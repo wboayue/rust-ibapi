@@ -2,7 +2,7 @@ use prost::Message;
 
 use crate::contracts::decode_option_computation;
 use crate::contracts::OptionComputation;
-use crate::proto::decoders::optional_f64;
+use crate::proto::decoders::{optional_f64, parse_f64};
 use crate::subscriptions::DecoderContext;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
@@ -11,6 +11,7 @@ use crate::market_data::realtime::{
     Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickAttribute, TickEFP, TickGeneric, TickPrice,
     TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
+use crate::market_data::MarketDataType;
 
 pub(crate) fn decode_realtime_bar(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
@@ -122,30 +123,46 @@ pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut Response
     Ok(depth)
 }
 pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    message.skip(); // message type
-    let count = message.next_int()?;
-    let mut descriptions = Vec::with_capacity(count as usize);
-    for _ in 0..count {
-        let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
-            DepthMarketDataDescription {
-                exchange_name: message.next_string()?,
-                security_type: message.next_string()?,
-                listing_exchange: message.next_string()?,
-                service_data_type: message.next_string()?,
-                aggregated_group: Some(message.next_string()?),
-            }
-        } else {
-            DepthMarketDataDescription {
-                exchange_name: message.next_string()?,
-                security_type: message.next_string()?,
-                listing_exchange: "".into(),
-                service_data_type: if message.next_bool()? { "Deep2".into() } else { "Deep".into() },
-                aggregated_group: None,
-            }
-        };
-        descriptions.push(description);
-    }
-    Ok(descriptions)
+    message.decode_proto_or_text(decode_market_depth_exchanges_proto, |msg| {
+        msg.skip(); // message type
+        let count = msg.next_int()?;
+        let mut descriptions = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
+                DepthMarketDataDescription {
+                    exchange_name: msg.next_string()?,
+                    security_type: msg.next_string()?,
+                    listing_exchange: msg.next_string()?,
+                    service_data_type: msg.next_string()?,
+                    aggregated_group: Some(msg.next_string()?),
+                }
+            } else {
+                DepthMarketDataDescription {
+                    exchange_name: msg.next_string()?,
+                    security_type: msg.next_string()?,
+                    listing_exchange: "".into(),
+                    service_data_type: if msg.next_bool()? { "Deep2".into() } else { "Deep".into() },
+                    aggregated_group: None,
+                }
+            };
+            descriptions.push(description);
+        }
+        Ok(descriptions)
+    })
+}
+
+pub(crate) fn decode_market_depth_exchanges_proto(bytes: &[u8]) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    let p = crate::proto::MarketDepthExchanges::decode(bytes)?;
+    Ok(p.depth_market_data_descriptions
+        .into_iter()
+        .map(|d| DepthMarketDataDescription {
+            exchange_name: d.exchange.unwrap_or_default(),
+            security_type: d.sec_type.unwrap_or_default(),
+            listing_exchange: d.listing_exch.unwrap_or_default(),
+            service_data_type: d.service_data_type.unwrap_or_default(),
+            aggregated_group: d.agg_group.map(|g| g.to_string()),
+        })
+        .collect())
 }
 pub(crate) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
     message.skip(); // message type
@@ -242,10 +259,29 @@ pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> R
         snapshot_permissions: message.next_int()?,
     })
 }
+pub(crate) fn decode_market_data_type(message: &mut ResponseMessage) -> Result<MarketDataType, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // request id
+    Ok(MarketDataType::from(message.next_int()?))
+}
 
 // === Protobuf decoders ===
 
-#[allow(dead_code)]
+pub(crate) fn decode_market_data_type_proto(bytes: &[u8]) -> Result<MarketDataType, Error> {
+    let msg = crate::proto::MarketDataType::decode(bytes)?;
+    Ok(MarketDataType::from(msg.market_data_type.unwrap_or_default()))
+}
+
+pub(crate) fn decode_tick_request_parameters_proto(bytes: &[u8]) -> Result<TickRequestParameters, Error> {
+    let msg = crate::proto::TickReqParams::decode(bytes)?;
+    Ok(TickRequestParameters {
+        min_tick: parse_f64(&msg.min_tick),
+        bbo_exchange: msg.bbo_exchange.unwrap_or_default(),
+        snapshot_permissions: msg.snapshot_permissions.unwrap_or_default(),
+    })
+}
+
 pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> {
     let msg = crate::proto::TickPrice::decode(bytes)?;
 
@@ -287,17 +323,15 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
     let msg = crate::proto::TickSize::decode(bytes)?;
 
     Ok(TickSize {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
-        size: msg.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        size: parse_f64(&msg.size),
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error> {
     let msg = crate::proto::TickString::decode(bytes)?;
 
@@ -307,7 +341,6 @@ pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Error> {
     let msg = crate::proto::TickGeneric::decode(bytes)?;
 
@@ -317,7 +350,6 @@ pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Err
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<OptionComputation, Error> {
     let msg = crate::proto::TickOptionComputation::decode(bytes)?;
 

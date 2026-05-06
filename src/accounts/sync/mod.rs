@@ -289,12 +289,7 @@ impl Client {
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
-            |message| {
-                message.skip(); // message type
-                message.skip(); // message version
-                let accounts = message.next_string()?;
-                Ok(accounts.split(',').filter(|s| !s.is_empty()).map(String::from).collect())
-            },
+            decoders::decode_managed_accounts,
             || Ok(Vec::default()),
         )
     }

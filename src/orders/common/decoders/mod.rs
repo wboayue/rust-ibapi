@@ -758,6 +758,10 @@ impl OrderDecoder {
 }
 
 pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
+    message.decode_proto_or_text_owned(decode_open_order_proto, |msg| decode_open_order_text(server_version, msg))
+}
+
+fn decode_open_order_text(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read order id
@@ -846,108 +850,118 @@ pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -
 }
 
 pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    message.skip(); // message type
+    message.decode_proto_or_text(decode_order_status_proto, |msg| {
+        msg.skip(); // message type
 
-    if server_version < server_versions::MARKET_CAP_PRICE {
-        message.skip(); // message version
-    };
+        if server_version < server_versions::MARKET_CAP_PRICE {
+            msg.skip(); // message version
+        };
 
-    let mut order_status = OrderStatus {
-        order_id: message.next_int()?,
-        status: message.next_string()?,
-        filled: message.next_double()?,
-        remaining: message.next_double()?,
-        average_fill_price: message.next_optional_double()?,
-        perm_id: message.next_long()?,
-        parent_id: message.next_int()?,
-        last_fill_price: message.next_optional_double()?,
-        client_id: message.next_int()?,
-        why_held: message.next_string()?,
-        ..Default::default()
-    };
+        let mut order_status = OrderStatus {
+            order_id: msg.next_int()?,
+            status: msg.next_string()?,
+            filled: msg.next_double()?,
+            remaining: msg.next_double()?,
+            average_fill_price: msg.next_optional_double()?,
+            perm_id: msg.next_long()?,
+            parent_id: msg.next_int()?,
+            last_fill_price: msg.next_optional_double()?,
+            client_id: msg.next_int()?,
+            why_held: msg.next_string()?,
+            ..Default::default()
+        };
 
-    if server_version >= server_versions::MARKET_CAP_PRICE {
-        order_status.market_cap_price = message.next_optional_double()?;
-    }
+        if server_version >= server_versions::MARKET_CAP_PRICE {
+            order_status.market_cap_price = msg.next_optional_double()?;
+        }
 
-    Ok(order_status)
+        Ok(order_status)
+    })
 }
 
 pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
-    message.skip(); // message type
+    message.decode_proto_or_text(decode_execution_data_proto, |msg| {
+        msg.skip(); // message type
 
-    if server_version < server_versions::LAST_LIQUIDITY {
-        message.skip(); // message version
-    };
+        if server_version < server_versions::LAST_LIQUIDITY {
+            msg.skip(); // message version
+        };
 
-    let mut execution_data = ExecutionData::default();
-    let contract = &mut execution_data.contract;
-    let execution = &mut execution_data.execution;
+        let mut execution_data = ExecutionData::default();
+        let contract = &mut execution_data.contract;
+        let execution = &mut execution_data.execution;
 
-    execution_data.request_id = message.next_int()?;
-    execution.order_id = message.next_int()?;
-    contract.contract_id = message.next_int()?;
-    contract.symbol = Symbol::from(message.next_string()?);
-    let secutity_type = message.next_string()?;
-    contract.security_type = SecurityType::from(&secutity_type);
-    contract.last_trade_date_or_contract_month = message.next_string()?;
-    contract.strike = message.next_double()?;
-    contract.right = message.next_string()?;
-    contract.multiplier = message.next_string()?;
-    contract.exchange = Exchange::from(message.next_string()?);
-    contract.currency = Currency::from(message.next_string()?);
-    contract.local_symbol = message.next_string()?;
-    contract.trading_class = message.next_string()?;
-    execution.execution_id = message.next_string()?;
-    execution.time = message.next_string()?;
-    execution.account_number = message.next_string()?;
-    execution.exchange = message.next_string()?;
-    execution.side = message.next_string()?;
-    execution.shares = message.next_double()?;
-    execution.price = message.next_double()?;
-    execution.perm_id = message.next_long()?;
-    execution.client_id = message.next_int()?;
-    execution.liquidation = message.next_int()?;
-    execution.cumulative_quantity = message.next_double()?;
-    execution.average_price = message.next_double()?;
-    execution.order_reference = message.next_string()?;
-    execution.ev_rule = message.next_string()?;
-    execution.ev_multiplier = message.next_optional_double()?;
+        execution_data.request_id = msg.next_int()?;
+        execution.order_id = msg.next_int()?;
+        contract.contract_id = msg.next_int()?;
+        contract.symbol = Symbol::from(msg.next_string()?);
+        let secutity_type = msg.next_string()?;
+        contract.security_type = SecurityType::from(&secutity_type);
+        contract.last_trade_date_or_contract_month = msg.next_string()?;
+        contract.strike = msg.next_double()?;
+        contract.right = msg.next_string()?;
+        contract.multiplier = msg.next_string()?;
+        contract.exchange = Exchange::from(msg.next_string()?);
+        contract.currency = Currency::from(msg.next_string()?);
+        contract.local_symbol = msg.next_string()?;
+        contract.trading_class = msg.next_string()?;
+        execution.execution_id = msg.next_string()?;
+        execution.time = msg.next_string()?;
+        execution.account_number = msg.next_string()?;
+        execution.exchange = msg.next_string()?;
+        execution.side = msg.next_string()?;
+        execution.shares = msg.next_double()?;
+        execution.price = msg.next_double()?;
+        execution.perm_id = msg.next_long()?;
+        execution.client_id = msg.next_int()?;
+        execution.liquidation = msg.next_int()?;
+        execution.cumulative_quantity = msg.next_double()?;
+        execution.average_price = msg.next_double()?;
+        execution.order_reference = msg.next_string()?;
+        execution.ev_rule = msg.next_string()?;
+        execution.ev_multiplier = msg.next_optional_double()?;
 
-    if server_version >= server_versions::MODELS_SUPPORT {
-        execution.model_code = message.next_string()?;
-    }
+        if server_version >= server_versions::MODELS_SUPPORT {
+            execution.model_code = msg.next_string()?;
+        }
 
-    if server_version >= server_versions::LAST_LIQUIDITY {
-        execution.last_liquidity = Liquidity::from(message.next_int()?);
-    }
+        if server_version >= server_versions::LAST_LIQUIDITY {
+            execution.last_liquidity = Liquidity::from(msg.next_int()?);
+        }
 
-    if server_version >= server_versions::PENDING_PRICE_REVISION {
-        execution.pending_price_revision = message.next_bool()?;
-    }
+        if server_version >= server_versions::PENDING_PRICE_REVISION {
+            execution.pending_price_revision = msg.next_bool()?;
+        }
 
-    if server_version >= server_versions::SUBMITTER {
-        execution.submitter = message.next_string()?;
-    }
+        if server_version >= server_versions::SUBMITTER {
+            execution.submitter = msg.next_string()?;
+        }
 
-    Ok(execution_data)
+        Ok(execution_data)
+    })
 }
 
 pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
-    message.skip(); // message type
-    message.skip(); // message version
+    message.decode_proto_or_text(decode_commission_report_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // message version
 
-    Ok(CommissionReport {
-        execution_id: message.next_string()?,
-        commission: message.next_double()?,
-        currency: message.next_string()?,
-        realized_pnl: message.next_optional_double()?,
-        yields: message.next_optional_double()?,
-        yield_redemption_date: message.next_string()?, // TODO: use date type?
+        Ok(CommissionReport {
+            execution_id: msg.next_string()?,
+            commission: msg.next_double()?,
+            currency: msg.next_string()?,
+            realized_pnl: msg.next_optional_double()?,
+            yields: msg.next_optional_double()?,
+            yield_redemption_date: msg.next_string()?, // TODO: use date type?
+        })
     })
 }
 
 pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
+    message.decode_proto_or_text_owned(decode_completed_order_proto, |msg| decode_completed_order_text(server_version, msg))
+}
+
+fn decode_completed_order_text(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read contract fields
@@ -1130,7 +1144,6 @@ fn decode_percent_change_condition(message: &mut ResponseMessage, is_conjunction
 
 // === Protobuf decoders ===
 
-#[allow(dead_code)]
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::OpenOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
@@ -1145,7 +1158,6 @@ pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> 
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Error> {
     let p: crate::proto::OrderStatus = prost::Message::decode(bytes)?;
 
@@ -1164,7 +1176,6 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData, Error> {
     let p: crate::proto::ExecutionDetails = prost::Message::decode(bytes)?;
 
@@ -1175,7 +1186,6 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::CompletedOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
@@ -1190,7 +1200,6 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionReport, Error> {
     let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(bytes)?;
 
@@ -1204,17 +1213,34 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
     })
 }
 
-// === Combined proto-or-text helpers (for handshake-time decoding) ===
+// === &mut-API adapters for handshake-time decoding ===
+//
+// `decode_open_order` / `decode_order_status` are proto-aware via
+// `decode_proto_or_text{,_owned}`. These wrappers adapt the `&mut
+// ResponseMessage` API used by callers (e.g. the connection startup loop) that
+// don't own the message.
 
-/// Decode an `OpenOrder` frame using protobuf or text format. Used by the
-/// connection layer's startup callback path.
-pub(crate) fn decode_open_order_either(server_version: i32, message: &mut ResponseMessage) -> Result<OrderData, Error> {
-    message.decode_proto_or_text(decode_open_order_proto, |m| decode_open_order(server_version, m.clone()))
+/// Decode an `OpenOrder` frame from a borrowed `&mut ResponseMessage`.
+pub(crate) fn decode_open_order_borrowed(server_version: i32, message: &mut ResponseMessage) -> Result<OrderData, Error> {
+    decode_open_order(server_version, message.clone())
 }
 
-/// Decode an `OrderStatus` frame using protobuf or text format.
-pub(crate) fn decode_order_status_either(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    message.decode_proto_or_text(decode_order_status_proto, |m| decode_order_status(server_version, m))
+/// Decode an `OrderStatus` frame from a borrowed `&mut ResponseMessage`.
+pub(crate) fn decode_order_status_borrowed(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
+    decode_order_status(server_version, message)
+}
+
+pub(crate) fn decode_next_valid_id(message: &mut ResponseMessage) -> Result<i32, Error> {
+    message.decode_proto_or_text(
+        |bytes| {
+            let p: crate::proto::NextValidId = prost::Message::decode(bytes)?;
+            Ok(p.order_id.unwrap_or_default())
+        },
+        |msg| {
+            // text fields: [msg_type, version, order_id]
+            msg.peek_int(2)
+        },
+    )
 }
 
 #[cfg(test)]

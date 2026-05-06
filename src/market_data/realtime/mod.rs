@@ -327,6 +327,8 @@ pub enum TickTypes {
     RequestParameters(TickRequestParameters),
     /// Combined price and size tick.
     PriceSize(TickPriceSize),
+    /// Active market data type for this subscription (real-time / frozen / delayed / delayed-frozen).
+    MarketDataType(crate::market_data::MarketDataType),
 }
 
 impl StreamDecoder<TickTypes> for TickTypes {
@@ -339,22 +341,42 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::TickOptionComputation,
         IncomingMessages::TickSnapshotEnd,
         IncomingMessages::TickReqParams,
+        IncomingMessages::MarketDataType,
     ];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+        let server_version = context.server_version;
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(common::decoders::decode_tick_price(context.server_version, message)?),
-            IncomingMessages::TickSize => Ok(TickTypes::Size(common::decoders::decode_tick_size(message)?)),
-            IncomingMessages::TickString => Ok(TickTypes::String(common::decoders::decode_tick_string(message)?)),
+            IncomingMessages::TickPrice => message.decode_proto_or_text(common::decoders::decode_tick_price_proto, |m| {
+                common::decoders::decode_tick_price(server_version, m)
+            }),
+            IncomingMessages::TickSize => message.decode_proto_or_text(
+                |b| common::decoders::decode_tick_size_proto(b).map(TickTypes::Size),
+                |m| common::decoders::decode_tick_size(m).map(TickTypes::Size),
+            ),
+            IncomingMessages::TickString => message.decode_proto_or_text(
+                |b| common::decoders::decode_tick_string_proto(b).map(TickTypes::String),
+                |m| common::decoders::decode_tick_string(m).map(TickTypes::String),
+            ),
+            IncomingMessages::TickGeneric => message.decode_proto_or_text(
+                |b| common::decoders::decode_tick_generic_proto(b).map(TickTypes::Generic),
+                |m| common::decoders::decode_tick_generic(m).map(TickTypes::Generic),
+            ),
+            IncomingMessages::TickOptionComputation => message.decode_proto_or_text(
+                |b| common::decoders::decode_tick_option_computation_proto(b).map(TickTypes::OptionComputation),
+                |m| common::decoders::decode_tick_option_computation(server_version, m).map(TickTypes::OptionComputation),
+            ),
+            IncomingMessages::TickReqParams => message.decode_proto_or_text(
+                |b| common::decoders::decode_tick_request_parameters_proto(b).map(TickTypes::RequestParameters),
+                |m| common::decoders::decode_tick_request_parameters(m).map(TickTypes::RequestParameters),
+            ),
+            IncomingMessages::MarketDataType => message.decode_proto_or_text(
+                |b| common::decoders::decode_market_data_type_proto(b).map(TickTypes::MarketDataType),
+                |m| common::decoders::decode_market_data_type(m).map(TickTypes::MarketDataType),
+            ),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(common::decoders::decode_tick_efp(message)?)),
-            IncomingMessages::TickGeneric => Ok(TickTypes::Generic(common::decoders::decode_tick_generic(message)?)),
-            IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(common::decoders::decode_tick_option_computation(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(common::decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
-            _ => Err(Error::NotImplemented),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 

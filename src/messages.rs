@@ -896,6 +896,21 @@ impl ResponseMessage {
         }
     }
 
+    /// Consuming variant of [`decode_proto_or_text`](Self::decode_proto_or_text)
+    /// for text decoders that take the message by value.
+    pub fn decode_proto_or_text_owned<T>(
+        self,
+        proto_decoder: impl FnOnce(&[u8]) -> Result<T, crate::Error>,
+        text_decoder: impl FnOnce(Self) -> Result<T, crate::Error>,
+    ) -> Result<T, crate::Error> {
+        if self.is_protobuf {
+            let bytes = self.raw_bytes().ok_or_else(|| crate::Error::Simple("missing protobuf bytes".into()))?;
+            proto_decoder(bytes)
+        } else {
+            text_decoder(self)
+        }
+    }
+
     /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
@@ -1345,8 +1360,19 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
 impl From<&ResponseMessage> for Notice {
-    /// Construct a notice from a response message.
+    /// Build a Notice from either wire format. The protobuf branch preserves
+    /// `error_time` (millis → OffsetDateTime) via the dispatcher's envelope
+    /// decoder, which the text accessors can't recover.
     fn from(message: &ResponseMessage) -> Notice {
+        if message.is_protobuf {
+            if let Some(notice) = message
+                .raw_bytes()
+                .and_then(crate::transport::routing::decode_error_envelope)
+                .map(Notice::from)
+            {
+                return notice;
+            }
+        }
         Notice {
             code: message.error_code(),
             message: message.error_message(),

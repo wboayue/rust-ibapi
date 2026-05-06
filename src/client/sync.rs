@@ -475,7 +475,7 @@ impl Debug for Client {
 /// // The subscription goes out of scope and is automatically cancelled.
 /// ```
 ///
-/// Subscriptions can be explicitly canceled using the [cancel](Subscription::cancel) method.
+/// Subscriptions can be explicitly canceled using the [`cancel`](crate::subscriptions::sync::Subscription::cancel) method.
 ///
 // Re-export SharesChannel trait from subscriptions module
 pub use crate::subscriptions::SharesChannel;

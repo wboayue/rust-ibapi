@@ -1224,3 +1224,78 @@ fn test_decode_pnl_single_proto_via_builder() {
     assert_eq!(result.realized_pnl, 500.0);
     assert_eq!(result.value, 75000.0);
 }
+
+#[test]
+fn test_decode_managed_accounts_proto() {
+    use prost::Message;
+    let proto_msg = crate::proto::ManagedAccounts {
+        accounts_list: Some("DU1111,DU2222,DU3333".into()),
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    assert_eq!(result, vec!["DU1111", "DU2222", "DU3333"]);
+}
+
+#[test]
+fn test_decode_managed_accounts_proto_skips_empty() {
+    use prost::Message;
+    // Trailing comma is the wire shape TWS sometimes emits; empty fields filtered out.
+    let proto_msg = crate::proto::ManagedAccounts {
+        accounts_list: Some("DU1111,,DU2222,".into()),
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    assert_eq!(result, vec!["DU1111", "DU2222"]);
+}
+
+#[test]
+fn test_decode_managed_accounts_proto_empty_list() {
+    use prost::Message;
+    let proto_msg = crate::proto::ManagedAccounts { accounts_list: None };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    assert!(result.is_empty());
+}
+
+#[test]
+fn test_decode_family_codes_proto() {
+    use prost::Message;
+    let proto_msg = crate::proto::FamilyCodes {
+        family_codes: vec![
+            crate::proto::FamilyCode {
+                account_id: Some("DU1111".into()),
+                family_code: Some("FAM_A".into()),
+            },
+            crate::proto::FamilyCode {
+                account_id: Some("DU2222".into()),
+                family_code: Some("FAM_B".into()),
+            },
+        ],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = super::decode_family_codes_proto(&bytes).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].account_id, "DU1111");
+    assert_eq!(result[0].family_code, "FAM_A");
+    assert_eq!(result[1].account_id, "DU2222");
+    assert_eq!(result[1].family_code, "FAM_B");
+}
+
+#[test]
+fn test_decode_family_codes_proto_empty() {
+    use prost::Message;
+    let proto_msg = crate::proto::FamilyCodes { family_codes: vec![] };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = super::decode_family_codes_proto(&bytes).unwrap();
+    assert!(result.is_empty());
+}

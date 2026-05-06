@@ -10,63 +10,88 @@ use crate::messages::ResponseMessage;
 use crate::Error;
 
 pub(in crate::news) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
-    message.skip(); // message type
+    message.decode_proto_or_text(decode_news_providers_proto, |msg| {
+        msg.skip(); // message type
 
-    let num_providers = message.next_int()?;
-    let mut news_providers = Vec::with_capacity(num_providers as usize);
+        let num_providers = msg.next_int()?;
+        let mut news_providers = Vec::with_capacity(num_providers as usize);
 
-    for _ in 0..num_providers {
-        news_providers.push(NewsProvider {
-            code: message.next_string()?,
-            name: message.next_string()?,
-        });
-    }
+        for _ in 0..num_providers {
+            news_providers.push(NewsProvider {
+                code: msg.next_string()?,
+                name: msg.next_string()?,
+            });
+        }
 
-    Ok(news_providers)
+        Ok(news_providers)
+    })
+}
+
+pub(crate) fn decode_news_providers_proto(bytes: &[u8]) -> Result<Vec<NewsProvider>, Error> {
+    let p = crate::proto::NewsProviders::decode(bytes)?;
+    Ok(p.news_providers
+        .into_iter()
+        .map(|np| NewsProvider {
+            code: np.provider_code.unwrap_or_default(),
+            name: np.provider_name.unwrap_or_default(),
+        })
+        .collect())
 }
 
 pub(in crate::news) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsBulletin, Error> {
-    message.skip(); // message type
-    message.skip(); // message version
+    message.decode_proto_or_text(decode_news_bulletin_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // message version
 
-    Ok(NewsBulletin {
-        message_id: message.next_int()?,
-        message_type: message.next_int()?,
-        message: message.next_string()?,
-        exchange: message.next_string()?,
+        Ok(NewsBulletin {
+            message_id: msg.next_int()?,
+            message_type: msg.next_int()?,
+            message: msg.next_string()?,
+            exchange: msg.next_string()?,
+        })
     })
 }
 
 pub(in crate::news) fn decode_historical_news(_time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
-    message.skip(); // message type
-    message.skip(); // request id
+    message.decode_proto_or_text(decode_historical_news_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // request id
 
-    let time = message.next_string()?;
-    let time = parse_time_as_utc(&time);
+        let time = msg.next_string()?;
+        let time = parse_time_as_utc(&time);
 
-    Ok(NewsArticle {
-        time,
-        provider_code: message.next_string()?,
-        article_id: message.next_string()?,
-        headline: message.next_string()?,
-        extra_data: "".to_string(),
+        Ok(NewsArticle {
+            time,
+            provider_code: msg.next_string()?,
+            article_id: msg.next_string()?,
+            headline: msg.next_string()?,
+            extra_data: "".to_string(),
+        })
     })
 }
 
-fn parse_time_as_utc(time: &str) -> OffsetDateTime {
+fn try_parse_time_as_utc(time: &str) -> Option<OffsetDateTime> {
     let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
-    let time = PrimitiveDateTime::parse(time, format).unwrap();
+    let dt = PrimitiveDateTime::parse(time, format).ok()?;
+    match dt.assume_timezone(timezones::db::UTC) {
+        time_tz::OffsetResult::Some(v) => Some(v),
+        _ => None,
+    }
+}
 
-    time.assume_timezone(timezones::db::UTC).unwrap()
+fn parse_time_as_utc(time: &str) -> OffsetDateTime {
+    try_parse_time_as_utc(time).expect("malformed news article time")
 }
 
 pub(in crate::news) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticleBody, Error> {
-    message.skip(); // message type
-    message.skip(); // request id
+    message.decode_proto_or_text(decode_news_article_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // request id
 
-    Ok(NewsArticleBody {
-        article_type: ArticleType::from(message.next_int()?),
-        article_text: message.next_string()?,
+        Ok(NewsArticleBody {
+            article_type: ArticleType::from(msg.next_int()?),
+            article_text: msg.next_string()?,
+        })
     })
 }
 
@@ -98,7 +123,6 @@ fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {
     let p = crate::proto::NewsBulletin::decode(bytes)?;
     Ok(NewsBulletin {
@@ -109,7 +133,6 @@ pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, E
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody, Error> {
     let p = crate::proto::NewsArticle::decode(bytes)?;
     Ok(NewsArticleBody {
@@ -118,22 +141,10 @@ pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody,
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_historical_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
     let p = crate::proto::HistoricalNews::decode(bytes)?;
 
-    let time = p
-        .time
-        .as_deref()
-        .and_then(|t| {
-            let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
-            PrimitiveDateTime::parse(t, format).ok()
-        })
-        .and_then(|dt| match dt.assume_timezone(timezones::db::UTC) {
-            time_tz::OffsetResult::Some(v) => Some(v),
-            _ => None,
-        })
-        .unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let time = p.time.as_deref().and_then(try_parse_time_as_utc).unwrap_or(OffsetDateTime::UNIX_EPOCH);
 
     Ok(NewsArticle {
         time,
@@ -222,5 +233,43 @@ mod tests {
         assert_eq!(result.article_id, "BRFG$12345");
         assert_eq!(result.headline, "Market Update");
         assert_ne!(result.time, OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn test_decode_news_providers_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::NewsProviders {
+            news_providers: vec![
+                crate::proto::NewsProvider {
+                    provider_code: Some("BRFG".into()),
+                    provider_name: Some("Briefing.com".into()),
+                },
+                crate::proto::NewsProvider {
+                    provider_code: Some("DJ-N".into()),
+                    provider_name: Some("Dow Jones News".into()),
+                },
+            ],
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_news_providers_proto(&bytes).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].code, "BRFG");
+        assert_eq!(result[0].name, "Briefing.com");
+        assert_eq!(result[1].code, "DJ-N");
+        assert_eq!(result[1].name, "Dow Jones News");
+    }
+
+    #[test]
+    fn test_decode_news_providers_proto_empty() {
+        use prost::Message;
+        let proto_msg = crate::proto::NewsProviders { news_providers: vec![] };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_news_providers_proto(&bytes).unwrap();
+        assert!(result.is_empty());
     }
 }

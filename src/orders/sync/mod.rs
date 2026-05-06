@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::common::{encoders, verify};
+use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
 use crate::contracts::Contract;
@@ -55,10 +55,10 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Cancels an active [Order] placed by the same API client ID.
+    /// Cancels an active [`crate::orders::Order`] placed by the same API client ID.
     ///
     /// # Arguments
-    /// * `order_id` - ID of the [Order] to cancel.
+    /// * `order_id` - ID of the [`crate::orders::Order`] to cancel.
     /// * `manual_order_cancel_time` - Optional timestamp to specify the cancellation time. Use an empty string to use the current time.
     ///
     /// # Examples
@@ -88,7 +88,7 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Requests completed [Order]s.
+    /// Requests completed [`crate::orders::Order`]s.
     ///
     /// # Arguments
     /// * `api_only` - request only orders placed by the API.
@@ -117,7 +117,7 @@ impl Client {
     /// Requests current day's (since midnight) executions matching the filter.
     ///
     /// Only the current day's executions can be retrieved.
-    /// Along with the [orders::ExecutionData], the [orders::CommissionReport] will also be returned.
+    /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionReport`] will also be returned.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -150,7 +150,7 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Cancels all open [Order]s.
+    /// Cancels all open [`crate::orders::Order`]s.
     ///
     /// # Examples
     ///
@@ -194,9 +194,8 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        if let Some(Ok(message)) = subscription.next() {
-            let order_id_index = 2;
-            let next_order_id = message.peek_int(order_id_index)?;
+        if let Some(Ok(mut message)) = subscription.next() {
+            let next_order_id = decoders::decode_next_valid_id(&mut message)?;
 
             self.set_next_order_id(next_order_id);
 
@@ -228,15 +227,15 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Places or modifies an [Order].
+    /// Places or modifies an [`crate::orders::Order`].
     ///
-    /// Submits an [Order] using [Client] for the given [Contract].
+    /// Submits an [`crate::orders::Order`] using [Client] for the given [Contract].
     /// Upon successful submission, the client will start receiving events related to the order's activity via the subscription, including order status updates and execution reports.
     ///
     /// # Arguments
-    /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+    /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     /// * `contract` - [Contract] to submit order for.
-    /// * `order` - [Order] to submit.
+    /// * `order` - [`crate::orders::Order`] to submit.
     ///
     /// # Examples
     ///
@@ -279,17 +278,17 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Submits or modifies an [Order] without returning a subscription.
+    /// Submits or modifies an [`crate::orders::Order`] without returning a subscription.
     ///
-    /// This is a fire-and-forget method that submits an [Order] for the given [Contract]
+    /// This is a fire-and-forget method that submits an [`crate::orders::Order`] for the given [Contract]
     /// but does not return a subscription for order updates. To receive order status updates,
     /// fills, and commission reports, use the [`order_update_stream`](Client::order_update_stream) method
     /// or use [`place_order`](Client::place_order) instead which returns a subscription.
     ///
     /// # Arguments
-    /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+    /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     /// * `contract` - [Contract] to submit order for.
-    /// * `order` - [Order] to submit.
+    /// * `order` - [`crate::orders::Order`] to submit.
     ///
     /// # Returns
     /// * `Ok(())` if the order was successfully sent

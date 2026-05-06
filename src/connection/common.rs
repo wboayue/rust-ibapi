@@ -304,34 +304,24 @@ impl ConnectionProtocol for ConnectionHandler {
 /// the caller can still inspect it. Decode failures surface as `Other` rather
 /// than being silently dropped.
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, callbacks: &StartupCallbacks<'_>) {
-    use crate::accounts::common::decode_account_update_either;
-    use crate::orders::common::{decode_open_order_either, decode_order_status_either};
-    use crate::transport::routing::decode_error_envelope;
+    use crate::accounts::common::decode_account_update_message;
+    use crate::orders::common::{decode_open_order_borrowed, decode_order_status_borrowed};
 
     match message.message_type() {
         IncomingMessages::Error => {
-            // Reuse the dispatcher's protobuf Error decoder + DecodedError→Notice
-            // conversion so handshake notices preserve `error_time` (millis →
-            // OffsetDateTime) the same way runtime notices do.
-            let notice = if message.is_protobuf {
-                message.raw_bytes().and_then(decode_error_envelope).map(Notice::from)
+            let notice = Notice::from(&*message);
+            if notice.is_warning() || notice.is_system_message() {
+                info!("{notice}");
             } else {
-                Some(Notice::from(&*message))
-            };
-            if let Some(notice) = notice {
-                if notice.is_warning() || notice.is_system_message() {
-                    info!("{notice}");
-                } else {
-                    error!("Error during account info: {notice}");
-                }
-                if let Some(cb) = callbacks.notice {
-                    cb(notice);
-                }
+                error!("Error during account info: {notice}");
+            }
+            if let Some(cb) = callbacks.notice {
+                cb(notice);
             }
         }
         IncomingMessages::OpenOrder => {
             if let Some(cb) = callbacks.startup {
-                let typed = decode_open_order_either(server_version, message)
+                let typed = decode_open_order_borrowed(server_version, message)
                     .map(StartupMessage::OpenOrder)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);
@@ -339,7 +329,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         }
         IncomingMessages::OrderStatus => {
             if let Some(cb) = callbacks.startup {
-                let typed = decode_order_status_either(server_version, message)
+                let typed = decode_order_status_borrowed(server_version, message)
                     .map(StartupMessage::OrderStatus)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);
@@ -355,7 +345,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         | IncomingMessages::AccountUpdateTime
         | IncomingMessages::AccountDownloadEnd => {
             if let Some(cb) = callbacks.startup {
-                let typed = decode_account_update_either(server_version, message)
+                let typed = decode_account_update_message(server_version, message)
                     .map(StartupMessage::AccountUpdate)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);
