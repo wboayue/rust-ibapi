@@ -8,6 +8,8 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - `Subscription::error()` and `Subscription::clear_error()` are removed. Terminal errors surface as `Some(Err(_))` on the next call to `next()`; subsequent calls return `None`.
 - New `Client::notice_stream()` exposes globally routed IB notices (connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc.) that are not tied to any subscription.
 - `ConnectionOptions::startup_callback` and `startup_notice_callback` provide typed access to messages and notices emitted during the connection handshake.
+- Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
+- `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
 - The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway server version that supports it.
 
 ## Notification handling: the new shape
@@ -124,6 +126,55 @@ while let Some(item) = subscription.next().await {
 
 `subscription.stream()` and `subscription.data_stream()` provide `futures::Stream` adapters with the same data/full split.
 
+### 4. Per-T `Notice`/`Message` variants removed
+
+`PlaceOrder::Message`, `OrderUpdate::Message`, and the analogous per-T notice variants on other subscription enums are gone. Per-subscription notices now arrive as `SubscriptionItem::Notice(_)`; globally routed notices go through `Client::notice_stream()`. If you matched on the typed variant, drop that arm and migrate to the envelope or the global stream — see §1, §3 above.
+
+### 5. `OrderStatus.status` / `OrderState.status` typed as `OrderStatusKind`
+
+Both fields were `String` in 2.x. In 3.0 they are typed as `OrderStatusKind`, a strict 9-variant enum (`ApiPending`, `PendingSubmit`, `PendingCancel`, `PreSubmitted`, `Submitted`, `ApiCancelled`, `Cancelled`, `Filled`, `Inactive`) matching IB's canonical OrderStatus vocabulary.
+
+```rust,ignore
+// v2.x — magic-string compare
+if status.status == "Filled" || status.status == "Cancelled" {
+    break;
+}
+
+// v3.0 — typed predicate; covers Filled/Cancelled/ApiCancelled/Inactive
+if status.status.is_terminal() {
+    break;
+}
+```
+
+`is_active()` covers `PreSubmitted`, `PendingSubmit`, `PendingCancel`, `Submitted`. The two helpers together cover 8 of 9 variants; `ApiPending` is neither active nor terminal — do not assume `!is_active() ⇒ is_terminal()`.
+
+`OrderStatusKind` implements `Display` (round-trips back to the IB string) and `FromStr`. The decoder propagates `Error::Parse` if TWS sends an unknown status string.
+
+`OrderState.completed_status` stays `String` — TWS uses that field for free-form descriptions like `"Cancelled by Trader"` or `"Filled Size: 1"`, not enum values.
+
+If you compared against the wire string, replace it with the matching variant:
+
+```rust,ignore
+// v2.x
+match status.status.as_str() {
+    "Submitted"    => log_submitted(),
+    "Filled"       => finalize(),
+    "Cancelled"    => rollback(),
+    other          => log_unknown(other),
+}
+
+// v3.0
+use ibapi::orders::OrderStatusKind;
+match status.status {
+    OrderStatusKind::Submitted => log_submitted(),
+    OrderStatusKind::Filled    => finalize(),
+    OrderStatusKind::Cancelled => rollback(),
+    other                      => log_other(other),
+}
+```
+
+`Display`-format strings still match the IB wire vocabulary, so `format!("{}", status.status)` and `status.status.to_string()` produce the same values you saw in 2.x.
+
 ## Before / after: common subscription patterns
 
 ### Market data
@@ -167,7 +218,7 @@ for event in events {
 ```
 
 ```rust,ignore
-// v3.0 — data-only is still ergonomic
+// v3.0 — `PlaceOrder::Message` is gone (notices route via SubscriptionItem::Notice)
 use ibapi::prelude::*;
 let events = client.place_order(order_id, &contract, &order)?;
 for event in events.iter_data() {
@@ -176,7 +227,6 @@ for event in events.iter_data() {
         PlaceOrder::OpenOrder(o)        => println!("open: {o:?}"),
         PlaceOrder::ExecutionData(e)    => println!("exec: {e:?}"),
         PlaceOrder::CommissionReport(c) => println!("commission: {c:?}"),
-        PlaceOrder::Message(m)          => println!("message: {m:?}"),
     }
 }
 ```
@@ -266,9 +316,11 @@ let client = Client::connect_with_options("127.0.0.1:4002", 100, options)?;
 1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
 2. Use `for item in &subscription { match item { Ok(SubscriptionItem::Data(_))..., Ok(SubscriptionItem::Notice(_))..., Err(_)... } }` when you want full visibility.
 3. Replace `subscription.error()` / `subscription.clear_error()` with pattern-matching on the `Err` arm of `next()`.
-4. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
-5. (Optional) Adopt `ConnectionOptions::startup_notice_callback` and `startup_callback` for handshake-time observability.
-6. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+4. Drop any `match` arms for `PlaceOrder::Message` / `OrderUpdate::Message` / similar per-T notice variants — those arms are unreachable and the variants are gone. Route per-order notices via `SubscriptionItem::Notice` and global notices via `Client::notice_stream()`.
+5. Replace string compares against `OrderStatus.status` / `OrderState.status` (`== "Filled"`, `.as_str() == "Cancelled"`, etc.) with `OrderStatusKind` variants or the `is_active()` / `is_terminal()` helpers.
+6. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
+7. (Optional) Adopt `ConnectionOptions::startup_notice_callback` and `startup_callback` for handshake-time observability.
+8. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
