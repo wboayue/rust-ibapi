@@ -1,5 +1,4 @@
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::{MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
@@ -92,7 +91,9 @@ async fn realtime_bars_trades() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Extended, Vec::new())
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .await
         .expect("realtime_bars failed");
 

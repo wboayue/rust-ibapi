@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{Bar, BarSize, WhatToShow};
+use ibapi::market_data::realtime::Bar;
 use ibapi::market_data::TradingHours;
 use ibapi::orders::{order_builder, Action, PlaceOrder};
 
@@ -22,9 +22,7 @@ fn main() {
     let symbol = "TSLA";
     let contract = Contract::stock(symbol).build(); // defaults to USD and SMART exchange.
 
-    let bars = client
-        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
-        .unwrap();
+    let bars = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe().unwrap();
 
     let mut channel = BreakoutChannel::new(30);
 

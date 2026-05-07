@@ -18,10 +18,14 @@ fn main() {
     let contract_nvda = Contract::stock("NVDA").build();
 
     let subscription_aapl = client
-        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract_aapl)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed!");
     let subscription_nvda = client
-        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract_nvda)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed!");
 
     for (bar_aapl, bar_nvda) in subscription_aapl.iter_data().zip(subscription_nvda.iter_data()) {

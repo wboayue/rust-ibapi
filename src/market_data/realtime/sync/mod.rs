@@ -8,7 +8,7 @@ use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
+use super::{Bar, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, RealtimeBarsBuilder, TickTypes, Trade, WhatToShow};
 use crate::market_data::TradingHours;
 
 // Validates that server supports the given request.
@@ -23,45 +23,35 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
 }
 
 impl Client {
-    /// Requests realtime bars.
+    /// Returns a builder for a real-time 5-second bar subscription.
     ///
-    /// # Arguments
-    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    /// Defaults to `WhatToShow::Trades` and `TradingHours::Regular`. See
+    /// [`RealtimeBarsBuilder`] for the chained methods.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::market_data::realtime::WhatToShow;
     /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA").build();
-    /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended).expect("request failed");
+    /// let subscription = client
+    ///     .realtime_bars(&contract)
+    ///     .what_to_show(WhatToShow::Trades)
+    ///     .trading_hours(TradingHours::Extended)
+    ///     .subscribe()
+    ///     .expect("realtime bars request failed");
     ///
     /// for (i, bar) in subscription.iter().enumerate().take(60) {
     ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
-    pub fn realtime_bars(
-        &self,
-        contract: &Contract,
-        _bar_size: BarSize,
-        what_to_show: WhatToShow,
-        trading_hours: TradingHours,
-    ) -> Result<Subscription<Bar>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_realtime_bars(
-            builder.request_id(),
-            contract,
-            &what_to_show,
-            trading_hours.use_rth(),
-            &Vec::<TagValue>::default(),
-        )?;
-
-        builder.send(request)
+    pub fn realtime_bars<'a>(&'a self, contract: &'a Contract) -> RealtimeBarsBuilder<'a, Self> {
+        RealtimeBarsBuilder::new(self, contract)
     }
 
     /// Requests tick by tick AllLast ticks.
@@ -320,6 +310,19 @@ pub fn market_data(
 ) -> Result<Subscription<TickTypes>, Error> {
     let builder = client.request();
     let request = encoders::encode_request_market_data(builder.request_id(), contract, generic_ticks, snapshot, regulatory_snapshot)?;
+
+    builder.send(request)
+}
+
+pub(crate) fn realtime_bars(
+    client: &Client,
+    contract: &Contract,
+    what_to_show: &WhatToShow,
+    trading_hours: TradingHours,
+    options: &[TagValue],
+) -> Result<Subscription<Bar>, Error> {
+    let builder = client.request();
+    let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
 
     builder.send(request)
 }

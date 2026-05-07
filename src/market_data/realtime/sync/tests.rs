@@ -61,12 +61,15 @@ fn test_realtime_bars() {
         last_trade_date_or_contract_month: "202303".to_owned(),
         ..Contract::default()
     };
-    let bar_size = BarSize::Sec5;
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     // Test subscription creation
-    let bars = client.realtime_bars(&contract, bar_size, what_to_show, trading_hours);
+    let bars = client
+        .realtime_bars(&contract)
+        .what_to_show(what_to_show)
+        .trading_hours(trading_hours)
+        .subscribe();
 
     // Test receiving data
     let bars = bars.expect("Failed to create realtime bars subscription");

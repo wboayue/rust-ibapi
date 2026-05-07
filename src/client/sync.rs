@@ -454,7 +454,6 @@ impl Debug for Client {
 ///
 /// ```no_run
 /// use ibapi::contracts::Contract;
-/// use ibapi::market_data::realtime::{BarSize, WhatToShow};
 /// use ibapi::market_data::TradingHours;
 /// use ibapi::client::blocking::Client;
 ///
@@ -464,7 +463,9 @@ impl Debug for Client {
 /// // Request real-time bars data for AAPL with 5-second intervals
 /// let contract = Contract::stock("AAPL").build();
 /// let subscription = client
-///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
+///     .realtime_bars(&contract)
+///     .trading_hours(TradingHours::Extended)
+///     .subscribe()
 ///     .expect("realtime bars request failed!");
 ///
 /// // Use the subscription as a blocking iterator

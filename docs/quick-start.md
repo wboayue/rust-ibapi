@@ -162,14 +162,14 @@ For detailed documentation on creating all contract types, see the [Contract Bui
 // Define a stock contract
 let contract = Contract::stock("AAPL").build();
 
-// Request real-time bars (sync)
-let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)?;
+// Request real-time bars (sync) — defaults to Trades + Regular trading hours
+let subscription = client.realtime_bars(&contract).subscribe()?;
 for bar in subscription {
     println!("Price: {}, Volume: {}", bar.close, bar.volume);
 }
 
 // Request real-time bars (async)
-let mut subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).await?;
+let mut subscription = client.realtime_bars(&contract).subscribe().await?;
 while let Some(bar) = subscription.next().await {
     println!("Price: {}, Volume: {}", bar.close, bar.volume);
 }
