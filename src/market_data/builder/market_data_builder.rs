@@ -72,18 +72,12 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     ///
     /// # Examples
     ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::stock("AAPL").build();
-    ///
+    /// ```ignore
+    /// // (Shown for docs; sync/async-specific runnable forms are on `subscribe`.)
     /// let _subscription = client.market_data(&contract)
-    ///     .add_generic_tick("233")
-    ///     .add_generic_tick("236")
-    ///     .subscribe()
-    ///     .expect("subscription failed");
+    ///     .add_generic_tick("233")  // RT Volume
+    ///     .add_generic_tick("236")  // Shortable
+    ///     .subscribe();
     /// ```
     pub fn add_generic_tick(mut self, tick: impl AsRef<str>) -> Self {
         self.generic_ticks.push(tick.as_ref().to_string());
