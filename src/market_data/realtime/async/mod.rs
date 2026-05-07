@@ -28,7 +28,6 @@ impl Client {
         RealtimeBarsBuilder::new(self, contract)
     }
 
-    /// Submit a real-time 5-second bar subscription. Called by `RealtimeBarsBuilder::subscribe`.
     pub(crate) async fn subscribe_realtime_bars(
         &self,
         contract: &Contract,

@@ -1,27 +1,14 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
-    use crate::client::sync::Client;
-    use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client, request_message_count};
     use crate::contracts::{Contract, TagValue};
     use crate::market_data::realtime::WhatToShow;
     use crate::market_data::TradingHours;
-    use crate::server_versions;
-    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::realtime_bars_request;
-    use std::sync::{Arc, RwLock};
-
-    fn stubbed_client() -> (Arc<MessageBusStub>, Client) {
-        let bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
-        (bus, client)
-    }
 
     #[test]
     fn defaults_match_trades_regular_no_options() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client.realtime_bars(&contract).subscribe().expect("subscribe failed");
@@ -30,17 +17,13 @@ mod sync_tests {
         assert_request(
             &bus,
             0,
-            &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
-                .contract(&contract)
-                .what_to_show(WhatToShow::Trades)
-                .use_rth(true),
+            &realtime_bars_request().contract(&contract).what_to_show(WhatToShow::Trades).use_rth(true),
         );
     }
 
     #[test]
     fn override_what_to_show() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client
@@ -53,7 +36,6 @@ mod sync_tests {
             &bus,
             0,
             &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
                 .contract(&contract)
                 .what_to_show(WhatToShow::MidPoint)
                 .use_rth(true),
@@ -62,7 +44,7 @@ mod sync_tests {
 
     #[test]
     fn extended_hours_clears_use_rth() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client
@@ -75,7 +57,6 @@ mod sync_tests {
             &bus,
             0,
             &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
                 .contract(&contract)
                 .what_to_show(WhatToShow::Trades)
                 .use_rth(false),
@@ -84,7 +65,7 @@ mod sync_tests {
 
     #[test]
     fn options_round_trip() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
         let options = vec![TagValue {
             tag: "XYZ".to_owned(),
@@ -101,7 +82,6 @@ mod sync_tests {
             &bus,
             0,
             &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
                 .contract(&contract)
                 .what_to_show(WhatToShow::Trades)
                 .use_rth(true)
@@ -112,28 +92,15 @@ mod sync_tests {
 
 #[cfg(feature = "async")]
 mod async_tests {
-    use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::{assert_request, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_test_client};
     use crate::contracts::{Contract, TagValue};
     use crate::market_data::realtime::WhatToShow;
     use crate::market_data::TradingHours;
-    use crate::server_versions;
-    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::realtime_bars_request;
-    use std::sync::{Arc, RwLock};
-
-    fn stubbed_client() -> (Arc<MessageBusStub>, Client) {
-        let bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
-        (bus, client)
-    }
 
     #[tokio::test]
     async fn defaults_async() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client.realtime_bars(&contract).subscribe().await.expect("subscribe failed");
@@ -141,17 +108,13 @@ mod async_tests {
         assert_request(
             &bus,
             0,
-            &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
-                .contract(&contract)
-                .what_to_show(WhatToShow::Trades)
-                .use_rth(true),
+            &realtime_bars_request().contract(&contract).what_to_show(WhatToShow::Trades).use_rth(true),
         );
     }
 
     #[tokio::test]
     async fn full_chain_async() {
-        let (bus, client) = stubbed_client();
+        let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
         let options = vec![TagValue {
             tag: "K".to_owned(),
@@ -171,7 +134,6 @@ mod async_tests {
             &bus,
             0,
             &realtime_bars_request()
-                .request_id(TEST_REQ_ID_FIRST)
                 .contract(&contract)
                 .what_to_show(WhatToShow::Bid)
                 .use_rth(false)

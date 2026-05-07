@@ -695,8 +695,8 @@ fn main() {
             let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract)
-        .trading_hours(TradingHours::Extended)
-        .subscribe()
+                .trading_hours(TradingHours::Extended)
+                .subscribe()
                 .expect("realtime bars request failed!");
 
             for bar in subscription.iter_data().flatten() {
@@ -730,8 +730,8 @@ fn main() {
             let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract)
-        .trading_hours(TradingHours::Extended)
-        .subscribe()
+                .trading_hours(TradingHours::Extended)
+                .subscribe()
                 .expect("realtime bars request failed!");
 
             for bar in subscription.iter_data().flatten() {
@@ -762,8 +762,8 @@ fn main() {
     'outer: loop {
         let subscription = client
             .realtime_bars(&contract)
-        .trading_hours(TradingHours::Extended)
-        .subscribe()
+            .trading_hours(TradingHours::Extended)
+            .subscribe()
             .expect("realtime bars request failed!");
 
         for item in &subscription {

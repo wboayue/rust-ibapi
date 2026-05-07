@@ -314,7 +314,6 @@ pub fn market_data(
     builder.send(request)
 }
 
-/// Submit a real-time 5-second bar subscription. Called by `RealtimeBarsBuilder::subscribe`.
 pub(crate) fn realtime_bars(
     client: &Client,
     contract: &Contract,
