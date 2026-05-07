@@ -178,15 +178,6 @@ impl VwapBuilder {
         })
     }
 }
-
-impl TryFrom<VwapBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: VwapBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === TWAP Builder ===
 
 /// Strategy type for TWAP orders.
@@ -302,15 +293,6 @@ impl TwapBuilder {
         })
     }
 }
-
-impl TryFrom<TwapBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: TwapBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Percentage of Volume Builder ===
 
 /// Builder for Percentage of Volume (PctVol) algorithmic orders.
@@ -405,15 +387,6 @@ impl PctVolBuilder {
         })
     }
 }
-
-impl TryFrom<PctVolBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: PctVolBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Arrival Price Builder ===
 
 /// Risk aversion level for Arrival Price orders.
@@ -560,15 +533,6 @@ impl ArrivalPriceBuilder {
         })
     }
 }
-
-impl TryFrom<ArrivalPriceBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: ArrivalPriceBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Adaptive Builder ===
 
 /// Urgency priority for Adaptive algorithmic orders.
@@ -642,15 +606,6 @@ impl AdaptiveBuilder {
         })
     }
 }
-
-impl TryFrom<AdaptiveBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: AdaptiveBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Close Price Builder ===
 
 /// Builder for Close Price (ClosePx) algorithmic orders.
@@ -746,15 +701,6 @@ impl ClosePriceBuilder {
         })
     }
 }
-
-impl TryFrom<ClosePriceBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: ClosePriceBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Dark Ice Builder ===
 
 /// Builder for Dark Ice algorithmic orders.
@@ -847,15 +793,6 @@ impl DarkIceBuilder {
         })
     }
 }
-
-impl TryFrom<DarkIceBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: DarkIceBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Accumulate/Distribute Builder ===
 
 /// Builder for Accumulate/Distribute (AD) algorithmic orders.
@@ -1014,15 +951,6 @@ impl AccumulateDistributeBuilder {
         })
     }
 }
-
-impl TryFrom<AccumulateDistributeBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: AccumulateDistributeBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Balance Impact Risk Builder ===
 
 /// Builder for Balance Impact Risk algorithmic orders.
@@ -1104,15 +1032,6 @@ impl BalanceImpactRiskBuilder {
         })
     }
 }
-
-impl TryFrom<BalanceImpactRiskBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: BalanceImpactRiskBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Minimise Impact Builder ===
 
 /// Builder for Minimise Impact (MinImpact) algorithmic orders.
@@ -1166,15 +1085,6 @@ impl MinimiseImpactBuilder {
         })
     }
 }
-
-impl TryFrom<MinimiseImpactBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: MinimiseImpactBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Price Variant Percentage of Volume Builder ===
 
 /// Builder for Price Variant Percentage of Volume (PctVolPx) algorithmic orders.
@@ -1319,15 +1229,6 @@ impl PctVolPriceBuilder {
         })
     }
 }
-
-impl TryFrom<PctVolPriceBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: PctVolPriceBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Size Variant Percentage of Volume Builder ===
 
 /// Builder for Size Variant Percentage of Volume (PctVolSz) algorithmic orders.
@@ -1439,15 +1340,6 @@ impl PctVolSizeBuilder {
         })
     }
 }
-
-impl TryFrom<PctVolSizeBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: PctVolSizeBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === Time Variant Percentage of Volume Builder ===
 
 /// Builder for Time Variant Percentage of Volume (PctVolTm) algorithmic orders.
@@ -1559,15 +1451,6 @@ impl PctVolTimeBuilder {
         })
     }
 }
-
-impl TryFrom<PctVolTimeBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: PctVolTimeBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 // === AccuDistr Builder ===
 
 /// Builder for AccuDistr algorithmic orders.
@@ -1697,15 +1580,6 @@ impl AccuDistrBuilder {
         })
     }
 }
-
-impl TryFrom<AccuDistrBuilder> for AlgoParams {
-    type Error = ValidationError;
-
-    fn try_from(builder: AccuDistrBuilder) -> Result<Self, Self::Error> {
-        builder.build()
-    }
-}
-
 #[cfg(test)]
 #[path = "algo_builders_tests.rs"]
 mod tests;
