@@ -6,6 +6,11 @@
 
 > **Branch notice:** The `main` branch is now tracking **v3.0** development. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
+## What's new in 3.0
+
+- **Protobuf-only wire format.** v3.0 drops the legacy text protocol and speaks only TWS protobuf. Requires TWS / IB Gateway server version **201 or newer**. Smaller, faster, and version-gated by IB itself — see [`docs/migration-3.0.md`](docs/migration-3.0.md) for the cutover.
+- **API ergonomics overhaul.** Builders for multi-arg subscriptions (`market_data(&contract).subscribe()`, `realtime_bars(&contract).subscribe()`), unified `Subscription<T>` shape with `SubscriptionItem::{Data, Notice}`, typed `OrderStatusKind` (was magic-string `String`), globally-routed `Client::notice_stream()` for unsolicited notices, and consistent sync/async surfaces. See the [migration guide](docs/migration-3.0.md) for the before/after on every breaking change.
+
 ## Introduction
 
 This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
@@ -19,15 +24,17 @@ rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The 
 - **async** *(default)*: Non-blocking client using Tokio tasks and broadcast channels. Available as `ibapi::Client`.
 - **sync**: Blocking client using crossbeam channels. Available as `ibapi::client::blocking::Client` (or `ibapi::Client` when `async` is disabled).
 
+v3.0 is not yet on crates.io — install from git while it's in development:
+
 ```toml
 # Async only (default features)
-ibapi = "3.0"
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main" }
 
 # Blocking only
-ibapi = { version = "3.0", default-features = false, features = ["sync"] }
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "3.0", default-features = false, features = ["sync", "async"] }
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
@@ -59,7 +66,9 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Install
 
-Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest available version and installation instructions.
+**v3.0 (this branch):** unreleased — install from git as shown in the [Sync/Async Architecture](#syncasync-architecture) section above.
+
+**v2.x (stable):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi). Maintenance lives on the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
 ## Examples
 
