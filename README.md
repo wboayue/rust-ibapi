@@ -236,7 +236,9 @@ fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed!");
 
     for bar in subscription.iter_data().flatten() {
@@ -257,7 +259,9 @@ async fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .await
         .expect("realtime bars request failed!");
 
@@ -305,10 +309,14 @@ fn main() {
     let contract_nvda = Contract::stock("NVDA").build();
 
     let subscription_aapl = client
-        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract_aapl)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed!");
     let subscription_nvda = client
-        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract_nvda)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed!");
 
     for (aapl, nvda) in subscription_aapl.iter_data().flatten().zip(subscription_nvda.iter_data().flatten()) {
@@ -555,7 +563,9 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed");
 
     for item in &subscription {
@@ -578,7 +588,9 @@ async fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .await
         .expect("realtime bars request failed");
 
@@ -617,7 +629,9 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime bars request failed");
 
     for bar in subscription.iter_data().flatten() {
@@ -680,7 +694,9 @@ fn main() {
         let handle = thread::spawn(move || {
             let contract = Contract::stock(symbol).build();
             let subscription = client
-                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+                .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
                 .expect("realtime bars request failed!");
 
             for bar in subscription.iter_data().flatten() {
@@ -713,7 +729,9 @@ fn main() {
 
             let contract = Contract::stock(symbol).build();
             let subscription = client
-                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+                .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
                 .expect("realtime bars request failed!");
 
             for bar in subscription.iter_data().flatten() {
@@ -743,7 +761,9 @@ fn main() {
 
     'outer: loop {
         let subscription = client
-            .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+            .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
             .expect("realtime bars request failed!");
 
         for item in &subscription {

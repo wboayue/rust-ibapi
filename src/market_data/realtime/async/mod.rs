@@ -8,7 +8,7 @@ use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
+use super::{Bar, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, RealtimeBarsBuilder, TickTypes, Trade, WhatToShow};
 use crate::market_data::TradingHours;
 
 impl Client {
@@ -20,17 +20,24 @@ impl Client {
         self.send_message(message).await
     }
 
-    /// Requests realtime bars.
-    pub async fn realtime_bars(
+    /// Returns a builder for a real-time 5-second bar subscription.
+    ///
+    /// Defaults to `WhatToShow::Trades` and `TradingHours::Regular`. See
+    /// [`RealtimeBarsBuilder`] for the chained methods.
+    pub fn realtime_bars<'a>(&'a self, contract: &'a Contract) -> RealtimeBarsBuilder<'a, Self> {
+        RealtimeBarsBuilder::new(self, contract)
+    }
+
+    /// Submit a real-time 5-second bar subscription. Called by `RealtimeBarsBuilder::subscribe`.
+    pub(crate) async fn subscribe_realtime_bars(
         &self,
         contract: &Contract,
-        _bar_size: &BarSize,
         what_to_show: &WhatToShow,
         trading_hours: TradingHours,
-        options: Vec<TagValue>,
+        options: &[TagValue],
     ) -> Result<Subscription<Bar>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), &options)?;
+        let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
 
         builder.send::<Bar>(request).await
     }

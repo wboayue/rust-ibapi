@@ -8,12 +8,12 @@
 
 use super::RequestEncoder;
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
-use crate::contracts::Contract;
+use crate::contracts::{Contract, TagValue};
 use crate::market_data::historical::{BarSize, Duration, WhatToShow as HistoricalWhatToShow};
 use crate::market_data::realtime::WhatToShow as RealtimeWhatToShow;
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::{encode_contract, some_bool, some_str};
+use crate::proto::encoders::{encode_contract, some_bool, some_str, tag_values_to_map};
 use crate::ToField;
 use time::OffsetDateTime;
 
@@ -310,6 +310,7 @@ pub struct RealtimeBarsRequestBuilder {
     pub contract: Contract,
     pub what_to_show: RealtimeWhatToShow,
     pub use_rth: bool,
+    pub options: Vec<TagValue>,
 }
 
 impl Default for RealtimeBarsRequestBuilder {
@@ -319,6 +320,7 @@ impl Default for RealtimeBarsRequestBuilder {
             contract: Contract::default(),
             what_to_show: RealtimeWhatToShow::Trades,
             use_rth: false,
+            options: Vec::new(),
         }
     }
 }
@@ -340,6 +342,10 @@ impl RealtimeBarsRequestBuilder {
         self.use_rth = v;
         self
     }
+    pub fn options(mut self, v: Vec<TagValue>) -> Self {
+        self.options = v;
+        self
+    }
 }
 
 impl RequestEncoder for RealtimeBarsRequestBuilder {
@@ -353,7 +359,7 @@ impl RequestEncoder for RealtimeBarsRequestBuilder {
             bar_size: Some(0),
             what_to_show: Some(self.what_to_show.to_string()),
             use_rth: some_bool(self.use_rth),
-            real_time_bars_options: Default::default(),
+            real_time_bars_options: tag_values_to_map(&self.options),
         }
     }
 }

@@ -190,6 +190,28 @@ let s = message.peek_string(2).unwrap_or_default();  // tolerate missing
 
 This is a low-level cursor primitive most users will never touch directly; if you do, the upgrade is mechanical.
 
+### 7. `Client::realtime_bars` is a builder
+
+The flat `realtime_bars(&contract, bar_size, what_to_show, trading_hours, [options])` form is gone on both sync and async. `Client::realtime_bars(&contract)` now returns a `RealtimeBarsBuilder`; configure with chained methods and finish with `.subscribe()`.
+
+```rust,ignore
+// v2.x (sync) — 4 args, no options parameter
+let sub = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)?;
+
+// v2.x (async) — 5 args, references on enums, options required
+let sub = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Extended, vec![]).await?;
+```
+
+```rust,ignore
+// v3.0 (sync)
+let sub = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe()?;
+
+// v3.0 (async)
+let sub = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe().await?;
+```
+
+Defaults: `WhatToShow::Trades`, `TradingHours::Regular`, no extra options. Chain `.what_to_show(_)`, `.trading_hours(_)`, `.options(_)` to override. The reserved `options: Vec<TagValue>` parameter — previously async-only — is now reachable from the sync side too, fixing the asymmetry called out in #486. The `BarSize` parameter is gone: TWS only accepts 5-second bars on the wire, so it never had per-call meaning. A `.bar_size(...)` method can be added non-breakingly if IB ever expands support.
+
 ## Before / after: common subscription patterns
 
 ### Market data

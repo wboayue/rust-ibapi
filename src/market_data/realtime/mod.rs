@@ -9,6 +9,9 @@ use crate::Error;
 // Common modules
 pub(crate) mod common;
 
+mod builder;
+pub use builder::RealtimeBarsBuilder;
+
 // Feature-specific implementations
 #[cfg(feature = "sync")]
 /// Synchronous real-time market data API.

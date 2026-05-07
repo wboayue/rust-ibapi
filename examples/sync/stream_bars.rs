@@ -13,7 +13,6 @@ use clap::{arg, ArgMatches, Command};
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::TradingHours;
 
 fn main() -> anyhow::Result<()> {
@@ -40,7 +39,7 @@ fn main() -> anyhow::Result<()> {
     println!("server_time: {:?}", client.connection_time());
     println!("next_order_id: {}", client.next_order_id());
 
-    let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)?;
+    let bars = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe()?;
 
     for (i, bar) in bars.iter().enumerate().take(60) {
         println!("bar: {i:?} {bar:?}");

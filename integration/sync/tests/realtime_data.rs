@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::{MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
@@ -83,7 +82,9 @@ fn realtime_bars_trades() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .expect("realtime_bars failed");
 
     if let Some(Ok(SubscriptionItem::Data(bar))) = subscription.next_timeout(Duration::from_secs(15)) {

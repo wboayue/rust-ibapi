@@ -421,21 +421,15 @@ The `TradingHours` enum controls whether data includes extended hours (pre-marke
 ```rust
 use ibapi::market_data::TradingHours;
 
-// Regular trading hours only
-let bars = client.realtime_bars(
-    &contract,
-    BarSize::Sec5,
-    WhatToShow::Trades,
-    TradingHours::Regular,  // Excludes pre/post-market
-).await?;
+// Regular trading hours only (default)
+let bars = client.realtime_bars(&contract).subscribe().await?;
 
 // Include extended hours
-let bars = client.realtime_bars(
-    &contract,
-    BarSize::Sec5,
-    WhatToShow::Trades,
-    TradingHours::Extended,  // Includes pre/post-market
-).await?;
+let bars = client
+    .realtime_bars(&contract)
+    .trading_hours(TradingHours::Extended)
+    .subscribe()
+    .await?;
 ```
 
 ### Market Data Subscriptions (No Extended Hours Filtering)

@@ -60,13 +60,15 @@ async fn test_realtime_bars() {
         last_trade_date_or_contract_month: "202303".to_owned(),
         ..Contract::default()
     };
-    let bar_size = BarSize::Sec5;
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     // Test subscription creation
     let mut bars = client
-        .realtime_bars(&contract, &bar_size, &what_to_show, trading_hours, vec![])
+        .realtime_bars(&contract)
+        .what_to_show(what_to_show)
+        .trading_hours(trading_hours)
+        .subscribe()
         .await
         .expect("Failed to create realtime bars subscription");
 
@@ -652,7 +654,9 @@ async fn subscription_cancel_only_sends_once() {
 
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Extended, vec![])
+        .realtime_bars(&contract)
+        .trading_hours(TradingHours::Extended)
+        .subscribe()
         .await
         .expect("Failed to create subscription");
 
