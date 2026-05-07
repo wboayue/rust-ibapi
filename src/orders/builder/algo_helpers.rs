@@ -19,7 +19,9 @@
 //!     .end_time("16:00:00 US/Eastern");
 //! ```
 
-use crate::orders::builder::algo_builders::{ArrivalPriceBuilder, PctVolBuilder, TwapBuilder, VwapBuilder};
+use crate::orders::builder::algo_builders::{
+    AdaptiveBuilder, ArrivalPriceBuilder, ClosePriceBuilder, DarkIceBuilder, PctVolBuilder, TwapBuilder, VwapBuilder,
+};
 
 /// Create a VWAP (Volume Weighted Average Price) algo builder.
 ///
@@ -102,6 +104,64 @@ pub fn arrival_price() -> ArrivalPriceBuilder {
     ArrivalPriceBuilder::new()
 }
 
+/// Create an Adaptive algo builder.
+///
+/// Combines IB's Smart Routing with user-defined urgency.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{adaptive, AdaptivePriority};
+///
+/// let algo = adaptive()
+///     .priority(AdaptivePriority::Normal)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn adaptive() -> AdaptiveBuilder {
+    AdaptiveBuilder::new()
+}
+
+/// Create a Close Price (ClosePx) algo builder.
+///
+/// Minimizes slippage relative to the closing auction price.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{close_price, RiskAversion};
+///
+/// let algo = close_price()
+///     .max_pct_vol(0.2)
+///     .risk_aversion(RiskAversion::Neutral)
+///     .start_time("15:30:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn close_price() -> ClosePriceBuilder {
+    ClosePriceBuilder::new()
+}
+
+/// Create a Dark Ice algo builder.
+///
+/// Hidden order with randomized display sizes.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::dark_ice;
+///
+/// let algo = dark_ice()
+///     .display_size(100)
+///     .start_time("09:30:00 US/Eastern")
+///     .end_time("16:00:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn dark_ice() -> DarkIceBuilder {
+    DarkIceBuilder::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +192,28 @@ mod tests {
     fn test_arrival_price_helper() {
         let algo: AlgoParams = arrival_price().max_pct_vol(0.1).build().unwrap();
         assert_eq!(algo.strategy, "ArrivalPx");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_adaptive_helper() {
+        use crate::orders::builder::AdaptivePriority;
+        let algo: AlgoParams = adaptive().priority(AdaptivePriority::Urgent).build().unwrap();
+        assert_eq!(algo.strategy, "Adaptive");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_close_price_helper() {
+        let algo: AlgoParams = close_price().max_pct_vol(0.2).build().unwrap();
+        assert_eq!(algo.strategy, "ClosePx");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_dark_ice_helper() {
+        let algo: AlgoParams = dark_ice().display_size(100).build().unwrap();
+        assert_eq!(algo.strategy, "DarkIce");
         assert_eq!(algo.params.len(), 1);
     }
 }

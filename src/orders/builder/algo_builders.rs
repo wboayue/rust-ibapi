@@ -569,6 +569,293 @@ impl TryFrom<ArrivalPriceBuilder> for AlgoParams {
     }
 }
 
+// === Adaptive Builder ===
+
+/// Urgency priority for Adaptive algorithmic orders.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum AdaptivePriority {
+    /// Urgent - complete quickly, less concerned with price improvement
+    Urgent,
+    /// Normal - balanced execution speed and price improvement
+    #[default]
+    Normal,
+    /// Patient - prefer price improvement, accept slower execution
+    Patient,
+}
+
+impl AdaptivePriority {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AdaptivePriority::Urgent => "Urgent",
+            AdaptivePriority::Normal => "Normal",
+            AdaptivePriority::Patient => "Patient",
+        }
+    }
+}
+
+/// Builder for Adaptive algorithmic orders.
+///
+/// Combines IB's Smart Routing with user-defined urgency to balance
+/// execution speed against price improvement.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{adaptive, AdaptivePriority};
+///
+/// let algo = adaptive()
+///     .priority(AdaptivePriority::Normal)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct AdaptiveBuilder {
+    priority: Option<AdaptivePriority>,
+}
+
+impl AdaptiveBuilder {
+    /// Create a new Adaptive builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the urgency priority.
+    pub fn priority(mut self, priority: AdaptivePriority) -> Self {
+        self.priority = Some(priority);
+        self
+    }
+
+    /// Build the algo parameters.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.priority {
+            params.push(TagValue {
+                tag: "adaptivePriority".to_string(),
+                value: v.as_str().to_string(),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "Adaptive".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<AdaptiveBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: AdaptiveBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Close Price Builder ===
+
+/// Builder for Close Price (ClosePx) algorithmic orders.
+///
+/// Minimizes slippage relative to the closing auction price.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{close_price, RiskAversion};
+///
+/// let algo = close_price()
+///     .max_pct_vol(0.2)
+///     .risk_aversion(RiskAversion::Neutral)
+///     .start_time("15:30:00 US/Eastern")
+///     .force_completion(true)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct ClosePriceBuilder {
+    max_pct_vol: Option<f64>,
+    risk_aversion: Option<RiskAversion>,
+    start_time: Option<String>,
+    force_completion: Option<bool>,
+}
+
+impl ClosePriceBuilder {
+    /// Create a new Close Price builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set maximum participation rate (must be 10-50% per IB requirements).
+    pub fn max_pct_vol(mut self, pct: f64) -> Self {
+        self.max_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set risk aversion level.
+    pub fn risk_aversion(mut self, risk: RiskAversion) -> Self {
+        self.risk_aversion = Some(risk);
+        self
+    }
+
+    /// Set start time (format: "HH:MM:SS TZ", e.g., "15:30:00 US/Eastern").
+    pub fn start_time(mut self, time: impl Into<String>) -> Self {
+        self.start_time = Some(time.into());
+        self
+    }
+
+    /// Force completion by the close.
+    pub fn force_completion(mut self, force: bool) -> Self {
+        self.force_completion = Some(force);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `max_pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.max_pct_vol {
+            validate_pct_vol("max_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "maxPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.risk_aversion {
+            params.push(TagValue {
+                tag: "riskAversion".to_string(),
+                value: v.as_str().to_string(),
+            });
+        }
+        if let Some(v) = self.start_time {
+            params.push(TagValue {
+                tag: "startTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.force_completion {
+            params.push(TagValue {
+                tag: "forceCompletion".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "ClosePx".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<ClosePriceBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: ClosePriceBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Dark Ice Builder ===
+
+/// Builder for Dark Ice algorithmic orders.
+///
+/// Hidden order with randomized display sizes - the user-supplied display
+/// size is randomized in increments to camouflage the actual order size.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::dark_ice;
+///
+/// let algo = dark_ice()
+///     .display_size(100)
+///     .start_time("09:30:00 US/Eastern")
+///     .end_time("16:00:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct DarkIceBuilder {
+    display_size: Option<i32>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    allow_past_end_time: Option<bool>,
+}
+
+impl DarkIceBuilder {
+    /// Create a new Dark Ice builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the display size (the visible portion of the order).
+    pub fn display_size(mut self, size: i32) -> Self {
+        self.display_size = Some(size);
+        self
+    }
+
+    /// Set start time (format: "HH:MM:SS TZ", e.g., "09:30:00 US/Eastern").
+    pub fn start_time(mut self, time: impl Into<String>) -> Self {
+        self.start_time = Some(time.into());
+        self
+    }
+
+    /// Set end time (format: "HH:MM:SS TZ", e.g., "16:00:00 US/Eastern").
+    pub fn end_time(mut self, time: impl Into<String>) -> Self {
+        self.end_time = Some(time.into());
+        self
+    }
+
+    /// Allow trading past the end time.
+    pub fn allow_past_end_time(mut self, allow: bool) -> Self {
+        self.allow_past_end_time = Some(allow);
+        self
+    }
+
+    /// Build the algo parameters.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.display_size {
+            params.push(TagValue {
+                tag: "displaySize".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.start_time {
+            params.push(TagValue {
+                tag: "startTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.end_time {
+            params.push(TagValue {
+                tag: "endTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.allow_past_end_time {
+            params.push(TagValue {
+                tag: "allowPastEndTime".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "DarkIce".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<DarkIceBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: DarkIceBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
 #[cfg(test)]
 #[path = "algo_builders_tests.rs"]
 mod tests;

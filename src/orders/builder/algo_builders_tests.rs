@@ -148,3 +148,100 @@ fn test_pct_vol_boundary_values() {
     assert!(VwapBuilder::new().max_pct_vol(0.09).build().is_err());
     assert!(VwapBuilder::new().max_pct_vol(0.51).build().is_err());
 }
+
+#[test]
+fn test_adaptive_builder() {
+    let params = AdaptiveBuilder::new().priority(AdaptivePriority::Urgent).build().unwrap();
+
+    assert_eq!(params.strategy, "Adaptive");
+    assert_eq!(params.params.len(), 1);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("adaptivePriority"), Some(&"Urgent".to_string()));
+}
+
+#[test]
+fn test_adaptive_builder_priority_variants() {
+    let urgent = AdaptiveBuilder::new().priority(AdaptivePriority::Urgent).build().unwrap();
+    assert_eq!(urgent.params[0].value, "Urgent");
+
+    let normal = AdaptiveBuilder::new().priority(AdaptivePriority::Normal).build().unwrap();
+    assert_eq!(normal.params[0].value, "Normal");
+
+    let patient = AdaptiveBuilder::new().priority(AdaptivePriority::Patient).build().unwrap();
+    assert_eq!(patient.params[0].value, "Patient");
+}
+
+#[test]
+fn test_adaptive_builder_minimal() {
+    let params = AdaptiveBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "Adaptive");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_close_price_builder() {
+    let params = ClosePriceBuilder::new()
+        .max_pct_vol(0.3)
+        .risk_aversion(RiskAversion::Aggressive)
+        .start_time("15:30:00 US/Eastern")
+        .force_completion(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "ClosePx");
+    assert_eq!(params.params.len(), 4);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("maxPctVol"), Some(&"0.3".to_string()));
+    assert_eq!(find_param("riskAversion"), Some(&"Aggressive".to_string()));
+    assert_eq!(find_param("startTime"), Some(&"15:30:00 US/Eastern".to_string()));
+    assert_eq!(find_param("forceCompletion"), Some(&"1".to_string()));
+}
+
+#[test]
+fn test_close_price_builder_minimal() {
+    let params = ClosePriceBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "ClosePx");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_close_price_pct_vol_boundary_values() {
+    // Exactly 0.1 and 0.5 should succeed
+    assert!(ClosePriceBuilder::new().max_pct_vol(0.1).build().is_ok());
+    assert!(ClosePriceBuilder::new().max_pct_vol(0.5).build().is_ok());
+
+    // Outside the range should fail
+    let err = ClosePriceBuilder::new().max_pct_vol(0.09).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+    let err = ClosePriceBuilder::new().max_pct_vol(0.51).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+}
+
+#[test]
+fn test_dark_ice_builder() {
+    let params = DarkIceBuilder::new()
+        .display_size(100)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .allow_past_end_time(false)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "DarkIce");
+    assert_eq!(params.params.len(), 4);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("displaySize"), Some(&"100".to_string()));
+    assert_eq!(find_param("startTime"), Some(&"09:30:00 US/Eastern".to_string()));
+    assert_eq!(find_param("endTime"), Some(&"16:00:00 US/Eastern".to_string()));
+    assert_eq!(find_param("allowPastEndTime"), Some(&"0".to_string()));
+}
+
+#[test]
+fn test_dark_ice_builder_minimal() {
+    let params = DarkIceBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "DarkIce");
+    assert!(params.params.is_empty());
+}
