@@ -30,6 +30,60 @@ fn validate_pct_vol(field: &'static str, value: f64) -> Result<(), ValidationErr
     }
 }
 
+/// Build params for a "windowed PctVol" strategy: a base/end participation
+/// rate plus optional active-window times. Shared by `PctVolSizeBuilder`
+/// (`"PctVolSz"`) and `PctVolTimeBuilder` (`"PctVolTm"`), which differ only
+/// in which dimension drives the rate ramp - the on-wire encoding is the
+/// same shape.
+fn build_windowed_pct_vol(
+    strategy: &'static str,
+    start_pct_vol: Option<f64>,
+    end_pct_vol: Option<f64>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    no_take_liq: Option<bool>,
+) -> Result<AlgoParams, ValidationError> {
+    let mut params = Vec::new();
+
+    if let Some(v) = start_pct_vol {
+        validate_pct_vol("start_pct_vol", v)?;
+        params.push(TagValue {
+            tag: "startPctVol".to_string(),
+            value: v.to_string(),
+        });
+    }
+    if let Some(v) = end_pct_vol {
+        validate_pct_vol("end_pct_vol", v)?;
+        params.push(TagValue {
+            tag: "endPctVol".to_string(),
+            value: v.to_string(),
+        });
+    }
+    if let Some(v) = start_time {
+        params.push(TagValue {
+            tag: "startTime".to_string(),
+            value: v,
+        });
+    }
+    if let Some(v) = end_time {
+        params.push(TagValue {
+            tag: "endTime".to_string(),
+            value: v,
+        });
+    }
+    if let Some(v) = no_take_liq {
+        params.push(TagValue {
+            tag: "noTakeLiq".to_string(),
+            value: bool_param(v),
+        });
+    }
+
+    Ok(AlgoParams {
+        strategy: strategy.to_string(),
+        params,
+    })
+}
+
 /// Parameters for an algorithmic order strategy.
 #[derive(Debug, Clone, Default)]
 pub struct AlgoParams {
@@ -1299,47 +1353,17 @@ impl PctVolSizeBuilder {
     /// Returns an error if `start_pct_vol` or `end_pct_vol` is set but
     /// outside the 10-50% range.
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
-        let mut params = Vec::new();
-
-        if let Some(v) = self.start_pct_vol {
-            validate_pct_vol("start_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "startPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.end_pct_vol {
-            validate_pct_vol("end_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "endPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.no_take_liq {
-            params.push(TagValue {
-                tag: "noTakeLiq".to_string(),
-                value: bool_param(v),
-            });
-        }
-
-        Ok(AlgoParams {
-            strategy: "PctVolSz".to_string(),
-            params,
-        })
+        build_windowed_pct_vol(
+            "PctVolSz",
+            self.start_pct_vol,
+            self.end_pct_vol,
+            self.start_time,
+            self.end_time,
+            self.no_take_liq,
+        )
     }
 }
+
 // === Time Variant Percentage of Volume Builder ===
 
 /// Builder for Time Variant Percentage of Volume (PctVolTm) algorithmic orders.
@@ -1410,47 +1434,17 @@ impl PctVolTimeBuilder {
     /// Returns an error if `start_pct_vol` or `end_pct_vol` is set but
     /// outside the 10-50% range.
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
-        let mut params = Vec::new();
-
-        if let Some(v) = self.start_pct_vol {
-            validate_pct_vol("start_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "startPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.end_pct_vol {
-            validate_pct_vol("end_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "endPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.no_take_liq {
-            params.push(TagValue {
-                tag: "noTakeLiq".to_string(),
-                value: bool_param(v),
-            });
-        }
-
-        Ok(AlgoParams {
-            strategy: "PctVolTm".to_string(),
-            params,
-        })
+        build_windowed_pct_vol(
+            "PctVolTm",
+            self.start_pct_vol,
+            self.end_pct_vol,
+            self.start_time,
+            self.end_time,
+            self.no_take_liq,
+        )
     }
 }
+
 // === AccuDistr Builder ===
 
 /// Builder for AccuDistr algorithmic orders.
