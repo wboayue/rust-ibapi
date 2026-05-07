@@ -1,31 +1,49 @@
 # Algo Order Builders - Remaining Types
 
-Issue: https://github.com/wboayue/rust-ibapi/issues/345
+Issue: https://github.com/wboayue/rust-ibapi/issues/345 (closed — core 4 satisfied the original ask; remaining algos are follow-on enhancement)
 
 ## Completed (Core 4)
 
-- [x] VWAP (`VwapBuilder`)
-- [x] TWAP (`TwapBuilder`)
-- [x] Percentage of Volume (`PctVolBuilder`)
-- [x] Arrival Price (`ArrivalPriceBuilder`)
+- [x] VWAP (`VwapBuilder`, strategy `"Vwap"`)
+- [x] TWAP (`TwapBuilder`, strategy `"Twap"`)
+- [x] Percentage of Volume (`PctVolBuilder`, strategy `"PctVol"`)
+- [x] Arrival Price (`ArrivalPriceBuilder`, strategy `"ArrivalPx"`)
 
 ## Remaining Algo Types
 
 ### Priority 1 - Common Strategies
 
-#### Adaptive Algo
+#### Adaptive Algo (strategy `"Adaptive"`)
 Simple algo that combines smart routing with user-defined urgency.
 
 ```rust
+#[derive(Debug, Clone, Copy, Default)]
+pub enum AdaptivePriority {
+    Urgent,
+    #[default]
+    Normal,
+    Patient,
+}
+
+impl AdaptivePriority {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AdaptivePriority::Urgent => "Urgent",
+            AdaptivePriority::Normal => "Normal",
+            AdaptivePriority::Patient => "Patient",
+        }
+    }
+}
+
 pub struct AdaptiveBuilder {
-    priority: Option<AdaptivePriority>,  // Urgent, Normal, Patient
+    priority: Option<AdaptivePriority>,
 }
 ```
 
 Parameters:
 - `adaptivePriority`: Urgent / Normal / Patient
 
-#### Close Price (ClosePx)
+#### Close Price (strategy `"ClosePx"`)
 Minimizes slippage relative to closing auction price.
 
 ```rust
@@ -38,12 +56,12 @@ pub struct ClosePriceBuilder {
 ```
 
 Parameters:
-- `maxPctVol` (0.1-0.5)
-- `riskAversion`: Get Done / Aggressive / Neutral / Passive
+- `maxPctVol` (0.1-0.5) — reuse `validate_pct_vol`
+- `riskAversion`: reuse existing `RiskAversion` enum
 - `startTime`
 - `forceCompletion`
 
-#### Dark Ice
+#### Dark Ice (strategy `"DarkIce"`)
 Hidden order with randomized display sizes.
 
 ```rust
@@ -63,7 +81,7 @@ Parameters:
 
 ### Priority 2 - Advanced Strategies
 
-#### Accumulate/Distribute (AD)
+#### Accumulate/Distribute (strategy `"AD"`)
 Slices orders into random increments at random intervals.
 
 ```rust
@@ -91,7 +109,7 @@ Parameters:
 - `activeTimeStart`
 - `activeTimeEnd`
 
-#### Balance Impact Risk
+#### Balance Impact Risk (strategy `"BalanceImpactRisk"`)
 Balances market impact against adverse price movement risk.
 
 ```rust
@@ -103,11 +121,11 @@ pub struct BalanceImpactRiskBuilder {
 ```
 
 Parameters:
-- `maxPctVol` (0.1-0.5)
-- `riskAversion`
+- `maxPctVol` (0.1-0.5) — reuse `validate_pct_vol`
+- `riskAversion` — reuse existing enum
 - `forceCompletion`
 
-#### Minimise Impact
+#### Minimise Impact (strategy `"MinImpact"`)
 Slices order to achieve market average with minimal impact.
 
 ```rust
@@ -117,11 +135,11 @@ pub struct MinimiseImpactBuilder {
 ```
 
 Parameters:
-- `maxPctVol` (0.1-0.5)
+- `maxPctVol` (0.1-0.5) — reuse `validate_pct_vol`
 
 ### Priority 3 - Specialized PctVol Variants
 
-#### Price Variant Percentage of Volume (PctVolPx)
+#### Price Variant Percentage of Volume (strategy `"PctVolPx"`)
 Participation rate varies with market price.
 
 ```rust
@@ -136,7 +154,7 @@ pub struct PctVolPriceBuilder {
 }
 ```
 
-#### Size Variant Percentage of Volume (PctVolSz)
+#### Size Variant Percentage of Volume (strategy `"PctVolSz"`)
 Participation rate varies based on remaining order size.
 
 ```rust
@@ -149,7 +167,7 @@ pub struct PctVolSizeBuilder {
 }
 ```
 
-#### Time Variant Percentage of Volume (PctVolTm)
+#### Time Variant Percentage of Volume (strategy `"PctVolTm"`)
 Participation rate varies over time.
 
 ```rust
@@ -165,12 +183,16 @@ pub struct PctVolTimeBuilder {
 ## Implementation Notes
 
 1. All builders follow established pattern in `algo_builders.rs`
-2. Add helper functions to `algo_helpers.rs`
-3. Re-export new types from `builder/mod.rs`
-4. Add docs to `docs/order-types.md`
-5. Reuse existing enums (`RiskAversion`) where applicable
+2. Add helper functions to `algo_helpers.rs` (one per builder, e.g. `adaptive()`, `close_price()`, …)
+3. Re-export new types and helpers from `builder/mod.rs`
+4. Add docs to `docs/order-types.md`, and update the TOC at lines 40-42 (currently lists VWAP/TWAP only — also missing PctVol and ArrivalPrice; fix in same PR)
+5. Reuse existing enums (`RiskAversion`) and helpers (`validate_pct_vol`, `MIN_PCT_VOL`, `MAX_PCT_VOL`, `bool_param`) where applicable
+6. **Doc-examples (rule 23)**: every public builder struct, `new()`, and `algo_helpers` entry point gets a runnable `# Examples` block. Mirror the existing `VwapBuilder` / `vwap()` shape
+7. **Modernize touched module (rules 13/14)**: `algo_builders.rs` still has an inline `#[cfg(test)] mod tests` block at lines 572-724. The PR that adds new algos should also extract those tests to a sibling `algo_builders_tests.rs` and wire it in via `#[cfg(test)] #[path = "algo_builders_tests.rs"] mod tests;`. New builders' tests go in the same sibling file
+8. **Tests for each new builder**: per CLAUDE.md rule 11, every new `pub fn`/builder needs a unit test — round-trip through `build()` and assert `params` tag/value pairs, plus boundary tests for percentage validators
 
 ## References
 
 - IB Algo docs: https://interactivebrokers.github.io/tws-api/ibalgos.html
 - IB Algo parameters: https://www.interactivebrokers.com/en/software/api/apiguide/tables/ibalgo_parameters.htm
+- C# reference: `/Users/wboayue/projects/tws-api/source/csharpclient/client/Order.cs` (search `AlgoStrategy`)
