@@ -23,8 +23,7 @@ pub struct RealtimeBarsBuilder<'a, C> {
 }
 
 impl<'a, C> RealtimeBarsBuilder<'a, C> {
-    /// Constructs the builder. Prefer `client.realtime_bars(&contract)`.
-    pub fn new(client: &'a C, contract: &'a Contract) -> Self {
+    pub(crate) fn new(client: &'a C, contract: &'a Contract) -> Self {
         Self {
             client,
             contract,

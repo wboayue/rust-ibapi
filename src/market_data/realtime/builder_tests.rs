@@ -122,13 +122,18 @@ mod async_tests {
     use crate::testdata::builders::market_data::realtime_bars_request;
     use std::sync::{Arc, RwLock};
 
-    #[tokio::test]
-    async fn defaults_async() {
+    fn stubbed_client() -> (Arc<MessageBusStub>, Client) {
         let bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
         });
         let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+        (bus, client)
+    }
+
+    #[tokio::test]
+    async fn defaults_async() {
+        let (bus, client) = stubbed_client();
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client.realtime_bars(&contract).subscribe().await.expect("subscribe failed");
@@ -146,11 +151,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn full_chain_async() {
-        let bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+        let (bus, client) = stubbed_client();
         let contract = Contract::stock("AAPL").build();
         let options = vec![TagValue {
             tag: "K".to_owned(),
