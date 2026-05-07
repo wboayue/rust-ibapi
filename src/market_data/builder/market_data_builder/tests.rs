@@ -1,11 +1,12 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
     use crate::client::sync::Client;
-    use crate::common::test_utils::helpers::assert_proto_msg_id;
+    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
+    use crate::testdata::builders::market_data::market_data_request;
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -42,6 +43,58 @@ mod sync_tests {
         let request_messages = message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
         assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    }
+
+    #[test]
+    fn test_market_data_builder_add_generic_tick_appends() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let _subscription = client
+            .market_data(&contract)
+            .add_generic_tick("233")
+            .add_generic_tick("236")
+            .subscribe()
+            .expect("Failed to create subscription");
+
+        assert_request(
+            &message_bus,
+            0,
+            &market_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .generic_ticks(&["233", "236"]),
+        );
+    }
+
+    #[test]
+    fn test_market_data_builder_add_generic_tick_after_bulk() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let _subscription = client
+            .market_data(&contract)
+            .generic_ticks(&["233"])
+            .add_generic_tick("236")
+            .subscribe()
+            .expect("Failed to create subscription");
+
+        assert_request(
+            &message_bus,
+            0,
+            &market_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .generic_ticks(&["233", "236"]),
+        );
     }
 
     #[test]
@@ -131,11 +184,12 @@ mod sync_tests {
 #[cfg(feature = "async")]
 mod async_tests {
     use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::assert_proto_msg_id;
+    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
+    use crate::testdata::builders::market_data::market_data_request;
     use std::sync::{Arc, RwLock};
 
     #[tokio::test]
@@ -158,6 +212,33 @@ mod async_tests {
         let request_messages = message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
         assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    }
+
+    #[tokio::test]
+    async fn test_market_data_builder_add_generic_tick_async() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let _subscription = client
+            .market_data(&contract)
+            .add_generic_tick("233")
+            .add_generic_tick("236")
+            .subscribe()
+            .await
+            .expect("Failed to create subscription");
+
+        assert_request(
+            &message_bus,
+            0,
+            &market_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .generic_ticks(&["233", "236"]),
+        );
     }
 
     #[tokio::test]

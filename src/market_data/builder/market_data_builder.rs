@@ -26,32 +26,52 @@ impl<'a, C> MarketDataBuilder<'a, C> {
         }
     }
 
-    /// Add generic tick types to subscribe to
+    /// Replace the generic tick list to subscribe to
+    ///
+    /// Each value is a numeric IB *generic tick request ID* (the
+    /// `genericTickList` parameter on `reqMktData`). To add ticks one at a
+    /// time, use [`Self::add_generic_tick`] instead.
     ///
     /// # Arguments
-    /// * `ticks` - Array of tick type IDs as strings (e.g., ["233", "236"])
+    /// * `ticks` - Array of tick type IDs as strings (e.g., `["233", "236"]`)
     ///
-    /// # Common tick types:
-    /// * "100" - Option Volume
-    /// * "101" - Option Open Interest
-    /// * "104" - Historical Volatility
-    /// * "106" - Option Implied Volatility
-    /// * "162" - Index Future Premium
-    /// * "165" - Miscellaneous Stats
-    /// * "221" - Mark Price
-    /// * "225" - Auction Values
-    /// * "233" - RTVolume
-    /// * "236" - Shortable
-    /// * "256" - Inventory
-    /// * "258" - Fundamental Ratios
-    /// * "293" - Trade Count
-    /// * "294" - Trade Rate
-    /// * "295" - Volume Rate
-    /// * "411" - Real-time Historical Volatility
+    /// # Common tick types
+    /// * `"100"` - Option Volume (call + put)
+    /// * `"101"` - Option Open Interest (call + put)
+    /// * `"104"` - Option Historical Volatility
+    /// * `"106"` - Option Implied Volatility
+    /// * `"162"` - Index Future Premium
+    /// * `"165"` - Misc Stats (13/26/52-week ranges + 90-day average volume)
+    /// * `"225"` - Auction Values (volume, price, imbalance, regulatory imbalance)
+    /// * `"232"` - Mark Price
+    /// * `"233"` - RT Volume (Time & Sales, incl. unreportable trades)
+    /// * `"236"` - Shortable / Shortable Shares
+    /// * `"292"` - News
+    /// * `"293"` - Trade Count
+    /// * `"294"` - Trade Rate
+    /// * `"295"` - Volume Rate
+    /// * `"318"` - Last RTH Trade
+    /// * `"375"` - RT Trade Volume (excludes unreportable trades)
+    /// * `"411"` - RT Historical Volatility
+    /// * `"456"` - IB Dividends
+    /// * `"588"` - Futures Open Interest
     ///
-    /// See: <https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types>
+    /// See: <https://interactivebrokers.github.io/tws-api/tick_types.html>
     pub fn generic_ticks(mut self, ticks: &[&str]) -> Self {
         self.generic_ticks = ticks.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// Append a single generic tick ID to the subscription
+    ///
+    /// Multiple calls accumulate; use [`Self::generic_ticks`] to replace the
+    /// list in one shot. Pairs naturally with conditional composition
+    /// (e.g. only add `"236"` for stocks).
+    ///
+    /// See [`Self::generic_ticks`] for the list of common IDs and
+    /// [`Self::subscribe`] for a runnable end-to-end example.
+    pub fn add_generic_tick(mut self, tick: impl AsRef<str>) -> Self {
+        self.generic_ticks.push(tick.as_ref().to_string());
         self
     }
 
@@ -101,7 +121,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// let contract = Contract::stock("AAPL").build();
     ///
     /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233", "236"])
+    ///     .add_generic_tick("233")  // RT Volume
+    ///     .add_generic_tick("236")  // Shortable
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
@@ -135,7 +156,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///     let contract = Contract::stock("AAPL").build();
     ///
     ///     let mut subscription = client.market_data(&contract)
-    ///         .generic_ticks(&["233", "236"])
+    ///         .add_generic_tick("233")  // RT Volume
+    ///         .add_generic_tick("236")  // Shortable
     ///         .subscribe()
     ///         .await
     ///         .expect("subscription failed");
