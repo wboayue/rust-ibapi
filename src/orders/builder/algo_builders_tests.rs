@@ -245,3 +245,105 @@ fn test_dark_ice_builder_minimal() {
     assert_eq!(params.strategy, "DarkIce");
     assert!(params.params.is_empty());
 }
+
+#[test]
+fn test_accumulate_distribute_builder() {
+    let params = AccumulateDistributeBuilder::new()
+        .component_size(100)
+        .time_between_orders(60)
+        .randomize_time_20(true)
+        .randomize_size_55(false)
+        .give_up(0)
+        .catch_up(true)
+        .wait_for_fill(false)
+        .active_time_start("20260101-09:30:00 US/Eastern")
+        .active_time_end("20260101-16:00:00 US/Eastern")
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "AD");
+    assert_eq!(params.params.len(), 9);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("componentSize"), Some(&"100".to_string()));
+    assert_eq!(find_param("timeBetweenOrders"), Some(&"60".to_string()));
+    assert_eq!(find_param("randomizeTime20"), Some(&"1".to_string()));
+    assert_eq!(find_param("randomizeSize55"), Some(&"0".to_string()));
+    assert_eq!(find_param("giveUp"), Some(&"0".to_string()));
+    assert_eq!(find_param("catchUp"), Some(&"1".to_string()));
+    assert_eq!(find_param("waitForFill"), Some(&"0".to_string()));
+    assert_eq!(find_param("activeTimeStart"), Some(&"20260101-09:30:00 US/Eastern".to_string()));
+    assert_eq!(find_param("activeTimeEnd"), Some(&"20260101-16:00:00 US/Eastern".to_string()));
+}
+
+#[test]
+fn test_accumulate_distribute_builder_minimal() {
+    let params = AccumulateDistributeBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "AD");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_balance_impact_risk_builder() {
+    let params = BalanceImpactRiskBuilder::new()
+        .max_pct_vol(0.25)
+        .risk_aversion(RiskAversion::Passive)
+        .force_completion(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "BalanceImpactRisk");
+    assert_eq!(params.params.len(), 3);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("maxPctVol"), Some(&"0.25".to_string()));
+    assert_eq!(find_param("riskAversion"), Some(&"Passive".to_string()));
+    assert_eq!(find_param("forceCompletion"), Some(&"1".to_string()));
+}
+
+#[test]
+fn test_balance_impact_risk_builder_minimal() {
+    let params = BalanceImpactRiskBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "BalanceImpactRisk");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_balance_impact_risk_pct_vol_boundary_values() {
+    assert!(BalanceImpactRiskBuilder::new().max_pct_vol(0.1).build().is_ok());
+    assert!(BalanceImpactRiskBuilder::new().max_pct_vol(0.5).build().is_ok());
+
+    let err = BalanceImpactRiskBuilder::new().max_pct_vol(0.09).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+    let err = BalanceImpactRiskBuilder::new().max_pct_vol(0.51).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+}
+
+#[test]
+fn test_minimise_impact_builder() {
+    let params = MinimiseImpactBuilder::new().max_pct_vol(0.3).build().unwrap();
+
+    assert_eq!(params.strategy, "MinImpact");
+    assert_eq!(params.params.len(), 1);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("maxPctVol"), Some(&"0.3".to_string()));
+}
+
+#[test]
+fn test_minimise_impact_builder_minimal() {
+    let params = MinimiseImpactBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "MinImpact");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_minimise_impact_pct_vol_boundary_values() {
+    assert!(MinimiseImpactBuilder::new().max_pct_vol(0.1).build().is_ok());
+    assert!(MinimiseImpactBuilder::new().max_pct_vol(0.5).build().is_ok());
+
+    let err = MinimiseImpactBuilder::new().max_pct_vol(0.09).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+    let err = MinimiseImpactBuilder::new().max_pct_vol(0.51).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
+}

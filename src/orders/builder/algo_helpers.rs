@@ -20,7 +20,8 @@
 //! ```
 
 use crate::orders::builder::algo_builders::{
-    AdaptiveBuilder, ArrivalPriceBuilder, ClosePriceBuilder, DarkIceBuilder, PctVolBuilder, TwapBuilder, VwapBuilder,
+    AccumulateDistributeBuilder, AdaptiveBuilder, ArrivalPriceBuilder, BalanceImpactRiskBuilder, ClosePriceBuilder, DarkIceBuilder,
+    MinimiseImpactBuilder, PctVolBuilder, TwapBuilder, VwapBuilder,
 };
 
 /// Create a VWAP (Volume Weighted Average Price) algo builder.
@@ -162,6 +163,62 @@ pub fn dark_ice() -> DarkIceBuilder {
     DarkIceBuilder::new()
 }
 
+/// Create an Accumulate/Distribute (AD) algo builder.
+///
+/// Slices an order into random increments at random intervals.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::accumulate_distribute;
+///
+/// let algo = accumulate_distribute()
+///     .component_size(100)
+///     .time_between_orders(60)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn accumulate_distribute() -> AccumulateDistributeBuilder {
+    AccumulateDistributeBuilder::new()
+}
+
+/// Create a Balance Impact Risk algo builder.
+///
+/// Balances market impact against adverse-price-movement risk.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{balance_impact_risk, RiskAversion};
+///
+/// let algo = balance_impact_risk()
+///     .max_pct_vol(0.2)
+///     .risk_aversion(RiskAversion::Neutral)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn balance_impact_risk() -> BalanceImpactRiskBuilder {
+    BalanceImpactRiskBuilder::new()
+}
+
+/// Create a Minimise Impact (MinImpact) algo builder.
+///
+/// Slices the order to match market average while minimizing impact.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::minimise_impact;
+///
+/// let algo = minimise_impact()
+///     .max_pct_vol(0.2)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn minimise_impact() -> MinimiseImpactBuilder {
+    MinimiseImpactBuilder::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +271,27 @@ mod tests {
     fn test_dark_ice_helper() {
         let algo: AlgoParams = dark_ice().display_size(100).build().unwrap();
         assert_eq!(algo.strategy, "DarkIce");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_accumulate_distribute_helper() {
+        let algo: AlgoParams = accumulate_distribute().component_size(100).build().unwrap();
+        assert_eq!(algo.strategy, "AD");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_balance_impact_risk_helper() {
+        let algo: AlgoParams = balance_impact_risk().max_pct_vol(0.2).build().unwrap();
+        assert_eq!(algo.strategy, "BalanceImpactRisk");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_minimise_impact_helper() {
+        let algo: AlgoParams = minimise_impact().max_pct_vol(0.2).build().unwrap();
+        assert_eq!(algo.strategy, "MinImpact");
         assert_eq!(algo.params.len(), 1);
     }
 }

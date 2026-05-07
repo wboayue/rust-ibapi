@@ -856,6 +856,325 @@ impl TryFrom<DarkIceBuilder> for AlgoParams {
     }
 }
 
+// === Accumulate/Distribute Builder ===
+
+/// Builder for Accumulate/Distribute (AD) algorithmic orders.
+///
+/// Slices an order into random increments at random intervals to disguise
+/// trading intent.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::accumulate_distribute;
+///
+/// let algo = accumulate_distribute()
+///     .component_size(100)
+///     .time_between_orders(60)
+///     .randomize_time_20(true)
+///     .randomize_size_55(true)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct AccumulateDistributeBuilder {
+    component_size: Option<i32>,
+    time_between_orders: Option<i32>,
+    randomize_time_20: Option<bool>,
+    randomize_size_55: Option<bool>,
+    give_up: Option<i32>,
+    catch_up: Option<bool>,
+    wait_for_fill: Option<bool>,
+    active_time_start: Option<String>,
+    active_time_end: Option<String>,
+}
+
+impl AccumulateDistributeBuilder {
+    /// Create a new Accumulate/Distribute builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the size of each component slice.
+    pub fn component_size(mut self, size: i32) -> Self {
+        self.component_size = Some(size);
+        self
+    }
+
+    /// Set the seconds between component orders.
+    pub fn time_between_orders(mut self, seconds: i32) -> Self {
+        self.time_between_orders = Some(seconds);
+        self
+    }
+
+    /// Randomize the time interval by ±20%.
+    pub fn randomize_time_20(mut self, randomize: bool) -> Self {
+        self.randomize_time_20 = Some(randomize);
+        self
+    }
+
+    /// Randomize the component size by ±55%.
+    pub fn randomize_size_55(mut self, randomize: bool) -> Self {
+        self.randomize_size_55 = Some(randomize);
+        self
+    }
+
+    /// Set the give-up account.
+    pub fn give_up(mut self, give_up: i32) -> Self {
+        self.give_up = Some(give_up);
+        self
+    }
+
+    /// Catch up in time if the algo falls behind.
+    pub fn catch_up(mut self, catch_up: bool) -> Self {
+        self.catch_up = Some(catch_up);
+        self
+    }
+
+    /// Wait for the previous component to fill before submitting the next.
+    pub fn wait_for_fill(mut self, wait: bool) -> Self {
+        self.wait_for_fill = Some(wait);
+        self
+    }
+
+    /// Set the active period start time (format: "YYYYMMDD-HH:MM:SS TZ").
+    pub fn active_time_start(mut self, time: impl Into<String>) -> Self {
+        self.active_time_start = Some(time.into());
+        self
+    }
+
+    /// Set the active period end time (format: "YYYYMMDD-HH:MM:SS TZ").
+    pub fn active_time_end(mut self, time: impl Into<String>) -> Self {
+        self.active_time_end = Some(time.into());
+        self
+    }
+
+    /// Build the algo parameters.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.component_size {
+            params.push(TagValue {
+                tag: "componentSize".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.time_between_orders {
+            params.push(TagValue {
+                tag: "timeBetweenOrders".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.randomize_time_20 {
+            params.push(TagValue {
+                tag: "randomizeTime20".to_string(),
+                value: bool_param(v),
+            });
+        }
+        if let Some(v) = self.randomize_size_55 {
+            params.push(TagValue {
+                tag: "randomizeSize55".to_string(),
+                value: bool_param(v),
+            });
+        }
+        if let Some(v) = self.give_up {
+            params.push(TagValue {
+                tag: "giveUp".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.catch_up {
+            params.push(TagValue {
+                tag: "catchUp".to_string(),
+                value: bool_param(v),
+            });
+        }
+        if let Some(v) = self.wait_for_fill {
+            params.push(TagValue {
+                tag: "waitForFill".to_string(),
+                value: bool_param(v),
+            });
+        }
+        if let Some(v) = self.active_time_start {
+            params.push(TagValue {
+                tag: "activeTimeStart".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.active_time_end {
+            params.push(TagValue {
+                tag: "activeTimeEnd".to_string(),
+                value: v,
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "AD".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<AccumulateDistributeBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: AccumulateDistributeBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Balance Impact Risk Builder ===
+
+/// Builder for Balance Impact Risk algorithmic orders.
+///
+/// Balances market impact against the risk of adverse price movement.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::{balance_impact_risk, RiskAversion};
+///
+/// let algo = balance_impact_risk()
+///     .max_pct_vol(0.2)
+///     .risk_aversion(RiskAversion::Neutral)
+///     .force_completion(true)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct BalanceImpactRiskBuilder {
+    max_pct_vol: Option<f64>,
+    risk_aversion: Option<RiskAversion>,
+    force_completion: Option<bool>,
+}
+
+impl BalanceImpactRiskBuilder {
+    /// Create a new Balance Impact Risk builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set maximum participation rate (must be 10-50% per IB requirements).
+    pub fn max_pct_vol(mut self, pct: f64) -> Self {
+        self.max_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set risk aversion level.
+    pub fn risk_aversion(mut self, risk: RiskAversion) -> Self {
+        self.risk_aversion = Some(risk);
+        self
+    }
+
+    /// Force completion of the order.
+    pub fn force_completion(mut self, force: bool) -> Self {
+        self.force_completion = Some(force);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `max_pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.max_pct_vol {
+            validate_pct_vol("max_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "maxPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.risk_aversion {
+            params.push(TagValue {
+                tag: "riskAversion".to_string(),
+                value: v.as_str().to_string(),
+            });
+        }
+        if let Some(v) = self.force_completion {
+            params.push(TagValue {
+                tag: "forceCompletion".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "BalanceImpactRisk".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<BalanceImpactRiskBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: BalanceImpactRiskBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Minimise Impact Builder ===
+
+/// Builder for Minimise Impact (MinImpact) algorithmic orders.
+///
+/// Slices the order to achieve the market average with minimal impact.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::minimise_impact;
+///
+/// let algo = minimise_impact()
+///     .max_pct_vol(0.2)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct MinimiseImpactBuilder {
+    max_pct_vol: Option<f64>,
+}
+
+impl MinimiseImpactBuilder {
+    /// Create a new Minimise Impact builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set maximum participation rate (must be 10-50% per IB requirements).
+    pub fn max_pct_vol(mut self, pct: f64) -> Self {
+        self.max_pct_vol = Some(pct);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `max_pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.max_pct_vol {
+            validate_pct_vol("max_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "maxPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "MinImpact".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<MinimiseImpactBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: MinimiseImpactBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
 #[cfg(test)]
 #[path = "algo_builders_tests.rs"]
 mod tests;
