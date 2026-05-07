@@ -507,3 +507,48 @@ fn test_pct_vol_time_validates_both_rates() {
     let err = PctVolTimeBuilder::new().end_pct_vol(0.6).build();
     assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "end_pct_vol", .. })));
 }
+
+#[test]
+fn test_accu_distr_builder() {
+    let params = AccuDistrBuilder::new()
+        .time_between_orders(60)
+        .route_order_type("LMT")
+        .component_size(100)
+        .active_time_start("20260101-09:30:00")
+        .active_time_end("20260101-16:00:00")
+        .active_time_tz("US/Eastern")
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "AccuDistr");
+    assert_eq!(params.params.len(), 6);
+
+    // Order matters - mirrors IBKR's AvailableAlgoParams.cs:137-150
+    let tags: Vec<&str> = params.params.iter().map(|p| p.tag.as_str()).collect();
+    assert_eq!(
+        tags,
+        vec![
+            "timeBetweenOrders",
+            "routeOrderType",
+            "componentSize",
+            "activeTimeStart",
+            "activeTimeEnd",
+            "activeTimeTz"
+        ]
+    );
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("timeBetweenOrders"), Some(&"60".to_string()));
+    assert_eq!(find_param("routeOrderType"), Some(&"LMT".to_string()));
+    assert_eq!(find_param("componentSize"), Some(&"100".to_string()));
+    assert_eq!(find_param("activeTimeStart"), Some(&"20260101-09:30:00".to_string()));
+    assert_eq!(find_param("activeTimeEnd"), Some(&"20260101-16:00:00".to_string()));
+    assert_eq!(find_param("activeTimeTz"), Some(&"US/Eastern".to_string()));
+}
+
+#[test]
+fn test_accu_distr_builder_minimal() {
+    let params = AccuDistrBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "AccuDistr");
+    assert!(params.params.is_empty());
+}

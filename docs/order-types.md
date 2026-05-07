@@ -46,6 +46,7 @@ This guide describes all order types supported by rust-ibapi and demonstrates ho
   - [Close Price](#close-price)
   - [Dark Ice](#dark-ice)
   - [Accumulate/Distribute](#accumulatedistribute)
+  - [AccuDistr](#accudistr)
   - [Balance Impact Risk](#balance-impact-risk)
   - [Minimise Impact](#minimise-impact)
   - [Price Variant Percentage of Volume](#price-variant-percentage-of-volume)
@@ -988,6 +989,38 @@ let order_id = client.order(&contract)
 - `active_time_start` / `active_time_end` - Active period (format: "YYYYMMDD-HH:MM:SS TZ")
 
 **When to use:** For very large orders worked over hours or days where camouflage matters more than speed.
+
+### AccuDistr
+
+A separate IBKR algorithm from `AD` (Accumulate/Distribute) with a smaller parameter set, plus an explicit time zone and route order type. Strategy string on the wire is `"AccuDistr"`.
+
+```rust
+use ibapi::orders::builder::accu_distr;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(accu_distr()
+        .time_between_orders(60)
+        .route_order_type("LMT")
+        .component_size(100)
+        .active_time_start("20260101-09:30:00")
+        .active_time_end("20260101-16:00:00")
+        .active_time_tz("US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `time_between_orders` - Seconds between slices
+- `route_order_type` - Order routing type (typical values: "LMT", "MKT", "REL")
+- `component_size` - Size of each child slice
+- `active_time_start` / `active_time_end` - Active period (format: "YYYYMMDD-HH:MM:SS")
+- `active_time_tz` - Time zone for the active period (e.g., "US/Eastern", "GMT")
+
+The IBKR algo docs page does not explicitly enumerate this algo's parameters; the parameter shape is taken from IBKR's canonical Testbed sample (`samples/CSharp/Testbed/AvailableAlgoParams.cs`).
+
+**When to use:** When you need an Accumulate/Distribute style algo and explicit control over the routing order type and time zone matters more than the broader parameter set of `AD`.
 
 ### Balance Impact Risk
 

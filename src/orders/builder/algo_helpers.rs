@@ -20,7 +20,7 @@
 //! ```
 
 use crate::orders::builder::algo_builders::{
-    AccumulateDistributeBuilder, AdaptiveBuilder, ArrivalPriceBuilder, BalanceImpactRiskBuilder, ClosePriceBuilder, DarkIceBuilder,
+    AccuDistrBuilder, AccumulateDistributeBuilder, AdaptiveBuilder, ArrivalPriceBuilder, BalanceImpactRiskBuilder, ClosePriceBuilder, DarkIceBuilder,
     MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, TwapBuilder, VwapBuilder,
 };
 
@@ -276,6 +276,28 @@ pub fn pct_vol_time() -> PctVolTimeBuilder {
     PctVolTimeBuilder::new()
 }
 
+/// Create an AccuDistr algo builder.
+///
+/// AccuDistr is distinct from `AD` (Accumulate/Distribute) and exposes a
+/// smaller set of parameters with explicit `route_order_type` and
+/// `active_time_tz`. See [`AccuDistrBuilder`] for the parameter shape.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::accu_distr;
+///
+/// let algo = accu_distr()
+///     .time_between_orders(60)
+///     .route_order_type("LMT")
+///     .component_size(100)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn accu_distr() -> AccuDistrBuilder {
+    AccuDistrBuilder::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +392,13 @@ mod tests {
     fn test_pct_vol_time_helper() {
         let algo: AlgoParams = pct_vol_time().start_pct_vol(0.1).build().unwrap();
         assert_eq!(algo.strategy, "PctVolTm");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_accu_distr_helper() {
+        let algo: AlgoParams = accu_distr().component_size(100).build().unwrap();
+        assert_eq!(algo.strategy, "AccuDistr");
         assert_eq!(algo.params.len(), 1);
     }
 }

@@ -1568,6 +1568,144 @@ impl TryFrom<PctVolTimeBuilder> for AlgoParams {
     }
 }
 
+// === AccuDistr Builder ===
+
+/// Builder for AccuDistr algorithmic orders.
+///
+/// AccuDistr is a separate IBKR algorithm from `AD` (Accumulate/Distribute).
+/// It exposes a smaller set of parameters and adds an explicit time zone
+/// (`active_time_tz`) and a `route_order_type` knob. Strategy string on the
+/// wire is `"AccuDistr"`.
+///
+/// `route_order_type` is a free-form string per IBKR's sample code (typical
+/// values: `"LMT"`, `"MKT"`, `"REL"`). The IBKR algo docs page does not
+/// enumerate the parameters of this algo; the parameter shape is taken from
+/// the canonical Testbed sample (`samples/CSharp/Testbed/AvailableAlgoParams.cs`).
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::accu_distr;
+///
+/// let algo = accu_distr()
+///     .time_between_orders(60)
+///     .route_order_type("LMT")
+///     .component_size(100)
+///     .active_time_start("20260101-09:30:00")
+///     .active_time_end("20260101-16:00:00")
+///     .active_time_tz("US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct AccuDistrBuilder {
+    time_between_orders: Option<i32>,
+    route_order_type: Option<String>,
+    component_size: Option<i32>,
+    active_time_start: Option<String>,
+    active_time_end: Option<String>,
+    active_time_tz: Option<String>,
+}
+
+impl AccuDistrBuilder {
+    /// Create a new AccuDistr builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the seconds between component orders.
+    pub fn time_between_orders(mut self, seconds: i32) -> Self {
+        self.time_between_orders = Some(seconds);
+        self
+    }
+
+    /// Set the route order type (e.g., "LMT", "MKT", "REL").
+    pub fn route_order_type(mut self, order_type: impl Into<String>) -> Self {
+        self.route_order_type = Some(order_type.into());
+        self
+    }
+
+    /// Set the size of each component slice.
+    pub fn component_size(mut self, size: i32) -> Self {
+        self.component_size = Some(size);
+        self
+    }
+
+    /// Set the active period start time (format: "YYYYMMDD-HH:MM:SS").
+    pub fn active_time_start(mut self, time: impl Into<String>) -> Self {
+        self.active_time_start = Some(time.into());
+        self
+    }
+
+    /// Set the active period end time (format: "YYYYMMDD-HH:MM:SS").
+    pub fn active_time_end(mut self, time: impl Into<String>) -> Self {
+        self.active_time_end = Some(time.into());
+        self
+    }
+
+    /// Set the time zone for `active_time_start` / `active_time_end`
+    /// (e.g., "US/Eastern", "GMT").
+    pub fn active_time_tz(mut self, tz: impl Into<String>) -> Self {
+        self.active_time_tz = Some(tz.into());
+        self
+    }
+
+    /// Build the algo parameters.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.time_between_orders {
+            params.push(TagValue {
+                tag: "timeBetweenOrders".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.route_order_type {
+            params.push(TagValue {
+                tag: "routeOrderType".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.component_size {
+            params.push(TagValue {
+                tag: "componentSize".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.active_time_start {
+            params.push(TagValue {
+                tag: "activeTimeStart".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.active_time_end {
+            params.push(TagValue {
+                tag: "activeTimeEnd".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.active_time_tz {
+            params.push(TagValue {
+                tag: "activeTimeTz".to_string(),
+                value: v,
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "AccuDistr".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<AccuDistrBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: AccuDistrBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
 #[cfg(test)]
 #[path = "algo_builders_tests.rs"]
 mod tests;

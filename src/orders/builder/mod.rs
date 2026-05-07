@@ -16,12 +16,12 @@ mod async_impl;
 mod tests;
 
 pub use algo_builders::{
-    AccumulateDistributeBuilder, AdaptiveBuilder, AdaptivePriority, AlgoParams, ArrivalPriceBuilder, BalanceImpactRiskBuilder, ClosePriceBuilder,
-    DarkIceBuilder, MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, RiskAversion, TwapBuilder,
-    TwapStrategyType, VwapBuilder,
+    AccuDistrBuilder, AccumulateDistributeBuilder, AdaptiveBuilder, AdaptivePriority, AlgoParams, ArrivalPriceBuilder, BalanceImpactRiskBuilder,
+    ClosePriceBuilder, DarkIceBuilder, MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, RiskAversion,
+    TwapBuilder, TwapStrategyType, VwapBuilder,
 };
 pub use algo_helpers::{
-    accumulate_distribute, adaptive, arrival_price, balance_impact_risk, close_price, dark_ice, minimise_impact, pct_vol, pct_vol_price,
+    accu_distr, accumulate_distribute, adaptive, arrival_price, balance_impact_risk, close_price, dark_ice, minimise_impact, pct_vol, pct_vol_price,
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
