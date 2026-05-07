@@ -89,7 +89,6 @@ fn test_arrival_price_builder() {
 
 #[test]
 fn test_builder_minimal() {
-    // Test that builders work with no params set
     let vwap = VwapBuilder::new().build().unwrap();
     assert_eq!(vwap.strategy, "Vwap");
     assert!(vwap.params.is_empty());
@@ -101,14 +100,12 @@ fn test_builder_minimal() {
 
 #[test]
 fn test_pct_vol_out_of_range_errors() {
-    // Values above 0.5 should return error
     let result = PctVolBuilder::new().pct_vol(0.8).build();
     assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
     let result = VwapBuilder::new().max_pct_vol(1.0).build();
     assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
 
-    // Values below 0.1 should return error
     let result = PctVolBuilder::new().pct_vol(0.05).build();
     assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
@@ -118,7 +115,6 @@ fn test_pct_vol_out_of_range_errors() {
 
 #[test]
 fn test_pct_vol_valid_values_succeed() {
-    // Values within 0.1-0.5 should pass through unchanged
     let params = PctVolBuilder::new().pct_vol(0.25).build().unwrap();
     let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
     assert_eq!(find_param("pctVol"), Some(&"0.25".to_string()));
@@ -134,17 +130,14 @@ fn test_pct_vol_valid_values_succeed() {
 
 #[test]
 fn test_pct_vol_boundary_values() {
-    // Exactly 0.1 should succeed
     assert!(VwapBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(PctVolBuilder::new().pct_vol(0.1).build().is_ok());
     assert!(ArrivalPriceBuilder::new().max_pct_vol(0.1).build().is_ok());
 
-    // Exactly 0.5 should succeed
     assert!(VwapBuilder::new().max_pct_vol(0.5).build().is_ok());
     assert!(PctVolBuilder::new().pct_vol(0.5).build().is_ok());
     assert!(ArrivalPriceBuilder::new().max_pct_vol(0.5).build().is_ok());
 
-    // Just outside boundaries should fail
     assert!(VwapBuilder::new().max_pct_vol(0.09).build().is_err());
     assert!(VwapBuilder::new().max_pct_vol(0.51).build().is_err());
 }
@@ -208,11 +201,9 @@ fn test_close_price_builder_minimal() {
 
 #[test]
 fn test_close_price_pct_vol_boundary_values() {
-    // Exactly 0.1 and 0.5 should succeed
     assert!(ClosePriceBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(ClosePriceBuilder::new().max_pct_vol(0.5).build().is_ok());
 
-    // Outside the range should fail
     let err = ClosePriceBuilder::new().max_pct_vol(0.09).build();
     assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
     let err = ClosePriceBuilder::new().max_pct_vol(0.51).build();

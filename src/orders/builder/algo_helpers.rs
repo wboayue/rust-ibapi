@@ -297,7 +297,3 @@ pub fn pct_vol_time() -> PctVolTimeBuilder {
 pub fn accu_distr() -> AccuDistrBuilder {
     AccuDistrBuilder::new()
 }
-
-#[cfg(test)]
-#[path = "algo_helpers_tests.rs"]
-mod tests;

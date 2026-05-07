@@ -1,15 +1,13 @@
 //! Builder structs for IB algorithmic order strategies.
 //!
-//! This module provides type-safe builders for common IB algo strategies:
-//! VWAP, TWAP, Percentage of Volume, and Arrival Price.
+//! Type-safe builders for every IBKR-documented algo strategy: VWAP, TWAP,
+//! Percentage of Volume (and its Price/Size/Time variants), Arrival Price,
+//! Adaptive, Close Price, Dark Ice, Accumulate/Distribute (AD and AccuDistr),
+//! Balance Impact Risk, and Minimise Impact.
 
 use super::types::ValidationError;
 use crate::contracts::TagValue;
-
-/// Convert a boolean to IB's string representation ("1" or "0").
-fn bool_param(v: bool) -> String {
-    if v { "1" } else { "0" }.to_string()
-}
+use crate::ToField;
 
 /// Minimum allowed participation rate (10%).
 pub const MIN_PCT_VOL: f64 = 0.1;
@@ -74,7 +72,7 @@ fn build_windowed_pct_vol(
     if let Some(v) = no_take_liq {
         params.push(TagValue {
             tag: "noTakeLiq".to_string(),
-            value: bool_param(v),
+            value: v.to_field(),
         });
     }
 
@@ -210,19 +208,19 @@ impl VwapBuilder {
         if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.no_take_liq {
             params.push(TagValue {
                 tag: "noTakeLiq".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.speed_up {
             params.push(TagValue {
                 tag: "speedUp".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -337,7 +335,7 @@ impl TwapBuilder {
         if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -431,7 +429,7 @@ impl PctVolBuilder {
         if let Some(v) = self.no_take_liq {
             params.push(TagValue {
                 tag: "noTakeLiq".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -571,13 +569,13 @@ impl ArrivalPriceBuilder {
         if let Some(v) = self.force_completion {
             params.push(TagValue {
                 tag: "forceCompletion".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -745,7 +743,7 @@ impl ClosePriceBuilder {
         if let Some(v) = self.force_completion {
             params.push(TagValue {
                 tag: "forceCompletion".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -837,7 +835,7 @@ impl DarkIceBuilder {
         if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -959,13 +957,13 @@ impl AccumulateDistributeBuilder {
         if let Some(v) = self.randomize_time_20 {
             params.push(TagValue {
                 tag: "randomizeTime20".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.randomize_size_55 {
             params.push(TagValue {
                 tag: "randomizeSize55".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.give_up {
@@ -977,13 +975,13 @@ impl AccumulateDistributeBuilder {
         if let Some(v) = self.catch_up {
             params.push(TagValue {
                 tag: "catchUp".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.wait_for_fill {
             params.push(TagValue {
                 tag: "waitForFill".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
         if let Some(v) = self.active_time_start {
@@ -1076,7 +1074,7 @@ impl BalanceImpactRiskBuilder {
         if let Some(v) = self.force_completion {
             params.push(TagValue {
                 tag: "forceCompletion".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
@@ -1273,7 +1271,7 @@ impl PctVolPriceBuilder {
         if let Some(v) = self.no_take_liq {
             params.push(TagValue {
                 tag: "noTakeLiq".to_string(),
-                value: bool_param(v),
+                value: v.to_field(),
             });
         }
 
