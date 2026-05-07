@@ -1175,6 +1175,396 @@ impl TryFrom<MinimiseImpactBuilder> for AlgoParams {
     }
 }
 
+// === Price Variant Percentage of Volume Builder ===
+
+/// Builder for Price Variant Percentage of Volume (PctVolPx) algorithmic orders.
+///
+/// Participation rate varies with the market price: above the minimum price
+/// it tracks at `pct_vol`, then increases or decreases by `delta_pct_vol` as
+/// price moves, bounded by `min_pct_vol_4_px` and `max_pct_vol_4_px`.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_price;
+///
+/// let algo = pct_vol_price()
+///     .pct_vol(0.1)
+///     .delta_pct_vol(0.05)
+///     .min_pct_vol_4_px(0.05)
+///     .max_pct_vol_4_px(0.4)
+///     .start_time("09:30:00 US/Eastern")
+///     .end_time("16:00:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct PctVolPriceBuilder {
+    pct_vol: Option<f64>,
+    delta_pct_vol: Option<f64>,
+    min_pct_vol_4_px: Option<f64>,
+    max_pct_vol_4_px: Option<f64>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    no_take_liq: Option<bool>,
+}
+
+impl PctVolPriceBuilder {
+    /// Create a new PctVolPx builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the base participation rate (must be 10-50% per IB requirements).
+    pub fn pct_vol(mut self, pct: f64) -> Self {
+        self.pct_vol = Some(pct);
+        self
+    }
+
+    /// Set the rate delta applied as price moves (signed, no validation).
+    pub fn delta_pct_vol(mut self, delta: f64) -> Self {
+        self.delta_pct_vol = Some(delta);
+        self
+    }
+
+    /// Set the minimum participation rate bound (0-1, no validation).
+    pub fn min_pct_vol_4_px(mut self, pct: f64) -> Self {
+        self.min_pct_vol_4_px = Some(pct);
+        self
+    }
+
+    /// Set the maximum participation rate bound (0-1, no validation).
+    pub fn max_pct_vol_4_px(mut self, pct: f64) -> Self {
+        self.max_pct_vol_4_px = Some(pct);
+        self
+    }
+
+    /// Set start time (format: "HH:MM:SS TZ", e.g., "09:30:00 US/Eastern").
+    pub fn start_time(mut self, time: impl Into<String>) -> Self {
+        self.start_time = Some(time.into());
+        self
+    }
+
+    /// Set end time (format: "HH:MM:SS TZ", e.g., "16:00:00 US/Eastern").
+    pub fn end_time(mut self, time: impl Into<String>) -> Self {
+        self.end_time = Some(time.into());
+        self
+    }
+
+    /// Passive only - do not take liquidity.
+    pub fn no_take_liq(mut self, no_take: bool) -> Self {
+        self.no_take_liq = Some(no_take);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `pct_vol` is set but outside the 10-50% range.
+    /// Other percentage fields (`delta_pct_vol`, `min_pct_vol_4_px`,
+    /// `max_pct_vol_4_px`) have different valid ranges per IB and are
+    /// passed through to TWS for validation.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.pct_vol {
+            validate_pct_vol("pct_vol", v)?;
+            params.push(TagValue {
+                tag: "pctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.delta_pct_vol {
+            params.push(TagValue {
+                tag: "deltaPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.min_pct_vol_4_px {
+            params.push(TagValue {
+                tag: "minPctVol4Px".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.max_pct_vol_4_px {
+            params.push(TagValue {
+                tag: "maxPctVol4Px".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.start_time {
+            params.push(TagValue {
+                tag: "startTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.end_time {
+            params.push(TagValue {
+                tag: "endTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.no_take_liq {
+            params.push(TagValue {
+                tag: "noTakeLiq".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "PctVolPx".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<PctVolPriceBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: PctVolPriceBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Size Variant Percentage of Volume Builder ===
+
+/// Builder for Size Variant Percentage of Volume (PctVolSz) algorithmic orders.
+///
+/// Participation rate varies linearly from `start_pct_vol` to `end_pct_vol`
+/// as the order is filled.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_size;
+///
+/// let algo = pct_vol_size()
+///     .start_pct_vol(0.1)
+///     .end_pct_vol(0.4)
+///     .start_time("09:30:00 US/Eastern")
+///     .end_time("16:00:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct PctVolSizeBuilder {
+    start_pct_vol: Option<f64>,
+    end_pct_vol: Option<f64>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    no_take_liq: Option<bool>,
+}
+
+impl PctVolSizeBuilder {
+    /// Create a new PctVolSz builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the participation rate at the start (must be 10-50%).
+    pub fn start_pct_vol(mut self, pct: f64) -> Self {
+        self.start_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set the participation rate at the end (must be 10-50%).
+    pub fn end_pct_vol(mut self, pct: f64) -> Self {
+        self.end_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set start time (format: "HH:MM:SS TZ", e.g., "09:30:00 US/Eastern").
+    pub fn start_time(mut self, time: impl Into<String>) -> Self {
+        self.start_time = Some(time.into());
+        self
+    }
+
+    /// Set end time (format: "HH:MM:SS TZ", e.g., "16:00:00 US/Eastern").
+    pub fn end_time(mut self, time: impl Into<String>) -> Self {
+        self.end_time = Some(time.into());
+        self
+    }
+
+    /// Passive only - do not take liquidity.
+    pub fn no_take_liq(mut self, no_take: bool) -> Self {
+        self.no_take_liq = Some(no_take);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `start_pct_vol` or `end_pct_vol` is set but
+    /// outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.start_pct_vol {
+            validate_pct_vol("start_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "startPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.end_pct_vol {
+            validate_pct_vol("end_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "endPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.start_time {
+            params.push(TagValue {
+                tag: "startTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.end_time {
+            params.push(TagValue {
+                tag: "endTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.no_take_liq {
+            params.push(TagValue {
+                tag: "noTakeLiq".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "PctVolSz".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<PctVolSizeBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: PctVolSizeBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
+// === Time Variant Percentage of Volume Builder ===
+
+/// Builder for Time Variant Percentage of Volume (PctVolTm) algorithmic orders.
+///
+/// Participation rate varies linearly from `start_pct_vol` to `end_pct_vol`
+/// over the active time window.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_time;
+///
+/// let algo = pct_vol_time()
+///     .start_pct_vol(0.1)
+///     .end_pct_vol(0.4)
+///     .start_time("09:30:00 US/Eastern")
+///     .end_time("16:00:00 US/Eastern")
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct PctVolTimeBuilder {
+    start_pct_vol: Option<f64>,
+    end_pct_vol: Option<f64>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    no_take_liq: Option<bool>,
+}
+
+impl PctVolTimeBuilder {
+    /// Create a new PctVolTm builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the participation rate at the start (must be 10-50%).
+    pub fn start_pct_vol(mut self, pct: f64) -> Self {
+        self.start_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set the participation rate at the end (must be 10-50%).
+    pub fn end_pct_vol(mut self, pct: f64) -> Self {
+        self.end_pct_vol = Some(pct);
+        self
+    }
+
+    /// Set start time (format: "HH:MM:SS TZ", e.g., "09:30:00 US/Eastern").
+    pub fn start_time(mut self, time: impl Into<String>) -> Self {
+        self.start_time = Some(time.into());
+        self
+    }
+
+    /// Set end time (format: "HH:MM:SS TZ", e.g., "16:00:00 US/Eastern").
+    pub fn end_time(mut self, time: impl Into<String>) -> Self {
+        self.end_time = Some(time.into());
+        self
+    }
+
+    /// Passive only - do not take liquidity.
+    pub fn no_take_liq(mut self, no_take: bool) -> Self {
+        self.no_take_liq = Some(no_take);
+        self
+    }
+
+    /// Build the algo parameters.
+    ///
+    /// Returns an error if `start_pct_vol` or `end_pct_vol` is set but
+    /// outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
+        let mut params = Vec::new();
+
+        if let Some(v) = self.start_pct_vol {
+            validate_pct_vol("start_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "startPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.end_pct_vol {
+            validate_pct_vol("end_pct_vol", v)?;
+            params.push(TagValue {
+                tag: "endPctVol".to_string(),
+                value: v.to_string(),
+            });
+        }
+        if let Some(v) = self.start_time {
+            params.push(TagValue {
+                tag: "startTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.end_time {
+            params.push(TagValue {
+                tag: "endTime".to_string(),
+                value: v,
+            });
+        }
+        if let Some(v) = self.no_take_liq {
+            params.push(TagValue {
+                tag: "noTakeLiq".to_string(),
+                value: bool_param(v),
+            });
+        }
+
+        Ok(AlgoParams {
+            strategy: "PctVolTm".to_string(),
+            params,
+        })
+    }
+}
+
+impl TryFrom<PctVolTimeBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: PctVolTimeBuilder) -> Result<Self, Self::Error> {
+        builder.build()
+    }
+}
+
 #[cfg(test)]
 #[path = "algo_builders_tests.rs"]
 mod tests;

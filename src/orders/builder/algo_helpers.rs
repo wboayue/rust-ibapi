@@ -21,7 +21,7 @@
 
 use crate::orders::builder::algo_builders::{
     AccumulateDistributeBuilder, AdaptiveBuilder, ArrivalPriceBuilder, BalanceImpactRiskBuilder, ClosePriceBuilder, DarkIceBuilder,
-    MinimiseImpactBuilder, PctVolBuilder, TwapBuilder, VwapBuilder,
+    MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, TwapBuilder, VwapBuilder,
 };
 
 /// Create a VWAP (Volume Weighted Average Price) algo builder.
@@ -219,6 +219,63 @@ pub fn minimise_impact() -> MinimiseImpactBuilder {
     MinimiseImpactBuilder::new()
 }
 
+/// Create a Price Variant Percentage of Volume (PctVolPx) algo builder.
+///
+/// Participation rate varies with the market price.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_price;
+///
+/// let algo = pct_vol_price()
+///     .pct_vol(0.1)
+///     .delta_pct_vol(0.05)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn pct_vol_price() -> PctVolPriceBuilder {
+    PctVolPriceBuilder::new()
+}
+
+/// Create a Size Variant Percentage of Volume (PctVolSz) algo builder.
+///
+/// Participation rate varies based on remaining order size.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_size;
+///
+/// let algo = pct_vol_size()
+///     .start_pct_vol(0.1)
+///     .end_pct_vol(0.4)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn pct_vol_size() -> PctVolSizeBuilder {
+    PctVolSizeBuilder::new()
+}
+
+/// Create a Time Variant Percentage of Volume (PctVolTm) algo builder.
+///
+/// Participation rate varies linearly over the active time window.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::orders::builder::pct_vol_time;
+///
+/// let algo = pct_vol_time()
+///     .start_pct_vol(0.1)
+///     .end_pct_vol(0.4)
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// ```
+pub fn pct_vol_time() -> PctVolTimeBuilder {
+    PctVolTimeBuilder::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +349,27 @@ mod tests {
     fn test_minimise_impact_helper() {
         let algo: AlgoParams = minimise_impact().max_pct_vol(0.2).build().unwrap();
         assert_eq!(algo.strategy, "MinImpact");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_pct_vol_price_helper() {
+        let algo: AlgoParams = pct_vol_price().pct_vol(0.15).build().unwrap();
+        assert_eq!(algo.strategy, "PctVolPx");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_pct_vol_size_helper() {
+        let algo: AlgoParams = pct_vol_size().start_pct_vol(0.1).build().unwrap();
+        assert_eq!(algo.strategy, "PctVolSz");
+        assert_eq!(algo.params.len(), 1);
+    }
+
+    #[test]
+    fn test_pct_vol_time_helper() {
+        let algo: AlgoParams = pct_vol_time().start_pct_vol(0.1).build().unwrap();
+        assert_eq!(algo.strategy, "PctVolTm");
         assert_eq!(algo.params.len(), 1);
     }
 }

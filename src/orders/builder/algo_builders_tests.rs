@@ -347,3 +347,128 @@ fn test_minimise_impact_pct_vol_boundary_values() {
     let err = MinimiseImpactBuilder::new().max_pct_vol(0.51).build();
     assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
 }
+
+#[test]
+fn test_pct_vol_price_builder() {
+    let params = PctVolPriceBuilder::new()
+        .pct_vol(0.2)
+        .delta_pct_vol(-0.05)
+        .min_pct_vol_4_px(0.05)
+        .max_pct_vol_4_px(0.8)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .no_take_liq(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "PctVolPx");
+    assert_eq!(params.params.len(), 7);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("pctVol"), Some(&"0.2".to_string()));
+    assert_eq!(find_param("deltaPctVol"), Some(&"-0.05".to_string()));
+    assert_eq!(find_param("minPctVol4Px"), Some(&"0.05".to_string()));
+    assert_eq!(find_param("maxPctVol4Px"), Some(&"0.8".to_string()));
+    assert_eq!(find_param("startTime"), Some(&"09:30:00 US/Eastern".to_string()));
+    assert_eq!(find_param("endTime"), Some(&"16:00:00 US/Eastern".to_string()));
+    assert_eq!(find_param("noTakeLiq"), Some(&"1".to_string()));
+}
+
+#[test]
+fn test_pct_vol_price_builder_minimal() {
+    let params = PctVolPriceBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "PctVolPx");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_pct_vol_price_only_pct_vol_validated() {
+    // pct_vol enforces 10-50%
+    assert!(PctVolPriceBuilder::new().pct_vol(0.1).build().is_ok());
+    assert!(PctVolPriceBuilder::new().pct_vol(0.5).build().is_ok());
+    let err = PctVolPriceBuilder::new().pct_vol(0.09).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
+
+    // delta_pct_vol can be negative; min/max bounds 0-1 — none are validated
+    assert!(PctVolPriceBuilder::new().delta_pct_vol(-0.5).build().is_ok());
+    assert!(PctVolPriceBuilder::new().min_pct_vol_4_px(0.0).build().is_ok());
+    assert!(PctVolPriceBuilder::new().max_pct_vol_4_px(1.0).build().is_ok());
+}
+
+#[test]
+fn test_pct_vol_size_builder() {
+    let params = PctVolSizeBuilder::new()
+        .start_pct_vol(0.1)
+        .end_pct_vol(0.4)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .no_take_liq(false)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "PctVolSz");
+    assert_eq!(params.params.len(), 5);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("startPctVol"), Some(&"0.1".to_string()));
+    assert_eq!(find_param("endPctVol"), Some(&"0.4".to_string()));
+    assert_eq!(find_param("startTime"), Some(&"09:30:00 US/Eastern".to_string()));
+    assert_eq!(find_param("endTime"), Some(&"16:00:00 US/Eastern".to_string()));
+    assert_eq!(find_param("noTakeLiq"), Some(&"0".to_string()));
+}
+
+#[test]
+fn test_pct_vol_size_builder_minimal() {
+    let params = PctVolSizeBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "PctVolSz");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_pct_vol_size_validates_both_rates() {
+    assert!(PctVolSizeBuilder::new().start_pct_vol(0.1).end_pct_vol(0.5).build().is_ok());
+
+    let err = PctVolSizeBuilder::new().start_pct_vol(0.05).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "start_pct_vol", .. })));
+
+    let err = PctVolSizeBuilder::new().end_pct_vol(0.6).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "end_pct_vol", .. })));
+}
+
+#[test]
+fn test_pct_vol_time_builder() {
+    let params = PctVolTimeBuilder::new()
+        .start_pct_vol(0.15)
+        .end_pct_vol(0.35)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .no_take_liq(true)
+        .build()
+        .unwrap();
+
+    assert_eq!(params.strategy, "PctVolTm");
+    assert_eq!(params.params.len(), 5);
+
+    let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
+    assert_eq!(find_param("startPctVol"), Some(&"0.15".to_string()));
+    assert_eq!(find_param("endPctVol"), Some(&"0.35".to_string()));
+    assert_eq!(find_param("noTakeLiq"), Some(&"1".to_string()));
+}
+
+#[test]
+fn test_pct_vol_time_builder_minimal() {
+    let params = PctVolTimeBuilder::new().build().unwrap();
+    assert_eq!(params.strategy, "PctVolTm");
+    assert!(params.params.is_empty());
+}
+
+#[test]
+fn test_pct_vol_time_validates_both_rates() {
+    assert!(PctVolTimeBuilder::new().start_pct_vol(0.1).end_pct_vol(0.5).build().is_ok());
+
+    let err = PctVolTimeBuilder::new().start_pct_vol(0.05).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "start_pct_vol", .. })));
+
+    let err = PctVolTimeBuilder::new().end_pct_vol(0.6).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "end_pct_vol", .. })));
+}
