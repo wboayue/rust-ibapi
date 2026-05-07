@@ -68,17 +68,8 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// list in one shot. Pairs naturally with conditional composition
     /// (e.g. only add `"236"` for stocks).
     ///
-    /// See [`Self::generic_ticks`] for the list of common IDs.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// // (Shown for docs; sync/async-specific runnable forms are on `subscribe`.)
-    /// let _subscription = client.market_data(&contract)
-    ///     .add_generic_tick("233")  // RT Volume
-    ///     .add_generic_tick("236")  // Shortable
-    ///     .subscribe();
-    /// ```
+    /// See [`Self::generic_ticks`] for the list of common IDs and
+    /// [`Self::subscribe`] for a runnable end-to-end example.
     pub fn add_generic_tick(mut self, tick: impl AsRef<str>) -> Self {
         self.generic_ticks.push(tick.as_ref().to_string());
         self
@@ -130,7 +121,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// let contract = Contract::stock("AAPL").build();
     ///
     /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233", "236"])
+    ///     .add_generic_tick("233")  // RT Volume
+    ///     .add_generic_tick("236")  // Shortable
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
@@ -164,7 +156,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///     let contract = Contract::stock("AAPL").build();
     ///
     ///     let mut subscription = client.market_data(&contract)
-    ///         .generic_ticks(&["233", "236"])
+    ///         .add_generic_tick("233")  // RT Volume
+    ///         .add_generic_tick("236")  // Shortable
     ///         .subscribe()
     ///         .await
     ///         .expect("subscription failed");
