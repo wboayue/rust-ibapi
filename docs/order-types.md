@@ -1046,9 +1046,9 @@ let order_id = client.order(&contract)
     .buy(1000)
     .limit(150.0)
     .algo(pct_vol_price()
-        .pct_vol(0.1)
-        .delta_pct_vol(0.05)
-        .min_pct_vol_4_px(0.05)
+        .pct_vol(0.2)
+        .delta_pct_vol(0.1)
+        .min_pct_vol_4_px(0.1)
         .max_pct_vol_4_px(0.4)
         .start_time("09:30:00 US/Eastern")
         .end_time("16:00:00 US/Eastern")
@@ -1057,12 +1057,14 @@ let order_id = client.order(&contract)
 ```
 
 **Parameters:**
-- `pct_vol(0.1-0.5)` - Base participation rate (validated)
-- `delta_pct_vol` - Rate delta applied as price moves; can be negative
-- `min_pct_vol_4_px(0-1)` - Lower participation bound
-- `max_pct_vol_4_px(0-1)` - Upper participation bound
+- `pct_vol(0.1-0.5)` - Base participation rate
+- `delta_pct_vol(0.1-0.5)` - Rate delta applied as price moves
+- `min_pct_vol_4_px(0.1-0.5)` - Lower participation bound
+- `max_pct_vol_4_px(0.1-0.5)` - Upper participation bound
 - `start_time` / `end_time` - Active window
 - `no_take_liq` - Passive only
+
+All four percentage fields are validated to IB's 10-50% range.
 
 **When to use:** When you want participation to scale with how favorable the price is.
 

@@ -1179,9 +1179,10 @@ impl TryFrom<MinimiseImpactBuilder> for AlgoParams {
 
 /// Builder for Price Variant Percentage of Volume (PctVolPx) algorithmic orders.
 ///
-/// Participation rate varies with the market price: above the minimum price
-/// it tracks at `pct_vol`, then increases or decreases by `delta_pct_vol` as
-/// price moves, bounded by `min_pct_vol_4_px` and `max_pct_vol_4_px`.
+/// Participation rate varies with the market price: tracks at `pct_vol`,
+/// adjusts by `delta_pct_vol` as price moves, and stays bounded by
+/// `min_pct_vol_4_px` / `max_pct_vol_4_px`. All four percentage fields are
+/// validated to IB's 10-50% range.
 ///
 /// # Example
 ///
@@ -1189,9 +1190,9 @@ impl TryFrom<MinimiseImpactBuilder> for AlgoParams {
 /// use ibapi::orders::builder::pct_vol_price;
 ///
 /// let algo = pct_vol_price()
-///     .pct_vol(0.1)
-///     .delta_pct_vol(0.05)
-///     .min_pct_vol_4_px(0.05)
+///     .pct_vol(0.2)
+///     .delta_pct_vol(0.1)
+///     .min_pct_vol_4_px(0.1)
 ///     .max_pct_vol_4_px(0.4)
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
@@ -1221,19 +1222,19 @@ impl PctVolPriceBuilder {
         self
     }
 
-    /// Set the rate delta applied as price moves (signed, no validation).
+    /// Set the rate delta applied as price moves (must be 10-50%).
     pub fn delta_pct_vol(mut self, delta: f64) -> Self {
         self.delta_pct_vol = Some(delta);
         self
     }
 
-    /// Set the minimum participation rate bound (0-1, no validation).
+    /// Set the minimum participation rate bound (must be 10-50%).
     pub fn min_pct_vol_4_px(mut self, pct: f64) -> Self {
         self.min_pct_vol_4_px = Some(pct);
         self
     }
 
-    /// Set the maximum participation rate bound (0-1, no validation).
+    /// Set the maximum participation rate bound (must be 10-50%).
     pub fn max_pct_vol_4_px(mut self, pct: f64) -> Self {
         self.max_pct_vol_4_px = Some(pct);
         self
@@ -1259,10 +1260,9 @@ impl PctVolPriceBuilder {
 
     /// Build the algo parameters.
     ///
-    /// Returns an error if `pct_vol` is set but outside the 10-50% range.
-    /// Other percentage fields (`delta_pct_vol`, `min_pct_vol_4_px`,
-    /// `max_pct_vol_4_px`) have different valid ranges per IB and are
-    /// passed through to TWS for validation.
+    /// Returns an error if any of `pct_vol`, `delta_pct_vol`,
+    /// `min_pct_vol_4_px`, or `max_pct_vol_4_px` is set but outside IB's
+    /// 10-50% range.
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
@@ -1274,18 +1274,21 @@ impl PctVolPriceBuilder {
             });
         }
         if let Some(v) = self.delta_pct_vol {
+            validate_pct_vol("delta_pct_vol", v)?;
             params.push(TagValue {
                 tag: "deltaPctVol".to_string(),
                 value: v.to_string(),
             });
         }
         if let Some(v) = self.min_pct_vol_4_px {
+            validate_pct_vol("min_pct_vol_4_px", v)?;
             params.push(TagValue {
                 tag: "minPctVol4Px".to_string(),
                 value: v.to_string(),
             });
         }
         if let Some(v) = self.max_pct_vol_4_px {
+            validate_pct_vol("max_pct_vol_4_px", v)?;
             params.push(TagValue {
                 tag: "maxPctVol4Px".to_string(),
                 value: v.to_string(),

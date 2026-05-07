@@ -352,9 +352,9 @@ fn test_minimise_impact_pct_vol_boundary_values() {
 fn test_pct_vol_price_builder() {
     let params = PctVolPriceBuilder::new()
         .pct_vol(0.2)
-        .delta_pct_vol(-0.05)
-        .min_pct_vol_4_px(0.05)
-        .max_pct_vol_4_px(0.8)
+        .delta_pct_vol(0.1)
+        .min_pct_vol_4_px(0.1)
+        .max_pct_vol_4_px(0.4)
         .start_time("09:30:00 US/Eastern")
         .end_time("16:00:00 US/Eastern")
         .no_take_liq(true)
@@ -366,9 +366,9 @@ fn test_pct_vol_price_builder() {
 
     let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
     assert_eq!(find_param("pctVol"), Some(&"0.2".to_string()));
-    assert_eq!(find_param("deltaPctVol"), Some(&"-0.05".to_string()));
-    assert_eq!(find_param("minPctVol4Px"), Some(&"0.05".to_string()));
-    assert_eq!(find_param("maxPctVol4Px"), Some(&"0.8".to_string()));
+    assert_eq!(find_param("deltaPctVol"), Some(&"0.1".to_string()));
+    assert_eq!(find_param("minPctVol4Px"), Some(&"0.1".to_string()));
+    assert_eq!(find_param("maxPctVol4Px"), Some(&"0.4".to_string()));
     assert_eq!(find_param("startTime"), Some(&"09:30:00 US/Eastern".to_string()));
     assert_eq!(find_param("endTime"), Some(&"16:00:00 US/Eastern".to_string()));
     assert_eq!(find_param("noTakeLiq"), Some(&"1".to_string()));
@@ -382,17 +382,52 @@ fn test_pct_vol_price_builder_minimal() {
 }
 
 #[test]
-fn test_pct_vol_price_only_pct_vol_validated() {
-    // pct_vol enforces 10-50%
+fn test_pct_vol_price_validates_all_rate_fields() {
+    // Per IB docs (https://interactivebrokers.github.io/tws-api/ibalgos.html),
+    // all four percentage fields are bounded to 0.1-0.5.
     assert!(PctVolPriceBuilder::new().pct_vol(0.1).build().is_ok());
     assert!(PctVolPriceBuilder::new().pct_vol(0.5).build().is_ok());
     let err = PctVolPriceBuilder::new().pct_vol(0.09).build();
     assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
-    // delta_pct_vol can be negative; min/max bounds 0-1 — none are validated
-    assert!(PctVolPriceBuilder::new().delta_pct_vol(-0.5).build().is_ok());
-    assert!(PctVolPriceBuilder::new().min_pct_vol_4_px(0.0).build().is_ok());
-    assert!(PctVolPriceBuilder::new().max_pct_vol_4_px(1.0).build().is_ok());
+    let err = PctVolPriceBuilder::new().delta_pct_vol(-0.1).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "delta_pct_vol", .. })));
+    let err = PctVolPriceBuilder::new().delta_pct_vol(0.51).build();
+    assert!(matches!(err, Err(ValidationError::InvalidPercentage { field: "delta_pct_vol", .. })));
+
+    let err = PctVolPriceBuilder::new().min_pct_vol_4_px(0.05).build();
+    assert!(matches!(
+        err,
+        Err(ValidationError::InvalidPercentage {
+            field: "min_pct_vol_4_px",
+            ..
+        })
+    ));
+    let err = PctVolPriceBuilder::new().min_pct_vol_4_px(0.6).build();
+    assert!(matches!(
+        err,
+        Err(ValidationError::InvalidPercentage {
+            field: "min_pct_vol_4_px",
+            ..
+        })
+    ));
+
+    let err = PctVolPriceBuilder::new().max_pct_vol_4_px(0.0).build();
+    assert!(matches!(
+        err,
+        Err(ValidationError::InvalidPercentage {
+            field: "max_pct_vol_4_px",
+            ..
+        })
+    ));
+    let err = PctVolPriceBuilder::new().max_pct_vol_4_px(1.0).build();
+    assert!(matches!(
+        err,
+        Err(ValidationError::InvalidPercentage {
+            field: "max_pct_vol_4_px",
+            ..
+        })
+    ));
 }
 
 #[test]
