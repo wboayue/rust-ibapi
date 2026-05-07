@@ -4,6 +4,8 @@ A living checklist of public-API rough edges to address before 3.0 ships. Goal:
 the API should feel **simple, ergonomic, easy to use, and intuitive** — minimal
 ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
+**Last audited:** 2026-05-06 (against `main` post-PR #519).
+
 ## How to use this doc
 
 - One bullet per concrete change. Keep them small and independently shippable.
@@ -15,7 +17,7 @@ ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
 Related existing tracking docs in `todos/`:
 - `algo-order-builders.md`, `generic-tick-types.md`, `legacy-text-protocol-cleanup.md`,
-  `protobuf-migration.md`.
+  `notice-api-unification.md`, `protobuf-migration.md`.
 
 ---
 
@@ -29,12 +31,10 @@ Related existing tracking docs in `todos/`:
     can construct), keep `pub` on getters; or `#[non_exhaustive]` + private constructor.
   - Breaking: yes (intentional for 3.0).
 
-- [ ] **Newtype ergonomics: take `impl Into<Symbol>` / `&str` everywhere.**
-  `Symbol::from("AAPL")`, `Exchange::from("SMART")`, `Currency::from("USD")` shows up
-  in every example. Builder methods and constructors should accept `impl Into<_>` so
-  callers can pass string literals directly.
-  - Audit: `Symbol`, `Exchange`, `Currency`, `Cusip`, `Isin`, `BondIdentifier`,
-    `ContractMonth`, `ExpirationDate`, `Strike`.
+- [x] **Newtype ergonomics: take `impl Into<Symbol>` / `&str` everywhere.** Shipped.
+  `Symbol`, `Exchange`, `Currency` impl `From<&str>` + `From<String>` (`src/contracts/types.rs:24,85,141`)
+  and the contract builder methods take `impl Into<String>` (`src/contracts/common/contract_builder/mod.rs:330`).
+  Verified 2026-05-06.
 
 - [ ] **Converge order construction on one style.** Two coexisting paths today:
   - `order_builder::limit_order(Action::Buy, 100.0, 150.0)` (free fn, returns `Order`)
@@ -46,7 +46,8 @@ Related existing tracking docs in `todos/`:
 
 - [ ] **Drop `client.next_order_id()` from the canonical happy path.** `submit()` already
   allocates an id internally; the only caller that still needs `next_order_id()` is
-  the low-level `place_order(order_id, contract, order)` form. Either:
+  the low-level `place_order(order_id, contract, order)` form. Examples still show it
+  at `examples/async/place_order.rs:32, 100, 103`. Either:
   - keep `next_order_id()` for advanced callers but stop showing it in examples; or
   - hide it behind `client.advanced()` / a feature flag and have `place_order` accept
     `Option<i32>`.
@@ -64,28 +65,43 @@ Related existing tracking docs in `todos/`:
   - Decision needed: keep `next_data()` as a thin alias, or remove and force `Stream`?
   - Breaking: yes if we remove.
 
-- [ ] **Notice classification helpers.** Examples do `notice.code >= 200 && notice.code < 300`
-  to decide "rejected/cancelled" (see `place_order.rs:92`). Provide:
-  - `Notice::is_warning()`, `Notice::is_order_rejection()`, `Notice::category() -> NoticeCategory`.
-  - A range-keyed enum or table-driven classifier so callers never reach for magic
-    numbers.
+- [ ] **Notice classification helpers.** Today callers reach for `notice.code` ranges
+  to decide "warning" vs "rejection" vs "system message" (some predicates already
+  exist on `Notice` — `is_warning`, `is_system_message` — but no public taxonomy
+  on the wire-error ranges). Provide:
+  - `Notice::is_order_rejection()` (codes 200–399), `Notice::category() -> NoticeCategory`.
+  - Precedent: `OrderStatusKind::is_terminal()` (PR #518) — table-driven typed
+    classifier, no magic numbers at the call site.
 
-- [ ] **Replace stringly-typed status fields with enums.**
-  - `OrderStatus.status: String` compared against `"Filled"`, `"Cancelled"`, … in every
-    order example. Introduce `OrderStatus::state: OrderState` enum, keep `status: String`
-    only as a fallback for unknown values (or drop it entirely).
-  - Same audit for `OrderState.status`, contract `secIdType`, exec `side`, etc.
+- [x] **`OrderStatus.status: String` → `OrderStatusKind` enum.** Shipped in PR #518
+  (commit `b9ed884`). `src/orders/mod.rs:1557` is `pub status: OrderStatusKind` with
+  `is_terminal()` etc. Examples now use `.is_terminal()` (lines 61, 143).
+
+- [ ] **Continue the typed-status sweep.** `OrderState.status`, contract `secIdType`,
+  exec `side`, and any other `String` fields whose wire vocabulary is enumerated.
+  Follow the PR #518 pattern (per `CLAUDE.md` rule 21): strict enum, `Display`
+  round-trips, decoder rejects empty/missing as `Error::Parse`. **First**: grep
+  captured-wire fixtures + the C# reference to confirm the field is actually
+  enumerated (rule 21 caveat — `OrderState.completed_status` looked enumerated
+  but is free-form text).
 
 - [ ] **One canonical `Subscription` import path.** `Subscription` is reachable from
-  `crate::client::Subscription`, `crate::subscriptions::Subscription`, and
-  `crate::prelude::Subscription`, with feature-gated divergence between `client::sync`
-  and `client::r#async`. Pick `crate::subscriptions::Subscription` as canonical and
-  keep the others as `pub use` aliases (or remove the client-level paths).
+  `crate::subscriptions::Subscription` (canonical at `src/subscriptions/mod.rs:32,35`),
+  `crate::client::Subscription` (`src/client/mod.rs:34`), and `crate::prelude::Subscription`
+  (feature-gated at `src/prelude.rs:51-53`). Pick `crate::subscriptions::Subscription`
+  as canonical and keep the others as `pub use` aliases (or remove the client-level paths).
 
 - [ ] **`NoticeStream` should not mirror `Subscription`'s sync/async toggle in the
   prelude.** Today the prelude conditionally re-exports a sync vs async `NoticeStream`.
   Either expose distinct `NoticeStream` / `BlockingNoticeStream` types, or keep a single
   type whose API is the same shape and only differs in `await`.
+
+- [ ] **Unify the two notice APIs.** `ConnectionOptions::startup_notice_callback` (pre-connect,
+  handshake-only) and `Client::notice_stream()` (post-connect, lifetime of the connection)
+  deliver the same data with a lifecycle gap, and the callback's window has a race against
+  gateway message ordering. Pick one canonical surface.
+  - Plan: [`notice-api-unification.md`](notice-api-unification.md).
+  - Breaking: yes.
 
 ## 3. Naming, layout, prelude
 
@@ -97,10 +113,12 @@ Related existing tracking docs in `todos/`:
   - Or keep the aliases but document them as the canonical names.
 
 - [ ] **Async-vs-blocking naming asymmetry.** `ibapi::Client` is the async client when
-  `async` is on; the sync client lives at `ibapi::client::blocking::Client`. Consider
-  symmetric paths (`client::async::Client` + `client::blocking::Client`) and a
-  feature-driven re-export at the crate root, so docs and examples can refer to
-  either by an obvious path.
+  `async` is on; the sync client lives at `ibapi::client::blocking::Client`
+  (`src/client/mod.rs:15`). `async` is a reserved keyword so a literal
+  `client::async::Client` path needs `r#async` (already used internally). Decision:
+  either (a) keep the asymmetry and document `Client` (root) + `client::blocking::Client`
+  as the two canonical paths, or (b) expose `client::r#async::Client` as a sibling
+  for symmetry in docs/examples.
 
 - [ ] **Reorganize re-exports out of `orders` for non-order types.** `TagValue` is
   re-exported from `orders` (`src/orders/mod.rs:67`) for historical reasons. Move to
@@ -108,16 +126,19 @@ Related existing tracking docs in `todos/`:
 
 - [ ] **Hide internal types from the public surface.** Audit `pub` items that look
   like plumbing:
-  - `Client::message_bus()`, `Client::stubbed()` (currently `pub`)
+  - `Client::message_bus()` (`src/client/async.rs:391`) and `Client::stubbed()`
+    (`src/client/async.rs:374`) — both `pub` on the async side; sync has neither
+    in its public signature, so the async exposure looks accidental.
   - `subscriptions::common::SubscriptionItem` (re-exported at module root — fine, but
     confirm `DecoderContext`, `StreamDecoder` stay `pub(crate)`)
-  - `pub mod messages` and `pub mod proto` — confirm what consumers actually need
-    versus what's just exposed for tests/examples; consider `#[doc(hidden)]` for the
-    advanced bits.
+  - `pub mod messages` and `pub mod proto` (`src/lib.rs:111, 131`) — confirm what
+    consumers actually need versus what's just exposed for tests/examples; consider
+    `#[doc(hidden)]` for the advanced bits.
 
 ## 4. Connection API
 
-- [ ] **Fold connect variants into a builder.** Today there are three:
+- [ ] **Fold connect variants into a builder.** Today there are three on each side
+  (sync `src/client/sync.rs:62, 105, 132`; async `src/client/async.rs:66, 112, 142`):
   `connect`, `connect_with_callback`, `connect_with_options`. Replace with:
   ```rust
   Client::builder("127.0.0.1:4002", 100)
@@ -126,19 +147,26 @@ Related existing tracking docs in `todos/`:
       .connect()
       .await?;
   ```
-  Keep `Client::connect(addr, id)` as the one-liner; deprecate the rest.
+  Keep `Client::connect(addr, id)` as the one-liner; deprecate the rest. Note: the
+  notice-API unification (`notice-api-unification.md` option 3) suggests doing this
+  refactor first so per-feature builders can use native broadcaster types.
 
-- [ ] **`StartupMessageCallback` ergonomics.** Currently `Box<dyn Fn(...)>`. Accept
-  `impl Fn(...) + Send + 'static` and box internally so the call site doesn't need
-  the `Box::new(...)` ceremony shown in `lib.rs:73`.
+- [x] **`StartupMessageCallback` builder ergonomics.** Shipped — the
+  `ConnectionOptions::startup_callback` builder method accepts
+  `impl Fn(StartupMessage) + Send + Sync + 'static` and boxes internally
+  (`src/connection/common.rs:122`). The type alias `StartupMessageCallback`
+  (`src/connection/common.rs:67`) is still `Box<dyn Fn(...)>`, but it's no longer
+  on the call-site path.
 
 ## 5. Errors
 
-- [ ] **Audit `Error` variants for actionable matching.** Per memory, `main` already
-  has typed variants vs. `v2-stable`'s `Error::Simple`. Double-check every place that
-  still funnels into `Error::Simple` / `Error::Message` and split into typed variants
-  where downstream code would plausibly match (auth failure, version mismatch,
-  connection lost, request timeout, request rejected by TWS, …).
+- [ ] **Audit remaining `Error::Simple` / `Error::Message` callers.** Enum is
+  `#[non_exhaustive]` (`src/errors.rs:18`) and the typed variants predominate
+  (`Io`, `Parse`, `ServerVersion`, `ConnectionFailed`, `ConnectionReset`,
+  `Cancelled`, `Shutdown`, `EndOfStream`, `UnexpectedResponse`,
+  `UnsupportedTimeZone`, `InvalidArgument`, etc.). Continue splitting the
+  remaining `Simple(format!(...))` / `Message` sites into typed variants where
+  downstream code would plausibly match (auth failure, request timeout, …).
 
 - [ ] **Distinguish "request rejected by server" from "transport error" in return
   types.** Today both come through `Result<_, Error>`. Consider promoting server-side
@@ -155,8 +183,10 @@ Related existing tracking docs in `todos/`:
   - `while let Some(item) = stream.next().await` for streams.
   - No magic-number notice code comparisons.
 
-- [ ] **`MIGRATION.md` for 2.x → 3.0.** Start drafting alongside changes — every item
-  here that's marked breaking needs a one-paragraph entry.
+- [x] **Migration guide created.** `docs/migration-3.0.md` exists. Keep updating it
+  in lockstep with breaking changes (see `CLAUDE.md` § "Keep `README.md` and
+  `docs/migration-3.0.md` in sync with v3.0 work" — this is enforced as a PR-time
+  check, not a one-shot deliverable).
 
 - [ ] **Consolidate the docs index.** `docs/api-patterns.md` and `docs/contract-builder.md`
   overlap. Merge or cross-link cleanly so the prelude + builders are documented in one
@@ -174,5 +204,6 @@ Related existing tracking docs in `todos/`:
 - [ ] **`#[must_use]` on every builder and `Subscription`.** Forgetting `.subscribe()`
   / `.submit()` / `.build()` should produce a lint, not silent no-ops.
 
-- [ ] **Remove `block_on` audit (already a project rule).** Confirm no remaining
-  `futures::executor::block_on` in async paths before 3.0.
+- [x] **No `block_on` in async paths.** Verified clean across `src/` on 2026-05-06
+  (no `futures::executor::block_on` usages). Project rule (`CLAUDE.md` §10) keeps
+  it that way.
