@@ -13,6 +13,7 @@ async fn test_wsh_metadata_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages,
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);
@@ -42,6 +43,7 @@ async fn test_wsh_metadata_request_body() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![test_data::build_response("104", TEST_REQ_ID_FIRST, json_responses::METADATA_SIMPLE)],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), crate::server_versions::WSHE_CALENDAR);
@@ -58,6 +60,7 @@ async fn test_wsh_event_data_by_contract_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages,
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
@@ -107,6 +110,7 @@ async fn test_wsh_event_data_by_filter_subscription_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages,
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
@@ -201,6 +205,7 @@ async fn test_wsh_event_data_by_filter_integration_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages,
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
@@ -268,6 +273,7 @@ async fn test_server_version_validation_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);
@@ -312,6 +318,7 @@ async fn test_subscription_integration_table() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages,
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);

@@ -14,6 +14,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -30,6 +31,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -50,6 +52,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -76,6 +79,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -102,6 +106,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -122,6 +127,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
@@ -142,6 +148,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -163,6 +170,7 @@ mod sync_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
@@ -197,6 +205,7 @@ mod async_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -219,6 +228,7 @@ mod async_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -246,6 +256,7 @@ mod async_tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();

@@ -49,6 +49,7 @@ async fn test_realtime_bars() {
             "50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned(),
             "50|3|9001|1678323340|4028.80|4029.10|4028.30|4028.55|3|4026.80|2|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -120,6 +121,7 @@ async fn test_tick_by_tick_all_last() {
             "99|9001|1|1678740829|3895.25|7|2|NASDAQ|Regular|".to_owned(),
             "99|9001|1|1678740830|3895.50|5|0|NYSE|Regular|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -180,6 +182,7 @@ async fn test_tick_by_tick_last() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["99|9001|1|1678740829|3895.25|7|2|NASDAQ|Regular|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -231,6 +234,7 @@ async fn test_tick_by_tick_bid_ask() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["99|9001|3|1678745793|3895.50|3896.00|9|11|3|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -283,6 +287,7 @@ async fn test_tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["99|9001|4|1678740829|3895.375|".to_owned(), "99|9001|4|1678740830|3895.425|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK);
@@ -349,6 +354,7 @@ async fn test_market_depth() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["12|1|9001|0|0|0|4028.75|100|".to_owned(), "12|1|9001|1|1|1|4028.50|200|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
@@ -418,6 +424,7 @@ async fn test_market_depth_exchanges() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["71|2|ISLAND|STK|NASDAQ|DEEP2|1|NYSE|STK|NYSE|DEEP|1|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SERVICE_DATA_TYPE);
@@ -461,6 +468,7 @@ async fn test_basic_market_data() {
             // Tick Generic message
             "45|2|9001|23|20.5|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -533,6 +541,7 @@ async fn test_market_data_with_combo_legs() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -573,6 +582,7 @@ async fn test_market_data_with_delta_neutral() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -610,6 +620,7 @@ async fn test_market_data_regulatory_snapshot() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
@@ -649,6 +660,7 @@ async fn subscription_cancel_only_sends_once() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 

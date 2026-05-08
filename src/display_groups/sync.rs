@@ -113,6 +113,7 @@ mod tests {
             request_messages: RwLock::new(vec![]),
             // Need a response so subscription can be created
             response_messages: vec!["68\x001\x009000\x00265598@SMART\x00".to_string()],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), 176);

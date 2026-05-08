@@ -16,6 +16,7 @@ fn test_news_providers() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["newsProviders|3|BZ|Benzinga Pro|DJ|Dow Jones|RSF|Test Provider|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -38,6 +39,7 @@ fn test_news_bulletins() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["14|1|1|2|Message text|NASDAQ|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -61,6 +63,7 @@ fn test_historical_news() {
             "86\09000\02024-12-23 19:45:00.0\0DJ-N\0DJ-N$19985fef\0{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com\0".to_owned(),
             "87\09000\01\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -96,6 +99,7 @@ fn test_news_article() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["83|9000|0|Article text content|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -120,6 +124,7 @@ fn test_contract_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -149,6 +154,7 @@ fn test_broad_tape_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

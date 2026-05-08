@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use crate::common::test_utils::helpers::{assert_request, request_message_count};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, text_response};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
+use crate::messages::IncomingMessages;
 use crate::orders::common::test_data::{
     COMPLETED_ORDER_AAPL_FILLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_TSLA_FILLED, OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION,
     OPEN_ORDER_TSLA_PRESUBMITTED,
@@ -13,27 +14,29 @@ use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_orders_request, execution_data,
     executions_request, global_cancel_request, next_valid_order_id_request, open_orders_request, order_status, place_order_request,
 };
-use crate::testdata::builders::ResponseEncoder;
+use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
 use super::*;
 use crate::orders::common::order_builder;
 
 #[test]
 fn place_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
-        order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe(),
-        execution_data().encode_pipe(),
-        OPEN_ORDER_TSLA_FILLED.to_owned(),
-        order_status()
-            .status(OrderStatusKind::Filled)
-            .filled(100.0)
-            .remaining(0.0)
-            .average_fill_price(Some(196.52))
-            .last_fill_price(Some(196.52))
-            .encode_pipe(),
-        OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION.to_owned(),
-        commission_report().encode_pipe(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        text_response(OPEN_ORDER_TSLA_PRESUBMITTED.to_owned()),
+        text_response(order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe()),
+        proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
+        text_response(OPEN_ORDER_TSLA_FILLED.to_owned()),
+        text_response(
+            order_status()
+                .status(OrderStatusKind::Filled)
+                .filled(100.0)
+                .remaining(0.0)
+                .average_fill_price(Some(196.52))
+                .last_fill_price(Some(196.52))
+                .encode_pipe(),
+        ),
+        text_response(OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION.to_owned()),
+        proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -745,11 +748,11 @@ fn submit_order() {
 
 #[test]
 fn order_update_stream() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
-        order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe(),
-        execution_data().encode_pipe(),
-        commission_report().encode_pipe(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        text_response(OPEN_ORDER_TSLA_PRESUBMITTED.to_owned()),
+        text_response(order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe()),
+        proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
+        proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
