@@ -1366,11 +1366,11 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
 
 #[test]
 fn test_decode_execution_data_rejects_text_framing() {
-    // Connection floor at PROTOBUF_PLACE_ORDER (203) means servers always emit
-    // ExecutionData in proto. Text-framed arrival skip-classifies via
-    // `UnexpectedResponse` (rule 20) rather than terminating the subscription.
+    // Servers ≥ PROTOBUF_PLACE_ORDER (203) always emit ExecutionData in proto.
+    // Text-framed arrival skip-classifies via `UnexpectedResponse` (rule 20)
+    // rather than terminating the subscription.
     let mut message = ResponseMessage::from("11\09000\042\0265598\0AAPL\0STK\0");
-    let err = decode_execution_data(server_versions::PROTOBUF_PLACE_ORDER, &mut message).expect_err("text framing must be rejected");
+    let err = decode_execution_data(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"
@@ -1380,7 +1380,7 @@ fn test_decode_execution_data_rejects_text_framing() {
 #[test]
 fn test_decode_commission_report_rejects_text_framing() {
     let mut message = ResponseMessage::from("59\01\0exec001\02.5\0USD\0");
-    let err = decode_commission_report(server_versions::PROTOBUF_PLACE_ORDER, &mut message).expect_err("text framing must be rejected");
+    let err = decode_commission_report(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"
