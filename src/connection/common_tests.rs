@@ -330,11 +330,10 @@ fn test_require_protobuf_support_rejects_older() {
 
 #[test]
 fn test_require_protobuf_support_rejects_previous_place_order_floor() {
-    // The previous floor `PROTOBUF_PLACE_ORDER` (203) is now below the new
-    // floor `PROTOBUF_SCAN_DATA` (210) — servers in [203, 209] don't yet emit
-    // the CompletedOrder/ContractData/MarketData/AccountsPositions/HistoricalData/News
-    // families in protobuf, and we have no text-decode fallback for callers
-    // that exercise those domains.
+    // Servers in [203, 209] don't yet emit the
+    // CompletedOrder/ContractData/MarketData/AccountsPositions/HistoricalData/News
+    // families in protobuf and we have no text-decode fallback, so the floor
+    // must reject them.
     let err = require_protobuf_support(server_versions::PROTOBUF_PLACE_ORDER).expect_err("203 is below new floor");
     match err {
         Error::ServerVersion(required, got, _) => {
