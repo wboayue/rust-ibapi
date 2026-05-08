@@ -20,7 +20,7 @@
 
 // Core client
 pub use crate::Client;
-pub use crate::ConnectionOptions;
+pub use crate::ClientBuilder;
 pub use crate::Error;
 
 // Contract types

@@ -653,34 +653,36 @@ fn main() {
 
 Farm-status codes (2104/2106/2158, etc.) typically arrive *before*
 `Client::connect` returns, so a `notice_stream` registered afterwards will not
-see that initial burst. To observe handshake-time notices — useful for
-connection-state UIs and startup telemetry — install a
-`startup_notice_callback` on `ConnectionOptions`:
+see that initial burst. To capture handshake-time notices — useful for
+connection-state UIs and startup telemetry — use the builder's
+`connect_with_notice_stream` terminal instead of `connect`:
 
 ```rust
 use ibapi::client::blocking::Client;
-use ibapi::ConnectionOptions;
 
 fn main() {
-    let options = ConnectionOptions::default()
-        .startup_notice_callback(|notice| {
-            if notice.is_system_message() {
-                println!("startup connectivity: {notice}");
-            } else {
-                println!("startup notice: {notice}");
-            }
-        });
-
-    let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
+    let (client, notices) = Client::builder()
+        .address("127.0.0.1:4002")
+        .client_id(100)
+        .connect_with_notice_stream()
         .expect("connection failed");
-    // ... use client
-    let _ = client;
+
+    for n in notices.iter() {
+        if n.is_system_message() {
+            println!("connectivity: {n}");
+        } else {
+            println!("notice: {n}");
+        }
+    }
+    drop(client);
 }
 ```
 
-`startup_notice_callback` fires for every handshake — initial connect *and*
-auto-reconnect — so a single hook covers both paths. For runtime-only unrouted
-notices once the client is up, see [`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream).
+The pre-bound stream survives auto-reconnects (the broadcaster lives on
+`Connection`, not on the bus), so a single subscription covers both paths.
+For runtime-only unrouted notices once the client is up, you can also call
+[`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream)
+post-connect — both subscribe to the same broadcaster.
 
 ## Multi-Threading
 

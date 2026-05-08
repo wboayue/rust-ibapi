@@ -4,11 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use log::{debug, info};
 
-use crate::messages::Notice;
-
 use super::common::{
-    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol,
-    StartupCallbacks, StartupMessage, StartupMessageCallback,
+    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
+    StartupMessage,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -16,8 +14,7 @@ use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::Stream;
-use crate::transport::sync::TcpSocket;
+use crate::transport::sync::{NoticeBroadcaster, Stream, TcpSocket};
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -29,10 +26,13 @@ pub struct Connection<S: Stream> {
     pub(crate) max_retries: i32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
-    /// Persisted callbacks copied from `ConnectionOptions`. Both fire on the
-    /// initial handshake *and* on every auto-reconnect.
+    /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
+    /// Fires on initial handshake *and* every auto-reconnect handshake.
     startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
+    /// Fan-out for unrouted notices. Shared with the bus (the bus reads via
+    /// `self.connection.notice_broadcaster`) and any pre-bound `NoticeStream`
+    /// the user obtained from `ClientBuilder::connect_with_notice_stream`.
+    pub(crate) notice_broadcaster: Arc<NoticeBroadcaster>,
 }
 
 impl<S: Stream> std::fmt::Debug for Connection<S> {
@@ -42,47 +42,41 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
             .field("connection_metadata", &self.connection_metadata)
             .field("max_retries", &self.max_retries)
             .field("startup_callback", &self.startup_callback.is_some())
-            .field("notice_callback", &self.notice_callback.is_some())
             .finish()
     }
 }
 
 impl Connection<TcpSocket> {
-    /// Create a connection with custom options.
+    /// Create a connection from explicit pieces handed in by the builder.
     ///
-    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callbacks)
-    /// before performing the TWS handshake. Callbacks persist across reconnects.
-    pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
-        let socket = TcpSocket::connect(address, options.tcp_no_delay)?;
-        Self::init(socket, client_id, options.startup_callback, options.startup_notice_callback)
+    /// `notice_broadcaster` is shared with any pre-bound `NoticeStream`; the
+    /// builder allocates it (and the matching receiver) before calling here.
+    /// Persists across reconnects.
+    pub(crate) fn with_pieces(
+        address: &str,
+        client_id: i32,
+        tcp_no_delay: bool,
+        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        notice_broadcaster: Arc<NoticeBroadcaster>,
+    ) -> Result<Self, Error> {
+        let socket = TcpSocket::connect(address, tcp_no_delay)?;
+        let connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
+        connection.establish_connection()?;
+        Ok(connection)
     }
 }
 
 impl<S: Stream> Connection<S> {
-    /// Create a new connection
-    #[allow(dead_code)]
-    pub fn connect(socket: S, client_id: i32) -> Result<Self, Error> {
-        Self::init(socket, client_id, None, None)
-    }
-
-    /// Create a new connection with a callback for unsolicited messages
-    ///
-    /// The callback fires for messages received during the handshake (initial
-    /// connect *and* auto-reconnect) that are not part of `NextValidId` /
-    /// `ManagedAccounts` — e.g. `OpenOrder`, `OrderStatus`, account updates.
-    #[allow(dead_code)]
-    pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
-        let cb = startup_callback.map(|c| Arc::from(c) as Arc<dyn Fn(StartupMessage) + Send + Sync>);
-        Self::init(socket, client_id, cb, None)
-    }
-
-    fn init(
+    /// Build a `Connection<S>` over an arbitrary `Stream`. **Does not** run the
+    /// handshake — caller is responsible for invoking `establish_connection`.
+    /// Mirrors `AsyncConnection::with_socket`.
+    pub(crate) fn with_socket(
         socket: S,
         client_id: i32,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-        notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
-    ) -> Result<Self, Error> {
-        let connection = Self {
+        notice_broadcaster: Arc<NoticeBroadcaster>,
+    ) -> Self {
+        Self {
             client_id,
             socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
@@ -93,18 +87,14 @@ impl<S: Stream> Connection<S> {
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
             startup_callback,
-            notice_callback,
-        };
-
-        connection.establish_connection()?;
-
-        Ok(connection)
+            notice_broadcaster,
+        }
     }
 
-    fn callbacks(&self) -> StartupCallbacks<'_> {
-        StartupCallbacks {
+    fn handshake_context(&self) -> StartupHandshakeContext<'_> {
+        StartupHandshakeContext {
             startup: self.startup_callback.as_deref(),
-            notice: self.notice_callback.as_deref(),
+            notice_sink: &*self.notice_broadcaster,
         }
     }
 
@@ -245,11 +235,11 @@ impl<S: Stream> Connection<S> {
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
-        let callbacks = self.callbacks();
+        let ctx = self.handshake_context();
         let server_version = self.server_version();
         loop {
             let mut message = self.read_message()?;
-            let info = self.connection_handler.parse_account_info(server_version, &mut message, &callbacks)?;
+            let info = self.connection_handler.parse_account_info(server_version, &mut message, &ctx)?;
 
             // Merge received info
             if info.next_order_id.is_some() {
@@ -290,7 +280,7 @@ impl<S: Stream> Connection<S> {
             recorder: MessageRecorder::new(false, String::from("")),
             connection_handler: ConnectionHandler::default(),
             startup_callback: None,
-            notice_callback: None,
+            notice_broadcaster: Arc::new(NoticeBroadcaster::new()),
         }
     }
 }

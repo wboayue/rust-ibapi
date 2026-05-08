@@ -265,7 +265,8 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::with_socket(stream, 28, None, std::sync::Arc::new(crate::transport::sync::NoticeBroadcaster::new()));
+    connection.establish_connection()?;
     let bus = Arc::new(TcpMessageBus::new(connection)?);
 
     let subscription = bus.send_order_request(5, &request)?;

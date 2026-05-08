@@ -147,7 +147,6 @@ pub struct TcpMessageBus<S: Stream> {
     orders: SenderHash<i32, RoutedItem>,
     executions: SenderHash<String, RoutedItem>,
     shared_channels: SharedChannels,
-    notice_broadcaster: NoticeBroadcaster,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_send: Sender<()>,
@@ -169,7 +168,6 @@ impl<S: Stream> TcpMessageBus<S> {
             orders: SenderHash::new(),
             executions: SenderHash::new(),
             shared_channels: SharedChannels::new(),
-            notice_broadcaster: NoticeBroadcaster::new(),
             signals_send,
             signals_recv,
             shutdown_send,
@@ -194,7 +192,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
-        self.notice_broadcaster.close();
+        self.connection.notice_broadcaster.close();
 
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
@@ -326,7 +324,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 if request_id == UNSPECIFIED_REQUEST_ID {
                     let notice = Notice::from(payload);
                     super::common::log_unrouted_notice(&notice);
-                    self.notice_broadcaster.broadcast(notice);
+                    self.connection.notice_broadcaster.broadcast(notice);
                 } else {
                     let item = if is_warning {
                         RoutedItem::Notice(Notice::from(payload))
@@ -658,7 +656,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn notice_subscribe(&self) -> NoticeStream {
-        NoticeStream::new(self.notice_broadcaster.subscribe())
+        NoticeStream::new(self.connection.notice_broadcaster.subscribe())
     }
 
     fn ensure_shutdown(&self) {

@@ -7,7 +7,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - `Subscription<T>::next()` now returns `Option<Result<SubscriptionItem<T>, Error>>`. The new `SubscriptionItem<T>` enum has two arms: `Data(T)` for decoded payloads and `Notice(Notice)` for non-fatal IB notices that share the subscription's `request_id`.
 - `Subscription::error()` and `Subscription::clear_error()` are removed. Terminal errors surface as `Some(Err(_))` on the next call to `next()`; subsequent calls return `None`.
 - New `Client::notice_stream()` exposes globally routed IB notices (connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc.) that are not tied to any subscription.
-- `ConnectionOptions::startup_callback` and `startup_notice_callback` provide typed access to messages and notices emitted during the connection handshake.
+- `Client::builder()` is the canonical entry point, replacing `connect_with_callback` / `connect_with_options`. Two terminals: `.connect()` and `.connect_with_notice_stream()`. `ConnectionOptions`, `StartupMessageCallback`, and `StartupNoticeCallback` are removed.
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
 - `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
 - The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway server version that supports it.
@@ -326,27 +326,67 @@ for notice in stream.iter() {
 
 The async version is symmetric — `client.notice_stream()` returns a handle whose `next().await` yields `Notice` values (and a `stream()` adapter for `futures::StreamExt`).
 
-### Handshake-time notices need a startup callback
+### Connect entry points unified on `Client::builder()`
 
-The 2104/2106/2158 farm-status notices typically arrive *before* `Client::connect` returns, so a `notice_stream` registered after connect won't see them. Use `ConnectionOptions::startup_notice_callback` for handshake-time observability:
+v3.0 collapses three connect paths (`connect`, `connect_with_callback`, `connect_with_options`) into a fluent builder. `Client::connect(addr, id)` stays as a no-options shortcut; everything else moves to the builder.
+
+**Removed in this release** (no compat shim):
+
+- `Client::connect_with_callback`
+- `Client::connect_with_options`
+- `ConnectionOptions` (struct + builder methods)
+- `StartupMessageCallback` (type alias)
+- `StartupNoticeCallback` (type alias)
+
+Before:
 
 ```rust,ignore
 use ibapi::client::blocking::Client;
 use ibapi::ConnectionOptions;
 
 let options = ConnectionOptions::default()
-    .startup_notice_callback(|notice| {
-        if notice.is_system_message() {
-            println!("startup connectivity: {notice}");
-        } else {
-            println!("startup notice: {notice}");
-        }
-    });
+    .tcp_no_delay(true)
+    .startup_notice_callback(|notice| println!("startup: {notice}"));
 
 let client = Client::connect_with_options("127.0.0.1:4002", 100, options)?;
 ```
 
-`startup_notice_callback` fires for every handshake — initial connect *and* auto-reconnect.
+After:
+
+```rust,ignore
+use ibapi::client::blocking::Client;
+
+let (client, notices) = Client::builder()
+    .address("127.0.0.1:4002")
+    .client_id(100)
+    .tcp_no_delay(true)
+    .connect_with_notice_stream()?;
+
+for n in notices.iter() {
+    println!("startup: {n}");
+}
+```
+
+The pre-bound `NoticeStream` from `connect_with_notice_stream()` captures handshake-time notices (2104/2106/2158 farm-status, 1100/1101/1102 connectivity) AND every unrouted notice for the lifetime of the connection. It survives auto-reconnects — the broadcaster lives on `Connection`, not on the bus.
+
+If you don't need handshake notices, use `.connect()` instead — it returns just the `Client`.
+
+The startup-message callback (typed `OpenOrder` / `OrderStatus` / account updates emitted during the handshake) is now a builder configurator:
+
+```rust,ignore
+use ibapi::{Client, StartupMessage};
+
+let client = Client::builder()
+    .address("127.0.0.1:4002")
+    .client_id(100)
+    .startup_callback(|msg| if let StartupMessage::OpenOrder(o) = msg {
+        println!("startup open order: {}", o.order_id);
+    })
+    .connect()
+    .await?;
+```
+
+The async builder lives at `ibapi::Client::builder()` (top-level alias under default features); the sync builder at `ibapi::client::blocking::Client::builder()`.
 
 ## Quick migration checklist
 
@@ -355,8 +395,8 @@ let client = Client::connect_with_options("127.0.0.1:4002", 100, options)?;
 3. Replace `subscription.error()` / `subscription.clear_error()` with pattern-matching on the `Err` arm of `next()`.
 4. Drop any `match` arms for `PlaceOrder::Message` / `OrderUpdate::Message` / similar per-T notice variants — those arms are unreachable and the variants are gone. Route per-order notices via `SubscriptionItem::Notice` and global notices via `Client::notice_stream()`.
 5. Replace string compares against `OrderStatus.status` / `OrderState.status` (`== "Filled"`, `.as_str() == "Cancelled"`, etc.) with `OrderStatusKind` variants or the `is_active()` / `is_terminal()` helpers.
-6. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
-7. (Optional) Adopt `ConnectionOptions::startup_notice_callback` and `startup_callback` for handshake-time observability.
+6. Replace `Client::connect_with_callback` / `Client::connect_with_options` / any `ConnectionOptions::default()...` with the corresponding `Client::builder()` chain. Use `connect_with_notice_stream()` if you previously installed `startup_notice_callback`.
+7. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
 8. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
