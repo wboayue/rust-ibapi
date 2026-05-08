@@ -6,7 +6,7 @@
 
 - **Outgoing:** all requests are protobuf. The text encoders are gone (PRs #449–#452, summarized in [protobuf-migration.md](protobuf-migration.md)).
 - **Incoming:** decoders are still mostly text-only with a small number of dual-format (`decode_proto_or_text`) call sites. The wire flips a message family from text to protobuf at a per-family server-version gate, so text-decode code stays load-bearing until the minimum server version we accept covers every gate.
-- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF` (201) — added in [#492](https://github.com/wboayue/rust-ibapi/pull/492). That establishes the floor we can raise as families come over.
+- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_PLACE_ORDER` (203) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted from 201 → 203 in this PR. Decoders weren't deleted as part of the bump — that's a follow-up PR after each family's response-format mapping is grounded in captured wire data (the `OutgoingMessages`-based grouping in C# Constants.cs maps to outgoing requests, not the responses we decode). Next ratchet candidate: 204 (`PROTOBUF_COMPLETED_ORDER`).
 
 ## Per-family protobuf-incoming gates
 

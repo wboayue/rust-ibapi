@@ -312,7 +312,7 @@ mod tests {
     use crate::subscriptions::DecoderContext;
 
     fn create_test_client() -> Client {
-        let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF);
+        let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF_PLACE_ORDER);
         client.set_next_order_id(9000);
         client
     }
