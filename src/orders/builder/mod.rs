@@ -15,8 +15,15 @@ mod async_impl;
 #[cfg(test)]
 mod tests;
 
-pub use algo_builders::{AlgoParams, ArrivalPriceBuilder, PctVolBuilder, RiskAversion, TwapBuilder, TwapStrategyType, VwapBuilder};
-pub use algo_helpers::{arrival_price, pct_vol, twap, vwap};
+pub use algo_builders::{
+    AccuDistrBuilder, AccumulateDistributeBuilder, AdaptiveBuilder, AdaptivePriority, AlgoParams, ArrivalPriceBuilder, BalanceImpactRiskBuilder,
+    ClosePriceBuilder, DarkIceBuilder, MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, RiskAversion,
+    TwapBuilder, TwapStrategyType, VwapBuilder,
+};
+pub use algo_helpers::{
+    accu_distr, accumulate_distribute, adaptive, arrival_price, balance_impact_risk, close_price, dark_ice, minimise_impact, pct_vol, pct_vol_price,
+    pct_vol_size, pct_vol_time, twap, vwap,
+};
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
 pub use order_builder::{BracketOrderBuilder, OrderBuilder};
 pub use types::{AuctionType, BracketOrderIds, OrderAnalysis, OrderId, OrderType, Price, Quantity, TimeInForce, ValidationError};

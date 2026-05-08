@@ -28,6 +28,15 @@ pub fn condition_time_today(hour: u8, minute: u8) -> String {
     )
 }
 
+/// Today's date as `YYYYMMDD` in UTC. Suitable for IBKR algo `activeTimeStart`/
+/// `activeTimeEnd` fields where TWS rejects literals more than ~5 days from
+/// "now" — a UTC date drifts by at most one day from US/Eastern, which is
+/// inside that window.
+pub fn yyyymmdd_today() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    format!("{:04}{:02}{:02}", now.year(), now.month() as u8, now.day())
+}
+
 /// Panics if US equity markets are closed (outside Mon-Fri 9:30-16:00 Eastern).
 /// Does not account for holidays.
 pub fn require_market_open() {

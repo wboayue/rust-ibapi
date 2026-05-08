@@ -42,6 +42,16 @@ This guide describes all order types supported by rust-ibapi and demonstrates ho
   - [TWAP](#twap)
   - [Percentage of Volume](#percentage-of-volume)
   - [Arrival Price](#arrival-price)
+  - [Adaptive](#adaptive)
+  - [Close Price](#close-price)
+  - [Dark Ice](#dark-ice)
+  - [Accumulate/Distribute](#accumulatedistribute)
+  - [AccuDistr](#accudistr)
+  - [Balance Impact Risk](#balance-impact-risk)
+  - [Minimise Impact](#minimise-impact)
+  - [Price Variant Percentage of Volume](#price-variant-percentage-of-volume)
+  - [Size Variant Percentage of Volume](#size-variant-percentage-of-volume)
+  - [Time Variant Percentage of Volume](#time-variant-percentage-of-volume)
 
 ## Basic Order Types
 
@@ -868,6 +878,282 @@ let order_id = client.order(&contract)
 - `allow_past_end_time` - Continue after end time
 
 **When to use:** When you want to benchmark against arrival price.
+
+### Adaptive
+
+Combines IB's Smart Routing with a user-defined urgency level.
+
+```rust
+use ibapi::orders::builder::{adaptive, AdaptivePriority};
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(adaptive()
+        .priority(AdaptivePriority::Normal)
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `priority` - Urgency level:
+  - `Urgent` - Complete quickly, less concerned with price
+  - `Normal` - Balanced speed and price improvement
+  - `Patient` - Prefer price improvement, accept slower execution
+
+**When to use:** As a simple drop-in for a single-line algo decision; the algorithm handles routing and price discovery on your behalf.
+
+### Close Price
+
+Minimizes slippage relative to the closing auction price.
+
+```rust
+use ibapi::orders::builder::{close_price, RiskAversion};
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(close_price()
+        .max_pct_vol(0.2)
+        .risk_aversion(RiskAversion::Neutral)
+        .start_time("15:30:00 US/Eastern")
+        .force_completion(true)
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `max_pct_vol(0.1-0.5)` - Maximum participation rate
+- `risk_aversion` - Urgency level (`GetDone` / `Aggressive` / `Neutral` / `Passive`)
+- `start_time` - When to begin executing
+- `force_completion` - Complete by the close
+
+**When to use:** When you want to benchmark against the closing auction price.
+
+### Dark Ice
+
+Hidden order with randomized display sizes - only the configured slice is visible to the market.
+
+```rust
+use ibapi::orders::builder::dark_ice;
+
+let order_id = client.order(&contract)
+    .buy(10000)
+    .limit(150.0)
+    .algo(dark_ice()
+        .display_size(100)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `display_size` - Visible portion of the order
+- `start_time` - Start time
+- `end_time` - End time
+- `allow_past_end_time` - Continue after end time
+
+**When to use:** For large orders where you want to disguise total quantity to avoid moving the market.
+
+### Accumulate/Distribute
+
+Slices an order into random increments at random intervals to disguise trading intent over a long horizon.
+
+```rust
+use ibapi::orders::builder::accumulate_distribute;
+
+let order_id = client.order(&contract)
+    .buy(10000)
+    .limit(150.0)
+    .algo(accumulate_distribute()
+        .component_size(100)
+        .time_between_orders(60)
+        .randomize_time_20(true)
+        .randomize_size_55(true)
+        .wait_for_fill(true)
+        .active_time_start("20260101-09:30:00 US/Eastern")
+        .active_time_end("20260101-16:00:00 US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `component_size` - Size of each child slice
+- `time_between_orders` - Seconds between slices
+- `randomize_time_20` - Randomize the interval by ±20%
+- `randomize_size_55` - Randomize the slice size by ±55%
+- `give_up` - Give-up account
+- `catch_up` - Catch up if the algo falls behind schedule
+- `wait_for_fill` - Wait for previous slice to fill before next
+- `active_time_start` / `active_time_end` - Active period (format: "YYYYMMDD-HH:MM:SS TZ")
+
+**When to use:** For very large orders worked over hours or days where camouflage matters more than speed.
+
+### AccuDistr
+
+A separate IBKR algorithm from `AD` (Accumulate/Distribute) with a smaller parameter set, plus an explicit time zone and route order type. Strategy string on the wire is `"AccuDistr"`.
+
+```rust
+use ibapi::orders::builder::accu_distr;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(accu_distr()
+        .time_between_orders(60)
+        .route_order_type("LMT")
+        .component_size(100)
+        .active_time_start("20260101-09:30:00")
+        .active_time_end("20260101-16:00:00")
+        .active_time_tz("US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `time_between_orders` - Seconds between slices
+- `route_order_type` - Order routing type (typical values: "LMT", "MKT", "REL")
+- `component_size` - Size of each child slice
+- `active_time_start` / `active_time_end` - Active period (format: "YYYYMMDD-HH:MM:SS")
+- `active_time_tz` - Time zone for the active period (e.g., "US/Eastern", "GMT")
+
+The IBKR algo docs page does not explicitly enumerate this algo's parameters; the parameter shape is taken from IBKR's canonical Testbed sample (`samples/CSharp/Testbed/AvailableAlgoParams.cs`).
+
+**When to use:** When you need an Accumulate/Distribute style algo and explicit control over the routing order type and time zone matters more than the broader parameter set of `AD`.
+
+### Balance Impact Risk
+
+Balances market impact against the risk of adverse price movement.
+
+```rust
+use ibapi::orders::builder::{balance_impact_risk, RiskAversion};
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(balance_impact_risk()
+        .max_pct_vol(0.2)
+        .risk_aversion(RiskAversion::Neutral)
+        .force_completion(true)
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `max_pct_vol(0.1-0.5)` - Maximum participation rate
+- `risk_aversion` - Urgency level
+- `force_completion` - Complete the order
+
+**When to use:** When you want IB's algo to choose the impact/risk tradeoff for you given your urgency.
+
+### Minimise Impact
+
+Slices the order to match the market average while keeping participation within a cap.
+
+```rust
+use ibapi::orders::builder::minimise_impact;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(minimise_impact()
+        .max_pct_vol(0.2)
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `max_pct_vol(0.1-0.5)` - Maximum participation rate
+
+**When to use:** Single-knob algo when you want to limit market impact and don't need price-time benchmarking.
+
+### Price Variant Percentage of Volume
+
+Participation rate varies with the market price - increases as the price improves and decreases as it deteriorates.
+
+```rust
+use ibapi::orders::builder::pct_vol_price;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(pct_vol_price()
+        .pct_vol(0.2)
+        .delta_pct_vol(0.1)
+        .min_pct_vol_4_px(0.1)
+        .max_pct_vol_4_px(0.4)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `pct_vol(0.1-0.5)` - Base participation rate
+- `delta_pct_vol(0.1-0.5)` - Rate delta applied as price moves
+- `min_pct_vol_4_px(0.1-0.5)` - Lower participation bound
+- `max_pct_vol_4_px(0.1-0.5)` - Upper participation bound
+- `start_time` / `end_time` - Active window
+- `no_take_liq` - Passive only
+
+All four percentage fields are validated to IB's 10-50% range.
+
+**When to use:** When you want participation to scale with how favorable the price is.
+
+### Size Variant Percentage of Volume
+
+Participation rate varies linearly between two rates as the order is filled.
+
+```rust
+use ibapi::orders::builder::pct_vol_size;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(pct_vol_size()
+        .start_pct_vol(0.1)
+        .end_pct_vol(0.4)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `start_pct_vol(0.1-0.5)` - Rate at start
+- `end_pct_vol(0.1-0.5)` - Rate at end
+- `start_time` / `end_time` - Active window
+- `no_take_liq` - Passive only
+
+**When to use:** When you want to ramp participation up or down as remaining size changes.
+
+### Time Variant Percentage of Volume
+
+Participation rate varies linearly between two rates over the active time window.
+
+```rust
+use ibapi::orders::builder::pct_vol_time;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(pct_vol_time()
+        .start_pct_vol(0.1)
+        .end_pct_vol(0.4)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .build()?)
+    .submit()?;
+```
+
+**Parameters:**
+- `start_pct_vol(0.1-0.5)` - Rate at start
+- `end_pct_vol(0.1-0.5)` - Rate at end
+- `start_time` / `end_time` - Active window
+- `no_take_liq` - Passive only
+
+**When to use:** When you want participation to scale with elapsed time rather than filled quantity.
 
 ### Manual Algo Order Construction
 
