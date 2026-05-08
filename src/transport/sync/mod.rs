@@ -199,8 +199,8 @@ impl<S: Stream> TcpMessageBus<S> {
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
 
-        // Wake the cleanup thread immediately. bounded(1) + try_send: if a
-        // shutdown is already pending, Err(Full) is the desired no-op.
+        // bounded(1) + try_send: if a shutdown is already pending,
+        // Err(Full) is the desired no-op (idempotent across duplicate calls).
         let _ = self.shutdown_send.try_send(());
 
         // Break the dispatcher's blocked read so it exits without waiting

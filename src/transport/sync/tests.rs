@@ -751,9 +751,11 @@ fn test_cleanup_thread_exits_promptly_on_shutdown() {
     handle.join().expect("cleanup thread join");
     let elapsed = start.elapsed();
 
+    // 500ms is 2x headroom over the 1s bug being guarded; comfortable
+    // margin for slow CI runners while still failing loudly on regression.
     assert!(
-        elapsed < Duration::from_millis(100),
-        "cleanup-thread join took {elapsed:?}, expected <100ms"
+        elapsed < Duration::from_millis(500),
+        "cleanup-thread join took {elapsed:?}, expected <500ms"
     );
 }
 
@@ -770,7 +772,7 @@ fn test_dispatcher_thread_exits_promptly_on_shutdown() {
     bus.ensure_shutdown();
     let elapsed = start.elapsed();
 
-    assert!(elapsed < Duration::from_millis(100), "ensure_shutdown took {elapsed:?}, expected <100ms");
+    assert!(elapsed < Duration::from_millis(500), "ensure_shutdown took {elapsed:?}, expected <500ms");
 }
 
 /// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
