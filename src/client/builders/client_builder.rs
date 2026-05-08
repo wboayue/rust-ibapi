@@ -35,12 +35,55 @@
 //! shape exactly — no `.await`, [`crate::client::blocking::NoticeStream`]
 //! instead of the async one.
 
+use std::sync::Arc;
+
+use crate::connection::common::StartupMessage;
+use crate::errors::Error;
+
+/// Configuration state shared by [`sync_impl::ClientBuilder`] and
+/// [`async_impl::ClientBuilder`]. Centralizes the field set and the
+/// `InvalidArgument` validation messages so future configurators only need
+/// to be added in one place. Terminals call [`BuilderState::validate`] to
+/// extract the checked pieces.
+#[derive(Default)]
+pub(super) struct BuilderState {
+    pub(super) address: Option<String>,
+    pub(super) client_id: Option<i32>,
+    pub(super) tcp_no_delay: bool,
+    pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+}
+
+/// Output of [`BuilderState::validate`] — same fields, but `address` and
+/// `client_id` have been unwrapped.
+pub(super) struct ValidatedPieces {
+    pub(super) address: String,
+    pub(super) client_id: i32,
+    pub(super) tcp_no_delay: bool,
+    pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+}
+
+impl BuilderState {
+    pub(super) fn validate(self) -> Result<ValidatedPieces, Error> {
+        Ok(ValidatedPieces {
+            address: self
+                .address
+                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?,
+            client_id: self
+                .client_id
+                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
+            tcp_no_delay: self.tcp_no_delay,
+            startup_callback: self.startup_callback,
+        })
+    }
+}
+
 #[cfg(feature = "sync")]
 pub mod sync_impl {
     //! Sync `ClientBuilder` for the blocking transport.
 
     use std::sync::Arc;
 
+    use super::BuilderState;
     use crate::client::sync::Client;
     use crate::connection::common::StartupMessage;
     use crate::errors::Error;
@@ -56,10 +99,7 @@ pub mod sync_impl {
     #[derive(Default)]
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
-        address: Option<String>,
-        client_id: Option<i32>,
-        tcp_no_delay: bool,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        state: BuilderState,
     }
 
     impl ClientBuilder {
@@ -72,7 +112,7 @@ pub mod sync_impl {
         /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).connect();
         /// ```
         pub fn address(mut self, addr: impl Into<String>) -> Self {
-            self.address = Some(addr.into());
+            self.state.address = Some(addr.into());
             self
         }
 
@@ -85,7 +125,7 @@ pub mod sync_impl {
         /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).connect();
         /// ```
         pub fn client_id(mut self, id: i32) -> Self {
-            self.client_id = Some(id);
+            self.state.client_id = Some(id);
             self
         }
 
@@ -99,7 +139,7 @@ pub mod sync_impl {
         /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).tcp_no_delay(true).connect();
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
-            self.tcp_no_delay = enabled;
+            self.state.tcp_no_delay = enabled;
             self
         }
 
@@ -123,7 +163,7 @@ pub mod sync_impl {
         ///     .connect();
         /// ```
         pub fn startup_callback(mut self, callback: impl Fn(StartupMessage) + Send + Sync + 'static) -> Self {
-            self.startup_callback = Some(Arc::new(callback));
+            self.state.startup_callback = Some(Arc::new(callback));
             self
         }
 
@@ -177,13 +217,14 @@ pub mod sync_impl {
         }
 
         fn connect_with_broadcaster(self, broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
-            let address = self
-                .address
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?;
-            let client_id = self
-                .client_id
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?;
-            Client::connect_with_pieces(&address, client_id, self.tcp_no_delay, self.startup_callback, broadcaster)
+            let pieces = self.state.validate()?;
+            Client::connect_with_pieces(
+                &pieces.address,
+                pieces.client_id,
+                pieces.tcp_no_delay,
+                pieces.startup_callback,
+                broadcaster,
+            )
         }
     }
 }
@@ -196,6 +237,7 @@ pub mod async_impl {
 
     use tokio::sync::broadcast;
 
+    use super::BuilderState;
     use crate::client::r#async::Client;
     use crate::connection::common::StartupMessage;
     use crate::errors::Error;
@@ -212,10 +254,7 @@ pub mod async_impl {
     #[derive(Default)]
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
-        address: Option<String>,
-        client_id: Option<i32>,
-        tcp_no_delay: bool,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        state: BuilderState,
     }
 
     impl ClientBuilder {
@@ -230,7 +269,7 @@ pub mod async_impl {
         /// # Ok(()) }
         /// ```
         pub fn address(mut self, addr: impl Into<String>) -> Self {
-            self.address = Some(addr.into());
+            self.state.address = Some(addr.into());
             self
         }
 
@@ -245,7 +284,7 @@ pub mod async_impl {
         /// # Ok(()) }
         /// ```
         pub fn client_id(mut self, id: i32) -> Self {
-            self.client_id = Some(id);
+            self.state.client_id = Some(id);
             self
         }
 
@@ -261,7 +300,7 @@ pub mod async_impl {
         /// # Ok(()) }
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
-            self.tcp_no_delay = enabled;
+            self.state.tcp_no_delay = enabled;
             self
         }
 
@@ -287,7 +326,7 @@ pub mod async_impl {
         /// # Ok(()) }
         /// ```
         pub fn startup_callback(mut self, callback: impl Fn(StartupMessage) + Send + Sync + 'static) -> Self {
-            self.startup_callback = Some(Arc::new(callback));
+            self.state.startup_callback = Some(Arc::new(callback));
             self
         }
 
@@ -345,13 +384,8 @@ pub mod async_impl {
         }
 
         async fn connect_with_sender(self, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
-            let address = self
-                .address
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?;
-            let client_id = self
-                .client_id
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?;
-            Client::connect_with_pieces(&address, client_id, self.tcp_no_delay, self.startup_callback, sender).await
+            let pieces = self.state.validate()?;
+            Client::connect_with_pieces(&pieces.address, pieces.client_id, pieces.tcp_no_delay, pieces.startup_callback, sender).await
         }
     }
 }

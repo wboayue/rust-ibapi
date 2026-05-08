@@ -60,18 +60,23 @@ impl Connection<TcpSocket> {
         notice_broadcaster: Arc<NoticeBroadcaster>,
     ) -> Result<Self, Error> {
         let socket = TcpSocket::connect(address, tcp_no_delay)?;
-        Self::with_socket(socket, client_id, startup_callback, notice_broadcaster)
+        let connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
+        connection.establish_connection()?;
+        Ok(connection)
     }
 }
 
 impl<S: Stream> Connection<S> {
+    /// Build a `Connection<S>` over an arbitrary `Stream`. **Does not** run the
+    /// handshake — caller is responsible for invoking `establish_connection`.
+    /// Mirrors `AsyncConnection::with_socket`.
     pub(crate) fn with_socket(
         socket: S,
         client_id: i32,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
-    ) -> Result<Self, Error> {
-        let connection = Self {
+    ) -> Self {
+        Self {
             client_id,
             socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
@@ -83,11 +88,7 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
             startup_callback,
             notice_broadcaster,
-        };
-
-        connection.establish_connection()?;
-
-        Ok(connection)
+        }
     }
 
     fn handshake_context(&self) -> StartupHandshakeContext<'_> {
