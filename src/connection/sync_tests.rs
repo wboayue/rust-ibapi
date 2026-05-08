@@ -10,7 +10,7 @@ use crate::server_versions;
 use crate::transport::sync::{MemoryStream, TcpMessageBus};
 
 const CLIENT_ID: i32 = 100;
-const SERVER_VERSION: i32 = server_versions::PROTOBUF;
+const SERVER_VERSION: i32 = server_versions::PROTOBUF_PLACE_ORDER;
 
 fn push_handshake(stream: &MemoryStream) {
     let handshake = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION);
@@ -38,14 +38,14 @@ fn establish_connection_rejects_pre_protobuf_server() {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
 
-    let too_old = server_versions::PROTOBUF - 1;
+    let too_old = server_versions::PROTOBUF_PLACE_ORDER - 1;
     let handshake = format!("{}\020240120 12:00:00 EST\0", too_old);
     stream.push_inbound(handshake.into_bytes());
 
     let err = connection.establish_connection().expect_err("must reject old server");
     match err {
         crate::errors::Error::ServerVersion(required, got, ref msg) => {
-            assert_eq!(required, server_versions::PROTOBUF);
+            assert_eq!(required, server_versions::PROTOBUF_PLACE_ORDER);
             assert_eq!(got, too_old);
             assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
         }

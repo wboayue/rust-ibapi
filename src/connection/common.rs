@@ -144,7 +144,7 @@ pub struct ConnectionHandler {
 impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
-            min_version: server_versions::PROTOBUF,
+            min_version: server_versions::PROTOBUF_PLACE_ORDER,
             max_version: server_versions::UPDATE_CONFIG,
         }
     }
@@ -298,17 +298,19 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
 /// Reject connections to TWS/IB Gateway builds older than the protobuf transport.
 ///
 /// rust-ibapi 3.x is protobuf-only; `start_api` and every request encoder emit
-/// protobuf, so a server below `server_versions::PROTOBUF` cannot interpret
-/// what we send. Fail fast after the handshake with a descriptive error rather
-/// than letting the gateway silently drop our messages.
+/// protobuf, so a server below the floor cannot interpret what we send. The
+/// floor ratchets up alongside the per-family text→proto migration; bumping it
+/// is what lets us delete the now-unreachable text-decoder branches in each
+/// domain. Fail fast after the handshake with a descriptive error rather than
+/// letting the gateway silently drop our messages.
 pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
-    if server_version < server_versions::PROTOBUF {
+    if server_version < server_versions::PROTOBUF_PLACE_ORDER {
         return Err(Error::ServerVersion(
-            server_versions::PROTOBUF,
+            server_versions::PROTOBUF_PLACE_ORDER,
             server_version,
             format!(
                 "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version {} or later; please upgrade",
-                server_versions::PROTOBUF
+                server_versions::PROTOBUF_PLACE_ORDER
             ),
         ));
     }

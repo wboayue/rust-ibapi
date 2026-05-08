@@ -10,7 +10,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - `Client::builder()` is the canonical entry point, replacing `connect_with_callback` / `connect_with_options`. Two terminals: `.connect()` and `.connect_with_notice_stream()`. `ConnectionOptions`, `StartupMessageCallback`, and `StartupNoticeCallback` are removed.
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
 - `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
-- The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway server version that supports it.
+- The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway with server version **203 (`PROTOBUF_PLACE_ORDER`) or later**. Older servers are rejected with `Error::ServerVersion` immediately after the handshake.
 
 ## Notification handling: the new shape
 
