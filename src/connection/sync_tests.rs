@@ -108,7 +108,7 @@ fn make_client() -> (Client, MemoryStream) {
     let server_version = connection.server_version();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version, Duration::from_secs(0)).expect("process_messages");
+    bus.process_messages(server_version).expect("process_messages");
 
     let client = Client::stubbed(bus, server_version);
     (client, stream)

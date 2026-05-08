@@ -17,7 +17,7 @@ use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
     // Build the protobuf-encoded contract data request directly
@@ -95,6 +95,10 @@ impl Reconnect for MockSocket {
         Err(mock_socket_error(ErrorKind::ConnectionRefused))
     }
     fn sleep(&self, _duration: std::time::Duration) {}
+    fn shutdown_read(&self) -> Result<(), Error> {
+        self.keep_alive.store(true, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 impl Stream for MockSocket {}
@@ -389,7 +393,7 @@ fn test_client_reconnect() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
+    bus.process_messages(server_version)?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     client.managed_accounts()?;
@@ -562,7 +566,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
+    bus.process_messages(server_version)?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     match client.contract_details(contract) {
@@ -732,6 +736,43 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
     assert!(matches!(resp, Err(Error::Shutdown)), "got: {resp:?}");
     Ok(())
+}
+
+/// Cleanup thread observes shutdown immediately via `crossbeam::select!`
+/// over the signal channel + shutdown-notify channel, instead of polling
+/// with `recv_timeout(1s)`. Regression guard for issue #523.
+#[test]
+fn test_cleanup_thread_exits_promptly_on_shutdown() {
+    let (_stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let start = Instant::now();
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    let elapsed = start.elapsed();
+
+    // 500ms is 2x headroom over the 1s bug being guarded; comfortable
+    // margin for slow CI runners while still failing loudly on regression.
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "cleanup-thread join took {elapsed:?}, expected <500ms"
+    );
+}
+
+/// Dispatcher thread's blocked socket read is interrupted by
+/// `Reconnect::shutdown_read` from `request_shutdown`, instead of waiting
+/// up to the 1s `TWS_READ_TIMEOUT`. Companion to the cleanup-thread test;
+/// together they cover both threads `Client::drop` joins. Issue #523.
+#[test]
+fn test_dispatcher_thread_exits_promptly_on_shutdown() {
+    let (_stream, bus) = make_bus();
+    bus.process_messages(0).expect("process_messages");
+
+    let start = Instant::now();
+    bus.ensure_shutdown();
+    let elapsed = start.elapsed();
+
+    assert!(elapsed < Duration::from_millis(500), "ensure_shutdown took {elapsed:?}, expected <500ms");
 }
 
 /// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
