@@ -1,8 +1,5 @@
 //! Common connection logic shared between sync and async implementations
 
-use std::fmt;
-use std::sync::Arc;
-
 use log::{debug, error, info, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -15,7 +12,7 @@ use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, 
 use crate::orders::{OrderData, OrderStatus};
 use crate::server_versions;
 
-/// Domain-typed messages delivered to a [`StartupMessageCallback`] during the
+/// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).
 ///
 /// TWS may emit any of these unsolicited at handshake time when the previous
@@ -62,99 +59,35 @@ impl StartupMessage {
     }
 }
 
-/// Callback for unsolicited typed messages emitted during the connection
-/// handshake (initial connect *and* every auto-reconnect handshake).
-pub type StartupMessageCallback = Box<dyn Fn(StartupMessage) + Send + Sync>;
+/// Sink for unrouted notices observed during the handshake. Production impls
+/// forward to the per-feature notice broadcaster owned by `Connection`, so
+/// handshake-time notices reach any pre-bound `NoticeStream` the user obtained
+/// from `ClientBuilder::connect_with_notice_stream`.
+pub(crate) trait NoticeSink: Send + Sync {
+    fn deliver(&self, notice: Notice);
+}
 
-/// Callback for IB notices emitted during the connection handshake — e.g. the
-/// 2104/2106/2158 farm-status notices, 1100/1101/1102 connectivity codes.
-/// Without this callback these are log-only.
-///
-/// Fires during initial connect *and* every auto-reconnect handshake.
-pub type StartupNoticeCallback = Box<dyn Fn(Notice) + Send + Sync>;
+#[cfg(feature = "sync")]
+impl NoticeSink for crate::transport::sync::NoticeBroadcaster {
+    fn deliver(&self, notice: Notice) {
+        self.broadcast(notice);
+    }
+}
 
-/// Bundle of the two startup-time callbacks for internal threading.
-///
-/// Public API exposes them as separate builder methods on [`ConnectionOptions`];
-/// internally they always travel together, so we pass one struct instead of two
-/// callback parameters (project rule: ≤3 fn args).
-pub(crate) struct StartupCallbacks<'a> {
+#[cfg(feature = "async")]
+impl NoticeSink for tokio::sync::broadcast::Sender<Notice> {
+    fn deliver(&self, notice: Notice) {
+        let _ = self.send(notice);
+    }
+}
+
+/// Handshake-time context bundling the optional typed-message callback and the
+/// mandatory notice sink. Internal use only; the public surface is
+/// `ClientBuilder` (`crate::client::ClientBuilder` for async,
+/// `crate::client::blocking::ClientBuilder` for sync).
+pub(crate) struct StartupHandshakeContext<'a> {
     pub startup: Option<&'a (dyn Fn(StartupMessage) + Send + Sync)>,
-    pub notice: Option<&'a (dyn Fn(Notice) + Send + Sync)>,
-}
-
-/// Options for configuring a connection to TWS or IB Gateway.
-///
-/// Use the builder methods to configure options, then pass to
-/// [`Client::connect_with_options`](crate::Client::connect_with_options).
-///
-/// # Examples
-///
-/// ```
-/// use ibapi::ConnectionOptions;
-///
-/// let options = ConnectionOptions::default()
-///     .tcp_no_delay(true);
-/// ```
-#[derive(Clone, Default)]
-pub struct ConnectionOptions {
-    pub(crate) tcp_no_delay: bool,
-    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    pub(crate) startup_notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
-}
-
-impl ConnectionOptions {
-    /// Enable or disable `TCP_NODELAY` on the connection socket.
-    ///
-    /// When enabled, disables Nagle's algorithm for lower latency.
-    /// Default: `false`.
-    pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
-        self.tcp_no_delay = enabled;
-        self
-    }
-
-    /// Set a callback for unsolicited typed messages during connection setup.
-    ///
-    /// When TWS sends messages like `OpenOrder`, `OrderStatus`, or account-update
-    /// frames during the connection handshake, this callback receives them as
-    /// typed [`StartupMessage`] values instead of having them discarded.
-    /// Fires during the initial connect *and* every auto-reconnect handshake.
-    pub fn startup_callback(mut self, callback: impl Fn(StartupMessage) + Send + Sync + 'static) -> Self {
-        self.startup_callback = Some(Arc::new(callback));
-        self
-    }
-
-    /// Set a callback for notices emitted during connection setup.
-    ///
-    /// Receives the 2104/2106/2158 farm-status notices, 1100/1101/1102
-    /// connectivity codes, and any other handshake-time error/warning messages
-    /// as typed [`Notice`] values. Without this callback these messages are
-    /// log-only. Fires during the initial connect *and* every auto-reconnect
-    /// handshake.
-    pub fn startup_notice_callback(mut self, callback: impl Fn(Notice) + Send + Sync + 'static) -> Self {
-        self.startup_notice_callback = Some(Arc::new(callback));
-        self
-    }
-}
-
-impl From<Option<StartupMessageCallback>> for ConnectionOptions {
-    fn from(callback: Option<StartupMessageCallback>) -> Self {
-        let mut opts = Self::default();
-        if let Some(cb) = callback {
-            opts.startup_callback = Some(Arc::from(cb));
-        }
-        opts
-    }
-}
-
-impl fmt::Debug for ConnectionOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ConnectionOptions")
-            .field("tcp_no_delay", &self.tcp_no_delay)
-            .field("startup_callback", &self.startup_callback.is_some())
-            .field("startup_notice_callback", &self.startup_notice_callback.is_some())
-            .finish()
-    }
+    pub notice_sink: &'a (dyn NoticeSink + Sync),
 }
 
 /// Data exchanged during the connection handshake
@@ -190,7 +123,7 @@ pub trait ConnectionProtocol {
         &self,
         server_version: i32,
         message: &mut ResponseMessage,
-        callbacks: &StartupCallbacks<'_>,
+        ctx: &StartupHandshakeContext<'_>,
     ) -> Result<AccountInfo, Self::Error>;
 }
 
@@ -256,7 +189,7 @@ impl ConnectionProtocol for ConnectionHandler {
         &self,
         server_version: i32,
         message: &mut ResponseMessage,
-        callbacks: &StartupCallbacks<'_>,
+        ctx: &StartupHandshakeContext<'_>,
     ) -> Result<AccountInfo, Self::Error> {
         use prost::Message;
 
@@ -289,7 +222,7 @@ impl ConnectionProtocol for ConnectionHandler {
                     info.managed_accounts = Some(message.next_string()?);
                 }
             }
-            _ => dispatch_unsolicited_message(server_version, message, callbacks),
+            _ => dispatch_unsolicited_message(server_version, message, ctx),
         }
 
         Ok(info)
@@ -298,12 +231,12 @@ impl ConnectionProtocol for ConnectionHandler {
 
 /// Dispatch an unsolicited message that arrived during the handshake — i.e. one
 /// that wasn't `NextValidId` / `ManagedAccounts` (which `parse_account_info`
-/// consumes itself). Errors fan out to the notice callback; `OpenOrder` /
-/// `OrderStatus` / account-update frames are decoded into typed
-/// [`StartupMessage`] values; anything else lands in `StartupMessage::Other` so
-/// the caller can still inspect it. Decode failures surface as `Other` rather
-/// than being silently dropped.
-pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, callbacks: &StartupCallbacks<'_>) {
+/// consumes itself). Errors fan out to the notice sink (always present);
+/// `OpenOrder` / `OrderStatus` / account-update frames are decoded into typed
+/// [`StartupMessage`] values for the optional startup callback; anything else
+/// lands in `StartupMessage::Other` so the caller can still inspect it. Decode
+/// failures surface as `Other` rather than being silently dropped.
+pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_open_order_borrowed, decode_order_status_borrowed};
 
@@ -315,12 +248,10 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
             } else {
                 error!("Error during account info: {notice}");
             }
-            if let Some(cb) = callbacks.notice {
-                cb(notice);
-            }
+            ctx.notice_sink.deliver(notice);
         }
         IncomingMessages::OpenOrder => {
-            if let Some(cb) = callbacks.startup {
+            if let Some(cb) = ctx.startup {
                 let typed = decode_open_order_borrowed(server_version, message)
                     .map(StartupMessage::OpenOrder)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
@@ -328,7 +259,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
             }
         }
         IncomingMessages::OrderStatus => {
-            if let Some(cb) = callbacks.startup {
+            if let Some(cb) = ctx.startup {
                 let typed = decode_order_status_borrowed(server_version, message)
                     .map(StartupMessage::OrderStatus)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
@@ -336,7 +267,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
             }
         }
         IncomingMessages::OpenOrderEnd => {
-            if let Some(cb) = callbacks.startup {
+            if let Some(cb) = ctx.startup {
                 cb(StartupMessage::OpenOrderEnd);
             }
         }
@@ -344,7 +275,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         | IncomingMessages::PortfolioValue
         | IncomingMessages::AccountUpdateTime
         | IncomingMessages::AccountDownloadEnd => {
-            if let Some(cb) = callbacks.startup {
+            if let Some(cb) = ctx.startup {
                 let typed = decode_account_update_message(server_version, message)
                     .map(StartupMessage::AccountUpdate)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
@@ -352,7 +283,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
             }
         }
         _ => {
-            if let Some(cb) = callbacks.startup {
+            if let Some(cb) = ctx.startup {
                 cb(StartupMessage::Other(message.clone()));
             } else {
                 warn!(

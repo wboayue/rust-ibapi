@@ -5,7 +5,7 @@ use time_tz::timezones;
 
 use super::*;
 use crate::client::r#async::Client;
-use crate::messages::{IncomingMessages, Notice};
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::r#async::{AsyncTcpMessageBus, MemoryStream};
 
@@ -108,43 +108,47 @@ async fn make_client() -> Client {
     Client::stubbed(bus, server_version)
 }
 
-/// Async mirror of `callbacks_fire_on_reconnect_handshake` — drive
-/// `establish_connection` twice and assert both callbacks fire each time.
+/// Async mirror of `handshake_callbacks_and_notice_stream_survive_reconnect`
+/// (sync) — drive `establish_connection` twice and assert the startup callback
+/// fires both times AND any 21xx farm-status notices reach a `broadcast::Receiver`
+/// subscribed pre-handshake. The broadcaster lives on `AsyncConnection`, so
+/// the same receiver survives reconnects.
 #[tokio::test]
-async fn callbacks_fire_on_reconnect_handshake() {
+async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     let stream = MemoryStream::default();
     let mut connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
 
     let startup_count = Arc::new(Mutex::new(0_usize));
     let startup_count_clone = startup_count.clone();
-    let notice_count = Arc::new(Mutex::new(0_usize));
-    let notice_count_clone = notice_count.clone();
 
     connection.startup_callback = Some(Arc::new(move |_msg: crate::connection::common::StartupMessage| {
         *startup_count_clone.lock().unwrap() += 1;
     }));
-    connection.notice_callback = Some(Arc::new(move |_notice: Notice| {
-        *notice_count_clone.lock().unwrap() += 1;
-    }));
+
+    // Subscribe to the per-connection broadcaster BEFORE the handshake — same
+    // shape as ClientBuilder::connect_with_notice_stream's pre-bind.
+    let mut notice_rx = connection.notice_sender.subscribe();
 
     let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0123\0AAPL\0\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "2\0-1\02104\0farm OK\0"));
+    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
     stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\090\0"));
     stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
 
     connection.establish_connection().await.expect("first establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 1, "startup callback should fire on first handshake");
-    assert_eq!(*notice_count.lock().unwrap(), 1, "notice callback should fire on first handshake");
+    let n1 = notice_rx.try_recv().expect("first farm-status notice should be on the stream");
+    assert_eq!(n1.code, 2104);
 
     stream.push_inbound(handshake_bytes);
     stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0456\0MSFT\0\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "2\0-1\02106\0HMDS farm OK\0"));
+    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02106\0HMDS farm OK\0"));
     stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\091\0"));
     stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
 
     connection.establish_connection().await.expect("second establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");
-    assert_eq!(*notice_count.lock().unwrap(), 2, "notice callback should fire on reconnect handshake");
+    let n2 = notice_rx.try_recv().expect("second farm-status notice should be on the same stream");
+    assert_eq!(n2.code, 2106);
 }

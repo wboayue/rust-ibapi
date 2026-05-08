@@ -71,7 +71,7 @@ fn connect_handshakes_against_real_socket() {
 }
 ```
 
-This is *not* a re-implementation of MockGateway — it has no per-API-call interaction surface. It exists only because `Client::connect`, `connect_with_callback`, `connect_with_options`, and the underlying `TcpSocket::connect` / `AsyncTcpSocket::connect` cannot otherwise be exercised without a real socket.
+This is *not* a re-implementation of MockGateway — it has no per-API-call interaction surface. It exists only because `Client::connect`, `Client::builder()...connect()`, and the underlying `TcpSocket::connect` / `AsyncTcpSocket::connect` cannot otherwise be exercised without a real socket.
 
 ## Picking the right fixture
 

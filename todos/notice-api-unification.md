@@ -1,8 +1,19 @@
 # Notice API Unification — v3.0 Follow-Up
 
-**Status:** open · candidate v3.0 breaking change · spawned out of the
-2026-05-06 integration-health pass while investigating the
-`startup_notice_callback_receives_handshake_notices` flake.
+**Status:** SHIPPED 2026-05-08 (option 3, folded with `Client::builder()` per
+v3-api-ergonomics §4.1). The original recommendation was option A (smallest
+shippable, `ConnectionOptions::with_notice_stream`); the implementation took
+option 3 directly because it costs a bigger diff but fixes the lifecycle gap,
+the `--all-features` naming gymnastics, AND the three-entry-point sprawl in
+one move. Hard-removed: `ConnectionOptions`, `StartupMessageCallback`,
+`StartupNoticeCallback`, `Client::connect_with_options`, and
+`Client::connect_with_callback`. Kept: `Client::connect(addr, id)` one-liner.
+
+Spawned out of the 2026-05-06 integration-health pass while investigating the
+`startup_notice_callback_receives_handshake_notices` flake (root cause: the
+trailing-handshake-notice race after `(NextValidId && ManagedAccounts)` exits
+the loop). The race is fixed by routing handshake notices through the
+broadcaster, which now lives on `Connection` and is reused across reconnects.
 
 ## Problem
 

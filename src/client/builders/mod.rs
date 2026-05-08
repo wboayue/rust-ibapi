@@ -10,6 +10,8 @@ pub mod r#async;
 
 mod common;
 
+pub mod client_builder;
+
 // Re-export builders based on feature selection
 #[cfg(feature = "sync")]
 pub mod blocking {

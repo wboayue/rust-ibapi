@@ -119,7 +119,7 @@ fn connect_handshakes_against_real_socket() {
 }
 
 #[test]
-fn connect_with_callback_receives_unsolicited_messages() {
+fn builder_startup_callback_receives_unsolicited_messages() {
     // Sparse OpenOrder frame: decoder fails, surfaces as Other — callback still fires.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
@@ -130,11 +130,15 @@ fn connect_with_callback_receives_unsolicited_messages() {
     let (addr, _h) = spawn_handshake_listener(frames);
     let captured = Arc::new(Mutex::new(Vec::<i32>::new()));
     let captured_clone = Arc::clone(&captured);
-    let callback: StartupMessageCallback = Box::new(move |msg| {
-        captured_clone.lock().unwrap().push(msg.message_type() as i32);
-    });
 
-    let _client = Client::connect_with_callback(&addr.to_string(), 100, Some(callback)).expect("connect_with_callback");
+    let _client = Client::builder()
+        .address(addr.to_string())
+        .client_id(100)
+        .startup_callback(move |msg| {
+            captured_clone.lock().unwrap().push(msg.message_type() as i32);
+        })
+        .connect()
+        .expect("ClientBuilder::connect");
 
     let seen = captured.lock().unwrap();
     assert!(
@@ -144,12 +148,38 @@ fn connect_with_callback_receives_unsolicited_messages() {
 }
 
 #[test]
-fn connect_with_options_applies_tcp_no_delay() {
+fn builder_tcp_no_delay_round_trips() {
     let (addr, _h) = spawn_handshake_listener(handshake_frames());
 
-    let options = ConnectionOptions::default().tcp_no_delay(true);
-    let client = Client::connect_with_options(&addr.to_string(), 100, options).expect("connect_with_options");
+    let client = Client::builder()
+        .address(addr.to_string())
+        .client_id(100)
+        .tcp_no_delay(true)
+        .connect()
+        .expect("ClientBuilder::connect");
 
     assert_eq!(client.client_id(), 100);
     assert_eq!(client.server_version(), SERVER_VERSION);
+}
+
+#[test]
+fn builder_connect_with_notice_stream_captures_handshake_notice() {
+    let mut frames = Vec::new();
+    frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
+    frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));
+    frames.push(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
+    frames.push(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+
+    let (addr, _h) = spawn_handshake_listener(frames);
+
+    let (_client, notices) = Client::builder()
+        .address(addr.to_string())
+        .client_id(100)
+        .connect_with_notice_stream()
+        .expect("connect_with_notice_stream");
+
+    let n = notices
+        .next_timeout(std::time::Duration::from_secs(2))
+        .expect("timed out waiting for handshake notice");
+    assert_eq!(n.code, 2104);
 }

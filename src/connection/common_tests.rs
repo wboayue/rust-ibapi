@@ -5,21 +5,46 @@ use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
 
 const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF;
 
-fn empty_callbacks<'a>() -> StartupCallbacks<'a> {
-    StartupCallbacks { startup: None, notice: None }
+/// Test sink that drops every notice. Used when the test cares about the
+/// startup callback, not the notice fan-out.
+#[derive(Default)]
+struct DiscardingSink;
+impl NoticeSink for DiscardingSink {
+    fn deliver(&self, _: Notice) {}
 }
 
-fn startup_callbacks<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupCallbacks<'a> {
-    StartupCallbacks {
-        startup: Some(cb),
-        notice: None,
+/// Test sink that captures every notice into a shared `Vec`.
+#[derive(Default)]
+struct CapturingSink {
+    notices: Mutex<Vec<Notice>>,
+}
+impl CapturingSink {
+    fn last(&self) -> Option<Notice> {
+        self.notices.lock().unwrap().last().cloned()
+    }
+    fn count(&self) -> usize {
+        self.notices.lock().unwrap().len()
+    }
+}
+impl NoticeSink for CapturingSink {
+    fn deliver(&self, n: Notice) {
+        self.notices.lock().unwrap().push(n);
     }
 }
 
-fn notice_callbacks<'a>(cb: &'a (dyn Fn(Notice) + Send + Sync)) -> StartupCallbacks<'a> {
-    StartupCallbacks {
+fn empty_ctx<'a>() -> StartupHandshakeContext<'a> {
+    static SINK: DiscardingSink = DiscardingSink;
+    StartupHandshakeContext {
         startup: None,
-        notice: Some(cb),
+        notice_sink: &SINK,
+    }
+}
+
+fn startup_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupHandshakeContext<'a> {
+    static SINK: DiscardingSink = DiscardingSink;
+    StartupHandshakeContext {
+        startup: Some(cb),
+        notice_sink: &SINK,
     }
 }
 
@@ -29,7 +54,7 @@ fn test_parse_account_info_next_valid_id() {
     // NextValidId message: message_type=9, version=1, next_order_id=1000
     let mut message = ResponseMessage::from("9\01\01000\0");
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_callbacks());
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx());
     assert!(result.is_ok());
 
     let info = result.unwrap();
@@ -43,7 +68,7 @@ fn test_parse_account_info_managed_accounts() {
     // ManagedAccounts message: message_type=15, version=1, accounts="DU123,DU456"
     let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_callbacks());
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx());
     assert!(result.is_ok());
 
     let info = result.unwrap();
@@ -62,7 +87,7 @@ fn test_dispatch_unsolicited_open_order_invokes_callback() {
     let captured_clone = captured.clone();
     let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OpenOrder));
 }
 
@@ -74,7 +99,7 @@ fn test_dispatch_unsolicited_order_status_invokes_callback() {
     let captured_clone = captured.clone();
     let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OrderStatus));
 }
 
@@ -93,7 +118,7 @@ fn test_dispatch_unsolicited_account_value_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
     assert_eq!(got.key, "NetLiquidation");
     assert_eq!(got.value, "123456.78");
@@ -116,7 +141,7 @@ fn test_dispatch_unsolicited_open_order_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert!(*captured_clone.lock().unwrap(), "OpenOrderEnd not delivered as typed variant");
 }
 
@@ -133,7 +158,7 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert!(*captured_clone.lock().unwrap(), "End variant not delivered");
 }
 
@@ -153,47 +178,46 @@ fn test_dispatch_unsolicited_unknown_falls_to_other() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CompletedOrder));
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_warning_invokes_notice_callback() {
+fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
     // Error frame with code 2104 (farm-status warning).
     // Format: msg_type=4, version=2, request_id=-1, code=2104, message
     let mut message = ResponseMessage::from("4\02\0-1\02104\0Market data farm OK\0");
 
-    let captured: Arc<Mutex<Option<Notice>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |notice: Notice| {
-        *captured.lock().unwrap() = Some(notice);
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
     };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_callbacks(&cb));
-    let got = captured_clone.lock().unwrap().take().expect("notice callback didn't fire");
+    let got = sink.last().expect("notice sink didn't receive notice");
     assert_eq!(got.code, 2104);
     assert_eq!(got.message, "Market data farm OK");
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_callback() {
+fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     // Error frame with code 504 — non-warning, non-system message.
     let mut message = ResponseMessage::from("4\02\0-1\0504\0Not connected\0");
 
-    let captured: Arc<Mutex<Option<Notice>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |notice: Notice| {
-        *captured.lock().unwrap() = Some(notice);
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
     };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_callbacks(&cb));
-    let got = captured_clone.lock().unwrap().take().expect("notice callback didn't fire");
-    assert_eq!(got.code, 504);
+    assert_eq!(sink.last().expect("sink missed").code, 504);
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_only_fires_notice_callback() {
-    // Error frame should fire the notice callback, NOT the startup callback.
+fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
+    // Error frame should fire the notice sink, NOT the startup callback.
     let mut message = ResponseMessage::from("4\02\0-1\02104\0farm OK\0");
 
     let startup_fired = Arc::new(Mutex::new(false));
@@ -201,22 +225,18 @@ fn test_dispatch_unsolicited_notice_only_fires_notice_callback() {
     let startup_cb = move |_msg: StartupMessage| {
         *startup_fired_clone.lock().unwrap() = true;
     };
-    let notice_fired = Arc::new(Mutex::new(false));
-    let notice_fired_clone = notice_fired.clone();
-    let notice_cb = move |_notice: Notice| {
-        *notice_fired_clone.lock().unwrap() = true;
-    };
+    let sink = CapturingSink::default();
 
     dispatch_unsolicited_message(
         TEST_SERVER_VERSION,
         &mut message,
-        &StartupCallbacks {
+        &StartupHandshakeContext {
             startup: Some(&startup_cb),
-            notice: Some(&notice_cb),
+            notice_sink: &sink,
         },
     );
     assert!(!*startup_fired.lock().unwrap(), "startup callback should not fire on Error");
-    assert!(*notice_fired.lock().unwrap(), "notice callback should fire on Error");
+    assert_eq!(sink.count(), 1, "notice sink should receive exactly one notice on Error");
 }
 
 #[test]
@@ -231,7 +251,7 @@ fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
         *fired_clone.lock().unwrap() = true;
     };
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert!(result.is_ok());
     assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for NextValidId");
 }
@@ -247,7 +267,7 @@ fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
         *fired_clone.lock().unwrap() = true;
     };
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
     assert!(result.is_ok());
     assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for ManagedAccounts");
 }
@@ -260,7 +280,7 @@ fn test_parse_account_info_multiple_messages_callback() {
     let cb = move |_: StartupMessage| {
         *count_clone.lock().unwrap() += 1;
     };
-    let cbs = startup_callbacks(&cb);
+    let cbs = startup_ctx(&cb);
 
     // First message: OpenOrder (sparse → Other)
     let mut msg1 = ResponseMessage::from("5\0123\0AAPL\0");
@@ -508,39 +528,4 @@ fn test_non_utf8_handshake_response() {
     assert_eq!(handshake_data.server_version, 173);
     // server_time will contain replacement characters but parsing succeeds
     assert!(handshake_data.server_time.contains("20251205"));
-}
-
-#[test]
-fn test_connection_options_default() {
-    let opts = ConnectionOptions::default();
-    assert_eq!(opts.tcp_no_delay, false);
-    assert!(opts.startup_callback.is_none());
-    assert!(opts.startup_notice_callback.is_none());
-}
-
-#[test]
-fn test_connection_options_builder() {
-    let opts = ConnectionOptions::default()
-        .tcp_no_delay(true)
-        .startup_callback(|_msg: StartupMessage| {})
-        .startup_notice_callback(|_notice: Notice| {});
-    assert_eq!(opts.tcp_no_delay, true);
-    assert!(opts.startup_callback.is_some());
-    assert!(opts.startup_notice_callback.is_some());
-}
-
-#[test]
-fn test_connection_options_clone() {
-    let opts = ConnectionOptions::default().tcp_no_delay(true);
-    let cloned = opts.clone();
-    assert_eq!(cloned.tcp_no_delay, true);
-}
-
-#[test]
-fn test_connection_options_debug() {
-    let opts = ConnectionOptions::default().tcp_no_delay(true);
-    let debug_str = format!("{:?}", opts);
-    assert!(debug_str.contains("tcp_no_delay: true"));
-    assert!(debug_str.contains("startup_callback: false"));
-    assert!(debug_str.contains("startup_notice_callback: false"));
 }

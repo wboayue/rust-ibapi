@@ -4,10 +4,11 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 
 use log::{debug, info};
+use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol,
-    StartupCallbacks, StartupMessage, StartupMessageCallback,
+    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
+    StartupMessage,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -16,7 +17,6 @@ use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::r#async::{AsyncStream, AsyncTcpSocket};
 use crate::transport::recorder::MessageRecorder;
-use tokio::sync::Mutex;
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -30,10 +30,13 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) server_version_cache: AtomicI32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
-    /// Persisted callbacks copied from `ConnectionOptions`. Both fire on the
-    /// initial handshake *and* on every auto-reconnect.
+    /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
+    /// Fires on initial handshake *and* every auto-reconnect handshake.
     startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
+    /// Fan-out for unrouted notices. Shared with the bus (the bus reads via
+    /// `self.connection.notice_sender`) and any pre-bound `NoticeStream` the
+    /// user obtained from `ClientBuilder::connect_with_notice_stream`.
+    pub(crate) notice_sender: broadcast::Sender<Notice>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -42,46 +45,37 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
             .field("client_id", &self.client_id)
             .field("server_version_cache", &self.server_version_cache.load(Ordering::Acquire))
             .field("startup_callback", &self.startup_callback.is_some())
-            .field("notice_callback", &self.notice_callback.is_some())
             .finish()
     }
 }
 
 impl AsyncConnection<AsyncTcpSocket> {
-    /// Create a new async connection
-    #[allow(dead_code)]
-    pub async fn connect(address: &str, client_id: i32) -> Result<Self, Error> {
-        Self::connect_with_callback(address, client_id, None).await
-    }
-
-    /// Create a new async connection with a callback for unsolicited messages.
+    /// Create a connection from explicit pieces handed in by the builder.
     ///
-    /// The callback fires for messages received during the handshake (initial
-    /// connect *and* auto-reconnect) that are not part of `NextValidId` /
-    /// `ManagedAccounts` — e.g. `OpenOrder`, `OrderStatus`, account updates.
-    pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
-        Self::connect_with_options(address, client_id, startup_callback.into()).await
-    }
-
-    /// Create a new async connection with custom options.
-    ///
-    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callbacks)
-    /// before performing the TWS handshake. Callbacks persist across reconnects.
-    pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
-        let socket = AsyncTcpSocket::connect(address, options.tcp_no_delay).await?;
-        let mut connection = Self::stubbed(socket, client_id);
-        connection.startup_callback = options.startup_callback;
-        connection.notice_callback = options.startup_notice_callback;
+    /// `notice_sender` is shared with any pre-bound `NoticeStream`; the builder
+    /// allocates the broadcast channel before calling here. Persists across
+    /// reconnects.
+    pub(crate) async fn with_pieces(
+        address: &str,
+        client_id: i32,
+        tcp_no_delay: bool,
+        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        notice_sender: broadcast::Sender<Notice>,
+    ) -> Result<Self, Error> {
+        let socket = AsyncTcpSocket::connect(address, tcp_no_delay).await?;
+        let connection = Self::with_socket(socket, client_id, startup_callback, notice_sender);
         connection.establish_connection().await?;
         Ok(connection)
     }
 }
 
 impl<S: AsyncStream> AsyncConnection<S> {
-    /// Build a connection over an arbitrary `AsyncStream` without performing
-    /// the handshake. For tests; the production path uses `connect_*` which
-    /// runs `establish_connection` immediately after construction.
-    pub(crate) fn stubbed(socket: S, client_id: i32) -> Self {
+    pub(crate) fn with_socket(
+        socket: S,
+        client_id: i32,
+        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        notice_sender: broadcast::Sender<Notice>,
+    ) -> Self {
         Self {
             client_id,
             socket,
@@ -92,15 +86,24 @@ impl<S: AsyncStream> AsyncConnection<S> {
             server_version_cache: AtomicI32::new(0),
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
-            startup_callback: None,
-            notice_callback: None,
+            startup_callback,
+            notice_sender,
         }
     }
 
-    fn callbacks(&self) -> StartupCallbacks<'_> {
-        StartupCallbacks {
+    /// Build a connection over an arbitrary `AsyncStream` without performing
+    /// the handshake. For tests; the production path uses `with_pieces` which
+    /// runs `establish_connection` immediately after construction.
+    #[cfg(test)]
+    pub(crate) fn stubbed(socket: S, client_id: i32) -> Self {
+        let (notice_sender, _) = broadcast::channel(crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY);
+        Self::with_socket(socket, client_id, None, notice_sender)
+    }
+
+    fn handshake_context(&self) -> StartupHandshakeContext<'_> {
+        StartupHandshakeContext {
             startup: self.startup_callback.as_deref(),
-            notice: self.notice_callback.as_deref(),
+            notice_sink: &self.notice_sender,
         }
     }
 
@@ -235,11 +238,11 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
-        let callbacks = self.callbacks();
+        let ctx = self.handshake_context();
         let server_version = self.server_version();
         loop {
             let mut message = self.read_message().await?;
-            let info = self.connection_handler.parse_account_info(server_version, &mut message, &callbacks)?;
+            let info = self.connection_handler.parse_account_info(server_version, &mut message, &ctx)?;
 
             // Merge received info
             if info.next_order_id.is_some() {

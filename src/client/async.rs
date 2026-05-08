@@ -6,10 +6,12 @@ use std::time::Duration;
 use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
+use tokio::sync::broadcast;
 
-use crate::connection::common::{ConnectionOptions, StartupMessageCallback};
+use crate::client::builders::client_builder::async_impl::ClientBuilder;
+use crate::connection::common::StartupMessage;
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
-use crate::messages::OutgoingMessages;
+use crate::messages::{Notice, OutgoingMessages};
 use crate::transport::{
     r#async::{AsyncInternalSubscription, AsyncTcpMessageBus},
     AsyncMessageBus,
@@ -41,9 +43,12 @@ impl Drop for Client {
 }
 
 impl Client {
-    /// Establishes async connection to TWS or Gateway
+    /// Establishes a connection to TWS or Gateway with no extra configuration.
     ///
-    /// Connects to server using the given connection string
+    /// One-liner shortcut equivalent to
+    /// `Client::builder().address(address).client_id(client_id).connect().await`.
+    /// For `tcp_no_delay`, startup callbacks, or a pre-bound `NoticeStream`,
+    /// use [`Client::builder`] instead.
     ///
     /// # Arguments
     /// * `address`   - address of server. e.g. 127.0.0.1:4002
@@ -64,83 +69,45 @@ impl Client {
     /// }
     /// ```
     pub async fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
-        Self::connect_with_callback(address, client_id, None).await
+        Self::builder().address(address).client_id(client_id).connect().await
     }
 
-    /// Establishes async connection to TWS or Gateway with a callback for startup messages
+    /// Begin a fluent connection builder.
     ///
-    /// This is similar to [`connect`](Self::connect), but allows you to provide a callback
-    /// that will be invoked for any unsolicited messages received during the connection
-    /// handshake (e.g., OpenOrder, OrderStatus).
-    ///
-    /// Note: The callback is only invoked during the initial connection, not during
-    /// automatic reconnections.
-    ///
-    /// # Arguments
-    /// * `address`          - address of server. e.g. 127.0.0.1:4002
-    /// * `client_id`        - id of client. e.g. 100
-    /// * `startup_callback` - optional callback for unsolicited messages during connection
+    /// See [`ClientBuilder`] for the configurators (`address`, `client_id`,
+    /// `tcp_no_delay`, `startup_callback`) and the two terminals
+    /// (`connect`, `connect_with_notice_stream`).
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{Client, StartupMessage, StartupMessageCallback};
-    /// use std::sync::{Arc, Mutex};
+    /// # async fn run() -> Result<(), ibapi::Error> {
+    /// use ibapi::Client;
     ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let order_ids = Arc::new(Mutex::new(Vec::new()));
-    ///     let order_ids_clone = order_ids.clone();
-    ///
-    ///     let callback: StartupMessageCallback = Box::new(move |msg| match msg {
-    ///         StartupMessage::OpenOrder(order_data) => {
-    ///             order_ids_clone.lock().unwrap().push(order_data.order_id);
-    ///         }
-    ///         StartupMessage::OrderStatus(_)
-    ///         | StartupMessage::OpenOrderEnd
-    ///         | StartupMessage::AccountUpdate(_)
-    ///         | StartupMessage::Other(_) => {}
-    ///     });
-    ///
-    ///     let client = Client::connect_with_callback("127.0.0.1:4002", 100, Some(callback))
-    ///         .await
-    ///         .expect("connection failed");
-    ///
-    ///     println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
-    /// }
+    /// let client = Client::builder()
+    ///     .address("127.0.0.1:4002")
+    ///     .client_id(100)
+    ///     .tcp_no_delay(true)
+    ///     .connect()
+    ///     .await?;
+    /// drop(client);
+    /// # Ok(()) }
     /// ```
-    pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
-        Self::connect_with_options(address, client_id, startup_callback.into()).await
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::default()
     }
 
-    /// Establishes async connection to TWS or Gateway with custom options
-    ///
-    /// This is similar to [`connect`](Self::connect), but allows you to configure
-    /// connection options like `TCP_NODELAY` and startup callbacks via
-    /// [`ConnectionOptions`].
-    ///
-    /// # Arguments
-    /// * `address`   - address of server. e.g. 127.0.0.1:4002
-    /// * `client_id` - id of client. e.g. 100
-    /// * `options`   - connection options
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::{Client, ConnectionOptions};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let options = ConnectionOptions::default()
-    ///         .tcp_no_delay(true);
-    ///
-    ///     let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
-    ///         .await
-    ///         .expect("connection failed");
-    /// }
-    /// ```
-    pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
-        let connection = AsyncConnection::connect_with_options(address, client_id, options).await?;
+    /// Internal entry point shared by `connect` and `ClientBuilder`. Constructs
+    /// the `AsyncConnection` with explicit pieces (no `ConnectionOptions`
+    /// indirection), wraps it in `AsyncTcpMessageBus`, kicks off the dispatcher.
+    pub(crate) async fn connect_with_pieces(
+        address: &str,
+        client_id: i32,
+        tcp_no_delay: bool,
+        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        notice_sender: broadcast::Sender<Notice>,
+    ) -> Result<Client, Error> {
+        let connection = AsyncConnection::with_pieces(address, client_id, tcp_no_delay, startup_callback, notice_sender).await?;
         let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);
@@ -257,8 +224,9 @@ impl Client {
     /// Notices emitted during the connection handshake — the typical
     /// 2104/2106/2158 farm-status burst that arrives before `connect` returns —
     /// will not be observed by a `NoticeStream` created afterwards. Use
-    /// [`ConnectionOptions::startup_notice_callback`](crate::ConnectionOptions::startup_notice_callback)
-    /// to capture those.
+    /// [`ClientBuilder::connect_with_notice_stream`](crate::ClientBuilder::connect_with_notice_stream)
+    /// to capture those (the pre-bound stream covers handshake AND post-connect
+    /// notices, and survives auto-reconnects).
     ///
     /// # Examples
     ///

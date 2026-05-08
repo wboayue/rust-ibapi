@@ -96,12 +96,13 @@ Related existing tracking docs in `todos/`:
   Either expose distinct `NoticeStream` / `BlockingNoticeStream` types, or keep a single
   type whose API is the same shape and only differs in `await`.
 
-- [ ] **Unify the two notice APIs.** `ConnectionOptions::startup_notice_callback` (pre-connect,
-  handshake-only) and `Client::notice_stream()` (post-connect, lifetime of the connection)
-  deliver the same data with a lifecycle gap, and the callback's window has a race against
-  gateway message ordering. Pick one canonical surface.
-  - Plan: [`notice-api-unification.md`](notice-api-unification.md).
-  - Breaking: yes.
+- [x] **Unify the two notice APIs.** Shipped 2026-05-08 as part of the
+  `Client::builder()` work (option 3 — folded with §4.1). Hard-removed
+  `ConnectionOptions::startup_notice_callback`; new path:
+  `Client::builder()...connect_with_notice_stream()`. Race fix is automatic —
+  the broadcaster lives on `Connection` and is reused across the handshake
+  loop AND the post-connect bus. Plan:
+  [`notice-api-unification.md`](notice-api-unification.md).
 
 ## 3. Naming, layout, prelude
 
@@ -137,19 +138,12 @@ Related existing tracking docs in `todos/`:
 
 ## 4. Connection API
 
-- [ ] **Fold connect variants into a builder.** Today there are three on each side
-  (sync `src/client/sync.rs:62, 105, 132`; async `src/client/async.rs:66, 112, 142`):
-  `connect`, `connect_with_callback`, `connect_with_options`. Replace with:
-  ```rust
-  Client::builder("127.0.0.1:4002", 100)
-      .startup_callback(cb)
-      .options(opts)
-      .connect()
-      .await?;
-  ```
-  Keep `Client::connect(addr, id)` as the one-liner; deprecate the rest. Note: the
-  notice-API unification (`notice-api-unification.md` option 3) suggests doing this
-  refactor first so per-feature builders can use native broadcaster types.
+- [x] **Fold connect variants into a builder.** Shipped 2026-05-08 alongside the
+  notice-API unification. `Client::builder()` is the canonical entry point
+  (`address`, `client_id`, `tcp_no_delay`, `startup_callback` configurators;
+  `connect()` and `connect_with_notice_stream()` terminals). Hard-removed
+  `connect_with_callback` and `connect_with_options`. `Client::connect(addr, id)`
+  stays as the one-liner.
 
 - [x] **`StartupMessageCallback` builder ergonomics.** Shipped — the
   `ConnectionOptions::startup_callback` builder method accepts

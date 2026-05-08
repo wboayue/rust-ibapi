@@ -52,16 +52,16 @@ pub(crate) mod transport;
 /// Connection management
 pub(crate) mod connection;
 
-/// Callback for handling unsolicited messages during connection setup.
+/// Typed handshake-time messages delivered to [`ClientBuilder::startup_callback`].
 ///
-/// When TWS sends messages like `OpenOrder` or `OrderStatus` during the connection
-/// handshake, this callback is invoked to allow the application to process them
-/// instead of discarding them.
+/// When TWS emits unsolicited `OpenOrder`, `OrderStatus`, account-update, or
+/// other frames during the handshake, the startup callback receives them as
+/// typed [`StartupMessage`] values instead of having them discarded.
 ///
 /// # Example
 ///
 /// ```ignore
-/// use ibapi::{Client, StartupMessage, StartupMessageCallback};
+/// use ibapi::{Client, StartupMessage};
 /// use std::sync::{Arc, Mutex};
 ///
 /// #[tokio::main]
@@ -69,25 +69,21 @@ pub(crate) mod connection;
 ///     let order_ids = Arc::new(Mutex::new(Vec::new()));
 ///     let order_ids_clone = order_ids.clone();
 ///
-///     let callback: StartupMessageCallback = Box::new(move |msg| match msg {
-///         StartupMessage::OpenOrder(o) => {
+///     let client = Client::builder()
+///         .address("127.0.0.1:4002")
+///         .client_id(100)
+///         .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
 ///             order_ids_clone.lock().unwrap().push(o.order_id);
-///         }
-///         StartupMessage::OrderStatus(_)
-///         | StartupMessage::OpenOrderEnd
-///         | StartupMessage::AccountUpdate(_)
-///         | StartupMessage::Other(_) => {}
-///     });
-///
-///     let client = Client::connect_with_callback("127.0.0.1:4002", 100, Some(callback))
+///         })
+///         .connect()
 ///         .await
 ///         .expect("connection failed");
 ///
 ///     println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
+///     drop(client);
 /// }
 /// ```
-pub use connection::ConnectionOptions;
-pub use connection::{StartupMessage, StartupMessageCallback, StartupNoticeCallback};
+pub use connection::StartupMessage;
 
 /// Common utilities shared across modules
 pub(crate) mod common;
@@ -137,6 +133,8 @@ pub use errors::Error;
 
 #[doc(inline)]
 pub use client::Client;
+#[doc(inline)]
+pub use client::ClientBuilder;
 use std::sync::LazyLock;
 use time::{
     format_description::{self, BorrowedFormatItem},
