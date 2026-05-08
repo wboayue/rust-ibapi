@@ -202,6 +202,13 @@ impl<S: Stream> TcpMessageBus<S> {
         // Wake the cleanup thread immediately. bounded(1) + try_send: if a
         // shutdown is already pending, Err(Full) is the desired no-op.
         let _ = self.shutdown_send.try_send(());
+
+        // Break the dispatcher's blocked read so it exits without waiting
+        // for the 1s socket-read timeout. Errors are non-fatal — a closed
+        // or already-shutdown socket still terminates the read.
+        if let Err(e) = self.connection.shutdown_read() {
+            debug!("shutdown_read returned: {e:?}");
+        }
     }
 
     fn reset(&self) {
@@ -264,6 +271,10 @@ impl<S: Stream> TcpMessageBus<S> {
                 Ok(())
             }
             Err(ref err) if is_connection_error(err) => {
+                if self.is_shutting_down() {
+                    debug!("dispatcher thread exiting");
+                    return Err(Error::Shutdown);
+                }
                 error!("error reading next message (will attempt reconnect): {err:?}");
                 self.connected.store(false, Ordering::Relaxed);
 
@@ -732,6 +743,9 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
+    /// Extra clone of the active stream used solely to break the dispatcher's
+    /// blocking read on shutdown. Refreshed on every `reconnect`.
+    shutdown_handle: Mutex<TcpStream>,
     connection_url: String,
     tcp_no_delay: bool,
 }
@@ -743,6 +757,7 @@ impl TcpSocket {
 
     pub fn new(stream: TcpStream, connection_url: &str, tcp_no_delay: bool) -> Result<Self, Error> {
         let writer = stream.try_clone()?;
+        let shutdown_handle = stream.try_clone()?;
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
         stream.set_nodelay(tcp_no_delay)?;
@@ -750,6 +765,7 @@ impl TcpSocket {
         Ok(Self {
             reader: Mutex::new(stream),
             writer: Mutex::new(writer),
+            shutdown_handle: Mutex::new(shutdown_handle),
             connection_url: connection_url.to_string(),
             tcp_no_delay,
         })
@@ -767,7 +783,10 @@ impl Reconnect for TcpSocket {
                 *reader = stream.try_clone()?;
 
                 let mut writer = self.writer.lock()?;
-                *writer = stream;
+                *writer = stream.try_clone()?;
+
+                let mut shutdown_handle = self.shutdown_handle.lock()?;
+                *shutdown_handle = stream;
 
                 Ok(())
             }
@@ -777,11 +796,22 @@ impl Reconnect for TcpSocket {
     fn sleep(&self, duration: std::time::Duration) {
         thread::sleep(duration)
     }
+    fn shutdown_read(&self) -> Result<(), Error> {
+        let handle = self.shutdown_handle.lock()?;
+        // Shutdown::Read is enough to break the blocked read; future writes
+        // (none expected during shutdown) remain functional.
+        handle.shutdown(std::net::Shutdown::Read)?;
+        Ok(())
+    }
 }
 
 pub(crate) trait Reconnect {
     fn reconnect(&self) -> Result<(), Error>;
     fn sleep(&self, duration: std::time::Duration);
+    /// Interrupt any in-flight blocking read so the dispatcher exits promptly
+    /// on shutdown. For `TcpSocket` this shuts down the read half; for the
+    /// in-memory test fixtures it closes their inbound queue.
+    fn shutdown_read(&self) -> Result<(), Error>;
 }
 
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}

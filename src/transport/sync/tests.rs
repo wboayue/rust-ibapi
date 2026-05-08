@@ -95,6 +95,10 @@ impl Reconnect for MockSocket {
         Err(mock_socket_error(ErrorKind::ConnectionRefused))
     }
     fn sleep(&self, _duration: std::time::Duration) {}
+    fn shutdown_read(&self) -> Result<(), Error> {
+        self.keep_alive.store(true, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 impl Stream for MockSocket {}
@@ -751,6 +755,22 @@ fn test_cleanup_thread_exits_promptly_on_shutdown() {
         elapsed < Duration::from_millis(100),
         "cleanup-thread join took {elapsed:?}, expected <100ms"
     );
+}
+
+/// Dispatcher thread's blocked socket read is interrupted by
+/// `Reconnect::shutdown_read` from `request_shutdown`, instead of waiting
+/// up to the 1s `TWS_READ_TIMEOUT`. Companion to the cleanup-thread test;
+/// together they cover both threads `Client::drop` joins. Issue #523.
+#[test]
+fn test_dispatcher_thread_exits_promptly_on_shutdown() {
+    let (_stream, bus) = make_bus();
+    bus.process_messages(0).expect("process_messages");
+
+    let start = Instant::now();
+    bus.ensure_shutdown();
+    let elapsed = start.elapsed();
+
+    assert!(elapsed < Duration::from_millis(100), "ensure_shutdown took {elapsed:?}, expected <100ms");
 }
 
 /// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
