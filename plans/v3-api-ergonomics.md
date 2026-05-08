@@ -12,12 +12,12 @@ ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 - Each item: **status · problem · proposal · breaking? · notes**.
 - Status: `[ ]` open · `[~]` in progress · `[x]` shipped · `[-]` rejected (note why).
 - When an item ships, leave it checked here with the PR link for ~one cycle, then prune.
-- File a separate `todos/<topic>.md` for any item large enough to need its own plan
+- File a separate `plans/<topic>.md` for any item large enough to need its own plan
   and link it from here.
 
-Related existing tracking docs in `todos/`:
+Related existing tracking docs in `plans/`:
 - `generic-tick-types.md`, `legacy-text-protocol-cleanup.md`,
-  `notice-api-unification.md`, `protobuf-migration.md`.
+  `protobuf-migration.md`.
 
 ---
 
@@ -101,8 +101,7 @@ Related existing tracking docs in `todos/`:
   `ConnectionOptions::startup_notice_callback`; new path:
   `Client::builder()...connect_with_notice_stream()`. Race fix is automatic —
   the broadcaster lives on `Connection` and is reused across the handshake
-  loop AND the post-connect bus. Plan:
-  [`notice-api-unification.md`](notice-api-unification.md).
+  loop AND the post-connect bus. PR #526.
 
 ## 3. Naming, layout, prelude
 
