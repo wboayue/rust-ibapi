@@ -150,6 +150,8 @@ pub struct TcpMessageBus<S: Stream> {
     notice_broadcaster: NoticeBroadcaster,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
+    shutdown_send: Sender<()>,
+    shutdown_recv: Receiver<()>,
     shutdown_requested: AtomicBool,
     order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
     connected: AtomicBool,
@@ -158,6 +160,7 @@ pub struct TcpMessageBus<S: Stream> {
 impl<S: Stream> TcpMessageBus<S> {
     pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
         let (signals_send, signals_recv) = channel::unbounded();
+        let (shutdown_send, shutdown_recv) = channel::bounded(1);
 
         Ok(TcpMessageBus {
             connection,
@@ -169,6 +172,8 @@ impl<S: Stream> TcpMessageBus<S> {
             notice_broadcaster: NoticeBroadcaster::new(),
             signals_send,
             signals_recv,
+            shutdown_send,
+            shutdown_recv,
             shutdown_requested: AtomicBool::new(false),
             order_update_stream: Mutex::new(None),
             connected: AtomicBool::new(true),
@@ -193,6 +198,10 @@ impl<S: Stream> TcpMessageBus<S> {
 
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
+
+        // Wake the cleanup thread immediately. bounded(1) + try_send: if a
+        // shutdown is already pending, Err(Full) is the desired no-op.
+        let _ = self.shutdown_send.try_send(());
     }
 
     fn reset(&self) {
@@ -480,41 +489,40 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     // The cleanup thread receives signals as subscribers are dropped and
-    // releases the sender channels
-    fn start_cleanup_thread(self: &Arc<Self>, timeout: std::time::Duration) -> JoinHandle<()> {
+    // releases the sender channels. Exits promptly on shutdown via select!
+    // over the signal channel and the shutdown-notify channel — no polling.
+    fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
         thread::spawn(move || {
             let signal_recv = message_bus.signals_recv.clone();
+            let shutdown_recv = message_bus.shutdown_recv.clone();
 
             loop {
-                if let Ok(signal) = signal_recv.recv_timeout(timeout) {
-                    match signal {
-                        Signal::Request(request_id) => {
-                            message_bus.clean_request(request_id);
+                crossbeam::select! {
+                    recv(signal_recv) -> signal => match signal {
+                        Ok(Signal::Request(request_id)) => message_bus.clean_request(request_id),
+                        Ok(Signal::Order(order_id)) => message_bus.clean_order(order_id),
+                        Ok(Signal::OrderUpdateStream) => message_bus.clear_order_update_stream(),
+                        Err(_) => {
+                            debug!("cleanup signal channel closed");
+                            return;
                         }
-                        Signal::Order(order_id) => {
-                            message_bus.clean_order(order_id);
-                        }
-                        Signal::OrderUpdateStream => {
-                            message_bus.clear_order_update_stream();
-                        }
+                    },
+                    recv(shutdown_recv) -> _ => {
+                        debug!("cleanup thread exiting");
+                        return;
                     }
-                }
-
-                if message_bus.is_shutting_down() {
-                    debug!("cleanup thread exiting");
-                    return;
                 }
             }
         })
     }
 
-    pub(crate) fn process_messages(self: &Arc<Self>, _server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
+    pub(crate) fn process_messages(self: &Arc<Self>, _server_version: i32) -> Result<(), Error> {
         let handle = self.start_dispatcher_thread();
         self.add_join_handle(handle);
 
-        let handle = self.start_cleanup_thread(timeout);
+        let handle = self.start_cleanup_thread();
         self.add_join_handle(handle);
 
         Ok(())

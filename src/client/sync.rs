@@ -6,7 +6,6 @@
 
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Duration;
 
 use log::debug;
 use time::OffsetDateTime;
@@ -136,7 +135,7 @@ impl Client {
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
         // Starts thread to read messages from TWS
-        message_bus.process_messages(connection_metadata.server_version, Duration::from_secs(1))?;
+        message_bus.process_messages(connection_metadata.server_version)?;
 
         Client::new(connection_metadata, message_bus)
     }

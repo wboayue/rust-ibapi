@@ -17,7 +17,7 @@ use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
     // Build the protobuf-encoded contract data request directly
@@ -389,7 +389,7 @@ fn test_client_reconnect() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
+    bus.process_messages(server_version)?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     client.managed_accounts()?;
@@ -562,7 +562,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
+    bus.process_messages(server_version)?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     match client.contract_details(contract) {
@@ -732,6 +732,25 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
     assert!(matches!(resp, Err(Error::Shutdown)), "got: {resp:?}");
     Ok(())
+}
+
+/// Cleanup thread observes shutdown immediately via `crossbeam::select!`
+/// over the signal channel + shutdown-notify channel, instead of polling
+/// with `recv_timeout(1s)`. Regression guard for issue #523.
+#[test]
+fn test_cleanup_thread_exits_promptly_on_shutdown() {
+    let (_stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let start = Instant::now();
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    let elapsed = start.elapsed();
+
+    assert!(
+        elapsed < Duration::from_millis(100),
+        "cleanup-thread join took {elapsed:?}, expected <100ms"
+    );
 }
 
 /// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
