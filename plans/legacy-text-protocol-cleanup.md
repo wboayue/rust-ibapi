@@ -6,7 +6,7 @@
 
 - **Outgoing:** all requests are protobuf. The text encoders are gone (PRs #449–#452, summarized in [protobuf-migration.md](protobuf-migration.md)).
 - **Incoming:** decoders are still mostly text-only with a small number of dual-format (`decode_proto_or_text`) call sites. The wire flips a message family from text to protobuf at a per-family server-version gate, so text-decode code stays load-bearing until the minimum server version we accept covers every gate.
-- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_PLACE_ORDER` (203) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted from 201 → 203 in this PR. Decoders weren't deleted as part of the bump — that's a follow-up PR after each family's response-format mapping is grounded in captured wire data (the `OutgoingMessages`-based grouping in C# Constants.cs maps to outgoing requests, not the responses we decode). Next ratchet candidate: 204 (`PROTOBUF_COMPLETED_ORDER`).
+- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_SCAN_DATA` (210) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted 201 → 203 in [#527](https://github.com/wboayue/rust-ibapi/pull/527), then 203 → 210 in this PR (skipping 204–209 in one move because every family in that range already has a proto decoder + `decode_proto_or_text` wrapper). Decoders weren't deleted as part of the bump — that's a follow-up PR after each family's response-format mapping is grounded in captured wire data (the `OutgoingMessages`-based grouping in C# Constants.cs maps to outgoing requests, not the responses we decode). Next ratchet candidate: 211 (`PROTOBUF_REST_MESSAGES_1`).
 
 ## Per-family protobuf-incoming gates
 
@@ -57,28 +57,38 @@ in place — the remaining work in §"Per-domain done checklist" is mostly
 adding proto decoders. Realtime market data and orders still have the largest
 text-decoder surface.
 
-### Floor 203 deletions (current state)
+### Floor 210 deletions (unlocked, follow-up PRs)
 
-Decoders now proto-only — text branch removed because the originating
-outgoing-request gates are all ≤ 203 (server always emits proto):
+Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions at the
+prior floor of 203 (`PROTOBUF_PLACE_ORDER`):
 
-- `decode_execution_data` (orders) — emitted by `RequestExecutions` (gate 201)
-  and `PlaceOrder` (gate 203)
-- `decode_commission_report` (orders) — same gates as `decode_execution_data`
+- `decode_execution_data` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
+- `decode_commission_report` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 
-Decoders that **stay** dual-format at floor 203 because at least one
-originating outgoing-request gate is > 203:
+Decoders whose text branch is now unreachable at floor 210 and can be deleted
+in follow-up PRs (originating outgoing-request gates all ≤ 210):
 
-- `decode_open_order`, `decode_order_status` — also emitted by
-  `RequestOpenOrders` / `RequestAutoOpenOrders` / `RequestAllOpenOrders`
-  (gate 204)
-- `decode_completed_order` — `RequestCompletedOrders` (gate 204)
+- `decode_open_order`, `decode_order_status`, `decode_completed_order` (orders)
+  — all originating gates are now ≤ 210
+- `contracts/common/decoders/` — `RequestContractData` gate 205
+- `market_data/realtime/common/decoders/` — `RequestMktData` / `RequestTickByTickData` /
+  `RequestMktDepth` etc. all gate 206
+- `accounts/common/decoders/` — `RequestPositions` / `RequestAccountUpdates` etc. gate 207
+- `market_data/historical/common/decoders/` — `RequestHistoricalData` etc. gate 208
+- `news/common/decoders.rs` — `RequestNewsArticle` / `RequestHistoricalNews` etc. gate 209
+- `scanner/common/decoders.rs` — `RequestScannerSubscription` gate 210
+
+Decoders that **stay** dual-format at floor 210 because at least one
+originating outgoing-request gate is > 210:
+
 - `decode_next_valid_id` — `RequestIds` and `StartApi` handshake (gate 213)
+- WSH event data decoders — `RequestWshEventData` (REST batch ≥ 211)
+- Display groups decoders — `QueryDisplayGroups` etc. (REST batch ≥ 211)
 
-Bumping the floor to 204 (`PROTOBUF_COMPLETED_ORDER`) unlocks the next four
-deletions; 213 (`PROTOBUF_REST_MESSAGES_3`) unlocks the last one and lets us
-collapse the dual-format machinery (`decode_proto_or_text`, `is_protobuf`
-field, etc.).
+Each follow-up PR should ground its family's response-format mapping in
+captured wire data before deleting; 213 (`PROTOBUF_REST_MESSAGES_3`) is the
+final ratchet that unlocks the remaining decoders and lets us collapse the
+dual-format machinery (`decode_proto_or_text`, `is_protobuf` field, etc.).
 
 ### Helper APIs that go away when all decoders are proto-only
 
@@ -110,7 +120,7 @@ Production sentinels have moved off `ResponseMessage::from(&str)` — the
 production callers of `ResponseMessage::from(&str)` are limited to:
 
 - `src/display_groups/common/decoders.rs:41` and `src/display_groups/common/stream_decoders.rs:51` — wrapping a parsed text payload after server-side framing; replace when display groups gets a proto decoder.
-- `src/connection/common.rs:387` — text-path branch of `parse_raw_message`; dead at floor 203 (server_version < `PROTOBUF` cannot occur).
+- `src/connection/common.rs:387` — text-path branch of `parse_raw_message`; dead at floor 210 (server_version < `PROTOBUF` cannot occur).
 - `src/stubs.rs:99` — test-fixture-only (the legacy `with_responses(Vec<String>)` path).
 
 The `"stray\0"` sentinel for `UnexpectedResponse` is now test-only
@@ -121,7 +131,7 @@ production code emits it.
 
 Two viable paths, not mutually exclusive:
 
-1. **Per-family ratchet.** Pick a family, bump the floor to its gate (e.g. raise `require_protobuf_support` minimum from 201 to 207 for accounts — extending the gate landed in [#492](https://github.com/wboayue/rust-ibapi/pull/492)), convert that domain's decoders to proto-only, delete the text branches and any `decode_proto_or_text` wrappers in that domain, ship. Repeat for the next family.
+1. **Per-family ratchet.** Pick a family, bump the floor to its gate (e.g. raise `require_protobuf_support` minimum from 210 to 211 for REST batch 1 — extending the gate landed in [#492](https://github.com/wboayue/rust-ibapi/pull/492)), convert that domain's decoders to proto-only, delete the text branches and any `decode_proto_or_text` wrappers in that domain, ship. Repeat for the next family.
 2. **Big-bang.** Raise the floor to 213 (`PROTOBUF_REST_MESSAGES_3`) in one PR, convert all remaining decoders to proto-only, delete the helpers, ship. Larger blast radius but ends the carrying cost in one move.
 
 Either path ends at the same place: only the proto branches remain, the helpers in §"Helper APIs that go away" are deleted, and `ResponseMessage` collapses to a thin protobuf-payload carrier (or is replaced entirely).
