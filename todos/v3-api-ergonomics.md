@@ -4,7 +4,7 @@ A living checklist of public-API rough edges to address before 3.0 ships. Goal:
 the API should feel **simple, ergonomic, easy to use, and intuitive** — minimal
 ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
-**Last audited:** 2026-05-06 (against `main` post-PR #519).
+**Last audited:** 2026-05-07 (against `main` post-PR #524).
 
 ## How to use this doc
 
@@ -16,7 +16,7 @@ ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
   and link it from here.
 
 Related existing tracking docs in `todos/`:
-- `algo-order-builders.md`, `generic-tick-types.md`, `legacy-text-protocol-cleanup.md`,
+- `generic-tick-types.md`, `legacy-text-protocol-cleanup.md`,
   `notice-api-unification.md`, `protobuf-migration.md`.
 
 ---
