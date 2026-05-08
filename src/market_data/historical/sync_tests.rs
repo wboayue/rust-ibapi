@@ -18,6 +18,7 @@ fn test_head_timestamp() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["88|9000|1678323335|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -49,6 +50,7 @@ fn test_histogram_data() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["19|9000|3|125.50|1000|126.00|2000|126.50|3000|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -93,6 +95,7 @@ fn test_historical_data() {
         response_messages: vec![
             "17|9000|20230413  16:31:22|20230415  16:31:22|2|20230413|182.9400|186.5000|180.9400|185.9000|948837.22|184.869|324891|20230414|183.8800|186.2800|182.0100|185.0000|810998.27|183.9865|277547|".to_owned()
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -146,6 +149,7 @@ fn test_historical_schedule() {
         response_messages: vec![
             "106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_SCHEDULE);
@@ -207,6 +211,7 @@ fn test_historical_ticks_bid_ask() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -243,6 +248,7 @@ fn test_historical_ticks_mid_point() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -277,6 +283,7 @@ fn test_historical_ticks_trade() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -312,6 +319,7 @@ fn test_historical_data_version_check() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     // Use an older server version
@@ -336,6 +344,7 @@ fn test_historical_data_adjusted_last_validation() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -366,6 +375,7 @@ fn test_historical_data_error_response() {
             // Respond with an error message
             "3\09000\0200\0No security definition has been found for the request\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -388,6 +398,7 @@ fn test_historical_data_unexpected_response() {
             // Respond with an unexpected message type (using market data type message)
             "58\09000\02\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -417,6 +428,7 @@ fn test_tick_subscription_methods() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -450,6 +462,7 @@ fn test_tick_subscription_buffer_and_iteration() {
             // Second response has 2 ticks, done = true
             "98\09000\02\01681133403\00\011.66\0100\0ARCA\0\01681133404\00\011.67\0300\0BATS\0\01\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -485,6 +498,7 @@ fn test_tick_subscription_owned_iterator() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["98\09000\02\01681133400\00\011.70\024547\0ISLAND\0 O X\01681133401\00\011.71\0179\0FINRA\0\01\0".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -510,6 +524,7 @@ fn test_tick_subscription_bid_ask() {
         response_messages: vec![
             "97\09000\03\01681133399\00\011.63\011.83\02800\0100\01681133400\00\011.64\011.84\02900\0200\01681133401\00\011.65\011.85\03000\0300\01\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -541,6 +556,7 @@ fn test_tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["96\09000\03\01681133398\00\091.36\00\01681133399\00\091.37\00\01681133400\00\091.38\00\01\0".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -570,6 +586,7 @@ fn test_historical_data_time_zone_handling() {
             // Format: historical data with NY timezone in the response
             "17\09000\020230413  09:30:00\020230415  16:00:00\02\020230413\0182.9400\0186.5000\0180.9400\0185.9000\0948837.22\0184.869\0324891\020230414\0183.8800\0186.2800\0182.0100\0185.0000\0810998.27\0183.9865\0277547\0".to_owned()
         ],
+        ordered_responses: vec![],
     });
 
     // Create a client with a time zone specifically set to NY
@@ -611,6 +628,7 @@ fn test_time_zone_fallback() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     // Create a client without a time zone (should fall back to UTC)
@@ -645,6 +663,7 @@ fn test_historical_data_streaming_with_updates() {
             // Streaming update (message type 90)
             "90\09000\0-1\01678890000\0185.80\0186.10\0185.60\0185.90\0500\0185.85\050\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -710,6 +729,7 @@ fn test_historical_data_streaming_keep_up_to_date_false() {
             // Initial historical data only
             "17\09000\020230315  09:30:00\020230315  10:30:00\01\01678886400\0185.50\0186.00\0185.25\0185.75\01000\0185.70\0100\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -762,6 +782,7 @@ fn test_historical_data_streaming_error_response() {
             // Error response
             "4\02\09000\0162\0Historical Market Data Service error message:No market data permissions.\0".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -796,6 +817,7 @@ fn test_tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let internal = message_bus.send_request(9100, &[]).unwrap();
@@ -815,6 +837,7 @@ fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let internal = message_bus.send_request(9101, &[]).unwrap();
@@ -837,6 +860,7 @@ fn test_tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let internal = message_bus.send_request(9102, &[]).unwrap();
@@ -860,6 +884,7 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -892,6 +917,7 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

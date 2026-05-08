@@ -31,6 +31,11 @@ const TEST_BROADCAST_CAPACITY: usize = 1024;
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
     pub response_messages: Vec<String>,
+    /// Pre-built responses (text or proto, in any order). When non-empty,
+    /// supersedes `response_messages` — supports true interleaving for tests
+    /// that mix dual-format decoders (e.g. OpenOrder text + ExecutionData proto
+    /// in the same `place_order` flow at floor 203).
+    pub ordered_responses: Vec<ResponseMessage>,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -44,6 +49,7 @@ impl Default for MessageBusStub {
         Self {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         }
     }
 }
@@ -61,6 +67,19 @@ impl MessageBusStub {
         Self {
             request_messages: RwLock::new(vec![]),
             response_messages,
+            ordered_responses: vec![],
+        }
+    }
+
+    /// Construct a stub that plays back a heterogeneous, ordered sequence of
+    /// pre-built `ResponseMessage` values. Use this when a test interleaves
+    /// text- and proto-framed responses (e.g. `place_order` flow with
+    /// dual-format `OpenOrder` text alongside proto-only `ExecutionData`).
+    pub fn with_ordered_responses(ordered_responses: Vec<ResponseMessage>) -> Self {
+        Self {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+            ordered_responses,
         }
     }
 
@@ -68,9 +87,13 @@ impl MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    /// Materialise configured response strings as `ResponseMessage` instances.
-    /// Accepts both pipe- and NUL-delimited literals; pipes are normalized to NULs.
+    /// Materialise configured responses as `ResponseMessage` instances.
+    /// Prefers `ordered_responses` (true interleaving) over the legacy
+    /// text-only `response_messages` field; only one is non-empty per test.
     pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
+        if !self.ordered_responses.is_empty() {
+            return self.ordered_responses.clone();
+        }
         self.response_messages
             .iter()
             .map(|m| ResponseMessage::from(&m.replace('|', "\0")))

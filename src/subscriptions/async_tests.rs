@@ -13,6 +13,7 @@ async fn test_subscription_with_decoder() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["1|9000|20241231 12:00:00|100.5|101.0|100.0|100.25|1000|100.2|5|0".to_string()],
+        ordered_responses: vec![],
     });
 
     let (tx, rx) = broadcast::channel(100);

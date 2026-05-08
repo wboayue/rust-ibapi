@@ -824,114 +824,6 @@ fn test_decode_open_order_v200_full_order_preview_with_values() {
     assert!(alloc1.is_monetary);
 }
 
-#[test]
-fn test_decode_execution_data_v200_new_fields() {
-    let fields = vec![
-        "11", // message type (ExecutionData)
-        // no version (server_version >= LAST_LIQUIDITY)
-        "9000",                         // request_id
-        "42",                           // order_id
-        "265598",                       // contract_id
-        "AAPL",                         // symbol
-        "STK",                          // security_type
-        "",                             // last_trade_date
-        "0",                            // strike
-        "?",                            // right
-        "",                             // multiplier
-        "SMART",                        // exchange
-        "USD",                          // currency
-        "AAPL",                         // local_symbol
-        "NMS",                          // trading_class
-        "0001f4e8.67890abc.01.01",      // execution_id
-        "20260115 10:30:00 US/Eastern", // time
-        "DU1234567",                    // account_number
-        "SMART",                        // exchange
-        "BOT",                          // side
-        "100",                          // shares
-        "150.50",                       // price
-        "123456",                       // perm_id
-        "1",                            // client_id
-        "0",                            // liquidation
-        "100",                          // cumulative_quantity
-        "150.50",                       // average_price
-        "",                             // order_reference
-        "",                             // ev_rule
-        "",                             // ev_multiplier
-        "",                             // model_code (>= MODELS_SUPPORT)
-        "2",                            // last_liquidity (>= LAST_LIQUIDITY)
-        "1",                            // pending_price_revision (>= PENDING_PRICE_REVISION=178)
-        "SUB002",                       // submitter (>= SUBMITTER=198)
-    ];
-
-    let mut message_str = fields.join("\0");
-    message_str.push('\0');
-    let mut message = ResponseMessage::from(&message_str);
-
-    let result = decode_execution_data(200, &mut message).unwrap();
-
-    // Verify core fields
-    assert_eq!(result.request_id, 9000);
-    assert_eq!(result.execution.order_id, 42);
-    assert_eq!(result.contract.symbol.to_string(), "AAPL");
-    assert_eq!(result.execution.execution_id, "0001f4e8.67890abc.01.01");
-    assert_eq!(result.execution.shares, 100.0);
-    assert_eq!(result.execution.price, 150.50);
-
-    // Verify new fields
-    assert!(result.execution.pending_price_revision);
-    assert_eq!(result.execution.submitter, "SUB002");
-}
-
-#[test]
-fn test_decode_execution_data_v177_skips_new_fields() {
-    // v177 is below PENDING_PRICE_REVISION (178) and SUBMITTER (198)
-    let fields = vec![
-        "11",                           // message type
-        "9000",                         // request_id
-        "42",                           // order_id
-        "265598",                       // contract_id
-        "AAPL",                         // symbol
-        "STK",                          // security_type
-        "",                             // last_trade_date
-        "0",                            // strike
-        "?",                            // right
-        "",                             // multiplier
-        "SMART",                        // exchange
-        "USD",                          // currency
-        "AAPL",                         // local_symbol
-        "NMS",                          // trading_class
-        "0001f4e8.67890abc.01.01",      // execution_id
-        "20260115 10:30:00 US/Eastern", // time
-        "DU1234567",                    // account_number
-        "SMART",                        // exchange
-        "BOT",                          // side
-        "100",                          // shares
-        "150.50",                       // price
-        "123456",                       // perm_id
-        "1",                            // client_id
-        "0",                            // liquidation
-        "100",                          // cumulative_quantity
-        "150.50",                       // average_price
-        "",                             // order_reference
-        "",                             // ev_rule
-        "",                             // ev_multiplier
-        "",                             // model_code (>= MODELS_SUPPORT)
-        "2",                            // last_liquidity (>= LAST_LIQUIDITY)
-                                        // No pending_price_revision (v177 < 178)
-                                        // No submitter (v177 < 198)
-    ];
-
-    let mut message_str = fields.join("\0");
-    message_str.push('\0');
-    let mut message = ResponseMessage::from(&message_str);
-
-    let result = decode_execution_data(177, &mut message).unwrap();
-
-    assert_eq!(result.execution.order_id, 42);
-    assert!(!result.execution.pending_price_revision);
-    assert_eq!(result.execution.submitter, "");
-}
-
 /// Builds base completed order message fields for a simple AAPL LMT order.
 fn build_completed_order_base_fields() -> Vec<&'static str> {
     vec![
@@ -1470,4 +1362,21 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
     assert_eq!(result.execution.shares, 50.0);
     assert_eq!(result.execution.price, 152.5);
     assert_eq!(result.execution.perm_id, 99999);
+}
+
+#[test]
+fn test_decode_execution_data_rejects_text_framing() {
+    // Connection floor at PROTOBUF_PLACE_ORDER (203) means servers always emit
+    // ExecutionData in proto. Text-framed arrival is a server bug — the decoder
+    // surfaces it as `Error::Parse` rather than silently mis-decoding.
+    let mut message = ResponseMessage::from("11\09000\042\0265598\0AAPL\0STK\0");
+    let err = decode_execution_data(server_versions::PROTOBUF_PLACE_ORDER, &mut message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::Parse(_, _, _)), "expected Error::Parse, got {err:?}");
+}
+
+#[test]
+fn test_decode_commission_report_rejects_text_framing() {
+    let mut message = ResponseMessage::from("59\01\0exec001\02.5\0USD\0");
+    let err = decode_commission_report(server_versions::PROTOBUF_PLACE_ORDER, &mut message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::Parse(_, _, _)), "expected Error::Parse, got {err:?}");
 }

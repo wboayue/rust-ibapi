@@ -43,7 +43,7 @@ text decoders are still load-bearing for servers below the family's gate.
 |-------------------------------------------|--------------:|---------------:|------------------:|
 | `accounts/common/decoders/`               |            14 |             10 |                12 |
 | `contracts/common/decoders/`              |             5 |              4 |                 4 |
-| `orders/common/decoders/`                 |            16 |              5 |                 7 |
+| `orders/common/decoders/`                 |            14 |              5 |                 5 |
 | `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
 | `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
 | `news/common/decoders.rs`                 |             5 |              4 |                 4 |
@@ -55,7 +55,30 @@ Most domains now have proto counterparts and `decode_proto_or_text` wrappers
 in place — the remaining work in §"Per-domain done checklist" is mostly
 *deleting* the text branch once the floor passes the family's gate, not
 adding proto decoders. Realtime market data and orders still have the largest
-text-decoder surface that hasn't been converted to dual-format wrappers yet.
+text-decoder surface.
+
+### Floor 203 deletions (current state)
+
+Decoders now proto-only — text branch removed because the originating
+outgoing-request gates are all ≤ 203 (server always emits proto):
+
+- `decode_execution_data` (orders) — emitted by `RequestExecutions` (gate 201)
+  and `PlaceOrder` (gate 203)
+- `decode_commission_report` (orders) — same gates as `decode_execution_data`
+
+Decoders that **stay** dual-format at floor 203 because at least one
+originating outgoing-request gate is > 203:
+
+- `decode_open_order`, `decode_order_status` — also emitted by
+  `RequestOpenOrders` / `RequestAutoOpenOrders` / `RequestAllOpenOrders`
+  (gate 204)
+- `decode_completed_order` — `RequestCompletedOrders` (gate 204)
+- `decode_next_valid_id` — `RequestIds` and `StartApi` handshake (gate 213)
+
+Bumping the floor to 204 (`PROTOBUF_COMPLETED_ORDER`) unlocks the next four
+deletions; 213 (`PROTOBUF_REST_MESSAGES_3`) unlocks the last one and lets us
+collapse the dual-format machinery (`decode_proto_or_text`, `is_protobuf`
+field, etc.).
 
 ### Helper APIs that go away when all decoders are proto-only
 
