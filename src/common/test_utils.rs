@@ -17,6 +17,7 @@ pub mod helpers {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
@@ -27,6 +28,7 @@ pub mod helpers {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: responses,
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         (client, message_bus)
@@ -37,6 +39,7 @@ pub mod helpers {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: responses,
+            ordered_responses: vec![],
         });
         let client = Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
@@ -65,6 +68,7 @@ pub mod helpers {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: responses,
+            ordered_responses: vec![],
         });
         let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
@@ -108,6 +112,20 @@ pub mod helpers {
     /// proto body from the builder's `RequestEncoder` impl, so tests don't repeat the msg id.
     pub fn assert_request<B: crate::testdata::builders::RequestEncoder>(message_bus: &MessageBusStub, index: usize, expected: &B) {
         assert_request_proto(message_bus, index, B::MSG_ID, &expected.to_proto());
+    }
+
+    /// Build a text-format `ResponseMessage` for use with
+    /// [`MessageBusStub::with_ordered_responses`]. Accepts pipe-delimited
+    /// builder output (`encode_pipe()`) or raw NUL-delimited literals.
+    pub fn text_response(s: impl Into<String>) -> crate::messages::ResponseMessage {
+        crate::messages::ResponseMessage::from(&s.into().replace('|', "\0"))
+    }
+
+    /// Build a proto-framed `ResponseMessage` for use with
+    /// [`MessageBusStub::with_ordered_responses`]. Pairs with
+    /// `Builder::encode_proto()`.
+    pub fn proto_response(msg_type: crate::messages::IncomingMessages, bytes: Vec<u8>) -> crate::messages::ResponseMessage {
+        crate::messages::ResponseMessage::from_protobuf(msg_type as i32, bytes, server_versions::PROTOBUF_PLACE_ORDER)
     }
 
     /// Common test constants that can be used across modules

@@ -13,7 +13,8 @@ use time::macros::datetime;
 async fn test_head_timestamp() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["88|9000|1678838400|".to_owned()], // 2023-03-15 00:00:00 UTC
+        response_messages: vec!["88|9000|1678838400|".to_owned()], // 2023-03-15 00:00:00 UTC,
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
@@ -51,6 +52,7 @@ async fn test_histogram_data() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["96|9000|3|185.50|100|185.75|150|186.00|200|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_HISTOGRAM);
@@ -103,6 +105,7 @@ async fn test_historical_data() {
             "17|9000|20230315  09:30:00|20230315  10:30:00|2|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|1678890000|185.75|186.25|185.50|186.00|1500|185.85|150|"
                 .to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -228,6 +231,7 @@ async fn test_historical_data_error_response() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["4|2|9000|162|Historical Market Data Service error message:No market data permissions.|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -254,7 +258,8 @@ async fn test_historical_data_error_response() {
 async fn test_historical_data_unexpected_response() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["1|2|9000|1|185.50|100|7|".to_owned()], // Wrong message type
+        response_messages: vec!["1|2|9000|1|185.50|100|7|".to_owned()], // Wrong message type,
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -282,6 +287,7 @@ async fn test_historical_schedule() {
             "106|9000|20230313-09:30:00|20230315-16:00:00|UTC|3|20230313-09:30:00|20230313-16:00:00|20230313|20230314-09:30:00|20230314-16:00:00|20230314|20230315-09:30:00|20230315-16:00:00|20230315|"
                 .to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
@@ -324,6 +330,7 @@ async fn test_tick_subscription_methods() {
             // Second response with 1 tick, done
             "97|9000|1|1678838500|10|185.75|186.25|150|250|1|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -379,6 +386,7 @@ async fn test_tick_subscription_buffer_and_iteration() {
             // Response with 3 ticks at once, done = true
             "97|9000|3|1678838400|8|185.50|186.00|100|200|1678838401|9|185.60|186.10|110|210|1678838402|10|185.70|186.20|120|220|1|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
@@ -417,6 +425,7 @@ async fn test_tick_subscription_bid_ask() {
             // mask = 2 (binary 10) = bid_past_low = true, ask_past_high = false
             "97|9000|1|1678838400|2|185.50|186.00|100|200|1|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -473,6 +482,7 @@ async fn test_tick_subscription_midpoint() {
             // Format: message_type|request_id|num_ticks|timestamp|skip|price|size|...|done
             "96|9000|1|1678838400|0|185.75|100|1|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -517,6 +527,7 @@ async fn test_historical_ticks_trade() {
             // Format: message_type|request_id|num_ticks|timestamp|mask|price|size|exchange|conditions|...|done
             "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -561,6 +572,7 @@ async fn test_historical_data_time_zone_handling() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned()],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -609,6 +621,7 @@ async fn test_historical_data_streaming_with_updates() {
             // Streaming update (message type 90)
             "90|9000|-1|1678890000|185.80|186.10|185.60|185.90|500|185.85|50|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -672,6 +685,7 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
             // Initial historical data only
             "17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -723,6 +737,7 @@ async fn test_historical_data_streaming_error_response() {
             // Error response
             "4|2|9000|162|Historical Market Data Service error message:No market data permissions.|".to_owned(),
         ],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -753,6 +768,7 @@ async fn test_tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
@@ -775,6 +791,7 @@ async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
@@ -796,6 +813,7 @@ async fn test_tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
@@ -818,6 +836,7 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -853,6 +872,7 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
+        ordered_responses: vec![],
     });
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

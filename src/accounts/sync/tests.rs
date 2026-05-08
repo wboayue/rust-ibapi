@@ -84,6 +84,7 @@ fn test_positions_multi() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -327,6 +328,7 @@ fn test_account_updates_multi() {
                 .encode_pipe(),
             account_update_multi_end().encode_pipe(),
         ],
+        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

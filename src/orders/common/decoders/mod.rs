@@ -1,7 +1,7 @@
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::ResponseMessage;
 use crate::orders::{
-    Action, CommissionReport, ExecutionData, Liquidity, Order, OrderAllocation, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState,
+    Action, CommissionReport, ExecutionData, Order, OrderAllocation, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState,
     OrderStatus, Rule80A, SoftDollarTier, TimeInForce,
 };
 use crate::{server_versions, Error};
@@ -879,82 +879,20 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
     })
 }
 
-pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
-    message.decode_proto_or_text(decode_execution_data_proto, |msg| {
-        msg.skip(); // message type
+/// Both originating outgoing-request gates (PlaceOrder=203, RequestExecutions=201)
+/// are <= floor 203, so the server always emits proto framing here. Text-framed
+/// arrival skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20)
+/// rather than terminating the subscription.
+fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
+    message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
+}
 
-        if server_version < server_versions::LAST_LIQUIDITY {
-            msg.skip(); // message version
-        };
-
-        let mut execution_data = ExecutionData::default();
-        let contract = &mut execution_data.contract;
-        let execution = &mut execution_data.execution;
-
-        execution_data.request_id = msg.next_int()?;
-        execution.order_id = msg.next_int()?;
-        contract.contract_id = msg.next_int()?;
-        contract.symbol = Symbol::from(msg.next_string()?);
-        let secutity_type = msg.next_string()?;
-        contract.security_type = SecurityType::from(&secutity_type);
-        contract.last_trade_date_or_contract_month = msg.next_string()?;
-        contract.strike = msg.next_double()?;
-        contract.right = msg.next_string()?;
-        contract.multiplier = msg.next_string()?;
-        contract.exchange = Exchange::from(msg.next_string()?);
-        contract.currency = Currency::from(msg.next_string()?);
-        contract.local_symbol = msg.next_string()?;
-        contract.trading_class = msg.next_string()?;
-        execution.execution_id = msg.next_string()?;
-        execution.time = msg.next_string()?;
-        execution.account_number = msg.next_string()?;
-        execution.exchange = msg.next_string()?;
-        execution.side = msg.next_string()?;
-        execution.shares = msg.next_double()?;
-        execution.price = msg.next_double()?;
-        execution.perm_id = msg.next_long()?;
-        execution.client_id = msg.next_int()?;
-        execution.liquidation = msg.next_int()?;
-        execution.cumulative_quantity = msg.next_double()?;
-        execution.average_price = msg.next_double()?;
-        execution.order_reference = msg.next_string()?;
-        execution.ev_rule = msg.next_string()?;
-        execution.ev_multiplier = msg.next_optional_double()?;
-
-        if server_version >= server_versions::MODELS_SUPPORT {
-            execution.model_code = msg.next_string()?;
-        }
-
-        if server_version >= server_versions::LAST_LIQUIDITY {
-            execution.last_liquidity = Liquidity::from(msg.next_int()?);
-        }
-
-        if server_version >= server_versions::PENDING_PRICE_REVISION {
-            execution.pending_price_revision = msg.next_bool()?;
-        }
-
-        if server_version >= server_versions::SUBMITTER {
-            execution.submitter = msg.next_string()?;
-        }
-
-        Ok(execution_data)
-    })
+pub(crate) fn decode_execution_data(_server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
+    decode_execution_data_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
-    message.decode_proto_or_text(decode_commission_report_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // message version
-
-        Ok(CommissionReport {
-            execution_id: msg.next_string()?,
-            commission: msg.next_double()?,
-            currency: msg.next_string()?,
-            realized_pnl: msg.next_optional_double()?,
-            yields: msg.next_optional_double()?,
-            yield_redemption_date: msg.next_string()?, // TODO: use date type?
-        })
-    })
+    decode_commission_report_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {

@@ -17,6 +17,7 @@ fn test_contract_details() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages.clone(),
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -43,6 +44,7 @@ fn test_matching_symbols() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![test_case.response_message.clone()],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
@@ -67,6 +69,7 @@ fn test_market_rule() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![test_case.response_message.clone()],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES);
@@ -92,6 +95,7 @@ fn test_option_calculations() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![test_case.response_message.clone()],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
@@ -149,6 +153,7 @@ fn test_option_chain() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages.clone(),
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
@@ -185,6 +190,7 @@ fn test_verify_contract() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);
@@ -302,6 +308,7 @@ fn test_client_methods() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages.clone(),
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(
@@ -376,6 +383,7 @@ fn test_contract_details_errors() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: test_case.response_messages.clone(),
+            ordered_responses: vec![],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

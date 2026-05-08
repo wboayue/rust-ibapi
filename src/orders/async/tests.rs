@@ -1,7 +1,8 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, Symbol};
+use crate::messages::IncomingMessages;
 use crate::orders::common::test_data::{COMPLETED_ORDER_ES_FUT_CANCELLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_ES_FUT_SUBMITTED};
 use crate::orders::OrderStatusKind;
 use crate::stubs::MessageBusStub;
@@ -9,35 +10,48 @@ use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_orders_end, completed_orders_request, execution_data, execution_data_end, executions_request,
     global_cancel_request, next_valid_order_id_request, open_order_end, open_orders_request, order_status, place_order_request,
 };
-use crate::testdata::builders::ResponseEncoder;
+use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 use crate::{server_versions, Client};
 use std::sync::Arc;
 use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_place_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
-        order_status()
-            .order_id(1)
-            .status(OrderStatusKind::Submitted)
-            .filled(0.0)
-            .remaining(1.0)
-            .encode_pipe(),
-        execution_data()
-            .request_id(1)
-            .order_id(1)
-            .contract_id(637533641)
-            .symbol("ES")
-            .security_type("FUT")
-            .exchange("CME")
-            .execution_id("0001f4e5.58bbad52.01.01")
-            .shares(1.0)
-            .price(5800.0)
-            .perm_id(2126726143)
-            .last_liquidity(1)
-            .encode_pipe(),
-        commission_report().execution_id("0001f4e5.58bbad52.01.01").commission(2.25).encode_pipe(),
+    // OpenOrder + OrderStatus stay text (decoders still dual-format at floor 203).
+    // ExecutionData + CommissionReport go proto (decoders are proto-only at floor 203).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
+        text_response(
+            order_status()
+                .order_id(1)
+                .status(OrderStatusKind::Submitted)
+                .filled(0.0)
+                .remaining(1.0)
+                .encode_pipe(),
+        ),
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data()
+                .request_id(1)
+                .order_id(1)
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .exchange("CME")
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .shares(1.0)
+                .price(5800.0)
+                .perm_id(2126726143)
+                .last_liquidity(1)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::CommissionsReport,
+            commission_report()
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .commission(2.25)
+                .encode_proto(),
+        ),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -178,22 +192,34 @@ async fn test_completed_orders() {
 
 #[tokio::test]
 async fn test_executions() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        execution_data()
-            .request_id(TEST_REQ_ID_FIRST)
-            .order_id(1)
-            .contract_id(637533641)
-            .symbol("ES")
-            .security_type("FUT")
-            .exchange("CME")
-            .execution_id("0001f4e5.58bbad52.01.01")
-            .shares(1.0)
-            .price(5800.0)
-            .perm_id(2126726143)
-            .last_liquidity(1)
-            .encode_pipe(),
-        commission_report().execution_id("0001f4e5.58bbad52.01.01").commission(2.25).encode_pipe(),
-        execution_data_end().encode_pipe(),
+    // All three responses are emitted only in response to RequestExecutions (gate 201)
+    // or PlaceOrder (gate 203) — both ≤ floor 203, so the server always emits them as
+    // proto and the text branch in the decoders is gone.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data()
+                .request_id(TEST_REQ_ID_FIRST)
+                .order_id(1)
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .exchange("CME")
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .shares(1.0)
+                .price(5800.0)
+                .perm_id(2126726143)
+                .last_liquidity(1)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::CommissionsReport,
+            commission_report()
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .commission(2.25)
+                .encode_proto(),
+        ),
+        proto_response(IncomingMessages::ExecutionDataEnd, execution_data_end().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -299,28 +325,41 @@ async fn test_next_valid_order_id() {
 
 #[tokio::test]
 async fn test_order_update_stream() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        order_status()
-            .order_id(100)
-            .status(OrderStatusKind::Submitted)
-            .filled(0.0)
-            .remaining(1.0)
-            .perm_id(2126726143)
-            .encode_pipe(),
-        execution_data()
-            .request_id(1)
-            .order_id(1)
-            .contract_id(637533641)
-            .symbol("ES")
-            .security_type("FUT")
-            .exchange("CME")
-            .execution_id("0001f4e5.58bbad52.01.01")
-            .shares(1.0)
-            .price(5800.0)
-            .perm_id(2126726143)
-            .last_liquidity(1)
-            .encode_pipe(),
-        commission_report().execution_id("0001f4e5.58bbad52.01.01").commission(2.25).encode_pipe(),
+    // Same dual-format split as `test_place_order`: OrderStatus stays text,
+    // ExecutionData / CommissionReport go proto.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        text_response(
+            order_status()
+                .order_id(100)
+                .status(OrderStatusKind::Submitted)
+                .filled(0.0)
+                .remaining(1.0)
+                .perm_id(2126726143)
+                .encode_pipe(),
+        ),
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data()
+                .request_id(1)
+                .order_id(1)
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .exchange("CME")
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .shares(1.0)
+                .price(5800.0)
+                .perm_id(2126726143)
+                .last_liquidity(1)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::CommissionsReport,
+            commission_report()
+                .execution_id("0001f4e5.58bbad52.01.01")
+                .commission(2.25)
+                .encode_proto(),
+        ),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
