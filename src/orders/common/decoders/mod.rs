@@ -879,23 +879,20 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
     })
 }
 
+/// Both originating outgoing-request gates (PlaceOrder=203, RequestExecutions=201)
+/// are <= floor 203, so the server always emits proto framing here. Text-framed
+/// arrival skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20)
+/// rather than terminating the subscription.
+fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
+    message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
+}
+
 pub(crate) fn decode_execution_data(_server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
-    // Floor at PROTOBUF_PLACE_ORDER (203) covers both originating outgoing
-    // gates: PlaceOrder (203) and RequestExecutions (201), so the server
-    // always emits this in proto. Text-framed arrival at this point is a
-    // server bug; surface it loudly via `Error::Parse`.
-    let bytes = message
-        .raw_bytes()
-        .ok_or_else(|| Error::Parse(0, String::new(), "ExecutionData: expected protobuf framing at floor 203".into()))?;
-    decode_execution_data_proto(bytes)
+    decode_execution_data_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
-    // Same gating as `decode_execution_data` above — proto-only at floor 203.
-    let bytes = message
-        .raw_bytes()
-        .ok_or_else(|| Error::Parse(0, String::new(), "CommissionReport: expected protobuf framing at floor 203".into()))?;
-    decode_commission_report_proto(bytes)
+    decode_commission_report_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {

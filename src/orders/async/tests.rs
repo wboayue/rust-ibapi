@@ -325,6 +325,8 @@ async fn test_next_valid_order_id() {
 
 #[tokio::test]
 async fn test_order_update_stream() {
+    // Same dual-format split as `test_place_order`: OrderStatus stays text,
+    // ExecutionData / CommissionReport go proto.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         text_response(
             order_status()
