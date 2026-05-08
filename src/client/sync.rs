@@ -90,9 +90,9 @@ impl Client {
         ClientBuilder::default()
     }
 
-    /// Internal entry point shared by `connect` and `ClientBuilder`. Constructs
-    /// the `Connection` with explicit pieces (no `ConnectionOptions`
-    /// indirection), wraps it in `TcpMessageBus`, kicks off the dispatcher.
+    /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
+    /// Builds the `Connection`, wraps it in a `TcpMessageBus`, and kicks off
+    /// the dispatcher thread.
     pub(crate) fn connect_with_pieces(
         address: &str,
         client_id: i32,

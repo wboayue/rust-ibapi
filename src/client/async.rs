@@ -97,9 +97,9 @@ impl Client {
         ClientBuilder::default()
     }
 
-    /// Internal entry point shared by `connect` and `ClientBuilder`. Constructs
-    /// the `AsyncConnection` with explicit pieces (no `ConnectionOptions`
-    /// indirection), wraps it in `AsyncTcpMessageBus`, kicks off the dispatcher.
+    /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
+    /// Builds the `AsyncConnection`, wraps it in an `AsyncTcpMessageBus`, and
+    /// kicks off the dispatcher task.
     pub(crate) async fn connect_with_pieces(
         address: &str,
         client_id: i32,

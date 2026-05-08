@@ -53,8 +53,9 @@ pub(super) struct BuilderState {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
 }
 
-/// Output of [`BuilderState::validate`] — same fields, but `address` and
-/// `client_id` have been unwrapped.
+/// Output of [`BuilderState::validate`]: same fields with `address` and
+/// `client_id` unwrapped. A struct (rather than a tuple) because the wide
+/// `Fn` trait object trips `clippy::type_complexity` in tuple form.
 pub(super) struct ValidatedPieces {
     pub(super) address: String,
     pub(super) client_id: i32,
