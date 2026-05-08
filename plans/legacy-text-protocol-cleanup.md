@@ -84,23 +84,23 @@ field, etc.).
 
 These exist solely to support text-format messages. Each can be deleted once no decoder reads from a text-format `ResponseMessage`.
 
-- `messages::ResponseMessage::is_protobuf` field (`src/messages.rs:849`)
-- `messages::ResponseMessage::from(fields: &str)` inherent constructor (`src/messages.rs:1231`) — note: not a `From<&str>` impl, despite the name
-- `messages::ResponseMessage::from_binary_text` (`src/messages.rs:868`)
-- `messages::ResponseMessage::with_server_version` (`src/messages.rs:1253`)
-- `messages::ResponseMessage::decode_proto_or_text{,_owned}` (`src/messages.rs:886, 901`)
-- `connection::common::parse_raw_message` text-payload branch (`src/connection/common.rs:451`)
+- `messages::ResponseMessage::is_protobuf` field (`src/messages.rs:879`)
+- `messages::ResponseMessage::from(fields: &str)` inherent constructor (`src/messages.rs:1298`) — note: not a `From<&str>` impl, despite the name
+- `messages::ResponseMessage::from_binary_text` (`src/messages.rs:898`)
+- `messages::ResponseMessage::with_server_version` (`src/messages.rs:1320`)
+- `messages::ResponseMessage::decode_proto_or_text{,_owned}` (`src/messages.rs:916, 931`)
+- `connection::common::parse_raw_message` (`src/connection/common.rs:368`) — the pre-`PROTOBUF` `else` branch (lines 384-389) is **already unreachable** at floor 203 and can be deleted whenever convenient; the binary-text-payload branch (lines 377-383) stays load-bearing until floor 213
 - All `message.skip()` calls (currently used to skip the text-format `message_type` and `message_version` header fields)
 
 ### Branching sites in production code
 
 `if message.is_protobuf` decisions outside the decoder bodies. Each disappears with the field.
 
-- `src/messages.rs:891, 906` — inside `decode_proto_or_text{,_owned}`
-- `src/messages.rs:1367` — inside `From<&ResponseMessage> for Notice`
+- `src/messages.rs:921, 936` — inside `decode_proto_or_text{,_owned}`
+- `src/messages.rs:1024, 1033, 1434` — proto-aware `peek_*` accessors and `From<&ResponseMessage> for Notice` (per rule 22)
 - `src/errors.rs:116` — inside `From<ResponseMessage> for Error`
-- `src/transport/routing.rs:120, 129` — error/notice routing
-- `src/connection/common.rs:267, 280` — handshake `NextValidId` / `ManagedAccounts` parsing
+- `src/transport/routing.rs:105` — error decode dispatch (proto envelope vs text fields)
+- `src/connection/common.rs:200, 213` — handshake `NextValidId` / `ManagedAccounts` parsing
 
 ### Sentinel-message uses of the text constructor
 
@@ -110,8 +110,8 @@ Production sentinels have moved off `ResponseMessage::from(&str)` — the
 production callers of `ResponseMessage::from(&str)` are limited to:
 
 - `src/display_groups/common/decoders.rs:41` and `src/display_groups/common/stream_decoders.rs:51` — wrapping a parsed text payload after server-side framing; replace when display groups gets a proto decoder.
-- `src/connection/common.rs:454` — text-path branch of `parse_raw_message`; goes away with the helper itself.
-- `src/stubs.rs:76` — test-fixture-only.
+- `src/connection/common.rs:387` — text-path branch of `parse_raw_message`; dead at floor 203 (server_version < `PROTOBUF` cannot occur).
+- `src/stubs.rs:99` — test-fixture-only (the legacy `with_responses(Vec<String>)` path).
 
 The `"stray\0"` sentinel for `UnexpectedResponse` is now test-only
 (`src/subscriptions/sync_tests.rs`, `src/subscriptions/async_tests.rs`); no

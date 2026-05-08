@@ -4,7 +4,7 @@ A living checklist of public-API rough edges to address before 3.0 ships. Goal:
 the API should feel **simple, ergonomic, easy to use, and intuitive** — minimal
 ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
-**Last audited:** 2026-05-07 (against `main` post-PR #524).
+**Last audited:** 2026-05-08 (against `main` post-PR #529; floor at `PROTOBUF_PLACE_ORDER` = 203).
 
 ## How to use this doc
 
