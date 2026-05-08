@@ -89,8 +89,13 @@ async fn builder_notice_stream_receives_handshake_notices() {
 }
 
 /// Reconnect-coverage live verification. Marked `#[ignore]` because we can't
-/// reliably automate a gateway flap. Run manually: start the test, then flap
-/// the gateway connection within 60s to trigger reconnect.
+/// reliably automate a gateway flap from inside the test suite. To run:
+///
+/// 1. Start the test (it connects + waits).
+/// 2. While it's waiting, restart the gateway (or briefly close the API socket
+///    via Gateway → Configure → Settings → API → reset connections).
+/// 3. The test should print captured notices from both the initial and
+///    post-reconnect handshakes, then exit.
 #[tokio::test]
 #[ignore]
 async fn builder_notice_stream_survives_reconnect() {
