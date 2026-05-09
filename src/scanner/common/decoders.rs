@@ -1,6 +1,5 @@
 use prost::Message;
 
-use crate::contracts::{Currency, Exchange, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
@@ -10,18 +9,23 @@ use super::super::ScannerData;
 /// Handles message type matching and error conversion.
 pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
     match message.message_type() {
-        IncomingMessages::ScannerData => decode_scanner_data(message.clone()),
+        IncomingMessages::ScannerData => decode_scanner_data(message),
         IncomingMessages::Error => Err(Error::from(message.clone())),
         _ => Err(Error::UnexpectedResponse(message.clone())),
     }
 }
 
-pub(in crate::scanner) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
-    message.decode_proto_or_text(decode_scanner_parameters_proto, |msg| {
-        msg.skip(); // skip message type
-        msg.skip(); // skip message version
-        msg.next_string()
-    })
+/// Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
+/// which equals the connection floor (`require_protobuf_support`), so the server
+/// always emits proto framing for these messages. Text-framed arrival
+/// skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20)
+/// rather than terminating the subscription.
+fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
+    message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
+}
+
+pub(in crate::scanner) fn decode_scanner_parameters(message: &ResponseMessage) -> Result<String, Error> {
+    decode_scanner_parameters_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Error> {
@@ -29,44 +33,8 @@ pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Er
     Ok(p.xml.unwrap_or_default())
 }
 
-pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    message.decode_proto_or_text(decode_scanner_data_proto, |msg| {
-        msg.skip(); // skip message type
-        msg.skip(); // skip message version
-        msg.skip(); // request id
-
-        let number_of_elements = msg.next_int()?;
-        let mut matches = Vec::with_capacity(number_of_elements as usize);
-
-        for _ in 0..number_of_elements {
-            let mut scanner_data = ScannerData {
-                rank: msg.next_int()?,
-                ..Default::default()
-            };
-
-            scanner_data.contract_details.contract.contract_id = msg.next_int()?;
-            scanner_data.contract_details.contract.symbol = Symbol::from(msg.next_string()?);
-            scanner_data.contract_details.contract.security_type = SecurityType::from(&msg.next_string()?);
-            scanner_data.contract_details.contract.last_trade_date_or_contract_month = msg.next_string()?;
-            scanner_data.contract_details.contract.strike = msg.next_double()?;
-            scanner_data.contract_details.contract.right = msg.next_string()?;
-            scanner_data.contract_details.contract.exchange = Exchange::from(msg.next_string()?);
-            scanner_data.contract_details.contract.currency = Currency::from(msg.next_string()?);
-            scanner_data.contract_details.contract.local_symbol = msg.next_string()?;
-            scanner_data.contract_details.market_name = msg.next_string()?;
-            scanner_data.contract_details.contract.trading_class = msg.next_string()?;
-
-            msg.skip(); // distance
-            msg.skip(); // benchmark
-            msg.skip(); // projection
-
-            scanner_data.leg = msg.next_string()?;
-
-            matches.push(scanner_data);
-        }
-
-        Ok(matches)
-    })
+pub(in crate::scanner) fn decode_scanner_data(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    decode_scanner_data_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
@@ -90,77 +58,5 @@ pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_decode_scanner_data_proto() {
-        use prost::Message;
-
-        let proto_msg = crate::proto::ScannerData {
-            req_id: Some(1),
-            scanner_data_element: vec![
-                crate::proto::ScannerDataElement {
-                    rank: Some(0),
-                    contract: Some(crate::proto::Contract {
-                        con_id: Some(265598),
-                        symbol: Some("AAPL".into()),
-                        sec_type: Some("STK".into()),
-                        ..Default::default()
-                    }),
-                    market_name: Some("NMS".into()),
-                    distance: Some("1.5".into()),
-                    benchmark: Some("".into()),
-                    projection: Some("".into()),
-                    combo_key: Some("".into()),
-                },
-                crate::proto::ScannerDataElement {
-                    rank: Some(1),
-                    contract: Some(crate::proto::Contract {
-                        con_id: Some(76792991),
-                        symbol: Some("TSLA".into()),
-                        sec_type: Some("STK".into()),
-                        ..Default::default()
-                    }),
-                    market_name: Some("NMS".into()),
-                    distance: None,
-                    benchmark: None,
-                    projection: None,
-                    combo_key: None,
-                },
-            ],
-        };
-
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
-
-        let results = decode_scanner_data_proto(&bytes).unwrap();
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].rank, 0);
-        assert_eq!(results[0].contract_details.contract.contract_id, 265598);
-        assert_eq!(results[0].contract_details.market_name, "NMS");
-    }
-
-    #[test]
-    fn test_decode_scanner_parameters_proto() {
-        use prost::Message;
-        let xml = "<ScanParameterResponse><ScanTypeList /></ScanParameterResponse>";
-        let proto_msg = crate::proto::ScannerParameters { xml: Some(xml.into()) };
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
-
-        let result = decode_scanner_parameters_proto(&bytes).unwrap();
-        assert_eq!(result, xml);
-    }
-
-    #[test]
-    fn test_decode_scanner_parameters_proto_empty() {
-        use prost::Message;
-        let proto_msg = crate::proto::ScannerParameters { xml: None };
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
-
-        let result = decode_scanner_parameters_proto(&bytes).unwrap();
-        assert_eq!(result, "");
-    }
-}
+#[path = "decoders_tests.rs"]
+mod tests;

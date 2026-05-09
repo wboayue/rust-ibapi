@@ -14,7 +14,7 @@ impl Client {
         let mut subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
 
         match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_scanner_parameters(message),
+            Some(Ok(message)) => decoders::decode_scanner_parameters(&message),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
         }

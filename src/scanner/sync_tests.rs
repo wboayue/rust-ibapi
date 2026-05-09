@@ -1,24 +1,25 @@
 use super::*;
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Exchange, SecurityType, Symbol};
+use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
-use crate::testdata::builders::scanner::{cancel_scanner_subscription_request, scanner_parameters_request, scanner_subscription_request};
-use std::sync::{Arc, RwLock};
+use crate::testdata::builders::scanner::{
+    cancel_scanner_subscription_request, scanner_data, scanner_data_row, scanner_parameters, scanner_parameters_request, scanner_subscription_request,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
+use std::sync::Arc;
 
 #[test]
 fn test_scanner_parameters() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "19|2|<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ScanParameterResponse>\n<InstrumentList>...</InstrumentList>\n</ScanParameterResponse>".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ScannerParameters,
+        scanner_parameters().encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SCANNER_GENERIC_OPTS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_SCAN_DATA);
 
     let scanner_params = client.scanner_parameters().expect("request scanner parameters failed");
 
@@ -31,15 +32,18 @@ fn test_scanner_parameters() {
 
 #[test]
 fn test_scanner_subscription() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "20\03\09000\010\00\0670777621\0SVMH\0STK\0\00\0\0SMART\0USD\0SVMH\0NMS\0NMS\0\0\0\0\01\0536918651\0GTI\0STK\0\00\0\0SMART\0USD\0GTI\0NMS\0NMS\0\0\0\0\02\0526726639\0LITM\0STK\0\00\0\0SMART\0USD\0LITM\0SCM\0SCM\0\0\0\0\03\0504716446\0LCID\0STK\0\00\0\0SMART\0USD\0LCID\0NMS\0NMS\0\0\0\0\04\0547605251\0RGTI\0STK\0\00\0\0SMART\0USD\0RGTI\0SCM\0SCM\0\0\0\0\05\0653568762\0AVGR\0STK\0\00\0\0SMART\0USD\0AVGR\0SCM\0SCM\0\0\0\0\06\04815747\0NVDA\0STK\0\00\0\0SMART\0USD\0NVDA\0NMS\0NMS\0\0\0\0\07\0534453483\0HOUR\0STK\0\00\0\0SMART\0USD\0HOUR\0SCM\0SCM\0\0\0\0\08\0631370187\0LAES\0STK\0\00\0\0SMART\0USD\0LAES\0SCM\0SCM\0\0\0\0\09\0689954925\0XTIA\0STK\0\00\0\0SMART\0USD\0XTIA\0SCM\0SCM\0\0\0\0\0".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let rows = vec![
+        scanner_data_row(0, 670777621, "SVMH").exchange("SMART"),
+        scanner_data_row(1, 536918651, "GTI").exchange("SMART"),
+        scanner_data_row(2, 526726639, "LITM").exchange("SMART").market_name("SCM"),
+    ];
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SCANNER_GENERIC_OPTS);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ScannerData,
+        scanner_data().request_id(TEST_REQ_ID_FIRST).rows(rows).encode_proto(),
+    )]));
+
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_SCAN_DATA);
 
     let subscription_params = ScannerSubscription {
         number_of_rows: 10,
