@@ -1,6 +1,6 @@
 use super::*;
 use crate::market_data::historical::HistoricalParseError;
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::builder::ValidationError;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;
@@ -9,14 +9,25 @@ use std::sync::{Mutex, PoisonError};
 use time::macros::format_description;
 use time::Time;
 
+const ERROR_MSG_TYPE: i32 = IncomingMessages::Error as i32;
+
+fn parse_time_error() -> time::error::Parse {
+    Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err()
+}
+
+fn protobuf_decode_error() -> prost::DecodeError {
+    let bad_bytes: &[u8] = &[0xff, 0xff];
+    prost::Message::decode(bad_bytes).map(|_: crate::proto::TickPrice| ()).unwrap_err()
+}
+
 #[test]
-fn test_error_debug() {
+fn error_debug() {
     let error = Error::Simple("test error".to_string());
     assert_eq!(format!("{error:?}"), "Simple(\"test error\")");
 }
 
 #[test]
-fn test_error_display() {
+fn error_display() {
     let cases = vec![
         (Error::Io(io::Error::new(io::ErrorKind::NotFound, "file not found")), "file not found"),
         (Error::ParseInt("123x".parse::<i32>().unwrap_err()), "invalid digit found in string"),
@@ -24,10 +35,7 @@ fn test_error_display() {
             Error::FromUtf8(String::from_utf8(vec![0, 159, 146, 150]).unwrap_err()),
             "invalid utf-8 sequence of 1 bytes from index 1",
         ),
-        (
-            Error::ParseTime(Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err()),
-            "the 'month' component could not be parsed",
-        ),
+        (Error::ParseTime(parse_time_error()), "the 'month' component could not be parsed"),
         (Error::Poison("test poison".to_string()), "test poison"),
         (Error::NotImplemented, "not implemented"),
         (
@@ -76,59 +84,50 @@ fn unexpected_response_display_includes_message_debug() {
 }
 
 #[test]
-fn test_error_is_error() {
+fn error_source_returns_none_for_simple() {
     let error = Error::Simple("test error".to_string());
     assert!(error.source().is_none());
 }
 
 #[test]
-fn test_from_io_error() {
-    let io_error = io::Error::other("io error");
-    let error: Error = io_error.into();
+fn from_io_error() {
+    let error: Error = io::Error::other("io error").into();
     assert!(matches!(error, Error::Io(_)));
 }
 
 #[test]
-fn test_from_parse_int_error() {
-    let parse_error = "abc".parse::<i32>().unwrap_err();
-    let error: Error = parse_error.into();
+fn from_parse_int_error() {
+    let error: Error = "abc".parse::<i32>().unwrap_err().into();
     assert!(matches!(error, Error::ParseInt(_)));
 }
 
 #[test]
-fn test_from_utf8_error() {
-    let utf8_error = String::from_utf8(vec![0, 159, 146, 150]).unwrap_err();
-    let error: Error = utf8_error.into();
+fn from_utf8_error() {
+    let error: Error = String::from_utf8(vec![0, 159, 146, 150]).unwrap_err().into();
     assert!(matches!(error, Error::FromUtf8(_)));
 }
 
 #[test]
-fn test_from_parse_time_error() {
-    let time_error = Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err();
-    let error: Error = time_error.into();
+fn from_parse_time_error() {
+    let error: Error = parse_time_error().into();
     assert!(matches!(error, Error::ParseTime(_)));
 }
 
 #[test]
-fn test_from_poison_error() {
-    let mutex = Mutex::new(());
-    let poison_error = PoisonError::new(mutex);
-    let error: Error = poison_error.into();
+fn from_poison_error() {
+    let error: Error = PoisonError::new(Mutex::new(())).into();
     assert!(matches!(error, Error::Poison(_)));
 }
 
 #[test]
-fn test_from_protobuf_decode_error() {
-    let bad_bytes: &[u8] = &[0xff, 0xff];
-    let decode_err = prost::Message::decode(bad_bytes).map(|_: crate::proto::TickPrice| ()).unwrap_err();
-    let error: Error = decode_err.into();
+fn from_protobuf_decode_error() {
+    let error: Error = protobuf_decode_error().into();
     assert!(matches!(error, Error::ProtobufDecode(_)));
     assert!(error.to_string().contains("protobuf decode error"));
 }
 
 #[test]
 fn from_text_response_message_extracts_code_and_message() {
-    // Old-format text error: msg_type, version, request_id, error_code, error_message
     let msg = ResponseMessage::from("4\02\0-1\0200\0No security found\0");
     let error: Error = msg.into();
     assert!(matches!(error, Error::Message(200, ref m) if m == "No security found"));
@@ -144,19 +143,16 @@ fn from_protobuf_response_message_decodes_envelope() {
         advanced_order_reject_json: None,
     };
     let raw = prost::Message::encode_to_vec(&envelope);
-    // Message type 4 = Error.
-    let msg = ResponseMessage::from_protobuf(4, raw, crate::server_versions::PROTOBUF);
+    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, raw, crate::server_versions::PROTOBUF);
     let error: Error = msg.into();
     assert!(matches!(error, Error::Message(2104, ref m) if m == "Market data farm OK"));
 }
 
 #[test]
 fn from_protobuf_response_message_falls_back_when_decode_fails() {
-    // raw_bytes won't parse as ErrorMessage — should fall back to the text accessors,
-    // which return defaults for an empty proto-framed message.
-    let msg = ResponseMessage::from_protobuf(4, vec![0xff, 0xff, 0xff, 0xff], crate::server_versions::PROTOBUF);
+    // Bad protobuf bytes -> falls back to text accessors (both default to 0 / empty).
+    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, vec![0xff, 0xff, 0xff, 0xff], crate::server_versions::PROTOBUF);
     let error: Error = msg.into();
-    // Falls back to error_code() / error_message() text path: both default.
     assert!(matches!(error, Error::Message(0, _)));
 }
 
@@ -237,8 +233,6 @@ fn clone_preserves_unit_variants() {
 
 #[test]
 fn clone_preserves_payloaded_variants() {
-    let bad_bytes: &[u8] = &[0xff, 0xff];
-    let proto_err = prost::Message::decode(bad_bytes).map(|_: crate::proto::TickPrice| ()).unwrap_err();
     let response = ResponseMessage::from("4\02\0-1\0200\0boom\0");
     let originals = vec![
         Error::Io(io::Error::other("io")),
@@ -253,7 +247,7 @@ fn clone_preserves_payloaded_variants() {
         Error::UnexpectedResponse(response),
         Error::Message(404, "nope".into()),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
-        Error::ProtobufDecode(proto_err),
+        Error::ProtobufDecode(protobuf_decode_error()),
     ];
 
     for original in originals {
@@ -264,15 +258,14 @@ fn clone_preserves_payloaded_variants() {
 
 #[test]
 fn clone_collapses_parse_time_to_simple() {
-    let parse_time = Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err();
-    let original = Error::ParseTime(parse_time);
+    let original = Error::ParseTime(parse_time_error());
     let display = original.to_string();
     let cloned = original.clone();
     assert!(matches!(cloned, Error::Simple(ref s) if *s == display));
 }
 
 #[test]
-fn test_non_exhaustive() {
+fn error_is_non_exhaustive() {
     fn assert_non_exhaustive<T: StdError>() {}
     assert_non_exhaustive::<Error>();
 }
