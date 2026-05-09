@@ -5,7 +5,7 @@ use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
 use crate::contracts::{Contract, SecurityType};
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::encode_contract;
+use crate::proto::encoders::{encode_contract, some_str};
 
 // =============================================================================
 // Request builders
@@ -294,8 +294,6 @@ pub struct ContractDataResponse {
     pub symbol: String,
     pub security_type: String,
     pub last_trade_date_or_contract_month: String,
-    pub strike: f64,
-    pub right: String,
     pub multiplier: String,
     pub exchange: String,
     pub primary_exchange: String,
@@ -306,21 +304,18 @@ pub struct ContractDataResponse {
     pub min_tick: String,
     pub order_types: String,
     pub valid_exchanges: String,
-    pub price_magnifier: i32,
     pub long_name: String,
-    pub contract_month: String,
     pub industry: String,
     pub category: String,
     pub subcategory: String,
     pub time_zone_id: String,
-    pub trading_hours: String,
-    pub liquid_hours: String,
-    pub agg_group: i32,
     pub stock_type: String,
+    /// Default `"1"` is load-bearing — `test_contract_details` validators assert `min_size == 1.0`.
     pub min_size: String,
+    /// Default `"1"` is load-bearing — see `min_size`.
     pub size_increment: String,
+    /// Default `"100"` is load-bearing — see `min_size`.
     pub suggested_size_increment: String,
-    pub sec_id_list: Vec<(String, String)>,
 }
 
 impl Default for ContractDataResponse {
@@ -331,8 +326,6 @@ impl Default for ContractDataResponse {
             symbol: String::new(),
             security_type: String::new(),
             last_trade_date_or_contract_month: String::new(),
-            strike: 0.0,
-            right: String::new(),
             multiplier: String::new(),
             exchange: String::new(),
             primary_exchange: String::new(),
@@ -343,21 +336,15 @@ impl Default for ContractDataResponse {
             min_tick: "0.01".to_string(),
             order_types: String::new(),
             valid_exchanges: String::new(),
-            price_magnifier: 1,
             long_name: String::new(),
-            contract_month: String::new(),
             industry: String::new(),
             category: String::new(),
             subcategory: String::new(),
             time_zone_id: String::new(),
-            trading_hours: String::new(),
-            liquid_hours: String::new(),
-            agg_group: 1,
             stock_type: String::new(),
             min_size: "1".to_string(),
             size_increment: "1".to_string(),
             suggested_size_increment: "100".to_string(),
-            sec_id_list: Vec::new(),
         }
     }
 }
@@ -449,14 +436,6 @@ impl ContractDataResponse {
     }
 }
 
-fn opt_str(s: &str) -> Option<String> {
-    if s.is_empty() {
-        None
-    } else {
-        Some(s.to_string())
-    }
-}
-
 impl ResponseProtoEncoder for ContractDataResponse {
     type Proto = proto::ContractData;
 
@@ -465,43 +444,35 @@ impl ResponseProtoEncoder for ContractDataResponse {
             req_id: Some(self.request_id),
             contract: Some(proto::Contract {
                 con_id: Some(self.contract_id),
-                symbol: opt_str(&self.symbol),
-                sec_type: opt_str(&self.security_type),
-                last_trade_date_or_contract_month: opt_str(&self.last_trade_date_or_contract_month),
-                strike: Some(self.strike),
-                right: opt_str(&self.right),
+                symbol: some_str(&self.symbol),
+                sec_type: some_str(&self.security_type),
+                last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
                 multiplier: if self.multiplier.is_empty() {
                     None
                 } else {
                     self.multiplier.parse().ok()
                 },
-                exchange: opt_str(&self.exchange),
-                primary_exch: opt_str(&self.primary_exchange),
-                currency: opt_str(&self.currency),
-                local_symbol: opt_str(&self.local_symbol),
-                trading_class: opt_str(&self.trading_class),
+                exchange: some_str(&self.exchange),
+                primary_exch: some_str(&self.primary_exchange),
+                currency: some_str(&self.currency),
+                local_symbol: some_str(&self.local_symbol),
+                trading_class: some_str(&self.trading_class),
                 ..Default::default()
             }),
             contract_details: Some(proto::ContractDetails {
-                market_name: opt_str(&self.market_name),
-                min_tick: opt_str(&self.min_tick),
-                order_types: opt_str(&self.order_types),
-                valid_exchanges: opt_str(&self.valid_exchanges),
-                price_magnifier: Some(self.price_magnifier),
-                long_name: opt_str(&self.long_name),
-                contract_month: opt_str(&self.contract_month),
-                industry: opt_str(&self.industry),
-                category: opt_str(&self.category),
-                subcategory: opt_str(&self.subcategory),
-                time_zone_id: opt_str(&self.time_zone_id),
-                trading_hours: opt_str(&self.trading_hours),
-                liquid_hours: opt_str(&self.liquid_hours),
-                agg_group: Some(self.agg_group),
-                stock_type: opt_str(&self.stock_type),
-                min_size: opt_str(&self.min_size),
-                size_increment: opt_str(&self.size_increment),
-                suggested_size_increment: opt_str(&self.suggested_size_increment),
-                sec_id_list: self.sec_id_list.iter().cloned().collect(),
+                market_name: some_str(&self.market_name),
+                min_tick: some_str(&self.min_tick),
+                order_types: some_str(&self.order_types),
+                valid_exchanges: some_str(&self.valid_exchanges),
+                long_name: some_str(&self.long_name),
+                industry: some_str(&self.industry),
+                category: some_str(&self.category),
+                subcategory: some_str(&self.subcategory),
+                time_zone_id: some_str(&self.time_zone_id),
+                stock_type: some_str(&self.stock_type),
+                min_size: some_str(&self.min_size),
+                size_increment: some_str(&self.size_increment),
+                suggested_size_increment: some_str(&self.suggested_size_increment),
                 ..Default::default()
             }),
         }
@@ -521,17 +492,6 @@ pub struct SymbolSamplesEntry {
 }
 
 impl SymbolSamplesEntry {
-    pub fn new(contract_id: i32, symbol: impl Into<String>) -> Self {
-        Self {
-            contract_id,
-            symbol: symbol.into(),
-            security_type: "STK".to_string(),
-            primary_exchange: "NASDAQ".to_string(),
-            currency: "USD".to_string(),
-            description: String::new(),
-            derivative_security_types: Vec::new(),
-        }
-    }
     pub fn primary_exchange(mut self, v: impl Into<String>) -> Self {
         self.primary_exchange = v.into();
         self
@@ -575,11 +535,11 @@ impl ResponseProtoEncoder for SymbolSamplesResponse {
                 .map(|e| proto::ContractDescription {
                     contract: Some(proto::Contract {
                         con_id: Some(e.contract_id),
-                        symbol: opt_str(&e.symbol),
-                        sec_type: opt_str(&e.security_type),
-                        primary_exch: opt_str(&e.primary_exchange),
-                        currency: opt_str(&e.currency),
-                        description: opt_str(&e.description),
+                        symbol: some_str(&e.symbol),
+                        sec_type: some_str(&e.security_type),
+                        primary_exch: some_str(&e.primary_exchange),
+                        currency: some_str(&e.currency),
+                        description: some_str(&e.description),
                         ..Default::default()
                     }),
                     derivative_sec_types: e.derivative_security_types.clone(),
@@ -597,12 +557,6 @@ pub struct MarketRuleResponse {
 }
 
 impl MarketRuleResponse {
-    pub fn new(market_rule_id: i32) -> Self {
-        Self {
-            market_rule_id,
-            price_increments: Vec::new(),
-        }
-    }
     pub fn increment(mut self, low_edge: f64, increment: f64) -> Self {
         self.price_increments.push((low_edge, increment));
         self
@@ -690,10 +644,10 @@ impl ResponseProtoEncoder for OptionChainResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::SecDefOptParameter {
             req_id: Some(self.request_id),
-            exchange: opt_str(&self.exchange),
+            exchange: some_str(&self.exchange),
             underlying_con_id: Some(self.underlying_contract_id),
-            trading_class: opt_str(&self.trading_class),
-            multiplier: opt_str(&self.multiplier),
+            trading_class: some_str(&self.trading_class),
+            multiplier: some_str(&self.multiplier),
             expirations: self.expirations.clone(),
             strikes: self.strikes.clone(),
         }
@@ -741,11 +695,22 @@ pub fn symbol_samples() -> SymbolSamplesResponse {
 }
 
 pub fn symbol_samples_entry(contract_id: i32, symbol: impl Into<String>) -> SymbolSamplesEntry {
-    SymbolSamplesEntry::new(contract_id, symbol)
+    SymbolSamplesEntry {
+        contract_id,
+        symbol: symbol.into(),
+        security_type: "STK".to_string(),
+        primary_exchange: "NASDAQ".to_string(),
+        currency: "USD".to_string(),
+        description: String::new(),
+        derivative_security_types: Vec::new(),
+    }
 }
 
 pub fn market_rule(market_rule_id: i32) -> MarketRuleResponse {
-    MarketRuleResponse::new(market_rule_id)
+    MarketRuleResponse {
+        market_rule_id,
+        price_increments: Vec::new(),
+    }
 }
 
 pub fn option_chain() -> OptionChainResponse {

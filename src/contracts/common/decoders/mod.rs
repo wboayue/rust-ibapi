@@ -78,7 +78,7 @@ fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Resul
 
 use prost::Message;
 
-use crate::contracts::{MarketRule as MarketRuleType, PriceIncrement};
+use crate::contracts::PriceIncrement;
 
 pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
     let p: crate::proto::ContractData = Message::decode(bytes)?;
@@ -103,9 +103,9 @@ pub(crate) fn decode_symbol_samples_proto(bytes: &[u8]) -> Result<Vec<ContractDe
         .collect())
 }
 
-pub(crate) fn decode_market_rule_proto(bytes: &[u8]) -> Result<MarketRuleType, Error> {
+pub(crate) fn decode_market_rule_proto(bytes: &[u8]) -> Result<MarketRule, Error> {
     let p: crate::proto::MarketRule = Message::decode(bytes)?;
-    Ok(MarketRuleType {
+    Ok(MarketRule {
         market_rule_id: p.market_rule_id.unwrap_or_default(),
         price_increments: p
             .price_increments
