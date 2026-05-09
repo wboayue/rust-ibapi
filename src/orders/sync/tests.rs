@@ -23,17 +23,21 @@ use crate::orders::common::order_builder;
 fn place_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         text_response(OPEN_ORDER_TSLA_PRESUBMITTED.to_owned()),
-        text_response(order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe()),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_proto(),
+        ),
         proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
         text_response(OPEN_ORDER_TSLA_FILLED.to_owned()),
-        text_response(
+        proto_response(
+            IncomingMessages::OrderStatus,
             order_status()
                 .status(OrderStatusKind::Filled)
                 .filled(100.0)
                 .remaining(0.0)
                 .average_fill_price(Some(196.52))
                 .last_fill_price(Some(196.52))
-                .encode_pipe(),
+                .encode_proto(),
         ),
         text_response(OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION.to_owned()),
         proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
@@ -315,12 +319,15 @@ fn place_order() {
 
 #[test]
 fn cancel_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
-        .order_id(41)
-        .status(OrderStatusKind::Cancelled)
-        .remaining(100.0)
-        .perm_id(71270927)
-        .encode_pipe()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderStatus,
+        order_status()
+            .order_id(41)
+            .status(OrderStatusKind::Cancelled)
+            .remaining(100.0)
+            .perm_id(71270927)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -363,12 +370,15 @@ fn global_cancel() {
 
 #[test]
 fn cancel_order_cme_tagging() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
-        .order_id(41)
-        .status(OrderStatusKind::Cancelled)
-        .remaining(100.0)
-        .perm_id(71270927)
-        .encode_pipe()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderStatus,
+        order_status()
+            .order_id(41)
+            .status(OrderStatusKind::Cancelled)
+            .remaining(100.0)
+            .perm_id(71270927)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
 
@@ -750,7 +760,10 @@ fn submit_order() {
 fn order_update_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         text_response(OPEN_ORDER_TSLA_PRESUBMITTED.to_owned()),
-        text_response(order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe()),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_proto(),
+        ),
         proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
         proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
     ]));
