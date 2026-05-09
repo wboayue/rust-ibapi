@@ -42,7 +42,7 @@ text decoders are still load-bearing for servers below the family's gate.
 | Domain                                    | Text-decoders | Proto-decoders | Dual-format calls |
 |-------------------------------------------|--------------:|---------------:|------------------:|
 | `accounts/common/decoders/`               |            14 |             10 |                12 |
-| `contracts/common/decoders/`              |             5 |              4 |                 4 |
+| `contracts/common/decoders/`              |             1 |              4 |                 0 |
 | `orders/common/decoders/`                 |            13 |              5 |                 4 |
 | `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
 | `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
@@ -64,7 +64,8 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 - `decode_execution_data` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 - `decode_commission_report` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 - `decode_order_status` (orders) — proto-only since [#531](https://github.com/wboayue/rust-ibapi/pull/531)
-- `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only at floor 210
+- `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only since [#532](https://github.com/wboayue/rust-ibapi/pull/532)
+- `decode_contract_details`, `decode_contract_descriptions`, `decode_market_rule`, `decode_option_chain` (contracts) — proto-only at floor 210; `decode_option_computation` stays text (shared with realtime market_data)
 
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
@@ -72,7 +73,6 @@ in follow-up PRs (originating outgoing-request gates all ≤ 210):
 - `decode_open_order`, `decode_completed_order` (orders) — share `OrderDecoder`
   + condition decoders, drop together; new test fixture builders needed
   (mirror `OrderStatusResponse` for `OpenOrder` + `CompletedOrder` protos)
-- `contracts/common/decoders/` — `RequestContractData` gate 205
 - `market_data/realtime/common/decoders/` — `RequestMktData` / `RequestTickByTickData` /
   `RequestMktDepth` etc. all gate 206
 - `accounts/common/decoders/` — `RequestPositions` / `RequestAccountUpdates` etc. gate 207
