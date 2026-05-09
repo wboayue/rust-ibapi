@@ -912,6 +912,14 @@ impl ResponseMessage {
         self.raw_bytes.as_deref()
     }
 
+    /// Raw protobuf payload bytes for use by proto-only decoders. Text-framed
+    /// arrival returns `Error::UnexpectedResponse`, which the dispatcher
+    /// skip-classifies (per CLAUDE.md rule 20) rather than terminating the
+    /// subscription.
+    pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
+        self.raw_bytes().ok_or_else(|| crate::Error::UnexpectedResponse(self.clone()))
+    }
+
     /// Dispatch decoding based on whether the message is protobuf or text.
     pub fn decode_proto_or_text<T>(
         &mut self,

@@ -849,25 +849,22 @@ fn decode_open_order_text(server_version: i32, message: ResponseMessage) -> Resu
     Ok(decoder.into_order_data())
 }
 
-/// All originating outgoing-request gates for OrderStatus / ExecutionData /
-/// CommissionReport are <= the connection floor (`PROTOBUF_SCAN_DATA` = 210), so
-/// the server always emits proto framing for these messages. Text-framed arrival
-/// skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20) rather
-/// than terminating the subscription.
-fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
-    message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
-}
+// All originating outgoing-request gates for OrderStatus / ExecutionData /
+// CommissionReport are <= the connection floor (`PROTOBUF_SCAN_DATA` = 210), so
+// the server always emits proto framing for these messages — text-framed
+// arrival is rejected via `ResponseMessage::require_proto` and
+// skip-classifies (rule 20).
 
 pub(crate) fn decode_order_status(_server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    decode_order_status_proto(require_proto(message)?)
+    decode_order_status_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_execution_data(_server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
-    decode_execution_data_proto(require_proto(message)?)
+    decode_execution_data_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
-    decode_commission_report_proto(require_proto(message)?)
+    decode_commission_report_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {

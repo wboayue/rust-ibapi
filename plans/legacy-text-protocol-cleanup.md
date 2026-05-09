@@ -47,7 +47,7 @@ text decoders are still load-bearing for servers below the family's gate.
 | `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
 | `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
 | `news/common/decoders.rs`                 |             5 |              4 |                 4 |
-| `scanner/common/decoders.rs`              |             3 |              2 |                 2 |
+| `scanner/common/decoders.rs`              |             0 |              2 |                 0 |
 | `wsh/common/decoders.rs`                  |             3 |              2 |                 0 |
 | `display_groups/common/decoders.rs`       |             1 |              1 |                 0 |
 
@@ -63,7 +63,8 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 
 - `decode_execution_data` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 - `decode_commission_report` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
-- `decode_order_status` (orders) — proto-only at floor 210
+- `decode_order_status` (orders) — proto-only since [#531](https://github.com/wboayue/rust-ibapi/pull/531)
+- `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only at floor 210
 
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
@@ -77,7 +78,6 @@ in follow-up PRs (originating outgoing-request gates all ≤ 210):
 - `accounts/common/decoders/` — `RequestPositions` / `RequestAccountUpdates` etc. gate 207
 - `market_data/historical/common/decoders/` — `RequestHistoricalData` etc. gate 208
 - `news/common/decoders.rs` — `RequestNewsArticle` / `RequestHistoricalNews` etc. gate 209
-- `scanner/common/decoders.rs` — `RequestScannerSubscription` gate 210
 
 Decoders that **stay** dual-format at floor 210 because at least one
 originating outgoing-request gate is > 210:

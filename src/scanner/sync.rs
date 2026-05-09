@@ -66,7 +66,7 @@ impl Client {
         let request = encoders::encode_scanner_parameters()?;
         let subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request)?;
         match subscription.next() {
-            Some(Ok(message)) => decoders::decode_scanner_parameters(message),
+            Some(Ok(message)) => decoders::decode_scanner_parameters(&message),
             Some(Err(Error::ConnectionReset)) => self.scanner_parameters(),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
