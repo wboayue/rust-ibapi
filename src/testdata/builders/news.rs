@@ -1,18 +1,14 @@
-//! Builders for news-domain request messages.
-//!
-//! Response builders are intentionally absent: news responses use IB's text
-//! wire format, and the existing inline literals in the migrated sync/async
-//! tests already exercise the production decoders end-to-end.
+//! Builders for news-domain request and response messages.
 //!
 //! `contract_news` and `broad_tape_news` reuse
 //! [`market_data::MarketDataRequestBuilder`](super::market_data::MarketDataRequestBuilder),
 //! since they ultimately fan out through `encode_request_market_data`.
 
-use super::RequestEncoder;
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::some_bool;
+use crate::proto::encoders::{some_bool, some_str};
 use crate::ToField;
 use time::OffsetDateTime;
 
@@ -161,6 +157,227 @@ impl RequestEncoder for NewsArticleRequestBuilder {
 }
 
 // =============================================================================
+// Response builders
+// =============================================================================
+
+/// One row of a `NewsProviders` (msg 85) response.
+#[derive(Clone, Debug)]
+pub struct NewsProviderEntry {
+    pub code: String,
+    pub name: String,
+}
+
+/// Builder for `NewsProviders` (msg 85) responses.
+#[derive(Clone, Debug, Default)]
+pub struct NewsProvidersResponse {
+    pub providers: Vec<NewsProviderEntry>,
+}
+
+impl NewsProvidersResponse {
+    pub fn provider(mut self, code: impl Into<String>, name: impl Into<String>) -> Self {
+        self.providers.push(NewsProviderEntry {
+            code: code.into(),
+            name: name.into(),
+        });
+        self
+    }
+}
+
+impl ResponseProtoEncoder for NewsProvidersResponse {
+    type Proto = proto::NewsProviders;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::NewsProviders {
+            news_providers: self
+                .providers
+                .iter()
+                .map(|p| proto::NewsProvider {
+                    provider_code: some_str(&p.code),
+                    provider_name: some_str(&p.name),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Builder for `NewsBulletins` (msg 14) responses.
+#[derive(Clone, Debug, Default)]
+pub struct NewsBulletinResponse {
+    pub message_id: i32,
+    pub message_type: i32,
+    pub message: String,
+    pub exchange: String,
+}
+
+impl NewsBulletinResponse {
+    pub fn message_id(mut self, v: i32) -> Self {
+        self.message_id = v;
+        self
+    }
+    pub fn message_type(mut self, v: i32) -> Self {
+        self.message_type = v;
+        self
+    }
+    pub fn message(mut self, v: impl Into<String>) -> Self {
+        self.message = v.into();
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for NewsBulletinResponse {
+    type Proto = proto::NewsBulletin;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::NewsBulletin {
+            news_msg_id: Some(self.message_id),
+            news_msg_type: Some(self.message_type),
+            news_message: some_str(&self.message),
+            originating_exch: some_str(&self.exchange),
+        }
+    }
+}
+
+/// Builder for `HistoricalNews` (msg 86) responses.
+#[derive(Clone, Debug)]
+pub struct HistoricalNewsResponse {
+    pub request_id: i32,
+    pub time: String,
+    pub provider_code: String,
+    pub article_id: String,
+    pub headline: String,
+}
+
+impl Default for HistoricalNewsResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            time: String::new(),
+            provider_code: String::new(),
+            article_id: String::new(),
+            headline: String::new(),
+        }
+    }
+}
+
+impl HistoricalNewsResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn time(mut self, v: impl Into<String>) -> Self {
+        self.time = v.into();
+        self
+    }
+    pub fn provider_code(mut self, v: impl Into<String>) -> Self {
+        self.provider_code = v.into();
+        self
+    }
+    pub fn article_id(mut self, v: impl Into<String>) -> Self {
+        self.article_id = v.into();
+        self
+    }
+    pub fn headline(mut self, v: impl Into<String>) -> Self {
+        self.headline = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalNewsResponse {
+    type Proto = proto::HistoricalNews;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalNews {
+            req_id: Some(self.request_id),
+            time: some_str(&self.time),
+            provider_code: some_str(&self.provider_code),
+            article_id: some_str(&self.article_id),
+            headline: some_str(&self.headline),
+        }
+    }
+}
+
+/// Builder for `HistoricalNewsEnd` (msg 87) responses.
+#[derive(Clone, Copy, Debug)]
+pub struct HistoricalNewsEndResponse {
+    pub request_id: i32,
+}
+
+impl Default for HistoricalNewsEndResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+        }
+    }
+}
+
+impl HistoricalNewsEndResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalNewsEndResponse {
+    type Proto = proto::HistoricalNewsEnd;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalNewsEnd {
+            req_id: Some(self.request_id),
+            has_more: None,
+        }
+    }
+}
+
+/// Builder for `NewsArticle` (msg 83) responses.
+#[derive(Clone, Debug)]
+pub struct NewsArticleResponse {
+    pub request_id: i32,
+    pub article_type: i32,
+    pub article_text: String,
+}
+
+impl Default for NewsArticleResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            article_type: 0,
+            article_text: String::new(),
+        }
+    }
+}
+
+impl NewsArticleResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn article_type(mut self, v: i32) -> Self {
+        self.article_type = v;
+        self
+    }
+    pub fn article_text(mut self, v: impl Into<String>) -> Self {
+        self.article_text = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for NewsArticleResponse {
+    type Proto = proto::NewsArticle;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::NewsArticle {
+            req_id: Some(self.request_id),
+            article_type: Some(self.article_type),
+            article_text: some_str(&self.article_text),
+        }
+    }
+}
+
+// =============================================================================
 // Entry-point functions
 // =============================================================================
 
@@ -182,4 +399,24 @@ pub fn historical_news_request() -> HistoricalNewsRequestBuilder {
 
 pub fn news_article_request() -> NewsArticleRequestBuilder {
     NewsArticleRequestBuilder::default()
+}
+
+pub fn news_providers() -> NewsProvidersResponse {
+    NewsProvidersResponse::default()
+}
+
+pub fn news_bulletin() -> NewsBulletinResponse {
+    NewsBulletinResponse::default()
+}
+
+pub fn historical_news() -> HistoricalNewsResponse {
+    HistoricalNewsResponse::default()
+}
+
+pub fn historical_news_end() -> HistoricalNewsEndResponse {
+    HistoricalNewsEndResponse::default()
+}
+
+pub fn news_article() -> NewsArticleResponse {
+    NewsArticleResponse::default()
 }

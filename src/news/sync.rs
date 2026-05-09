@@ -37,7 +37,7 @@ impl Client {
         let subscription = self.send_shared_request(OutgoingMessages::RequestNewsProviders, request)?;
 
         match subscription.next() {
-            Some(Ok(message)) => decoders::decode_news_providers(message),
+            Some(Ok(message)) => decoders::decode_news_providers(&message),
             Some(Err(Error::ConnectionReset)) => self.news_providers(),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
@@ -158,7 +158,7 @@ impl Client {
 
         let subscription = self.send_request(request_id, request)?;
         match subscription.next() {
-            Some(Ok(message)) => decoders::decode_news_article(message),
+            Some(Ok(message)) => decoders::decode_news_article(&message),
             Some(Err(Error::ConnectionReset)) => self.news_article(provider_code, article_id),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),

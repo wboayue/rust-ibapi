@@ -46,7 +46,7 @@ text decoders are still load-bearing for servers below the family's gate.
 | `orders/common/decoders/`                 |            13 |              5 |                 4 |
 | `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
 | `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
-| `news/common/decoders.rs`                 |             5 |              4 |                 4 |
+| `news/common/decoders.rs`                 |             1 |              4 |                 0 |
 | `scanner/common/decoders.rs`              |             0 |              2 |                 0 |
 | `wsh/common/decoders.rs`                  |             3 |              2 |                 0 |
 | `display_groups/common/decoders.rs`       |             1 |              1 |                 0 |
@@ -66,6 +66,7 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 - `decode_order_status` (orders) — proto-only since [#531](https://github.com/wboayue/rust-ibapi/pull/531)
 - `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only since [#532](https://github.com/wboayue/rust-ibapi/pull/532)
 - `decode_contract_details`, `decode_contract_descriptions`, `decode_market_rule`, `decode_option_chain` (contracts) — proto-only at floor 210; `decode_option_computation` stays text (shared with realtime market_data)
+- `decode_news_providers`, `decode_news_bulletin`, `decode_historical_news`, `decode_news_article` (news) — proto-only at floor 210; `decode_tick_news` stays text (gate 206 PROTOBUF_MARKET_DATA, deferred to realtime cleanup)
 
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
@@ -74,10 +75,9 @@ in follow-up PRs (originating outgoing-request gates all ≤ 210):
   + condition decoders, drop together; new test fixture builders needed
   (mirror `OrderStatusResponse` for `OpenOrder` + `CompletedOrder` protos)
 - `market_data/realtime/common/decoders/` — `RequestMktData` / `RequestTickByTickData` /
-  `RequestMktDepth` etc. all gate 206
+  `RequestMktDepth` etc. all gate 206 (also covers `decode_tick_news` left over from news cleanup)
 - `accounts/common/decoders/` — `RequestPositions` / `RequestAccountUpdates` etc. gate 207
 - `market_data/historical/common/decoders/` — `RequestHistoricalData` etc. gate 208
-- `news/common/decoders.rs` — `RequestNewsArticle` / `RequestHistoricalNews` etc. gate 209
 
 Decoders that **stay** dual-format at floor 210 because at least one
 originating outgoing-request gate is > 210:
