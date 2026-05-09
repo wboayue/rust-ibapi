@@ -17,17 +17,18 @@ use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_place_order() {
-    // OpenOrder + OrderStatus stay text (decoders still dual-format at floor 203).
-    // ExecutionData + CommissionReport go proto (decoders are proto-only at floor 203).
+    // OpenOrder stays text (decoder still dual-format at floor 210).
+    // OrderStatus + ExecutionData + CommissionReport are proto-only.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
-        text_response(
+        proto_response(
+            IncomingMessages::OrderStatus,
             order_status()
                 .order_id(1)
                 .status(OrderStatusKind::Submitted)
                 .filled(0.0)
                 .remaining(1.0)
-                .encode_pipe(),
+                .encode_proto(),
         ),
         proto_response(
             IncomingMessages::ExecutionData,
@@ -103,13 +104,16 @@ async fn test_place_order() {
 
 #[tokio::test]
 async fn test_cancel_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
-        .order_id(1)
-        .status(OrderStatusKind::Cancelled)
-        .filled(0.0)
-        .remaining(1.0)
-        .perm_id(2126726143)
-        .encode_pipe()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderStatus,
+        order_status()
+            .order_id(1)
+            .status(OrderStatusKind::Cancelled)
+            .filled(0.0)
+            .remaining(1.0)
+            .perm_id(2126726143)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -128,16 +132,19 @@ async fn test_cancel_order() {
 
 #[tokio::test]
 async fn test_open_orders() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
-        order_status()
-            .order_id(1)
-            .status(OrderStatusKind::Submitted)
-            .filled(0.0)
-            .remaining(1.0)
-            .perm_id(2126726143)
-            .encode_pipe(),
-        open_order_end().encode_pipe(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status()
+                .order_id(1)
+                .status(OrderStatusKind::Submitted)
+                .filled(0.0)
+                .remaining(1.0)
+                .perm_id(2126726143)
+                .encode_proto(),
+        ),
+        text_response(open_order_end().encode_pipe()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -325,17 +332,16 @@ async fn test_next_valid_order_id() {
 
 #[tokio::test]
 async fn test_order_update_stream() {
-    // Same dual-format split as `test_place_order`: OrderStatus stays text,
-    // ExecutionData / CommissionReport go proto.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        text_response(
+        proto_response(
+            IncomingMessages::OrderStatus,
             order_status()
                 .order_id(100)
                 .status(OrderStatusKind::Submitted)
                 .filled(0.0)
                 .remaining(1.0)
                 .perm_id(2126726143)
-                .encode_pipe(),
+                .encode_proto(),
         ),
         proto_response(
             IncomingMessages::ExecutionData,

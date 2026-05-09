@@ -1097,34 +1097,6 @@ fn test_decode_order_status_proto() {
 }
 
 #[test]
-fn test_decode_order_status_text_unset_double() {
-    // IBKR sends UNSET_DOUBLE (1.7976931348623157E308) for unset price fields;
-    // they must decode to None, not f64::MAX leaking through.
-    let raw = "3\013\0PreSubmitted\00\0100\01.7976931348623157E308\01376327563\00\01.7976931348623157E308\0100\0\01.7976931348623157E308\0";
-    let mut message = ResponseMessage::from(raw);
-
-    let result = decode_order_status(server_versions::SIZE_RULES, &mut message).unwrap();
-
-    assert_eq!(result.order_id, 13);
-    assert_eq!(result.status, OrderStatusKind::PreSubmitted);
-    assert_eq!(result.average_fill_price, None);
-    assert_eq!(result.last_fill_price, None);
-    assert_eq!(result.market_cap_price, None);
-}
-
-#[test]
-fn test_decode_order_status_text_empty_double() {
-    let raw = "3\013\0PreSubmitted\00\0100\0\01376327563\00\0\0100\0\0\0";
-    let mut message = ResponseMessage::from(raw);
-
-    let result = decode_order_status(server_versions::SIZE_RULES, &mut message).unwrap();
-
-    assert_eq!(result.average_fill_price, None);
-    assert_eq!(result.last_fill_price, None);
-    assert_eq!(result.market_cap_price, None);
-}
-
-#[test]
 fn test_decode_order_status_proto_missing_doubles() {
     // Regression: previously decoded to Some(0.0) via unwrap_or_default().
     use prost::Message;
@@ -1381,6 +1353,16 @@ fn test_decode_execution_data_rejects_text_framing() {
 fn test_decode_commission_report_rejects_text_framing() {
     let mut message = ResponseMessage::from("59\01\0exec001\02.5\0USD\0");
     let err = decode_commission_report(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
+    assert!(
+        matches!(err, Error::UnexpectedResponse(_)),
+        "expected Error::UnexpectedResponse, got {err:?}"
+    );
+}
+
+#[test]
+fn test_decode_order_status_rejects_text_framing() {
+    let mut message = ResponseMessage::from("3\013\0PreSubmitted\00\0100\00.0\01376327563\00\00.0\0100\0\00.0\0");
+    let err = decode_order_status(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"

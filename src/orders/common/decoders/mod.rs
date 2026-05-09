@@ -849,42 +849,17 @@ fn decode_open_order_text(server_version: i32, message: ResponseMessage) -> Resu
     Ok(decoder.into_order_data())
 }
 
-pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    message.decode_proto_or_text(decode_order_status_proto, |msg| {
-        msg.skip(); // message type
-
-        if server_version < server_versions::MARKET_CAP_PRICE {
-            msg.skip(); // message version
-        };
-
-        let mut order_status = OrderStatus {
-            order_id: msg.next_int()?,
-            status: msg.next_string()?.parse()?,
-            filled: msg.next_double()?,
-            remaining: msg.next_double()?,
-            average_fill_price: msg.next_optional_double()?,
-            perm_id: msg.next_long()?,
-            parent_id: msg.next_int()?,
-            last_fill_price: msg.next_optional_double()?,
-            client_id: msg.next_int()?,
-            why_held: msg.next_string()?,
-            ..Default::default()
-        };
-
-        if server_version >= server_versions::MARKET_CAP_PRICE {
-            order_status.market_cap_price = msg.next_optional_double()?;
-        }
-
-        Ok(order_status)
-    })
-}
-
-/// Both originating outgoing-request gates (PlaceOrder=203, RequestExecutions=201)
-/// are <= floor 203, so the server always emits proto framing here. Text-framed
-/// arrival skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20)
-/// rather than terminating the subscription.
+/// All originating outgoing-request gates for OrderStatus / ExecutionData /
+/// CommissionReport are <= the connection floor (`PROTOBUF_SCAN_DATA` = 210), so
+/// the server always emits proto framing for these messages. Text-framed arrival
+/// skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20) rather
+/// than terminating the subscription.
 fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
     message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
+}
+
+pub(crate) fn decode_order_status(_server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
+    decode_order_status_proto(require_proto(message)?)
 }
 
 pub(crate) fn decode_execution_data(_server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
@@ -1161,21 +1136,14 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
     })
 }
 
-// === &mut-API adapters for handshake-time decoding ===
-//
-// `decode_open_order` / `decode_order_status` are proto-aware via
-// `decode_proto_or_text{,_owned}`. These wrappers adapt the `&mut
-// ResponseMessage` API used by callers (e.g. the connection startup loop) that
-// don't own the message.
-
 /// Decode an `OpenOrder` frame from a borrowed `&mut ResponseMessage`.
+///
+/// `decode_open_order` is still proto-aware via `decode_proto_or_text_owned` and
+/// takes the message by value; this wrapper adapts the `&mut ResponseMessage`
+/// API used by callers (e.g. the connection startup loop) that don't own the
+/// message.
 pub(crate) fn decode_open_order_borrowed(server_version: i32, message: &mut ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order(server_version, message.clone())
-}
-
-/// Decode an `OrderStatus` frame from a borrowed `&mut ResponseMessage`.
-pub(crate) fn decode_order_status_borrowed(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    decode_order_status(server_version, message)
 }
 
 pub(crate) fn decode_next_valid_id(message: &mut ResponseMessage) -> Result<i32, Error> {

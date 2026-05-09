@@ -43,7 +43,7 @@ text decoders are still load-bearing for servers below the family's gate.
 |-------------------------------------------|--------------:|---------------:|------------------:|
 | `accounts/common/decoders/`               |            14 |             10 |                12 |
 | `contracts/common/decoders/`              |             5 |              4 |                 4 |
-| `orders/common/decoders/`                 |            14 |              5 |                 5 |
+| `orders/common/decoders/`                 |            13 |              5 |                 4 |
 | `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
 | `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
 | `news/common/decoders.rs`                 |             5 |              4 |                 4 |
@@ -59,17 +59,18 @@ text-decoder surface.
 
 ### Floor 210 deletions (unlocked, follow-up PRs)
 
-Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions at the
-prior floor of 203 (`PROTOBUF_PLACE_ORDER`):
+Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 
 - `decode_execution_data` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 - `decode_commission_report` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
+- `decode_order_status` (orders) — proto-only at floor 210
 
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
 
-- `decode_open_order`, `decode_order_status`, `decode_completed_order` (orders)
-  — all originating gates are now ≤ 210
+- `decode_open_order`, `decode_completed_order` (orders) — share `OrderDecoder`
+  + condition decoders, drop together; new test fixture builders needed
+  (mirror `OrderStatusResponse` for `OpenOrder` + `CompletedOrder` protos)
 - `contracts/common/decoders/` — `RequestContractData` gate 205
 - `market_data/realtime/common/decoders/` — `RequestMktData` / `RequestTickByTickData` /
   `RequestMktDepth` etc. all gate 206
