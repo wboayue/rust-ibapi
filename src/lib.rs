@@ -148,6 +148,10 @@ pub(crate) mod stubs;
 pub(crate) mod tests;
 
 #[cfg(test)]
+#[path = "lib_tests.rs"]
+mod lib_tests;
+
+#[cfg(test)]
 pub(crate) mod testdata;
 
 // ToField
