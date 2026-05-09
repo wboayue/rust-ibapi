@@ -16,7 +16,7 @@ impl Client {
         let mut subscription = self.send_shared_request(OutgoingMessages::RequestNewsProviders, request).await?;
 
         match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_news_providers(message),
+            Some(Ok(message)) => decoders::decode_news_providers(&message),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
         }
@@ -72,7 +72,7 @@ impl Client {
         let mut subscription = self.send_request(request_id, request).await?;
 
         match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_news_article(message),
+            Some(Ok(message)) => decoders::decode_news_article(&message),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
         }

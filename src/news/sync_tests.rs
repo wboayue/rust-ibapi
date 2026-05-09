@@ -1,11 +1,16 @@
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_request, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
+use crate::messages::IncomingMessages;
 use crate::news::ArticleType;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::market_data_request;
-use crate::testdata::builders::news::{historical_news_request, news_article_request, news_bulletins_request, news_providers_request};
+use crate::testdata::builders::news::{
+    historical_news, historical_news_end, historical_news_request, news_article, news_article_request, news_bulletin, news_bulletins_request,
+    news_providers, news_providers_request,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::{Arc, RwLock};
 use time::macros::datetime;
 
@@ -13,13 +18,16 @@ const NEWS_ARTICLE_RESPONSE: &str = "84|9000|1672531200|BZ|BZ$123|Breaking news 
 
 #[test]
 fn test_news_providers() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["newsProviders|3|BZ|Benzinga Pro|DJ|Dow Jones|RSF|Test Provider|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::NewsProviders,
+        news_providers()
+            .provider("BZ", "Benzinga Pro")
+            .provider("DJ", "Dow Jones")
+            .provider("RSF", "Test Provider")
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let results = client.news_providers().expect("request news providers failed");
 
@@ -36,13 +44,17 @@ fn test_news_providers() {
 
 #[test]
 fn test_news_bulletins() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["14|1|1|2|Message text|NASDAQ|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::NewsBulletins,
+        news_bulletin()
+            .message_id(1)
+            .message_type(2)
+            .message("Message text")
+            .exchange("NASDAQ")
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let subscription = client.news_bulletins(true).expect("request news bulletins failed");
 
@@ -57,16 +69,25 @@ fn test_news_bulletins() {
 
 #[test]
 fn test_historical_news() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "86\09000\02024-12-23 19:45:00.0\0DJ-N\0DJ-N$19985fef\0{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com\0".to_owned(),
-            "87\09000\01\0".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let headline = "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com";
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalNews,
+            historical_news()
+                .request_id(TEST_REQ_ID_FIRST)
+                .time("2024-12-23 19:45:00.0")
+                .provider_code("DJ-N")
+                .article_id("DJ-N$19985fef")
+                .headline(headline)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalNewsEnd,
+            historical_news_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+        ),
+    ]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let start_time = datetime!(2023-01-01 0:00 UTC);
     let end_time = datetime!(2023-01-02 0:00 UTC);
@@ -89,20 +110,23 @@ fn test_historical_news() {
     let article = subscription.next_data().expect("expected news article").expect("subscription error");
     assert_eq!(article.provider_code, "DJ-N");
     assert_eq!(article.article_id, "DJ-N$19985fef");
-    assert_eq!(article.headline, "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com");
+    assert_eq!(article.headline, headline);
     assert_eq!(article.extra_data, "");
     assert_eq!(article.time.unix_timestamp(), 1734983100);
 }
 
 #[test]
 fn test_news_article() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["83|9000|0|Article text content|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::NewsArticle,
+        news_article()
+            .request_id(TEST_REQ_ID_FIRST)
+            .article_type(0)
+            .article_text("Article text content")
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let article = client.news_article("BZ", "BZ$123").expect("request news article failed");
 
