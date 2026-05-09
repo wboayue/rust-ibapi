@@ -32,16 +32,16 @@ async fn test_scanner_parameters() {
 #[tokio::test]
 async fn test_scanner_subscription() {
     let rows = vec![
-        scanner_data_row(0, 670777621, "SVMH").exchange("SMART"),
-        scanner_data_row(1, 536918651, "GTI").exchange("SMART"),
-        scanner_data_row(2, 526726639, "LITM").exchange("SMART").market_name("SCM"),
-        scanner_data_row(3, 504716446, "LCID").exchange("SMART"),
-        scanner_data_row(4, 547605251, "RGTI").exchange("SMART").market_name("SCM"),
-        scanner_data_row(5, 653568762, "AVGR").exchange("SMART").market_name("SCM"),
-        scanner_data_row(6, 4815747, "NVDA").exchange("SMART"),
-        scanner_data_row(7, 534453483, "HOUR").exchange("SMART").market_name("SCM"),
-        scanner_data_row(8, 631370187, "LAES").exchange("SMART").market_name("SCM"),
-        scanner_data_row(9, 689954925, "XTIA").exchange("SMART").market_name("SCM"),
+        scanner_data_row(0, 670777621, "SVMH"),
+        scanner_data_row(1, 536918651, "GTI"),
+        scanner_data_row(2, 526726639, "LITM").market_name("SCM"),
+        scanner_data_row(3, 504716446, "LCID"),
+        scanner_data_row(4, 547605251, "RGTI").market_name("SCM"),
+        scanner_data_row(5, 653568762, "AVGR").market_name("SCM"),
+        scanner_data_row(6, 4815747, "NVDA"),
+        scanner_data_row(7, 534453483, "HOUR").market_name("SCM"),
+        scanner_data_row(8, 631370187, "LAES").market_name("SCM"),
+        scanner_data_row(9, 689954925, "XTIA").market_name("SCM"),
     ];
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -135,7 +135,7 @@ async fn test_scanner_subscription() {
 
 #[tokio::test]
 async fn test_scanner_subscription_drop_sends_cancel() {
-    let rows = vec![scanner_data_row(0, 670777621, "SVMH").exchange("SMART")];
+    let rows = vec![scanner_data_row(0, 670777621, "SVMH")];
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerData,
         scanner_data().request_id(TEST_REQ_ID_FIRST).rows(rows).encode_proto(),
@@ -168,7 +168,7 @@ async fn test_scanner_subscription_drop_sends_cancel() {
 
 #[tokio::test]
 async fn test_scanner_subscription_no_double_cancel() {
-    let rows = vec![scanner_data_row(0, 670777621, "SVMH").exchange("SMART")];
+    let rows = vec![scanner_data_row(0, 670777621, "SVMH")];
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerData,
         scanner_data().request_id(TEST_REQ_ID_FIRST).rows(rows).encode_proto(),

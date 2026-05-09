@@ -116,24 +116,6 @@ pub struct ScannerDataRow {
 }
 
 impl ScannerDataRow {
-    pub fn new(rank: i32, contract_id: i32, symbol: impl Into<String>) -> Self {
-        Self {
-            rank,
-            contract_id,
-            symbol: symbol.into(),
-            security_type: "STK".to_string(),
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
-            local_symbol: String::new(),
-            trading_class: "NMS".to_string(),
-            market_name: "NMS".to_string(),
-            combo_key: String::new(),
-        }
-    }
-    pub fn security_type(mut self, v: impl Into<String>) -> Self {
-        self.security_type = v.into();
-        self
-    }
     pub fn exchange(mut self, v: impl Into<String>) -> Self {
         self.exchange = v.into();
         self
@@ -232,5 +214,16 @@ pub fn scanner_data() -> ScannerDataResponse {
 }
 
 pub fn scanner_data_row(rank: i32, contract_id: i32, symbol: impl Into<String>) -> ScannerDataRow {
-    ScannerDataRow::new(rank, contract_id, symbol)
+    ScannerDataRow {
+        rank,
+        contract_id,
+        symbol: symbol.into(),
+        security_type: "STK".to_string(),
+        exchange: "SMART".to_string(),
+        currency: "USD".to_string(),
+        local_symbol: String::new(),
+        trading_class: "NMS".to_string(),
+        market_name: "NMS".to_string(),
+        combo_key: String::new(),
+    }
 }

@@ -33,9 +33,9 @@ fn test_scanner_parameters() {
 #[test]
 fn test_scanner_subscription() {
     let rows = vec![
-        scanner_data_row(0, 670777621, "SVMH").exchange("SMART"),
-        scanner_data_row(1, 536918651, "GTI").exchange("SMART"),
-        scanner_data_row(2, 526726639, "LITM").exchange("SMART").market_name("SCM"),
+        scanner_data_row(0, 670777621, "SVMH"),
+        scanner_data_row(1, 536918651, "GTI"),
+        scanner_data_row(2, 526726639, "LITM").market_name("SCM"),
     ];
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(

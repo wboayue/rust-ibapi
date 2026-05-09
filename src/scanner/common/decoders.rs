@@ -15,17 +15,13 @@ pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) 
     }
 }
 
-/// Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
-/// which equals the connection floor (`require_protobuf_support`), so the server
-/// always emits proto framing for these messages. Text-framed arrival
-/// skip-classifies via `Error::UnexpectedResponse` (per CLAUDE.md rule 20)
-/// rather than terminating the subscription.
-fn require_proto(message: &ResponseMessage) -> Result<&[u8], Error> {
-    message.raw_bytes().ok_or_else(|| Error::UnexpectedResponse(message.clone()))
-}
+// Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
+// which equals the connection floor (`require_protobuf_support`), so the server
+// always emits proto framing for these messages — text-framed arrival is
+// rejected via `ResponseMessage::require_proto` and skip-classifies (rule 20).
 
 pub(in crate::scanner) fn decode_scanner_parameters(message: &ResponseMessage) -> Result<String, Error> {
-    decode_scanner_parameters_proto(require_proto(message)?)
+    decode_scanner_parameters_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Error> {
@@ -34,7 +30,7 @@ pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Er
 }
 
 pub(in crate::scanner) fn decode_scanner_data(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    decode_scanner_data_proto(require_proto(message)?)
+    decode_scanner_data_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
