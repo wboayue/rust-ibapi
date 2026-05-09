@@ -1185,3 +1185,297 @@ fn test_notice_stream_closes_on_shutdown() -> Result<(), Error> {
     assert!(notice_stream.next().is_none(), "stream should close on shutdown");
     Ok(())
 }
+
+// ---- order-routing strategy tests ----
+//
+// `process_orders` dispatches by `order_routing_strategy(message_type)`. Each
+// strategy has a different fallback order (order_id → request_id, by execution_id,
+// shared-only). For each strategy we cover the positive route, every fallback,
+// and the orphan-fallthrough.
+
+/// Text-format ExecutionData body: `request_id` at field 1, `order_id` at field 2,
+/// `execution_id` at field 14 (the dispatcher's persisted-mapping key).
+fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
+    let mut frame = format!("11|{request_id}|{order_id}|");
+    for _ in 3..14 {
+        frame.push_str("0|");
+    }
+    frame.push_str(execution_id);
+    frame.push('|');
+    body(&frame)
+}
+
+#[test]
+fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
+    assert_eq!(msg.peek_int(0)?, 11);
+    assert_eq!(msg.peek_int(2)?, 7);
+    Ok(())
+}
+
+#[test]
+fn test_execution_data_falls_back_to_request_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(99, &[])?;
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
+    assert_eq!(msg.peek_int(1)?, 99);
+    Ok(())
+}
+
+#[test]
+fn test_execution_data_end_routes_to_order_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(body("55|1|7|"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("order sub got no end")?;
+    assert_eq!(msg.peek_int(0)?, 55);
+    Ok(())
+}
+
+/// ExecutionDataEnd uses field 2 for BOTH request_id and order_id, so a request
+/// subscription on the same id catches it via the order-channel-miss fallback.
+#[test]
+fn test_execution_data_end_falls_back_to_request_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(7, &[])?;
+
+    stream.push_inbound(body("55|1|7|"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("request sub got no end")?;
+    assert_eq!(msg.peek_int(0)?, 55);
+    Ok(())
+}
+
+/// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
+/// sender, and the CommissionsReport rides that mapping back to the same sub.
+#[test]
+fn test_commission_report_routes_via_execution_id_mapping() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
+    stream.push_inbound(body("59|1|exec-abc|"));
+
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    let exec_msg = sub.next_timeout(TICK).expect("exec data missing")?;
+    assert_eq!(exec_msg.peek_int(0)?, 11);
+
+    let commission = sub.next_timeout(TICK).expect("commission report missing")?;
+    assert_eq!(commission.peek_int(0)?, 59);
+    Ok(())
+}
+
+#[test]
+fn test_completed_order_routes_to_shared_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, &[])?;
+
+    stream.push_inbound(body("101|265598|AAPL|STK|"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("completed orders got no message")?;
+    assert_eq!(msg.peek_int(0)?, 101);
+    Ok(())
+}
+
+#[test]
+fn test_completed_orders_end_routes_to_shared_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, &[])?;
+
+    stream.push_inbound(body("102|"));
+    bus.dispatch()?;
+
+    let msg = sub.next_timeout(TICK).expect("completed orders end got no message")?;
+    assert_eq!(msg.peek_int(0)?, 102);
+    Ok(())
+}
+
+/// `send_order_update` fan-out: an OpenOrder reaches both an order subscription
+/// and the order-update stream when both are registered for the same order.
+#[test]
+fn test_order_update_stream_receives_open_order() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_sub = bus.send_order_request(42, &[])?;
+    let stream_sub = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    bus.dispatch()?;
+
+    assert!(order_sub.next_timeout(TICK).is_some(), "order sub missed open order");
+    assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+    Ok(())
+}
+
+/// Drop signals exercise `clean_request` / `clean_order` / `clear_order_update_stream`.
+/// The cleanup thread is signal-driven; we poll with a deadline rather than
+/// adding an ack channel to production code.
+#[test]
+fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let req = bus.send_request(42, &[])?;
+    let order = bus.send_order_request(99, &[])?;
+    let stream_sub = bus.create_order_update_subscription()?;
+
+    drop(req);
+    drop(order);
+    drop(stream_sub);
+
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < deadline && (bus.requests.contains(&42) || bus.orders.contains(&99) || bus.order_update_stream.lock().unwrap().is_some()) {
+        std::thread::sleep(Duration::from_millis(2));
+    }
+
+    assert!(!bus.requests.contains(&42), "request 42 not cleaned");
+    assert!(!bus.orders.contains(&99), "order 99 not cleaned");
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream not cleared");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// Routed-but-orphan notice (real request_id, no matching sub) takes the
+/// `log_orphan` path, NOT the global notice stream.
+#[test]
+fn test_warning_with_orphan_request_id_logs() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let unrelated = bus.send_request(42, &[])?;
+    let notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body("4|2|99|2104|orphan warning|"));
+    bus.dispatch()?;
+
+    assert!(unrelated.try_next_routed().is_none(), "unrelated sub got the notice");
+    assert!(notice_stream.try_next().is_none(), "global notice stream got a routed-but-orphan notice");
+    Ok(())
+}
+
+#[test]
+fn test_is_connected_reflects_shutdown() {
+    let (_, bus) = make_bus();
+
+    assert!(bus.is_connected());
+    bus.request_shutdown();
+    assert!(!bus.is_connected());
+}
+
+/// Cancel for an unknown id still writes the cancel bytes through (no-op
+/// otherwise — there's no in-flight subscription to notify).
+#[test]
+fn test_cancel_unknown_subscription_writes_through() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    mb.cancel_subscription(7777, b"cancel-bytes")?;
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+    Ok(())
+}
+
+/// `ExecutionData` with no matching order or request subscription falls
+/// through both branches; an unrelated subscription must not see it.
+#[test]
+fn test_execution_data_orphan_dropped() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let unrelated = bus.send_request(42, &[])?;
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.dispatch()?;
+
+    assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan message");
+    Ok(())
+}
+
+#[test]
+fn test_execution_data_end_orphan_dropped() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let unrelated = bus.send_request(42, &[])?;
+
+    stream.push_inbound(body("55|1|999|"));
+    bus.dispatch()?;
+
+    assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan end");
+    Ok(())
+}
+
+#[test]
+fn test_commission_report_without_mapping_dropped() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let unrelated = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(body("59|1|exec-not-mapped|"));
+    bus.dispatch()?;
+
+    assert!(unrelated.try_next().is_none(), "unrelated sub got an unmapped commission");
+    Ok(())
+}
+
+/// `process_response_with_id` orders-fallback: a non-order message
+/// (HistogramData) whose request_id collides with an order subscription's id
+/// still gets routed to the order channel.
+#[test]
+fn test_response_falls_back_to_order_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_sub = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(body("89|7|payload|"));
+    bus.dispatch()?;
+
+    order_sub.next_timeout(TICK).expect("order sub got no message")?;
+    Ok(())
+}
+
+#[test]
+fn test_response_with_no_recipient_dropped() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let unrelated = bus.send_request(42, &[])?;
+
+    stream.push_inbound(body("89|999|payload|"));
+    bus.dispatch()?;
+
+    assert!(unrelated.try_next().is_none(), "unrelated sub got a stray message");
+    Ok(())
+}
+
+/// `reset` notifies every channel category — requests, orders, shared — and
+/// clears the channel maps. All three categories must be live before the call
+/// to exercise each `notify_all` branch.
+#[test]
+fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+
+    let req = bus.send_request(100, &[])?;
+    let order = bus.send_order_request(200, &[])?;
+    let shared = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, &[])?;
+
+    bus.reset();
+
+    for (name, sub) in [("request", &req), ("order", &order), ("shared", &shared)] {
+        let resp = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} sub got no notification"));
+        assert!(matches!(resp, Err(Error::ConnectionReset)), "{name}: {resp:?}");
+    }
+
+    assert!(!bus.requests.contains(&100));
+    assert!(!bus.orders.contains(&200));
+    Ok(())
+}

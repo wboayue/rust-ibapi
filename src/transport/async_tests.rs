@@ -538,3 +538,256 @@ async fn test_notice_stream_late_subscriber_misses_prior() {
     let leaked = tokio::time::timeout(TICK, late.next()).await;
     assert!(leaked.is_err(), "late subscriber should not see prior notices");
 }
+
+// ---- order-routing strategy tests ----
+//
+// Mirror of the sync-side `process_orders` strategy tests. `route_to_order_channel`
+// dispatches by `order_routing_strategy(message_type)`; each strategy has a
+// different fallback order (order_id → request_id, by execution_id, shared-only).
+
+/// Text-format ExecutionData body: `request_id` at field 1, `order_id` at field 2,
+/// `execution_id` at field 14 (the dispatcher's persisted-mapping key).
+fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
+    let mut frame = format!("11|{request_id}|{order_id}|");
+    for _ in 3..14 {
+        frame.push_str("0|");
+    }
+    frame.push_str(execution_id);
+    frame.push('|');
+    body(&frame)
+}
+
+#[tokio::test]
+async fn test_execution_data_routes_to_order_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.read_and_route_message().await.unwrap();
+
+    let msg = next_message(&mut sub).await;
+    assert_eq!(msg.peek_int(2).unwrap(), 7);
+}
+
+#[tokio::test]
+async fn test_execution_data_falls_back_to_request_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(99, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.read_and_route_message().await.unwrap();
+
+    let msg = next_message(&mut sub).await;
+    assert_eq!(msg.peek_int(1).unwrap(), 99);
+}
+
+#[tokio::test]
+async fn test_execution_data_orphan_dropped() {
+    let (stream, bus) = make_bus();
+    let mut unrelated = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
+        "unrelated sub got an orphan message"
+    );
+}
+
+#[tokio::test]
+async fn test_execution_data_end_routes_to_order_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(body("55|1|7|"));
+    bus.read_and_route_message().await.unwrap();
+
+    next_message(&mut sub).await;
+}
+
+/// ExecutionDataEnd uses field 2 for BOTH request_id and order_id, so a request
+/// subscription on the same id catches it via the order-channel-miss fallback.
+#[tokio::test]
+async fn test_execution_data_end_falls_back_to_request_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(body("55|1|7|"));
+    bus.read_and_route_message().await.unwrap();
+
+    next_message(&mut sub).await;
+}
+
+#[tokio::test]
+async fn test_execution_data_end_orphan_dropped() {
+    let (stream, bus) = make_bus();
+    let mut unrelated = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(body("55|1|999|"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
+        "unrelated sub got an orphan end"
+    );
+}
+
+/// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
+/// sender, and the CommissionsReport rides that mapping back to the same sub.
+#[tokio::test]
+async fn test_commission_report_routes_via_execution_id_mapping() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
+    stream.push_inbound(body("59|1|exec-abc|"));
+
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    let exec_msg = next_message(&mut sub).await;
+    assert_eq!(exec_msg.peek_int(0).unwrap(), 11);
+    let commission = next_message(&mut sub).await;
+    assert_eq!(commission.peek_int(0).unwrap(), 59);
+}
+
+#[tokio::test]
+async fn test_commission_report_without_mapping_dropped() {
+    let (stream, bus) = make_bus();
+    let mut unrelated = bus.send_order_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(body("59|1|exec-not-mapped|"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
+        "unrelated sub got an unmapped commission"
+    );
+}
+
+#[tokio::test]
+async fn test_completed_order_routes_to_shared_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, vec![]).await.unwrap();
+
+    stream.push_inbound(body("101|265598|AAPL|STK|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let msg = next_message(&mut sub).await;
+    assert_eq!(msg.peek_int(0).unwrap(), 101);
+}
+
+#[tokio::test]
+async fn test_completed_orders_end_routes_to_shared_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, vec![]).await.unwrap();
+
+    stream.push_inbound(body("102|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let msg = next_message(&mut sub).await;
+    assert_eq!(msg.peek_int(0).unwrap(), 102);
+}
+
+// ---- order-update stream + lifecycle tests ----
+
+/// `send_order_update` fan-out: an OpenOrder reaches both an order subscription
+/// and the order-update stream when both are registered for the same order.
+#[tokio::test]
+async fn test_order_update_stream_receives_open_order() {
+    let (stream, bus) = make_bus();
+    let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
+    let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
+
+    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    bus.read_and_route_message().await.unwrap();
+
+    next_message(&mut order_sub).await;
+    next_message(&mut stream_sub).await;
+}
+
+/// Routed-but-orphan notice (real request_id, no matching sub) takes the
+/// `log_orphan` path, NOT the global notice stream.
+#[tokio::test]
+async fn test_warning_with_orphan_request_id_logs() {
+    let (stream, bus) = make_bus();
+    let mut unrelated = bus.send_request(42, vec![]).await.unwrap();
+    let mut notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body("4|2|99|2104|orphan warning|"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
+        "unrelated sub got the notice"
+    );
+    let leaked = tokio::time::timeout(TICK, notice_stream.next()).await;
+    assert!(leaked.is_err(), "global notice stream got a routed-but-orphan notice");
+}
+
+/// `reset_channels` after reconnect: every in-flight request and order
+/// subscription receives `Error::ConnectionReset`, then the channel maps are
+/// cleared.
+#[tokio::test]
+async fn test_reset_channels_notifies_in_flight_subscriptions() {
+    let (_, bus) = make_bus();
+
+    let mut req = bus.send_request(100, vec![]).await.unwrap();
+    let mut order = bus.send_order_request(200, vec![]).await.unwrap();
+
+    bus.reset_channels().await;
+
+    for (name, sub) in [("request", &mut req), ("order", &mut order)] {
+        let item = tokio::time::timeout(TICK, sub.next_routed())
+            .await
+            .unwrap_or_else(|_| panic!("{name} got no notification"))
+            .unwrap_or_else(|| panic!("{name} channel closed early"));
+        assert!(matches!(item, RoutedItem::Error(Error::ConnectionReset)), "{name}: {item:?}");
+    }
+
+    assert!(bus.request_channels.read().await.is_empty());
+    assert!(bus.order_channels.read().await.is_empty());
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
+/// `ensure_shutdown` joins the running message-processing task and reports
+/// `is_connected() == false` afterwards. The handle is installed asynchronously
+/// (separate `tokio::spawn`), so we yield until it's set rather than sleeping.
+#[tokio::test]
+async fn test_ensure_shutdown_joins_processing_task() {
+    let (_, bus) = make_bus();
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+    while bus.process_task.read().await.is_none() {
+        assert!(tokio::time::Instant::now() < deadline, "process_task never installed");
+        tokio::task::yield_now().await;
+    }
+
+    mb.ensure_shutdown().await;
+    assert!(!mb.is_connected());
+}
+
+#[tokio::test]
+async fn test_cancel_unknown_subscription_writes_through() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    mb.cancel_subscription(7777, b"cancel-bytes".to_vec()).await.unwrap();
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+}
+
+#[tokio::test]
+async fn test_send_shared_request_unsupported_returns_error() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    match mb.send_shared_request(OutgoingMessages::PlaceOrder, b"x".to_vec()).await {
+        Err(Error::Simple(_)) => {}
+        other => panic!("expected Error::Simple, got {:?}", other.err()),
+    }
+}
