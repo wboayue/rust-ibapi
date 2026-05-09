@@ -17,7 +17,6 @@ use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_place_order() {
-    // OpenOrder stays text (decoder still dual-format at floor 210).
     // OrderStatus + ExecutionData + CommissionReport are proto-only.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
