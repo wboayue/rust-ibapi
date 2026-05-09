@@ -1,25 +1,22 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST};
 use crate::contracts::common::test_tables::*;
 use crate::contracts::{Currency, Exchange, Symbol};
-use crate::messages::ResponseMessage;
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::testdata::builders::contracts::{
-    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data_request, market_rule_request,
-    matching_symbols_request, option_chain_request,
+    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_request,
+    market_rule_request, matching_symbols_request, option_chain_request,
 };
-use std::sync::{Arc, RwLock};
+use crate::testdata::builders::ResponseProtoEncoder;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_contract_details() {
     for test_case in contract_details_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract).await;
@@ -42,11 +39,7 @@ async fn test_contract_details() {
 #[tokio::test]
 async fn test_matching_symbols() {
     for test_case in matching_symbols_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
         let result = client.matching_symbols(test_case.pattern).await;
@@ -67,11 +60,7 @@ async fn test_matching_symbols() {
 #[tokio::test]
 async fn test_market_rule() {
     for test_case in market_rule_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES);
         let result = client.market_rule(test_case.market_rule_id).await;
@@ -93,11 +82,7 @@ async fn test_market_rule() {
 #[tokio::test]
 async fn test_option_calculations() {
     for test_case in option_calculation_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![test_case.response_message.clone()]));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
 
@@ -155,11 +140,7 @@ async fn test_option_calculations() {
 #[tokio::test]
 async fn test_option_chain() {
     for test_case in option_chain_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
         let result = client
@@ -197,11 +178,7 @@ async fn test_option_chain() {
 #[tokio::test]
 async fn test_verify_contract() {
     for test_case in verify_contract_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
         let result = verify::verify_contract(client.server_version(), &test_case.contract);
@@ -227,7 +204,7 @@ async fn test_verify_contract() {
 #[tokio::test]
 async fn test_stream_decoders() {
     for test_case in stream_decoder_test_cases() {
-        let mut message = ResponseMessage::from(test_case.message);
+        let mut message = test_case.message.clone();
 
         match &test_case.expected_result {
             StreamDecoderResult::OptionComputation { price, delta } => {
@@ -249,27 +226,22 @@ async fn test_stream_decoders() {
                 );
             }
             StreamDecoderResult::Error(expected_error) => {
-                match test_case.message {
-                    msg if msg.starts_with("76") => {
-                        // OptionChain end of stream
-                        let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
-                        assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                        assert!(
-                            format!("{:?}", result.err()).contains(expected_error),
-                            "Test '{}' wrong error",
-                            test_case.name
-                        );
-                    }
-                    _ => {
-                        // Try both decoders
-                        let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message.clone());
-                        let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
-                        assert!(
-                            opt_result.is_err() && chain_result.is_err(),
-                            "Test '{}' should have failed",
-                            test_case.name
-                        );
-                    }
+                if test_case.name == "option chain end of stream" {
+                    let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    assert!(
+                        format!("{:?}", result.err()).contains(expected_error),
+                        "Test '{}' wrong error",
+                        test_case.name
+                    );
+                } else {
+                    let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message.clone());
+                    let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
+                    assert!(
+                        opt_result.is_err() && chain_result.is_err(),
+                        "Test '{}' should have failed",
+                        test_case.name
+                    );
                 }
             }
         }
@@ -314,15 +286,43 @@ async fn test_cancel_messages() {
 
 #[tokio::test]
 async fn request_stock_contract_details() {
-    let message_bus = Arc::new(MessageBusStub{
-    request_messages: RwLock::new(vec![]),
-    response_messages: vec![
-        "10|9001|TSLA|STK||0||SMART|USD|TSLA|NMS|NMS|76792991|0.01||ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX|1|0|TESLA INC|NASDAQ||Consumer, Cyclical|Auto Manufacturers|Auto-Cars/Light Trucks|US/Eastern|20221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000|20221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600|||1|ISIN|US88160R1014|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|1|1|100||".to_string(),
-        "10|9001|TSLA|STK||0||AMEX|USD|TSLA|NMS|NMS|76792991|0.01||ACTIVETIM,AD,ADJUST,ALERT,ALLOC,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,IOC,LIT,LMT,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX|1|0|TESLA INC|NASDAQ||Consumer, Cyclical|Auto Manufacturers|Auto-Cars/Light Trucks|US/Eastern|20221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000|20221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000|||1|ISIN|US88160R1014|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|1|1|100||".to_string(),
-        "52|1|9001||".to_string(),
-    ],
-    ordered_responses: vec![],
-});
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::ContractData,
+            contract_data()
+                .request_id(9001)
+                .contract_id(76792991)
+                .symbol("TSLA")
+                .security_type("STK")
+                .exchange("SMART")
+                .currency("USD")
+                .local_symbol("TSLA")
+                .trading_class("NMS")
+                .market_name("NMS")
+                .long_name("TESLA INC")
+                .primary_exchange("NASDAQ")
+                .stock_type("COMMON")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::ContractData,
+            contract_data()
+                .request_id(9001)
+                .contract_id(76792991)
+                .symbol("TSLA")
+                .security_type("STK")
+                .exchange("AMEX")
+                .currency("USD")
+                .local_symbol("TSLA")
+                .trading_class("NMS")
+                .market_name("NMS")
+                .long_name("TESLA INC")
+                .primary_exchange("NASDAQ")
+                .stock_type("COMMON")
+                .encode_proto(),
+        ),
+        text_response("52|1|9001|"),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -360,15 +360,25 @@ async fn request_stock_contract_details() {
 #[tokio::test]
 #[ignore = "reason: need sample messages"]
 async fn request_bond_contract_details() {
-    let message_bus = Arc::new(MessageBusStub{
-    request_messages: RwLock::new(vec![]),
-    response_messages: vec![
-        // Format similar to request_stock_contract_details but with bond-specific fields
-        "10|9001|TLT|BOND|20420815|0||||USD|TLT|US Treasury Bond|BOND|12345|0.01|1000|SMART|NYSE|SMART|NYSE|1|0|US Treasury Bond|SMART||Government||US/Eastern|20221229:0400-20221229:2000;20221230:0400-20221230:2000|20221229:0930-20221229:1600;20221230:0930-20221230:1600|||1|CUSIP|912810TL8|1|||26|20420815|GOVT|1|1|2.25|0|20420815|20120815|20320815|CALL|100.0|1|Government Bond Notes|0.1|0.01|1|".to_string(),
-        "52|1|9001||".to_string(),
-    ],
-    ordered_responses: vec![],
-});
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::ContractData,
+            contract_data()
+                .request_id(9001)
+                .contract_id(12345)
+                .symbol("TLT")
+                .security_type("BOND")
+                .last_trade_date_or_contract_month("20420815")
+                .currency("USD")
+                .local_symbol("TLT")
+                .market_name("US Treasury Bond")
+                .trading_class("BOND")
+                .long_name("US Treasury Bond")
+                .industry("Government")
+                .encode_proto(),
+        ),
+        text_response("52|1|9001|"),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -415,14 +425,27 @@ async fn request_bond_contract_details() {
 
 #[tokio::test]
 async fn request_future_contract_details() {
-    let message_bus = Arc::new(MessageBusStub{
-    request_messages: RwLock::new(vec![]),
-    response_messages: vec![
-        "10|9000|ES|FUT|20250620 08:30 US/Central|0||CME|USD|ESM5|ES|ES|620731015|0.25|50|ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AVGCOST,BASKET,BENCHPX,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IOC,LIT,LMT,LTH,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|CME,QBALGO|1|11004968|E-mini S&P 500||202506||||US/Central|20250521:1700-20250522:1600;20250522:1700-20250523:1600;20250524:CLOSED;20250525:1700-20250526:1200;20250526:1700-20250527:1600;20250527:1700-20250528:1600|20250522:0830-20250522:1600;20250523:0830-20250523:1600;20250524:CLOSED;20250525:1700-20250526:1200;20250527:0830-20250527:1600;20250527:1700-20250528:1600|||0|2147483647|ES|IND|67,67|20250620||1|1|1|".to_string(),
-        "52|1|9000|".to_string(),
-    ],
-    ordered_responses: vec![],
-});
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::ContractData,
+            contract_data()
+                .request_id(9000)
+                .contract_id(620731015)
+                .symbol("ES")
+                .security_type("FUT")
+                .last_trade_date_or_contract_month("20250620")
+                .multiplier("50")
+                .exchange("CME")
+                .currency("USD")
+                .local_symbol("ESM5")
+                .trading_class("ES")
+                .market_name("ES")
+                .min_tick("0.25")
+                .long_name("E-mini S&P 500")
+                .encode_proto(),
+        ),
+        text_response("52|1|9000|"),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 

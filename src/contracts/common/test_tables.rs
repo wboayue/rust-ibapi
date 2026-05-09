@@ -1,15 +1,18 @@
 //! Table-driven test data for contracts module tests
 
+use crate::common::test_utils::helpers::{proto_response, text_response};
 use crate::contracts::{Contract, ContractDetails, Currency, Exchange, SecurityType, Symbol};
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::server_versions;
+use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, symbol_samples, symbol_samples_entry};
+use crate::testdata::builders::ResponseProtoEncoder;
 
 /// Test case for contract details tests
 #[allow(clippy::type_complexity, dead_code)]
 pub struct ContractDetailsTestCase {
     pub name: &'static str,
     pub contract: Contract,
-    pub response_messages: Vec<String>,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request: &'static str,
     pub expected_count: usize,
     pub validations: Box<dyn Fn(&[ContractDetails]) + Send + Sync>,
@@ -20,7 +23,7 @@ pub struct ContractDetailsTestCase {
 pub struct MatchingSymbolsTestCase {
     pub name: &'static str,
     pub pattern: &'static str,
-    pub response_message: String,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request: &'static str,
     pub expected_count: usize,
 }
@@ -30,7 +33,7 @@ pub struct MatchingSymbolsTestCase {
 pub struct MarketRuleTestCase {
     pub name: &'static str,
     pub market_rule_id: i32,
-    pub response_message: String,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request: &'static str,
     pub expected_price_increments: usize,
 }
@@ -57,7 +60,7 @@ pub struct OptionChainTestCase {
     pub exchange: &'static str,
     pub security_type: SecurityType,
     pub contract_id: i32,
-    pub response_messages: Vec<String>,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request: &'static str,
     pub expected_count: usize,
 }
@@ -74,7 +77,7 @@ pub struct VerifyContractTestCase {
 /// Test case for StreamDecoder tests
 pub struct StreamDecoderTestCase {
     pub name: &'static str,
-    pub message: &'static str,
+    pub message: ResponseMessage,
     pub expected_result: StreamDecoderResult,
 }
 
@@ -93,6 +96,16 @@ pub struct CancelMessageTestCase {
     pub expected_msg_id: Result<i32, &'static str>,
 }
 
+const STK_ORDER_TYPES: &str = "ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF";
+const STK_VALID_EXCHANGES: &str =
+    "SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX";
+const FUT_ORDER_TYPES: &str = "ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IOC,LIT,LMT,LOC,MIT,MKT,MOC,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,PEGMID,PEGSTK,POSTONLY,PREOPGRTH,REL,RPI,RTH,SCALE,SCALEODD,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF";
+const AMEX_ORDER_TYPES: &str = "ACTIVETIM,AD,ADJUST,ALERT,ALLOC,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,IOC,LIT,LMT,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF";
+
+fn contract_data_end(request_id: i32) -> ResponseMessage {
+    text_response(format!("52|1|{request_id}|"))
+}
+
 /// Test cases for contract details
 pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
     vec![
@@ -105,9 +118,31 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 currency: Currency::from("USD"),
                 ..Default::default()
             },
-            response_messages: vec![
-                "10\09001\0TSLA\0STK\0\00\0\0SMART\0USD\0TSLA\0NMS\0NMS\0459200101\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0TESLA INC\0NASDAQ\0\0Consumer, Cyclical\0Auto Manufacturers\0Auto-Cars/Light Trucks\0US/Eastern\020221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000\020221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600\0\00\01\0ISIN\0US88160R1014\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
-                "52\01\09001\0\0".to_string(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(459200101)
+                        .symbol("TSLA")
+                        .security_type("STK")
+                        .exchange("SMART")
+                        .currency("USD")
+                        .local_symbol("TSLA")
+                        .trading_class("NMS")
+                        .market_name("NMS")
+                        .order_types(STK_ORDER_TYPES)
+                        .valid_exchanges(STK_VALID_EXCHANGES)
+                        .long_name("TESLA INC")
+                        .primary_exchange("NASDAQ")
+                        .industry("Consumer, Cyclical")
+                        .category("Auto Manufacturers")
+                        .subcategory("Auto-Cars/Light Trucks")
+                        .time_zone_id("US/Eastern")
+                        .stock_type("COMMON")
+                        .encode_proto(),
+                ),
+                contract_data_end(9001),
             ],
             expected_request: "9|8|9000|0|TSLA|STK||0|||SMART||USD|||0|||",
             expected_count: 1,
@@ -135,9 +170,32 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 currency: Currency::from("USD"),
                 ..Default::default()
             },
-            response_messages: vec![
-                "10\09001\0ES\0FUT\020240621\00\0\0CME\0USD\0ESM4\0CME\0CME\0551318584\00.25\050\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IOC,LIT,LMT,LOC,MIT,MKT,MOC,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,PEGMID,PEGSTK,POSTONLY,PREOPGRTH,REL,RPI,RTH,SCALE,SCALEODD,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0CME\01\00\0E-mini S&P 500\0CME\0202406\0Financial\0Indices\0Broad Market Equity Index\0US/Central\020240617:CLOSED;20240618:1700-20240618:1600;20240619:1700-20240619:1600;20240620:1700-20240620:1600;20240621:1700-20240621:0900\020240617:CLOSED;20240618:1700-20240618:1600;20240619:1700-20240619:1600;20240620:1700-20240620:1600;20240621:1700-20240621:0900\0\00\01\0\0\01\0\0\0\0\0FUT\01\01\01\00.25\0\0".to_string(),
-                "52\01\09001\0\0".to_string(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(551318584)
+                        .symbol("ES")
+                        .security_type("FUT")
+                        .last_trade_date_or_contract_month("20240621")
+                        .multiplier("50")
+                        .exchange("CME")
+                        .currency("USD")
+                        .local_symbol("ESM4")
+                        .trading_class("CME")
+                        .market_name("CME")
+                        .order_types(FUT_ORDER_TYPES)
+                        .valid_exchanges("CME")
+                        .long_name("E-mini S&P 500")
+                        .primary_exchange("CME")
+                        .industry("Financial")
+                        .category("Indices")
+                        .subcategory("Broad Market Equity Index")
+                        .time_zone_id("US/Central")
+                        .encode_proto(),
+                ),
+                contract_data_end(9001),
             ],
             expected_request: "9|8|9000|0|ES|FUT|202406|0|||CME||USD|||0|||",
             expected_count: 1,
@@ -161,9 +219,29 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 currency: Currency::from("USD"),
                 ..Default::default()
             },
-            response_messages: vec![
-                "10\09001\0TLT\0BOND\020420815\00\0\0SMART\0USD\0TLT\0US Treasury Bond\0TLT\012345\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IMB,IOC,LIT,LMT,LOC,MIT,MKT,MOC,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,PEGMID,PEGSTK,POSTONLY,PREOPGRTH,REL,RPI,RTH,SCALE,SCALEODD,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,NYSE\01\00\0US Treasury Bond\0SMART\0\0Government\0\0\0US/Eastern\020221229:0400-20221229:2000;20221230:0400-20221230:2000\020221229:0930-20221229:1600;20221230:0930-20221230:1600\0\00\01\0CUSIP\0912810TL8\01\0\0\026\020420815\0GOVT\01\01\02.25\00\020420815\020120815\020320815\0CALL\01\0Government Bond Notes\00.1\00.01\01\0".to_string(),
-                "52\01\09001\0\0".to_string(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(12345)
+                        .symbol("TLT")
+                        .security_type("BOND")
+                        .last_trade_date_or_contract_month("20420815")
+                        .exchange("SMART")
+                        .currency("USD")
+                        .local_symbol("TLT")
+                        .trading_class("TLT")
+                        .market_name("US Treasury Bond")
+                        .order_types(STK_ORDER_TYPES)
+                        .valid_exchanges("SMART,NYSE")
+                        .long_name("US Treasury Bond")
+                        .primary_exchange("SMART")
+                        .industry("Government")
+                        .time_zone_id("US/Eastern")
+                        .encode_proto(),
+                ),
+                contract_data_end(9001),
             ],
             expected_request: "9|8|9000|0|TLT|BOND||0|||SMART||USD|||0|||",
             expected_count: 1,
@@ -174,8 +252,6 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].contract.contract_id, 12345);
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
                 assert_eq!(contracts[0].industry, "Government");
-                // Note: Bond-specific fields (cusip, coupon, maturity, etc.) are not currently
-                // decoded by the contract details decoder and will be empty/default values
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20420815");
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].market_name, "US Treasury Bond");
@@ -190,26 +266,67 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 currency: Currency::from("USD"),
                 ..Default::default()
             },
-            response_messages: vec![
-                "10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NASDAQ\0NMS\0265598\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0APPLE INC\0NASDAQ\0\0Computers\0Computers\0Computers-Electronic\0US/Eastern\020090507:0700-1830,1830-2330;20090508:CLOSED\020090507:0930-1600;20090508:CLOSED\0\00\01\0ISIN\0US0378331005\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
-                "10\09001\0AAPL\0STK\0\00\0\0NYSE\0USD\0AAPL\0NYSE\0NMS\0265598\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0NYSE\01\00\0APPLE INC\0NYSE\0\0Computers\0Computers\0Computers-Electronic\0US/Eastern\020090507:0700-1830,1830-2330;20090508:CLOSED\020090507:0930-1600;20090508:CLOSED\0\00\01\0ISIN\0US0378331005\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
-                "52\01\09001\0\0".to_string(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(265598)
+                        .symbol("AAPL")
+                        .security_type("STK")
+                        .exchange("SMART")
+                        .currency("USD")
+                        .local_symbol("AAPL")
+                        .trading_class("NMS")
+                        .market_name("NASDAQ")
+                        .order_types(STK_ORDER_TYPES)
+                        .valid_exchanges(STK_VALID_EXCHANGES)
+                        .long_name("APPLE INC")
+                        .primary_exchange("NASDAQ")
+                        .industry("Computers")
+                        .category("Computers")
+                        .subcategory("Computers-Electronic")
+                        .time_zone_id("US/Eastern")
+                        .stock_type("COMMON")
+                        .encode_proto(),
+                ),
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(265598)
+                        .symbol("AAPL")
+                        .security_type("STK")
+                        .exchange("NYSE")
+                        .currency("USD")
+                        .local_symbol("AAPL")
+                        .trading_class("NMS")
+                        .market_name("NYSE")
+                        .order_types(STK_ORDER_TYPES)
+                        .valid_exchanges("NYSE")
+                        .long_name("APPLE INC")
+                        .primary_exchange("NYSE")
+                        .industry("Computers")
+                        .category("Computers")
+                        .subcategory("Computers-Electronic")
+                        .time_zone_id("US/Eastern")
+                        .stock_type("COMMON")
+                        .encode_proto(),
+                ),
+                contract_data_end(9001),
             ],
             expected_request: "9|8|9000|0|AAPL|STK||0|||SMART||USD|||0|||",
             expected_count: 2,
             validations: Box::new(|contracts| {
                 assert_eq!(contracts.len(), 2);
-                // First contract (SMART routing)
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("AAPL"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
-                // Second contract (NYSE)
                 assert_eq!(contracts[1].contract.symbol, Symbol::from("AAPL"));
                 assert_eq!(contracts[1].contract.security_type, SecurityType::Stock);
                 assert_eq!(contracts[1].contract.exchange, Exchange::from("NYSE"));
                 assert_eq!(contracts[1].contract.primary_exchange, Exchange::from("NYSE"));
-                // Both should have same contract ID
                 assert_eq!(contracts[0].contract.contract_id, 265598);
                 assert_eq!(contracts[1].contract.contract_id, 265598);
             }),
@@ -217,10 +334,54 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
         ContractDetailsTestCase {
             name: "TSLA contract details - multiple exchanges (sync_tests)",
             contract: Contract::stock("TSLA").build(),
-            response_messages: vec![
-                "10\09001\0TSLA\0STK\0\00\0\0SMART\0USD\0TSLA\0NMS\0NMS\076792991\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0TESLA INC\0NASDAQ\0\0Consumer, Cyclical\0Auto Manufacturers\0Auto-Cars/Light Trucks\0US/Eastern\020221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000\020221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600\0\00\01\0ISIN\0US88160R1014\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
-                "10\09001\0TSLA\0STK\0\00\0\0AMEX\0USD\0TSLA\0NMS\0NMS\076792991\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALLOC,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,IOC,LIT,LMT,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0TESLA INC\0NASDAQ\0\0Consumer, Cyclical\0Auto Manufacturers\0Auto-Cars/Light Trucks\0US/Eastern\020221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000\020221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000\0\00\01\0ISIN\0US88160R1014\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
-                "52|1|9001||".to_string(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(76792991)
+                        .symbol("TSLA")
+                        .security_type("STK")
+                        .exchange("SMART")
+                        .currency("USD")
+                        .local_symbol("TSLA")
+                        .trading_class("NMS")
+                        .market_name("NMS")
+                        .order_types(STK_ORDER_TYPES)
+                        .valid_exchanges(STK_VALID_EXCHANGES)
+                        .long_name("TESLA INC")
+                        .primary_exchange("NASDAQ")
+                        .industry("Consumer, Cyclical")
+                        .category("Auto Manufacturers")
+                        .subcategory("Auto-Cars/Light Trucks")
+                        .time_zone_id("US/Eastern")
+                        .stock_type("COMMON")
+                        .encode_proto(),
+                ),
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(76792991)
+                        .symbol("TSLA")
+                        .security_type("STK")
+                        .exchange("AMEX")
+                        .currency("USD")
+                        .local_symbol("TSLA")
+                        .trading_class("NMS")
+                        .market_name("NMS")
+                        .order_types(AMEX_ORDER_TYPES)
+                        .valid_exchanges(STK_VALID_EXCHANGES)
+                        .long_name("TESLA INC")
+                        .primary_exchange("NASDAQ")
+                        .industry("Consumer, Cyclical")
+                        .category("Auto Manufacturers")
+                        .subcategory("Auto-Cars/Light Trucks")
+                        .time_zone_id("US/Eastern")
+                        .stock_type("COMMON")
+                        .encode_proto(),
+                ),
+                contract_data_end(9001),
             ],
             expected_request: "9|8|9000|0|TSLA|STK||0|||SMART||USD|||0|||",
             expected_count: 2,
@@ -235,7 +396,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[1].contract.contract_id, 76792991);
                 assert_eq!(contracts[0].order_types.len(), 70);
                 assert_eq!(contracts[0].order_types[0], "ACTIVETIM");
-                assert_eq!(contracts[1].order_types.len(), 42); // AMEX has fewer order types
+                assert_eq!(contracts[1].order_types.len(), 42);
             }),
         },
     ]
@@ -247,15 +408,32 @@ pub fn matching_symbols_test_cases() -> Vec<MatchingSymbolsTestCase> {
         MatchingSymbolsTestCase {
             name: "single match",
             pattern: "AAPL",
-            response_message: "79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::SymbolSamples,
+                symbol_samples()
+                    .request_id(9000)
+                    .entry(symbol_samples_entry(12345, "AAPL").primary_exchange("NASDAQ").description("APPLE INC"))
+                    .encode_proto(),
+            )],
             expected_request: "81|9000|AAPL|",
             expected_count: 1,
         },
         MatchingSymbolsTestCase {
             name: "multiple matches",
             pattern: "AA",
-            response_message: "79\09000\02\067890\0AA\0STK\0SMART\0USD\01\0OPT\0ALCOA CORP\0\012346\0AAPL\0STK\0SMART\0USD\00\0APPLE INC\0\0"
-                .to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::SymbolSamples,
+                symbol_samples()
+                    .request_id(9000)
+                    .entry(
+                        symbol_samples_entry(67890, "AA")
+                            .primary_exchange("SMART")
+                            .description("ALCOA CORP")
+                            .derivative_security_types(vec!["OPT".to_string()]),
+                    )
+                    .entry(symbol_samples_entry(12346, "AAPL").primary_exchange("SMART").description("APPLE INC"))
+                    .encode_proto(),
+            )],
             expected_request: "81|9000|AA|",
             expected_count: 2,
         },
@@ -268,28 +446,54 @@ pub fn market_rule_test_cases() -> Vec<MarketRuleTestCase> {
         MarketRuleTestCase {
             name: "standard market rule",
             market_rule_id: 26,
-            response_message: "87\026\04\00\00.01\00.01\00.01\01\01\05\00.05\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::MarketRule,
+                market_rule(26)
+                    .increment(0.0, 0.01)
+                    .increment(1.0, 0.01)
+                    .increment(5.0, 0.01)
+                    .increment(0.05, 0.05)
+                    .encode_proto(),
+            )],
             expected_request: "91|26|",
             expected_price_increments: 4,
         },
         MarketRuleTestCase {
             name: "complex market rule",
             market_rule_id: 635,
-            response_message: "87\0635\03\00\00.0001\00.01\00.001\010\00.01\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::MarketRule,
+                market_rule(635)
+                    .increment(0.0, 0.0001)
+                    .increment(0.01, 0.001)
+                    .increment(10.0, 0.01)
+                    .encode_proto(),
+            )],
             expected_request: "91|635|",
             expected_price_increments: 3,
         },
         MarketRuleTestCase {
             name: "market rule with 6 increments",
             market_rule_id: 239,
-            response_message: "87\0239\06\00\00.01\00.5\00.01\01\00.01\03\00.01\010000000000\00.05\010000000000\00.1\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::MarketRule,
+                market_rule(239)
+                    .increment(0.0, 0.01)
+                    .increment(0.5, 0.01)
+                    .increment(1.0, 0.01)
+                    .increment(3.0, 0.01)
+                    .increment(10000000000.0, 0.05)
+                    .increment(10000000000.0, 0.1)
+                    .encode_proto(),
+            )],
             expected_request: "91|239|",
             expected_price_increments: 6,
         },
     ]
 }
 
-/// Test cases for option calculations
+/// Test cases for option calculations (still text-framed: TickOptionComputation gates at 206 but
+/// `decode_option_computation` is shared with realtime market_data and migrated separately.)
 pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
     vec![
         OptionCalculationTestCase {
@@ -339,21 +543,41 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
 
 /// Test cases for option chain
 pub fn option_chain_test_cases() -> Vec<OptionChainTestCase> {
-    vec![
-        OptionChainTestCase {
-            name: "stock option chain",
-            symbol: "AAPL",
-            exchange: "SMART",
-            security_type: SecurityType::Stock,
-            contract_id: 0,
-            response_messages: vec![
-                "75\09000\0SMART\0265598\0100\00\012\020230120\020230217\020230317\020230421\020230519\020230616\020230721\020230818\020231215\020240119\020240621\020250117\031\050\055\060\065\070\075\080\085\090\095\0100\0105\0110\0115\0120\0125\0130\0135\0140\0145\0150\0155\0160\0165\0170\0175\0180\0185\0190\0195\0200\0".to_string(),
-                "76\09000\0".to_string(),
-            ],
-            expected_request: "78|9000|AAPL|SMART|STK|0|",
-            expected_count: 1,
-        },
-    ]
+    vec![OptionChainTestCase {
+        name: "stock option chain",
+        symbol: "AAPL",
+        exchange: "SMART",
+        security_type: SecurityType::Stock,
+        contract_id: 0,
+        ordered_responses: vec![
+            proto_response(
+                IncomingMessages::SecurityDefinitionOptionParameter,
+                option_chain()
+                    .request_id(9000)
+                    .exchange("SMART")
+                    .underlying_contract_id(265598)
+                    .trading_class("GOOG")
+                    .multiplier("100")
+                    .expirations(
+                        [
+                            "20230120", "20230217", "20230317", "20230421", "20230519", "20230616", "20230721", "20230818", "20231215", "20240119",
+                            "20240621", "20250117",
+                        ]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
+                    )
+                    .strikes(vec![
+                        50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0, 140.0,
+                        145.0, 150.0, 155.0, 160.0, 165.0, 170.0, 175.0, 180.0, 185.0, 190.0, 195.0, 200.0,
+                    ])
+                    .encode_proto(),
+            ),
+            text_response("76|9000|"),
+        ],
+        expected_request: "78|9000|AAPL|SMART|STK|0|",
+        expected_count: 1,
+    }]
 }
 
 /// Test cases for verify contract
@@ -409,12 +633,23 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
     vec![
         StreamDecoderTestCase {
             name: "valid option computation",
-            message: "21\06\09000\013\00.3\00.35\05.25\0-0.025\00.55\0-0.0015\00.3\04.75\0140.0\05.25\0",
+            message: text_response("21|6|9000|13|0.3|0.35|5.25|-0.025|0.55|-0.0015|0.3|4.75|140.0|5.25|"),
             expected_result: StreamDecoderResult::OptionComputation { price: 5.25, delta: 0.35 },
         },
         StreamDecoderTestCase {
             name: "valid option chain",
-            message: "75\09000\0SMART\0265598\0100\00\02\020230120\020230217\03\050\055\060\0",
+            message: proto_response(
+                IncomingMessages::SecurityDefinitionOptionParameter,
+                option_chain()
+                    .request_id(9000)
+                    .exchange("SMART")
+                    .underlying_contract_id(265598)
+                    .trading_class("AAPL")
+                    .multiplier("100")
+                    .expirations(vec!["20230120".to_string(), "20230217".to_string()])
+                    .strikes(vec![50.0, 55.0, 60.0])
+                    .encode_proto(),
+            ),
             expected_result: StreamDecoderResult::OptionChain {
                 exchange: "SMART".to_string(),
                 underlying_conid: 265598,
@@ -422,12 +657,12 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
         },
         StreamDecoderTestCase {
             name: "option chain end of stream",
-            message: "76\09000\0",
+            message: text_response("76|9000|"),
             expected_result: StreamDecoderResult::Error("EndOfStream"),
         },
         StreamDecoderTestCase {
             name: "unexpected message type",
-            message: "1\09000\0unexpected\0",
+            message: text_response("1|9000|unexpected|"),
             expected_result: StreamDecoderResult::Error("UnexpectedResponse"),
         },
     ]
@@ -461,7 +696,9 @@ pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
 }
 
 #[cfg(feature = "sync")]
-/// Test case for client method tests (tests that use the Client convenience methods)
+/// Test case for client method tests (tests that use the Client convenience methods).
+/// Stays text-framed: TickOptionComputation (msg 21) gates at 206 but `decode_option_computation`
+/// is shared with realtime market_data and migrated separately.
 pub struct ClientMethodTestCase {
     pub name: &'static str,
     pub test_type: ClientMethodTest,
@@ -533,7 +770,7 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
 pub struct ContractDetailsErrorTestCase {
     pub name: &'static str,
     pub contract: Contract,
-    pub response_messages: Vec<String>,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub should_error: bool,
     pub error_contains: Option<&'static str>,
     pub expected_count: usize,
@@ -546,7 +783,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
         ContractDetailsErrorTestCase {
             name: "error message from server",
             contract: Contract::stock("INVALID").build(),
-            response_messages: vec!["4|2|9000|200|Invalid contract|".to_string()],
+            ordered_responses: vec![text_response("4|2|9000|200|Invalid contract|")],
             should_error: true,
             error_contains: Some("Invalid contract"),
             expected_count: 0,
@@ -554,7 +791,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
         ContractDetailsErrorTestCase {
             name: "empty response (no contracts found)",
             contract: Contract::stock("NOEXIST").build(),
-            response_messages: vec!["52|1|9000||".to_string()],
+            ordered_responses: vec![contract_data_end(9000)],
             should_error: false,
             error_contains: None,
             expected_count: 0,

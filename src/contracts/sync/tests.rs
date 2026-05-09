@@ -1,7 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::common::test_tables::*;
-use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
@@ -9,16 +8,12 @@ use crate::testdata::builders::contracts::{
     calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data_request, market_rule_request,
     matching_symbols_request, option_chain_request,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 #[test]
 fn test_contract_details() {
     for test_case in contract_details_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract);
@@ -41,11 +36,7 @@ fn test_contract_details() {
 #[test]
 fn test_matching_symbols() {
     for test_case in matching_symbols_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
         let result = client.matching_symbols(test_case.pattern);
@@ -66,11 +57,7 @@ fn test_matching_symbols() {
 #[test]
 fn test_market_rule() {
     for test_case in market_rule_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES);
         let result = client.market_rule(test_case.market_rule_id);
@@ -92,11 +79,7 @@ fn test_market_rule() {
 #[test]
 fn test_option_calculations() {
     for test_case in option_calculation_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![test_case.response_message.clone()],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![test_case.response_message.clone()]));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
 
@@ -150,11 +133,7 @@ fn test_option_calculations() {
 #[test]
 fn test_option_chain() {
     for test_case in option_chain_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
         let result = client.option_chain(
@@ -187,11 +166,7 @@ fn test_option_chain() {
 #[test]
 fn test_verify_contract() {
     for test_case in verify_contract_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
         let result = verify::verify_contract(client.server_version, &test_case.contract);
@@ -217,7 +192,7 @@ fn test_verify_contract() {
 #[test]
 fn test_stream_decoders() {
     for test_case in stream_decoder_test_cases() {
-        let mut message = ResponseMessage::from(test_case.message);
+        let mut message = test_case.message.clone();
 
         match &test_case.expected_result {
             StreamDecoderResult::OptionComputation { price, delta } => {
@@ -239,27 +214,22 @@ fn test_stream_decoders() {
                 );
             }
             StreamDecoderResult::Error(expected_error) => {
-                match test_case.message {
-                    msg if msg.starts_with("76") => {
-                        // OptionChain end of stream
-                        let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
-                        assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                        assert!(
-                            format!("{:?}", result.err()).contains(expected_error),
-                            "Test '{}' wrong error",
-                            test_case.name
-                        );
-                    }
-                    _ => {
-                        // Try both decoders
-                        let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message.clone());
-                        let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
-                        assert!(
-                            opt_result.is_err() && chain_result.is_err(),
-                            "Test '{}' should have failed",
-                            test_case.name
-                        );
-                    }
+                if test_case.name == "option chain end of stream" {
+                    let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    assert!(
+                        format!("{:?}", result.err()).contains(expected_error),
+                        "Test '{}' wrong error",
+                        test_case.name
+                    );
+                } else {
+                    let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message.clone());
+                    let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
+                    assert!(
+                        opt_result.is_err() && chain_result.is_err(),
+                        "Test '{}' should have failed",
+                        test_case.name
+                    );
                 }
             }
         }
@@ -305,11 +275,7 @@ fn test_cancel_messages() {
 #[test]
 fn test_client_methods() {
     for test_case in client_method_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(test_case.response_messages.clone()));
 
         let client = Client::stubbed(
             message_bus.clone(),
@@ -380,11 +346,7 @@ fn test_client_methods() {
 #[test]
 fn test_contract_details_errors() {
     for test_case in contract_details_error_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages.clone(),
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract);
