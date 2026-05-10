@@ -23,27 +23,17 @@ Related existing tracking docs in `plans/`:
 
 ## 1. Construction & builders
 
-- [ ] **Forbid bare `Contract { ... }` construction.** Today `Contract::stock(...).build()`
-  is the blessed path, but ~20+ example sites (e.g. `examples/async/place_order.rs:22`)
-  still build the struct field-by-field with `..Default::default()`. Fields are `pub`,
-  so there's no compile-time push toward the builder.
-  - Proposal: make required fields private (or wrap in newtypes that only the builder
-    can construct), keep `pub` on getters; or `#[non_exhaustive]` + private constructor.
-  - Breaking: yes (intentional for 3.0).
-  - **Escape-hatch invariant** (so locking down doesn't strand users on missing
-    sec-type constructors): every `pub` field on `Contract` keeps a corresponding
-    setter on `ContractBuilder`. `ContractBuilder::new()` is the named generic
-    entry point — anything spellable as `Contract { ... }` stays spellable as
-    `ContractBuilder::new().symbol(...).security_type(SecurityType::Warrant)…build()`.
-    Today's builder already has setters for every field
-    (`src/contracts/common/contract_builder/mod.rs:128-311`); the lockdown only
-    works as long as that stays true.
-  - Doc the escape hatch in `docs/migration-3.0.md` — "no convenience constructor
-    for X? use `ContractBuilder::new()`" — otherwise readers parse "forbid bare
-    construction" as "you're stuck if we missed your case."
-  - Add a regression test that asserts setter-per-public-field parity (reflective
-    enumeration via a macro, or a tiny `compile_fail`/doc-test). Without it the
-    invariant drifts silently the next time someone adds a field.
+- [x] **Forbid bare `Contract { ... }` construction.** Shipped 2026-05-10 in
+  PR #547 (example modernization) + PR #548 (lockdown). `Contract` is now
+  `#[non_exhaustive]`; bare struct literals fail to compile in external crates.
+  The escape-hatch invariant — every `pub` field on `Contract` is settable on
+  `ContractBuilder` — is enforced by a compile-time regression test
+  (`setter_parity_with_contract_fields`) plus a `compile_fail,E0639` doc-test
+  on `Contract` that pins to the rustc error code so it can't silently pass
+  for the wrong reason. Migration guide §8 documents the escape hatch.
+  Bonus: PR #548 also revived `ContractBuilder` (it had been deprecated when
+  typed builders shipped) and added `PartialEq<str>`/`PartialEq<&str>` (both
+  directions, via macro) for `Symbol`/`Exchange`/`Currency`.
 
 - [x] **Newtype ergonomics: take `impl Into<Symbol>` / `&str` everywhere.** Shipped.
   `Symbol`, `Exchange`, `Currency` impl `From<&str>` + `From<String>` (`src/contracts/types.rs:24,85,141`)
