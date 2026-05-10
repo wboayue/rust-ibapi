@@ -21,12 +21,14 @@
 - Use traits to define shared behavior across types
 - Compose complex types from smaller building blocks:
   ```rust
-  // Good: use builder when 4+ params, optional params, or complex construction
-  let order = order_builder::limit_order(Action::Buy, 100.0, 150.0)
+  // Good: fluent builder when 4+ params, optional params, or complex construction.
+  let order_id = client.order(&contract)
+      .buy(100)
+      .limit(150.0)
       .condition(price_condition)
-      .build();
+      .submit()?;
 
-  // Bad: monolithic constructor with 4+ params
+  // Bad: monolithic constructor with 4+ params.
   let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), None, None);
   ```
 - Prefer `impl Trait` for flexible return types

@@ -1,18 +1,21 @@
 //! Place Order example
 //!
+//! Submits a single market order driven by CLI args, using the fluent builder.
+//!
+//! For status / execution monitoring, see `examples/sync/submit_order.rs`, which
+//! sets up `client.order_update_stream()` in a background thread.
+//!
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example place_order
+//! cargo run --features sync --example place_order -- --stock AAPL --buy 100
 //! ```
 
 use clap::{arg, ArgMatches, Command};
 use ibapi::client::blocking::Client;
-use log::{debug, info};
-
 use ibapi::contracts::Currency;
-use ibapi::orders;
 use ibapi::prelude::*;
+use log::{debug, info};
 
 fn main() {
     env_logger::init();
@@ -30,55 +33,29 @@ fn main() {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
 
-    let (action_str, quantity) = get_order(&matches).expect("specify --buy <QTY> or --sell <QTY>");
-    let action = match action_str.as_str() {
-        "BUY" => orders::Action::Buy,
-        "SELL" => orders::Action::Sell,
-        _ => unreachable!("get_order only emits BUY or SELL"),
-    };
-    println!("action: {action}, quantity: {quantity}");
-
+    let (action, quantity) = parse_action(&matches).expect("specify --buy <QTY> or --sell <QTY>");
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
-
     info!("Connected {client:?}");
 
     let mut contract = Contract::stock(stock_symbol.as_str()).build();
     contract.currency = Currency::from("USD");
     debug!("contract template {contract:?}");
 
-    let order_id = client.next_order_id();
-    println!("order_id: {order_id}");
-    let order = order_builder::market_order(action, f64::from(quantity));
-
-    println!("contract: {contract:?}, order: {order:?}");
-
-    let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-
-    for status in subscription.iter_data() {
-        let status = match status {
-            Ok(status) => status,
-            Err(e) => {
-                eprintln!("error: {e}");
-                break;
-            }
-        };
-        match status {
-            PlaceOrder::OrderStatus(order_status) => {
-                println!("order status: {order_status:?}")
-            }
-            PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-            PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
-            PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
-        }
+    let order_id = match action {
+        Action::Buy => client.order(&contract).buy(quantity).market().submit(),
+        Action::Sell => client.order(&contract).sell(quantity).market().submit(),
+        _ => unreachable!("CLI surface only emits Buy or Sell"),
     }
+    .expect("could not place order");
+    println!("Submitted order: {order_id}");
 }
 
-fn get_order(matches: &ArgMatches) -> Option<(String, i32)> {
+fn parse_action(matches: &ArgMatches) -> Option<(Action, i32)> {
     if let Some(quantity) = matches.get_one::<i32>("buy") {
-        Some(("BUY".to_string(), *quantity))
+        Some((Action::Buy, *quantity))
     } else {
-        matches.get_one::<i32>("sell").map(|quantity| ("SELL".to_string(), *quantity))
+        matches.get_one::<i32>("sell").map(|q| (Action::Sell, *q))
     }
 }

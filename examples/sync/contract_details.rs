@@ -16,7 +16,6 @@ fn main() -> anyhow::Result<()> {
 
     println!("server_version: {}", client.server_version());
     println!("connection_time: {:?}", client.connection_time());
-    println!("next_order_id: {}", client.next_order_id());
 
     let contract = Contract::stock("MSFT").build();
 

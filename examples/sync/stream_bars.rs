@@ -37,7 +37,6 @@ fn main() -> anyhow::Result<()> {
 
     println!("server_version: {}", client.server_version());
     println!("server_time: {:?}", client.connection_time());
-    println!("next_order_id: {}", client.next_order_id());
 
     let bars = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe()?;
 

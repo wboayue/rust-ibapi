@@ -12,7 +12,6 @@ use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::Bar;
 use ibapi::market_data::TradingHours;
-use ibapi::orders::{order_builder, Action, PlaceOrder};
 
 fn main() {
     env_logger::init();
@@ -41,31 +40,17 @@ fn main() {
             continue;
         }
 
-        let action = if bar.close > channel.high() {
-            Action::Buy
+        let order_id = if bar.close > channel.high() {
+            client.order(&contract).buy(100).market().submit()
         } else if bar.close < channel.low() {
-            Action::Sell
+            client.order(&contract).sell(100).market().submit()
         } else {
             continue;
         };
 
-        let order_id = client.next_order_id();
-        let order = order_builder::market_order(action, 100.0);
-
-        let notices = client.place_order(order_id, &contract, &order).unwrap();
-        for notice in notices.iter_data() {
-            let notice = match notice {
-                Ok(notice) => notice,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    break;
-                }
-            };
-            if let PlaceOrder::ExecutionData(data) = notice {
-                println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
-            } else {
-                println!("{notice:?}");
-            }
+        match order_id {
+            Ok(id) => println!("Submitted breakout order {id}"),
+            Err(e) => eprintln!("error: {e}"),
         }
     }
 }

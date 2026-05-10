@@ -3,7 +3,8 @@
 //! This example connects to TWS/IB Gateway, starts a background thread to monitor order updates,
 //! then submits a series of buy and sell orders for AAPL stock with 1 second delays between orders.
 //!
-//! The `submit_order` method is used to send orders, while `order_update_stream`
+//! `client.order(&contract).buy(qty).market().submit()` is the canonical fluent path —
+//! `submit()` is fire-and-forget and allocates the order id internally; `order_update_stream`
 //! provides real-time updates about all orders including:
 //! - Order status changes
 //! - Execution/fill notifications
@@ -11,7 +12,6 @@
 //! - System messages
 
 use ibapi::client::blocking::Client;
-use ibapi::orders::OrderUpdate;
 use ibapi::prelude::*;
 use std::sync::Arc;
 use std::thread;
@@ -80,8 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let contract = Contract::stock(symbol).on_exchange("SMART").in_currency("USD").build();
 
-    // Place a series of buy and sell orders
-    let order_quantities = [
+    // Place a series of buy and sell orders using the canonical fluent path.
+    let order_specs = [
         (Action::Buy, 100.0),
         (Action::Sell, 50.0),
         (Action::Buy, 75.0),
@@ -89,26 +89,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Action::Buy, 25.0),
     ];
 
-    for (i, (action, quantity)) in order_quantities.iter().enumerate() {
-        let order_id = client.next_order_id();
-        let order = order_builder::market_order(*action, *quantity);
+    for (i, (action, quantity)) in order_specs.iter().enumerate() {
+        println!("\n[Main] Placing order #{} - {action} {quantity} shares of {symbol}", i + 1);
 
-        println!(
-            "\n[Main] Placing order #{} (ID: {}) - {} {} shares of {}",
-            i + 1,
-            order_id,
-            action,
-            quantity,
-            symbol
-        );
-
-        match client.submit_order(order_id, &contract, &order) {
-            Ok(_) => println!("[Main] Order {order_id} submitted successfully"),
-            Err(e) => eprintln!("[Main] Failed to submit order {order_id}: {e}"),
+        let result = match action {
+            Action::Buy => client.order(&contract).buy(*quantity).market().submit(),
+            Action::Sell => client.order(&contract).sell(*quantity).market().submit(),
+            _ => unreachable!("specs only contain Buy / Sell"),
+        };
+        match result {
+            Ok(order_id) => println!("[Main] Order {order_id} submitted successfully"),
+            Err(e) => eprintln!("[Main] Failed to submit order: {e}"),
         }
 
         // Wait 1 second between orders
-        if i < order_quantities.len() - 1 {
+        if i < order_specs.len() - 1 {
             println!("[Main] Waiting 1 second before next order...");
             thread::sleep(Duration::from_secs(1));
         }

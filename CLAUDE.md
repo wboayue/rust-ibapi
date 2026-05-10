@@ -148,6 +148,8 @@ Update `README.md` whenever the PR:
 - Removes a variant matched on in any README `match` block.
 - Adds an idiom that should be the canonical happy-path (e.g. `is_terminal()` instead of magic-string compares — once shipped, the README should show the new form).
 
-Mechanical check before opening the PR: grep `README.md` and `docs/migration-3.0.md` for any name you changed, removed, or replaced in this PR. Stale references are blockers, not nits.
+Mechanical check before opening the PR: grep `README.md`, every `docs/*.md`, and module-level rustdoc for any name you changed, removed, or replaced in this PR. Stale references are blockers, not nits.
+
+**Markdown fenced code blocks aren't compile-checked.** `cargo test --doc` only runs `# Examples` blocks in `.rs` files; ```rust blocks in `README.md` and `docs/*.md` are prose. They rot silently every time a field is renamed, a method removed, or a public type reshaped — and there's no CI gate to catch it. After grepping, *read each remaining hit* and verify the snippet would compile against current public API (mental compile pass: do those identifiers exist? do those methods chain on those receivers? are field types still spelled that way?). PR #549's order-construction sweep surfaced six broken `order_builder::market_order(...).condition(...).build()` chains in `docs/api-patterns.md` (Order has no `.condition()` method) and `Order { lmt_price: ..., tif: "GTC".to_string() }` blocks in `docs/order-types.md` (real fields: `limit_price`, `tif: TimeInForce`) — both shipped wrong for months because nothing tested them.
 
 Cross-link in both directions: a new section in `docs/migration-3.0.md` should usually be linkable from a README example or its surrounding prose, and the README's "Migrating?" pointer near the top should keep working.

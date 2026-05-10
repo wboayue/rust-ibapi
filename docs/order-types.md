@@ -1157,7 +1157,10 @@ let order_id = client.order(&contract)
 
 ### Manual Algo Order Construction
 
-For custom algo strategies or parameters not exposed by the builders, you can construct orders manually:
+For custom algo strategies or parameters not exposed by the builders, drop down to the
+advanced / BYO-id path: build an `Order` value directly, allocate the id with
+`next_order_id()`, and submit via `place_order` (returns a per-order subscription) or
+`submit_order` (fire-and-forget):
 
 ```rust
 use ibapi::orders::{Order, Action, TagValue};
@@ -1166,7 +1169,7 @@ let order = Order {
     order_type: "LMT".to_string(),
     action: Action::Buy,
     total_quantity: 1000.0,
-    lmt_price: Some(150.0),
+    limit_price: Some(150.0),
     algo_strategy: "Vwap".to_string(),
     algo_params: vec![
         TagValue { tag: "maxPctVol".to_string(), value: "0.2".to_string() },
@@ -1300,29 +1303,29 @@ match result {
 
 ## Custom Order Construction
 
-While the fluent API provides a convenient interface for creating common order types, you can also manually construct `Order` objects for more advanced or specialized scenarios. Orders can be submitted using either `place_order` or `submit_order` methods.
+While the fluent API provides a convenient interface for creating common order types, you can also manually construct `Order` objects for more advanced or specialized scenarios. Orders can be submitted using either `place_order` or `submit_order` methods. This is the BYO-id / advanced path; reach for it when you need to set order fields not exposed by the fluent builder.
 
 ```rust
-use rust_ibapi::orders::Order;
+use ibapi::orders::{Order, Action, TimeInForce};
 
-// Manually construct an order
+// Manually construct an order.
 let order = Order {
     action: Action::Buy,
     order_type: "LMT".to_string(),
     total_quantity: 100.0,
-    lmt_price: Some(150.50),
-    tif: "GTC".to_string(),
+    limit_price: Some(150.50),
+    tif: TimeInForce::GoodTilCanceled,
     outside_rth: true,
     ..Default::default()
 };
 
-// Get the next valid order ID
+// Get the next valid order ID.
 let order_id = client.next_order_id();
 
 // Submit using place_order (returns subscription for updates)
 let subscription = client.place_order(order_id, &contract, &order)?;
 
-// Or using submit_order (fire-and-forget, no subscription)
+// Or using submit_order (fire-and-forget; monitor via order_update_stream())
 client.submit_order(order_id, &contract, &order)?;
 ```
 

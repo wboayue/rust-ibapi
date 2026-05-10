@@ -150,16 +150,89 @@ impl<'a, C> OrderBuilder<'a, C> {
 
     // Action methods
 
-    /// Set order to buy the specified quantity
+    /// Set order to buy the specified quantity.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// let contract = Contract::stock("AAPL").build();
+    /// let _ = client.order(&contract).buy(100).market().submit().await?;
+    /// # Ok(()) }
+    /// ```
     pub fn buy(mut self, quantity: impl Into<f64>) -> Self {
         self.action = Some(Action::Buy);
         self.quantity = Some(quantity.into());
         self
     }
 
-    /// Set order to sell the specified quantity
+    /// Set order to sell the specified quantity.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// let _ = client.order(&contract).sell(100).limit(150.0).submit().await?;
+    /// # Ok(()) }
+    /// ```
     pub fn sell(mut self, quantity: impl Into<f64>) -> Self {
         self.action = Some(Action::Sell);
+        self.quantity = Some(quantity.into());
+        self
+    }
+
+    /// Set order to sell short (`SSHORT`) the specified quantity.
+    ///
+    /// `SSHORT` is only supported for institutional accounts configured with Long/Short
+    /// account segments or clearing with a separate account; see [`Action::SellShort`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// let _ = client.order(&contract).sell_short(100).limit(150.0).submit().await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn sell_short(mut self, quantity: impl Into<f64>) -> Self {
+        self.action = Some(Action::SellShort);
+        self.quantity = Some(quantity.into());
+        self
+    }
+
+    /// Set order to sell long (`SLONG`) the specified quantity.
+    ///
+    /// `SLONG` is available in specially-configured institutional accounts to indicate
+    /// that a long position not yet delivered is being sold; see [`Action::SellLong`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// let _ = client.order(&contract).sell_long(100).limit(150.0).submit().await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn sell_long(mut self, quantity: impl Into<f64>) -> Self {
+        self.action = Some(Action::SellLong);
         self.quantity = Some(quantity.into());
         self
     }

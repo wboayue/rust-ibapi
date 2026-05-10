@@ -1,13 +1,14 @@
 #![allow(clippy::uninlined_format_args)]
-//! Example demonstrating how to use order_update_stream() with submit_order()
+//! Example demonstrating order_update_stream() with the fluent submit path.
 //!
 //! This example shows how to:
 //! 1. Create a global order update stream that receives all order-related events
-//! 2. Submit orders using the fire-and-forget submit_order() method
+//! 2. Submit orders via `client.order(&contract).buy(qty).<type>().submit().await`
+//!    (fluent fire-and-forget; submit() allocates the order id internally)
 //! 3. Monitor order status through the update stream
 
 use ibapi::contracts::Contract;
-use ibapi::orders::{order_builder, Action, OrderUpdate};
+use ibapi::orders::OrderUpdate;
 use ibapi::Client;
 use std::error::Error;
 
@@ -80,40 +81,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a contract for Apple stock
     let contract = Contract::stock("AAPL").build();
 
-    // Create a limit order to buy 100 shares
-    let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
-
-    // Submit the order using fire-and-forget method
-    let order_id = client.next_order_id();
-    println!(
-        "\nSubmitting order {} for {} {} @ {}",
-        order_id,
-        order.total_quantity,
-        contract.symbol,
-        order.limit_price.unwrap()
-    );
-
-    client.submit_order(order_id, &contract, &order).await?;
-    println!("Order submitted successfully");
+    // Submit a limit buy via the fluent path. `submit()` is fire-and-forget and allocates
+    // the order id internally; status flows through the `order_update_stream` above.
+    let order_id = client.order(&contract).buy(100).limit(150.0).submit().await?;
+    println!("\nSubmitted order: {order_id}");
 
     // Wait a bit to see order updates
     println!("\nWaiting for order updates...");
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
     // Submit another order
-    let order_id2 = client.next_order_id();
-    let order2 = order_builder::limit_order(Action::Sell, 50.0, 160.0);
-
-    println!(
-        "\nSubmitting order {} for {} {} @ {}",
-        order_id2,
-        order2.total_quantity,
-        contract.symbol,
-        order2.limit_price.unwrap()
-    );
-
-    client.submit_order(order_id2, &contract, &order2).await?;
-    println!("Order submitted successfully");
+    let order_id2 = client.order(&contract).sell(50).limit(160.0).submit().await?;
+    println!("\nSubmitted order: {order_id2}");
 
     // Wait for more updates
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

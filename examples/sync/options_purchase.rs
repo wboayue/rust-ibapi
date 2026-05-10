@@ -1,5 +1,10 @@
 //! Options Purchase example
 //!
+//! Submits two market buys on an AAPL call option via the fluent builder.
+//!
+//! For status / execution monitoring, see `examples/sync/submit_order.rs`, which
+//! sets up `client.order_update_stream()` in a background thread.
+//!
 //! # Usage
 //!
 //! ```bash
@@ -7,10 +12,7 @@
 //! ```
 
 use ibapi::client::blocking::Client;
-use ibapi::{
-    contracts::Contract,
-    orders::{self, order_builder, PlaceOrder},
-};
+use ibapi::contracts::Contract;
 
 fn main() {
     env_logger::init();
@@ -18,44 +20,13 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let contract = Contract::call("AAPL").strike(180.0).expires_on(2025, 2, 21).build();
+    println!("contract: {contract:?}");
 
-    let order_id = client.next_valid_order_id().expect("could not get next valid order id");
-    //    let order_id = client.next_order_id();
-    println!("next order id: {order_id}");
-
-    let order = order_builder::market_order(orders::Action::Buy, 5.0);
-    println!("contract: {contract:?}, order: {order:?}");
-
-    let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-    for status in subscription.iter_data() {
-        match status {
-            Ok(status) => println!("{status:?}"),
-            Err(e) => {
-                eprintln!("error: {e}");
-                break;
-            }
-        }
-    }
-    let order_id = client.next_order_id();
-    println!("next order id: {order_id}");
-
-    let order = order_builder::market_order(orders::Action::Buy, 5.0);
-    println!("contract: {contract:?}, order: {order:?}");
-
-    let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-    for status in subscription.iter_data() {
-        let status = match status {
-            Ok(status) => status,
-            Err(e) => {
-                eprintln!("error: {e}");
-                break;
-            }
-        };
-        println!("{status:?}");
-        if let PlaceOrder::OrderStatus(order_status) = status {
-            if order_status.remaining == 0.0 {
-                break;
-            }
+    // Submit two 5-contract market buys via the fluent path.
+    for i in 1..=2 {
+        match client.order(&contract).buy(5).market().submit() {
+            Ok(id) => println!("Submitted order #{i}: {id}"),
+            Err(e) => eprintln!("Submit #{i} failed: {e}"),
         }
     }
 }

@@ -24,7 +24,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected successfully!");
     println!("Server version: {}", client.server_version());
     println!("Connection time: {:?}", client.connection_time());
-    println!("Next order ID: {}", client.next_order_id());
 
     // Get server time to verify connection is working
     match client.server_time() {

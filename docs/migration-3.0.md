@@ -257,6 +257,67 @@ The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>
 
 ## Before / after: common subscription patterns
 
+### Order construction
+
+3.0 picks `client.order(&contract).buy(qty).<type>().submit()` as the canonical fluent
+path. `submit()` allocates the order id internally (no manual `next_order_id()` step) and
+uses fire-and-forget delivery; status flows through
+[`Client::order_update_stream`](https://docs.rs/ibapi/latest/ibapi/client/struct.Client.html#method.order_update_stream).
+The `order_builder::*` free functions still exist and are unchanged — they are now
+documented as the *advanced / client-less* layer (BYO order id, offline construction,
+hand-composed multi-leg orders). For BYO-id flows with the fluent builder,
+`OrderBuilder::build_order()` returns a bare `Order` you can submit yourself.
+
+```rust,ignore
+// v2.x — manual id + free-fn order construction + place_order
+let order_id = client.next_order_id();
+let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
+client.place_order(order_id, &contract, &order)?;
+```
+
+```rust,ignore
+// v3.0 (sync) — fluent: side implies action; submit() allocates the id
+let order_id = client.order(&contract)
+    .buy(100)
+    .limit(150.0)
+    .submit()?;
+```
+
+```rust,ignore
+// v3.0 (async)
+let order_id = client.order(&contract)
+    .buy(100)
+    .limit(150.0)
+    .submit().await?;
+```
+
+```rust,ignore
+// v3.0 — bracket order: entry + take-profit + stop-loss in one chain
+let bracket_ids = client.order(&contract)
+    .buy(100)
+    .bracket()
+    .entry_limit(150.00)
+    .take_profit(160.00)
+    .stop_loss(145.00)
+    .submit_all()?;
+```
+
+```rust,ignore
+// v3.0 — BYO order id (advanced): use OrderBuilder::build_order() and submit yourself
+let order = client.order(&contract).buy(100).limit(150.0).build_order()?;
+let order_id = my_external_allocator.next();
+client.place_order(order_id, &contract, &order)?;
+```
+
+`client.next_order_id()` is still public for the BYO-id path; it just isn't shown in the
+canonical happy-path examples anymore.
+
+The fluent path covers all four `Action` variants. `.buy(qty)` and `.sell(qty)` are the
+common cases; `.sell_short(qty)` (`SSHORT` — institutional Long/Short account segments)
+and `.sell_long(qty)` (`SLONG` — selling not-yet-delivered long position) cover the
+specialized accounts. Callers that dispatch on a runtime `Action` value can match
+exhaustively without a `_ => unreachable!()` arm.
+
 ### Market data
 
 ```rust,ignore

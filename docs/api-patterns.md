@@ -138,7 +138,7 @@ impl Client {
 
 ### Conditional Order Builder Pattern
 
-The library provides a fluent API for building conditional orders with type-safe condition builders and ergonomic helper functions.
+The library provides a fluent API for building conditional orders with type-safe condition builders and ergonomic helper functions. Conditions chain off the canonical `client.order(&contract).…` builder.
 
 #### Helper Functions
 
@@ -146,22 +146,23 @@ Helper functions provide a concise way to create condition builders:
 
 ```rust
 use ibapi::orders::builder::{price, time, margin, volume, execution, percent_change};
-use ibapi::orders::order_builder;
 
-// Helper functions return partially-built condition builders
+// Helper functions return partially-built condition builders.
 let price_cond = price(265598, "SMART").greater_than(150.0);
 let time_cond = time().greater_than("20251230 14:30:00 US/Eastern");
 let margin_cond = margin().less_than(30);
 let volume_cond = volume(76792991, "SMART").greater_than(50_000_000);
 let pct_change_cond = percent_change(756733, "SMART").greater_than(2.0);
 
-// Execution condition returns OrderCondition directly (no threshold)
+// Execution condition returns OrderCondition directly (no threshold).
 let exec_cond = execution("TSLA", "STK", "SMART");
 
-// Create order with single condition
-let order = order_builder::market_order(Action::Buy, 100.0)
+// Attach a condition via the fluent order builder; submit() allocates the id.
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
     .condition(price_cond)
-    .build();
+    .submit()?;
 ```
 
 #### Fluent Condition Chaining
@@ -169,29 +170,34 @@ let order = order_builder::market_order(Action::Buy, 100.0)
 The `OrderBuilder` provides methods for chaining conditions with AND/OR logic:
 
 ```rust
-use ibapi::orders::builder::{price, time, volume};
-use ibapi::orders::order_builder;
+use ibapi::orders::builder::{price, time, volume, margin};
 
-// Multiple conditions with AND logic (all must be true)
-let order = order_builder::limit_order(Action::Buy, 100.0, 151.0)
+// Multiple conditions with AND logic (all must be true).
+let order_id = client.order(&contract)
+    .buy(100)
+    .limit(151.0)
     .condition(price(265598, "SMART").greater_than(150.0))
     .and_condition(volume(265598, "SMART").greater_than(80_000_000))
     .and_condition(time().greater_than("20251230 10:00:00 US/Eastern"))
-    .build();
+    .submit()?;
 
-// Multiple conditions with OR logic (any can trigger)
-let order = order_builder::market_order(Action::Sell, 100.0)
+// Multiple conditions with OR logic (any can trigger).
+let order_id = client.order(&contract)
+    .sell(100)
+    .market()
     .condition(margin().less_than(25))
     .or_condition(price(265598, "SMART").less_than(140.0))
     .or_condition(time().greater_than("20251230 15:55:00 US/Eastern"))
-    .build();
+    .submit()?;
 
-// Mixed AND/OR logic
-let order = order_builder::limit_order(Action::Buy, 50.0, 452.0)
+// Mixed AND/OR logic.
+let order_id = client.order(&contract)
+    .buy(50)
+    .limit(452.0)
     .condition(price(265598, "SMART").greater_than(150.0))
-    .and_condition(volume(265598, "SMART").greater_than(50_000_000))  // Price AND Volume
+    .and_condition(volume(265598, "SMART").greater_than(50_000_000)) // Price AND Volume
     .or_condition(time().greater_than("20251230 14:00:00 US/Eastern")) // OR Time
-    .build();
+    .submit()?;
 ```
 
 #### Type-State Pattern for Conditions
@@ -245,15 +251,17 @@ order.conditions = vec![
 ];
 ```
 
-**After (v1.0+):**
+**After (v3.0+):**
 ```rust
-// Threshold and direction combined, fluent chaining
-let order = order_builder::market_order(Action::Buy, 100.0)
+// Threshold and direction combined; conditions chain off the fluent order builder.
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
     .condition(price(265598, "SMART").greater_than(150.0))
     .and_condition(time().greater_than("20251230 14:30:00 US/Eastern"))
-    .build();
+    .submit()?;
 
-// Or using builders directly
+// Or build the condition explicitly, then attach.
 let price_cond = PriceCondition::builder(265598, "SMART")
     .greater_than(150.0)
     .build();
@@ -278,36 +286,32 @@ Conditional orders work identically in both sync and async modes:
 ```rust
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::builder::{price, order_builder};
-use ibapi::orders::Action;
+use ibapi::orders::builder::price;
 
 let client = Client::connect("127.0.0.1:7497", 100)?;
 let contract = Contract::stock("AAPL").build();
 
-let order = order_builder::market_order(Action::Buy, 100.0)
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
     .condition(price(265598, "SMART").greater_than(150.0))
-    .build();
-
-let order_id = client.next_valid_order_id()?;
-client.submit_order(order_id, &contract, &order)?;
+    .submit()?;
 ```
 
 **Async Mode:**
 ```rust
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::builder::{price, order_builder};
-use ibapi::orders::Action;
+use ibapi::orders::builder::price;
 
 let client = Client::connect("127.0.0.1:4002", 100).await?;
 let contract = Contract::stock("AAPL").build();
 
-let order = order_builder::market_order(Action::Buy, 100.0)
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
     .condition(price(265598, "SMART").greater_than(150.0))
-    .build();
-
-let order_id = client.next_valid_order_id().await?;
-client.submit_order(order_id, &contract, &order).await?;
+    .submit().await?;
 ```
 
 The only difference is the `.await` calls on client methods. The order building logic is identical.
@@ -335,12 +339,14 @@ fn risk_guard() -> impl Into<OrderCondition> {
     margin().less_than(30)
 }
 
-// Compose conditions
-let order = order_builder::market_order(Action::Buy, 100.0)
+// Compose conditions onto the fluent order builder.
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
     .condition(liquidity_check(265598, 50_000_000))
     .and_condition(trading_hours_only())
     .and_condition(risk_guard())
-    .build();
+    .submit()?;
 ```
 
 For comprehensive conditional order documentation, see [Order Types - Conditional Orders](order-types.md#conditional-orders-with-conditions).

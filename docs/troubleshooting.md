@@ -154,11 +154,12 @@ Error: Invalid order ID
 ```
 
 **Solution:**
-Always use `client.next_order_id()` to get a valid order ID:
+Use the canonical fluent path — `submit()` allocates a valid id internally:
 ```rust
-let order_id = client.next_order_id();
-client.place_order(order_id, &contract, &order)?;
+let order_id = client.order(&contract).buy(100).market().submit()?;
 ```
+
+For BYO-id flows (external allocator) use `client.next_order_id()` and the lower-level `client.submit_order(id, &contract, &order)` / `client.place_order(id, &contract, &order)`.
 
 ### Order Rejected
 
@@ -320,7 +321,7 @@ If you're still stuck:
 - [ ] Correct port number?
 - [ ] API enabled in IB Gateway/TWS?
 - [ ] Market data subscriptions active?
-- [ ] Using `client.next_order_id()` for orders?
+- [ ] Submitting via `client.order(&contract).…submit()` (canonical) or BYO-id `next_order_id()` + `submit_order` (advanced)?
 - [ ] Market open for the symbol?
 - [ ] Debug logging enabled?
 - [ ] Checked examples for similar use case?
