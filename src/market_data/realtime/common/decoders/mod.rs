@@ -2,7 +2,7 @@ use prost::Message;
 
 use crate::contracts::OptionComputation;
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::{optional_f64, parse_f64, ts};
+use crate::proto::decoders::{optional_f64, optional_string_f64, parse_f64, ts};
 use crate::server_versions;
 use crate::Error;
 
@@ -11,18 +11,6 @@ use crate::market_data::realtime::{
     TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 use crate::market_data::MarketDataType;
-
-// All originating outgoing-request gates for RealTimeBars / TickByTick
-// (`PROTOBUF_HISTORICAL_DATA` = 208) and the MarketData family — TickPrice /
-// TickSize / TickString / TickGeneric / TickOptionComputation / TickReqParams /
-// MarketDataType / MarketDepth / MarketDepthL2 (`PROTOBUF_MARKET_DATA` = 206) —
-// sit at or below the connection floor (`PROTOBUF_SCAN_DATA` = 210). The server
-// always emits proto framing for these messages — text-framed arrival is
-// rejected via `ResponseMessage::require_proto` and skip-classifies (rule 20).
-//
-// `decode_tick_efp` stays text-only: the server has no proto encoder for
-// TickEFP. `decode_market_depth_exchanges` stays dual-format: its outgoing
-// gate (`PROTOBUF_REST_MESSAGES_3` = 213) is above the floor.
 
 pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     decode_realtime_bar_proto(message.require_proto()?)
@@ -48,6 +36,7 @@ pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<Ma
     decode_market_depth_l2_proto(message.require_proto()?)
 }
 
+// Stays dual-format: outgoing gate `PROTOBUF_REST_MESSAGES_3` (213) > floor 210.
 pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
     message.decode_proto_or_text(decode_market_depth_exchanges_proto, |msg| {
         msg.skip(); // message type
@@ -89,6 +78,7 @@ pub(crate) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickSt
     decode_tick_string_proto(message.require_proto()?)
 }
 
+// Stays text-only: TWS has no protobuf encoder for TickEFP.
 pub(crate) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, Error> {
     message.skip(); // message type
     message.skip(); // message version
@@ -232,7 +222,7 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
 
     let tick_type = TickType::from(msg.tick_type.unwrap_or_default());
     let price = msg.price.unwrap_or_default();
-    let size: f64 = msg.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or(f64::MAX);
+    let size = optional_string_f64(&msg.size);
     let attr_mask = msg.attr_mask.unwrap_or_default();
 
     let attributes = TickAttribute {
@@ -251,20 +241,19 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
         _ => TickType::Unknown,
     };
 
-    if size_tick_type == TickType::Unknown || size == f64::MAX {
-        Ok(TickTypes::Price(TickPrice {
+    match (size_tick_type, size) {
+        (TickType::Unknown, _) | (_, None) => Ok(TickTypes::Price(TickPrice {
             tick_type,
             price,
             attributes,
-        }))
-    } else {
-        Ok(TickTypes::PriceSize(TickPriceSize {
+        })),
+        (size_tick_type, Some(size)) => Ok(TickTypes::PriceSize(TickPriceSize {
             price_tick_type: tick_type,
             price,
             attributes,
             size_tick_type,
             size,
-        }))
+        })),
     }
 }
 

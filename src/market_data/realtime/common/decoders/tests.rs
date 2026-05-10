@@ -1,35 +1,29 @@
 use super::*;
 use crate::messages::ResponseMessage;
 use crate::subscriptions::DecoderContext;
+use crate::testdata::builders::market_data::{
+    bid_ask_tick, market_depth_response, mid_point_tick, realtime_bar_tick, tick_generic, tick_price, tick_size, tick_string, trade_tick,
+    BidAskTickResponse, MidPointTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 use time::OffsetDateTime;
 
-fn encode<M: prost::Message>(msg: &M) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    msg.encode(&mut bytes).unwrap();
-    bytes
-}
-
-#[cfg(test)]
 mod realtime_bar_tests {
     use super::*;
 
-    fn proto_bar() -> crate::proto::RealTimeBarTick {
-        crate::proto::RealTimeBarTick {
-            req_id: Some(9000),
-            time: Some(1678323335),
-            open: Some(4028.75),
-            high: Some(4029.00),
-            low: Some(4028.25),
-            close: Some(4028.50),
-            volume: Some("2".into()),
-            wap: Some("4026.75".into()),
-            count: Some(1),
-        }
+    fn fixture() -> Vec<u8> {
+        realtime_bar_tick()
+            .time(1678323335)
+            .ohlc(4028.75, 4029.00, 4028.25, 4028.50)
+            .volume(2.0)
+            .wap(4026.75)
+            .count(1)
+            .encode_proto()
     }
 
     #[test]
     fn test_decode_realtime_bar_proto() {
-        let bar = decode_realtime_bar_proto(&encode(&proto_bar())).expect("decode failed");
+        let bar = decode_realtime_bar_proto(&fixture()).expect("decode failed");
 
         assert_eq!(bar.date, OffsetDateTime::from_unix_timestamp(1678323335).unwrap());
         assert_eq!(bar.open, 4028.75);
@@ -45,7 +39,7 @@ mod realtime_bar_tests {
     fn test_decode_realtime_bar_through_wrapper() {
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::RealTimeBars as i32,
-            encode(&proto_bar()),
+            fixture(),
             server_versions::PROTOBUF_HISTORICAL_DATA,
         );
         let bar = decode_realtime_bar(&mut message).expect("decode failed");
@@ -54,7 +48,6 @@ mod realtime_bar_tests {
 
     #[test]
     fn test_decode_realtime_bar_invalid_proto_bytes() {
-        // Garbage bytes — prost decode error.
         let result = decode_realtime_bar_proto(&[0xff, 0xff, 0xff]);
         assert!(result.is_err());
     }
@@ -71,33 +64,23 @@ mod realtime_bar_tests {
     }
 }
 
-#[cfg(test)]
 mod trade_tick_tests {
     use super::*;
 
-    fn proto_trade(tick_type: i32) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(tick_type),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(
-                crate::proto::HistoricalTickLast {
-                    time: Some(1678740829),
-                    tick_attrib_last: Some(crate::proto::TickAttribLast {
-                        past_limit: Some(false),
-                        unreported: Some(true),
-                    }),
-                    price: Some(3895.25),
-                    size: Some("7".into()),
-                    exchange: Some("NASDAQ".into()),
-                    special_conditions: Some("Regular".into()),
-                },
-            )),
-        }
+    fn fixture(tick_type: i32) -> TradeTickResponse {
+        trade_tick()
+            .tick_type(tick_type)
+            .time(1678740829)
+            .price(3895.25)
+            .size(7.0)
+            .attributes(false, true)
+            .exchange("NASDAQ")
+            .special_conditions("Regular")
     }
 
     #[test]
     fn test_decode_trade_tick_proto_last() {
-        let trade = decode_trade_tick_proto(&encode(&proto_trade(1))).expect("decode failed");
+        let trade = decode_trade_tick_proto(&fixture(1).encode_proto()).expect("decode failed");
         assert_eq!(trade.tick_type, "1");
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(trade.price, 3895.25);
@@ -110,27 +93,26 @@ mod trade_tick_tests {
 
     #[test]
     fn test_decode_trade_tick_proto_all_last() {
-        // tick_type 2 = AllLast.
-        let trade = decode_trade_tick_proto(&encode(&proto_trade(2))).expect("decode failed");
+        let trade = decode_trade_tick_proto(&fixture(2).encode_proto()).expect("decode failed");
         assert_eq!(trade.tick_type, "2");
     }
 
     #[test]
     fn test_decode_trade_tick_proto_invalid_type() {
         // tick_type 3 = BidAsk — wrong feed for the trade decoder.
-        let result = decode_trade_tick_proto(&encode(&proto_trade(3)));
-        let err = result.expect_err("should reject bid/ask tick type");
+        let err = decode_trade_tick_proto(&fixture(3).encode_proto()).expect_err("should reject bid/ask tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
     }
 
     #[test]
     fn test_decode_trade_tick_proto_missing_payload() {
+        // Build a tick_type=1 envelope with no inner Tick variant.
         let msg = crate::proto::TickByTickData {
             req_id: Some(9000),
             tick_type: Some(1),
             tick: None,
         };
-        let result = decode_trade_tick_proto(&encode(&msg));
+        let result = decode_trade_tick_proto(&msg.encode_to_vec());
         assert!(result.is_err());
     }
 
@@ -138,7 +120,7 @@ mod trade_tick_tests {
     fn test_decode_trade_tick_through_wrapper() {
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::TickByTick as i32,
-            encode(&proto_trade(1)),
+            fixture(1).encode_proto(),
             server_versions::PROTOBUF_HISTORICAL_DATA,
         );
         let trade = decode_trade_tick(&mut message).expect("decode failed");
@@ -146,33 +128,19 @@ mod trade_tick_tests {
     }
 }
 
-#[cfg(test)]
 mod bid_ask_tests {
     use super::*;
 
-    fn proto_bid_ask(mask: u32) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(3),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(
-                crate::proto::HistoricalTickBidAsk {
-                    time: Some(1678745793),
-                    tick_attrib_bid_ask: Some(crate::proto::TickAttribBidAsk {
-                        bid_past_low: Some(mask & 0x1 != 0),
-                        ask_past_high: Some(mask & 0x2 != 0),
-                    }),
-                    price_bid: Some(3895.50),
-                    price_ask: Some(3896.00),
-                    size_bid: Some("9".into()),
-                    size_ask: Some("11".into()),
-                },
-            )),
-        }
+    fn fixture(mask: u32) -> BidAskTickResponse {
+        bid_ask_tick()
+            .time(1678745793)
+            .quote(3895.50, 3896.00, 9.0, 11.0)
+            .attributes(mask & 0x1 != 0, mask & 0x2 != 0)
     }
 
     #[test]
     fn test_decode_bid_ask_proto_basic() {
-        let bid_ask = decode_bid_ask_tick_proto(&encode(&proto_bid_ask(3))).expect("decode failed");
+        let bid_ask = decode_bid_ask_tick_proto(&fixture(3).encode_proto()).expect("decode failed");
         assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap());
         assert_eq!(bid_ask.bid_price, 3895.50);
         assert_eq!(bid_ask.ask_price, 3896.00);
@@ -185,7 +153,7 @@ mod bid_ask_tests {
     #[test]
     fn test_decode_bid_ask_proto_attributes() {
         for (mask, expected_bid_past_low, expected_ask_past_high) in [(0, false, false), (1, true, false), (2, false, true), (3, true, true)] {
-            let bid_ask = decode_bid_ask_tick_proto(&encode(&proto_bid_ask(mask))).expect("decode failed");
+            let bid_ask = decode_bid_ask_tick_proto(&fixture(mask).encode_proto()).expect("decode failed");
             assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, expected_bid_past_low, "mask {mask}");
             assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, expected_ask_past_high, "mask {mask}");
         }
@@ -199,32 +167,21 @@ mod bid_ask_tests {
             tick_type: Some(1),
             tick: None,
         };
-        let err = decode_bid_ask_tick_proto(&encode(&msg)).expect_err("should reject last tick type");
+        let err = decode_bid_ask_tick_proto(&msg.encode_to_vec()).expect_err("should reject last tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
     }
 }
 
-#[cfg(test)]
 mod mid_point_tests {
     use super::*;
 
-    fn proto_mid_point() -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(4),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(
-                crate::proto::HistoricalTick {
-                    time: Some(1678740829),
-                    price: Some(3895.375),
-                    size: Some("0".into()),
-                },
-            )),
-        }
+    fn fixture() -> MidPointTickResponse {
+        mid_point_tick().time(1678740829).mid_point(3895.375)
     }
 
     #[test]
     fn test_decode_mid_point_tick_proto() {
-        let mid = decode_mid_point_tick_proto(&encode(&proto_mid_point())).expect("decode failed");
+        let mid = decode_mid_point_tick_proto(&fixture().encode_proto()).expect("decode failed");
         assert_eq!(mid.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(mid.mid_point, 3895.375);
     }
@@ -236,33 +193,24 @@ mod mid_point_tests {
             tick_type: Some(1),
             tick: None,
         };
-        let err = decode_mid_point_tick_proto(&encode(&msg)).expect_err("should reject last tick type");
+        let err = decode_mid_point_tick_proto(&msg.encode_to_vec()).expect_err("should reject last tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
     }
 }
 
-#[cfg(test)]
 mod market_depth_tests {
     use super::*;
 
-    fn proto_depth(side: i32, operation: i32) -> crate::proto::MarketDepth {
-        crate::proto::MarketDepth {
-            req_id: Some(9000),
-            market_depth_data: Some(crate::proto::MarketDepthData {
-                position: Some(0),
-                operation: Some(operation),
-                side: Some(side),
-                price: Some(185.50),
-                size: Some("100".into()),
-                market_maker: None,
-                is_smart_depth: None,
-            }),
-        }
-    }
-
     #[test]
     fn test_decode_market_depth_proto_basic() {
-        let depth = decode_market_depth_proto(&encode(&proto_depth(1, 1))).expect("decode failed");
+        let bytes = market_depth_response()
+            .position(0)
+            .operation(1)
+            .side(1)
+            .price(185.50)
+            .size(100.0)
+            .encode_proto();
+        let depth = decode_market_depth_proto(&bytes).expect("decode failed");
         assert_eq!(depth.position, 0);
         assert_eq!(depth.operation, 1);
         assert_eq!(depth.side, 1);
@@ -273,7 +221,8 @@ mod market_depth_tests {
     #[test]
     fn test_decode_market_depth_proto_operations() {
         for op in [0, 1, 2] {
-            let depth = decode_market_depth_proto(&encode(&proto_depth(1, op))).expect("decode failed");
+            let bytes = market_depth_response().operation(op).side(1).price(185.50).size(100.0).encode_proto();
+            let depth = decode_market_depth_proto(&bytes).expect("decode failed");
             assert_eq!(depth.operation, op);
         }
     }
@@ -281,7 +230,8 @@ mod market_depth_tests {
     #[test]
     fn test_decode_market_depth_proto_sides() {
         for side in [0, 1] {
-            let depth = decode_market_depth_proto(&encode(&proto_depth(side, 0))).expect("decode failed");
+            let bytes = market_depth_response().side(side).price(185.50).size(100.0).encode_proto();
+            let depth = decode_market_depth_proto(&bytes).expect("decode failed");
             assert_eq!(depth.side, side);
         }
     }
@@ -292,12 +242,14 @@ mod market_depth_tests {
             req_id: Some(9000),
             market_depth_data: None,
         };
-        let err = decode_market_depth_proto(&encode(&msg)).expect_err("missing data should error");
+        let err = decode_market_depth_proto(&msg.encode_to_vec()).expect_err("missing data should error");
         assert!(err.to_string().contains("missing market_depth_data"));
     }
 
     #[test]
     fn test_decode_market_depth_l2_proto() {
+        // L2 carries market_maker + is_smart_depth, fields the MarketDepthResponse builder
+        // doesn't expose; build the proto directly.
         let proto_msg = crate::proto::MarketDepthL2 {
             req_id: Some(9000),
             market_depth_data: Some(crate::proto::MarketDepthData {
@@ -310,7 +262,7 @@ mod market_depth_tests {
                 is_smart_depth: Some(true),
             }),
         };
-        let depth = decode_market_depth_l2_proto(&encode(&proto_msg)).expect("decode failed");
+        let depth = decode_market_depth_l2_proto(&proto_msg.encode_to_vec()).expect("decode failed");
 
         assert_eq!(depth.position, 0);
         assert_eq!(depth.market_maker, "ISLAND");
@@ -335,7 +287,7 @@ mod market_depth_tests {
                 is_smart_depth: None,
             }),
         };
-        let depth = decode_market_depth_l2_proto(&encode(&proto_msg)).expect("decode failed");
+        let depth = decode_market_depth_l2_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert!(!depth.smart_depth, "missing smart_depth flag should default to false");
     }
 
@@ -360,7 +312,7 @@ mod market_depth_tests {
             ],
         };
 
-        let exchanges = decode_market_depth_exchanges_proto(&encode(&proto_msg)).expect("decode failed");
+        let exchanges = decode_market_depth_exchanges_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert_eq!(exchanges.len(), 2);
         assert_eq!(exchanges[0].exchange_name, "ISLAND");
         assert_eq!(exchanges[0].listing_exchange, "NASDAQ");
@@ -371,7 +323,7 @@ mod market_depth_tests {
 
     #[test]
     fn test_decode_market_depth_exchanges_text_path() {
-        // MktDepthExchanges stays dual-format until floor 213; text path still active at 210.
+        // Stays dual-format until floor 213; text path still active.
         let mut message = ResponseMessage::from("71\02\0ISLAND\0STK\0NASDAQ\0DEEP2\01\0NYSE\0STK\0NYSE\0DEEP\01\0");
         let exchanges = decode_market_depth_exchanges(server_versions::SERVICE_DATA_TYPE, &mut message).expect("decode failed");
         assert_eq!(exchanges.len(), 2);
@@ -392,22 +344,18 @@ mod market_depth_tests {
     }
 }
 
-#[cfg(test)]
 mod tick_price_tests {
     use super::*;
+
+    fn fixture(tick_type: i32, attr_mask: i32) -> TickPriceResponse {
+        tick_price().tick_type(tick_type).price(150.25).size(100.0).attr_mask(attr_mask)
+    }
 
     #[test]
     fn test_decode_tick_price_proto_with_size() {
         // TickType::Bid = 1, should produce PriceSize with BidSize.
-        let proto_msg = crate::proto::TickPrice {
-            req_id: Some(1),
-            tick_type: Some(1),
-            price: Some(150.25),
-            size: Some("100".into()),
-            attr_mask: Some(0x5), // can_auto_execute + pre_open
-        };
-
-        let result = decode_tick_price_proto(&encode(&proto_msg)).expect("decode failed");
+        // attr_mask 0x5 = can_auto_execute + pre_open
+        let result = decode_tick_price_proto(&fixture(1, 0x5).encode_proto()).expect("decode failed");
         match result {
             TickTypes::PriceSize(ps) => {
                 assert_eq!(ps.price_tick_type, TickType::Bid);
@@ -424,17 +372,9 @@ mod tick_price_tests {
 
     #[test]
     fn test_decode_tick_price_proto_unknown_type() {
-        // TickType 99 => Unknown size tick type => returns Price variant.
-        let proto_msg = crate::proto::TickPrice {
-            req_id: Some(1),
-            tick_type: Some(99),
-            price: Some(42.0),
-            size: Some("10".into()),
-            attr_mask: Some(0x2),
-        };
-
-        let result = decode_tick_price_proto(&encode(&proto_msg)).expect("decode failed");
-        match result {
+        // TickType 99 → Unknown size tick type → returns Price variant.
+        let proto_msg = tick_price().tick_type(99).price(42.0).size(10.0).attr_mask(0x2).encode_proto();
+        match decode_tick_price_proto(&proto_msg).expect("decode failed") {
             TickTypes::Price(tp) => {
                 assert_eq!(tp.price, 42.0);
                 assert!(tp.attributes.past_limit);
@@ -446,33 +386,24 @@ mod tick_price_tests {
     #[test]
     fn test_decode_tick_price_proto_no_size() {
         // size missing → Price variant (no size companion tick).
-        let proto_msg = crate::proto::TickPrice {
-            req_id: Some(1),
-            tick_type: Some(1),
-            price: Some(150.25),
-            size: None,
-            attr_mask: Some(0),
-        };
-
-        match decode_tick_price_proto(&encode(&proto_msg)).expect("decode failed") {
+        let bytes = tick_price().tick_type(1).price(150.25).encode_proto();
+        match decode_tick_price_proto(&bytes).expect("decode failed") {
             TickTypes::Price(tp) => assert_eq!(tp.tick_type, TickType::Bid),
             _ => panic!("expected Price variant when size missing"),
         }
     }
 }
 
-#[cfg(test)]
 mod tick_size_tests {
     use super::*;
 
+    fn fixture(tick_type: i32) -> TickSizeResponse {
+        tick_size().tick_type(tick_type).size(500.0)
+    }
+
     #[test]
     fn test_decode_tick_size_proto() {
-        let proto_msg = crate::proto::TickSize {
-            req_id: Some(1),
-            tick_type: Some(0), // BidSize
-            size: Some("500".into()),
-        };
-        let result = decode_tick_size_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_size_proto(&fixture(0).encode_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::BidSize);
         assert_eq!(result.size, 500.0);
     }
@@ -485,52 +416,43 @@ mod tick_size_tests {
             (5, TickType::LastSize),
             (8, TickType::Volume),
         ] {
-            let proto_msg = crate::proto::TickSize {
-                req_id: Some(1),
-                tick_type: Some(type_id),
-                size: Some("100".into()),
-            };
-            let tick = decode_tick_size_proto(&encode(&proto_msg)).expect("decode failed");
+            let bytes = tick_size().tick_type(type_id).size(100.0).encode_proto();
+            let tick = decode_tick_size_proto(&bytes).expect("decode failed");
             assert_eq!(tick.tick_type, expected, "type_id {type_id}");
         }
     }
 }
 
-#[cfg(test)]
 mod tick_string_tests {
     use super::*;
 
+    fn fixture() -> TickStringResponse {
+        tick_string().tick_type(45).value("1681133400")
+    }
+
     #[test]
     fn test_decode_tick_string_proto() {
-        let proto_msg = crate::proto::TickString {
-            req_id: Some(1),
-            tick_type: Some(45), // LastTimestamp
-            value: Some("1681133400".into()),
-        };
-        let result = decode_tick_string_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_string_proto(&fixture().encode_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::LastTimestamp);
         assert_eq!(result.value, "1681133400");
     }
 }
 
-#[cfg(test)]
 mod tick_generic_tests {
     use super::*;
 
+    fn fixture() -> TickGenericResponse {
+        tick_generic().tick_type(49).value(0.0)
+    }
+
     #[test]
     fn test_decode_tick_generic_proto() {
-        let proto_msg = crate::proto::TickGeneric {
-            req_id: Some(1),
-            tick_type: Some(49), // Halted
-            value: Some(0.0),
-        };
-        let result = decode_tick_generic_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_generic_proto(&fixture().encode_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::Halted);
         assert_eq!(result.value, 0.0);
     }
 }
 
-#[cfg(test)]
 mod tick_efp_tests {
     use super::*;
 
@@ -567,7 +489,6 @@ mod tick_efp_tests {
     }
 }
 
-#[cfg(test)]
 mod tick_option_computation_tests {
     use super::*;
 
@@ -587,7 +508,7 @@ mod tick_option_computation_tests {
             und_price: Some(150.0),
         };
 
-        let result = decode_tick_option_computation_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_option_computation_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert_eq!(result.field, TickType::ModelOption);
         assert_eq!(result.tick_attribute, Some(1));
         assert_eq!(result.implied_volatility, Some(0.25));
@@ -609,12 +530,11 @@ mod tick_option_computation_tests {
             implied_vol: Some(f64::MAX),
             ..Default::default()
         };
-        let result = decode_tick_option_computation_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_option_computation_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert_eq!(result.implied_volatility, None);
     }
 }
 
-#[cfg(test)]
 mod tick_request_parameters_tests {
     use super::*;
 
@@ -628,14 +548,13 @@ mod tick_request_parameters_tests {
             ..Default::default()
         };
 
-        let result = decode_tick_request_parameters_proto(&encode(&proto_msg)).expect("decode failed");
+        let result = decode_tick_request_parameters_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert_eq!(result.min_tick, 0.01);
         assert_eq!(result.bbo_exchange, "ISLAND");
         assert_eq!(result.snapshot_permissions, 2);
     }
 }
 
-#[cfg(test)]
 mod market_data_type_tests {
     use super::*;
     use crate::subscriptions::common::StreamDecoder;
@@ -646,14 +565,20 @@ mod market_data_type_tests {
             req_id: Some(9000),
             market_data_type: Some(3),
         };
-        assert_eq!(decode_market_data_type_proto(&encode(&proto_msg)).unwrap(), MarketDataType::Delayed);
+        assert_eq!(
+            decode_market_data_type_proto(&proto_msg.encode_to_vec()).unwrap(),
+            MarketDataType::Delayed
+        );
 
         // Forward-compat: out-of-range int → Unknown (no error).
         let proto_msg = crate::proto::MarketDataType {
             req_id: Some(9000),
             market_data_type: Some(99),
         };
-        assert_eq!(decode_market_data_type_proto(&encode(&proto_msg)).unwrap(), MarketDataType::Unknown);
+        assert_eq!(
+            decode_market_data_type_proto(&proto_msg.encode_to_vec()).unwrap(),
+            MarketDataType::Unknown
+        );
     }
 
     #[test]
@@ -665,7 +590,7 @@ mod market_data_type_tests {
         };
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::MarketDataType as i32,
-            encode(&proto_msg),
+            proto_msg.encode_to_vec(),
             server_versions::PROTOBUF,
         );
         let context = DecoderContext::new(server_versions::PROTOBUF, None);
@@ -687,7 +612,7 @@ mod market_data_type_tests {
         };
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::TickReqParams as i32,
-            encode(&proto_msg),
+            proto_msg.encode_to_vec(),
             server_versions::PROTOBUF,
         );
         let context = DecoderContext::new(server_versions::PROTOBUF, None);

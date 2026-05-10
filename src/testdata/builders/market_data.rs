@@ -1,12 +1,11 @@
-//! Builders for market-data domain request messages.
+//! Builders for market-data domain request and response messages.
 //!
 //! Covers both `historical` and `realtime` submodules. Response builders are
-//! intentionally absent: market-data responses use IB's per-message text wire
-//! format (no protobuf), and the existing inline literals in
-//! `{historical,realtime}/{sync,async}/tests.rs` already exercise the
-//! production decoders end-to-end.
+//! gated on the family's protobuf wire being available; realtime
+//! TickByTick / RealTimeBars / MarketData / MarketDepth shipped proto in
+//! [#543](https://github.com/wboayue/rust-ibapi/pull/543).
 
-use super::RequestEncoder;
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
 use crate::contracts::{Contract, TagValue};
 use crate::market_data::historical::{BarSize, Duration, WhatToShow as HistoricalWhatToShow};
@@ -585,4 +584,588 @@ pub fn market_depth_exchanges_request() -> MarketDepthExchangesRequestBuilder {
 
 pub fn market_data_request() -> MarketDataRequestBuilder {
     MarketDataRequestBuilder::default()
+}
+
+// =============================================================================
+// Realtime response builders (RealTimeBars, TickByTick, MarketDepth,
+// TickPrice/Size/String/Generic) — pair with `proto_response()` in tests.
+// =============================================================================
+
+#[derive(Clone, Debug)]
+pub struct RealTimeBarTickResponse {
+    pub request_id: i32,
+    pub time: i64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+    pub wap: f64,
+    pub count: i32,
+}
+
+impl Default for RealTimeBarTickResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            time: 0,
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            wap: 0.0,
+            count: 0,
+        }
+    }
+}
+
+impl RealTimeBarTickResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn time(mut self, v: i64) -> Self {
+        self.time = v;
+        self
+    }
+    pub fn ohlc(mut self, open: f64, high: f64, low: f64, close: f64) -> Self {
+        self.open = open;
+        self.high = high;
+        self.low = low;
+        self.close = close;
+        self
+    }
+    pub fn volume(mut self, v: f64) -> Self {
+        self.volume = v;
+        self
+    }
+    pub fn wap(mut self, v: f64) -> Self {
+        self.wap = v;
+        self
+    }
+    pub fn count(mut self, v: i32) -> Self {
+        self.count = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for RealTimeBarTickResponse {
+    type Proto = proto::RealTimeBarTick;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::RealTimeBarTick {
+            req_id: Some(self.request_id),
+            time: Some(self.time),
+            open: Some(self.open),
+            high: Some(self.high),
+            low: Some(self.low),
+            close: Some(self.close),
+            volume: Some(self.volume.to_string()),
+            wap: Some(self.wap.to_string()),
+            count: Some(self.count),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TradeTickResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub time: i64,
+    pub price: f64,
+    pub size: f64,
+    pub past_limit: bool,
+    pub unreported: bool,
+    pub exchange: String,
+    pub special_conditions: String,
+}
+
+impl Default for TradeTickResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 1,
+            time: 0,
+            price: 0.0,
+            size: 0.0,
+            past_limit: false,
+            unreported: false,
+            exchange: String::new(),
+            special_conditions: String::new(),
+        }
+    }
+}
+
+impl TradeTickResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn time(mut self, v: i64) -> Self {
+        self.time = v;
+        self
+    }
+    pub fn price(mut self, v: f64) -> Self {
+        self.price = v;
+        self
+    }
+    pub fn size(mut self, v: f64) -> Self {
+        self.size = v;
+        self
+    }
+    pub fn attributes(mut self, past_limit: bool, unreported: bool) -> Self {
+        self.past_limit = past_limit;
+        self.unreported = unreported;
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+    pub fn special_conditions(mut self, v: impl Into<String>) -> Self {
+        self.special_conditions = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TradeTickResponse {
+    type Proto = proto::TickByTickData;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickByTickData {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickLast(proto::HistoricalTickLast {
+                time: Some(self.time),
+                tick_attrib_last: Some(proto::TickAttribLast {
+                    past_limit: Some(self.past_limit),
+                    unreported: Some(self.unreported),
+                }),
+                price: Some(self.price),
+                size: Some(self.size.to_string()),
+                exchange: some_str(&self.exchange),
+                special_conditions: some_str(&self.special_conditions),
+            })),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct BidAskTickResponse {
+    pub request_id: i32,
+    pub time: i64,
+    pub bid_price: f64,
+    pub ask_price: f64,
+    pub bid_size: f64,
+    pub ask_size: f64,
+    pub bid_past_low: bool,
+    pub ask_past_high: bool,
+}
+
+impl Default for BidAskTickResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            time: 0,
+            bid_price: 0.0,
+            ask_price: 0.0,
+            bid_size: 0.0,
+            ask_size: 0.0,
+            bid_past_low: false,
+            ask_past_high: false,
+        }
+    }
+}
+
+impl BidAskTickResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn time(mut self, v: i64) -> Self {
+        self.time = v;
+        self
+    }
+    pub fn quote(mut self, bid_price: f64, ask_price: f64, bid_size: f64, ask_size: f64) -> Self {
+        self.bid_price = bid_price;
+        self.ask_price = ask_price;
+        self.bid_size = bid_size;
+        self.ask_size = ask_size;
+        self
+    }
+    pub fn attributes(mut self, bid_past_low: bool, ask_past_high: bool) -> Self {
+        self.bid_past_low = bid_past_low;
+        self.ask_past_high = ask_past_high;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for BidAskTickResponse {
+    type Proto = proto::TickByTickData;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickByTickData {
+            req_id: Some(self.request_id),
+            tick_type: Some(3),
+            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(proto::HistoricalTickBidAsk {
+                time: Some(self.time),
+                tick_attrib_bid_ask: Some(proto::TickAttribBidAsk {
+                    bid_past_low: Some(self.bid_past_low),
+                    ask_past_high: Some(self.ask_past_high),
+                }),
+                price_bid: Some(self.bid_price),
+                price_ask: Some(self.ask_price),
+                size_bid: Some(self.bid_size.to_string()),
+                size_ask: Some(self.ask_size.to_string()),
+            })),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MidPointTickResponse {
+    pub request_id: i32,
+    pub time: i64,
+    pub mid_point: f64,
+}
+
+impl Default for MidPointTickResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            time: 0,
+            mid_point: 0.0,
+        }
+    }
+}
+
+impl MidPointTickResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn time(mut self, v: i64) -> Self {
+        self.time = v;
+        self
+    }
+    pub fn mid_point(mut self, v: f64) -> Self {
+        self.mid_point = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for MidPointTickResponse {
+    type Proto = proto::TickByTickData;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickByTickData {
+            req_id: Some(self.request_id),
+            tick_type: Some(4),
+            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(proto::HistoricalTick {
+                time: Some(self.time),
+                price: Some(self.mid_point),
+                size: Some("0".into()),
+            })),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MarketDepthResponse {
+    pub request_id: i32,
+    pub position: i32,
+    pub operation: i32,
+    pub side: i32,
+    pub price: f64,
+    pub size: f64,
+}
+
+impl Default for MarketDepthResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            position: 0,
+            operation: 0,
+            side: 0,
+            price: 0.0,
+            size: 0.0,
+        }
+    }
+}
+
+impl MarketDepthResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn position(mut self, v: i32) -> Self {
+        self.position = v;
+        self
+    }
+    pub fn operation(mut self, v: i32) -> Self {
+        self.operation = v;
+        self
+    }
+    pub fn side(mut self, v: i32) -> Self {
+        self.side = v;
+        self
+    }
+    pub fn price(mut self, v: f64) -> Self {
+        self.price = v;
+        self
+    }
+    pub fn size(mut self, v: f64) -> Self {
+        self.size = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for MarketDepthResponse {
+    type Proto = proto::MarketDepth;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::MarketDepth {
+            req_id: Some(self.request_id),
+            market_depth_data: Some(proto::MarketDepthData {
+                position: Some(self.position),
+                operation: Some(self.operation),
+                side: Some(self.side),
+                price: Some(self.price),
+                size: Some(self.size.to_string()),
+                market_maker: None,
+                is_smart_depth: None,
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TickPriceResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub price: f64,
+    pub size: Option<f64>,
+    pub attr_mask: i32,
+}
+
+impl Default for TickPriceResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 0,
+            price: 0.0,
+            size: None,
+            attr_mask: 0,
+        }
+    }
+}
+
+impl TickPriceResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn price(mut self, v: f64) -> Self {
+        self.price = v;
+        self
+    }
+    pub fn size(mut self, v: f64) -> Self {
+        self.size = Some(v);
+        self
+    }
+    pub fn attr_mask(mut self, v: i32) -> Self {
+        self.attr_mask = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickPriceResponse {
+    type Proto = proto::TickPrice;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickPrice {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            price: Some(self.price),
+            size: self.size.map(|s| s.to_string()),
+            attr_mask: Some(self.attr_mask),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TickSizeResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub size: f64,
+}
+
+impl Default for TickSizeResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 0,
+            size: 0.0,
+        }
+    }
+}
+
+impl TickSizeResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn size(mut self, v: f64) -> Self {
+        self.size = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickSizeResponse {
+    type Proto = proto::TickSize;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickSize {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            size: Some(self.size.to_string()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TickStringResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub value: String,
+}
+
+impl Default for TickStringResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 0,
+            value: String::new(),
+        }
+    }
+}
+
+impl TickStringResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn value(mut self, v: impl Into<String>) -> Self {
+        self.value = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickStringResponse {
+    type Proto = proto::TickString;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickString {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            value: some_str(&self.value),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TickGenericResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub value: f64,
+}
+
+impl Default for TickGenericResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 0,
+            value: 0.0,
+        }
+    }
+}
+
+impl TickGenericResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn value(mut self, v: f64) -> Self {
+        self.value = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickGenericResponse {
+    type Proto = proto::TickGeneric;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickGeneric {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            value: Some(self.value),
+        }
+    }
+}
+
+pub fn realtime_bar_tick() -> RealTimeBarTickResponse {
+    RealTimeBarTickResponse::default()
+}
+
+pub fn trade_tick() -> TradeTickResponse {
+    TradeTickResponse::default()
+}
+
+pub fn bid_ask_tick() -> BidAskTickResponse {
+    BidAskTickResponse::default()
+}
+
+pub fn mid_point_tick() -> MidPointTickResponse {
+    MidPointTickResponse::default()
+}
+
+pub fn market_depth_response() -> MarketDepthResponse {
+    MarketDepthResponse::default()
+}
+
+pub fn tick_price() -> TickPriceResponse {
+    TickPriceResponse::default()
+}
+
+pub fn tick_size() -> TickSizeResponse {
+    TickSizeResponse::default()
+}
+
+pub fn tick_string() -> TickStringResponse {
+    TickStringResponse::default()
+}
+
+pub fn tick_generic() -> TickGenericResponse {
+    TickGenericResponse::default()
 }
