@@ -286,14 +286,14 @@ fn test_contract_builder_combo_legs() {
             contract_id: 12345,
             ratio: 1,
             action: "BUY".to_string(),
-            exchange: Exchange::from("SMART"),
+            exchange: "SMART".to_string(),
             ..Default::default()
         },
         ComboLeg {
             contract_id: 67890,
             ratio: 1,
             action: "SELL".to_string(),
-            exchange: Exchange::from("SMART"),
+            exchange: "SMART".to_string(),
             ..Default::default()
         },
     ];
@@ -382,6 +382,104 @@ fn test_contract_builder_defaults() {
     assert_eq!(contract.combo_legs_description, "");
     assert!(contract.combo_legs.is_empty());
     assert!(contract.delta_neutral_contract.is_none());
+    assert!(contract.last_trade_date.is_none());
     assert_eq!(contract.issuer_id, "");
     assert_eq!(contract.description, "");
+}
+
+/// Escape-hatch invariant: every `pub` field on `Contract` is settable on
+/// `ContractBuilder`. The exhaustive destructure at the end of this test is
+/// the compile-time guard — when `Contract` gains a new field, this test
+/// fails to compile, forcing the developer to add a setter and wire it in
+/// here before the workspace goes green again.
+///
+/// See `plans/v3-api-ergonomics.md` §1 for the rationale.
+#[test]
+fn setter_parity_with_contract_fields() {
+    let date = time::macros::date!(2024 - 12 - 20);
+
+    let built = ContractBuilder::new()
+        .contract_id(99)
+        .symbol("X")
+        .security_type(SecurityType::Stock)
+        .last_trade_date_or_contract_month("20241220")
+        .strike(150.0)
+        .right("C")
+        .multiplier("100")
+        .exchange("SMART")
+        .currency("USD")
+        .local_symbol("X-LOCAL")
+        .primary_exchange("NASDAQ")
+        .trading_class("NMS")
+        .include_expired(true)
+        .security_id_type("CUSIP")
+        .security_id("037833100")
+        .combo_legs_description("desc")
+        .combo_legs(vec![ComboLeg {
+            contract_id: 1,
+            ratio: 1,
+            action: "BUY".to_string(),
+            exchange: "SMART".to_string(),
+            ..Default::default()
+        }])
+        .delta_neutral_contract(DeltaNeutralContract {
+            contract_id: 7,
+            delta: 0.5,
+            price: 100.0,
+        })
+        .last_trade_date(date)
+        .issuer_id("issuer")
+        .description("description")
+        .build()
+        .unwrap();
+
+    // Exhaustive destructure — fails to compile if Contract gains a new
+    // field. To resolve the compile error: add a setter on ContractBuilder,
+    // wire it through build(), and call it above.
+    let Contract {
+        contract_id,
+        symbol,
+        security_type,
+        last_trade_date_or_contract_month,
+        strike,
+        right,
+        multiplier,
+        exchange,
+        currency,
+        local_symbol,
+        primary_exchange,
+        trading_class,
+        include_expired,
+        security_id_type,
+        security_id,
+        combo_legs_description,
+        combo_legs,
+        delta_neutral_contract,
+        last_trade_date,
+        issuer_id,
+        description,
+    } = built;
+
+    assert_eq!(contract_id, 99);
+    assert_eq!(symbol, "X");
+    assert_eq!(security_type, SecurityType::Stock);
+    assert_eq!(last_trade_date_or_contract_month, "20241220");
+    assert_eq!(strike, 150.0);
+    assert_eq!(right, "C");
+    assert_eq!(multiplier, "100");
+    assert_eq!(exchange, "SMART");
+    assert_eq!(currency, "USD");
+    assert_eq!(local_symbol, "X-LOCAL");
+    assert_eq!(primary_exchange, "NASDAQ");
+    assert_eq!(trading_class, "NMS");
+    assert!(include_expired);
+    assert_eq!(security_id_type, "CUSIP");
+    assert_eq!(security_id, "037833100");
+    assert_eq!(combo_legs_description, "desc");
+    assert_eq!(combo_legs.len(), 1);
+    assert_eq!(combo_legs[0].contract_id, 1);
+    assert_eq!(delta_neutral_contract.unwrap().contract_id, 7);
+    assert_eq!(last_trade_date, Some(date));
+    assert_eq!(issuer_id, "issuer");
+    assert_eq!(description, "description");
 }
