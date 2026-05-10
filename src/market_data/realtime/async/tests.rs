@@ -1,12 +1,15 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{
-    market_data_request, market_depth_exchanges_request, market_depth_request, realtime_bars_request, tick_by_tick_request,
+    bid_ask_tick, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response, mid_point_tick,
+    realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
 };
+use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 use std::sync::RwLock;
 use time::OffsetDateTime;
@@ -42,15 +45,28 @@ async fn test_validate_tick_by_tick_request() {
 
 #[tokio::test]
 async fn test_realtime_bars() {
-    // Setup test message bus with mock responses
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned(),
-            "50|3|9001|1678323340|4028.80|4029.10|4028.30|4028.55|3|4026.80|2|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::RealTimeBars,
+            realtime_bar_tick()
+                .time(1678323335)
+                .ohlc(4028.75, 4029.00, 4028.25, 4028.50)
+                .volume(2.0)
+                .wap(4026.75)
+                .count(1)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::RealTimeBars,
+            realtime_bar_tick()
+                .time(1678323340)
+                .ohlc(4028.80, 4029.10, 4028.30, 4028.55)
+                .volume(3.0)
+                .wap(4026.80)
+                .count(2)
+                .encode_proto(),
+        ),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract {
@@ -115,14 +131,31 @@ async fn test_realtime_bars() {
 
 #[tokio::test]
 async fn test_tick_by_tick_all_last() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "99|9001|1|1678740829|3895.25|7|2|NASDAQ|Regular|".to_owned(),
-            "99|9001|1|1678740830|3895.50|5|0|NYSE|Regular|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::TickByTick,
+            trade_tick()
+                .tick_type(1)
+                .time(1678740829)
+                .price(3895.25)
+                .size(7.0)
+                .attributes(false, true)
+                .exchange("NASDAQ")
+                .special_conditions("Regular")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::TickByTick,
+            trade_tick()
+                .tick_type(1)
+                .time(1678740830)
+                .price(3895.50)
+                .size(5.0)
+                .exchange("NYSE")
+                .special_conditions("Regular")
+                .encode_proto(),
+        ),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
@@ -179,11 +212,18 @@ async fn test_tick_by_tick_all_last() {
 
 #[tokio::test]
 async fn test_tick_by_tick_last() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["99|9001|1|1678740829|3895.25|7|2|NASDAQ|Regular|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::TickByTick,
+        trade_tick()
+            .tick_type(1)
+            .time(1678740829)
+            .price(3895.25)
+            .size(7.0)
+            .attributes(false, true)
+            .exchange("NASDAQ")
+            .special_conditions("Regular")
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
@@ -231,11 +271,14 @@ async fn test_tick_by_tick_last() {
 
 #[tokio::test]
 async fn test_tick_by_tick_bid_ask() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["99|9001|3|1678745793|3895.50|3896.00|9|11|3|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::TickByTick,
+        bid_ask_tick()
+            .time(1678745793)
+            .quote(3895.50, 3896.00, 9.0, 11.0)
+            .attributes(true, true)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
@@ -284,11 +327,16 @@ async fn test_tick_by_tick_bid_ask() {
 
 #[tokio::test]
 async fn test_tick_by_tick_midpoint() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["99|9001|4|1678740829|3895.375|".to_owned(), "99|9001|4|1678740830|3895.425|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::TickByTick,
+            mid_point_tick().time(1678740829).mid_point(3895.375).encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::TickByTick,
+            mid_point_tick().time(1678740830).mid_point(3895.425).encode_proto(),
+        ),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK);
     let contract = Contract {
@@ -351,11 +399,28 @@ async fn test_tick_by_tick_midpoint() {
 
 #[tokio::test]
 async fn test_market_depth() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["12|1|9001|0|0|0|4028.75|100|".to_owned(), "12|1|9001|1|1|1|4028.50|200|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::MarketDepth,
+            market_depth_response()
+                .position(0)
+                .operation(0)
+                .side(0)
+                .price(4028.75)
+                .size(100.0)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::MarketDepth,
+            market_depth_response()
+                .position(1)
+                .operation(1)
+                .side(1)
+                .price(4028.50)
+                .size(200.0)
+                .encode_proto(),
+        ),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
     let contract = Contract {
@@ -456,20 +521,22 @@ async fn test_market_depth_exchanges() {
 
 #[tokio::test]
 async fn test_basic_market_data() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Tick Price message
-            "1|2|9001|1|185.50|100|7|".to_owned(),
-            // Tick Size message
-            "2|2|9001|0|150|".to_owned(),
-            // Tick String message
-            "46|2|9001|45|2023-03-13 09:30:00|".to_owned(),
-            // Tick Generic message
-            "45|2|9001|23|20.5|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        // tick_type 1 = Bid; size present + Bid → PriceSize variant.
+        proto_response(
+            IncomingMessages::TickPrice,
+            tick_price().tick_type(1).price(185.50).size(100.0).encode_proto(),
+        ),
+        // tick_type 0 = BidSize
+        proto_response(IncomingMessages::TickSize, tick_size().tick_type(0).size(150.0).encode_proto()),
+        // tick_type 45 = LastTimestamp
+        proto_response(
+            IncomingMessages::TickString,
+            tick_string().tick_type(45).value("2023-03-13 09:30:00").encode_proto(),
+        ),
+        // tick_type 23 = OptionHistoricalVol
+        proto_response(IncomingMessages::TickGeneric, tick_generic().tick_type(23).value(20.5).encode_proto()),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
