@@ -378,36 +378,6 @@ fn test_decode_head_timestamp_proto() {
 }
 
 #[test]
-fn test_decode_real_time_bar_proto() {
-    use prost::Message;
-
-    let proto_msg = crate::proto::RealTimeBarTick {
-        req_id: Some(1),
-        time: Some(1681133400),
-        open: Some(185.5),
-        high: Some(186.0),
-        low: Some(185.0),
-        close: Some(185.75),
-        volume: Some("1000".into()),
-        wap: Some("185.625".into()),
-        count: Some(150),
-    };
-
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_real_time_bar_proto(&bytes).unwrap();
-    assert_eq!(result.date, datetime!(2023-04-10 13:30:00 UTC));
-    assert_eq!(result.open, 185.5);
-    assert_eq!(result.high, 186.0);
-    assert_eq!(result.low, 185.0);
-    assert_eq!(result.close, 185.75);
-    assert_eq!(result.volume, 1000.0);
-    assert_eq!(result.wap, 185.625);
-    assert_eq!(result.count, 150);
-}
-
-#[test]
 fn test_decode_historical_ticks_proto() {
     use prost::Message;
 

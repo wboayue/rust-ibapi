@@ -6,7 +6,7 @@
 
 - **Outgoing:** all requests are protobuf. The text encoders are gone (PRs #449–#452, summarized in [protobuf-migration.md](protobuf-migration.md)).
 - **Incoming:** decoders are still mostly text-only with a small number of dual-format (`decode_proto_or_text`) call sites. The wire flips a message family from text to protobuf at a per-family server-version gate, so text-decode code stays load-bearing until the minimum server version we accept covers every gate.
-- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_SCAN_DATA` (210) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted 201 → 203 in [#527](https://github.com/wboayue/rust-ibapi/pull/527), then 203 → 210 in this PR (skipping 204–209 in one move because every family in that range already has a proto decoder + `decode_proto_or_text` wrapper). Decoders weren't deleted as part of the bump — that's a follow-up PR after each family's response-format mapping is grounded in captured wire data (the `OutgoingMessages`-based grouping in C# Constants.cs maps to outgoing requests, not the responses we decode). Next ratchet candidate: 211 (`PROTOBUF_REST_MESSAGES_1`).
+- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_SCAN_DATA` (210) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted 201 → 203 in [#527](https://github.com/wboayue/rust-ibapi/pull/527), then 203 → 210 in [#530](https://github.com/wboayue/rust-ibapi/pull/530) (skipping 204–209 in one move because every family in that range already has a proto decoder + `decode_proto_or_text` wrapper). Decoders weren't deleted as part of the bump — that's a follow-up PR after each family's response-format mapping is grounded in captured wire data (the `OutgoingMessages`-based grouping in C# Constants.cs maps to outgoing requests, not the responses we decode). Next ratchet candidate: 211 (`PROTOBUF_REST_MESSAGES_1`).
 
 ## Per-family protobuf-incoming gates
 
@@ -44,8 +44,8 @@ text decoders are still load-bearing for servers below the family's gate.
 | `accounts/common/decoders/`               |            14 |             10 |                12 |
 | `contracts/common/decoders/`              |             1 |              4 |                 0 |
 | `orders/common/decoders/`                 |             0 |              5 |                 1 |
-| `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
-| `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
+| `market_data/realtime/common/decoders/`   |             2 |             13 |                 1 |
+| `market_data/historical/common/decoders/` |             8 |              9 |                 9 |
 | `news/common/decoders.rs`                 |             1 |              4 |                 0 |
 | `scanner/common/decoders.rs`              |             0 |              2 |                 0 |
 | `wsh/common/decoders.rs`                  |             3 |              2 |                 0 |
@@ -67,15 +67,16 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 - `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only since [#532](https://github.com/wboayue/rust-ibapi/pull/532)
 - `decode_contract_details`, `decode_contract_descriptions`, `decode_market_rule`, `decode_option_chain` (contracts) — proto-only at floor 210; `decode_option_computation` stays text (shared with realtime market_data)
 - `decode_news_providers`, `decode_news_bulletin`, `decode_historical_news`, `decode_news_article` (news) — proto-only at floor 210; `decode_tick_news` stays text (gate 206 PROTOBUF_MARKET_DATA, deferred to realtime cleanup)
-- `decode_open_order`, `decode_completed_order` (orders) — proto-only at floor 210 in this PR; deleted `OrderDecoder` (~750 lines) + 6 condition text decoders + `decode_open_order_borrowed` wrapper; added `OpenOrderResponse` / `CompletedOrderResponse` field-minimal builders
+- `decode_open_order`, `decode_completed_order` (orders) — proto-only since [#539](https://github.com/wboayue/rust-ibapi/pull/539); deleted `OrderDecoder` (~750 lines) + 6 condition text decoders + `decode_open_order_borrowed` wrapper; added `OpenOrderResponse` / `CompletedOrderResponse` field-minimal builders
+- `decode_realtime_bar`, `decode_trade_tick`, `decode_bid_ask_tick`, `decode_mid_point_tick` (gate 208), and `decode_market_depth`, `decode_market_depth_l2`, `decode_tick_price`, `decode_tick_size`, `decode_tick_string`, `decode_tick_generic`, `decode_tick_option_computation`, `decode_tick_request_parameters`, `decode_market_data_type` (gate 206) — proto-only at floor 210 in this PR; added 3 new tick-by-tick proto decoders (`decode_trade_tick_proto` / `decode_bid_ask_tick_proto` / `decode_mid_point_tick_proto`) over `proto::TickByTickData`; moved `decode_real_time_bar_proto` from historical → realtime; dropped `context.server_version` plumbing through the dispatcher; added `realtime/common/test_helpers.rs` for shared sync/async test fixtures. `decode_tick_efp` stays text-only (no server proto). `decode_market_depth_exchanges` stays dual-format (gate 213).
 
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
 
-- `market_data/realtime/common/decoders/` — `RequestMktData` / `RequestTickByTickData` /
-  `RequestMktDepth` etc. all gate 206 (also covers `decode_tick_news` left over from news cleanup)
 - `accounts/common/decoders/` — `RequestPositions` / `RequestAccountUpdates` etc. gate 207
 - `market_data/historical/common/decoders/` — `RequestHistoricalData` etc. gate 208
+- `news/common/decoders.rs` — `decode_tick_news` left over (gate 206 PROTOBUF_MARKET_DATA), to fold into a follow-up
+- `contracts/common/decoders/` — `decode_option_computation` left over (gate 206), to fold into a follow-up
 
 Decoders that **stay** dual-format at floor 210 because at least one
 originating outgoing-request gate is > 210:

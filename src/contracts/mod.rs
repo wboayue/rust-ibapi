@@ -14,8 +14,7 @@ use serde::Serialize;
 use tick_types::TickType;
 
 use crate::encode_option_field;
-use crate::messages::ResponseMessage;
-use crate::{Error, ToField};
+use crate::ToField;
 
 // Re-export V2 API types
 pub use builders::*;
@@ -910,11 +909,6 @@ pub struct PriceIncrement {
 }
 
 // Async API methods are now on Client directly via contracts/async.rs
-
-// Public function for decoding option computation (used by market_data module)
-pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
-    common::decoders::decode_option_computation(server_version, message)
-}
 
 // ContractBuilder is deprecated - use the new builder methods on Contract instead
 // e.g., Contract::stock(), Contract::call(), Contract::put(), etc.

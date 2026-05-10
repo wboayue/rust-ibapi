@@ -68,9 +68,9 @@ pub struct BidAsk {
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(context, message),
+            IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -104,9 +104,9 @@ pub struct MidPoint {
 impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(context, message),
+            IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -142,9 +142,9 @@ pub struct Bar {
 impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::RealTimeBars => common::decoders::decode_realtime_bar(context, message),
+            IncomingMessages::RealTimeBars => common::decoders::decode_realtime_bar(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -178,9 +178,9 @@ pub struct Trade {
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_trade_tick(context, message),
+            IncomingMessages::TickByTick => common::decoders::decode_trade_tick(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -275,13 +275,10 @@ pub struct MarketDepthL2 {
 impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(common::decoders::decode_market_depth(message)?)),
-            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(message)?)),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -347,36 +344,15 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::MarketDataType,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        let server_version = context.server_version;
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => message.decode_proto_or_text(common::decoders::decode_tick_price_proto, |m| {
-                common::decoders::decode_tick_price(server_version, m)
-            }),
-            IncomingMessages::TickSize => message.decode_proto_or_text(
-                |b| common::decoders::decode_tick_size_proto(b).map(TickTypes::Size),
-                |m| common::decoders::decode_tick_size(m).map(TickTypes::Size),
-            ),
-            IncomingMessages::TickString => message.decode_proto_or_text(
-                |b| common::decoders::decode_tick_string_proto(b).map(TickTypes::String),
-                |m| common::decoders::decode_tick_string(m).map(TickTypes::String),
-            ),
-            IncomingMessages::TickGeneric => message.decode_proto_or_text(
-                |b| common::decoders::decode_tick_generic_proto(b).map(TickTypes::Generic),
-                |m| common::decoders::decode_tick_generic(m).map(TickTypes::Generic),
-            ),
-            IncomingMessages::TickOptionComputation => message.decode_proto_or_text(
-                |b| common::decoders::decode_tick_option_computation_proto(b).map(TickTypes::OptionComputation),
-                |m| common::decoders::decode_tick_option_computation(server_version, m).map(TickTypes::OptionComputation),
-            ),
-            IncomingMessages::TickReqParams => message.decode_proto_or_text(
-                |b| common::decoders::decode_tick_request_parameters_proto(b).map(TickTypes::RequestParameters),
-                |m| common::decoders::decode_tick_request_parameters(m).map(TickTypes::RequestParameters),
-            ),
-            IncomingMessages::MarketDataType => message.decode_proto_or_text(
-                |b| common::decoders::decode_market_data_type_proto(b).map(TickTypes::MarketDataType),
-                |m| common::decoders::decode_market_data_type(m).map(TickTypes::MarketDataType),
-            ),
+            IncomingMessages::TickPrice => common::decoders::decode_tick_price(message),
+            IncomingMessages::TickSize => common::decoders::decode_tick_size(message).map(TickTypes::Size),
+            IncomingMessages::TickString => common::decoders::decode_tick_string(message).map(TickTypes::String),
+            IncomingMessages::TickGeneric => common::decoders::decode_tick_generic(message).map(TickTypes::Generic),
+            IncomingMessages::TickOptionComputation => common::decoders::decode_tick_option_computation(message).map(TickTypes::OptionComputation),
+            IncomingMessages::TickReqParams => common::decoders::decode_tick_request_parameters(message).map(TickTypes::RequestParameters),
+            IncomingMessages::MarketDataType => common::decoders::decode_market_data_type(message).map(TickTypes::MarketDataType),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(common::decoders::decode_tick_efp(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
             _ => Err(Error::UnexpectedResponse(message.clone())),

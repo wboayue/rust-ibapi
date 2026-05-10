@@ -407,22 +407,6 @@ pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error>
     Ok(msg.head_timestamp.unwrap_or_default())
 }
 
-#[allow(dead_code)]
-pub(crate) fn decode_real_time_bar_proto(bytes: &[u8]) -> Result<crate::market_data::realtime::Bar, Error> {
-    let msg = proto::RealTimeBarTick::decode(bytes)?;
-
-    Ok(crate::market_data::realtime::Bar {
-        date: OffsetDateTime::from_unix_timestamp(msg.time.unwrap_or_default()).unwrap_or(OffsetDateTime::UNIX_EPOCH),
-        open: msg.open.unwrap_or_default(),
-        high: msg.high.unwrap_or_default(),
-        low: msg.low.unwrap_or_default(),
-        close: msg.close.unwrap_or_default(),
-        volume: parse_str_f64(&msg.volume),
-        wap: parse_str_f64(&msg.wap),
-        count: msg.count.unwrap_or_default(),
-    })
-}
-
 pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {
     let msg = proto::HistoricalTicks::decode(bytes)?;
 
