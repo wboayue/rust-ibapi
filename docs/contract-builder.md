@@ -312,7 +312,7 @@ let exchange = Exchange::from("SMART");        // Smart routing
 let exchange = Exchange::from("NASDAQ");       // NASDAQ
 let exchange = Exchange::from("NYSE");         // NYSE
 let exchange = Exchange::from("CBOE");         // CBOE
-let exchange = Exchange::from("GLOBEX");       // CME Globex
+let exchange = Exchange::from("CME");          // CME (formerly GLOBEX)
 let exchange = Exchange::from("IDEALPRO");     // Forex
 let exchange = Exchange::from("PAXOS");        // Crypto
 

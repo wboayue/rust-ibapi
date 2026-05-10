@@ -50,7 +50,7 @@ use crate::Error;
 /// use ibapi::contracts::{ContractBuilder, SecurityType};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let contract = ContractBuilder::futures("ES", "GLOBEX", "USD")
+/// let contract = ContractBuilder::futures("ES", "CME", "USD")
 ///     .last_trade_date_or_contract_month("202412")
 ///     .build()?;
 /// # Ok(())
@@ -208,7 +208,7 @@ impl ContractBuilder {
     /// Common values include:
     /// - "SMART" for IB's smart routing
     /// - "NASDAQ", "NYSE", "AMEX" for US equities
-    /// - "GLOBEX", "NYMEX", "CME" for futures
+    /// - "CME", "NYMEX" for futures
     pub fn exchange<S: Into<String>>(mut self, exchange: S) -> Self {
         self.exchange = Some(exchange.into());
         self
@@ -367,7 +367,7 @@ impl ContractBuilder {
     /// use ibapi::contracts::ContractBuilder;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let contract = ContractBuilder::futures("ES", "GLOBEX", "USD")
+    /// let contract = ContractBuilder::futures("ES", "CME", "USD")
     ///     .last_trade_date_or_contract_month("202412")
     ///     .multiplier("50")
     ///     .build()?;
@@ -390,7 +390,7 @@ impl ContractBuilder {
     /// use ibapi::contracts::ContractBuilder;
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let contract = ContractBuilder::continuous_futures("ES", "GLOBEX", "USD")
+    /// let contract = ContractBuilder::continuous_futures("ES", "CME", "USD")
     ///     .multiplier("50")
     ///     .build()?;
     /// # Ok(())

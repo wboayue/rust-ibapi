@@ -232,7 +232,7 @@ impl FuturesBuilder<Missing, Missing> {
         FuturesBuilder {
             symbol: symbol.into(),
             contract_month: Missing,
-            exchange: "GLOBEX".into(),
+            exchange: "CME".into(),
             currency: "USD".into(),
             multiplier: None,
         }
@@ -311,7 +311,7 @@ impl ContinuousFuturesBuilder<Missing> {
     pub fn new(symbol: impl Into<Symbol>) -> ContinuousFuturesBuilder<Symbol> {
         ContinuousFuturesBuilder {
             symbol: symbol.into(),
-            exchange: "GLOBEX".into(),
+            exchange: "CME".into(),
             currency: "USD".into(),
             multiplier: None,
         }
