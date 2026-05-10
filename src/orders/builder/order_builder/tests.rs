@@ -1293,6 +1293,33 @@ fn test_execution_condition_no_threshold() {
 }
 
 #[test]
+fn sell_short_sets_action_and_quantity() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).sell_short(100).limit(50.0).build().unwrap();
+
+    assert_eq!(order.action, Action::SellShort);
+    assert_eq!(order.action.to_string(), "SSHORT");
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.order_type, "LMT");
+    assert_eq!(order.limit_price, Some(50.0));
+}
+
+#[test]
+fn sell_long_sets_action_and_quantity() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).sell_long(75).market().build().unwrap();
+
+    assert_eq!(order.action, Action::SellLong);
+    assert_eq!(order.action.to_string(), "SLONG");
+    assert_eq!(order.total_quantity, 75.0);
+    assert_eq!(order.order_type, "MKT");
+}
+
+#[test]
 fn bracket_order_propagates_tif() {
     let client = MockClient;
     let contract = create_test_contract();

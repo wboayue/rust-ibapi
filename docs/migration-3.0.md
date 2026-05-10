@@ -312,6 +312,12 @@ client.place_order(order_id, &contract, &order)?;
 `client.next_order_id()` is still public for the BYO-id path; it just isn't shown in the
 canonical happy-path examples anymore.
 
+The fluent path covers all four `Action` variants. `.buy(qty)` and `.sell(qty)` are the
+common cases; `.sell_short(qty)` (`SSHORT` — institutional Long/Short account segments)
+and `.sell_long(qty)` (`SLONG` — selling not-yet-delivered long position) cover the
+specialized accounts. Callers that dispatch on a runtime `Action` value can match
+exhaustively without a `_ => unreachable!()` arm.
+
 ### Market data
 
 ```rust,ignore
