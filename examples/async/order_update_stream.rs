@@ -6,7 +6,7 @@
 //! 2. Submit orders using the fire-and-forget submit_order() method
 //! 3. Monitor order status through the update stream
 
-use ibapi::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
+use ibapi::contracts::Contract;
 use ibapi::orders::{order_builder, Action, OrderUpdate};
 use ibapi::Client;
 use std::error::Error;
@@ -78,13 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Create a contract for Apple stock
-    let contract = Contract {
-        symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Stock,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        ..Default::default()
-    };
+    let contract = Contract::stock("AAPL").build();
 
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);

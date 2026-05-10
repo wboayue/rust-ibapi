@@ -31,13 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected to IB Gateway");
 
     // Create contract for highly liquid forex pair
-    let contract = Contract {
-        symbol: Symbol::from("EUR"),
-        security_type: SecurityType::ForexPair,
-        currency: Currency::from("USD"),
-        exchange: Exchange::from("IDEALPRO"),
-        ..Default::default()
-    };
+    let contract = Contract::forex("EUR", "USD").build();
 
     println!("\nRetrieving historical midpoint ticks for EUR/USD");
 

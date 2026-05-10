@@ -9,13 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     // Create a contract for Apple stock
-    let contract = Contract {
-        symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Stock,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        ..Default::default()
-    };
+    let contract = Contract::stock("AAPL").build();
 
     // Request contract details
     let contract_details = client.contract_details(&contract).await?;

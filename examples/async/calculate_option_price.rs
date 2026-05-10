@@ -1,5 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
-use ibapi::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
+use ibapi::contracts::Contract;
 use ibapi::Client;
 
 #[tokio::main]
@@ -9,17 +9,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to IB Gateway or TWS
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
-    // Create an option contract
-    let contract = Contract {
-        symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Option,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        strike: 150.0,
-        right: "C".to_string(),                                    // Call option
-        last_trade_date_or_contract_month: "20250117".to_string(), // January 17, 2025
-        ..Default::default()
-    };
+    // Create an option contract — AAPL Call $150 expiring 2025-01-17
+    let contract = Contract::call("AAPL").strike(150.0).expires_on(2025, 1, 17).build();
 
     // Calculate option price given volatility and underlying price
     let volatility = 0.25; // 25% implied volatility

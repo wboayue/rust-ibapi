@@ -8,7 +8,7 @@
 
 use ibapi::client::blocking::Client;
 use ibapi::{
-    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
+    contracts::Contract,
     orders::{self, order_builder, PlaceOrder},
 };
 
@@ -17,7 +17,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = create_option_contract("AAPL", 180.0, "C", "20250221");
+    let contract = Contract::call("AAPL").strike(180.0).expires_on(2025, 2, 21).build();
 
     let order_id = client.next_valid_order_id().expect("could not get next valid order id");
     //    let order_id = client.next_order_id();
@@ -57,19 +57,5 @@ fn main() {
                 break;
             }
         }
-    }
-}
-
-fn create_option_contract(symbol: &str, strike: f64, right: &str, last_trade_date_or_contract_month: &str) -> Contract {
-    Contract {
-        symbol: Symbol::from(symbol),
-        security_type: SecurityType::Option,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: last_trade_date_or_contract_month.to_owned(),
-        strike,
-        right: right.to_owned(),
-        multiplier: "100".to_owned(),
-        ..Default::default()
     }
 }
