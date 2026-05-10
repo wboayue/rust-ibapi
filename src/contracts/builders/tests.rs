@@ -79,7 +79,7 @@ fn test_invalid_strike_price() {
 fn test_futures_builder_with_manual_expiry() {
     let futures = Contract::futures("ES")
         .expires_in(ContractMonth::new(2024, 3))
-        .on_exchange("GLOBEX")
+        .on_exchange("CME")
         .in_currency("USD")
         .multiplier(50)
         .build();
@@ -87,7 +87,7 @@ fn test_futures_builder_with_manual_expiry() {
     assert_eq!(futures.symbol, Symbol::from("ES"));
     assert_eq!(futures.security_type, SecurityType::Future);
     assert_eq!(futures.last_trade_date_or_contract_month, "202403");
-    assert_eq!(futures.exchange, Exchange::from("GLOBEX"));
+    assert_eq!(futures.exchange, Exchange::from("CME"));
     assert_eq!(futures.currency, Currency::from("USD"));
     assert_eq!(futures.multiplier, "50");
 }
