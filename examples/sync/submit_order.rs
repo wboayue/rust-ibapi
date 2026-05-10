@@ -18,11 +18,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-enum Side {
-    Buy,
-    Sell,
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
@@ -88,23 +83,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Place a series of buy and sell orders using the canonical fluent path.
     let order_specs = [
-        (Side::Buy, 100.0),
-        (Side::Sell, 50.0),
-        (Side::Buy, 75.0),
-        (Side::Sell, 100.0),
-        (Side::Buy, 25.0),
+        (Action::Buy, 100.0),
+        (Action::Sell, 50.0),
+        (Action::Buy, 75.0),
+        (Action::Sell, 100.0),
+        (Action::Buy, 25.0),
     ];
 
-    for (i, (side, quantity)) in order_specs.iter().enumerate() {
-        let label = match side {
-            Side::Buy => "Buy",
-            Side::Sell => "Sell",
-        };
-        println!("\n[Main] Placing order #{} - {label} {quantity} shares of {symbol}", i + 1);
+    for (i, (action, quantity)) in order_specs.iter().enumerate() {
+        println!("\n[Main] Placing order #{} - {action} {quantity} shares of {symbol}", i + 1);
 
-        let result = match side {
-            Side::Buy => client.order(&contract).buy(*quantity).market().submit(),
-            Side::Sell => client.order(&contract).sell(*quantity).market().submit(),
+        let result = match action {
+            Action::Buy => client.order(&contract).buy(*quantity).market().submit(),
+            Action::Sell => client.order(&contract).sell(*quantity).market().submit(),
+            _ => unreachable!("specs only contain Buy / Sell"),
         };
         match result {
             Ok(order_id) => println!("[Main] Order {order_id} submitted successfully"),
