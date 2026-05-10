@@ -1,20 +1,47 @@
+//! Free-function order constructors — the advanced / client-less layer.
+//!
+//! For normal use, prefer the canonical fluent path on [`Client`](crate::Client):
+//!
+//! ```no_run
+//! # #[cfg(feature = "async")]
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! use ibapi::Client;
+//! use ibapi::contracts::Contract;
+//!
+//! let client = Client::connect("127.0.0.1:4002", 100).await?;
+//! let contract = Contract::stock("AAPL").build();
+//!
+//! let order_id = client.order(&contract)
+//!     .buy(100)
+//!     .limit(50.0)
+//!     .submit().await?;
+//! # Ok(()) }
+//! ```
+//!
+//! `submit()` allocates the order id internally and uses fire-and-forget delivery;
+//! status flows through [`Client::order_update_stream`](crate::Client::order_update_stream).
+//!
+//! Reach for these free functions when you need to build an [`Order`](crate::orders::Order)
+//! *without* a [`Client`](crate::Client) — typically:
+//!
+//! - **Bring-your-own order id**: a multi-process or external allocator owns the id;
+//!   build the [`Order`](crate::orders::Order) here and submit via the lower-level
+//!   `place_order` / `submit_order` methods on [`Client`](crate::Client). For BYO-id
+//!   with the fluent builder,
+//!   [`OrderBuilder::build_order`](crate::orders::builder::OrderBuilder::build_order)
+//!   returns the bare [`Order`](crate::orders::Order) without submitting.
+//! - **Offline construction**: tests, fixtures, or examples that illustrate order shapes
+//!   without a live connection.
+//! - **Hand-composed multi-leg orders**: e.g. attaching adjustable triggers
+//!   (`attach_adjustable_to_stop` etc.) to a parent built by the fluent path.
+//!
+//! Side is a parameter on every function here ([`Action::Buy`](crate::orders::Action::Buy) /
+//! [`Action::Sell`](crate::orders::Action::Sell)); the fluent builder implies side from
+//! `.buy()` / `.sell()` instead.
+
 use crate::orders::{
     Action, AuctionStrategy, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
 };
-
-// TODO: Consider implementing a fluent builder pattern for Order construction
-// instead of having many standalone functions. This would provide a more
-// idiomatic Rust API and better discoverability of order options.
-// Example:
-// ```
-// let order = Order::builder()
-//     .action(Action::Buy)
-//     .quantity(100.0)
-//     .order_type(OrderType::Limit)
-//     .limit_price(50.0)
-//     .time_in_force(TimeInForce::Day)
-//     .build();
-// ```
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with

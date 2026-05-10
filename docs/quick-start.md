@@ -178,13 +178,14 @@ while let Some(bar) = subscription.next().await {
 ### Placing Orders
 
 ```rust
-// Create a market order
-let contract = Contract::stock("AAPL");
-let order = Order::market_order(Action::Buy, 100.0);
-
-// Place the order
-let order_id = client.next_order_id();
-client.place_order(order_id, &contract, &order)?;
+// Submit a market order via the canonical fluent path.
+// `submit()` allocates the order id internally and is fire-and-forget;
+// monitor status through `client.order_update_stream()`.
+let contract = Contract::stock("AAPL").build();
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
+    .submit()?;
 ```
 
 ### Getting Account Information

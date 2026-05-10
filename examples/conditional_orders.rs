@@ -13,12 +13,20 @@
 //!
 //! # Note
 //!
-//! This example is designed to compile and demonstrate the API usage patterns.
-//! To actually place orders, you would need to:
-//! 1. Connect to TWS or IB Gateway
-//! 2. Obtain valid contract IDs using the contract_details() API
-//! 3. Use a valid order ID from next_order_id()
-//! 4. Call client.place_order() with your contract and order
+//! This example is offline / compile-only — it constructs `Order` values via the
+//! `order_builder::*` free functions so the API patterns can be illustrated without a
+//! running TWS connection. For live submission, prefer the canonical fluent path:
+//!
+//! ```ignore
+//! let order_id = client.order(&contract)
+//!     .buy(100)
+//!     .market()
+//!     .condition(price(265598, "SMART").greater_than(150.0))
+//!     .submit()?;
+//! ```
+//!
+//! `submit()` allocates the order id internally; reach for `next_order_id()` only when
+//! coordinating with an external id allocator.
 //!
 //! # Usage
 //!
@@ -267,8 +275,10 @@ fn main() {
     println!("- Contract IDs must be obtained via contract_details() API");
     println!();
     println!("To actually place these orders:");
-    println!("1. Connect to TWS/Gateway: client.connect(...)");
+    println!("1. Connect to TWS/Gateway: Client::connect(...)");
     println!("2. Get valid contract IDs: client.contract_details(...)");
-    println!("3. Get order ID: client.next_order_id()");
-    println!("4. Place order: client.place_order(order_id, &contract, &order)");
+    println!("3. Submit via the fluent path:");
+    println!("     client.order(&contract).buy(100).market()");
+    println!("           .condition(price(265598, \"SMART\").greater_than(150.0))");
+    println!("           .submit()");
 }

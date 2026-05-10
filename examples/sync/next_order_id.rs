@@ -1,4 +1,15 @@
-//! Next Order Id example
+//! Next Order Id (advanced — bring your own order id)
+//!
+//! For normal use, prefer `client.order(&contract).buy(qty).<type>().submit()` —
+//! `submit()` allocates the next id internally. This example demonstrates the manual
+//! id-allocation flow used when coordinating with an external allocator (e.g. a
+//! multi-process system that reserves ids out of band).
+//!
+//! - `next_valid_order_id()` round-trips to TWS to fetch the server-side starting id
+//!   (useful right after connect, or after a manual id reset).
+//! - `next_order_id()` (not shown here) returns the next id from the in-memory
+//!   counter without contacting TWS — use it for repeated allocations after the
+//!   initial `next_valid_order_id()`.
 //!
 //! # Usage
 //!

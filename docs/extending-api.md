@@ -57,16 +57,18 @@ impl Client {
 
 ### Large Parameter Lists
 ```rust
-// Bad: 4+ params signal need for builder
+// Bad: 4+ params signal need for builder.
 fn create_order(action: Action, qty: f64, price: f64, tif: TimeInForce,
                 oca: Option<String>, cond: Option<Condition>) { }
 
-// Good: use builder pattern
-order_builder::limit_order(action, qty, price)
+// Good: fluent builder on Client.
+client.order(&contract)
+    .buy(qty)
+    .limit(price)
     .time_in_force(tif)
-    .oca_group(oca)
+    .oca_group(oca_group, oca_type)
     .condition(cond)
-    .build()
+    .submit()
 ```
 
 ## Module Organization

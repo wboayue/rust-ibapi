@@ -40,23 +40,27 @@ Related existing tracking docs in `plans/`:
   and the contract builder methods take `impl Into<String>` (`src/contracts/common/contract_builder/mod.rs:330`).
   Verified 2026-05-06.
 
-- [ ] **Converge order construction on one style.** Two coexisting paths today:
-  - `order_builder::limit_order(Action::Buy, 100.0, 150.0)` (free fn, returns `Order`)
-  - `client.order(&c).buy(100).limit(150.0).submit()` (fluent, owns submission)
+- [x] **Converge order construction on one style.** Shipped 2026-05-10. Fluent
+  `client.order(&c).buy(n).<type>().submit()` is the canonical path; the
+  `order_builder::*` free functions are reframed as the advanced / client-less
+  layer (BYO order id, offline construction, hand-composed multi-leg orders).
+  Module docs at `src/orders/common/order_builder/mod.rs` lead with the fluent
+  example and demote the free fns. The fluent path's `.buy()/.sell()` already
+  implies side (no `Action` arg on per-type methods). The 50 free fns retain
+  their `Action` parameter for backward compat — no deprecation, since the
+  plan keeps them as the convenience layer.
 
-  Pick the fluent one as canonical, keep the free fns as a thin convenience layer
-  documented as "advanced — bring your own order id." Remove the per-method
-  `Action::Buy` argument once the side is implied by `.buy()` / `.sell()`.
-
-- [ ] **Drop `client.next_order_id()` from the canonical happy path.** `submit()` already
-  allocates an id internally; the only caller that still needs `next_order_id()` is
-  the low-level `place_order(order_id, contract, order)` form. Examples still show it
-  at `examples/async/place_order.rs:32, 100, 103`.
-  - Decision: keep `next_order_id()` on `Client` for advanced callers (BYO-id flows
-    + the low-level `place_order` form), but stop showing it in examples.
-  - Sweep: rewrite `examples/async/place_order.rs` (and any sync sibling) to use the
-    fluent `client.order(c).buy(n).limit(p).submit()` path; only retain a
-    `next_order_id()` example in a dedicated "advanced / BYO order id" section.
+- [x] **Drop `client.next_order_id()` from the canonical happy path.** Shipped
+  2026-05-10. `client.next_order_id()` stays public for BYO-id callers, but
+  examples and docs now use `submit()` (which allocates the id internally) on
+  the canonical happy path. `examples/sync/next_order_id.rs` is reframed as
+  the dedicated BYO-id advanced example. Diagnostic `next_order_id` prints
+  removed from `examples/{sync,async}/connect.rs`,
+  `examples/sync/{stream_bars,contract_details}.rs`. Doc-tree
+  (`docs/{quick-start,api-patterns,order-types,extending-api,code-style,troubleshooting}.md`)
+  swept to fluent canonical; the BYO-id sections in `order-types.md` and
+  `troubleshooting.md` retain the manual id + `place_order`/`submit_order`
+  pattern as the labelled advanced flow.
 
 ## 2. Streaming surface
 
@@ -185,13 +189,17 @@ Related existing tracking docs in `plans/`:
 
 ## 6. Examples & docs
 
-- [ ] **Modernize every example to use the canonical happy path.** After the
+- [~] **Modernize every example to use the canonical happy path.** After the
   decisions above land, sweep `examples/sync/*.rs` and `examples/async/*.rs`:
   - `Contract::stock("AAPL").build()` not bare struct literals.
   - `client.order(c).buy(n).limit(p).submit()` for orders (drop `next_order_id`
     boilerplate where possible).
   - `while let Some(item) = stream.next().await` for streams.
   - No magic-number notice code comparisons.
+
+  Status (2026-05-10): order construction sweep done — all `examples/{sync,async}/*.rs`
+  + `examples/conditional_orders.rs` use the fluent path or are reframed as the
+  advanced/offline layer. Market-data and stream-shape sweeps still pending.
 
 - [x] **Migration guide created.** `docs/migration-3.0.md` exists. Keep updating it
   in lockstep with breaking changes (see `CLAUDE.md` § "Keep `README.md` and
