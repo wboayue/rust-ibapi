@@ -215,51 +215,5 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_check_version_supported() {
-        let result = check_version(150, Features::POSITIONS);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_check_version_unsupported() {
-        let result = check_version(50, Features::TICK_BY_TICK);
-        assert!(result.is_err());
-        match result {
-            Err(Error::ServerVersion(required, actual, feature)) => {
-                assert_eq!(required, 137);
-                assert_eq!(actual, 50);
-                assert_eq!(feature, "tick-by-tick data");
-            }
-            _ => panic!("Expected ServerVersion error"),
-        }
-
-        // Display formatting must match the variant convention (errors.rs).
-        let rendered = check_version(50, Features::TICK_BY_TICK).unwrap_err().to_string();
-        assert_eq!(rendered, "server version 137 required, got 50: tick-by-tick data");
-    }
-
-    #[test]
-    fn test_is_supported() {
-        assert!(is_supported(150, Features::POSITIONS));
-        assert!(!is_supported(50, Features::TICK_BY_TICK));
-    }
-
-    #[test]
-    fn test_include_if_supported() {
-        let mut called = false;
-        include_if_supported(150, Features::POSITIONS, || {
-            called = true;
-        });
-        assert!(called);
-
-        let mut called = false;
-        include_if_supported(50, Features::TICK_BY_TICK, || {
-            called = true;
-        });
-        assert!(!called);
-    }
-}
+#[path = "protocol_tests.rs"]
+mod tests;
