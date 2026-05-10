@@ -1,25 +1,41 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::common::test_data::{COMPLETED_ORDER_ES_FUT_CANCELLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_ES_FUT_SUBMITTED};
 use crate::orders::OrderStatusKind;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
-    cancel_order_request, commission_report, completed_orders_end, completed_orders_request, execution_data, execution_data_end, executions_request,
-    global_cancel_request, next_valid_order_id_request, open_order_end, open_orders_request, order_status, place_order_request,
+    cancel_order_request, commission_report, completed_order, completed_orders_end, completed_orders_request, execution_data, execution_data_end,
+    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_status,
+    place_order_request,
 };
-use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
+use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
 use std::sync::Arc;
 use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_place_order() {
-    // OrderStatus + ExecutionData + CommissionReport are proto-only.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(1)
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .last_trade_date_or_contract_month("20250919")
+                .multiplier("50")
+                .exchange("CME")
+                .local_symbol("ESU5")
+                .trading_class("ES")
+                .total_quantity(1.0)
+                .order_type("LMT")
+                .limit_price(Some(5800.0))
+                .perm_id(2126726143)
+                .encode_proto(),
+        ),
         proto_response(
             IncomingMessages::OrderStatus,
             order_status()
@@ -132,7 +148,24 @@ async fn test_cancel_order() {
 #[tokio::test]
 async fn test_open_orders() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        text_response(OPEN_ORDER_ES_FUT_SUBMITTED.to_owned()),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(1)
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .last_trade_date_or_contract_month("20250919")
+                .multiplier("50")
+                .exchange("CME")
+                .local_symbol("ESU5")
+                .trading_class("ES")
+                .total_quantity(1.0)
+                .order_type("LMT")
+                .limit_price(Some(5800.0))
+                .perm_id(2126726143)
+                .encode_proto(),
+        ),
         proto_response(
             IncomingMessages::OrderStatus,
             order_status()
@@ -143,7 +176,7 @@ async fn test_open_orders() {
                 .perm_id(2126726143)
                 .encode_proto(),
         ),
-        text_response(open_order_end().encode_pipe()),
+        proto_response(IncomingMessages::OpenOrderEnd, open_order_end().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -173,9 +206,28 @@ async fn test_open_orders() {
 
 #[tokio::test]
 async fn test_completed_orders() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        COMPLETED_ORDER_ES_FUT_CANCELLED.to_owned(),
-        completed_orders_end().encode_pipe(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::CompletedOrder,
+            completed_order()
+                .contract_id(637533641)
+                .symbol("ES")
+                .security_type("FUT")
+                .last_trade_date_or_contract_month("20250919")
+                .multiplier("50")
+                .exchange("CME")
+                .local_symbol("ESU5")
+                .trading_class("ES")
+                .total_quantity(1.0)
+                .order_type("LMT")
+                .limit_price(Some(5800.0))
+                .perm_id(2126726143)
+                .status(OrderStatusKind::Cancelled)
+                .completed_time("20250708 02:34:46 America/New_York")
+                .completed_status("Cancelled by Trader")
+                .encode_proto(),
+        ),
+        proto_response(IncomingMessages::CompletedOrdersEnd, completed_orders_end().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::COMPLETED_ORDERS);
@@ -282,7 +334,21 @@ async fn test_submit_order() {
 
 #[tokio::test]
 async fn test_exercise_options() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED.to_owned()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order()
+            .symbol("ES")
+            .security_type("FOP")
+            .last_trade_date_or_contract_month("20250919")
+            .strike(5800.0)
+            .right("C")
+            .multiplier("50")
+            .exchange("CME")
+            .local_symbol("ESU5C5800")
+            .trading_class("ES")
+            .total_quantity(1.0)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 

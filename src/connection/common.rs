@@ -238,7 +238,7 @@ impl ConnectionProtocol for ConnectionHandler {
 /// failures surface as `Other` rather than being silently dropped.
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
-    use crate::orders::common::{decode_open_order_borrowed, decode_order_status};
+    use crate::orders::common::{decode_open_order, decode_order_status};
 
     match message.message_type() {
         IncomingMessages::Error => {
@@ -252,7 +252,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         }
         IncomingMessages::OpenOrder => {
             if let Some(cb) = ctx.startup {
-                let typed = decode_open_order_borrowed(server_version, message)
+                let typed = decode_open_order(message)
                     .map(StartupMessage::OpenOrder)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);
@@ -260,7 +260,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         }
         IncomingMessages::OrderStatus => {
             if let Some(cb) = ctx.startup {
-                let typed = decode_order_status(server_version, message)
+                let typed = decode_order_status(message)
                     .map(StartupMessage::OrderStatus)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);

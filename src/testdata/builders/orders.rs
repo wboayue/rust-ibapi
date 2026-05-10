@@ -426,6 +426,365 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
     }
 }
 
+// --- OpenOrder (msg 5) ---
+//
+// Defaults: TSLA STK BUY 100 @ MKT, status `Submitted`, perm_id `TEST_PERM_ID`.
+
+#[derive(Clone, Debug)]
+pub struct OpenOrderResponse {
+    pub order_id: i32,
+    pub contract_id: i32,
+    pub symbol: String,
+    pub security_type: String,
+    pub last_trade_date_or_contract_month: String,
+    pub strike: f64,
+    pub right: String,
+    pub multiplier: String,
+    pub exchange: String,
+    pub currency: String,
+    pub local_symbol: String,
+    pub trading_class: String,
+    pub action: String,
+    pub total_quantity: f64,
+    pub order_type: String,
+    pub limit_price: Option<f64>,
+    pub aux_price: Option<f64>,
+    pub tif: String,
+    pub account: String,
+    pub client_id: i32,
+    pub perm_id: i64,
+    pub status: OrderStatusKind,
+}
+
+impl Default for OpenOrderResponse {
+    fn default() -> Self {
+        Self {
+            order_id: 13,
+            contract_id: 76792991,
+            symbol: "TSLA".to_string(),
+            security_type: "STK".to_string(),
+            last_trade_date_or_contract_month: String::new(),
+            strike: 0.0,
+            right: "?".to_string(),
+            multiplier: String::new(),
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "TSLA".to_string(),
+            trading_class: "NMS".to_string(),
+            action: "BUY".to_string(),
+            total_quantity: 100.0,
+            order_type: "MKT".to_string(),
+            limit_price: Some(0.0),
+            aux_price: Some(0.0),
+            tif: "DAY".to_string(),
+            account: TEST_ACCOUNT.to_string(),
+            client_id: 100,
+            perm_id: TEST_PERM_ID,
+            status: OrderStatusKind::Submitted,
+        }
+    }
+}
+
+impl OpenOrderResponse {
+    pub fn order_id(mut self, v: i32) -> Self {
+        self.order_id = v;
+        self
+    }
+    pub fn contract_id(mut self, v: i32) -> Self {
+        self.contract_id = v;
+        self
+    }
+    pub fn symbol(mut self, v: impl Into<String>) -> Self {
+        self.symbol = v.into();
+        self
+    }
+    pub fn security_type(mut self, v: impl Into<String>) -> Self {
+        self.security_type = v.into();
+        self
+    }
+    pub fn last_trade_date_or_contract_month(mut self, v: impl Into<String>) -> Self {
+        self.last_trade_date_or_contract_month = v.into();
+        self
+    }
+    pub fn strike(mut self, v: f64) -> Self {
+        self.strike = v;
+        self
+    }
+    pub fn right(mut self, v: impl Into<String>) -> Self {
+        self.right = v.into();
+        self
+    }
+    pub fn multiplier(mut self, v: impl Into<String>) -> Self {
+        self.multiplier = v.into();
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+    pub fn local_symbol(mut self, v: impl Into<String>) -> Self {
+        self.local_symbol = v.into();
+        self
+    }
+    pub fn trading_class(mut self, v: impl Into<String>) -> Self {
+        self.trading_class = v.into();
+        self
+    }
+    pub fn action(mut self, v: impl Into<String>) -> Self {
+        self.action = v.into();
+        self
+    }
+    pub fn total_quantity(mut self, v: f64) -> Self {
+        self.total_quantity = v;
+        self
+    }
+    pub fn order_type(mut self, v: impl Into<String>) -> Self {
+        self.order_type = v.into();
+        self
+    }
+    pub fn limit_price(mut self, v: Option<f64>) -> Self {
+        self.limit_price = v;
+        self
+    }
+    pub fn aux_price(mut self, v: Option<f64>) -> Self {
+        self.aux_price = v;
+        self
+    }
+    pub fn perm_id(mut self, v: i64) -> Self {
+        self.perm_id = v;
+        self
+    }
+    pub fn status(mut self, v: OrderStatusKind) -> Self {
+        self.status = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for OpenOrderResponse {
+    type Proto = proto::OpenOrder;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::OpenOrder {
+            order_id: Some(self.order_id),
+            contract: Some(proto::Contract {
+                con_id: Some(self.contract_id),
+                symbol: Some(self.symbol.clone()),
+                sec_type: Some(self.security_type.clone()),
+                last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
+                strike: Some(self.strike),
+                right: some_str(&self.right),
+                multiplier: self.multiplier.parse().ok(),
+                exchange: Some(self.exchange.clone()),
+                currency: Some(self.currency.clone()),
+                local_symbol: Some(self.local_symbol.clone()),
+                trading_class: Some(self.trading_class.clone()),
+                ..Default::default()
+            }),
+            order: Some(proto::Order {
+                order_id: Some(self.order_id),
+                client_id: Some(self.client_id),
+                action: Some(self.action.clone()),
+                total_quantity: Some(self.total_quantity.to_string()),
+                order_type: Some(self.order_type.clone()),
+                lmt_price: self.limit_price,
+                aux_price: self.aux_price,
+                tif: Some(self.tif.clone()),
+                account: Some(self.account.clone()),
+                perm_id: Some(self.perm_id),
+                ..Default::default()
+            }),
+            order_state: Some(proto::OrderState {
+                status: Some(self.status.to_string()),
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+// --- CompletedOrder (msg 101) ---
+//
+// Defaults: AAPL STK BUY 100 @ MKT, status `Filled`, completion fields populated.
+
+#[derive(Clone, Debug)]
+pub struct CompletedOrderResponse {
+    pub contract_id: i32,
+    pub symbol: String,
+    pub security_type: String,
+    pub last_trade_date_or_contract_month: String,
+    pub strike: f64,
+    pub right: String,
+    pub multiplier: String,
+    pub exchange: String,
+    pub currency: String,
+    pub local_symbol: String,
+    pub trading_class: String,
+    pub action: String,
+    pub total_quantity: f64,
+    pub order_type: String,
+    pub limit_price: Option<f64>,
+    pub aux_price: Option<f64>,
+    pub tif: String,
+    pub account: String,
+    pub perm_id: i64,
+    pub status: OrderStatusKind,
+    pub trail_stop_price: Option<f64>,
+    pub shareholder: String,
+    pub completed_time: String,
+    pub completed_status: String,
+}
+
+impl Default for CompletedOrderResponse {
+    fn default() -> Self {
+        Self {
+            contract_id: 265598,
+            symbol: "AAPL".to_string(),
+            security_type: "STK".to_string(),
+            last_trade_date_or_contract_month: String::new(),
+            strike: 0.0,
+            right: String::new(),
+            multiplier: String::new(),
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "AAPL".to_string(),
+            trading_class: "NMS".to_string(),
+            action: "BUY".to_string(),
+            total_quantity: 100.0,
+            order_type: "MKT".to_string(),
+            limit_price: Some(0.0),
+            aux_price: Some(0.0),
+            tif: "DAY".to_string(),
+            account: TEST_ACCOUNT.to_string(),
+            perm_id: 1377295418,
+            status: OrderStatusKind::Filled,
+            trail_stop_price: None,
+            shareholder: "Not an insider or substantial shareholder".to_string(),
+            completed_time: "20231122 10:30:00 America/Los_Angeles".to_string(),
+            completed_status: "Filled".to_string(),
+        }
+    }
+}
+
+impl CompletedOrderResponse {
+    pub fn contract_id(mut self, v: i32) -> Self {
+        self.contract_id = v;
+        self
+    }
+    pub fn symbol(mut self, v: impl Into<String>) -> Self {
+        self.symbol = v.into();
+        self
+    }
+    pub fn security_type(mut self, v: impl Into<String>) -> Self {
+        self.security_type = v.into();
+        self
+    }
+    pub fn last_trade_date_or_contract_month(mut self, v: impl Into<String>) -> Self {
+        self.last_trade_date_or_contract_month = v.into();
+        self
+    }
+    pub fn strike(mut self, v: f64) -> Self {
+        self.strike = v;
+        self
+    }
+    pub fn right(mut self, v: impl Into<String>) -> Self {
+        self.right = v.into();
+        self
+    }
+    pub fn multiplier(mut self, v: impl Into<String>) -> Self {
+        self.multiplier = v.into();
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+    pub fn local_symbol(mut self, v: impl Into<String>) -> Self {
+        self.local_symbol = v.into();
+        self
+    }
+    pub fn trading_class(mut self, v: impl Into<String>) -> Self {
+        self.trading_class = v.into();
+        self
+    }
+    pub fn action(mut self, v: impl Into<String>) -> Self {
+        self.action = v.into();
+        self
+    }
+    pub fn total_quantity(mut self, v: f64) -> Self {
+        self.total_quantity = v;
+        self
+    }
+    pub fn order_type(mut self, v: impl Into<String>) -> Self {
+        self.order_type = v.into();
+        self
+    }
+    pub fn limit_price(mut self, v: Option<f64>) -> Self {
+        self.limit_price = v;
+        self
+    }
+    pub fn perm_id(mut self, v: i64) -> Self {
+        self.perm_id = v;
+        self
+    }
+    pub fn status(mut self, v: OrderStatusKind) -> Self {
+        self.status = v;
+        self
+    }
+    pub fn trail_stop_price(mut self, v: Option<f64>) -> Self {
+        self.trail_stop_price = v;
+        self
+    }
+    pub fn completed_time(mut self, v: impl Into<String>) -> Self {
+        self.completed_time = v.into();
+        self
+    }
+    pub fn completed_status(mut self, v: impl Into<String>) -> Self {
+        self.completed_status = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for CompletedOrderResponse {
+    type Proto = proto::CompletedOrder;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::CompletedOrder {
+            contract: Some(proto::Contract {
+                con_id: Some(self.contract_id),
+                symbol: Some(self.symbol.clone()),
+                sec_type: Some(self.security_type.clone()),
+                last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
+                strike: Some(self.strike),
+                right: some_str(&self.right),
+                multiplier: self.multiplier.parse().ok(),
+                exchange: Some(self.exchange.clone()),
+                currency: Some(self.currency.clone()),
+                local_symbol: Some(self.local_symbol.clone()),
+                trading_class: Some(self.trading_class.clone()),
+                ..Default::default()
+            }),
+            order: Some(proto::Order {
+                action: Some(self.action.clone()),
+                total_quantity: Some(self.total_quantity.to_string()),
+                order_type: Some(self.order_type.clone()),
+                lmt_price: self.limit_price,
+                aux_price: self.aux_price,
+                tif: Some(self.tif.clone()),
+                account: Some(self.account.clone()),
+                perm_id: Some(self.perm_id),
+                trail_stop_price: self.trail_stop_price,
+                shareholder: some_str(&self.shareholder),
+                ..Default::default()
+            }),
+            order_state: Some(proto::OrderState {
+                status: Some(self.status.to_string()),
+                completed_time: some_str(&self.completed_time),
+                completed_status: some_str(&self.completed_status),
+                ..Default::default()
+            }),
+        }
+    }
+}
+
 // --- OpenOrderEnd (msg 53) ---
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -809,6 +1168,14 @@ pub fn commission_report() -> CommissionReportResponse {
 
 pub fn execution_data() -> ExecutionDataResponse {
     ExecutionDataResponse::default()
+}
+
+pub fn open_order() -> OpenOrderResponse {
+    OpenOrderResponse::default()
+}
+
+pub fn completed_order() -> CompletedOrderResponse {
+    CompletedOrderResponse::default()
 }
 
 pub fn open_order_end() -> OpenOrderEndResponse {
