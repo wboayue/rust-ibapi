@@ -4,7 +4,7 @@ A living checklist of public-API rough edges to address before 3.0 ships. Goal:
 the API should feel **simple, ergonomic, easy to use, and intuitive** — minimal
 ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
-**Last audited:** 2026-05-08 (against `main` post-PR #529; floor at `PROTOBUF_SCAN_DATA` = 210).
+**Last audited:** 2026-05-10 (against `main`; floor at `PROTOBUF_SCAN_DATA` = 210).
 
 ## How to use this doc
 
@@ -24,12 +24,26 @@ Related existing tracking docs in `plans/`:
 ## 1. Construction & builders
 
 - [ ] **Forbid bare `Contract { ... }` construction.** Today `Contract::stock(...).build()`
-  is the blessed path, but examples (e.g. `examples/async/place_order.rs:22`) still
-  build the struct field-by-field with `..Default::default()`. Fields are `pub`, so
-  there's no compile-time push toward the builder.
+  is the blessed path, but ~20+ example sites (e.g. `examples/async/place_order.rs:22`)
+  still build the struct field-by-field with `..Default::default()`. Fields are `pub`,
+  so there's no compile-time push toward the builder.
   - Proposal: make required fields private (or wrap in newtypes that only the builder
     can construct), keep `pub` on getters; or `#[non_exhaustive]` + private constructor.
   - Breaking: yes (intentional for 3.0).
+  - **Escape-hatch invariant** (so locking down doesn't strand users on missing
+    sec-type constructors): every `pub` field on `Contract` keeps a corresponding
+    setter on `ContractBuilder`. `ContractBuilder::new()` is the named generic
+    entry point — anything spellable as `Contract { ... }` stays spellable as
+    `ContractBuilder::new().symbol(...).security_type(SecurityType::Warrant)…build()`.
+    Today's builder already has setters for every field
+    (`src/contracts/common/contract_builder/mod.rs:128-311`); the lockdown only
+    works as long as that stays true.
+  - Doc the escape hatch in `docs/migration-3.0.md` — "no convenience constructor
+    for X? use `ContractBuilder::new()`" — otherwise readers parse "forbid bare
+    construction" as "you're stuck if we missed your case."
+  - Add a regression test that asserts setter-per-public-field parity (reflective
+    enumeration via a macro, or a tiny `compile_fail`/doc-test). Without it the
+    invariant drifts silently the next time someone adds a field.
 
 - [x] **Newtype ergonomics: take `impl Into<Symbol>` / `&str` everywhere.** Shipped.
   `Symbol`, `Exchange`, `Currency` impl `From<&str>` + `From<String>` (`src/contracts/types.rs:24,85,141`)
@@ -47,10 +61,12 @@ Related existing tracking docs in `plans/`:
 - [ ] **Drop `client.next_order_id()` from the canonical happy path.** `submit()` already
   allocates an id internally; the only caller that still needs `next_order_id()` is
   the low-level `place_order(order_id, contract, order)` form. Examples still show it
-  at `examples/async/place_order.rs:32, 100, 103`. Either:
-  - keep `next_order_id()` for advanced callers but stop showing it in examples; or
-  - hide it behind `client.advanced()` / a feature flag and have `place_order` accept
-    `Option<i32>`.
+  at `examples/async/place_order.rs:32, 100, 103`.
+  - Decision: keep `next_order_id()` on `Client` for advanced callers (BYO-id flows
+    + the low-level `place_order` form), but stop showing it in examples.
+  - Sweep: rewrite `examples/async/place_order.rs` (and any sync sibling) to use the
+    fluent `client.order(c).buy(n).limit(p).submit()` path; only retain a
+    `next_order_id()` example in a dedicated "advanced / BYO order id" section.
 
 ## 2. Streaming surface
 
@@ -62,7 +78,13 @@ Related existing tracking docs in `plans/`:
   Today consumers call `subscription.next_data().await` (see
   `examples/async/place_order.rs:47`). For async this should be `StreamExt::next`,
   and for sync the `for item in subscription` form should be the default in examples.
-  - Decision needed: keep `next_data()` as a thin alias, or remove and force `Stream`?
+  - Current state: sync `Subscription` impls `IntoIterator`
+    (`src/subscriptions/sync.rs:341,349,373`); async exposes `.stream()` returning
+    `impl Stream + Unpin` (`src/subscriptions/async.rs:301`) but does NOT impl
+    `Stream` directly on `Subscription` itself.
+  - Decision needed: (a) impl `Stream` directly on async `Subscription` and drop
+    `.stream()`; (b) keep `next_data()` as a thin alias and just sweep examples to
+    show `.stream().next().await`; (c) remove `next_data()` entirely.
   - Breaking: yes if we remove.
 
 - [ ] **Notice classification helpers.** Today callers reach for `notice.code` ranges
@@ -77,8 +99,12 @@ Related existing tracking docs in `plans/`:
   (commit `b9ed884`). `src/orders/mod.rs:1557` is `pub status: OrderStatusKind` with
   `is_terminal()` etc. Examples now use `.is_terminal()` (lines 61, 143).
 
-- [ ] **Continue the typed-status sweep.** `OrderState.status`, contract `secIdType`,
-  exec `side`, and any other `String` fields whose wire vocabulary is enumerated.
+- [ ] **Continue the typed-status sweep.** `OrderState.status` already typed as
+  `OrderStatusKind` (`src/orders/mod.rs:1280`); remaining `String` fields whose
+  wire vocabulary is enumerated:
+  - `Execution.side` (`src/orders/mod.rs:1473`) — Buy / Sell / SShort / SLng
+  - `Contract.security_id_type` (`src/contracts/mod.rs`) — CUSIP / ISIN / SEDOL / RIC
+  - any others surfaced by audit
   Follow the PR #518 pattern (per `CLAUDE.md` rule 21): strict enum, `Display`
   round-trips, decoder rejects empty/missing as `Error::Parse`. **First**: grep
   captured-wire fixtures + the C# reference to confirm the field is actually
@@ -87,14 +113,14 @@ Related existing tracking docs in `plans/`:
 
 - [ ] **One canonical `Subscription` import path.** `Subscription` is reachable from
   `crate::subscriptions::Subscription` (canonical at `src/subscriptions/mod.rs:32,35`),
-  `crate::client::Subscription` (`src/client/mod.rs:34`), and `crate::prelude::Subscription`
-  (feature-gated at `src/prelude.rs:51-53`). Pick `crate::subscriptions::Subscription`
-  as canonical and keep the others as `pub use` aliases (or remove the client-level paths).
+  `crate::client::Subscription` (feature-gated at `src/client/mod.rs:41,44`), and
+  `crate::prelude::Subscription` (feature-gated at `src/prelude.rs:51,53`). Pick
+  `crate::subscriptions::Subscription` as canonical and keep the others as `pub use`
+  aliases (or remove the client-level paths).
 
-- [ ] **`NoticeStream` should not mirror `Subscription`'s sync/async toggle in the
-  prelude.** Today the prelude conditionally re-exports a sync vs async `NoticeStream`.
-  Either expose distinct `NoticeStream` / `BlockingNoticeStream` types, or keep a single
-  type whose API is the same shape and only differs in `await`.
+- [x] **`NoticeStream` should not mirror `Subscription`'s sync/async toggle in the
+  prelude.** Shipped — `src/prelude.rs:54` re-exports a single `NoticeStream`
+  (per-feature impls share the public name; only `await` differs).
 
 - [x] **Unify the two notice APIs.** Shipped 2026-05-08 as part of the
   `Client::builder()` work (option 3 — folded with §4.1). Hard-removed
@@ -126,12 +152,12 @@ Related existing tracking docs in `plans/`:
 
 - [ ] **Hide internal types from the public surface.** Audit `pub` items that look
   like plumbing:
-  - `Client::message_bus()` (`src/client/async.rs:391`) and `Client::stubbed()`
-    (`src/client/async.rs:374`) — both `pub` on the async side; sync has neither
+  - `Client::message_bus()` (`src/client/async.rs:359`) and `Client::stubbed()`
+    (`src/client/async.rs:342`) — both `pub` on the async side; sync has neither
     in its public signature, so the async exposure looks accidental.
   - `subscriptions::common::SubscriptionItem` (re-exported at module root — fine, but
     confirm `DecoderContext`, `StreamDecoder` stay `pub(crate)`)
-  - `pub mod messages` and `pub mod proto` (`src/lib.rs:111, 131`) — confirm what
+  - `pub mod messages` and `pub mod proto` (`src/lib.rs:107, 127`) — confirm what
     consumers actually need versus what's just exposed for tests/examples; consider
     `#[doc(hidden)]` for the advanced bits.
 
@@ -157,9 +183,10 @@ Related existing tracking docs in `plans/`:
   `#[non_exhaustive]` (`src/errors.rs:18`) and the typed variants predominate
   (`Io`, `Parse`, `ServerVersion`, `ConnectionFailed`, `ConnectionReset`,
   `Cancelled`, `Shutdown`, `EndOfStream`, `UnexpectedResponse`,
-  `UnsupportedTimeZone`, `InvalidArgument`, etc.). Continue splitting the
-  remaining `Simple(format!(...))` / `Message` sites into typed variants where
-  downstream code would plausibly match (auth failure, request timeout, …).
+  `UnsupportedTimeZone`, `InvalidArgument`, etc.). ~42 callsites remain
+  (concentrated in `src/messages.rs` ~24, `src/errors.rs` ~7, scattered elsewhere).
+  Continue splitting `Simple(format!(...))` / `Message` sites into typed variants
+  where downstream code would plausibly match (auth failure, request timeout, …).
 
 - [ ] **Distinguish "request rejected by server" from "transport error" in return
   types.** Today both come through `Result<_, Error>`. Consider promoting server-side
@@ -192,10 +219,14 @@ Related existing tracking docs in `plans/`:
   domain module should each pick one home for each type.
 
 - [ ] **`#[non_exhaustive]` on every public enum and struct that may grow.** Avoids
-  future breaking releases for additive variants/fields. Sweep before 3.0 cuts.
+  future breaking releases for additive variants/fields. Coverage today is **very
+  low**: only `Error` carries the attribute. Public enums like `Action`,
+  `SecurityType`, `OrderStatusKind`, `Liquidity` are unannotated. Sweep before
+  3.0 cuts.
 
 - [ ] **`#[must_use]` on every builder and `Subscription`.** Forgetting `.subscribe()`
-  / `.submit()` / `.build()` should produce a lint, not silent no-ops.
+  / `.submit()` / `.build()` should produce a lint, not silent no-ops. Today: zero
+  `#[must_use]` annotations on `ContractBuilder`, `OrderBuilder`, or `Subscription`.
 
 - [x] **No `block_on` in async paths.** Verified clean across `src/` on 2026-05-06
   (no `futures::executor::block_on` usages). Project rule (`CLAUDE.md` §10) keeps
