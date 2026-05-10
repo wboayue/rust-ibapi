@@ -1,4 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -16,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Waiting for news bulletins... (Press Ctrl+C to stop)");
 
-    while let Some(result) = bulletins.next_data().await {
+    while let Some(result) = (&mut bulletins).filter_data().next().await {
         match result {
             Ok(bulletin) => {
                 println!("\n--- News Bulletin ---");

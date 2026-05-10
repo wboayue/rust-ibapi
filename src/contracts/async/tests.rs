@@ -11,6 +11,7 @@ use crate::testdata::builders::contracts::{
     market_rule_request, matching_symbols_request, option_chain_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use futures::StreamExt;
 use std::sync::Arc;
 
 #[tokio::test]

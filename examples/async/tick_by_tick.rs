@@ -19,7 +19,9 @@
 
 use std::sync::Arc;
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use time::macros::format_description;
 
 #[tokio::main]
@@ -40,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut all_last_ticks = all_last_ticks;
     let mut count = 0;
-    while let Some(trade) = all_last_ticks.next_data().await {
+    while let Some(trade) = (&mut all_last_ticks).filter_data().next().await {
         if count >= 5 {
             break;
         }
@@ -71,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bid_ask_ticks = bid_ask_ticks;
     let mut count = 0;
-    while let Some(quote) = bid_ask_ticks.next_data().await {
+    while let Some(quote) = (&mut bid_ask_ticks).filter_data().next().await {
         if count >= 5 {
             break;
         }
@@ -102,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut midpoint_ticks = midpoint_ticks;
     let mut count = 0;
-    while let Some(midpoint) = midpoint_ticks.next_data().await {
+    while let Some(midpoint) = (&mut midpoint_ticks).filter_data().next().await {
         if count >= 5 {
             break;
         }

@@ -1,7 +1,9 @@
 //! Asynchronous subscription implementation
 
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use futures::stream::Stream;
 use log::{debug, warn};
@@ -19,8 +21,8 @@ type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<
 
 /// Asynchronous subscription for streaming data.
 ///
-/// Each call to [`next`](Subscription::next) returns
-/// `Option<Result<SubscriptionItem<T>, Error>>`:
+/// `Subscription<T>` implements [`futures::Stream`] with
+/// `Item = Result<SubscriptionItem<T>, Error>`:
 ///
 /// * `None` — the stream has ended.
 /// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
@@ -29,8 +31,39 @@ type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<
 ///   `request_id`; the stream stays open.
 /// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
 ///
-/// When you only care about data, use [`next_data`](Subscription::next_data) or
-/// [`data_stream`](Subscription::data_stream); both filter notices for you.
+/// Consume via [`StreamExt`](futures::StreamExt):
+///
+/// ```no_run
+/// # use ibapi::Client;
+/// # use ibapi::contracts::Contract;
+/// # use ibapi::subscriptions::SubscriptionItem;
+/// # use futures::StreamExt;
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let client = Client::connect("127.0.0.1:4002", 100).await?;
+/// let contract = Contract::stock("AAPL").build();
+/// let mut subscription = client.market_data(&contract).subscribe().await?;
+///
+/// while let Some(item) = subscription.next().await {
+///     match item {
+///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
+///         Ok(SubscriptionItem::Notice(n))    => eprintln!("notice: {n}"),
+///         Err(e)                             => { eprintln!("error: {e}"); break; }
+///     }
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// When you only care about data, use the [`SubscriptionItemStreamExt::filter_data`]
+/// adapter to filter notices (logged at `warn!`):
+///
+/// ```no_run
+/// # use ibapi::subscriptions::SubscriptionItemStreamExt;
+/// # use futures::StreamExt;
+/// # async fn run(mut subscription: ibapi::subscriptions::Subscription<i32>) {
+/// let mut data = (&mut subscription).filter_data();
+/// while let Some(result) = data.next().await { /* ... */ }
+/// # }
+/// ```
 ///
 /// Notices that are *not* tied to a specific subscription — connectivity codes
 /// 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc. — are not delivered
@@ -98,9 +131,13 @@ impl<T> Clone for Subscription<T> {
 }
 
 impl<T> Subscription<T> {
-    /// Create a subscription from an internal subscription and a decoder
+    /// Create a subscription from an internal subscription and a decoder.
+    ///
+    /// `pub(crate)` because the parameter types (`AsyncInternalSubscription`,
+    /// `DecoderContext`) are not part of the public API. External callers
+    /// reach subscriptions via the typed builders on `Client`.
     #[allow(clippy::too_many_arguments)]
-    pub fn with_decoder<D>(
+    pub(crate) fn with_decoder<D>(
         internal: AsyncInternalSubscription,
         message_bus: Arc<dyn AsyncMessageBus>,
         decoder: D,
@@ -129,40 +166,6 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Create a subscription from an internal subscription with a decoder function
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_with_decoder<F>(
-        internal: AsyncInternalSubscription,
-        message_bus: Arc<dyn AsyncMessageBus>,
-        decoder: F,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        message_type: Option<OutgoingMessages>,
-        context: DecoderContext,
-    ) -> Self
-    where
-        F: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
-    {
-        Self::with_decoder(internal, message_bus, decoder, request_id, order_id, message_type, context)
-    }
-
-    /// Create a subscription from components and a decoder (alias for with_decoder)
-    #[allow(clippy::too_many_arguments)]
-    pub fn with_decoder_components<D>(
-        internal: AsyncInternalSubscription,
-        message_bus: Arc<dyn AsyncMessageBus>,
-        decoder: D,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        message_type: Option<OutgoingMessages>,
-        context: DecoderContext,
-    ) -> Self
-    where
-        D: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
-    {
-        Self::with_decoder(internal, message_bus, decoder, request_id, order_id, message_type, context)
-    }
-
     /// Create a subscription from an internal subscription using the DataStream decoder
     pub(crate) fn new_from_internal<D>(
         internal: AsyncInternalSubscription,
@@ -176,7 +179,7 @@ impl<T> Subscription<T> {
         D: StreamDecoder<T> + 'static,
         T: 'static,
     {
-        let mut sub = Self::with_decoder_components(internal, message_bus, D::decode, request_id, order_id, message_type, context);
+        let mut sub = Self::with_decoder(internal, message_bus, D::decode, request_id, order_id, message_type, context);
         // Store the cancel function
         sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
         sub
@@ -213,120 +216,85 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Get the next item from the subscription.
-    ///
-    /// Returns `Option<Result<SubscriptionItem<T>, Error>>`:
-    /// - `None` — stream ended.
-    /// - `Some(Ok(SubscriptionItem::Data(t)))` — decoded payload.
-    /// - `Some(Ok(SubscriptionItem::Notice(n)))` — non-fatal IB notice; stream stays open.
-    /// - `Some(Err(e))` — terminal error; subsequent calls return `None`.
-    ///
-    /// When you only care about data, use [`next_data`](Self::next_data) which
-    /// filters notices.
-    pub async fn next(&mut self) -> Option<Result<SubscriptionItem<T>, Error>>
-    where
-        T: 'static,
-    {
-        if self.stream_ended.load(Ordering::Relaxed) {
-            return None;
-        }
-
-        match &mut self.inner {
-            SubscriptionInner::WithDecoder {
-                subscription,
-                decoder,
-                context,
-            } => loop {
-                match subscription.next_routed().await {
-                    Some(RoutedItem::Response(mut message)) => {
-                        let result = decoder(context, &mut message);
-                        match process_decode_result(result) {
-                            ProcessingResult::Success(val) => return Some(Ok(SubscriptionItem::Data(val))),
-                            ProcessingResult::EndOfStream => {
-                                self.stream_ended.store(true, Ordering::Relaxed);
-                                return None;
-                            }
-                            ProcessingResult::Skip => {
-                                log::trace!("skipping unexpected message on shared channel");
-                                continue;
-                            }
-                            ProcessingResult::Error(err) => {
-                                self.stream_ended.store(true, Ordering::Relaxed);
-                                return Some(Err(err));
-                            }
-                        }
-                    }
-                    Some(RoutedItem::Notice(notice)) => return Some(Ok(SubscriptionItem::Notice(notice))),
-                    Some(RoutedItem::Error(Error::EndOfStream)) => {
-                        self.stream_ended.store(true, Ordering::Relaxed);
-                        return None;
-                    }
-                    Some(RoutedItem::Error(e)) => {
-                        self.stream_ended.store(true, Ordering::Relaxed);
-                        return Some(Err(e));
-                    }
-                    None => return None,
-                }
-            },
-            SubscriptionInner::PreDecoded { receiver } => match receiver.recv().await? {
-                Ok(t) => Some(Ok(SubscriptionItem::Data(t))),
-                Err(e) => {
-                    self.stream_ended.store(true, Ordering::Relaxed);
-                    Some(Err(e))
-                }
-            },
-        }
-    }
-
-    /// Convenience: awaits the next item and filters notices, yielding just data.
-    /// Filtered notices are logged at `warn!`. Use [`next`](Self::next) instead
-    /// when you want to observe `SubscriptionItem::Notice` items.
-    pub async fn next_data(&mut self) -> Option<Result<T, Error>>
-    where
-        T: 'static,
-    {
-        loop {
-            if let Some(out) = filter_notice(self.next().await?) {
-                return Some(out);
-            }
-        }
-    }
-
-    /// Async mirror of the sync `Subscription::iter` adapter: returns a [`Stream`]
-    /// of `Result<SubscriptionItem<T>, Error>` — notices are surfaced for callers
-    /// that want to react to them.
-    ///
-    /// The returned stream is `Unpin` so callers can chain
-    /// [`futures::StreamExt`] combinators directly without `pin_mut!`.
-    pub fn stream(&mut self) -> impl Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin + '_
-    where
-        T: 'static,
-    {
-        Box::pin(futures::stream::unfold(
-            self,
-            |sub| async move { sub.next().await.map(|item| (item, sub)) },
-        ))
-    }
-
-    /// Async mirror of the sync `Subscription::iter_data` adapter: returns a
-    /// [`Stream`] of `Result<T, Error>` with notices filtered (and logged at
-    /// `warn!`).
-    ///
-    /// The returned stream is `Unpin` so callers can chain
-    /// [`futures::StreamExt`] combinators (`next`, `take`, `collect`, ...)
-    /// directly without wrapping in `pin_mut!`.
-    pub fn data_stream(&mut self) -> impl Stream<Item = Result<T, Error>> + Unpin + '_
-    where
-        T: 'static,
-    {
-        Box::pin(futures::stream::unfold(self, |sub| async move {
-            sub.next_data().await.map(|item| (item, sub))
-        }))
-    }
-
     /// Get the request ID associated with this subscription
     pub fn request_id(&self) -> Option<i32> {
         self.request_id
+    }
+}
+
+impl<T: Send + 'static> Stream for Subscription<T> {
+    type Item = Result<SubscriptionItem<T>, Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Subscription<T> is auto-Unpin: BroadcastStream uses ReusableBoxFuture
+        // (boxed → Unpin externally), mpsc::UnboundedReceiver is Unpin, and
+        // every other field is Unpin. Safe to project to &mut Self.
+        let this = self.get_mut();
+
+        if this.stream_ended.load(Ordering::Relaxed) {
+            return Poll::Ready(None);
+        }
+
+        loop {
+            match &mut this.inner {
+                SubscriptionInner::WithDecoder {
+                    subscription,
+                    decoder,
+                    context,
+                } => {
+                    // Drain the BroadcastStream synchronously while items are
+                    // ready, so we can apply Skip without re-yielding to the
+                    // executor between immediately-available items.
+                    let routed = match Pin::new(&mut subscription.stream).poll_next(cx) {
+                        Poll::Ready(Some(Ok(item))) => item,
+                        Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
+                        Poll::Ready(None) => return Poll::Ready(None),
+                        Poll::Pending => return Poll::Pending,
+                    };
+
+                    match routed {
+                        RoutedItem::Response(mut message) => {
+                            let result = decoder(context, &mut message);
+                            match process_decode_result(result) {
+                                ProcessingResult::Success(val) => return Poll::Ready(Some(Ok(SubscriptionItem::Data(val)))),
+                                ProcessingResult::EndOfStream => {
+                                    this.stream_ended.store(true, Ordering::Relaxed);
+                                    return Poll::Ready(None);
+                                }
+                                ProcessingResult::Skip => {
+                                    log::trace!("skipping unexpected message on shared channel");
+                                    continue;
+                                }
+                                ProcessingResult::Error(err) => {
+                                    this.stream_ended.store(true, Ordering::Relaxed);
+                                    return Poll::Ready(Some(Err(err)));
+                                }
+                            }
+                        }
+                        RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
+                        RoutedItem::Error(Error::EndOfStream) => {
+                            this.stream_ended.store(true, Ordering::Relaxed);
+                            return Poll::Ready(None);
+                        }
+                        RoutedItem::Error(e) => {
+                            this.stream_ended.store(true, Ordering::Relaxed);
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                    }
+                }
+                SubscriptionInner::PreDecoded { receiver } => {
+                    return match receiver.poll_recv(cx) {
+                        Poll::Ready(Some(Ok(t))) => Poll::Ready(Some(Ok(SubscriptionItem::Data(t)))),
+                        Poll::Ready(Some(Err(e))) => {
+                            this.stream_ended.store(true, Ordering::Relaxed);
+                            Poll::Ready(Some(Err(e)))
+                        }
+                        Poll::Ready(None) => Poll::Ready(None),
+                        Poll::Pending => Poll::Pending,
+                    };
+                }
+            }
+        }
     }
 }
 
@@ -384,11 +352,66 @@ impl<T> Drop for Subscription<T> {
     }
 }
 
-// Note: `Subscription<T>` does not implement `futures::Stream` directly
-// (tokio's broadcast::Receiver doesn't expose poll_recv). Use
-// [`Subscription::data_stream`] for a `Stream<Item = Result<T, Error>>` adapter,
-// or [`Subscription::next`] / [`Subscription::next_data`] for await-based
-// consumption.
+/// Stream adapter that filters `SubscriptionItem::Notice` items (logging them
+/// at `warn!`) from any `Stream<Item = Result<SubscriptionItem<T>, Error>>` and
+/// yields the underlying `Result<T, Error>` to the caller.
+///
+/// Returned by [`SubscriptionItemStreamExt::filter_data`]. Async mirror of the
+/// sync `FilterData` iterator adapter.
+#[must_use = "streams are lazy and do nothing unless polled"]
+pub struct FilterDataStream<S> {
+    inner: S,
+}
+
+impl<S, T> Stream for FilterDataStream<S>
+where
+    S: Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin,
+{
+    type Item = Result<T, Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        loop {
+            match Pin::new(&mut self.inner).poll_next(cx) {
+                Poll::Ready(Some(item)) => {
+                    if let Some(out) = filter_notice(item) {
+                        return Poll::Ready(Some(out));
+                    }
+                    // Filtered Notice; loop and poll again.
+                }
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+    }
+}
+
+/// Extension trait that adds [`filter_data`](SubscriptionItemStreamExt::filter_data)
+/// to any stream yielding `Result<SubscriptionItem<T>, Error>`. Async mirror of
+/// the sync `SubscriptionItemIterExt`.
+///
+/// Use it for the data-only flow when consuming a [`Subscription`]:
+///
+/// ```no_run
+/// # use ibapi::subscriptions::{Subscription, SubscriptionItemStreamExt};
+/// # use futures::StreamExt;
+/// # async fn run(mut subscription: Subscription<i32>) {
+/// let mut data = (&mut subscription).filter_data();
+/// while let Some(result) = data.next().await { /* ... */ }
+/// # }
+/// ```
+pub trait SubscriptionItemStreamExt: Stream + Sized {
+    /// Wrap `self` in a [`FilterDataStream`] adapter that drops
+    /// `SubscriptionItem::Notice` items (logging them) and yields the
+    /// underlying `Result<T, Error>`.
+    fn filter_data<T>(self) -> FilterDataStream<Self>
+    where
+        Self: Stream<Item = Result<SubscriptionItem<T>, Error>>,
+    {
+        FilterDataStream { inner: self }
+    }
+}
+
+impl<S: Stream + Sized> SubscriptionItemStreamExt for S {}
 
 #[cfg(all(test, feature = "async"))]
 #[path = "async_tests.rs"]

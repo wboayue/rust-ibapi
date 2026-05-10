@@ -8,8 +8,10 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
+use futures::StreamExt;
 use ibapi::accounts::types::AccountId;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use std::env;
 
 #[tokio::main]
@@ -35,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process PnL updates
     println!("Waiting for PnL updates (press Ctrl+C to stop)...");
-    while let Some(result) = subscription.next_data().await {
+    while let Some(result) = (&mut subscription).filter_data().next().await {
         match result {
             Ok(pnl_update) => {
                 print!("PnL Update - Daily: ${:.2}", pnl_update.daily_pnl);

@@ -7,7 +7,9 @@
 //! - All-order monitoring flows through `client.order_update_stream()`; this example
 //!   spawns a single background task that reads from it.
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -29,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return;
             }
         };
-        while let Some(update) = stream.next_data().await {
+        while let Some(update) = (&mut stream).filter_data().next().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
                     println!(

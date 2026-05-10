@@ -9,8 +9,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::broadcast::error::TryRecvError;
-
 use super::*;
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
@@ -64,14 +62,8 @@ async fn test_request_id_correlation_with_interleaved_responses() {
     assert_eq!(msg_b.peek_int(1).unwrap(), 200);
 
     // No cross-talk.
-    assert!(
-        matches!(sub_a.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "sub_a received an extra message"
-    );
-    assert!(
-        matches!(sub_b.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "sub_b received an extra message"
-    );
+    assert!(sub_a.try_next_routed().is_none(), "sub_a received an extra message");
+    assert!(sub_b.try_next_routed().is_none(), "sub_b received an extra message");
 }
 
 /// Same shape as the request_id test but on the orders channel: two in-flight
@@ -95,14 +87,8 @@ async fn test_order_id_correlation_with_interleaved_responses() {
     assert_eq!(msg_a.peek_int(1).unwrap(), 11);
     assert_eq!(msg_b.peek_int(1).unwrap(), 22);
 
-    assert!(
-        matches!(sub_a.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "sub_a received an extra message"
-    );
-    assert!(
-        matches!(sub_b.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "sub_b received an extra message"
-    );
+    assert!(sub_a.try_next_routed().is_none(), "sub_a received an extra message");
+    assert!(sub_b.try_next_routed().is_none(), "sub_b received an extra message");
 }
 
 /// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
@@ -291,10 +277,7 @@ async fn test_warning_with_unspecified_id_is_log_only() {
     stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
     bus.read_and_route_message().await.unwrap();
 
-    assert!(
-        matches!(sub.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "unrouted notice must not be delivered to a subscription"
-    );
+    assert!(sub.try_next_routed().is_none(), "unrouted notice must not be delivered to a subscription");
 }
 
 /// Order-channel fallback: a notice arrives bound to an `order_id` matching
@@ -326,7 +309,7 @@ async fn test_warning_with_order_id_falls_back_to_order_channel() {
 // expected.
 
 use crate::subscriptions::r#async::Subscription;
-use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
+use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, SubscriptionItemStreamExt};
 use futures::StreamExt;
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
@@ -449,8 +432,8 @@ async fn test_subscription_data_stream_filters_notices() {
         bus.read_and_route_message().await.unwrap();
     }
 
-    let collected: Vec<_> = subscription.data_stream().take(2).collect().await;
-    assert_eq!(collected.len(), 2, "data_stream must yield the two data items");
+    let collected: Vec<_> = (&mut subscription).filter_data().take(2).collect().await;
+    assert_eq!(collected.len(), 2, "filter_data() must yield the two data items");
     for item in collected {
         assert!(matches!(item, Ok(NoticeTestData)), "unexpected stream item");
     }
@@ -589,10 +572,7 @@ async fn test_execution_data_orphan_dropped() {
     stream.push_inbound(execution_data_body(99, 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
-    assert!(
-        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "unrelated sub got an orphan message"
-    );
+    assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an orphan message");
 }
 
 #[tokio::test]
@@ -627,10 +607,7 @@ async fn test_execution_data_end_orphan_dropped() {
     stream.push_inbound(body("55|1|999|"));
     bus.read_and_route_message().await.unwrap();
 
-    assert!(
-        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "unrelated sub got an orphan end"
-    );
+    assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an orphan end");
 }
 
 /// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
@@ -660,10 +637,7 @@ async fn test_commission_report_without_mapping_dropped() {
     stream.push_inbound(body("59|1|exec-not-mapped|"));
     bus.read_and_route_message().await.unwrap();
 
-    assert!(
-        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "unrelated sub got an unmapped commission"
-    );
+    assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an unmapped commission");
 }
 
 #[tokio::test]
@@ -718,10 +692,7 @@ async fn test_warning_with_orphan_request_id_logs() {
     stream.push_inbound(body("4|2|99|2104|orphan warning|"));
     bus.read_and_route_message().await.unwrap();
 
-    assert!(
-        matches!(unrelated.receiver.try_recv(), Err(TryRecvError::Empty)),
-        "unrelated sub got the notice"
-    );
+    assert!(unrelated.try_next_routed().is_none(), "unrelated sub got the notice");
     let leaked = tokio::time::timeout(TICK, notice_stream.next()).await;
     assert!(leaked.is_err(), "global notice stream got a routed-but-orphan notice");
 }

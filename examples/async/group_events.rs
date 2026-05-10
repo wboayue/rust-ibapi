@@ -11,7 +11,9 @@
 //!
 //! Make sure TWS is running with API connections enabled
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Listening for events. Change the contract in TWS Group 1 (Red) to see updates.");
 
-    while let Some(result) = subscription.next_data().await {
+    // DisplayGroupSubscription derefs to Subscription; deref-then-borrow before filter_data.
+    let inner = &mut *subscription;
+    while let Some(result) = inner.filter_data().next().await {
         match result {
             Ok(event) => {
                 println!("Received group event: {:?}", event);

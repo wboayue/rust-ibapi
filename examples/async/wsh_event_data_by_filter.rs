@@ -12,7 +12,9 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::wsh::AutoFill;
 
 #[tokio::main]
@@ -60,7 +62,7 @@ async fn main() {
             let mut event_count = 0;
 
             // Process events as they arrive
-            while let Some(event_result) = event_stream.next_data().await {
+            while let Some(event_result) = (&mut event_stream).filter_data().next().await {
                 match event_result {
                     Ok(event_data) => {
                         event_count += 1;

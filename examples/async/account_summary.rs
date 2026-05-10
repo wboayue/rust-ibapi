@@ -8,8 +8,10 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
+use futures::StreamExt;
 use ibapi::accounts::types::AccountGroup;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut subscription = client.account_summary(&AccountGroup("All".to_string()), tags).await?;
 
-    while let Some(result) = subscription.next_data().await {
+    while let Some(result) = (&mut subscription).filter_data().next().await {
         match result {
             Ok(update) => match update {
                 AccountSummaryResult::Summary(summary) => {

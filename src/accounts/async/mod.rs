@@ -24,6 +24,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::PositionUpdate;
+    /// use ibapi::subscriptions::SubscriptionItem;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
@@ -31,10 +32,11 @@ impl Client {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let mut subscription = client.positions().await.expect("error requesting positions");
     ///
-    ///     while let Some(position_response) = subscription.next_data().await {
-    ///         match position_response {
-    ///             Ok(PositionUpdate::Position(position)) => println!("{position:?}"),
-    ///             Ok(PositionUpdate::PositionEnd) => println!("initial set of positions received"),
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(PositionUpdate::Position(position))) => println!("{position:?}"),
+    ///             Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd))        => println!("initial set of positions received"),
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
     ///             Err(e) => eprintln!("Error: {e}"),
     ///         }
     ///     }
@@ -233,6 +235,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountUpdate;
     /// use ibapi::accounts::types::AccountId;
+    /// use ibapi::subscriptions::SubscriptionItem;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
@@ -243,14 +246,15 @@ impl Client {
     ///
     ///     let mut subscription = client.account_updates(&account).await.expect("error requesting account updates");
     ///
-    ///     while let Some(update_result) = subscription.next_data().await {
-    ///         match update_result {
-    ///             Ok(update) => {
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(update)) => {
     ///                 println!("{update:?}");
     ///                 if let AccountUpdate::End = update {
     ///                     break;
     ///                 }
     ///             }
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
     ///             Err(e) => eprintln!("Error: {e}"),
     ///         }
     ///     }
@@ -277,6 +281,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountUpdateMulti;
     /// use ibapi::accounts::types::AccountId;
+    /// use ibapi::subscriptions::SubscriptionItem;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
@@ -287,14 +292,15 @@ impl Client {
     ///
     ///     let mut subscription = client.account_updates_multi(Some(&account), None).await.expect("error requesting account updates multi");
     ///
-    ///     while let Some(update_result) = subscription.next_data().await {
-    ///         match update_result {
-    ///             Ok(update) => {
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(update)) => {
     ///                 println!("{update:?}");
     ///                 if let AccountUpdateMulti::End = update {
     ///                     break;
     ///                 }
     ///             }
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
     ///             Err(e) => eprintln!("Error: {e}"),
     ///         }
     ///     }

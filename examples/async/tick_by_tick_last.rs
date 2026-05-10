@@ -19,7 +19,9 @@
 
 use std::sync::Arc;
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -50,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process first 20 trades for demo
     let mut count = 0;
-    while let Some(trade_result) = trades.next_data().await {
+    while let Some(trade_result) = (&mut trades).filter_data().next().await {
         if count >= 20 {
             break;
         }

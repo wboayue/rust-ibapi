@@ -1,5 +1,7 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
 use ibapi::scanner::ScannerSubscription;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -37,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nScanning market... (Press Ctrl+C to stop)");
 
-    while let Some(result) = scanner_results.next_data().await {
+    while let Some(result) = (&mut scanner_results).filter_data().next().await {
         match result {
             Ok(scanner_data_list) => {
                 println!("\n=== Scanner Results ===");

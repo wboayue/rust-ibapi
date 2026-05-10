@@ -49,9 +49,9 @@ pub use crate::accounts::{
 // Client subscription type
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use crate::client::Subscription;
-#[cfg(feature = "async")]
-pub use crate::subscriptions::Subscription;
 pub use crate::subscriptions::{NoticeStream, SubscriptionItem};
+#[cfg(feature = "async")]
+pub use crate::subscriptions::{Subscription, SubscriptionItemStreamExt};
 
 // Async-specific imports
 #[cfg(feature = "async")]

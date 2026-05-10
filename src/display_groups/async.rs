@@ -72,6 +72,8 @@ mod tests {
     use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::SubscriptionItem;
+    use futures::StreamExt;
     use std::sync::{Arc, RwLock};
 
     #[tokio::test]
@@ -95,9 +97,9 @@ mod tests {
         }
 
         // Verify response
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "265598@SMART");
     }
 
@@ -113,9 +115,9 @@ mod tests {
 
         let mut subscription = client.subscribe_to_group_events(2).await.expect("failed to subscribe");
 
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "");
     }
 
@@ -158,9 +160,9 @@ mod tests {
         let mut subscription = client.subscribe_to_group_events(1).await.expect("failed to subscribe");
 
         // Should skip the wrong message type and return the correct one
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "correct message");
     }
 }

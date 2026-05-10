@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::conditions::{
     ExecutionCondition, MarginCondition, PercentChangeCondition, PriceCondition, TimeCondition, TriggerMethod, VolumeCondition,

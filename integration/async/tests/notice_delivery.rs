@@ -13,6 +13,7 @@
 
 use std::time::Duration;
 
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{order_builder, Action};
 use ibapi::subscriptions::SubscriptionItem;

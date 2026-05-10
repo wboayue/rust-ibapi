@@ -23,8 +23,10 @@
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
+use futures::StreamExt;
 use ibapi::market_data::historical::HistoricalBarUpdate;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use time::OffsetDateTime;
 
 #[derive(Parser)]
@@ -239,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    while let Some(update) = subscription.next_data().await {
+    while let Some(update) = (&mut subscription).filter_data().next().await {
         match update {
             Ok(HistoricalBarUpdate::Historical(data)) => {
                 println!("Received {} initial historical bars", data.bars.len());

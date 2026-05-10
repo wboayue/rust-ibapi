@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 

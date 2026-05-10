@@ -20,6 +20,8 @@
 
 use std::sync::Arc;
 
+use futures::StreamExt;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::{contracts::Contract, market_data::realtime::MarketDepths, Client};
 
 #[tokio::main]
@@ -62,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut market_depth = market_depth;
     let mut update_count = 0;
 
-    while let Some(depth_update) = market_depth.next_data().await {
+    while let Some(depth_update) = (&mut market_depth).filter_data().next().await {
         update_count += 1;
         if update_count > 30 {
             break;

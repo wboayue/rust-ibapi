@@ -217,7 +217,7 @@ impl Client {
     /// Per-subscription notices (codes carrying a real `request_id`) are not
     /// delivered here — they reach their owning subscription as
     /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice)
-    /// (see [`Subscription::next`](crate::subscriptions::Subscription::next)).
+    /// (via [`futures::StreamExt::next`] on the [`Subscription`](crate::subscriptions::Subscription) stream).
     ///
     /// # Note on handshake-time notices
     ///

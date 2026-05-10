@@ -19,7 +19,9 @@
 
 use std::sync::Arc;
 
+use futures::StreamExt;
 use ibapi::prelude::*;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = realtime_bars;
     let mut bar_count = 0;
 
-    while let Some(bar) = stream.next_data().await {
+    while let Some(bar) = (&mut stream).filter_data().next().await {
         let bar = bar?;
         bar_count += 1;
 

@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
 use ibapi::market_data::TradingHours;

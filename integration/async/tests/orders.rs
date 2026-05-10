@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind};
 use ibapi::subscriptions::SubscriptionItem;

@@ -1,5 +1,7 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
 use ibapi::contracts::SecurityType;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -21,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut chain_count = 0;
 
-    while let Some(result) = option_chain_stream.next_data().await {
+    while let Some(result) = (&mut option_chain_stream).filter_data().next().await {
         match result {
             Ok(chain) => {
                 chain_count += 1;

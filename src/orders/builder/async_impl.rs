@@ -1,6 +1,9 @@
+use futures::StreamExt;
+
 use super::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
 use crate::client::r#async::Client;
 use crate::errors::Error;
+use crate::subscriptions::SubscriptionItemStreamExt;
 
 #[cfg(test)]
 mod tests;
@@ -32,10 +35,11 @@ impl<'a> OrderBuilder<'a, Client> {
         let order = self.build()?;
 
         // Submit what-if order and get the response
-        let mut subscription = client.place_order(order_id, contract, &order).await?;
+        let subscription = client.place_order(order_id, contract, &order).await?;
 
         // Look for the order state in the responses
-        while let Some(Ok(response)) = subscription.next_data().await {
+        let mut data = subscription.filter_data();
+        while let Some(Ok(response)) = data.next().await {
             if let crate::orders::PlaceOrder::OpenOrder(order_data) = response {
                 if order_data.order_id == order_id {
                     return Ok(order_data.order_state);

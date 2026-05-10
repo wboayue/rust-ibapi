@@ -1,4 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -32,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Contract ID: {contract_id}, Providers: {provider_codes:?}");
 
     let mut count = 0;
-    while let Some(result) = news_stream.next_data().await {
+    while let Some(result) = (&mut news_stream).filter_data().next().await {
         match result {
             Ok(article) => {
                 count += 1;
