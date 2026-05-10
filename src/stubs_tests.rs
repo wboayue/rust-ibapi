@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::common::test_utils::helpers::text_response;
 use crate::messages::ResponseMessage;
 
 fn sample_response_messages() -> Vec<String> {
@@ -24,7 +25,7 @@ fn with_responses_stores_text_payloads() {
 
 #[test]
 fn with_ordered_responses_stores_messages() {
-    let messages = vec![ResponseMessage::from("1\09001\0"), ResponseMessage::from("2\09002\0")];
+    let messages = vec![text_response("1|9001|"), text_response("2|9002|")];
     let stub = MessageBusStub::with_ordered_responses(messages.clone());
     assert!(stub.response_messages.is_empty());
     assert_eq!(stub.ordered_responses.len(), messages.len());
@@ -57,12 +58,11 @@ fn response_messages_decoded_translates_pipe_to_nul() {
 
 #[test]
 fn response_messages_decoded_prefers_ordered_responses() {
-    let ordered = vec![ResponseMessage::from("X\01\0")];
     let stub = MessageBusStub {
         request_messages: std::sync::RwLock::new(vec![]),
         // text payloads are deliberately ignored when ordered_responses is non-empty
         response_messages: vec!["should-not-decode".to_string()],
-        ordered_responses: ordered,
+        ordered_responses: vec![text_response("X|1|")],
     };
     let decoded = stub.response_messages_decoded();
     assert_eq!(decoded.len(), 1);
@@ -102,7 +102,6 @@ mod sync_tests {
         let sub = MessageBus::send_order_request(&stub, 7, b"order-bytes").expect("send_order_request");
 
         assert_eq!(stub.request_messages(), vec![b"order-bytes".to_vec()]);
-        // send_order_request reuses the request_id slot in the stub builder.
         assert_eq!(sub.request_id, Some(7));
         assert_eq!(drain_subscription(&sub).len(), 1);
     }
@@ -127,7 +126,6 @@ mod sync_tests {
         let sub = MessageBus::send_shared_request(&stub, OutgoingMessages::RequestMarketData, b"shared-bytes").expect("send_shared_request");
 
         assert_eq!(stub.request_messages(), vec![b"shared-bytes".to_vec()]);
-        // shared subscriptions populate message_type, not request_id.
         assert_eq!(sub.request_id, None);
         assert_eq!(sub.message_type, Some(OutgoingMessages::RequestMarketData));
         assert_eq!(drain_subscription(&sub).len(), 1);
@@ -159,7 +157,6 @@ mod sync_tests {
         MessageBus::cancel_order_subscription(&stub, 0, b"cancel-order").expect("cancel_order_subscription");
         assert_eq!(stub.request_messages(), vec![b"cancel-order".to_vec()]);
 
-        // Tracker entry was released, so a fresh subscription is allowed.
         let _second = MessageBus::create_order_update_subscription(&stub).expect("re-subscribe after cancel");
     }
 
@@ -184,9 +181,12 @@ mod async_tests {
     use super::*;
     use crate::transport::AsyncMessageBus;
 
+    // The stub drops the broadcast sender before returning from each `send_*`
+    // call, so once preloaded messages drain, `next()` returns `None` cleanly —
+    // no timeout needed.
     async fn drain_async(sub: &mut crate::transport::AsyncInternalSubscription) -> Vec<ResponseMessage> {
         let mut out = Vec::new();
-        while let Ok(Some(result)) = tokio::time::timeout(std::time::Duration::from_millis(50), sub.next()).await {
+        while let Some(result) = sub.next().await {
             match result {
                 Ok(message) => out.push(message),
                 Err(e) => panic!("unexpected error in stub stream: {e:?}"),
@@ -248,7 +248,6 @@ mod async_tests {
         AsyncMessageBus::cancel_order_subscription(&stub, 7, b"ignored".to_vec())
             .await
             .expect("cancel_order_subscription");
-        // The async stub deliberately drops the packet rather than recording it.
         assert!(stub.request_messages().is_empty());
     }
 
@@ -266,18 +265,18 @@ mod async_tests {
             Ok(_) => panic!("expected AlreadySubscribed, got Ok"),
         }
 
-        // Drop sends CleanupSignal::OrderUpdateStream; the spawned task picks
-        // it up and clears the tracker entry.
+        // Drop sends CleanupSignal::OrderUpdateStream; yield until the spawned
+        // task receives it and clears the tracker entry. Bounded with a short
+        // timeout so a regression hangs the test rather than the suite.
         drop(sub);
-        for _ in 0..50 {
-            if !super::ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().contains(&stub_id) {
-                break;
+        tokio::time::timeout(std::time::Duration::from_millis(500), async {
+            while super::ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().contains(&stub_id) {
+                tokio::task::yield_now().await;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        assert!(!super::ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().contains(&stub_id));
+        })
+        .await
+        .expect("cleanup task did not clear tracker within 500ms");
 
-        // After cleanup we can subscribe again.
         let _again = AsyncMessageBus::create_order_update_subscription(&stub)
             .await
             .expect("re-subscribe after cleanup");
