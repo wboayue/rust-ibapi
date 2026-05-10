@@ -15,6 +15,23 @@ use super::encoders;
 ///
 /// Created by [`Client::subscribe_to_group_events`](crate::Client::subscribe_to_group_events).
 /// Derefs to `Subscription<DisplayGroupUpdate>` for `next()`, `cancel()`, etc.
+///
+/// # `filter_data` and the reborrow gotcha
+///
+/// `Subscription::filter_data` (from `SubscriptionItemStreamExt`) takes `self`,
+/// and method resolution through `DerefMut` is not allowed to *move* the
+/// dereferenced value. So `(&mut subscription).filter_data()` on a
+/// `DisplayGroupSubscription` fails with `cannot move out of dereference`.
+///
+/// Reborrow first:
+///
+/// ```ignore
+/// let inner = &mut *subscription;            // `&mut Subscription<_>`
+/// while let Some(item) = inner.filter_data().next().await { /* ... */ }
+/// ```
+///
+/// This is a Rust language quirk, not a subscription-shape issue. The same
+/// reborrow applies to any Deref-wrapping subscription type.
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
     message_bus: Arc<dyn AsyncMessageBus>,

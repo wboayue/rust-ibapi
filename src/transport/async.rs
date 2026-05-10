@@ -99,11 +99,19 @@ impl Clone for AsyncInternalSubscription {
 }
 
 impl AsyncInternalSubscription {
+    /// Construct an internal subscription wrapping a broadcast receiver.
+    ///
+    /// **Receiver positioning matters.** The receiver you pass is what feeds
+    /// the stream — its position in the broadcast channel determines what
+    /// the subscription sees. Pass the receiver paired with the messages
+    /// you want consumed (typically the `rx` returned alongside the `tx`).
+    /// **Do not** pass `rx.resubscribe()` unless you specifically want to
+    /// skip messages already queued in `rx`; `resubscribe()` positions a
+    /// fresh receiver at the channel's *current tail*, which silently
+    /// hides already-queued items and causes "test ran to completion but
+    /// the assertion never fired" failures.
     #[cfg(test)]
     pub(crate) fn new(receiver: broadcast::Receiver<RoutedItem>) -> Self {
-        // The original receiver feeds the stream (so it sees any messages
-        // already queued before this subscription was constructed). The
-        // template is a fresh resubscribe used by `Clone`.
         let template = receiver.resubscribe();
         Self {
             template_receiver: template,

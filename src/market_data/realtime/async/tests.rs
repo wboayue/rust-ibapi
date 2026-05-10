@@ -5,7 +5,7 @@ use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Excha
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::SubscriptionItemStreamExt;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     bid_ask_tick, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response, mid_point_tick,
     realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
@@ -94,7 +94,7 @@ async fn test_realtime_bars() {
     // Test receiving data
     let mut received_bars = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(bar)) = (&mut bars).filter_data().next().await {
+        if let Some(Ok(SubscriptionItem::Data(bar))) = bars.next().await {
             received_bars.push(bar);
         }
     }
@@ -180,7 +180,7 @@ async fn test_tick_by_tick_all_last() {
     // Test receiving data
     let mut received_trades = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(trade)) = (&mut trades).filter_data().next().await {
+        if let Some(Ok(SubscriptionItem::Data(trade))) = trades.next().await {
             received_trades.push(trade);
         }
     }
@@ -247,7 +247,7 @@ async fn test_tick_by_tick_last() {
 
     // Test receiving data
     let mut received_trades = Vec::new();
-    if let Some(Ok(trade)) = (&mut trades).filter_data().next().await {
+    if let Some(Ok(SubscriptionItem::Data(trade))) = trades.next().await {
         received_trades.push(trade);
     }
 
@@ -302,7 +302,7 @@ async fn test_tick_by_tick_bid_ask() {
 
     // Test receiving data
     let mut received_ticks = Vec::new();
-    if let Some(Ok(tick)) = (&mut subscription).filter_data().next().await {
+    if let Some(Ok(SubscriptionItem::Data(tick))) = subscription.next().await {
         received_ticks.push(tick);
     }
 
@@ -361,7 +361,7 @@ async fn test_tick_by_tick_midpoint() {
     // Test receiving data
     let mut received_midpoints = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(midpoint)) = (&mut midpoints).filter_data().next().await {
+        if let Some(Ok(SubscriptionItem::Data(midpoint))) = midpoints.next().await {
             received_midpoints.push(midpoint);
         }
     }
@@ -445,7 +445,7 @@ async fn test_market_depth() {
     // Test receiving data
     let mut received_depth = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(depth)) = (&mut depth).filter_data().next().await {
+        if let Some(Ok(SubscriptionItem::Data(depth))) = depth.next().await {
             received_depth.push(depth);
         }
     }
@@ -555,7 +555,7 @@ async fn test_basic_market_data() {
     // Test receiving data
     let mut received_ticks = Vec::new();
     for _ in 0..4 {
-        if let Some(Ok(tick)) = (&mut subscription).filter_data().next().await {
+        if let Some(Ok(SubscriptionItem::Data(tick))) = subscription.next().await {
             received_ticks.push(tick);
         }
     }

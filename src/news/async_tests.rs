@@ -5,7 +5,7 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::news::ArticleType;
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::SubscriptionItemStreamExt;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::market_data_request;
 use crate::testdata::builders::news::{
     cancel_news_bulletins_request, historical_news, historical_news_end, historical_news_request, news_article, news_article_request, news_bulletin,
@@ -63,7 +63,9 @@ async fn test_news_bulletins() {
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
-    let bulletin = (&mut subscription).filter_data().next().await.expect("expected news bulletin").unwrap();
+    let Some(Ok(SubscriptionItem::Data(bulletin))) = subscription.next().await else {
+        panic!("expected news bulletin");
+    };
     assert_eq!(bulletin.message_id, 1);
     assert_eq!(bulletin.message_type, 2);
     assert_eq!(bulletin.message, "Message text");
@@ -111,7 +113,9 @@ async fn test_historical_news() {
             .total_results(10),
     );
 
-    let article = (&mut subscription).filter_data().next().await.expect("expected news article").unwrap();
+    let Some(Ok(SubscriptionItem::Data(article))) = subscription.next().await else {
+        panic!("expected news article");
+    };
     assert_eq!(article.provider_code, "DJ-N");
     assert_eq!(article.article_id, "DJ-N$19985fef");
     assert_eq!(article.headline, headline);
@@ -172,7 +176,9 @@ async fn test_contract_news() {
             .generic_ticks(&["mdoff", "292:BZ", "292:DJ"]),
     );
 
-    let article = (&mut subscription).filter_data().next().await.expect("expected news article").unwrap();
+    let Some(Ok(SubscriptionItem::Data(article))) = subscription.next().await else {
+        panic!("expected news article");
+    };
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
@@ -202,7 +208,9 @@ async fn test_broad_tape_news() {
             .generic_ticks(&["mdoff", "292"]),
     );
 
-    let article = (&mut subscription).filter_data().next().await.expect("expected news article").unwrap();
+    let Some(Ok(SubscriptionItem::Data(article))) = subscription.next().await else {
+        panic!("expected news article");
+    };
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
@@ -225,7 +233,7 @@ async fn test_news_bulletin_cancellation() {
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let mut subscription = client.news_bulletins(true).await.unwrap();
-    let _ = (&mut subscription).filter_data().next().await;
+    let _ = subscription.next().await;
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
@@ -247,7 +255,7 @@ async fn test_contract_news_cancellation() {
 
     let contract = Contract::stock("TSLA").build();
     let mut subscription = client.contract_news(&contract, &["BZ"]).await.unwrap();
-    let _ = (&mut subscription).filter_data().next().await;
+    let _ = subscription.next().await;
 
     assert_eq!(request_message_count(&message_bus), 1);
 

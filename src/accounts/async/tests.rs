@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::*;
-use crate::subscriptions::SubscriptionItemStreamExt;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
     cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, family_codes, managed_accounts,
@@ -19,16 +19,16 @@ async fn test_positions() {
 
     let mut subscription = client.positions().await.expect("request positions failed");
 
-    let first_update = (&mut subscription).filter_data().next().await;
+    let first_update = subscription.next().await;
     assert!(
-        matches!(first_update, Some(Ok(PositionUpdate::Position(_)))),
+        matches!(first_update, Some(Ok(SubscriptionItem::Data(PositionUpdate::Position(_))))),
         "Expected PositionUpdate::Position, got {:?}",
         first_update
     );
 
-    let second_update = (&mut subscription).filter_data().next().await;
+    let second_update = subscription.next().await;
     assert!(
-        matches!(second_update, Some(Ok(PositionUpdate::PositionEnd))),
+        matches!(second_update, Some(Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd)))),
         "Expected PositionUpdate::PositionEnd, got {:?}",
         second_update
     );
@@ -53,15 +53,15 @@ async fn test_positions_multi() {
         .await
         .expect("request positions_multi failed");
 
-    let first_update = (&mut subscription).filter_data().next().await;
+    let first_update = subscription.next().await;
     assert!(
-        matches!(first_update, Some(Ok(PositionUpdateMulti::Position(_)))),
+        matches!(first_update, Some(Ok(SubscriptionItem::Data(PositionUpdateMulti::Position(_))))),
         "Expected PositionUpdateMulti::Position"
     );
 
-    let second_update = (&mut subscription).filter_data().next().await;
+    let second_update = subscription.next().await;
     assert!(
-        matches!(second_update, Some(Ok(PositionUpdateMulti::PositionEnd))),
+        matches!(second_update, Some(Ok(SubscriptionItem::Data(PositionUpdateMulti::PositionEnd)))),
         "Expected PositionUpdateMulti::PositionEnd"
     );
 
@@ -89,9 +89,9 @@ async fn test_account_summary() {
 
     let mut subscription = client.account_summary(&group, tags).await.expect("request account_summary failed");
 
-    let first_update = (&mut subscription).filter_data().next().await;
+    let first_update = subscription.next().await;
     match first_update {
-        Some(Ok(AccountSummaryResult::Summary(summary))) => {
+        Some(Ok(SubscriptionItem::Data(AccountSummaryResult::Summary(summary)))) => {
             assert_eq!(summary.account, TEST_ACCOUNT);
             assert_eq!(summary.tag, AccountSummaryTags::ACCOUNT_TYPE);
             assert_eq!(summary.value, "FA");
@@ -99,9 +99,9 @@ async fn test_account_summary() {
         _ => panic!("Expected AccountSummaryResult::Summary, got {first_update:?}"),
     }
 
-    let second_update = (&mut subscription).filter_data().next().await;
+    let second_update = subscription.next().await;
     assert!(
-        matches!(second_update, Some(Ok(AccountSummaryResult::End))),
+        matches!(second_update, Some(Ok(SubscriptionItem::Data(AccountSummaryResult::End)))),
         "Expected AccountSummaryResult::End, got {:?}",
         second_update
     );
@@ -262,9 +262,9 @@ async fn test_account_updates() {
 
     let mut subscription = client.account_updates(&account_name).await.expect("subscribe failed");
 
-    let first_update = (&mut subscription).filter_data().next().await;
+    let first_update = subscription.next().await;
     match first_update {
-        Some(Ok(AccountUpdate::AccountValue(av))) => {
+        Some(Ok(SubscriptionItem::Data(AccountUpdate::AccountValue(av)))) => {
             assert_eq!(av.key, "CashBalance");
             assert_eq!(av.value, "1000.00");
             assert_eq!(av.currency, "USD");
@@ -272,9 +272,9 @@ async fn test_account_updates() {
         other => panic!("First update was not AccountValue: {other:?}"),
     }
 
-    let second_update = (&mut subscription).filter_data().next().await;
+    let second_update = subscription.next().await;
     assert!(
-        matches!(second_update, Some(Ok(AccountUpdate::End))),
+        matches!(second_update, Some(Ok(SubscriptionItem::Data(AccountUpdate::End)))),
         "Expected AccountUpdate::End, got {:?}",
         second_update
     );
@@ -308,7 +308,9 @@ async fn test_account_updates_multi() {
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
 
     for key in expected_keys {
-        let update = (&mut subscription).filter_data().next().await.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         match update {
             AccountUpdateMulti::AccountMultiValue(value) => {
                 assert_eq!(value.key, *key);
@@ -319,7 +321,9 @@ async fn test_account_updates_multi() {
         }
     }
 
-    let end = (&mut subscription).filter_data().next().await.unwrap().unwrap();
+    let Some(Ok(SubscriptionItem::Data(end))) = subscription.next().await else {
+        panic!("expected Data");
+    };
     assert_eq!(end, AccountUpdateMulti::End);
 
     subscription.cancel().await;
@@ -478,16 +482,16 @@ async fn test_account_summary_multiple_tags() {
                 .await
                 .unwrap_or_else(|_| panic!("account_summary failed for {}", test_case.description));
 
-            let first_update = (&mut subscription).filter_data().next().await;
+            let first_update = subscription.next().await;
             assert!(
-                matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))),
+                matches!(first_update, Some(Ok(SubscriptionItem::Data(AccountSummaryResult::Summary(_))))),
                 "Expected summary for {}",
                 test_case.description
             );
 
-            let second_update = (&mut subscription).filter_data().next().await;
+            let second_update = subscription.next().await;
             assert!(
-                matches!(second_update, Some(Ok(AccountSummaryResult::End))),
+                matches!(second_update, Some(Ok(SubscriptionItem::Data(AccountSummaryResult::End)))),
                 "Expected end marker for {}",
                 test_case.description
             );

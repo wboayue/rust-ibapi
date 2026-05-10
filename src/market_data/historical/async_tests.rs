@@ -4,7 +4,7 @@ use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::SubscriptionItemStreamExt;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
 use futures::StreamExt;
 use std::sync::Arc;
@@ -644,29 +644,19 @@ async fn test_historical_data_streaming_with_updates() {
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let update1 = (&mut subscription)
-        .filter_data()
-        .next()
-        .await
-        .expect("Should receive initial historical data");
-    match update1.expect("decode should succeed") {
-        HistoricalBarUpdate::Historical(data) => {
-            assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
-            assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
-        }
-        _ => panic!("Expected Historical variant"),
-    }
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next().await else {
+        panic!("Expected Historical variant");
+    };
+    assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
+    assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
 
     // Second: receive streaming update
-    let update2 = (&mut subscription).filter_data().next().await.expect("Should receive streaming update");
-    match update2.expect("decode should succeed") {
-        HistoricalBarUpdate::Update(bar) => {
-            assert_eq!(bar.open, 185.80, "Wrong open price in update");
-            assert_eq!(bar.high, 186.10, "Wrong high price in update");
-            assert_eq!(bar.close, 185.90, "Wrong close price in update");
-        }
-        _ => panic!("Expected Update variant"),
-    }
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Update(bar)))) = subscription.next().await else {
+        panic!("Expected Update variant");
+    };
+    assert_eq!(bar.open, 185.80, "Wrong open price in update");
+    assert_eq!(bar.high, 186.10, "Wrong high price in update");
+    assert_eq!(bar.close, 185.90, "Wrong close price in update");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -712,17 +702,10 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
         .expect("streaming request should succeed");
 
     // Receive initial historical data
-    let update1 = (&mut subscription)
-        .filter_data()
-        .next()
-        .await
-        .expect("Should receive initial historical data");
-    match update1.expect("decode should succeed") {
-        HistoricalBarUpdate::Historical(data) => {
-            assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
-        }
-        _ => panic!("Expected Historical variant"),
-    }
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next().await else {
+        panic!("Expected Historical variant");
+    };
+    assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -768,12 +751,9 @@ async fn test_historical_data_streaming_error_response() {
         .expect("streaming request should succeed");
 
     // Should yield Some(Err(_)) — Subscription<T> surfaces errors through next().
-    let update = (&mut subscription)
-        .filter_data()
-        .next()
-        .await
-        .expect("error should arrive as Some(Err(_))");
-    let err = update.expect_err("Should yield error result");
+    let Some(Err(err)) = subscription.next().await else {
+        panic!("error should arrive as Some(Err(_))");
+    };
     assert!(err.to_string().contains("No market data permissions"), "Error should contain the message");
 }
 

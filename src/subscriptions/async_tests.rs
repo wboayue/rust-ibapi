@@ -3,6 +3,7 @@ use crate::market_data::realtime::Bar;
 use crate::messages::{Notice, OutgoingMessages};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
+use crate::subscriptions::SubscriptionItem;
 use crate::subscriptions::SubscriptionItemStreamExt;
 use futures::StreamExt;
 use std::sync::RwLock;
@@ -18,7 +19,7 @@ async fn test_subscription_with_decoder() {
     });
 
     let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx.resubscribe());
+    let internal = AsyncInternalSubscription::new(rx);
 
     let subscription: Subscription<Bar> = Subscription::with_decoder(
         internal,
@@ -48,9 +49,9 @@ async fn test_subscription_with_decoder() {
 
     // Test that we can receive the decoded message
     let mut sub = subscription;
-    let result = (&mut sub).filter_data().next().await;
-    assert!(result.is_some());
-    let bar = result.unwrap().unwrap();
+    let Some(Ok(SubscriptionItem::Data(bar))) = sub.next().await else {
+        panic!("expected Data");
+    };
     assert_eq!(bar.open, 100.5);
     assert_eq!(bar.high, 101.0);
 }
@@ -64,9 +65,10 @@ async fn test_subscription_new_from_receiver() {
     // Send test data
     tx.send(Ok("test".to_string())).unwrap();
 
-    let result = (&mut subscription).filter_data().next().await;
-    assert!(result.is_some());
-    assert_eq!(result.unwrap().unwrap(), "test");
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(SubscriptionItem::Data(ref s))) if s == "test"
+    ));
 }
 
 #[tokio::test]
@@ -108,7 +110,7 @@ async fn test_routed_item_error_surfaces_through_async_subscription() {
 
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
-    let result = (&mut subscription).filter_data().next().await;
+    let result = subscription.next().await;
     assert!(matches!(result, Some(Err(Error::ConnectionReset))));
 }
 
@@ -140,8 +142,10 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
     .unwrap();
     tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
 
-    let result = (&mut subscription).filter_data().next().await;
-    assert_eq!(result.unwrap().unwrap(), "data");
+    // First item via the raw Stream is the Notice (passes through);
+    // filter_data() drops it and yields the Data.
+    let mut data = (&mut subscription).filter_data();
+    assert!(matches!(data.next().await, Some(Ok(ref s)) if s == "data"));
 }
 
 #[tokio::test]
@@ -164,7 +168,7 @@ async fn test_subscription_next_with_error() {
     let msg = ResponseMessage::from("test\0");
     tx.send(msg.into()).unwrap();
 
-    let result = (&mut subscription).filter_data().next().await;
+    let result = subscription.next().await;
     assert!(result.is_some());
     assert!(result.unwrap().is_err());
 }
@@ -189,7 +193,7 @@ async fn test_subscription_next_end_of_stream() {
     let msg = ResponseMessage::from("test\0");
     tx.send(msg.into()).unwrap();
 
-    let result = (&mut subscription).filter_data().next().await;
+    let result = subscription.next().await;
     assert!(result.is_none());
 }
 
@@ -221,7 +225,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
 
     // First message triggers EndOfStream
     tx.send(ResponseMessage::from("end\0").into()).unwrap();
-    let result = (&mut subscription).filter_data().next().await;
+    let result = subscription.next().await;
     assert!(result.is_none());
 
     // Send stray messages after stream ended
@@ -229,7 +233,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
     tx.send(ResponseMessage::from("stray2\0").into()).unwrap();
 
     // Subsequent calls should return None immediately without invoking decoder
-    let result = (&mut subscription).filter_data().next().await;
+    let result = subscription.next().await;
     assert!(result.is_none());
 
     // Decoder should have been called only once (for the EndOfStream message)
@@ -270,12 +274,13 @@ async fn test_subscription_skips_unexpected_messages_without_retry_limit() {
         tx.send(ResponseMessage::from("msg\0").into()).unwrap();
     }
 
-    let result = (&mut subscription).filter_data().next().await;
     assert!(
-        result.is_some(),
+        matches!(
+            subscription.next().await,
+            Some(Ok(SubscriptionItem::Data(ref s))) if s == "success"
+        ),
         "subscription should not have stopped after skipping unexpected messages"
     );
-    assert_eq!(result.unwrap().unwrap(), "success");
     // All 21 messages should have been processed (20 skipped + 1 success)
     assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 21);
 }
