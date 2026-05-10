@@ -230,7 +230,9 @@ fn test_decode_completed_order_proto() {
     proto_msg.encode(&mut bytes).unwrap();
 
     let result = decode_completed_order_proto(&bytes).unwrap();
-    assert_eq!(result.order_id, 200);
+    // Completed orders always report `order_id = -1` (legacy text-decoder sentinel).
+    assert_eq!(result.order_id, -1);
+    assert_eq!(result.order.order_id, 200);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
     assert_eq!(result.order.action, Action::Sell);

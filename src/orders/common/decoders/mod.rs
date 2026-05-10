@@ -89,7 +89,9 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
         .unwrap_or_default();
 
     Ok(OrderData {
-        order_id: order.order_id,
+        // Completed orders carry no live order_id; preserve the legacy text-decoder
+        // sentinel so v2 → v3 consumers see the same value.
+        order_id: -1,
         contract,
         order,
         order_state,

@@ -428,17 +428,7 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
 
 // --- OpenOrder (msg 5) ---
 //
-// Field-minimal builder over `proto::OpenOrder` (Contract + Order + OrderState).
-// Defaults model a TSLA STK BUY 100 @ MKT order matching the existing TSLA test
-// fixture. Tests should override only the fields they assert on; everything else
-// stays at proto-level defaults and lets `decode_order` / `decode_contract` /
-// `decode_order_state` produce stable defaults.
-//
-// `clearing_intent`, `delta_neutral_order_type`, `delta_neutral_open_close`, and
-// `adjusted_order_type` carry non-empty proto defaults because `decode_order`
-// passes them through `s(&proto.x)` — empty proto strings would surface as `""`
-// in the decoded `Order`, but legacy text fixtures emitted `"IB"` / `"None"` /
-// `"?"` literals, and test assertions match that wire form.
+// Defaults: TSLA STK BUY 100 @ MKT, status `Submitted`, perm_id `TEST_PERM_ID`.
 
 #[derive(Clone, Debug)]
 pub struct OpenOrderResponse {
@@ -576,19 +566,44 @@ impl ResponseProtoEncoder for OpenOrderResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::OpenOrder {
             order_id: Some(self.order_id),
-            contract: Some(open_order_contract_proto(self)),
-            order: Some(open_order_proto(self)),
-            order_state: Some(open_order_state_proto(self.status)),
+            contract: Some(proto::Contract {
+                con_id: Some(self.contract_id),
+                symbol: Some(self.symbol.clone()),
+                sec_type: Some(self.security_type.clone()),
+                last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
+                strike: Some(self.strike),
+                right: some_str(&self.right),
+                multiplier: self.multiplier.parse().ok(),
+                exchange: Some(self.exchange.clone()),
+                currency: Some(self.currency.clone()),
+                local_symbol: Some(self.local_symbol.clone()),
+                trading_class: Some(self.trading_class.clone()),
+                ..Default::default()
+            }),
+            order: Some(proto::Order {
+                order_id: Some(self.order_id),
+                client_id: Some(self.client_id),
+                action: Some(self.action.clone()),
+                total_quantity: Some(self.total_quantity.to_string()),
+                order_type: Some(self.order_type.clone()),
+                lmt_price: self.limit_price,
+                aux_price: self.aux_price,
+                tif: Some(self.tif.clone()),
+                account: Some(self.account.clone()),
+                perm_id: Some(self.perm_id),
+                ..Default::default()
+            }),
+            order_state: Some(proto::OrderState {
+                status: Some(self.status.to_string()),
+                ..Default::default()
+            }),
         }
     }
 }
 
 // --- CompletedOrder (msg 101) ---
 //
-// Field-minimal builder over `proto::CompletedOrder`. Same construction shape as
-// `OpenOrderResponse` plus completion fields (`completed_time`,
-// `completed_status`, `shareholder`). Defaults model an AAPL STK BUY 100 @ MKT
-// completed-cancelled order.
+// Defaults: AAPL STK BUY 100 @ MKT, status `Filled`, completion fields populated.
 
 #[derive(Clone, Debug)]
 pub struct CompletedOrderResponse {
@@ -733,105 +748,40 @@ impl ResponseProtoEncoder for CompletedOrderResponse {
 
     fn to_proto(&self) -> Self::Proto {
         proto::CompletedOrder {
-            contract: Some(completed_order_contract_proto(self)),
-            order: Some(completed_order_proto(self)),
-            order_state: Some(completed_order_state_proto(self)),
+            contract: Some(proto::Contract {
+                con_id: Some(self.contract_id),
+                symbol: Some(self.symbol.clone()),
+                sec_type: Some(self.security_type.clone()),
+                last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
+                strike: Some(self.strike),
+                right: some_str(&self.right),
+                multiplier: self.multiplier.parse().ok(),
+                exchange: Some(self.exchange.clone()),
+                currency: Some(self.currency.clone()),
+                local_symbol: Some(self.local_symbol.clone()),
+                trading_class: Some(self.trading_class.clone()),
+                ..Default::default()
+            }),
+            order: Some(proto::Order {
+                action: Some(self.action.clone()),
+                total_quantity: Some(self.total_quantity.to_string()),
+                order_type: Some(self.order_type.clone()),
+                lmt_price: self.limit_price,
+                aux_price: self.aux_price,
+                tif: Some(self.tif.clone()),
+                account: Some(self.account.clone()),
+                perm_id: Some(self.perm_id),
+                trail_stop_price: self.trail_stop_price,
+                shareholder: some_str(&self.shareholder),
+                ..Default::default()
+            }),
+            order_state: Some(proto::OrderState {
+                status: Some(self.status.to_string()),
+                completed_time: some_str(&self.completed_time),
+                completed_status: some_str(&self.completed_status),
+                ..Default::default()
+            }),
         }
-    }
-}
-
-fn open_order_contract_proto(b: &OpenOrderResponse) -> proto::Contract {
-    proto::Contract {
-        con_id: Some(b.contract_id),
-        symbol: Some(b.symbol.clone()),
-        sec_type: Some(b.security_type.clone()),
-        last_trade_date_or_contract_month: some_str(&b.last_trade_date_or_contract_month),
-        strike: Some(b.strike),
-        right: Some(b.right.clone()),
-        multiplier: if b.multiplier.is_empty() { None } else { b.multiplier.parse().ok() },
-        exchange: Some(b.exchange.clone()),
-        currency: Some(b.currency.clone()),
-        local_symbol: Some(b.local_symbol.clone()),
-        trading_class: Some(b.trading_class.clone()),
-        ..Default::default()
-    }
-}
-
-fn completed_order_contract_proto(b: &CompletedOrderResponse) -> proto::Contract {
-    proto::Contract {
-        con_id: Some(b.contract_id),
-        symbol: Some(b.symbol.clone()),
-        sec_type: Some(b.security_type.clone()),
-        last_trade_date_or_contract_month: some_str(&b.last_trade_date_or_contract_month),
-        strike: Some(b.strike),
-        right: some_str(&b.right),
-        multiplier: if b.multiplier.is_empty() { None } else { b.multiplier.parse().ok() },
-        exchange: Some(b.exchange.clone()),
-        currency: Some(b.currency.clone()),
-        local_symbol: Some(b.local_symbol.clone()),
-        trading_class: Some(b.trading_class.clone()),
-        ..Default::default()
-    }
-}
-
-fn open_order_proto(b: &OpenOrderResponse) -> proto::Order {
-    proto::Order {
-        order_id: Some(b.order_id),
-        action: Some(b.action.clone()),
-        total_quantity: Some(b.total_quantity.to_string()),
-        order_type: Some(b.order_type.clone()),
-        lmt_price: b.limit_price,
-        aux_price: b.aux_price,
-        tif: Some(b.tif.clone()),
-        account: Some(b.account.clone()),
-        client_id: Some(b.client_id),
-        perm_id: Some(b.perm_id),
-        oca_type: Some(3),
-        delta_neutral_order_type: Some("None".to_string()),
-        delta_neutral_open_close: Some("?".to_string()),
-        clearing_intent: Some("IB".to_string()),
-        cash_qty: Some(0.0),
-        dont_use_auto_price_for_hedge: Some(true),
-        adjusted_order_type: Some("None".to_string()),
-        ..Default::default()
-    }
-}
-
-fn completed_order_proto(b: &CompletedOrderResponse) -> proto::Order {
-    proto::Order {
-        action: Some(b.action.clone()),
-        total_quantity: Some(b.total_quantity.to_string()),
-        order_type: Some(b.order_type.clone()),
-        lmt_price: b.limit_price,
-        aux_price: b.aux_price,
-        tif: Some(b.tif.clone()),
-        account: Some(b.account.clone()),
-        perm_id: Some(b.perm_id),
-        oca_type: Some(3),
-        delta_neutral_order_type: Some("None".to_string()),
-        clearing_intent: Some("IB".to_string()),
-        cash_qty: Some(0.0),
-        dont_use_auto_price_for_hedge: Some(true),
-        adjusted_order_type: Some("None".to_string()),
-        trail_stop_price: b.trail_stop_price,
-        shareholder: some_str(&b.shareholder),
-        ..Default::default()
-    }
-}
-
-fn open_order_state_proto(status: OrderStatusKind) -> proto::OrderState {
-    proto::OrderState {
-        status: Some(status.to_string()),
-        ..Default::default()
-    }
-}
-
-fn completed_order_state_proto(b: &CompletedOrderResponse) -> proto::OrderState {
-    proto::OrderState {
-        status: Some(b.status.to_string()),
-        completed_time: some_str(&b.completed_time),
-        completed_status: some_str(&b.completed_status),
-        ..Default::default()
     }
 }
 

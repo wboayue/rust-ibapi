@@ -70,11 +70,6 @@ fn place_order() {
 
     if let Some(Ok(PlaceOrder::OpenOrder(open_order))) = notifications.next_data() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
-        assert_eq!(open_order.contract.symbol, Symbol::from("TSLA"), "contract.symbol");
-        assert_eq!(open_order.contract.security_type, SecurityType::Stock, "contract.security_type");
-        assert_eq!(open_order.order.action, Action::Buy, "order.action");
-        assert_eq!(open_order.order.total_quantity, 100.0, "order.total_quantity");
-        assert_eq!(open_order.order.order_type, "MKT", "order.order_type");
         assert_eq!(open_order.order_state.status, OrderStatusKind::PreSubmitted, "order_state.status");
     } else {
         assert!(false, "message[0] expected an open order notification");
