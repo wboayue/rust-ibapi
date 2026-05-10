@@ -8,7 +8,7 @@
 
 use ibapi::client::blocking::Client;
 use ibapi::{
-    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
+    contracts::{Contract, SecurityType},
     orders::ExerciseAction,
 };
 
@@ -42,50 +42,24 @@ fn main() {
             let chain = &chains[0];
             let expiration = &chain.expirations[0];
             let strike = chain.strikes[chain.strikes.len() / 2];
+            let (year, month, day) = parse_yyyymmdd(expiration).expect("expiration in YYYYMMDD");
 
             println!("Using option from chain: SPY {} Call, Strike: {}", expiration, strike);
 
-            Contract {
-                symbol: Symbol::from("SPY"),
-                security_type: SecurityType::Option,
-                exchange: Exchange::from(chain.exchange.clone()),
-                currency: Currency::from("USD"),
-                last_trade_date_or_contract_month: expiration.clone(),
-                strike,
-                right: "C".to_owned(),
-                multiplier: chain.multiplier.clone(),
-                trading_class: chain.trading_class.clone(),
-                ..Default::default()
-            }
+            Contract::call("SPY")
+                .strike(strike)
+                .expires_on(year, month, day)
+                .on_exchange(chain.exchange.clone())
+                .multiplier(chain.multiplier.parse().unwrap_or(100))
+                .trading_class(chain.trading_class.clone())
+                .build()
         } else {
             println!("No option chain data available, using hardcoded contract");
-            // Fallback to hardcoded contract
-            Contract {
-                symbol: Symbol::from("SPY"),
-                security_type: SecurityType::Option,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                last_trade_date_or_contract_month: "20250117".to_owned(),
-                strike: 500.0, // More reasonable strike for SPY
-                right: "C".to_owned(),
-                multiplier: "100".to_owned(),
-                ..Default::default()
-            }
+            Contract::call("SPY").strike(500.0).expires_on(2025, 1, 17).build()
         }
     } else {
         println!("Could not get option chain, using hardcoded contract");
-        // Fallback to hardcoded contract
-        Contract {
-            symbol: Symbol::from("SPY"),
-            security_type: SecurityType::Option,
-            exchange: Exchange::from("SMART"),
-            currency: Currency::from("USD"),
-            last_trade_date_or_contract_month: "20250117".to_owned(),
-            strike: 550.0,
-            right: "C".to_owned(),
-            multiplier: "100".to_owned(),
-            ..Default::default()
-        }
+        Contract::call("SPY").strike(550.0).expires_on(2025, 1, 17).build()
     };
 
     println!("\nGetting contract details for option:");
@@ -140,4 +114,14 @@ fn main() {
     }
 
     println!("\nExercise options example completed.");
+}
+
+fn parse_yyyymmdd(s: &str) -> Option<(u16, u8, u8)> {
+    if s.len() != 8 {
+        return None;
+    }
+    let year = s.get(..4)?.parse().ok()?;
+    let month = s.get(4..6)?.parse().ok()?;
+    let day = s.get(6..8)?.parse().ok()?;
+    Some((year, month, day))
 }

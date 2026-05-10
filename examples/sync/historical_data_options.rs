@@ -18,7 +18,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = build_contract();
+    let contract = Contract::call("AMZN").strike(230.0).expires_on(2025, 1, 31).build();
 
     let historical_data = client
         .historical_data(
@@ -35,17 +35,5 @@ fn main() {
 
     for bar in &historical_data.bars {
         println!("{bar:?}");
-    }
-}
-
-fn build_contract() -> Contract {
-    Contract {
-        security_type: SecurityType::Option,
-        symbol: "AMZN".into(),
-        exchange: "SMART".into(),
-        last_trade_date_or_contract_month: "20250131".into(),
-        strike: 230.0,
-        right: "C".into(),
-        ..Default::default()
     }
 }

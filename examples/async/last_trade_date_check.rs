@@ -8,16 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     // SPY option — should have a last_trade_date
-    let contract = Contract {
-        symbol: Symbol::from("SPY"),
-        security_type: SecurityType::Option,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "20260320".to_string(),
-        strike: 600.0,
-        right: "C".to_string(),
-        ..Default::default()
-    };
+    let contract = Contract::call("SPY").strike(600.0).expires_on(2026, 3, 20).build();
 
     let details = client.contract_details(&contract).await?;
 
@@ -32,14 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ES future — should also have a last_trade_date
-    let contract = Contract {
-        symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("CME"),
-        currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "202606".to_string(),
-        ..Default::default()
-    };
+    let contract = Contract::futures("ES").expires_in(ContractMonth::new(2026, 6)).build();
 
     let details = client.contract_details(&contract).await?;
 

@@ -19,13 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to server version {}", client.server_version());
 
     // Create a contract for Apple stock
-    let contract = Contract {
-        symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Stock,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        ..Default::default()
-    };
+    let contract = Contract::stock("AAPL").build();
 
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);

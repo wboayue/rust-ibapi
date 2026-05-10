@@ -23,7 +23,6 @@
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
-use ibapi::contracts::SecurityType;
 use ibapi::market_data::historical::HistoricalBarUpdate;
 use ibapi::prelude::*;
 use time::OffsetDateTime;
@@ -62,33 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AssetType::Stock => Contract::stock("AAPL").build(),
         AssetType::Forex => Contract::forex("EUR", "USD").build(),
         AssetType::Futures => {
-            // For futures, we need to resolve the front-month contract via contract_details
+            // front_month() picks the next-expiring month locally; resolve
+            // via contract_details for the canonical local_symbol.
             println!("Resolving front-month contract for ES...");
-            let query = Contract {
-                symbol: "ES".into(),
-                security_type: SecurityType::Future,
-                exchange: "CME".into(),
-                currency: "USD".into(),
-                ..Default::default()
-            };
-
+            let query = Contract::futures("ES").front_month().build();
             let details = client.contract_details(&query).await?;
-            if details.is_empty() {
-                return Err("No futures contracts found for ES".into());
-            }
-
-            // Sort by contract month and take front-month
-            let mut sorted: Vec<_> = details
-                .into_iter()
-                .filter(|d| !d.contract.last_trade_date_or_contract_month.is_empty())
-                .collect();
-            sorted.sort_by(|a, b| {
-                a.contract
-                    .last_trade_date_or_contract_month
-                    .cmp(&b.contract.last_trade_date_or_contract_month)
-            });
-
-            let front = sorted.into_iter().next().expect("No valid contracts");
+            let front = details.into_iter().next().ok_or("No front-month contract found for ES")?;
             println!(
                 "  Found front-month: local_symbol='{}', contract_month='{}'",
                 front.contract.local_symbol, front.contract.last_trade_date_or_contract_month

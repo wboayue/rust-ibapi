@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use ibapi::{
-    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
+    contracts::{Contract, ContractMonth},
     market_data::historical::ToDuration,
     Client,
 };
@@ -40,14 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("SPY", Contract::stock("SPY").build(), "NYSE"),
         (
             "GC",
-            Contract {
-                symbol: Symbol::from("GC"),
-                security_type: SecurityType::Future,
-                exchange: Exchange::from("COMEX"),
-                currency: Currency::from("USD"),
-                last_trade_date_or_contract_month: "202502".to_string(),
-                ..Default::default()
-            },
+            Contract::futures("GC")
+                .expires_in(ContractMonth::new(2025, 2))
+                .on_exchange("COMEX")
+                .build(),
             "COMEX",
         ),
     ];
