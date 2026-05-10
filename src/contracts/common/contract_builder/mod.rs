@@ -302,8 +302,8 @@ impl ContractBuilder {
     ///
     /// Server responses overwrite this on contract-details round-trips,
     /// so most callers can leave it unset.
-    pub fn last_trade_date(mut self, date: Option<time::Date>) -> Self {
-        self.last_trade_date = date;
+    pub fn last_trade_date(mut self, date: time::Date) -> Self {
+        self.last_trade_date = Some(date);
         self
     }
 

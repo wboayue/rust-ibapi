@@ -8,6 +8,33 @@ use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 #[path = "types_tests.rs"]
 mod tests;
 
+/// Mirrors std `String`'s `PartialEq` ergonomics on a string-newtype:
+/// `wrapper == "literal"` and `"literal" == wrapper` both work.
+macro_rules! impl_str_partial_eq {
+    ($t:ty) => {
+        impl PartialEq<str> for $t {
+            fn eq(&self, other: &str) -> bool {
+                self.0 == other
+            }
+        }
+        impl PartialEq<&str> for $t {
+            fn eq(&self, other: &&str) -> bool {
+                self.0 == *other
+            }
+        }
+        impl PartialEq<$t> for str {
+            fn eq(&self, other: &$t) -> bool {
+                self == other.0
+            }
+        }
+        impl PartialEq<$t> for &str {
+            fn eq(&self, other: &$t) -> bool {
+                *self == other.0
+            }
+        }
+    };
+}
+
 /// Strong type for trading symbols
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -55,29 +82,7 @@ impl ToField for Symbol {
     }
 }
 
-impl PartialEq<str> for Symbol {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for Symbol {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<Symbol> for str {
-    fn eq(&self, other: &Symbol) -> bool {
-        self == other.0
-    }
-}
-
-impl PartialEq<Symbol> for &str {
-    fn eq(&self, other: &Symbol) -> bool {
-        *self == other.0
-    }
-}
+impl_str_partial_eq!(Symbol);
 
 /// Exchange identifier
 ///
@@ -140,29 +145,7 @@ impl ToField for Exchange {
     }
 }
 
-impl PartialEq<str> for Exchange {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for Exchange {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<Exchange> for str {
-    fn eq(&self, other: &Exchange) -> bool {
-        self == other.0
-    }
-}
-
-impl PartialEq<Exchange> for &str {
-    fn eq(&self, other: &Exchange) -> bool {
-        *self == other.0
-    }
-}
+impl_str_partial_eq!(Exchange);
 
 /// Currency identifier
 ///
@@ -220,29 +203,7 @@ impl ToField for Currency {
     }
 }
 
-impl PartialEq<str> for Currency {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for Currency {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<Currency> for str {
-    fn eq(&self, other: &Currency) -> bool {
-        self == other.0
-    }
-}
-
-impl PartialEq<Currency> for &str {
-    fn eq(&self, other: &Currency) -> bool {
-        *self == other.0
-    }
-}
+impl_str_partial_eq!(Currency);
 
 /// Option right (Call or Put)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

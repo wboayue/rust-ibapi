@@ -427,7 +427,7 @@ fn setter_parity_with_contract_fields() {
             delta: 0.5,
             price: 100.0,
         })
-        .last_trade_date(Some(date))
+        .last_trade_date(date)
         .issuer_id("issuer")
         .description("description")
         .build()

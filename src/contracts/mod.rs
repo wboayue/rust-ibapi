@@ -155,9 +155,12 @@ impl SecurityType {
 ///
 /// # Example
 ///
-/// ```compile_fail
+/// ```compile_fail,E0639
 /// use ibapi::contracts::{Contract, SecurityType, Symbol};
-/// // Fails: cannot build a `#[non_exhaustive]` struct from outside its crate.
+/// // Fails with E0639: cannot create non-exhaustive struct from outside its
+/// // defining crate. Pinning the error code here means a future rustc change
+/// // (or accidental removal of `#[non_exhaustive]`) surfaces as a doc-test
+/// // failure rather than silently "passing for the wrong reason."
 /// let c = Contract {
 ///     symbol: Symbol::from("AAPL"),
 ///     security_type: SecurityType::Stock,
