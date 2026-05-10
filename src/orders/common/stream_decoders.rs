@@ -12,21 +12,12 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
         IncomingMessages::CommissionsReport,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(message)?)),
+            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(message)?)),
+            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(message)?)),
+            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(message)?)),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -40,21 +31,12 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
         IncomingMessages::CommissionsReport,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<OrderUpdate, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<OrderUpdate, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(message)?)),
+            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(message)?)),
+            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(message)?)),
+            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(message)?)),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -63,9 +45,9 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
 impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
         match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
+            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(message)?)),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -81,15 +63,12 @@ impl StreamDecoder<Orders> for Orders {
         IncomingMessages::CompletedOrdersEnd,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Orders, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
+            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(message)?)),
+            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
+            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
+            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -103,16 +82,10 @@ impl StreamDecoder<Executions> for Executions {
         IncomingMessages::ExecutionDataEnd,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Executions, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Executions, Error> {
         match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(message)?)),
+            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(message)?)),
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -122,16 +95,10 @@ impl StreamDecoder<Executions> for Executions {
 impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(message)?)),
+            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(message)?)),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
