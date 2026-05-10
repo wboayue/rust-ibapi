@@ -305,3 +305,7 @@ impl AsyncMessageBus for MessageBusStub {
         true // Stub always returns connected
     }
 }
+
+#[cfg(test)]
+#[path = "stubs_tests.rs"]
+mod tests;
