@@ -18,6 +18,7 @@ use crate::ToField;
 
 // Re-export V2 API types
 pub use builders::*;
+pub use common::contract_builder::ContractBuilder;
 pub use types::*;
 
 // Common implementation modules
@@ -142,7 +143,28 @@ impl SecurityType {
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// Contract describes an instrument's definition
+/// Contract describes an instrument's definition.
+///
+/// This struct is `#[non_exhaustive]` — external callers must build it through one
+/// of the typed entry points (`Contract::stock`, `Contract::call`, `Contract::put`,
+/// `Contract::futures`, `Contract::forex`, `Contract::crypto`, `Contract::index`,
+/// `Contract::bond_cusip`, `Contract::bond_isin`, `Contract::spread`) or the
+/// field-minimal [`ContractBuilder::new`] when the typed builders don't fit.
+/// Bare `Contract { … ..Default::default() }` literal syntax is rejected at the
+/// crate boundary.
+///
+/// # Example
+///
+/// ```compile_fail
+/// use ibapi::contracts::{Contract, SecurityType, Symbol};
+/// // Fails: cannot build a `#[non_exhaustive]` struct from outside its crate.
+/// let c = Contract {
+///     symbol: Symbol::from("AAPL"),
+///     security_type: SecurityType::Stock,
+///     ..Default::default()
+/// };
+/// ```
+#[non_exhaustive]
 pub struct Contract {
     /// The unique IB contract identifier.
     pub contract_id: i32,

@@ -4,6 +4,10 @@ use crate::ToField;
 use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;
+
 /// Strong type for trading symbols
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -48,6 +52,30 @@ impl fmt::Display for Symbol {
 impl ToField for Symbol {
     fn to_field(&self) -> String {
         self.0.clone()
+    }
+}
+
+impl PartialEq<str> for Symbol {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Symbol {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Symbol> for str {
+    fn eq(&self, other: &Symbol) -> bool {
+        self == other.0
+    }
+}
+
+impl PartialEq<Symbol> for &str {
+    fn eq(&self, other: &Symbol) -> bool {
+        *self == other.0
     }
 }
 
@@ -112,6 +140,30 @@ impl ToField for Exchange {
     }
 }
 
+impl PartialEq<str> for Exchange {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Exchange {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Exchange> for str {
+    fn eq(&self, other: &Exchange) -> bool {
+        self == other.0
+    }
+}
+
+impl PartialEq<Exchange> for &str {
+    fn eq(&self, other: &Exchange) -> bool {
+        *self == other.0
+    }
+}
+
 /// Currency identifier
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
@@ -165,6 +217,30 @@ impl fmt::Display for Currency {
 impl ToField for Currency {
     fn to_field(&self) -> String {
         self.0.clone()
+    }
+}
+
+impl PartialEq<str> for Currency {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Currency {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Currency> for str {
+    fn eq(&self, other: &Currency) -> bool {
+        self == other.0
+    }
+}
+
+impl PartialEq<Currency> for &str {
+    fn eq(&self, other: &Currency) -> bool {
+        *self == other.0
     }
 }
 

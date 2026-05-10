@@ -1,4 +1,4 @@
-use super::super::{ComboLeg, Contract, DeltaNeutralContract, SecurityType};
+use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -96,6 +96,7 @@ pub struct ContractBuilder {
     pub(crate) combo_legs_description: Option<String>,
     pub(crate) combo_legs: Option<Vec<ComboLeg>>,
     pub(crate) delta_neutral_contract: Option<DeltaNeutralContract>,
+    pub(crate) last_trade_date: Option<time::Date>,
     pub(crate) issuer_id: Option<String>,
     pub(crate) description: Option<String>,
 }
@@ -297,6 +298,15 @@ impl ContractBuilder {
         self
     }
 
+    /// Sets the last trade date.
+    ///
+    /// Server responses overwrite this on contract-details round-trips,
+    /// so most callers can leave it unset.
+    pub fn last_trade_date(mut self, date: Option<time::Date>) -> Self {
+        self.last_trade_date = date;
+        self
+    }
+
     /// Sets the issuer ID
     ///
     /// Primarily used for bond contracts.
@@ -478,16 +488,16 @@ impl ContractBuilder {
 
         Ok(Contract {
             contract_id: self.contract_id.unwrap_or(0),
-            symbol: self.symbol.unwrap_or_default(),
+            symbol: Symbol::from(self.symbol.unwrap_or_default()),
             security_type,
             last_trade_date_or_contract_month: self.last_trade_date_or_contract_month.unwrap_or_default(),
             strike: self.strike.unwrap_or(0.0),
             right: self.right.unwrap_or_default(),
             multiplier: self.multiplier.unwrap_or_default(),
-            exchange: self.exchange.unwrap_or_default(),
-            currency: self.currency.unwrap_or_default(),
+            exchange: Exchange::from(self.exchange.unwrap_or_default()),
+            currency: Currency::from(self.currency.unwrap_or_default()),
             local_symbol: self.local_symbol.unwrap_or_default(),
-            primary_exchange: self.primary_exchange.unwrap_or_default(),
+            primary_exchange: Exchange::from(self.primary_exchange.unwrap_or_default()),
             trading_class: self.trading_class.unwrap_or_default(),
             include_expired: self.include_expired.unwrap_or(false),
             security_id_type: self.security_id_type.unwrap_or_default(),
@@ -495,12 +505,12 @@ impl ContractBuilder {
             combo_legs_description: self.combo_legs_description.unwrap_or_default(),
             combo_legs: self.combo_legs.unwrap_or_default(),
             delta_neutral_contract: self.delta_neutral_contract,
+            last_trade_date: self.last_trade_date,
             issuer_id: self.issuer_id.unwrap_or_default(),
             description: self.description.unwrap_or_default(),
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests;

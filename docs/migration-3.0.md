@@ -11,6 +11,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
 - `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
 - The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway with server version **210 (`PROTOBUF_SCAN_DATA`) or later**. Older servers are rejected with `Error::ServerVersion` immediately after the handshake.
+- `Contract` is `#[non_exhaustive]`. Build via the typed entry points (`Contract::stock`/`call`/`put`/`futures`/`forex`/`crypto`/`index`/`bond_*`/`spread`) or `ContractBuilder::new()` for the field-minimal escape hatch. Bare `Contract { … ..Default::default() }` no longer compiles outside the crate.
 
 ## Notification handling: the new shape
 
@@ -211,6 +212,48 @@ let sub = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).
 ```
 
 Defaults: `WhatToShow::Trades`, `TradingHours::Regular`, no extra options. Chain `.what_to_show(_)`, `.trading_hours(_)`, `.options(_)` to override. The reserved `options: Vec<TagValue>` parameter — previously async-only — is now reachable from the sync side too, fixing the asymmetry called out in #486. The `BarSize` parameter is gone: TWS only accepts 5-second bars on the wire, so it never had per-call meaning. A `.bar_size(...)` method can be added non-breakingly if IB ever expands support.
+
+### 8. `Contract` is `#[non_exhaustive]`
+
+`Contract` has gained `#[non_exhaustive]`, so external crates can no longer build it via struct literal syntax. The typed entry points on `Contract` are the canonical path; the field-minimal `ContractBuilder::new()` is the escape hatch when no typed builder fits.
+
+```rust,ignore
+// v2.x — no longer compiles outside the crate
+let c = Contract {
+    symbol: Symbol::from("AAPL"),
+    security_type: SecurityType::Stock,
+    exchange: Exchange::from("SMART"),
+    currency: Currency::from("USD"),
+    ..Default::default()
+};
+```
+
+```rust,ignore
+// v3.0 — typed entry points cover the common cases
+let stock  = Contract::stock("AAPL").build();
+let call   = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
+let put    = Contract::put("SPY").strike(450.0).expires_weekly().build();
+let future = Contract::futures("ES").front_month().build();
+let forex  = Contract::forex("EUR", "USD").build();
+let crypto = Contract::crypto("BTC").build();
+let index  = Contract::index("SPX");
+let bond   = Contract::bond_cusip("912810RN0");
+
+// Field-minimal escape hatch — anything spellable as `Contract { ... }`
+// stays spellable here. Required only when no typed builder exists for
+// your security type (warrants, exotic instruments, contract_id-only
+// lookups, etc.).
+let warrant = ContractBuilder::new()
+    .symbol("AAPL")
+    .security_type(SecurityType::Warrant)
+    .exchange("SMART")
+    .currency("USD")
+    .build()?;
+```
+
+**Escape-hatch invariant.** Every `pub` field on `Contract` is settable on `ContractBuilder` (including `last_trade_date`, which servers overwrite on contract-details round-trips). A regression test at `src/contracts/common/contract_builder/tests.rs::setter_parity_with_contract_fields` enforces this — when a new `Contract` field lands without a corresponding setter, the test fails to compile.
+
+The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>` / `PartialEq<&str>` (both directions), so `contract.symbol == "AAPL"` works without `.as_str()`.
 
 ## Before / after: common subscription patterns
 
