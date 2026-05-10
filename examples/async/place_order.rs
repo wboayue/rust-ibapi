@@ -7,7 +7,6 @@
 //! - All-order monitoring flows through `client.order_update_stream()`; this example
 //!   spawns a single background task that reads from it.
 
-use ibapi::orders::OrderUpdate;
 use ibapi::prelude::*;
 use std::error::Error;
 use std::sync::Arc;
@@ -71,14 +70,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let order_id = client.order(&contract).buy(100).limit(150.0).submit().await?;
     println!("Submitted order: {order_id}");
 
-    // Submit two more concurrent orders on the same contract.
-    let order_id1 = client.order(&contract).buy(50).limit(149.0).submit().await?;
-    println!("Submitted order: {order_id1}");
-    let order_id2 = client.order(&contract).sell(75).limit(151.0).submit().await?;
-    println!("Submitted order: {order_id2}");
+    // Submit two more orders concurrently using try_join!.
+    let (order_id1, order_id2) = tokio::try_join!(
+        client.order(&contract).buy(50).limit(149.0).submit(),
+        client.order(&contract).sell(75).limit(151.0).submit(),
+    )?;
+    println!("Submitted orders: {order_id1}, {order_id2}");
 
-    // Let the monitor task observe updates for up to 30 seconds, then bail.
+    // Let the monitor task observe updates for up to 30 seconds, then abort it.
+    let abort = monitor_handle.abort_handle();
     let _ = tokio::time::timeout(tokio::time::Duration::from_secs(30), monitor_handle).await;
+    abort.abort();
 
     println!("\nExample complete");
     Ok(())

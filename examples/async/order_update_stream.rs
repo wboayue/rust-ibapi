@@ -1,9 +1,10 @@
 #![allow(clippy::uninlined_format_args)]
-//! Example demonstrating how to use order_update_stream() with submit_order()
+//! Example demonstrating order_update_stream() with the fluent submit path.
 //!
 //! This example shows how to:
 //! 1. Create a global order update stream that receives all order-related events
-//! 2. Submit orders using the fire-and-forget submit_order() method
+//! 2. Submit orders via `client.order(&contract).buy(qty).<type>().submit().await`
+//!    (fluent fire-and-forget; submit() allocates the order id internally)
 //! 3. Monitor order status through the update stream
 
 use ibapi::contracts::Contract;

@@ -43,7 +43,6 @@ fn main() {
     contract.currency = Currency::from("USD");
     debug!("contract template {contract:?}");
 
-    // Fluent submit: dispatch on Action to .buy() / .sell(); .submit() allocates the id.
     let order_id = match action {
         Action::Buy => client.order(&contract).buy(quantity).market().submit(),
         Action::Sell => client.order(&contract).sell(quantity).market().submit(),

@@ -12,7 +12,6 @@
 //! - System messages
 
 use ibapi::client::blocking::Client;
-use ibapi::orders::OrderUpdate;
 use ibapi::prelude::*;
 use std::sync::Arc;
 use std::thread;
