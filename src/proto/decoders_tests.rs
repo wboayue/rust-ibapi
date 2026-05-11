@@ -5,7 +5,7 @@ use crate::orders::OrderStatusKind;
 
 #[test]
 fn parse_required_none_errors_with_label() {
-    let err = parse_required::<OrderStatusKind>(&None, "OrderStatus").unwrap_err();
+    let err = parse_required::<OrderStatusKind>(None, "OrderStatus").unwrap_err();
     match err {
         Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
         other => panic!("expected Error::Parse, got {other:?}"),
@@ -14,7 +14,7 @@ fn parse_required_none_errors_with_label() {
 
 #[test]
 fn parse_required_empty_errors_with_label() {
-    let err = parse_required::<OrderStatusKind>(&Some(String::new()), "OrderStatus").unwrap_err();
+    let err = parse_required::<OrderStatusKind>(Some(""), "OrderStatus").unwrap_err();
     match err {
         Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
         other => panic!("expected Error::Parse, got {other:?}"),
@@ -23,14 +23,14 @@ fn parse_required_empty_errors_with_label() {
 
 #[test]
 fn parse_required_valid_round_trips() {
-    let v: OrderStatusKind = parse_required(&Some("Submitted".into()), "OrderStatus").unwrap();
+    let v: OrderStatusKind = parse_required(Some("Submitted"), "OrderStatus").unwrap();
     assert_eq!(v, OrderStatusKind::Submitted);
 }
 
 #[test]
 fn parse_required_unknown_propagates_fromstr_err() {
     assert!(matches!(
-        parse_required::<OrderStatusKind>(&Some("Garbage".into()), "OrderStatus"),
+        parse_required::<OrderStatusKind>(Some("Garbage"), "OrderStatus"),
         Err(Error::Parse(_, _, _))
     ));
 }
@@ -39,28 +39,25 @@ fn parse_required_unknown_propagates_fromstr_err() {
 
 #[test]
 fn parse_optional_none_is_ok_none() {
-    let v: Option<OrderStatusKind> = parse_optional(&None).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(None).unwrap();
     assert_eq!(v, None);
 }
 
 #[test]
 fn parse_optional_empty_is_ok_none() {
-    let v: Option<OrderStatusKind> = parse_optional(&Some(String::new())).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(Some("")).unwrap();
     assert_eq!(v, None);
 }
 
 #[test]
 fn parse_optional_valid_round_trips() {
-    let v: Option<OrderStatusKind> = parse_optional(&Some("Filled".into())).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(Some("Filled")).unwrap();
     assert_eq!(v, Some(OrderStatusKind::Filled));
 }
 
 #[test]
 fn parse_optional_unknown_propagates_fromstr_err() {
-    assert!(matches!(
-        parse_optional::<OrderStatusKind>(&Some("Garbage".into())),
-        Err(Error::Parse(_, _, _))
-    ));
+    assert!(matches!(parse_optional::<OrderStatusKind>(Some("Garbage")), Err(Error::Parse(_, _, _))));
 }
 
 // === decode_combo_leg end-to-end (CLAUDE.md rule 10) ===
