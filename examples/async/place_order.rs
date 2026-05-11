@@ -7,9 +7,7 @@
 //! - All-order monitoring flows through `client.order_update_stream()`; this example
 //!   spawns a single background task that reads from it.
 
-use futures::StreamExt;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 use std::error::Error;
 use std::sync::Arc;
 

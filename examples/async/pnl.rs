@@ -8,10 +8,8 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
-use futures::StreamExt;
 use ibapi::accounts::types::AccountId;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 use std::env;
 
 #[tokio::main]

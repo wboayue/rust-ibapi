@@ -328,14 +328,14 @@ impl StreamDecoder<NoticeTestData> for NoticeTestData {
 async fn make_request_subscription(request_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
     let internal = bus.send_request(request_id, vec![]).await.unwrap();
-    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), Some(request_id), None, None, DecoderContext::default());
+    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), Some(request_id), None, DecoderContext::default());
     (stream, bus, sub)
 }
 
 async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
     let internal = bus.send_order_request(order_id, vec![]).await.unwrap();
-    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), None, Some(order_id), None, DecoderContext::default());
+    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), None, Some(order_id), DecoderContext::default());
     (stream, bus, sub)
 }
 

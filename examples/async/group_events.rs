@@ -11,9 +11,7 @@
 //!
 //! Make sure TWS is running with API connections enabled
 
-use futures::StreamExt;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

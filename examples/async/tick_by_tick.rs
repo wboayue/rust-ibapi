@@ -19,9 +19,7 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 use time::macros::format_description;
 
 #[tokio::main]

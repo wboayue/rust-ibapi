@@ -42,7 +42,6 @@ impl Client {
             self.message_bus.clone(),
             Some(request_id),
             None,
-            None,
             self.decoder_context(),
         ))
     }

@@ -32,7 +32,6 @@ impl Client {
             self.message_bus.clone(),
             None,
             None,
-            Some(OutgoingMessages::RequestNewsBulletins),
             self.decoder_context(),
         ))
     }
@@ -56,7 +55,6 @@ impl Client {
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),
-            None,
             None,
             self.decoder_context(),
         ))
@@ -89,7 +87,6 @@ impl Client {
             self.message_bus.clone(),
             Some(request_id),
             None,
-            None,
             self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
         ))
     }
@@ -104,7 +101,6 @@ impl Client {
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),
-            None,
             None,
             self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
         ))

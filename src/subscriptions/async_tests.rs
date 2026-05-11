@@ -39,7 +39,6 @@ async fn test_subscription_with_decoder() {
         },
         Some(9000),
         None,
-        Some(OutgoingMessages::RequestRealTimeBars),
         DecoderContext::default(),
     );
 
@@ -104,7 +103,6 @@ async fn test_routed_item_error_surfaces_through_async_subscription() {
         |_context, _msg| Ok("should-not-be-called".to_string()),
         None,
         None,
-        None,
         DecoderContext::default(),
     );
 
@@ -124,7 +122,6 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
-        None,
         None,
         None,
         DecoderContext::default(),
@@ -160,7 +157,6 @@ async fn test_subscription_next_with_error() {
         |_context, _msg| Err(Error::Simple("decode error".into())),
         None,
         None,
-        None,
         DecoderContext::default(),
     );
 
@@ -183,7 +179,6 @@ async fn test_subscription_next_end_of_stream() {
         internal,
         message_bus,
         |_context, _msg| Err(Error::EndOfStream),
-        None,
         None,
         None,
         DecoderContext::default(),
@@ -217,7 +212,6 @@ async fn test_subscription_no_retries_after_end_of_stream() {
                 Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
             }
         },
-        None,
         None,
         None,
         DecoderContext::default(),
@@ -265,7 +259,6 @@ async fn test_subscription_skips_unexpected_messages_without_retry_limit() {
         },
         None,
         None,
-        None,
         DecoderContext::default(),
     );
 
@@ -301,7 +294,6 @@ async fn test_subscription_cancel() {
         |_context, _msg| Ok("test".to_string()),
         Some(123),
         None,
-        Some(OutgoingMessages::RequestMarketData),
         DecoderContext::default(),
     );
     subscription.cancel_fn = Some(Arc::new(cancel_fn));
@@ -328,7 +320,6 @@ async fn test_subscription_clone() {
         |_context, _msg| Ok("test".to_string()),
         Some(456),
         Some(789),
-        Some(OutgoingMessages::RequestPositions),
         DecoderContext::default()
             .with_smart_depth(true)
             .with_request_type(OutgoingMessages::RequestPositions),
@@ -337,7 +328,6 @@ async fn test_subscription_clone() {
     let cloned = subscription.clone();
     assert_eq!(cloned.request_id, Some(456));
     assert_eq!(cloned.order_id, Some(789));
-    assert_eq!(cloned._message_type, Some(OutgoingMessages::RequestPositions));
     assert!(cloned.context.is_smart_depth);
 }
 
@@ -358,7 +348,6 @@ async fn test_subscription_drop_with_cancel() {
             |_context, _msg| Ok("test".to_string()),
             Some(999),
             None,
-            Some(OutgoingMessages::RequestMarketData),
             DecoderContext::default(),
         );
         subscription.cancel_fn = Some(Arc::new(cancel_fn));
@@ -395,7 +384,6 @@ async fn test_subscription_with_context() {
         |_context, _msg| Ok("test".to_string()),
         None,
         None,
-        None,
         context.clone(),
     );
 
@@ -421,7 +409,7 @@ async fn test_subscription_new_from_internal_simple() {
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, DecoderContext::default(), message_bus);
+    let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, message_bus, DecoderContext::default());
 
     assert!(subscription.cancel_fn.is_some());
 }
@@ -474,7 +462,6 @@ async fn test_data_stream_filters_notices() {
         |_context, _msg| Ok("data".to_string()),
         None,
         None,
-        None,
         DecoderContext::default(),
     );
 
@@ -505,7 +492,6 @@ async fn test_routed_item_notice_surfaces_as_subscription_item() {
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
-        None,
         None,
         None,
         DecoderContext::default(),
@@ -567,7 +553,6 @@ async fn subscription_impls_stream() {
         |_ctx, msg| Ok(msg.peek_int(0).unwrap_or_default()),
         Some(1),
         None,
-        None,
         DecoderContext::default(),
     );
 
@@ -599,7 +584,6 @@ async fn filter_data_stream_drops_notices() {
         message_bus,
         |_ctx, msg| Ok(msg.peek_int(0).unwrap_or_default()),
         Some(7),
-        None,
         None,
         DecoderContext::default(),
     );

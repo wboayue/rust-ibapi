@@ -68,12 +68,13 @@ pub trait AsyncMessageBus: Send + Sync {
 
 /// Internal subscription for async implementation.
 ///
-/// Holds a `BroadcastStream<RoutedItem>` for poll-based consumption (used by
-/// `Subscription<T>::poll_next`) plus a `template_receiver` kept solely so
-/// `Clone` can `resubscribe()` to produce an independent stream.
+/// Holds a `BroadcastStream<RoutedItem>` for poll-based consumption plus a
+/// `template_receiver` kept solely so `Clone` can `resubscribe()` to produce an
+/// independent stream. We cannot store the `Sender` instead — that would keep
+/// the channel alive past the external sender's drop, breaking the
+/// "channel closes when senders drop" termination contract.
 pub struct AsyncInternalSubscription {
-    /// Held only for `Clone` via `resubscribe()`. Never polled directly — it
-    /// would race with `stream`, lag, and waste a receiver slot.
+    /// Held only for `Clone` via `resubscribe()`. Never polled directly.
     template_receiver: broadcast::Receiver<RoutedItem>,
     pub(crate) stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
@@ -85,7 +86,7 @@ impl Clone for AsyncInternalSubscription {
     fn clone(&self) -> Self {
         // For clones, both template and stream start at the current tail of
         // the broadcast channel — clones see future messages, not the
-        // original's history. This matches the prior `resubscribe()` semantics.
+        // original's history.
         let new_template = self.template_receiver.resubscribe();
         let new_polling = self.template_receiver.resubscribe();
         Self {

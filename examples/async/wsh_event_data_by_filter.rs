@@ -12,9 +12,7 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
-use futures::StreamExt;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::wsh::AutoFill;
 
 #[tokio::main]

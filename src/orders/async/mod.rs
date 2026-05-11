@@ -16,8 +16,8 @@ impl Client {
         let internal_subscription = self.create_order_update_subscription().await?;
         Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -42,8 +42,8 @@ impl Client {
 
         Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -58,8 +58,8 @@ impl Client {
 
         Ok(Subscription::new_from_internal_simple::<CancelOrder>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -101,8 +101,8 @@ impl Client {
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
         Ok(Subscription::new_from_internal_simple::<Orders>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -113,8 +113,8 @@ impl Client {
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
         Ok(Subscription::new_from_internal_simple::<Orders>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -125,8 +125,8 @@ impl Client {
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
         Ok(Subscription::new_from_internal_simple::<Orders>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -137,8 +137,8 @@ impl Client {
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
         Ok(Subscription::new_from_internal_simple::<Orders>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -149,8 +149,8 @@ impl Client {
         let internal_subscription = self.send_request(request_id, request).await?;
         Ok(Subscription::new_from_internal_simple::<Executions>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 
@@ -169,8 +169,8 @@ impl Client {
         let internal_subscription = self.send_order(order_id, request).await?;
         Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
             internal_subscription,
-            self.decoder_context(),
             self.message_bus.clone(),
+            self.decoder_context(),
         ))
     }
 }

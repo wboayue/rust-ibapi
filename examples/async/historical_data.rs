@@ -23,10 +23,8 @@
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
-use futures::StreamExt;
 use ibapi::market_data::historical::HistoricalBarUpdate;
 use ibapi::prelude::*;
-use ibapi::subscriptions::SubscriptionItemStreamExt;
 use time::OffsetDateTime;
 
 #[derive(Parser)]
