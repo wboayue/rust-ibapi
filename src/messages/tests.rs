@@ -1298,6 +1298,50 @@ fn test_notice_is_error() {
     assert!(warning.is_informational());
 }
 
+fn notice_with_code(code: i32) -> Notice {
+    Notice {
+        code,
+        message: String::new(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+#[test]
+fn test_notice_is_order_rejection() {
+    let start = *ORDER_REJECTION_CODE_RANGE.start();
+    let end = *ORDER_REJECTION_CODE_RANGE.end();
+
+    for code in [start, start + 1, ORDER_CANCELLED_CODE, end - 1, end] {
+        assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
+    }
+
+    for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
+        assert!(!notice_with_code(code).is_order_rejection(), "code {code} should not be order rejection");
+    }
+}
+
+#[test]
+fn test_notice_category_partition() {
+    let cases: &[(i32, NoticeCategory)] = &[
+        (ORDER_CANCELLED_CODE, NoticeCategory::Cancellation), // 202 — precedence over OrderRejection
+        (*WARNING_CODE_RANGE.start(), NoticeCategory::Warning),
+        (*WARNING_CODE_RANGE.end(), NoticeCategory::Warning),
+        (SYSTEM_MESSAGE_CODES[0], NoticeCategory::SystemMessage),
+        (SYSTEM_MESSAGE_CODES[3], NoticeCategory::SystemMessage),
+        (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200
+        (*ORDER_REJECTION_CODE_RANGE.start() + 1, NoticeCategory::OrderRejection), // 201 — hard rejection
+        (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
+        (100, NoticeCategory::Error),
+        (502, NoticeCategory::Error),
+        (10000, NoticeCategory::Error),
+    ];
+
+    for &(code, expected) in cases {
+        assert_eq!(notice_with_code(code).category(), expected, "code {code} miscategorised");
+    }
+}
+
 #[test]
 fn test_all_incoming_message_conversions() {
     // Test boundary values and ensure all message types are covered

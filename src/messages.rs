@@ -1434,6 +1434,57 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 /// - 1300: Socket port reset during active connection
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
+/// Range of error codes that represent order rejections from TWS (200-399).
+///
+/// Includes parameter validation, contract-not-found, margin and risk-check
+/// rejections. Note: [`ORDER_CANCELLED_CODE`] (202) is numerically inside this
+/// range but is a *confirmation*, not a rejection; see [`Notice::category`]
+/// for partition semantics.
+pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
+
+/// Typed classification of a [`Notice`] by TWS error-code range.
+///
+/// Returned by [`Notice::category`]. Forms a disjoint partition over all
+/// possible codes; when ranges overlap on the wire (e.g. code 202 is both a
+/// cancellation and inside the order-rejection range 200-399), the classifier
+/// resolves overlap by **precedence**:
+///
+/// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
+/// 2. [`Warning`](Self::Warning) — 2100..=2169.
+/// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
+/// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding 202 by precedence.
+/// 5. [`Error`](Self::Error) — everything else.
+///
+/// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
+/// breaking release.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::messages::{Notice, NoticeCategory};
+/// # let notice: Notice = unimplemented!();
+/// match notice.category() {
+///     NoticeCategory::OrderRejection => eprintln!("rejected: {}", notice),
+///     NoticeCategory::Warning        => eprintln!("warn: {}",     notice),
+///     NoticeCategory::Error          => eprintln!("error: {}",    notice),
+///     _ => {}
+/// }
+/// ```
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeCategory {
+    /// Order cancellation confirmation (exact code 202).
+    Cancellation,
+    /// Informational warning (codes 2100..=2169).
+    Warning,
+    /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
+    SystemMessage,
+    /// Order rejection (codes 200..=399).
+    OrderRejection,
+    /// Any other error code.
+    Error,
+}
+
 impl From<&ResponseMessage> for Notice {
     /// Build a Notice from either wire format. The protobuf branch preserves
     /// `error_time` (millis → OffsetDateTime) via the dispatcher's envelope
@@ -1505,6 +1556,57 @@ impl Notice {
     /// warnings, and system messages.
     pub fn is_error(&self) -> bool {
         !self.is_informational()
+    }
+
+    /// Returns `true` if this notice falls in the order-rejection range (200-399).
+    ///
+    /// Code 202 (cancellation confirmation) is numerically inside this range; this
+    /// predicate returns `true` for it. For a disjoint partition that routes 202
+    /// to [`NoticeCategory::Cancellation`] instead, use [`Notice::category`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::messages::Notice;
+    /// # let notice: Notice = unimplemented!();
+    /// if notice.is_order_rejection() {
+    ///     eprintln!("rejection: {}", notice);
+    /// }
+    /// ```
+    pub fn is_order_rejection(&self) -> bool {
+        ORDER_REJECTION_CODE_RANGE.contains(&self.code)
+    }
+
+    /// Classify this notice into a disjoint [`NoticeCategory`].
+    ///
+    /// See [`NoticeCategory`] for the precedence chain.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::messages::{Notice, NoticeCategory};
+    /// # let notice: Notice = unimplemented!();
+    /// let level = match notice.category() {
+    ///     NoticeCategory::Cancellation
+    ///     | NoticeCategory::Warning
+    ///     | NoticeCategory::SystemMessage => "info",
+    ///     NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
+    ///     _ => "unknown",
+    /// };
+    /// # let _ = level;
+    /// ```
+    pub fn category(&self) -> NoticeCategory {
+        if self.is_cancellation() {
+            NoticeCategory::Cancellation
+        } else if self.is_warning() {
+            NoticeCategory::Warning
+        } else if self.is_system_message() {
+            NoticeCategory::SystemMessage
+        } else if self.is_order_rejection() {
+            NoticeCategory::OrderRejection
+        } else {
+            NoticeCategory::Error
+        }
     }
 }
 

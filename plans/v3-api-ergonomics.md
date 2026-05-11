@@ -77,13 +77,13 @@ Related existing tracking docs in `plans/`:
   Full sweep of async examples / docs / tests landed in the same PR. See
   CLAUDE.md rule 24 for the consumer idiom.
 
-- [ ] **Notice classification helpers.** Today callers reach for `notice.code` ranges
-  to decide "warning" vs "rejection" vs "system message" (some predicates already
-  exist on `Notice` — `is_warning`, `is_system_message` — but no public taxonomy
-  on the wire-error ranges). Provide:
-  - `Notice::is_order_rejection()` (codes 200–399), `Notice::category() -> NoticeCategory`.
-  - Precedent: `OrderStatusKind::is_terminal()` (PR #518) — table-driven typed
-    classifier, no magic numbers at the call site.
+- [~] **Notice classification helpers.** Open in PR #551. Adds
+  `Notice::is_order_rejection()` (range 200–399), `Notice::category() ->
+  NoticeCategory`, and a `#[non_exhaustive]` `NoticeCategory` enum
+  (`Cancellation, Warning, SystemMessage, OrderRejection, Error`) with
+  documented precedence chain. Disjoint partition resolves the 202 overlap
+  (cancellation > rejection range). Mirrors the `OrderStatusKind::is_terminal()`
+  pattern from PR #518.
 
 - [x] **`OrderStatus.status: String` → `OrderStatusKind` enum.** Shipped in PR #518
   (commit `b9ed884`). `src/orders/mod.rs:1557` is `pub status: OrderStatusKind` with
