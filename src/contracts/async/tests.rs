@@ -495,3 +495,169 @@ async fn test_cancel_contract_details() {
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &cancel_contract_data_request().request_id(42));
 }
+
+#[tokio::test]
+async fn contract_details_returns_server_error() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
+        "4|2|9000|200|No security definition found|",
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("INVALID").build();
+
+    let err = client.contract_details(&contract).await.unwrap_err();
+    assert!(matches!(err, crate::Error::Message(200, _)), "got {err:?}");
+}
+
+#[tokio::test]
+async fn contract_details_rejects_unexpected_message() {
+    // SymbolSamples (msg id 79) isn't expected during contract_details — should
+    // route to the `_ => Error::UnexpectedResponse(..)` arm.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("79|9000|0|")]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client.contract_details(&contract).await.unwrap_err();
+    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
+}
+
+#[tokio::test]
+async fn contract_details_returns_unexpected_end_of_stream() {
+    // Empty response stream closes immediately; the body falls past the while
+    // loop and returns Error::UnexpectedEndOfStream.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client.contract_details(&contract).await.unwrap_err();
+    assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
+}
+
+#[tokio::test]
+async fn contract_details_propagates_verify_failure() {
+    // `trading_class` requires `Features::TRADING_CLASS`; with an older
+    // server, verify_contract short-circuits before any encoding.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::TRADING_CLASS - 1);
+    let mut contract = Contract::stock("AAPL").build();
+    contract.trading_class = "NMS".into();
+
+    let result = client.contract_details(&contract).await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn matching_symbols_returns_server_error() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
+        "4|2|9000|321|invalid pattern|",
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let err = client.matching_symbols("???").await.unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(msg.contains("unexpected error"), "got {msg}");
+}
+
+#[tokio::test]
+async fn matching_symbols_rejects_unexpected_message() {
+    // ContractData (msg id 10) is unexpected for matching_symbols — should
+    // route to the wildcard "unexpected message" arm.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("10|9000|")]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let err = client.matching_symbols("AAPL").await.unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(msg.contains("unexpected message"), "got {msg}");
+}
+
+#[tokio::test]
+async fn matching_symbols_returns_empty_on_closed_stream() {
+    // Closed-without-response branch (subscription.next() == None) falls
+    // through to Ok(Vec::default()).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let symbols = client.matching_symbols("AAPL").await.expect("ok on empty stream");
+    assert!(symbols.is_empty());
+}
+
+#[tokio::test]
+async fn matching_symbols_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_MATCHING_SYMBOLS - 1);
+
+    let result = client.matching_symbols("AAPL").await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn market_rule_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
+
+    let err = client.market_rule(26).await.unwrap_err();
+    assert!(format!("{err:?}").contains("no market rule found"), "got {err:?}");
+}
+
+#[tokio::test]
+async fn market_rule_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES - 1);
+
+    let result = client.market_rule(26).await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn calculate_option_price_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+
+    let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
+    assert!(format!("{err:?}").contains("no data for option calculation"), "got {err:?}");
+}
+
+#[tokio::test]
+async fn calculate_option_price_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE - 1);
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+
+    let result = client.calculate_option_price(&contract, 0.25, 155.0).await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+
+    let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
+    assert!(format!("{err:?}").contains("no data for option calculation"), "got {err:?}");
+}
+
+#[tokio::test]
+async fn calculate_implied_volatility_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_IMPLIED_VOLAT - 1);
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+
+    let result = client.calculate_implied_volatility(&contract, 8.5, 155.0).await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn cancel_contract_details_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA - 1);
+
+    let result = client.cancel_contract_details(42).await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert_eq!(request_message_count(&message_bus), 0);
+}
