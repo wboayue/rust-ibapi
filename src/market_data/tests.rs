@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_proto_msg_id;
 use crate::messages::OutgoingMessages;
 
 #[test]
@@ -30,8 +31,7 @@ fn market_data_type_from_i32() {
 #[test]
 fn encode_request_market_data_type_round_trip() {
     let bytes = encoders::encode_request_market_data_type(MarketDataType::Delayed).unwrap();
-    let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    assert_eq!(msg_id, OutgoingMessages::RequestMarketDataType as i32 + 200);
+    assert_proto_msg_id(&bytes, OutgoingMessages::RequestMarketDataType);
 
     use prost::Message;
     let req = crate::proto::MarketDataTypeRequest::decode(&bytes[4..]).unwrap();
