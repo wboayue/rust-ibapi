@@ -89,17 +89,13 @@ Related existing tracking docs in `plans/`:
   (commit `b9ed884`). `src/orders/mod.rs:1557` is `pub status: OrderStatusKind` with
   `is_terminal()` etc. Examples now use `.is_terminal()` (lines 61, 143).
 
-- [ ] **Continue the typed-status sweep.** `OrderState.status` already typed as
-  `OrderStatusKind` (`src/orders/mod.rs:1280`); remaining `String` fields whose
-  wire vocabulary is enumerated:
-  - `Execution.side` (`src/orders/mod.rs:1473`) — Buy / Sell / SShort / SLng
-  - `Contract.security_id_type` (`src/contracts/mod.rs`) — CUSIP / ISIN / SEDOL / RIC
-  - any others surfaced by audit
-  Follow the PR #518 pattern (per `CLAUDE.md` rule 21): strict enum, `Display`
-  round-trips, decoder rejects empty/missing as `Error::Parse`. **First**: grep
-  captured-wire fixtures + the C# reference to confirm the field is actually
-  enumerated (rule 21 caveat — `OrderState.completed_status` looked enumerated
-  but is free-form text).
+- [~] **Continue the typed-status sweep.** Tracked in
+  [`plans/typed-status-sweep.md`](typed-status-sweep.md). Audit complete; 5 PRs
+  staged (ComboLeg.action → Contract.right → Contract.security_id_type →
+  ExecutionFilter.side → Execution.side via live-diagnostic split). Note:
+  the parent's original vocab claim for `Execution.side` was wrong —
+  `BOT`/`SLD` is the wire (`Buy/Sell/SShort/SLng` belongs to `Action`); the
+  tracker has the corrected analysis.
 
 - [ ] **One canonical `Subscription` import path.** `Subscription` is reachable from
   `crate::subscriptions::Subscription` (canonical at `src/subscriptions/mod.rs:32,35`),
