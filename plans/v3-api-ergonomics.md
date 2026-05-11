@@ -68,18 +68,14 @@ Related existing tracking docs in `plans/`:
   variants deleted; notices route through `SubscriptionItem::Notice` and the
   dedicated `NoticeStream`. Same PR removed the dead untyped `Err` arms.
 
-- [ ] **Standardize the consumer interface on `Stream` (async) and `Iterator` (sync).**
-  Today consumers call `subscription.next_data().await` (see
-  `examples/async/place_order.rs:47`). For async this should be `StreamExt::next`,
-  and for sync the `for item in subscription` form should be the default in examples.
-  - Current state: sync `Subscription` impls `IntoIterator`
-    (`src/subscriptions/sync.rs:341,349,373`); async exposes `.stream()` returning
-    `impl Stream + Unpin` (`src/subscriptions/async.rs:301`) but does NOT impl
-    `Stream` directly on `Subscription` itself.
-  - Decision needed: (a) impl `Stream` directly on async `Subscription` and drop
-    `.stream()`; (b) keep `next_data()` as a thin alias and just sweep examples to
-    show `.stream().next().await`; (c) remove `next_data()` entirely.
-  - Breaking: yes if we remove.
+- [x] **Standardize the consumer interface on `Stream` (async) and `Iterator` (sync).**
+  Shipped 2026-05-10 in PR #550. Async `Subscription<T>` now impls
+  `Stream<Item = Result<SubscriptionItem<T>, Error>>` directly; inherent
+  `next_data` / `stream` / `data_stream` deleted. Data-only flow via
+  `SubscriptionItemStreamExt::filter_data()` extension trait. Sync surface kept
+  asymmetric on purpose (inherent `next()` / `iter_data()` + `IntoIterator`).
+  Full sweep of async examples / docs / tests landed in the same PR. See
+  CLAUDE.md rule 24 for the consumer idiom.
 
 - [ ] **Notice classification helpers.** Today callers reach for `notice.code` ranges
   to decide "warning" vs "rejection" vs "system message" (some predicates already
@@ -199,7 +195,9 @@ Related existing tracking docs in `plans/`:
 
   Status (2026-05-10): order construction sweep done — all `examples/{sync,async}/*.rs`
   + `examples/conditional_orders.rs` use the fluent path or are reframed as the
-  advanced/offline layer. Market-data and stream-shape sweeps still pending.
+  advanced/offline layer. Stream-shape sweep done in PR #550 (async examples now
+  use `subscription.next().await` / `filter_data()`). Market-data sweep still
+  pending.
 
 - [x] **Migration guide created.** `docs/migration-3.0.md` exists. Keep updating it
   in lockstep with breaking changes (see `CLAUDE.md` § "Keep `README.md` and
