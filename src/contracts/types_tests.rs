@@ -114,11 +114,38 @@ fn option_right_str_and_display() {
 }
 
 #[test]
-fn leg_action_str_and_display() {
-    assert_eq!(LegAction::Buy.as_str(), "BUY");
-    assert_eq!(LegAction::Sell.as_str(), "SELL");
-    assert_eq!(format!("{}", LegAction::Buy), "BUY");
-    assert_eq!(format!("{}", LegAction::Sell), "SELL");
+fn leg_action_display_round_trip() {
+    use std::str::FromStr;
+    for variant in [LegAction::Buy, LegAction::Sell, LegAction::SellShort] {
+        let wire = variant.as_str();
+        assert_eq!(variant.to_string(), wire);
+        assert_eq!(format!("{variant}"), wire);
+        assert_eq!(LegAction::from_str(wire).unwrap(), variant);
+    }
+}
+
+#[test]
+fn leg_action_from_str_rejects_unknown() {
+    use std::str::FromStr;
+    assert!(matches!(LegAction::from_str("INVALID"), Err(crate::Error::Parse(_, _, _))));
+    assert!(matches!(LegAction::from_str(""), Err(crate::Error::Parse(_, _, _))));
+    // Case-sensitive: lowercase must not match.
+    assert!(matches!(LegAction::from_str("buy"), Err(crate::Error::Parse(_, _, _))));
+    // SLONG is deliberately excluded from combo-leg vocabulary.
+    assert!(matches!(LegAction::from_str("SLONG"), Err(crate::Error::Parse(_, _, _))));
+}
+
+#[test]
+fn leg_action_default_is_buy() {
+    assert_eq!(LegAction::default(), LegAction::Buy);
+}
+
+#[test]
+fn leg_action_to_field_matches_display() {
+    use crate::ToField;
+    for variant in [LegAction::Buy, LegAction::Sell, LegAction::SellShort] {
+        assert_eq!(variant.to_field(), variant.to_string());
+    }
 }
 
 #[test]

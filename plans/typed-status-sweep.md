@@ -9,6 +9,7 @@
 - `OrderStatus.status: OrderStatusKind` — shipped PR #518.
 - `OrderState.status: OrderStatusKind` — shipped (same wave).
 - `OrderState.completed_status: String` — verified free-form by audit, **not** typed (rule 21 caveat).
+- `ComboLeg.action: LegAction` + shared `parse_required` / `parse_optional` helpers — shipped PR #556 (PR 1).
 - Remaining typed-status work tracked below.
 
 ## Audit summary
@@ -102,6 +103,7 @@ For every field (CLAUDE.md rule 16, mirroring PR #518):
 - **Files**: `src/contracts/mod.rs` (struct + enum + `Contract::option()` constructor at `:544`); `src/proto/decoders.rs:72` and `decode_contract`; `src/proto/encoders.rs:right`; `src/contracts/common/contract_builder/mod.rs` (`right()` setter); sibling tests in `src/contracts/tests.rs` and `src/contracts/common/contract_builder/tests.rs` (currently at lines 30/49/415/453).
 - **Migration**: `Contract::option("AAPL", "20260619", 200.0, "C")` keeps `&str` parameter (parsed via `FromStr`) for ergonomics; struct field exposes `Option<OptionRight>`.
 - **Sweep targets**: every `Contract::option(...)` call in examples; `README.md` snippets; `docs/contract-builder.md`; `docs/order-types.md`.
+- **Scope add (test-shape modernization)**: rewrite the existing `OptionRight` per-variant asserts at `src/contracts/types_tests.rs:107-114` into the table-driven loop shape PR 1 used for `LegAction` (`:117-149`). CLAUDE.md rule 21 — derive expectations from the constant. Drop the hand-rolled `assert_eq!(OptionRight::Call.as_str(), "C")` block, replace with a loop over `[OptionRight::Call, OptionRight::Put]` asserting `Display`/`FromStr` round-trip from `as_str()`. Rule 9 ("modernize touched modules") makes this in-scope. Tracked from [`v3-api-ergonomics.md` §2](v3-api-ergonomics.md).
 
 ### PR 3 — `Contract.security_id_type: Option<SecurityIdType>`
 
@@ -148,6 +150,10 @@ For every field (CLAUDE.md rule 16, mirroring PR #518):
 - [ ] `cargo build -p ibapi-integration-sync --tests` + async equivalent (rule 11)
 - [ ] Grep `README.md` + `docs/*.md` + module rustdoc for renamed identifiers; visually verify each snippet still compiles (CLAUDE.md rule 16 preamble).
 - [ ] Update `docs/migration-3.0.md` entry in the same PR.
+
+## Cross-cutting follow-ups
+
+- **`Error::Parse(usize, String, String)` index slot — decide shape before PR 5.** Every new `FromStr<Err = Error>` impl in this sweep passes `0` as the `field_index` (legacy from text-protocol days; proto fields are name-keyed). After PR 1 shipped, the count of fake-`0` sites is 2 (`LegAction::from_str` + `parse_required`'s `Err` arm). PR 2/3/4/5 add 4 more. Five accumulated fakes is the inflection — three options to weigh: (1) make the index `Option<usize>`; (2) restructure as `Parse { index: Option<usize>, value, reason }`; (3) leave as-is + document the `0`-as-placeholder convention. Tracked in [`v3-api-ergonomics.md` §5](v3-api-ergonomics.md).
 
 ## Rule references
 

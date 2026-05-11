@@ -255,6 +255,30 @@ let warrant = ContractBuilder::new()
 
 The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>` / `PartialEq<&str>` (both directions), so `contract.symbol == "AAPL"` works without `.as_str()`.
 
+### 9. `ComboLeg.action` typed as `LegAction`
+
+`ComboLeg.action` was `String` in 2.x. In 3.0 it is typed as `LegAction`, a strict 3-variant enum (`Buy`, `Sell`, `SellShort`) matching IBKR's combo-leg wire vocabulary. `LegAction` already existed as the `SpreadBuilder::add_leg(_, LegAction)` parameter type; 3.0 reuses it as the struct field and adds the `SellShort` variant.
+
+`SLONG` is intentionally excluded — combo legs do not accept it (only the `SSHORT_COMBO_LEGS` gate exists in the C# reference at server version 35, well below our floor of 210; no `SLONG` gate exists for combo legs). If you need long-undelivered semantics, that's the outer `Order.action: Action::SellLong`, not a combo leg.
+
+```rust,ignore
+// v2.x
+let leg = ComboLeg {
+    contract_id: 12345,
+    action: "BUY".to_string(),
+    ..Default::default()
+};
+
+// v3.0
+let leg = ComboLeg {
+    contract_id: 12345,
+    action: LegAction::Buy,
+    ..Default::default()
+};
+```
+
+`LegAction` implements `Display` (`"BUY"` / `"SELL"` / `"SSHORT"`) and `FromStr<Err = Error>`. The decoder propagates `Error::Parse` if TWS sends an empty or unknown action — silent fallback to `LegAction::default()` is off the table.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

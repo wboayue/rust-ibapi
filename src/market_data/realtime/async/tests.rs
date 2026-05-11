@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
-use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
+use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -619,7 +619,7 @@ async fn test_market_data_with_combo_legs() {
     contract.combo_legs = vec![ComboLeg {
         contract_id: 12345,
         ratio: 1,
-        action: "BUY".to_owned(),
+        action: LegAction::Buy,
         exchange: "SMART".to_owned(),
         ..ComboLeg::default()
     }];

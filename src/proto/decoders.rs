@@ -2,12 +2,12 @@ use prost::Message;
 
 use crate::contracts::{
     ComboLeg, ComboLegOpenClose, Contract, ContractDetails, Currency, DeltaNeutralContract, Exchange, FundAssetType, FundDistributionPolicyIndicator,
-    IneligibilityReason, SecurityType, Symbol, TagValue,
+    IneligibilityReason, LegAction, SecurityType, Symbol, TagValue,
 };
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, Execution, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState, OrderStatusKind,
-    ReferencePriceType, Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
+    Action, Execution, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState, ReferencePriceType,
+    Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
 };
 use crate::proto;
 use crate::Error;
@@ -36,14 +36,31 @@ pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
         .and_then(|v| if v == f64::MAX { None } else { Some(v) })
 }
 
-/// Parse an optional protocol string into a status. Both `None` and empty
-/// strings surface as `Error::Parse` so incomplete TWS responses fail loudly
-/// instead of silently defaulting to `OrderStatusKind::Submitted` (which
-/// would mask the missing field downstream).
-pub(crate) fn parse_order_status(opt: &Option<String>) -> Result<OrderStatusKind, Error> {
+/// Parse a required enumerated wire field. Both `None` and empty strings
+/// surface as `Error::Parse`: an empty wire on a required field is a TWS
+/// protocol bug, not a default. Silent fallback to `T::default()` masks
+/// incomplete responses (CLAUDE.md rule 16).
+pub(crate) fn parse_required<T>(opt: &Option<String>, label: &str) -> Result<T, Error>
+where
+    T: std::str::FromStr<Err = Error>,
+{
     match opt.as_deref() {
         Some(s) if !s.is_empty() => s.parse(),
-        _ => Err(Error::Parse(0, String::new(), "missing OrderStatus".into())),
+        _ => Err(Error::Parse(0, String::new(), format!("missing {label}"))),
+    }
+}
+
+/// Parse an optional enumerated wire field. `None` and `Some("")` both mean
+/// "no value" — a valid wire state for fields like `Contract.right` on
+/// non-option contracts. Only an unknown non-empty string is an error.
+#[allow(dead_code)]
+pub(crate) fn parse_optional<T>(opt: &Option<String>) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr<Err = Error>,
+{
+    match opt.as_deref() {
+        Some(s) if !s.is_empty() => s.parse().map(Some),
+        _ => Ok(None),
     }
 }
 
@@ -62,8 +79,8 @@ pub(crate) fn tag_values(map: &std::collections::HashMap<String, String>) -> Vec
 
 // === Shared converters ===
 
-pub fn decode_contract(proto: &proto::Contract) -> Contract {
-    Contract {
+pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
+    Ok(Contract {
         contract_id: proto.con_id.unwrap_or_default(),
         symbol: Symbol::from(s(&proto.symbol)),
         security_type: SecurityType::from(proto.sec_type.as_deref().unwrap_or_default()),
@@ -82,23 +99,23 @@ pub fn decode_contract(proto: &proto::Contract) -> Contract {
         description: s(&proto.description),
         issuer_id: s(&proto.issuer_id),
         combo_legs_description: s(&proto.combo_legs_descrip),
-        combo_legs: proto.combo_legs.iter().map(decode_combo_leg).collect(),
+        combo_legs: proto.combo_legs.iter().map(decode_combo_leg).collect::<Result<Vec<_>, _>>()?,
         delta_neutral_contract: proto.delta_neutral_contract.as_ref().map(decode_delta_neutral_contract),
         last_trade_date: None,
-    }
+    })
 }
 
-pub fn decode_combo_leg(proto: &proto::ComboLeg) -> ComboLeg {
-    ComboLeg {
+pub fn decode_combo_leg(proto: &proto::ComboLeg) -> Result<ComboLeg, Error> {
+    Ok(ComboLeg {
         contract_id: proto.con_id.unwrap_or_default(),
         ratio: proto.ratio.unwrap_or_default(),
-        action: s(&proto.action),
+        action: parse_required::<LegAction>(&proto.action, "LegAction")?,
         exchange: s(&proto.exchange),
         open_close: ComboLegOpenClose::from(proto.open_close.unwrap_or_default()),
         short_sale_slot: proto.short_sales_slot.unwrap_or_default(),
         designated_location: s(&proto.designated_location),
         exempt_code: proto.exempt_code.unwrap_or_default(),
-    }
+    })
 }
 
 pub fn decode_delta_neutral_contract(proto: &proto::DeltaNeutralContract) -> DeltaNeutralContract {
@@ -360,7 +377,7 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
 
 pub fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error> {
     Ok(OrderState {
-        status: parse_order_status(&proto.status)?,
+        status: parse_required(&proto.status, "OrderStatus")?,
         initial_margin_before: optional_f64(proto.init_margin_before),
         maintenance_margin_before: optional_f64(proto.maint_margin_before),
         equity_with_loan_before: optional_f64(proto.equity_with_loan_before),
@@ -430,10 +447,10 @@ pub fn decode_execution(proto: &proto::Execution) -> Execution {
     }
 }
 
-pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: &proto::ContractDetails) -> ContractDetails {
-    let contract = decode_contract(proto_contract);
+pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: &proto::ContractDetails) -> Result<ContractDetails, Error> {
+    let contract = decode_contract(proto_contract)?;
 
-    ContractDetails {
+    Ok(ContractDetails {
         contract,
         market_name: s(&proto_details.market_name),
         min_tick: proto_details.min_tick.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
@@ -528,7 +545,7 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
             .collect(),
         // defaults for fields not in protobuf
         last_trade_time: String::new(),
-    }
+    })
 }
 
 pub fn decode_error_message(bytes: &[u8]) -> Result<(i32, i32, String, String), Error> {
@@ -540,3 +557,7 @@ pub fn decode_error_message(bytes: &[u8]) -> Result<(i32, i32, String, String), 
         s(&p.advanced_order_reject_json),
     ))
 }
+
+#[cfg(test)]
+#[path = "decoders_tests.rs"]
+mod tests;

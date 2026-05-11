@@ -520,29 +520,55 @@ pub enum BondIdentifier {
     Isin(Isin),
 }
 
-/// Trading action for spread/combo legs
+/// Trading action for spread/combo legs. Mirrors the IBKR wire vocabulary
+/// `BUY` / `SELL` / `SSHORT`. `SLONG` is not accepted on combo legs — only the
+/// SSHORT short-sale form is gated (`SSHORT_COMBO_LEGS = 35`, well below our
+/// floor of 210), so all three variants are unconditionally valid.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub enum LegAction {
     /// Buy the leg.
+    #[default]
     Buy,
     /// Sell the leg.
     Sell,
+    /// Short-sell the leg.
+    SellShort,
 }
 
 impl LegAction {
-    /// Return the string form used by IB (`"BUY"`/`"SELL"`).
-    pub fn as_str(&self) -> &str {
+    /// Return the canonical IB wire string (`"BUY"` / `"SELL"` / `"SSHORT"`).
+    pub fn as_str(&self) -> &'static str {
         match self {
             LegAction::Buy => "BUY",
             LegAction::Sell => "SELL",
+            LegAction::SellShort => "SSHORT",
         }
     }
 }
 
 impl fmt::Display for LegAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for LegAction {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            "SSHORT" => Self::SellShort,
+            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown LegAction".into())),
+        })
+    }
+}
+
+impl ToField for LegAction {
+    fn to_field(&self) -> String {
+        self.to_string()
     }
 }
 

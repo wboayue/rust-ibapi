@@ -1,4 +1,5 @@
 use super::*;
+use crate::contracts::LegAction;
 
 #[test]
 fn test_contract_builder_new() {
@@ -285,14 +286,14 @@ fn test_contract_builder_combo_legs() {
         ComboLeg {
             contract_id: 12345,
             ratio: 1,
-            action: "BUY".to_string(),
+            action: LegAction::Buy,
             exchange: "SMART".to_string(),
             ..Default::default()
         },
         ComboLeg {
             contract_id: 67890,
             ratio: 1,
-            action: "SELL".to_string(),
+            action: LegAction::Sell,
             exchange: "SMART".to_string(),
             ..Default::default()
         },
@@ -307,9 +308,9 @@ fn test_contract_builder_combo_legs() {
 
     assert_eq!(contract.combo_legs.len(), 2);
     assert_eq!(contract.combo_legs[0].contract_id, 12345);
-    assert_eq!(contract.combo_legs[0].action, "BUY");
+    assert_eq!(contract.combo_legs[0].action, LegAction::Buy);
     assert_eq!(contract.combo_legs[1].contract_id, 67890);
-    assert_eq!(contract.combo_legs[1].action, "SELL");
+    assert_eq!(contract.combo_legs[1].action, LegAction::Sell);
 }
 
 #[test]
@@ -418,7 +419,7 @@ fn setter_parity_with_contract_fields() {
         .combo_legs(vec![ComboLeg {
             contract_id: 1,
             ratio: 1,
-            action: "BUY".to_string(),
+            action: LegAction::Buy,
             exchange: "SMART".to_string(),
             ..Default::default()
         }])

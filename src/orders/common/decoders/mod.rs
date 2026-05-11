@@ -32,7 +32,12 @@ pub(crate) fn decode_completed_order(message: &mut ResponseMessage) -> Result<Or
 
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::OpenOrder = prost::Message::decode(bytes)?;
-    let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+    let contract = p
+        .contract
+        .as_ref()
+        .map(crate::proto::decoders::decode_contract)
+        .transpose()?
+        .unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
     let order_state = p
         .order_state
@@ -54,7 +59,7 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
 
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
-        status: crate::proto::decoders::parse_order_status(&p.status)?,
+        status: crate::proto::decoders::parse_required(&p.status, "OrderStatus")?,
         filled: crate::proto::decoders::parse_f64(&p.filled),
         remaining: crate::proto::decoders::parse_f64(&p.remaining),
         average_fill_price: p.avg_fill_price,
@@ -72,14 +77,24 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
 
     Ok(ExecutionData {
         request_id: p.req_id.unwrap_or_default(),
-        contract: p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default(),
+        contract: p
+            .contract
+            .as_ref()
+            .map(crate::proto::decoders::decode_contract)
+            .transpose()?
+            .unwrap_or_default(),
         execution: p.execution.as_ref().map(crate::proto::decoders::decode_execution).unwrap_or_default(),
     })
 }
 
 pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::CompletedOrder = prost::Message::decode(bytes)?;
-    let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+    let contract = p
+        .contract
+        .as_ref()
+        .map(crate::proto::decoders::decode_contract)
+        .transpose()?
+        .unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
     let order_state = p
         .order_state
