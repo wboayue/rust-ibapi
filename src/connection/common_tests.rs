@@ -48,6 +48,13 @@ fn startup_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupHan
     }
 }
 
+fn notice_sink_ctx(sink: &CapturingSink) -> StartupHandshakeContext<'_> {
+    StartupHandshakeContext {
+        startup: None,
+        notice_sink: sink,
+    }
+}
+
 #[test]
 fn test_parse_account_info_next_valid_id() {
     let handler = ConnectionHandler::default();
@@ -189,11 +196,7 @@ fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
     let mut message = ResponseMessage::from("4\02\0-1\02104\0Market data farm OK\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
 
     let got = sink.last().expect("notice sink didn't receive notice");
     assert_eq!(got.code, 2104);
@@ -206,11 +209,7 @@ fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     let mut message = ResponseMessage::from("4\02\0-1\0504\0Not connected\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
 
     assert_eq!(sink.last().expect("sink missed").code, 504);
 }
@@ -548,9 +547,6 @@ fn test_non_utf8_handshake_response() {
 
 #[test]
 fn test_startup_message_message_type_typed_variants() {
-    // Cover every typed `StartupMessage::message_type()` arm — the previously
-    // covered arm was only `Other`, leaving the OpenOrder/OrderStatus/
-    // OpenOrderEnd/AccountUpdate(*) arms at 0 hits.
     use crate::accounts::{AccountPortfolioValue, AccountUpdateTime, AccountValue};
     use crate::orders::{OrderData, OrderStatus};
 
@@ -640,16 +636,10 @@ fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
 
 #[test]
 fn test_dispatch_unsolicited_open_order_no_callback_is_noop() {
-    // No startup callback → OpenOrder frame is dropped silently. Notice sink
-    // must NOT receive a notice (the Error arm is the only path that fans out).
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0, "OpenOrder must not deliver to notice sink");
 }
 
@@ -658,11 +648,7 @@ fn test_dispatch_unsolicited_order_status_no_callback_is_noop() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -671,11 +657,7 @@ fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("53\01\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -684,18 +666,13 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
     let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123.45\0USD\0DU1\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
 #[test]
 fn test_dispatch_unsolicited_account_value_decode_failure_falls_to_other() {
-    // Truncated AccountValue (missing key/value/currency/account) fails to
-    // decode, exercising the `unwrap_or_else(|_| Other(...))` branch.
+    // Truncated AccountValue — too few fields to decode into AccountValue.
     let mut message = ResponseMessage::from("6\02\0");
 
     let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
@@ -714,15 +691,10 @@ fn test_dispatch_unsolicited_account_value_decode_failure_falls_to_other() {
 
 #[test]
 fn test_dispatch_unsolicited_unknown_no_callback_warns() {
-    // Unknown msg type (CompletedOrder=101) with no startup callback exercises
-    // the `_ => warn!(...)` "consuming message" branch.
+    // CompletedOrder (101) — no typed dispatch arm, no startup callback.
     let mut message = ResponseMessage::from("101\0\0");
 
     let sink = CapturingSink::default();
-    let ctx = StartupHandshakeContext {
-        startup: None,
-        notice_sink: &sink,
-    };
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0, "unknown messages without a callback are dropped, not fan-out");
 }
