@@ -4,9 +4,9 @@ use crate::common::test_utils::helpers::*;
 use crate::messages::OutgoingMessages;
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
-    cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, family_codes,
-    managed_accounts, request_account_summary, request_account_updates, request_account_updates_multi, request_current_time, request_family_codes,
-    request_managed_accounts, request_pnl, request_pnl_single,
+    cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time,
+    current_time_in_millis, family_codes, managed_accounts, request_account_summary, request_account_updates, request_account_updates_multi,
+    request_current_time, request_current_time_in_millis, request_family_codes, request_managed_accounts, request_pnl, request_pnl_single,
 };
 use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
@@ -729,4 +729,44 @@ fn test_error_propagation() {
     assert!(old_version_client.pnl(&account, None).is_err());
     assert!(old_version_client.positions().is_err());
     assert!(old_version_client.account_summary(&AccountGroup("All".to_string()), &[]).is_err());
+}
+
+#[test]
+fn test_server_time_millis() {
+    use time::macros::datetime;
+
+    let (client, message_bus) = create_blocking_test_client_with_responses_and_version(
+        vec![current_time_in_millis().millis(1_678_890_000_123).encode_pipe()],
+        server_versions::CURRENT_TIME_IN_MILLIS,
+    );
+
+    let result = client.server_time_millis().expect("server_time_millis failed");
+    assert_eq!(result, datetime!(2023-03-15 14:20:00.123 UTC));
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &request_current_time_in_millis());
+}
+
+#[test]
+fn test_server_time_millis_version_error() {
+    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS - 1);
+
+    let result = client.server_time_millis();
+    assert!(
+        matches!(result, Err(Error::ServerVersion(_, _, _))),
+        "expected ServerVersion error, got {result:?}"
+    );
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[test]
+fn test_server_time_millis_no_response() {
+    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS);
+
+    let result = client.server_time_millis();
+    match result.expect_err("expected error for no response") {
+        Error::Simple(msg) => assert_eq!(msg, "No response from server"),
+        other => panic!("unexpected error: {other:?}"),
+    }
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &request_current_time_in_millis());
 }

@@ -421,6 +421,43 @@ impl ResponseEncoder for CurrentTimeResponse {
     }
 }
 
+// --- CurrentTimeInMillis (msg 109) ---
+
+#[derive(Clone, Debug)]
+pub struct CurrentTimeInMillisResponse {
+    pub millis: i64,
+}
+
+impl Default for CurrentTimeInMillisResponse {
+    fn default() -> Self {
+        // 2023-03-15 14:20:00.000 UTC
+        Self { millis: 1_678_890_000_000 }
+    }
+}
+
+impl CurrentTimeInMillisResponse {
+    pub fn millis(mut self, v: i64) -> Self {
+        self.millis = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for CurrentTimeInMillisResponse {
+    type Proto = proto::CurrentTimeInMillis;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::CurrentTimeInMillis {
+            current_time_in_millis: Some(self.millis),
+        }
+    }
+}
+
+impl ResponseEncoder for CurrentTimeInMillisResponse {
+    fn fields(&self) -> Vec<String> {
+        vec!["109".to_string(), self.millis.to_string()]
+    }
+}
+
 // --- PnL (msg 94) ---
 
 #[derive(Clone, Debug)]
@@ -844,6 +881,11 @@ single_req_id_request_builder!(CancelPnLSingleBuilder, CancelPnLSingle, Outgoing
 
 empty_request_builder!(FamilyCodesRequestBuilder, FamilyCodesRequest, OutgoingMessages::RequestFamilyCodes);
 empty_request_builder!(CurrentTimeRequestBuilder, CurrentTimeRequest, OutgoingMessages::RequestCurrentTime);
+empty_request_builder!(
+    CurrentTimeInMillisRequestBuilder,
+    CurrentTimeInMillisRequest,
+    OutgoingMessages::RequestCurrentTimeInMillis
+);
 
 // =============================================================================
 // Entry-point functions
@@ -883,6 +925,10 @@ pub fn family_codes() -> FamilyCodesResponse {
 
 pub fn current_time() -> CurrentTimeResponse {
     CurrentTimeResponse::default()
+}
+
+pub fn current_time_in_millis() -> CurrentTimeInMillisResponse {
+    CurrentTimeInMillisResponse::default()
 }
 
 pub fn pnl() -> PnLResponse {
@@ -946,6 +992,10 @@ pub fn request_family_codes() -> FamilyCodesRequestBuilder {
 
 pub fn request_current_time() -> CurrentTimeRequestBuilder {
     CurrentTimeRequestBuilder
+}
+
+pub fn request_current_time_in_millis() -> CurrentTimeInMillisRequestBuilder {
+    CurrentTimeInMillisRequestBuilder
 }
 
 #[cfg(test)]
