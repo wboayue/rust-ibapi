@@ -115,6 +115,49 @@ fn assert_request_helper_panics_on_body_mismatch() {
 }
 
 #[test]
+fn test_create_test_client_with_responses_and_version() {
+    let responses = vec!["1|2|123|".to_string()];
+    let custom_version = 150;
+    let (client, message_bus) = create_test_client_with_responses_and_version(responses.clone(), custom_version);
+    assert_eq!(client.server_version(), custom_version);
+    assert_eq!(message_bus.response_messages, responses);
+}
+
+#[test]
+#[should_panic(expected = "Expected at least 2 request messages, got 0")]
+fn assert_request_msg_id_panics_on_short_buffer() {
+    let (_client, message_bus) = create_test_client();
+    assert_request_msg_id(&message_bus, 1, OutgoingMessages::RequestAccountSummary);
+}
+
+#[test]
+fn assert_tws_error_message_matches_code_and_substring() {
+    let err = crate::Error::Message(10089, "not subscribed to market data".to_string());
+    assert_tws_error_message(err, 10089, "not subscribed");
+}
+
+#[test]
+#[should_panic(expected = "expected Error::Message(10089, _)")]
+fn assert_tws_error_message_panics_on_wrong_variant() {
+    let err = crate::Error::Simple("nope".to_string());
+    assert_tws_error_message(err, 10089, "not subscribed");
+}
+
+#[test]
+#[should_panic(expected = "wrong error code")]
+fn assert_tws_error_message_panics_on_wrong_code() {
+    let err = crate::Error::Message(1, "not subscribed".to_string());
+    assert_tws_error_message(err, 10089, "not subscribed");
+}
+
+#[test]
+#[should_panic(expected = "does not contain")]
+fn assert_tws_error_message_panics_on_missing_substring() {
+    let err = crate::Error::Message(10089, "other text".to_string());
+    assert_tws_error_message(err, 10089, "not subscribed");
+}
+
+#[test]
 #[should_panic(expected = "request 0 body mismatch")]
 fn assert_request_proto_panics_on_body_mismatch() {
     use crate::proto::AccountSummaryRequest;
