@@ -1479,7 +1479,7 @@ pub enum NoticeCategory {
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
-    /// Order rejection (codes 200..=399, excluding 202 by precedence).
+    /// Order rejection (codes 200..=399).
     OrderRejection,
     /// Any other error code.
     Error,
@@ -1563,10 +1563,6 @@ impl Notice {
     /// Code 202 (cancellation confirmation) is numerically inside this range; this
     /// predicate returns `true` for it. For a disjoint partition that routes 202
     /// to [`NoticeCategory::Cancellation`] instead, use [`Notice::category`].
-    ///
-    /// Most order rejections currently arrive as `Err(Error::Message)` from the
-    /// transport router rather than as `Notice` values; this predicate is mainly
-    /// useful on `Notice` values constructed in tests or by future routing changes.
     ///
     /// # Examples
     ///
