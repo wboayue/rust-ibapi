@@ -40,11 +40,15 @@ pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
 /// surface as `Error::Parse`: an empty wire on a required field is a TWS
 /// protocol bug, not a default. Silent fallback to `T::default()` masks
 /// incomplete responses (CLAUDE.md rule 16).
-pub(crate) fn parse_required<T>(opt: &Option<String>, label: &str) -> Result<T, Error>
+///
+/// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
+/// and text-protocol callers can pass `Some(text_str.as_str())` without
+/// allocating a wrapper.
+pub(crate) fn parse_required<T>(opt: Option<&str>, label: &str) -> Result<T, Error>
 where
     T: std::str::FromStr<Err = Error>,
 {
-    match opt.as_deref() {
+    match opt {
         Some(s) if !s.is_empty() => s.parse(),
         _ => Err(Error::Parse(0, String::new(), format!("missing {label}"))),
     }
@@ -53,15 +57,16 @@ where
 /// Parse an optional enumerated wire field. `None` and `Some("")` both mean
 /// "no value" — a valid wire state for fields like `Contract.right` on
 /// non-option contracts. Only an unknown non-empty string is an error.
+///
+/// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
+/// and text-protocol callers can pass `Some(text_str.as_str())` without
+/// allocating a wrapper.
 #[allow(dead_code)]
-pub(crate) fn parse_optional<T>(opt: &Option<String>) -> Result<Option<T>, Error>
+pub(crate) fn parse_optional<T>(opt: Option<&str>) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr<Err = Error>,
 {
-    match opt.as_deref() {
-        Some(s) if !s.is_empty() => s.parse().map(Some),
-        _ => Ok(None),
-    }
+    opt.filter(|s| !s.is_empty()).map(|s| s.parse()).transpose()
 }
 
 pub(crate) fn ts(secs: i64) -> time::OffsetDateTime {
@@ -109,7 +114,7 @@ pub fn decode_combo_leg(proto: &proto::ComboLeg) -> Result<ComboLeg, Error> {
     Ok(ComboLeg {
         contract_id: proto.con_id.unwrap_or_default(),
         ratio: proto.ratio.unwrap_or_default(),
-        action: parse_required::<LegAction>(&proto.action, "LegAction")?,
+        action: parse_required::<LegAction>(proto.action.as_deref(), "LegAction")?,
         exchange: s(&proto.exchange),
         open_close: ComboLegOpenClose::from(proto.open_close.unwrap_or_default()),
         short_sale_slot: proto.short_sales_slot.unwrap_or_default(),
@@ -377,7 +382,7 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
 
 pub fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error> {
     Ok(OrderState {
-        status: parse_required(&proto.status, "OrderStatus")?,
+        status: parse_required(proto.status.as_deref(), "OrderStatus")?,
         initial_margin_before: optional_f64(proto.init_margin_before),
         maintenance_margin_before: optional_f64(proto.maint_margin_before),
         equity_with_loan_before: optional_f64(proto.equity_with_loan_before),
