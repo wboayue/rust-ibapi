@@ -52,7 +52,7 @@ async fn main() {
 
     // Request WSH event data stream
     match client.wsh_event_data_by_filter(filter, limit, auto_fill).await {
-        Ok(mut event_stream) => {
+        Ok(event_stream) => {
             println!("\nStreaming WSH events with filter:");
             println!("Filter: {filter:?}");
             println!("Waiting for events...\n");
@@ -60,7 +60,8 @@ async fn main() {
             let mut event_count = 0;
 
             // Process events as they arrive
-            while let Some(event_result) = (&mut event_stream).filter_data().next().await {
+            let mut event_stream = event_stream.filter_data();
+            while let Some(event_result) = event_stream.next().await {
                 match event_result {
                     Ok(event_data) => {
                         event_count += 1;

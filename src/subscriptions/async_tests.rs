@@ -118,7 +118,7 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
+    let subscription: Subscription<String> = Subscription::with_decoder(
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
@@ -141,7 +141,7 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
 
     // First item via the raw Stream is the Notice (passes through);
     // filter_data() drops it and yields the Data.
-    let mut data = (&mut subscription).filter_data();
+    let mut data = subscription.filter_data();
     assert!(matches!(data.next().await, Some(Ok(ref s)) if s == "data"));
 }
 
@@ -417,13 +417,13 @@ async fn test_subscription_new_from_internal_simple() {
 #[tokio::test]
 async fn test_data_stream_collects_data_items() {
     let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let mut subscription = Subscription::new(rx);
+    let subscription = Subscription::new(rx);
 
     tx.send(Ok("a".to_string())).unwrap();
     tx.send(Ok("b".to_string())).unwrap();
     drop(tx);
 
-    let collected: Vec<_> = (&mut subscription).filter_data().collect().await;
+    let collected: Vec<_> = subscription.filter_data().collect().await;
     assert_eq!(collected.len(), 2);
     assert_eq!(collected[0].as_ref().unwrap(), "a");
     assert_eq!(collected[1].as_ref().unwrap(), "b");
@@ -432,13 +432,13 @@ async fn test_data_stream_collects_data_items() {
 #[tokio::test]
 async fn test_data_stream_yields_error_then_ends() {
     let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let mut subscription = Subscription::new(rx);
+    let subscription = Subscription::new(rx);
 
     tx.send(Ok("first".to_string())).unwrap();
     tx.send(Err(Error::ConnectionReset)).unwrap();
     tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
 
-    let mut stream = (&mut subscription).filter_data();
+    let mut stream = subscription.filter_data();
 
     let first = stream.next().await;
     assert_eq!(first.unwrap().unwrap(), "first");
@@ -456,7 +456,7 @@ async fn test_data_stream_filters_notices() {
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
+    let subscription: Subscription<String> = Subscription::with_decoder(
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
@@ -475,7 +475,7 @@ async fn test_data_stream_filters_notices() {
     tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
     drop(tx);
 
-    let collected: Vec<_> = (&mut subscription).filter_data().collect().await;
+    let collected: Vec<_> = subscription.filter_data().collect().await;
     assert_eq!(collected.len(), 1);
     assert_eq!(collected[0].as_ref().unwrap(), "data");
 }
@@ -579,7 +579,7 @@ async fn filter_data_stream_drops_notices() {
     let (tx, rx) = broadcast::channel::<RoutedItem>(16);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let mut subscription: Subscription<i32> = Subscription::with_decoder(
+    let subscription: Subscription<i32> = Subscription::with_decoder(
         internal,
         message_bus,
         |_ctx, msg| Ok(msg.peek_int(0).unwrap_or_default()),
@@ -599,7 +599,7 @@ async fn filter_data_stream_drops_notices() {
     tx.send(RoutedItem::Response(ResponseMessage::from("13\0"))).unwrap();
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
-    let mut data = (&mut subscription).filter_data();
+    let mut data = subscription.filter_data();
     assert!(matches!(data.next().await, Some(Ok(11))));
     // Notice is filtered (logged at warn!) — the next yielded item is the 13 payload.
     assert!(matches!(data.next().await, Some(Ok(13))));
@@ -621,10 +621,8 @@ async fn pre_decoded_subscription_polls() {
     tx.send(Ok(2)).unwrap();
     drop(tx); // close the channel so the stream eventually terminates.
 
-    let collected: Vec<_> = (&mut subscription).filter_data().collect().await;
-    assert_eq!(collected.len(), 2);
-    assert!(matches!(collected[0], Ok(1)));
-    assert!(matches!(collected[1], Ok(2)));
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(1)))));
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(2)))));
     // After the sender drops, the stream is exhausted.
     assert!(subscription.next().await.is_none());
 }

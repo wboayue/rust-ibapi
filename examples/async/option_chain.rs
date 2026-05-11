@@ -19,11 +19,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Requesting Option Chain for {symbol} ===");
 
-    let mut option_chain_stream = client.option_chain(symbol, exchange, security_type, contract_id).await?;
+    let option_chain_stream = client.option_chain(symbol, exchange, security_type, contract_id).await?;
 
     let mut chain_count = 0;
+    let mut option_chain_stream = option_chain_stream.filter_data();
 
-    while let Some(result) = (&mut option_chain_stream).filter_data().next().await {
+    while let Some(result) = option_chain_stream.next().await {
         match result {
             Ok(chain) => {
                 chain_count += 1;

@@ -61,10 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ask_book = [None; 5];
 
     // Process market depth stream
-    let mut market_depth = market_depth;
+    let mut market_depth = market_depth.filter_data();
     let mut update_count = 0;
 
-    while let Some(depth_update) = (&mut market_depth).filter_data().next().await {
+    while let Some(depth_update) = market_depth.next().await {
         update_count += 1;
         if update_count > 30 {
             break;

@@ -22,10 +22,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request positions for all accounts
     println!("\nRequesting positions...");
-    let mut subscription = client.positions().await?;
+    let subscription = client.positions().await?;
 
     // Process position updates
-    while let Some(result) = (&mut subscription).filter_data().next().await {
+    let mut subscription = subscription.filter_data();
+    while let Some(result) = subscription.next().await {
         match result {
             Ok(update) => match update {
                 PositionUpdate::Position(position) => {

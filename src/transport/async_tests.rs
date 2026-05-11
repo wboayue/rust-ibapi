@@ -423,7 +423,7 @@ async fn test_subscription_unspecified_notice_not_delivered() {
 /// `data_stream()` filters `SubscriptionItem::Notice` and yields only data.
 #[tokio::test]
 async fn test_subscription_data_stream_filters_notices() {
-    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+    let (stream, bus, subscription) = make_request_subscription(42).await;
 
     stream.push_inbound(body("89|42|first|"));
     stream.push_inbound(body(FARM_OK_FRAME_42));
@@ -432,7 +432,7 @@ async fn test_subscription_data_stream_filters_notices() {
         bus.read_and_route_message().await.unwrap();
     }
 
-    let collected: Vec<_> = (&mut subscription).filter_data().take(2).collect().await;
+    let collected: Vec<_> = subscription.filter_data().take(2).collect().await;
     assert_eq!(collected.len(), 2, "filter_data() must yield the two data items");
     for item in collected {
         assert!(matches!(item, Ok(NoticeTestData)), "unexpected stream item");

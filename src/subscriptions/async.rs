@@ -59,9 +59,9 @@ type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<
 /// ```no_run
 /// # use ibapi::subscriptions::SubscriptionItemStreamExt;
 /// # use futures::StreamExt;
-/// # async fn run(mut subscription: ibapi::subscriptions::Subscription<i32>) {
-/// let mut data = (&mut subscription).filter_data();
-/// while let Some(result) = data.next().await { /* ... */ }
+/// # async fn run(subscription: ibapi::subscriptions::Subscription<i32>) {
+/// let mut data = subscription.filter_data();
+/// while let Some(result) = data.next().await { /* result: Result<i32, _> */ }
 /// # }
 /// ```
 ///
@@ -381,9 +381,9 @@ where
 /// ```no_run
 /// # use ibapi::subscriptions::{Subscription, SubscriptionItemStreamExt};
 /// # use futures::StreamExt;
-/// # async fn run(mut subscription: Subscription<i32>) {
-/// let mut data = (&mut subscription).filter_data();
-/// while let Some(result) = data.next().await { /* ... */ }
+/// # async fn run(subscription: Subscription<i32>) {
+/// let mut data = subscription.filter_data();
+/// while let Some(result) = data.next().await { /* result: Result<i32, _> */ }
 /// # }
 /// ```
 pub trait SubscriptionItemStreamExt: Stream + Sized {

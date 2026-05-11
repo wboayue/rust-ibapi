@@ -16,11 +16,17 @@ use super::encoders;
 /// Created by [`Client::subscribe_to_group_events`](crate::Client::subscribe_to_group_events).
 /// Derefs to `Subscription<DisplayGroupUpdate>` for `next()`, `cancel()`, etc.
 ///
+/// The canonical pattern-match form works through `Deref` with no extra ceremony:
+///
+/// ```ignore
+/// while let Some(item) = subscription.next().await { /* match on SubscriptionItem */ }
+/// ```
+///
 /// # `filter_data` and the reborrow gotcha
 ///
 /// `Subscription::filter_data` (from `SubscriptionItemStreamExt`) takes `self`,
 /// and method resolution through `DerefMut` is not allowed to *move* the
-/// dereferenced value. So `(&mut subscription).filter_data()` on a
+/// dereferenced value. So `subscription.filter_data()` on a
 /// `DisplayGroupSubscription` fails with `cannot move out of dereference`.
 ///
 /// Reborrow first:

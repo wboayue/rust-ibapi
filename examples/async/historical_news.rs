@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Maximum number of results
     let total_results = 100;
 
-    let mut news_stream = client
+    let news_stream = client
         .historical_news(contract_id, provider_codes, start_time, end_time, total_results)
         .await?;
 
@@ -34,7 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Contract ID: {contract_id}, Providers: {provider_codes:?}");
 
     let mut count = 0;
-    while let Some(result) = (&mut news_stream).filter_data().next().await {
+    let mut news_stream = news_stream.filter_data();
+    while let Some(result) = news_stream.next().await {
         match result {
             Ok(article) => {
                 count += 1;

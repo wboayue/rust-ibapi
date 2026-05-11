@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // - contract: The contract to get data for
     // - number_of_ticks: 0 for streaming data, or 1-1000 for historical ticks
     // - ignore_size: false to include size information
-    let mut trades = client.tick_by_tick_last(&contract, 0, false).await?;
+    let trades = client.tick_by_tick_last(&contract, 0, false).await?;
 
     println!("Subscription created. Receiving Last trades only...\n");
     println!("Time                     | Price    | Size   | Exchange | Conditions");
@@ -50,7 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process first 20 trades for demo
     let mut count = 0;
-    while let Some(trade_result) = (&mut trades).filter_data().next().await {
+    let mut trades = trades.filter_data();
+    while let Some(trade_result) = trades.next().await {
         if count >= 20 {
             break;
         }

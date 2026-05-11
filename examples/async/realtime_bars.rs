@@ -40,10 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Receiving 5-second bars...\n");
 
     // Process real-time bars stream
-    let mut stream = realtime_bars;
+    let mut stream = realtime_bars.filter_data();
     let mut bar_count = 0;
 
-    while let Some(bar) = (&mut stream).filter_data().next().await {
+    while let Some(bar) = stream.next().await {
         let bar = bar?;
         bar_count += 1;
 
