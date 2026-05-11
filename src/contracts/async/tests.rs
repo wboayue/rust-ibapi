@@ -1,5 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_tws_error_message, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::common::test_tables::*;
 use crate::contracts::{Currency, Exchange, Symbol};
 use crate::messages::IncomingMessages;
@@ -505,13 +507,11 @@ async fn contract_details_returns_server_error() {
     let contract = Contract::stock("INVALID").build();
 
     let err = client.contract_details(&contract).await.unwrap_err();
-    assert!(matches!(err, crate::Error::Message(200, _)), "got {err:?}");
+    assert_tws_error_message(err, 200, "No security definition found");
 }
 
 #[tokio::test]
 async fn contract_details_rejects_unexpected_message() {
-    // SymbolSamples (msg id 79) isn't expected during contract_details — should
-    // route to the `_ => Error::UnexpectedResponse(..)` arm.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("79|9000|0|")]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
@@ -522,8 +522,6 @@ async fn contract_details_rejects_unexpected_message() {
 
 #[tokio::test]
 async fn contract_details_returns_unexpected_end_of_stream() {
-    // Empty response stream closes immediately; the body falls past the while
-    // loop and returns Error::UnexpectedEndOfStream.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
@@ -534,12 +532,9 @@ async fn contract_details_returns_unexpected_end_of_stream() {
 
 #[tokio::test]
 async fn contract_details_propagates_verify_failure() {
-    // `trading_class` requires `Features::TRADING_CLASS`; with an older
-    // server, verify_contract short-circuits before any encoding.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::TRADING_CLASS - 1);
-    let mut contract = Contract::stock("AAPL").build();
-    contract.trading_class = "NMS".into();
+    let contract = Contract::stock("AAPL").trading_class("NMS").build();
 
     let result = client.contract_details(&contract).await;
     assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "got {result:?}");
@@ -554,26 +549,26 @@ async fn matching_symbols_returns_server_error() {
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
     let err = client.matching_symbols("???").await.unwrap_err();
-    let msg = format!("{err:?}");
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
     assert!(msg.contains("unexpected error"), "got {msg}");
 }
 
 #[tokio::test]
 async fn matching_symbols_rejects_unexpected_message() {
-    // ContractData (msg id 10) is unexpected for matching_symbols — should
-    // route to the wildcard "unexpected message" arm.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("10|9000|")]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
     let err = client.matching_symbols("AAPL").await.unwrap_err();
-    let msg = format!("{err:?}");
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
     assert!(msg.contains("unexpected message"), "got {msg}");
 }
 
 #[tokio::test]
 async fn matching_symbols_returns_empty_on_closed_stream() {
-    // Closed-without-response branch (subscription.next() == None) falls
-    // through to Ok(Vec::default()).
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
@@ -597,7 +592,10 @@ async fn market_rule_returns_simple_error_on_empty_stream() {
     let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
 
     let err = client.market_rule(26).await.unwrap_err();
-    assert!(format!("{err:?}").contains("no market rule found"), "got {err:?}");
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no market rule found");
 }
 
 #[tokio::test]
@@ -617,7 +615,10 @@ async fn calculate_option_price_returns_simple_error_on_empty_stream() {
     let contract = Contract::option("AAPL", "20231215", 150.0, "C");
 
     let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
-    assert!(format!("{err:?}").contains("no data for option calculation"), "got {err:?}");
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no data for option calculation");
 }
 
 #[tokio::test]
@@ -638,7 +639,10 @@ async fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
     let contract = Contract::option("AAPL", "20231215", 150.0, "C");
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
-    assert!(format!("{err:?}").contains("no data for option calculation"), "got {err:?}");
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no data for option calculation");
 }
 
 #[tokio::test]
