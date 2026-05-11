@@ -287,9 +287,12 @@ impl ExpirationDate {
 
     /// Get the next Friday from today
     pub fn next_friday() -> Self {
-        let today = OffsetDateTime::now_utc().date();
+        Self::next_friday_from(OffsetDateTime::now_utc().date())
+    }
+
+    fn next_friday_from(today: Date) -> Self {
         let days_to_add = match today.weekday() {
-            Weekday::Friday => 7, // If today is Friday, get next Friday
+            Weekday::Friday => 7,
             other => Self::days_until_friday(other),
         };
         let next_friday = today + Duration::days(days_to_add);
@@ -303,9 +306,12 @@ impl ExpirationDate {
 
     /// Get the third Friday of the current month (standard monthly options expiration)
     pub fn third_friday_of_month() -> Self {
-        let now = OffsetDateTime::now_utc();
-        let year = now.year();
-        let month = now.month();
+        Self::third_friday_from(OffsetDateTime::now_utc().date())
+    }
+
+    fn third_friday_from(today: Date) -> Self {
+        let year = today.year();
+        let month = today.month();
 
         // Find the first day of the month
         let first_of_month = Date::from_calendar_date(year, month, 1).expect("Valid date");
@@ -315,7 +321,7 @@ impl ExpirationDate {
         let third_friday = first_of_month + Duration::days(days_to_first_friday + 14);
 
         // If we've passed this month's third Friday, get next month's
-        if now.date() > third_friday {
+        if today > third_friday {
             let next_month = if month == Month::December {
                 Date::from_calendar_date(year + 1, Month::January, 1)
             } else {
@@ -364,10 +370,10 @@ impl ContractMonth {
     /// Get the front month contract (next expiring)
     pub fn front() -> Self {
         let now = OffsetDateTime::now_utc();
-        let current_year = now.year() as u16;
-        let current_month = now.month() as u8;
-        let current_day = now.day();
+        Self::front_from(now.year() as u16, now.month() as u8, now.day())
+    }
 
+    fn front_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Futures typically expire around the third Friday of the month
         // If we're past the 15th, assume current month has expired
         if current_day > 15 {
@@ -384,10 +390,10 @@ impl ContractMonth {
     /// Get the next quarterly contract month (Mar, Jun, Sep, Dec)
     pub fn next_quarter() -> Self {
         let now = OffsetDateTime::now_utc();
-        let current_year = now.year() as u16;
-        let current_month = now.month() as u8;
-        let current_day = now.day();
+        Self::next_quarter_from(now.year() as u16, now.month() as u8, now.day())
+    }
 
+    fn next_quarter_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Find next quarterly month
         let next_quarter_month = match current_month {
             1 | 2 => 3,
