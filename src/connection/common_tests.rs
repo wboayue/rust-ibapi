@@ -545,3 +545,184 @@ fn test_non_utf8_handshake_response() {
     // server_time will contain replacement characters but parsing succeeds
     assert!(handshake_data.server_time.contains("20251205"));
 }
+
+#[test]
+fn test_startup_message_message_type_typed_variants() {
+    // Cover every typed `StartupMessage::message_type()` arm — the previously
+    // covered arm was only `Other`, leaving the OpenOrder/OrderStatus/
+    // OpenOrderEnd/AccountUpdate(*) arms at 0 hits.
+    use crate::accounts::{AccountPortfolioValue, AccountUpdateTime, AccountValue};
+    use crate::orders::{OrderData, OrderStatus};
+
+    assert_eq!(
+        StartupMessage::OpenOrder(OrderData::default()).message_type(),
+        IncomingMessages::OpenOrder
+    );
+    assert_eq!(
+        StartupMessage::OrderStatus(OrderStatus::default()).message_type(),
+        IncomingMessages::OrderStatus
+    );
+    assert_eq!(StartupMessage::OpenOrderEnd.message_type(), IncomingMessages::OpenOrderEnd);
+    assert_eq!(
+        StartupMessage::AccountUpdate(AccountUpdate::AccountValue(AccountValue::default())).message_type(),
+        IncomingMessages::AccountValue
+    );
+    assert_eq!(
+        StartupMessage::AccountUpdate(AccountUpdate::PortfolioValue(AccountPortfolioValue::default())).message_type(),
+        IncomingMessages::PortfolioValue
+    );
+    assert_eq!(
+        StartupMessage::AccountUpdate(AccountUpdate::UpdateTime(AccountUpdateTime::default())).message_type(),
+        IncomingMessages::AccountUpdateTime
+    );
+    assert_eq!(
+        StartupMessage::AccountUpdate(AccountUpdate::End).message_type(),
+        IncomingMessages::AccountDownloadEnd
+    );
+}
+
+#[test]
+fn test_parse_account_info_next_valid_id_protobuf() {
+    use prost::Message;
+
+    let handler = ConnectionHandler::default();
+    let proto = crate::proto::NextValidId { order_id: Some(4242) };
+    let bytes = proto.encode_to_vec();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
+
+    let info = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect("protobuf NextValidId must parse");
+    assert_eq!(info.next_order_id, Some(4242));
+    assert_eq!(info.managed_accounts, None);
+}
+
+#[test]
+fn test_parse_account_info_managed_accounts_protobuf() {
+    use prost::Message;
+
+    let handler = ConnectionHandler::default();
+    let proto = crate::proto::ManagedAccounts {
+        accounts_list: Some("DU111,DU222".to_string()),
+    };
+    let bytes = proto.encode_to_vec();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, bytes, TEST_SERVER_VERSION);
+
+    let info = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect("protobuf ManagedAccounts must parse");
+    assert_eq!(info.next_order_id, None);
+    assert_eq!(info.managed_accounts, Some("DU111,DU222".to_string()));
+}
+
+#[test]
+fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
+    // Garbage bytes for the NextValidId proto envelope.
+    let handler = ConnectionHandler::default();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, vec![0xff, 0xff, 0xff], TEST_SERVER_VERSION);
+
+    let err = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect_err("garbage protobuf must error");
+    assert!(matches!(err, Error::Simple(ref s) if s.contains("NextValidId")), "got {err:?}");
+}
+
+#[test]
+fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
+    let handler = ConnectionHandler::default();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, vec![0xff, 0xff, 0xff], TEST_SERVER_VERSION);
+
+    let err = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect_err("garbage protobuf must error");
+    assert!(matches!(err, Error::Simple(ref s) if s.contains("ManagedAccounts")), "got {err:?}");
+}
+
+#[test]
+fn test_dispatch_unsolicited_open_order_no_callback_is_noop() {
+    // No startup callback → OpenOrder frame is dropped silently. Notice sink
+    // must NOT receive a notice (the Error arm is the only path that fans out).
+    let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
+
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
+    };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    assert_eq!(sink.count(), 0, "OpenOrder must not deliver to notice sink");
+}
+
+#[test]
+fn test_dispatch_unsolicited_order_status_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
+
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
+    };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("53\01\0");
+
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
+    };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123.45\0USD\0DU1\0");
+
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
+    };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_account_value_decode_failure_falls_to_other() {
+    // Truncated AccountValue (missing key/value/currency/account) fails to
+    // decode, exercising the `unwrap_or_else(|_| Other(...))` branch.
+    let mut message = ResponseMessage::from("6\02\0");
+
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| {
+        if let StartupMessage::Other(rm) = msg {
+            *captured.lock().unwrap() = Some(rm.message_type());
+        } else {
+            panic!("expected Other after decode failure, got {msg:?}");
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::AccountValue));
+}
+
+#[test]
+fn test_dispatch_unsolicited_unknown_no_callback_warns() {
+    // Unknown msg type (CompletedOrder=101) with no startup callback exercises
+    // the `_ => warn!(...)` "consuming message" branch.
+    let mut message = ResponseMessage::from("101\0\0");
+
+    let sink = CapturingSink::default();
+    let ctx = StartupHandshakeContext {
+        startup: None,
+        notice_sink: &sink,
+    };
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &ctx);
+    assert_eq!(sink.count(), 0, "unknown messages without a callback are dropped, not fan-out");
+}
