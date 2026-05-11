@@ -232,7 +232,6 @@ where
             self.message_bus.clone(),
             Some(request_id),
             None,
-            None,
             self.context,
         ))
     }
@@ -249,7 +248,6 @@ where
             self.message_bus.clone(),
             None,
             None,
-            Some(message_type),
             self.context,
         ))
     }
@@ -266,7 +264,6 @@ where
             self.message_bus.clone(),
             None,
             Some(order_id),
-            None,
             self.context,
         ))
     }

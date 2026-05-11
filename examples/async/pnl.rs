@@ -31,11 +31,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request PnL updates
     println!("\nRequesting PnL updates for account {account}...");
-    let mut subscription = client.pnl(&AccountId(account.clone()), None).await?;
+    let subscription = client.pnl(&AccountId(account.clone()), None).await?;
 
     // Process PnL updates
     println!("Waiting for PnL updates (press Ctrl+C to stop)...");
-    while let Some(result) = subscription.next_data().await {
+    let mut subscription = subscription.filter_data();
+    while let Some(result) = subscription.next().await {
         match result {
             Ok(pnl_update) => {
                 print!("PnL Update - Daily: ${:.2}", pnl_update.daily_pnl);

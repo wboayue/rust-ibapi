@@ -22,14 +22,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Spawn a background task to monitor all order updates before submitting.
     let monitor_client = client.clone();
     let monitor_handle = tokio::spawn(async move {
-        let mut stream = match monitor_client.order_update_stream().await {
+        let stream = match monitor_client.order_update_stream().await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("failed to open order update stream: {e:?}");
                 return;
             }
         };
-        while let Some(update) = stream.next_data().await {
+        let mut stream = stream.filter_data();
+        while let Some(update) = stream.next().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
                     println!(

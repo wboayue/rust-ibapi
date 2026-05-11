@@ -32,4 +32,4 @@ pub use sync::{
 pub use sync::Subscription;
 
 #[cfg(feature = "async")]
-pub use r#async::Subscription;
+pub use r#async::{FilterDataStream, Subscription, SubscriptionItemStreamExt};

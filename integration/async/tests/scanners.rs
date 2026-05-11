@@ -1,4 +1,6 @@
+use futures::StreamExt;
 use ibapi::scanner::ScannerSubscription;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
@@ -35,8 +37,9 @@ async fn scanner_subscription_top_gainers() {
     rate_limit();
     let mut subscription = client.scanner_subscription(&sub, &[]).await.expect("scanner_subscription failed");
 
-    let results = subscription
-        .next_data()
+    let results = (&mut subscription)
+        .filter_data()
+        .next()
         .await
         .expect("expected scanner results")
         .expect("scanner subscription error");

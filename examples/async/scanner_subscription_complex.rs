@@ -1,6 +1,8 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
 use ibapi::orders::TagValue;
 use ibapi::scanner::ScannerSubscription;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -43,12 +45,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         value: "2".to_string(), // At least 2% change
     }];
 
-    let mut scanner_results = client.scanner_subscription(&subscription, &filters).await?;
+    let scanner_results = client.scanner_subscription(&subscription, &filters).await?;
 
     println!("\nScanning market... (Press Ctrl+C to stop)");
 
     let mut batch_count = 0;
-    while let Some(result) = scanner_results.next_data().await {
+    let mut scanner_results = scanner_results.filter_data();
+    while let Some(result) = scanner_results.next().await {
         match result {
             Ok(scanner_data_list) => {
                 batch_count += 1;

@@ -9,10 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::StreamExt;
 use log::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task;
 use tokio::time::Duration;
+use tokio_stream::wrappers::BroadcastStream;
 
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -64,9 +66,17 @@ pub trait AsyncMessageBus: Send + Sync {
     fn is_connected(&self) -> bool;
 }
 
-/// Internal subscription for async implementation
+/// Internal subscription for async implementation.
+///
+/// Holds a `BroadcastStream<RoutedItem>` for poll-based consumption plus a
+/// `template_receiver` kept solely so `Clone` can `resubscribe()` to produce an
+/// independent stream. We cannot store the `Sender` instead — that would keep
+/// the channel alive past the external sender's drop, breaking the
+/// "channel closes when senders drop" termination contract.
 pub struct AsyncInternalSubscription {
-    pub(crate) receiver: broadcast::Receiver<RoutedItem>,
+    /// Held only for `Clone` via `resubscribe()`. Never polled directly.
+    template_receiver: broadcast::Receiver<RoutedItem>,
+    pub(crate) stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
     cleanup_sent: bool,
@@ -74,8 +84,14 @@ pub struct AsyncInternalSubscription {
 
 impl Clone for AsyncInternalSubscription {
     fn clone(&self) -> Self {
+        // For clones, both template and stream start at the current tail of
+        // the broadcast channel — clones see future messages, not the
+        // original's history.
+        let new_template = self.template_receiver.resubscribe();
+        let new_polling = self.template_receiver.resubscribe();
         Self {
-            receiver: self.receiver.resubscribe(),
+            template_receiver: new_template,
+            stream: BroadcastStream::new(new_polling),
             cleanup_sender: self.cleanup_sender.clone(),
             cleanup_signal: self.cleanup_signal.clone(),
             cleanup_sent: false, // Each clone should handle its own cleanup
@@ -84,10 +100,23 @@ impl Clone for AsyncInternalSubscription {
 }
 
 impl AsyncInternalSubscription {
+    /// Construct an internal subscription wrapping a broadcast receiver.
+    ///
+    /// **Receiver positioning matters.** The receiver you pass is what feeds
+    /// the stream — its position in the broadcast channel determines what
+    /// the subscription sees. Pass the receiver paired with the messages
+    /// you want consumed (typically the `rx` returned alongside the `tx`).
+    /// **Do not** pass `rx.resubscribe()` unless you specifically want to
+    /// skip messages already queued in `rx`; `resubscribe()` positions a
+    /// fresh receiver at the channel's *current tail*, which silently
+    /// hides already-queued items and causes "test ran to completion but
+    /// the assertion never fired" failures.
     #[cfg(test)]
     pub(crate) fn new(receiver: broadcast::Receiver<RoutedItem>) -> Self {
+        let template = receiver.resubscribe();
         Self {
-            receiver,
+            template_receiver: template,
+            stream: BroadcastStream::new(receiver),
             cleanup_sender: None,
             cleanup_signal: None,
             cleanup_sent: false,
@@ -99,8 +128,10 @@ impl AsyncInternalSubscription {
         cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
         cleanup_signal: CleanupSignal,
     ) -> Self {
+        let template = receiver.resubscribe();
         Self {
-            receiver,
+            template_receiver: template,
+            stream: BroadcastStream::new(receiver),
             cleanup_sender: Some(cleanup_sender),
             cleanup_signal: Some(cleanup_signal),
             cleanup_sent: false,
@@ -109,27 +140,41 @@ impl AsyncInternalSubscription {
 
     pub async fn next(&mut self) -> Option<Result<ResponseMessage, Error>> {
         loop {
-            match self.receiver.recv().await {
+            match self.stream.next().await? {
                 Ok(item) => {
                     if let Some(legacy) = item.into_legacy() {
                         return Some(legacy);
                     }
                 }
-                Err(broadcast::error::RecvError::Closed) => return None,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_lagged) => continue,
             }
         }
     }
 
     /// Receive the next typed envelope (Response / Notice / Error) without
-    /// the legacy projection. Consumed by `Subscription<T>::next` so it can
-    /// surface notices as `SubscriptionItem::Notice` items.
+    /// the legacy projection. Kept because `src/transport/async_tests.rs`
+    /// stub fixtures drive the channel directly via this helper.
+    #[cfg(test)]
     pub(crate) async fn next_routed(&mut self) -> Option<RoutedItem> {
         loop {
-            match self.receiver.recv().await {
+            match self.stream.next().await? {
                 Ok(item) => return Some(item),
-                Err(broadcast::error::RecvError::Closed) => return None,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_lagged) => continue,
+            }
+        }
+    }
+
+    /// Non-blocking poll for "is anything immediately available?". Returns
+    /// `None` if the stream is pending or closed. Used by test fixtures that
+    /// assert no cross-talk between subscriptions.
+    #[cfg(test)]
+    pub(crate) fn try_next_routed(&mut self) -> Option<RoutedItem> {
+        use futures::FutureExt;
+        loop {
+            match self.stream.next().now_or_never()? {
+                Some(Ok(item)) => return Some(item),
+                Some(Err(_lagged)) => continue,
+                None => return None,
             }
         }
     }

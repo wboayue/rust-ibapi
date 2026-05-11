@@ -228,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => HistoricalWhatToShow::Trades,
     };
 
-    let mut subscription = client
+    let subscription = client
         .historical_data_streaming(
             &contract,
             1.days(),               // Duration: 1 day of history
@@ -239,7 +239,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    while let Some(update) = subscription.next_data().await {
+    let mut subscription = subscription.filter_data();
+    while let Some(update) = subscription.next().await {
         match update {
             Ok(HistoricalBarUpdate::Historical(data)) => {
                 println!("Received {} initial historical bars", data.bars.len());

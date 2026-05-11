@@ -28,9 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AccountSummaryTags::BUYING_POWER,
     ];
 
-    let mut subscription = client.account_summary(&AccountGroup("All".to_string()), tags).await?;
+    let subscription = client.account_summary(&AccountGroup("All".to_string()), tags).await?;
 
-    while let Some(result) = subscription.next_data().await {
+    let mut subscription = subscription.filter_data();
+    while let Some(result) = subscription.next().await {
         match result {
             Ok(update) => match update {
                 AccountSummaryResult::Summary(summary) => {

@@ -7,8 +7,10 @@
 //!    (fluent fire-and-forget; submit() allocates the order id internally)
 //! 3. Monitor order status through the update stream
 
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::OrderUpdate;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 use std::error::Error;
 
@@ -21,14 +23,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to server version {}", client.server_version());
 
     // Create order update stream - this receives ALL order updates
-    let mut order_stream = client.order_update_stream().await?;
+    let order_stream = client.order_update_stream().await?;
     println!("Created order update stream");
 
     // Spawn a task to monitor all order updates
     let monitor_handle = tokio::spawn(async move {
         println!("Starting order update monitor...");
 
-        while let Some(update) = order_stream.next_data().await {
+        let mut order_stream = order_stream.filter_data();
+        while let Some(update) = order_stream.next().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
                     println!("Order Status Update:");

@@ -1,4 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
+use futures::StreamExt;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
 #[tokio::main]
@@ -15,12 +17,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Subscribing to broad tape news from provider: {provider_code}");
 
-    let mut news_stream = client.broad_tape_news(provider_code).await?;
+    let news_stream = client.broad_tape_news(provider_code).await?;
 
     println!("Waiting for broad tape news... (Press Ctrl+C to stop)");
     println!("Note: This will show all news from the provider, not limited to specific contracts");
 
-    while let Some(result) = news_stream.next_data().await {
+    let mut news_stream = news_stream.filter_data();
+    while let Some(result) = news_stream.next().await {
         match result {
             Ok(article) => {
                 println!("\n--- Broad Tape News ---");

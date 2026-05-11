@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};

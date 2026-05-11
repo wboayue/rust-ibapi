@@ -15,6 +15,29 @@ use super::encoders;
 ///
 /// Created by [`Client::subscribe_to_group_events`](crate::Client::subscribe_to_group_events).
 /// Derefs to `Subscription<DisplayGroupUpdate>` for `next()`, `cancel()`, etc.
+///
+/// The canonical pattern-match form works through `Deref` with no extra ceremony:
+///
+/// ```ignore
+/// while let Some(item) = subscription.next().await { /* match on SubscriptionItem */ }
+/// ```
+///
+/// # `filter_data` and the reborrow gotcha
+///
+/// `Subscription::filter_data` (from `SubscriptionItemStreamExt`) takes `self`,
+/// and method resolution through `DerefMut` is not allowed to *move* the
+/// dereferenced value. So `subscription.filter_data()` on a
+/// `DisplayGroupSubscription` fails with `cannot move out of dereference`.
+///
+/// Reborrow first:
+///
+/// ```ignore
+/// let inner = &mut *subscription;            // `&mut Subscription<_>`
+/// while let Some(item) = inner.filter_data().next().await { /* ... */ }
+/// ```
+///
+/// This is a Rust language quirk, not a subscription-shape issue. The same
+/// reborrow applies to any Deref-wrapping subscription type.
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
     message_bus: Arc<dyn AsyncMessageBus>,
@@ -72,6 +95,8 @@ mod tests {
     use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::SubscriptionItem;
+    use futures::StreamExt;
     use std::sync::{Arc, RwLock};
 
     #[tokio::test]
@@ -95,9 +120,9 @@ mod tests {
         }
 
         // Verify response
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "265598@SMART");
     }
 
@@ -113,9 +138,9 @@ mod tests {
 
         let mut subscription = client.subscribe_to_group_events(2).await.expect("failed to subscribe");
 
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "");
     }
 
@@ -158,9 +183,9 @@ mod tests {
         let mut subscription = client.subscribe_to_group_events(1).await.expect("failed to subscribe");
 
         // Should skip the wrong message type and return the correct one
-        let result = subscription.next_data().await;
-        assert!(result.is_some());
-        let update = result.unwrap().unwrap();
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected Data");
+        };
         assert_eq!(update.contract_info, "correct message");
     }
 }

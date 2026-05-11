@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::builder::{
     accu_distr, accumulate_distribute, adaptive, arrival_price, balance_impact_risk, close_price, dark_ice, minimise_impact, pct_vol, pct_vol_price,

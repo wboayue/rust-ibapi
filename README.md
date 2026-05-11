@@ -259,7 +259,8 @@ async fn main() {
         .await
         .expect("realtime bars request failed!");
 
-    while let Some(item) = subscription.next_data().await {
+    let mut data = subscription.filter_data();
+    while let Some(item) = data.next().await {
         match item {
             Ok(bar) => println!("bar: {bar:?}"),
             Err(e)  => { eprintln!("error: {e}"); break; }
@@ -605,13 +606,13 @@ notices:
 
 | Want                                  | Sync                            | Async                          |
 |---------------------------------------|---------------------------------|--------------------------------|
-| **Data only** (notices logged at warn) | `subscription.iter_data()` / `next_data()` | `subscription.data_stream()` / `next_data()` |
-| **Data + notices** (full visibility)   | `subscription.iter()` / `next()` | `subscription.stream()` / `next()` |
+| **Data only** (notices logged at warn) | `subscription.iter_data()` / `next_data()` | `subscription.filter_data()` (then `.next().await`) |
+| **Data + notices** (full visibility)   | `subscription.iter()` / `next()` | `subscription.next().await` (matches on `SubscriptionItem`) |
 
 Most call sites (downstream business logic, indicators, paper-trading loops)
-want `iter_data()` / `data_stream()` — notices are observability concerns and
+want `iter_data()` / `filter_data()` — notices are observability concerns and
 already log at `warn!`. UI status indicators, custom logging, and audit pipelines
-want `iter()` / `stream()` so they can react to `SubscriptionItem::Notice`.
+match on `SubscriptionItem::Data` vs `SubscriptionItem::Notice` directly.
 
 Sync data-only example:
 

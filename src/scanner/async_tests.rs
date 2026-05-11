@@ -5,10 +5,12 @@ use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::scanner::{
     cancel_scanner_subscription_request, scanner_data, scanner_data_row, scanner_parameters, scanner_parameters_request, scanner_subscription_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use futures::StreamExt;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -91,8 +93,9 @@ async fn test_scanner_subscription() {
         .await
         .expect("request scanner subscription failed");
 
-    let scanner_data = match subscription.next_data().await {
-        Some(Ok(data)) => data,
+    let scanner_data = match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(data))) => data,
+        Some(Ok(SubscriptionItem::Notice(n))) => panic!("Unexpected notice: {n}"),
         Some(Err(e)) => panic!("Error getting scanner results: {e}"),
         None => panic!("Unexpected end of stream"),
     };
@@ -154,7 +157,7 @@ async fn test_scanner_subscription_drop_sends_cancel() {
         .await
         .expect("request scanner subscription failed");
 
-    let _ = subscription.next_data().await;
+    let _ = subscription.next().await;
 
     assert_eq!(request_message_count(&message_bus), 1);
 

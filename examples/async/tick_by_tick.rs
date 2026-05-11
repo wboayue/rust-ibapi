@@ -38,9 +38,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== All Last Trades ===");
     let all_last_ticks = client.tick_by_tick_all_last(&contract, 0, false).await?;
 
-    let mut all_last_ticks = all_last_ticks;
+    let mut all_last_ticks = all_last_ticks.filter_data();
     let mut count = 0;
-    while let Some(trade) = all_last_ticks.next_data().await {
+    while let Some(trade) = all_last_ticks.next().await {
         if count >= 5 {
             break;
         }
@@ -69,9 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Bid/Ask Quotes ===");
     let bid_ask_ticks = client.tick_by_tick_bid_ask(&contract, 0, false).await?;
 
-    let mut bid_ask_ticks = bid_ask_ticks;
+    let mut bid_ask_ticks = bid_ask_ticks.filter_data();
     let mut count = 0;
-    while let Some(quote) = bid_ask_ticks.next_data().await {
+    while let Some(quote) = bid_ask_ticks.next().await {
         if count >= 5 {
             break;
         }
@@ -100,9 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Midpoint Ticks ===");
     let midpoint_ticks = client.tick_by_tick_midpoint(&contract, 0, false).await?;
 
-    let mut midpoint_ticks = midpoint_ticks;
+    let mut midpoint_ticks = midpoint_ticks.filter_data();
     let mut count = 0;
-    while let Some(midpoint) = midpoint_ticks.next_data().await {
+    while let Some(midpoint) = midpoint_ticks.next().await {
         if count >= 5 {
             break;
         }

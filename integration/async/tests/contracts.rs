@@ -1,4 +1,6 @@
+use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
@@ -128,8 +130,9 @@ async fn option_chain_returns_data() {
         .await
         .expect("option_chain failed");
 
-    let chain = subscription
-        .next_data()
+    let chain = (&mut subscription)
+        .filter_data()
+        .next()
         .await
         .expect("expected at least one option chain result")
         .expect("option chain subscription error");

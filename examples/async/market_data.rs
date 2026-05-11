@@ -59,8 +59,12 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
         .await?;
 
     let mut tick_count = 0;
-    while let Some(result) = subscription.next_data().await {
-        match result? {
+    while let Some(item) = subscription.next().await {
+        let tick = match item? {
+            SubscriptionItem::Data(tick) => tick,
+            SubscriptionItem::Notice(_) => continue,
+        };
+        match tick {
             TickTypes::Price(price) => {
                 println!("Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
                 if price.attributes.can_auto_execute {
@@ -101,9 +105,10 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
 async fn example_snapshot(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 2: One-time snapshot\n");
 
-    let mut snapshot_subscription = client.market_data(contract).snapshot().subscribe().await?;
+    let snapshot_subscription = client.market_data(contract).snapshot().subscribe().await?;
 
-    while let Some(result) = snapshot_subscription.next_data().await {
+    let mut snapshot_subscription = snapshot_subscription.filter_data();
+    while let Some(result) = snapshot_subscription.next().await {
         match result? {
             TickTypes::Price(price) => {
                 println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
@@ -139,8 +144,9 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
     println!("Listening for generic ticks...\n");
 
     let mut tick_count = 0;
-    while let Some(result) = subscription.next_data().await {
-        if let TickTypes::Generic(generic) = result? {
+    while let Some(item) = subscription.next().await {
+        let SubscriptionItem::Data(tick) = item? else { continue };
+        if let TickTypes::Generic(generic) = tick {
             println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
             tick_count += 1;
             if tick_count >= 5 {
@@ -154,15 +160,15 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
 }
 
 // Demonstrates pattern-matching on `SubscriptionItem` directly. The earlier
-// examples filter notices via `next_data()`; here we use the `stream()`
-// adapter so notices are surfaced as `SubscriptionItem::Notice(_)`. UIs that
-// show connection / farm-status indicators want this shape.
+// examples filter notices via `filter_data()`; here we drive `Subscription`'s
+// `Stream` impl directly so notices are surfaced as `SubscriptionItem::Notice(_)`.
+// UIs that show connection / farm-status indicators want this shape.
 async fn example_observe_notices(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 4: Observing notices via SubscriptionItem\n");
 
-    let mut subscription = client.market_data(contract).generic_ticks(&["233"]).subscribe().await?;
+    let subscription = client.market_data(contract).generic_ticks(&["233"]).subscribe().await?;
 
-    let mut events = subscription.stream().take(8);
+    let mut events = subscription.take(8);
     while let Some(event) = events.next().await {
         match event {
             Ok(SubscriptionItem::Data(_)) => println!("data tick"),

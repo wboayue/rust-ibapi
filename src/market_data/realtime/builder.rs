@@ -104,8 +104,12 @@ impl<'a> RealtimeBarsBuilder<'a, crate::client::r#async::Client> {
     ///         .await
     ///         .expect("realtime bars request failed");
     ///
-    ///     while let Some(bar) = subscription.next_data().await {
-    ///         println!("{bar:?}");
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(bar)) => println!("{bar:?}"),
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
+    ///             Err(e) => { eprintln!("error: {e}"); break; }
+    ///         }
     ///     }
     /// }
     /// ```
