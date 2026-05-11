@@ -51,9 +51,9 @@ where
 }
 
 /// Parse an optional enumerated wire field. `None` and `Some("")` both mean
-/// "no value" (a valid wire state for fields like `Contract.right` on
-/// non-option contracts); only an unknown non-empty string is an error.
-#[allow(dead_code)] // First consumer lands in PR 2 (Contract.right)
+/// "no value" — a valid wire state for fields like `Contract.right` on
+/// non-option contracts. Only an unknown non-empty string is an error.
+#[allow(dead_code)]
 pub(crate) fn parse_optional<T>(opt: &Option<String>) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr<Err = Error>,

@@ -533,8 +533,7 @@ pub enum LegAction {
     Buy,
     /// Sell the leg.
     Sell,
-    /// Short-sell the leg. Supported on accounts configured for short-sale
-    /// combo legs; the gate is at server version 35 and our floor is 210.
+    /// Short-sell the leg.
     SellShort,
 }
 
