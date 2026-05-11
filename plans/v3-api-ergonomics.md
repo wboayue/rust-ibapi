@@ -77,7 +77,7 @@ Related existing tracking docs in `plans/`:
   Full sweep of async examples / docs / tests landed in the same PR. See
   CLAUDE.md rule 24 for the consumer idiom.
 
-- [~] **Notice classification helpers.** Open in PR #551. Adds
+- [x] **Notice classification helpers.** Shipped 2026-05-10 in PR #551. Adds
   `Notice::is_order_rejection()` (range 200–399), `Notice::category() ->
   NoticeCategory`, and a `#[non_exhaustive]` `NoticeCategory` enum
   (`Cancellation, Warning, SystemMessage, OrderRejection, Error`) with
