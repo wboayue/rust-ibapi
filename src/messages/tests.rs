@@ -1298,29 +1298,26 @@ fn test_notice_is_error() {
     assert!(warning.is_informational());
 }
 
+fn notice_with_code(code: i32) -> Notice {
+    Notice {
+        code,
+        message: String::new(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
 #[test]
 fn test_notice_is_order_rejection() {
     let start = *ORDER_REJECTION_CODE_RANGE.start();
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
     for code in [start, start + 1, ORDER_CANCELLED_CODE, end - 1, end] {
-        let n = Notice {
-            code,
-            message: String::new(),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
-        assert!(n.is_order_rejection(), "code {code} should be order rejection");
+        assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
     }
 
     for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
-        let n = Notice {
-            code,
-            message: String::new(),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
-        assert!(!n.is_order_rejection(), "code {code} should not be order rejection");
+        assert!(!notice_with_code(code).is_order_rejection(), "code {code} should not be order rejection");
     }
 }
 
@@ -1341,13 +1338,7 @@ fn test_notice_category_partition() {
     ];
 
     for &(code, expected) in cases {
-        let n = Notice {
-            code,
-            message: String::new(),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
-        assert_eq!(n.category(), expected, "code {code} miscategorised");
+        assert_eq!(notice_with_code(code).category(), expected, "code {code} miscategorised");
     }
 }
 
