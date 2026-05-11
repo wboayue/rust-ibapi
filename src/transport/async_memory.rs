@@ -19,6 +19,8 @@ struct Inner {
     inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
     closed: bool,
+    /// Remaining `reconnect()` calls that should fail before one succeeds.
+    reconnect_failures: usize,
 }
 
 /// In-memory async stream. Cloning yields another handle to the same shared queues.
@@ -45,6 +47,12 @@ impl MemoryStream {
     pub fn close(&self) {
         self.inner.lock().unwrap().closed = true;
         self.notify.notify_waiters();
+    }
+
+    /// Schedule the next `count` `reconnect()` calls to fail with
+    /// `Error::Simple`; subsequent calls succeed.
+    pub fn set_reconnect_failures(&self, count: usize) {
+        self.inner.lock().unwrap().reconnect_failures = count;
     }
 }
 
@@ -87,7 +95,21 @@ impl AsyncIo for MemoryStream {
 #[async_trait]
 impl AsyncReconnect for MemoryStream {
     async fn reconnect(&self) -> Result<(), Error> {
-        Ok(())
+        // Scope the std::sync MutexGuard so it cannot be held across a future .await.
+        let should_fail = {
+            let mut inner = self.inner.lock().unwrap();
+            if inner.reconnect_failures > 0 {
+                inner.reconnect_failures -= 1;
+                true
+            } else {
+                false
+            }
+        };
+        if should_fail {
+            Err(Error::Simple("simulated reconnect failure".into()))
+        } else {
+            Ok(())
+        }
     }
     async fn sleep(&self, _duration: Duration) {}
 }

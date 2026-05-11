@@ -7,6 +7,7 @@ use super::*;
 use crate::client::r#async::Client;
 use crate::messages::IncomingMessages;
 use crate::server_versions;
+use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::r#async::{AsyncTcpMessageBus, MemoryStream};
 
 const CLIENT_ID: i32 = 100;
@@ -151,4 +152,76 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");
     let n2 = notice_rx.try_recv().expect("second farm-status notice should be on the same stream");
     assert_eq!(n2.code, 2106);
+}
+
+/// Debug impl is wired up — print and check the client id is in the output.
+#[test]
+fn debug_impl_formats_connection() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream, CLIENT_ID);
+    let rendered = format!("{connection:?}");
+    assert!(rendered.contains("AsyncConnection"), "{rendered}");
+    assert!(rendered.contains(&CLIENT_ID.to_string()), "{rendered}");
+}
+
+/// A closed stream surfaces `Io(UnexpectedEof)` from `read_message`, which
+/// `handshake` must translate to `Error::Simple` with the "server may be
+/// rejecting connections" hint — the user-visible signal for a host
+/// allow-list mismatch.
+#[tokio::test]
+async fn handshake_unexpected_eof_returns_rejection_simple_error() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    // EOF before any handshake response: read_message → UnexpectedEof.
+    stream.close();
+
+    let err = connection.handshake().await.expect_err("must surface rejection error");
+    match err {
+        crate::errors::Error::Simple(ref msg) => {
+            assert!(msg.contains("server may be rejecting"), "unexpected message: {msg}");
+        }
+        other => panic!("expected Error::Simple, got {other:?}"),
+    }
+}
+
+/// Reconnect succeeds once the socket stops failing. The Fibonacci backoff
+/// loop counts down `reconnect_failures` (3 here), then `establish_connection`
+/// replays the handshake against the pre-queued inbound frames.
+#[tokio::test]
+async fn reconnect_succeeds_after_transient_failures() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    // Initial connection.
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("initial establish_connection failed");
+    assert_eq!(connection.server_version(), SERVER_VERSION);
+
+    // Fail 3 reconnect attempts, then succeed; queue a fresh handshake for the
+    // post-reconnect establish_connection replay.
+    stream.set_reconnect_failures(3);
+    push_handshake(&stream);
+
+    connection.reconnect().await.expect("reconnect must succeed after transient failures");
+    // Handshake replay updates the server-version cache.
+    assert_eq!(connection.server_version(), SERVER_VERSION);
+}
+
+/// When the socket refuses reconnects through every Fibonacci attempt, the
+/// loop exits with `Error::ConnectionFailed`. Pre-arming with exactly
+/// `MAX_RECONNECT_ATTEMPTS` failures binds the test to the loop's exit
+/// condition (rather than a hardcoded count).
+#[tokio::test]
+async fn reconnect_returns_connection_failed_after_exhausting_attempts() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("initial establish_connection failed");
+
+    stream.set_reconnect_failures(MAX_RECONNECT_ATTEMPTS as usize);
+
+    let err = connection.reconnect().await.expect_err("must give up after MAX_RECONNECT_ATTEMPTS");
+    assert!(matches!(err, crate::errors::Error::ConnectionFailed), "got {err:?}");
 }
