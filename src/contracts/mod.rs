@@ -568,8 +568,10 @@ pub struct ComboLeg {
     pub contract_id: i32,
     /// Select the relative number of contracts for the leg you are constructing. To help determine the ratio for a specific combination order, refer to the Interactive Analytics section of the User's Guide.
     pub ratio: i32,
-    /// The side (buy or sell) of the leg:
-    pub action: String,
+    /// The side of the leg (`Buy` / `Sell` / `SellShort`). Combo legs do not
+    /// accept `SLONG` — for long-undelivered semantics use the outer
+    /// `Order.action: Action::SellLong`.
+    pub action: LegAction,
     /// The destination exchange to which the order will be routed.
     pub exchange: String,
     /// Specifies whether an order is an open or closing order.
@@ -1156,14 +1158,14 @@ mod tests {
                 ComboLeg {
                     contract_id: 12345,
                     ratio: 1,
-                    action: "BUY".to_string(),
+                    action: LegAction::Buy,
                     exchange: "SMART".to_string(),
                     ..Default::default()
                 },
                 ComboLeg {
                     contract_id: 67890,
                     ratio: 1,
-                    action: "SELL".to_string(),
+                    action: LegAction::Sell,
                     exchange: "SMART".to_string(),
                     ..Default::default()
                 },

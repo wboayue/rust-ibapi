@@ -118,7 +118,7 @@ fn encode_combo_leg(leg: &contracts::ComboLeg, per_leg_price: Option<f64>) -> pr
     proto::ComboLeg {
         con_id: some_i32_ne(leg.contract_id, 0),
         ratio: some_i32_ne(leg.ratio, 0),
-        action: some_str(&leg.action),
+        action: Some(leg.action.to_string()),
         exchange: some_str(&leg.exchange),
         open_close: some_i32_ne(leg.open_close as i32, 0),
         short_sales_slot: some_i32_ne(leg.short_sale_slot, 0),

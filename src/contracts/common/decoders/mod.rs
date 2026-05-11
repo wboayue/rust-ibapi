@@ -86,21 +86,26 @@ pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails
     let default_details = crate::proto::ContractDetails::default();
     let proto_contract = p.contract.as_ref().unwrap_or(&default_contract);
     let proto_details = p.contract_details.as_ref().unwrap_or(&default_details);
-    Ok(crate::proto::decoders::decode_contract_details(proto_contract, proto_details))
+    crate::proto::decoders::decode_contract_details(proto_contract, proto_details)
 }
 
 pub(crate) fn decode_symbol_samples_proto(bytes: &[u8]) -> Result<Vec<ContractDescription>, Error> {
     let p: crate::proto::SymbolSamples = Message::decode(bytes)?;
-    Ok(p.contract_descriptions
+    p.contract_descriptions
         .into_iter()
         .map(|d| {
-            let contract = d.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
-            ContractDescription {
+            let contract = d
+                .contract
+                .as_ref()
+                .map(crate::proto::decoders::decode_contract)
+                .transpose()?
+                .unwrap_or_default();
+            Ok(ContractDescription {
                 contract,
                 derivative_security_types: d.derivative_sec_types,
-            }
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub(crate) fn decode_market_rule_proto(bytes: &[u8]) -> Result<MarketRule, Error> {

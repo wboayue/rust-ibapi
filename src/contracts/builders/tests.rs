@@ -201,10 +201,10 @@ fn test_spread_builder_calendar() {
     assert_eq!(spread.security_type, SecurityType::Spread);
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 12345);
-    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[0].action, LegAction::Buy);
     assert_eq!(spread.combo_legs[0].ratio, 1);
     assert_eq!(spread.combo_legs[1].contract_id, 67890);
-    assert_eq!(spread.combo_legs[1].action, "SELL");
+    assert_eq!(spread.combo_legs[1].action, LegAction::Sell);
     assert_eq!(spread.combo_legs[1].ratio, 1);
     assert_eq!(spread.currency, Currency::from("USD"));
     assert_eq!(spread.exchange, Exchange::from("SMART"));
@@ -217,9 +217,9 @@ fn test_spread_builder_vertical() {
     assert_eq!(spread.security_type, SecurityType::Spread);
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 11111);
-    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[0].action, LegAction::Buy);
     assert_eq!(spread.combo_legs[1].contract_id, 22222);
-    assert_eq!(spread.combo_legs[1].action, "SELL");
+    assert_eq!(spread.combo_legs[1].action, LegAction::Sell);
 }
 
 #[test]
@@ -242,16 +242,16 @@ fn test_spread_builder_custom_legs() {
     assert_eq!(spread.combo_legs.len(), 3);
 
     assert_eq!(spread.combo_legs[0].contract_id, 10001);
-    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[0].action, LegAction::Buy);
     assert_eq!(spread.combo_legs[0].ratio, 2);
     assert_eq!(spread.combo_legs[0].exchange, "CBOE");
 
     assert_eq!(spread.combo_legs[1].contract_id, 10002);
-    assert_eq!(spread.combo_legs[1].action, "SELL");
+    assert_eq!(spread.combo_legs[1].action, LegAction::Sell);
     assert_eq!(spread.combo_legs[1].ratio, 3);
 
     assert_eq!(spread.combo_legs[2].contract_id, 10003);
-    assert_eq!(spread.combo_legs[2].action, "BUY");
+    assert_eq!(spread.combo_legs[2].action, LegAction::Buy);
     assert_eq!(spread.combo_legs[2].ratio, 1);
 }
 
@@ -347,22 +347,22 @@ fn test_iron_condor_spread() {
 
     // First leg: Buy 100 Put
     assert_eq!(legs[0].contract_id, 100);
-    assert_eq!(legs[0].action, "BUY");
+    assert_eq!(legs[0].action, LegAction::Buy);
     assert_eq!(legs[0].ratio, 1);
 
     // Second leg: Sell 105 Put
     assert_eq!(legs[1].contract_id, 105);
-    assert_eq!(legs[1].action, "SELL");
+    assert_eq!(legs[1].action, LegAction::Sell);
     assert_eq!(legs[1].ratio, 1);
 
     // Third leg: Sell 110 Call
     assert_eq!(legs[2].contract_id, 110);
-    assert_eq!(legs[2].action, "SELL");
+    assert_eq!(legs[2].action, LegAction::Sell);
     assert_eq!(legs[2].ratio, 1);
 
     // Fourth leg: Buy 115 Call
     assert_eq!(legs[3].contract_id, 115);
-    assert_eq!(legs[3].action, "BUY");
+    assert_eq!(legs[3].action, LegAction::Buy);
     assert_eq!(legs[3].ratio, 1);
 }
 

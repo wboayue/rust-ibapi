@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
-use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
+use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, OrderStatusKind};
 use crate::stubs::MessageBusStub;
@@ -383,7 +383,7 @@ fn encode_combo_market_order() {
         let leg_1 = ComboLeg {
             contract_id: 55928698, //WTI future June 2017
             ratio: 1,
-            action: "BUY".to_owned(),
+            action: LegAction::Buy,
             exchange: "IPE".to_owned(),
             ..ComboLeg::default()
         };
@@ -391,7 +391,7 @@ fn encode_combo_market_order() {
         let leg_2 = ComboLeg {
             contract_id: 55850663, //COIL future June 2017
             ratio: 1,
-            action: "SELL".to_owned(),
+            action: LegAction::Sell,
             exchange: "IPE".to_owned(),
             ..ComboLeg::default()
         };

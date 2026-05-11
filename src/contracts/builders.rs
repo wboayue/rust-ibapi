@@ -522,7 +522,7 @@ impl SpreadBuilder {
             .map(|leg| ComboLeg {
                 contract_id: leg.contract_id,
                 ratio: leg.ratio,
-                action: leg.action.to_string(),
+                action: leg.action,
                 exchange: leg.exchange.map(|e| e.to_string()).unwrap_or_default(),
                 ..Default::default()
             })

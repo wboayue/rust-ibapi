@@ -320,7 +320,7 @@ pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Resul
 
 pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
     let p = proto::Position::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
     Ok(Position {
         account: p.account.unwrap_or_default(),
         contract,
@@ -341,7 +341,7 @@ pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, E
 
 pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<AccountPortfolioValue, Error> {
     let p = proto::PortfolioValue::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
     Ok(AccountPortfolioValue {
         contract,
         position: parse_str_f64(&p.position),
@@ -386,7 +386,7 @@ pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummar
 
 pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti, Error> {
     let p = proto::PositionMulti::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
     Ok(PositionMulti {
         account: p.account.unwrap_or_default(),
         contract,
