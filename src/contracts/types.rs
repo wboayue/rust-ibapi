@@ -292,7 +292,7 @@ impl ExpirationDate {
 
     fn next_friday_from(today: Date) -> Self {
         let days_to_add = match today.weekday() {
-            Weekday::Friday => 7, // If today is Friday, get next Friday
+            Weekday::Friday => 7,
             other => Self::days_until_friday(other),
         };
         let next_friday = today + Duration::days(days_to_add);

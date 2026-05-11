@@ -1,4 +1,5 @@
 use super::*;
+use time::macros::date;
 use time::{Date, Month};
 
 /// Round-trip the `PartialEq<str>` / `PartialEq<&str>` impls in both
@@ -24,24 +25,26 @@ str_eq_round_trip!(symbol_partial_eq_str_round_trip, Symbol, "AAPL", "MSFT");
 str_eq_round_trip!(exchange_partial_eq_str_round_trip, Exchange, "NASDAQ", "NYSE");
 str_eq_round_trip!(currency_partial_eq_str_round_trip, Currency, "USD", "EUR");
 
-/// Cover the full conversion / accessor / Display surface of a string-newtype.
+/// Cover `new`'s `&str` and `String` monomorphizations plus the From / Display / as_str surface.
 macro_rules! string_newtype_surface {
     ($name:ident, $t:ty, $sample:expr) => {
         #[test]
         fn $name() {
             let owned: String = String::from($sample);
 
-            let from_new = <$t>::new($sample);
+            let from_new_str = <$t>::new($sample);
+            let from_new_string = <$t>::new(owned.clone());
             let from_str: $t = <&str>::into($sample);
             let from_string: $t = owned.clone().into();
             let from_ref_string: $t = (&owned).into();
 
-            assert_eq!(from_new.as_str(), $sample);
-            assert_eq!(from_str, from_new);
-            assert_eq!(from_string, from_new);
-            assert_eq!(from_ref_string, from_new);
+            assert_eq!(from_new_str.as_str(), $sample);
+            assert_eq!(from_new_string, from_new_str);
+            assert_eq!(from_str, from_new_str);
+            assert_eq!(from_string, from_new_str);
+            assert_eq!(from_ref_string, from_new_str);
 
-            assert_eq!(format!("{}", from_new), $sample);
+            assert_eq!(format!("{}", from_new_str), $sample);
         }
     };
 }
@@ -51,26 +54,6 @@ string_newtype_surface!(exchange_surface, Exchange, "NASDAQ");
 string_newtype_surface!(currency_surface, Currency, "USD");
 string_newtype_surface!(cusip_surface, Cusip, "037833100");
 string_newtype_surface!(isin_surface, Isin, "US0378331005");
-
-/// Exercise both `&str` and `String` monomorphizations of `new(impl Into<String>)`.
-macro_rules! string_newtype_new_monomorphizations {
-    ($name:ident, $t:ty, $sample:expr) => {
-        #[test]
-        fn $name() {
-            let from_slice = <$t>::new($sample);
-            let from_owned = <$t>::new(String::from($sample));
-            assert_eq!(from_slice.as_str(), $sample);
-            assert_eq!(from_owned.as_str(), $sample);
-            assert_eq!(from_slice, from_owned);
-        }
-    };
-}
-
-string_newtype_new_monomorphizations!(symbol_new_takes_str_or_string, Symbol, "AAPL");
-string_newtype_new_monomorphizations!(exchange_new_takes_str_or_string, Exchange, "NASDAQ");
-string_newtype_new_monomorphizations!(currency_new_takes_str_or_string, Currency, "USD");
-string_newtype_new_monomorphizations!(cusip_new_takes_str_or_string, Cusip, "037833100");
-string_newtype_new_monomorphizations!(isin_new_takes_str_or_string, Isin, "US0378331005");
 
 #[test]
 fn symbol_to_field_emits_raw() {
@@ -196,42 +179,33 @@ fn expiration_date_third_friday_is_a_friday_in_15_to_21() {
     assert!(date >= today, "third Friday must be today or later, got {} vs {}", date, today);
 }
 
-fn date(year: i32, month: u8, day: u8) -> Date {
-    Date::from_calendar_date(year, Month::try_from(month).unwrap(), day).unwrap()
-}
-
 #[test]
 fn next_friday_from_friday_jumps_one_week() {
-    // 2025-03-21 is a Friday — next_friday must skip to 2025-03-28.
-    let nf = ExpirationDate::next_friday_from(date(2025, 3, 21));
+    let nf = ExpirationDate::next_friday_from(date!(2025 - 03 - 21));
     assert_eq!(format!("{}", nf), "20250328");
 }
 
 #[test]
 fn next_friday_from_monday_advances_four_days() {
-    // 2025-03-17 is a Monday.
-    let nf = ExpirationDate::next_friday_from(date(2025, 3, 17));
+    let nf = ExpirationDate::next_friday_from(date!(2025 - 03 - 17));
     assert_eq!(format!("{}", nf), "20250321");
 }
 
 #[test]
 fn third_friday_when_before_third_friday() {
-    // 2025-03-01 is before the third Friday (2025-03-21).
-    let tf = ExpirationDate::third_friday_from(date(2025, 3, 1));
+    let tf = ExpirationDate::third_friday_from(date!(2025 - 03 - 01));
     assert_eq!(format!("{}", tf), "20250321");
 }
 
 #[test]
 fn third_friday_when_past_rolls_to_next_month() {
-    // 2025-03-22 is past 2025-03-21 — must roll to April's third Friday (2025-04-18).
-    let tf = ExpirationDate::third_friday_from(date(2025, 3, 22));
+    let tf = ExpirationDate::third_friday_from(date!(2025 - 03 - 22));
     assert_eq!(format!("{}", tf), "20250418");
 }
 
 #[test]
 fn third_friday_december_rolls_to_january_next_year() {
-    // 2025-12-31 is past 2025-12-19 — must roll to 2026-01-16.
-    let tf = ExpirationDate::third_friday_from(date(2025, 12, 31));
+    let tf = ExpirationDate::third_friday_from(date!(2025 - 12 - 31));
     assert_eq!(format!("{}", tf), "20260116");
 }
 
@@ -277,50 +251,27 @@ fn contract_month_next_quarter_is_quarterly() {
 
 #[test]
 fn contract_month_front_from_branches() {
-    // Day <= 15 → current month.
-    let m = ContractMonth::front_from(2025, 6, 10);
-    assert_eq!(format!("{}", m), "202506");
-
-    // Day > 15 in non-December → next month.
-    let m = ContractMonth::front_from(2025, 6, 20);
-    assert_eq!(format!("{}", m), "202507");
-
-    // Day > 15 in December → January next year.
-    let m = ContractMonth::front_from(2025, 12, 31);
-    assert_eq!(format!("{}", m), "202601");
+    assert_eq!(format!("{}", ContractMonth::front_from(2025, 6, 10)), "202506");
+    assert_eq!(format!("{}", ContractMonth::front_from(2025, 6, 20)), "202507");
+    assert_eq!(format!("{}", ContractMonth::front_from(2025, 12, 31)), "202601");
 }
 
 #[test]
 fn contract_month_next_quarter_from_table() {
-    // January / February → March.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 1, 10)), "202503");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 2, 28)), "202503");
-
-    // March early → March; March late → June.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 3, 1)), "202503");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 3, 20)), "202506");
-
-    // April / May → June.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 4, 5)), "202506");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 5, 31)), "202506");
-
-    // June early → June; June late → September.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 6, 1)), "202506");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 6, 30)), "202509");
-
-    // July / August → September.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 7, 4)), "202509");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 8, 31)), "202509");
-
-    // September early → September; September late → December.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 9, 1)), "202509");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 9, 30)), "202512");
-
-    // October / November → December.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 10, 5)), "202512");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 11, 30)), "202512");
-
-    // December early → December; December late → March next year.
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 12, 1)), "202512");
     assert_eq!(format!("{}", ContractMonth::next_quarter_from(2025, 12, 31)), "202603");
 }
@@ -344,7 +295,7 @@ serde_round_trip!(exchange_serde_round_trip, Exchange, "NASDAQ");
 serde_round_trip!(currency_serde_round_trip, Currency, "USD");
 
 #[test]
-fn bond_identifier_variants_round_trip() {
+fn bond_identifier_variants_equality_and_match() {
     let c = BondIdentifier::Cusip(Cusip::new("037833100"));
     let i = BondIdentifier::Isin(Isin::new("US0378331005"));
 
