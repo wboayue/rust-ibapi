@@ -96,6 +96,15 @@ Related existing tracking docs in `plans/`:
   the parent's original vocab claim for `Execution.side` was wrong —
   `BOT`/`SLD` is the wire (`Buy/Sell/SShort/SLng` belongs to `Action`); the
   tracker has the corrected analysis.
+  - PR 1 shipped (PR #556) — `ComboLeg.action: LegAction` + shared
+    `parse_required` / `parse_optional` helpers in `proto/decoders.rs`.
+  - **PR 2 scope add: modernize `OptionRight` tests.** The existing
+    `OptionRight` per-variant asserts at `src/contracts/types_tests.rs:107-114`
+    are hand-rolled; PR 1's new `LegAction` tests at `:117-149` use a
+    table-driven loop (CLAUDE.md rule 21). PR 2 types `Contract.right` as
+    `Option<OptionRight>` — fold the test-shape rewrite into that PR
+    (rule 9, "modernize touched modules"). Drop the hand-rolled asserts,
+    use the same loop-over-variants shape.
 
 - [ ] **One canonical `Subscription` import path.** `Subscription` is reachable from
   `crate::subscriptions::Subscription` (canonical at `src/subscriptions/mod.rs:32,35`),
@@ -178,6 +187,26 @@ Related existing tracking docs in `plans/`:
   types.** Today both come through `Result<_, Error>`. Consider promoting server-side
   rejections (TWS error codes 200-299, 300-399, 10000+) into a typed sub-enum so
   callers can pattern-match without string parsing.
+
+- [ ] **Revisit `Error::Parse(usize, String, String)` shape — the index slot is a
+  legacy from text-protocol days.** Variant is `Parse(usize, String, String)`
+  (`src/errors.rs:49`): `(field_index, raw_value, message)`. In the
+  text-protocol era the index pointed at a positional field in the framed
+  message; under the protobuf-only floor (210, see [`plans/protobuf-migration.md`](protobuf-migration.md))
+  proto fields are name-keyed, not positional, so every new `FromStr<Err = Error>`
+  impl passes `0` as a placeholder. The typed-status sweep is about to add 4
+  more such sites (PR 2 `OptionRight`, PR 3 `SecurityIdType`, PR 4
+  `ExecutionFilterSide`, PR 5 `ExecutionSide`), each with a fake `0`. Three
+  options to weigh before the sweep finishes:
+  1. Make the index `Option<usize>` so proto-domain callers pass `None`
+     honestly. Text-protocol callsites in `messages.rs` keep their indices.
+  2. Replace with a struct: `Parse { index: Option<usize>, value: String,
+     reason: String }`. Most readable, biggest churn.
+  3. Leave as-is, document the `0`-as-placeholder convention in `errors.rs`
+     and the typed-status sweep plan. Lowest churn, but the convention rots
+     once readers forget it.
+
+  Decide before PR 5 lands — five accumulated fake-`0` sites is the inflection.
 
 ## 6. Examples & docs
 
