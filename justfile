@@ -3,9 +3,12 @@
 proto:
     cargo run -p proto-gen
 
-# Generate and open coverage report using cargo-llvm-cov
+# Generate and open coverage report using cargo-llvm-cov.
+# Uses nightly + --doctests so doc-test examples contribute and to avoid
+# stable's phantom instrumentation on `..Default::default()` and doc-fence
+# lines (rustdoc's --persist-doctests is nightly-only).
 cover:
-    cargo llvm-cov --all-features --html --open
+    cargo +nightly llvm-cov --all-features --doctests --html --open
 
 # Tags repo with specified version
 tag VERSION:
