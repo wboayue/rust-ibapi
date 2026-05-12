@@ -190,6 +190,40 @@ pub mod helpers {
     }
 }
 
+/// Generic round-trip / reject-unknown helpers for typed wire enums built with `impl_wire_enum!`.
+#[cfg(test)]
+#[allow(dead_code)] // Consumers grow as the typed-status sweep lands.
+pub mod wire_enum {
+    /// Assert `Display`, `FromStr`, and `ToField` agree on a hand-written
+    /// `(variant, wire)` table. One helper covers every trait impl generated
+    /// by `impl_wire_enum!` — independent verification (the table is not
+    /// derived from `as_str()`, so a typo in either direction surfaces).
+    pub fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
+    where
+        T: Copy + std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
+    {
+        for &(variant, wire) in table {
+            assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
+            assert_eq!(T::from_str(wire).unwrap(), variant, "FromStr({wire})");
+            assert_eq!(variant.to_field(), wire, "ToField for {variant:?}");
+        }
+    }
+
+    /// Assert every input string in `unknowns` produces `Err(Error::Parse(..))`.
+    pub fn check_wire_enum_rejects_unknown<T>(unknowns: &[&str])
+    where
+        T: std::str::FromStr<Err = crate::Error> + std::fmt::Debug,
+    {
+        for &s in unknowns {
+            let err = T::from_str(s);
+            assert!(
+                matches!(err, Err(crate::Error::Parse(_, _, _))),
+                "expected Parse error for {s:?}, got {err:?}",
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "test_utils_tests.rs"]
 mod tests;

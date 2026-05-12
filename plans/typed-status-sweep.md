@@ -114,13 +114,16 @@ For every field (CLAUDE.md rule 16, mirroring PR #518):
 - **Migration**: `ContractBuilder::security_id_type("CUSIP")` becomes `.security_id_type(SecurityIdType::Cusip)`. Worth adding a `From<&str>` for ergonomics? **No** — rule 21 says decoders should reject unknown wire; a `From<&str>` that silently defaults masks bugs. Use `TryFrom<&str>` or require `FromStr` + `?`.
 - **Sweep targets**: `src/contracts/mod.rs:398, 431, 456, 477` (existing string literals in tests); `src/contracts/common/test_tables.rs:607`; `docs/migration-3.0.md` §8 (Contract section).
 
-### PR 4 — `ExecutionFilter.side: Option<ExecutionFilterSide>`
+### PR 4 — `ExecutionFilter.side: Option<ExecutionFilterSide>` (split 4a + 4b)
 
-- **Why a new enum, not `Action`**: same logic as PR 1. The filter wire vocabulary is `BUY`/`SELL` only (per doc comment `src/orders/mod.rs:1614` and `proto/encoders.rs:612` fixture). Reusing `Action` would let `filter.side = Some(Action::SellShort)` compile; the server would either reject or silently misbehave. A narrow 2-variant enum makes invalid filter values unrepresentable.
-- **New enum**: `pub enum ExecutionFilterSide { Buy, Sell }`. `#[non_exhaustive]`; `Display` → `"BUY"`/`"SELL"`; `FromStr` rejects anything else.
-- **Empty wire = `Option::None`** (no filter set).
-- **Files**: `src/orders/mod.rs:1615` (field + new enum); `src/proto/encoders.rs:372` and `test_encode_execution_filter` at `:604`; `examples/sync/executions.rs:24` (uncomment `filter.side = side.to_owned();` as `filter.side = Some(ExecutionFilterSide::Buy)`).
-- **Migration**: `filter.side = "BUY".to_string()` → `filter.side = Some(ExecutionFilterSide::Buy)`.
+Split on the PR 3a/3b precedent: infrastructure ships first, typing migration consumes it. Plan-time distillation pass (rule 4, rule 25, `feedback_distillation_cadence`) surfaced three duplication classes that warrant a focused infra PR:
+
+1. `impl_wire_enum!` is module-local in `contracts/types.rs`; PR 4b's new `ExecutionFilterSide` would hand-roll `Display`/`FromStr`/`ToField` (and PR 5b's `ExecutionSide` again), deepening the existing `OrderStatusKind` hand-roll. 6 consumers across two modules — past rule 25's earned-cost threshold.
+2. `check_wire_enum_round_trip<T>` / `check_wire_enum_rejects_unknown<T>` test helpers are private to `contracts/types_tests.rs`. `orders/tests.rs` hand-rolls the same shape for `OrderStatusKind`; PR 4b would add a third hand-roll.
+3. PR 3b's /simplify pass tracked `some_display(Option<&impl Display>)` as a deferred follow-up. PR 4b makes it three call sites — the rule-of-three tripwire.
+
+- **[PR 4a](typed-status-sweep-pr4a.md)** — promote `impl_wire_enum!` (and `impl_str_partial_eq!`) to crate-wide reach via `#[macro_use] mod macros;`; move test helpers to `src/common/test_utils.rs::wire_enum`; introduce `some_display` in `proto/encoders.rs` and convert the two existing PR 2/PR 3b sites; retrofit `OrderStatusKind` to use the macro. Zero behavior change.
+- **[PR 4b](typed-status-sweep-pr4b.md)** — add `ExecutionFilterSide` (uses macro from 4a), promote field to `Option<ExecutionFilterSide>`, encoder uses `some_display`, tests use shared helpers, doc-examples for both sync + async (closes rule 18 gap on async `executions`), `prelude` re-export, migration-3.0 §12.
 
 ### PR 5 — `Execution.side: ExecutionSide` (split: 5a diagnostic, 5b typed)
 

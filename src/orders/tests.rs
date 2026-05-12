@@ -1,6 +1,5 @@
 use super::*;
-use crate::Error;
-use std::str::FromStr;
+use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 
 const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
     (OrderStatusKind::ApiPending, "ApiPending"),
@@ -15,23 +14,13 @@ const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
 ];
 
 #[test]
-fn order_status_kind_from_str_round_trips_for_all_variants() {
-    for &(kind, text) in ALL_KINDS {
-        let parsed = OrderStatusKind::from_str(text).unwrap_or_else(|e| panic!("FromStr failed for {text}: {e}"));
-        assert_eq!(parsed, kind, "FromStr({text}) mapped to wrong variant");
-        assert_eq!(kind.to_string(), text, "Display for {kind:?} did not produce {text}");
-        // Display → FromStr must round-trip.
-        assert_eq!(OrderStatusKind::from_str(&kind.to_string()).unwrap(), kind);
-    }
+fn order_status_kind_round_trip() {
+    check_wire_enum_round_trip(ALL_KINDS);
 }
 
 #[test]
-fn order_status_kind_from_str_rejects_unknown_status() {
-    let err = OrderStatusKind::from_str("NotARealStatus").expect_err("unknown string should not parse");
-    match err {
-        Error::Parse(_, value, _) => assert_eq!(value, "NotARealStatus"),
-        other => panic!("expected Error::Parse, got {other:?}"),
-    }
+fn order_status_kind_from_str_rejects_unknown() {
+    check_wire_enum_rejects_unknown::<OrderStatusKind>(&["NotARealStatus", "", "submitted", "FILLED"]);
 }
 
 #[test]

@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 use time::macros::date;
 use time::{Date, Month};
 
@@ -103,34 +104,6 @@ fn currency_default_is_usd() {
 #[test]
 fn symbol_default_is_empty() {
     assert_eq!(Symbol::default().as_str(), "");
-}
-
-/// Assert `Display`, `FromStr`, and `ToField` agree on a hand-written
-/// `(variant, wire)` table. One helper covers every trait impl generated
-/// by `impl_wire_enum!` — independent verification (the table is not
-/// derived from `as_str()`, so a typo in either direction surfaces).
-fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
-where
-    T: Copy + std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
-{
-    for &(variant, wire) in table {
-        assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
-        assert_eq!(T::from_str(wire).unwrap(), variant, "FromStr({wire})");
-        assert_eq!(variant.to_field(), wire, "ToField for {variant:?}");
-    }
-}
-
-fn check_wire_enum_rejects_unknown<T>(unknowns: &[&str])
-where
-    T: std::str::FromStr<Err = crate::Error> + std::fmt::Debug,
-{
-    for &s in unknowns {
-        let err = T::from_str(s);
-        assert!(
-            matches!(err, Err(crate::Error::Parse(_, _, _))),
-            "expected Parse error for {s:?}, got {err:?}",
-        );
-    }
 }
 
 #[test]
