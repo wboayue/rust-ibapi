@@ -24,6 +24,22 @@ fn test_contract() -> Contract {
     }
 }
 
+/// Drives a method against a stubbed client pinned below its required server version,
+/// asserts the failure surfaces `feature_name` in the error message. Sidesteps the
+/// `T: Debug` bound that blocks `.expect_err()` on subscription return types.
+async fn assert_version_check_fails<F, Fut, T>(server_version: i32, feature_name: &str, call: F)
+where
+    F: FnOnce(Client) -> Fut,
+    Fut: std::future::Future<Output = Result<T, Error>>,
+{
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_version);
+    let Err(err) = call(client).await else {
+        panic!("expected version-check failure ({feature_name})");
+    };
+    assert!(err.to_string().contains(feature_name), "expected '{feature_name}', got: {err}");
+}
+
 #[tokio::test]
 async fn test_head_timestamp() {
     let message_bus = Arc::new(MessageBusStub {
@@ -33,14 +49,7 @@ async fn test_head_timestamp() {
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
@@ -71,14 +80,7 @@ async fn test_histogram_data() {
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_HISTOGRAM);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
     let trading_hours = TradingHours::Regular;
     let period = BarSize::Day;
 
@@ -127,14 +129,7 @@ async fn test_historical_data() {
     // Set client timezone for test
     client.time_zone = Some(time_tz::timezones::db::UTC);
 
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
     let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
     let duration = Duration::seconds(3600);
     let bar_size = BarSize::Min30;
@@ -190,29 +185,13 @@ async fn test_historical_data() {
 
 #[tokio::test]
 async fn test_historical_data_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
-
-    let mut contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
-    contract.trading_class = "ES".to_string(); // Requires TRADING_CLASS version
-
-    let result = client
-        .historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
-        .await;
-    assert!(result.is_err(), "Should fail version check");
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("trading class"),
-        "Error should mention trading class feature: {}",
-        err_msg
-    );
+    let mut contract = test_contract();
+    contract.trading_class = "ES".to_owned();
+    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+        c.historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
+            .await
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -250,14 +229,7 @@ async fn test_historical_data_error_response() {
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let result = client
         .historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
@@ -278,14 +250,7 @@ async fn test_historical_data_unexpected_response() {
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let result = client
         .historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
@@ -349,14 +314,7 @@ async fn test_tick_subscription_methods() {
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let mut subscription = client
         .historical_ticks_bid_ask(&contract, None, None, 3, TradingHours::Regular, false)
@@ -405,14 +363,7 @@ async fn test_tick_subscription_buffer_and_iteration() {
     });
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let mut subscription = client
         .historical_ticks_bid_ask(&contract, None, None, 3, TradingHours::Regular, false)
@@ -444,14 +395,7 @@ async fn test_tick_subscription_bid_ask() {
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
     let start = Some(datetime!(2023-03-15 09:00:00 UTC));
     let end = Some(datetime!(2023-03-15 10:00:00 UTC));
     let number_of_ticks = 1;
@@ -501,14 +445,7 @@ async fn test_tick_subscription_midpoint() {
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let mut subscription = client
         .historical_ticks_mid_point(&contract, None, None, 1, TradingHours::Regular)
@@ -546,14 +483,7 @@ async fn test_historical_ticks_trade() {
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
 
     let mut subscription = client
         .historical_ticks_trade(&contract, None, None, 1, TradingHours::Regular)
@@ -594,14 +524,7 @@ async fn test_historical_data_time_zone_handling() {
     // Set client timezone to Eastern
     client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
 
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
+    let contract = test_contract();
     let result = client
         .historical_data(&contract, None, Duration::seconds(3600), BarSize::Hour, None, TradingHours::Regular)
         .await;
@@ -914,12 +837,10 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 
 #[tokio::test]
 async fn test_head_timestamp_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::REQ_HEAD_TIMESTAMP - 1);
-
-    let result = client.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await;
-    let err = result.expect_err("version check should fail");
-    assert!(err.to_string().contains("head timestamp"), "error mentions feature: {err}");
+    assert_version_check_fails(server_versions::REQ_HEAD_TIMESTAMP - 1, "head timestamp", |c| async move {
+        c.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -983,28 +904,23 @@ async fn test_historical_data_connection_reset_after_retries() {
 
 #[tokio::test]
 async fn test_historical_schedule_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE - 1);
-
-    let result = client.historical_schedule(&test_contract(), None, Duration::days(1)).await;
-    let err = result.expect_err("version check should fail");
-    assert!(err.to_string().contains("historical schedule"), "mentions feature: {err}");
+    assert_version_check_fails(server_versions::HISTORICAL_SCHEDULE - 1, "historical schedule", |c| async move {
+        c.historical_schedule(&test_contract(), None, Duration::days(1)).await
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_schedule_trading_class_version_check() {
-    // contract.trading_class non-empty triggers an earlier TRADING_CLASS check; pin the
-    // server version below TRADING_CLASS so the trading-class arm fires before the
-    // HISTORICAL_SCHEDULE arm.
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
-
+    // contract.trading_class non-empty triggers an earlier TRADING_CLASS check; pin
+    // the server version below TRADING_CLASS so the trading-class arm fires before
+    // the HISTORICAL_SCHEDULE arm.
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
-
-    let result = client.historical_schedule(&contract, None, Duration::days(1)).await;
-    let err = result.expect_err("trading_class version check should fail");
-    assert!(err.to_string().contains("trading class"), "mentions trading-class feature: {err}");
+    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+        c.historical_schedule(&contract, None, Duration::days(1)).await
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -1023,38 +939,27 @@ async fn test_historical_schedule_unexpected_response() {
 
 #[tokio::test]
 async fn test_historical_ticks_bid_ask_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS - 1);
-
-    let result = client
-        .historical_ticks_bid_ask(&test_contract(), None, None, 1, TradingHours::Regular, false)
-        .await;
-    let Err(err) = result else {
-        panic!("expected version-check failure");
-    };
-    assert!(err.to_string().contains("historical ticks"), "mentions feature: {err}");
+    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+        c.historical_ticks_bid_ask(&test_contract(), None, None, 1, TradingHours::Regular, false)
+            .await
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_ticks_mid_point_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS - 1);
-
-    let result = client
-        .historical_ticks_mid_point(&test_contract(), None, None, 1, TradingHours::Regular)
-        .await;
-    assert!(result.is_err(), "version check should fail");
+    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+        c.historical_ticks_mid_point(&test_contract(), None, None, 1, TradingHours::Regular).await
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_ticks_trade_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS - 1);
-
-    let result = client
-        .historical_ticks_trade(&test_contract(), None, None, 1, TradingHours::Regular)
-        .await;
-    assert!(result.is_err(), "version check should fail");
+    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+        c.historical_ticks_trade(&test_contract(), None, None, 1, TradingHours::Regular).await
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -1070,33 +975,26 @@ async fn test_cancel_historical_ticks() {
 
 #[tokio::test]
 async fn test_cancel_historical_ticks_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::CANCEL_CONTRACT_DATA - 1);
-
-    let result = client.cancel_historical_ticks(9000).await;
-    assert!(result.is_err(), "version check should fail");
+    assert_version_check_fails(server_versions::CANCEL_CONTRACT_DATA - 1, "cancel contract data", |c| async move {
+        c.cancel_historical_ticks(9000).await
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_histogram_data_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::REQ_HISTOGRAM - 1);
-
-    let result = client.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await;
-    let err = result.expect_err("version check should fail");
-    assert!(err.to_string().contains("histogram"), "mentions feature: {err}");
+    assert_version_check_fails(server_versions::REQ_HISTOGRAM - 1, "histogram", |c| async move {
+        c.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_data_streaming_trading_class_version_check() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
-
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
-
-    let result = client
-        .historical_data_streaming(
+    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+        c.historical_data_streaming(
             &contract,
             Duration::days(1),
             BarSize::Hour,
@@ -1104,11 +1002,9 @@ async fn test_historical_data_streaming_trading_class_version_check() {
             TradingHours::Regular,
             true,
         )
-        .await;
-    let Err(err) = result else {
-        panic!("expected trading_class version-check failure");
-    };
-    assert!(err.to_string().contains("trading class"), "mentions feature: {err}");
+        .await
+    })
+    .await;
 }
 
 #[tokio::test]
