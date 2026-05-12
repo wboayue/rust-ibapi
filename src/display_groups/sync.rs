@@ -101,24 +101,32 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    use crate::messages::IncomingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use std::sync::{Arc, RwLock};
+    use crate::subscriptions::SubscriptionItem;
+    use std::sync::Arc;
 
-    /// Encoded `DisplayGroupUpdated` (msg id 68, version 1) for request id
-    /// `TEST_REQ_ID_FIRST` (9000).
     fn display_group_update_response(contract_info: &str) -> String {
-        format!("68\x001\x009000\x00{contract_info}\x00")
+        format!(
+            "{}\x001\x00{TEST_REQ_ID_FIRST}\x00{contract_info}\x00",
+            IncomingMessages::DisplayGroupUpdated as i32,
+        )
     }
 
     fn stubbed_subscription(responses: Vec<String>) -> (Arc<MessageBusStub>, DisplayGroupSubscription) {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: responses,
-            ordered_responses: vec![],
-        });
-        let client = Client::stubbed(message_bus.clone(), 176);
+        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
+        let client = Client::stubbed(message_bus.clone(), server_versions::LINKING);
         let subscription = client.subscribe_to_group_events(1).expect("failed to subscribe");
         (message_bus, subscription)
+    }
+
+    fn assert_first_data_eq(item: Option<Result<SubscriptionItem<DisplayGroupUpdate>, Error>>, expected_contract_info: &str) {
+        let Some(Ok(SubscriptionItem::Data(update))) = item else {
+            panic!("expected Data");
+        };
+        assert_eq!(update.contract_info, expected_contract_info);
     }
 
     #[test]
@@ -139,39 +147,20 @@ mod tests {
 
     #[test]
     fn test_subscription_derefs_to_inner_for_next() {
-        use crate::subscriptions::SubscriptionItem;
-
         let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
         // `.next()` is Subscription<T>::next reached via Deref::deref.
-        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next() else {
-            panic!("expected Data");
-        };
-        assert_eq!(update.contract_info, "265598@SMART");
+        assert_first_data_eq(subscription.next(), "265598@SMART");
     }
 
     #[test]
     fn test_borrowed_into_iter_yields_subscription_items() {
-        use crate::subscriptions::SubscriptionItem;
-
         let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
-
-        let mut iter = (&subscription).into_iter();
-        let Some(Ok(SubscriptionItem::Data(update))) = iter.next() else {
-            panic!("expected Data");
-        };
-        assert_eq!(update.contract_info, "265598@SMART");
+        assert_first_data_eq((&subscription).into_iter().next(), "265598@SMART");
     }
 
     #[test]
     fn test_owned_into_iter_consumes_subscription() {
-        use crate::subscriptions::SubscriptionItem;
-
         let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
-
-        let mut iter = subscription.into_iter();
-        let Some(Ok(SubscriptionItem::Data(update))) = iter.next() else {
-            panic!("expected Data");
-        };
-        assert_eq!(update.contract_info, "265598@SMART");
+        assert_first_data_eq(subscription.into_iter().next(), "265598@SMART");
     }
 }
