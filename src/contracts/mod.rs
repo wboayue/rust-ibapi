@@ -199,11 +199,7 @@ pub struct Contract {
     pub trading_class: String,
     /// If set to true, contract details requests and historical data queries can be performed pertaining to expired futures contracts. Expired options or other instrument types are not available.
     pub include_expired: bool,
-    /// Security identifier scheme used in conjunction with `security_id`.
-    ///
-    /// `None` on contracts without an external identifier (the wire field is
-    /// empty). When set, `security_id` carries the corresponding identifier
-    /// value — e.g. `Some(SecurityIdType::Isin)` paired with `"US0378331005"`.
+    /// `None` when no external identifier; otherwise paired with [`security_id`](Self::security_id) (e.g. `Some(SecurityIdType::Isin)` with `security_id = "US0378331005"`).
     pub security_id_type: Option<SecurityIdType>,
     /// Identifier of the security type.
     pub security_id: String,
