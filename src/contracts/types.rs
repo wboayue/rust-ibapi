@@ -207,11 +207,8 @@ impl_str_partial_eq!(Currency);
 
 /// Option right (Call or Put). Matches IBKR's wire vocabulary `"C"` / `"P"`.
 ///
-/// Unlike [`LegAction`], `OptionRight` does **not** derive `Default`:
-/// `Contract.right` is meaningful only when `security_type == Option`, and
-/// the field is typed `Option<OptionRight>` — `None` is the no-right state.
-/// A `Default` impl would invite `OptionRight::default()` and silently pick
-/// `Call`.
+/// No `Default` — `Contract.right: Option<OptionRight>` carries the no-right
+/// state via `None`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
