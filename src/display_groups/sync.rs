@@ -101,24 +101,40 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    use crate::messages::IncomingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use std::sync::{Arc, RwLock};
+    use crate::subscriptions::SubscriptionItem;
+    use std::sync::Arc;
+
+    fn display_group_update_response(contract_info: &str) -> String {
+        format!(
+            "{}\x001\x00{TEST_REQ_ID_FIRST}\x00{contract_info}\x00",
+            IncomingMessages::DisplayGroupUpdated as i32,
+        )
+    }
+
+    fn stubbed_subscription(responses: Vec<String>) -> (Arc<MessageBusStub>, DisplayGroupSubscription) {
+        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
+        let client = Client::stubbed(message_bus.clone(), server_versions::LINKING);
+        let subscription = client.subscribe_to_group_events(1).expect("failed to subscribe");
+        (message_bus, subscription)
+    }
+
+    fn assert_first_data_eq(item: Option<Result<SubscriptionItem<DisplayGroupUpdate>, Error>>, expected_contract_info: &str) {
+        let Some(Ok(SubscriptionItem::Data(update))) = item else {
+            panic!("expected Data");
+        };
+        assert_eq!(update.contract_info, expected_contract_info);
+    }
 
     #[test]
     fn test_update_display_group() {
         use crate::common::test_utils::helpers::assert_proto_msg_id;
         use crate::messages::OutgoingMessages;
 
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            // Need a response so subscription can be created
-            response_messages: vec!["68\x001\x009000\x00265598@SMART\x00".to_string()],
-            ordered_responses: vec![],
-        });
-
-        let client = Client::stubbed(message_bus.clone(), 176);
-
-        let subscription = client.subscribe_to_group_events(1).expect("failed to subscribe");
+        let (message_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
         subscription.update("265598@SMART").expect("update failed");
 
         let requests = message_bus.request_messages.read().unwrap();
@@ -127,5 +143,24 @@ mod tests {
 
         assert_proto_msg_id(&requests[0], OutgoingMessages::SubscribeToGroupEvents);
         assert_proto_msg_id(&requests[1], OutgoingMessages::UpdateDisplayGroup);
+    }
+
+    #[test]
+    fn test_subscription_derefs_to_inner_for_next() {
+        let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
+        // `.next()` is Subscription<T>::next reached via Deref::deref.
+        assert_first_data_eq(subscription.next(), "265598@SMART");
+    }
+
+    #[test]
+    fn test_borrowed_into_iter_yields_subscription_items() {
+        let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
+        assert_first_data_eq((&subscription).into_iter().next(), "265598@SMART");
+    }
+
+    #[test]
+    fn test_owned_into_iter_consumes_subscription() {
+        let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
+        assert_first_data_eq(subscription.into_iter().next(), "265598@SMART");
     }
 }
