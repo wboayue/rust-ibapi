@@ -205,11 +205,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            // Error on the same request_id channel surfaces as Error::Message, not a
-            // parse failure or "unexpected message" error (#434).
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = AccountSummaryResult::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<AccountSummaryResult>(10089, "Requested market data is not subscribed");
         }
 
         #[test]
@@ -279,9 +275,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = PnL::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<PnL>(10089, "Requested market data is not subscribed");
         }
     }
 
@@ -317,9 +311,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = PnLSingle::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<PnLSingle>(10089, "Requested market data is not subscribed");
         }
     }
 
@@ -372,9 +364,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = PositionUpdate::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<PositionUpdate>(10089, "Requested market data is not subscribed");
         }
     }
 
@@ -441,9 +431,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<PositionUpdateMulti>(10089, "Requested market data is not subscribed");
         }
     }
 
@@ -537,9 +525,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = AccountUpdate::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<AccountUpdate>(10089, "Requested market data is not subscribed");
         }
     }
 
@@ -606,9 +592,7 @@ mod tests {
 
         #[test]
         fn test_decode_error_message() {
-            let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-            let err = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
-            assert_tws_error_message(err, 10089, "not subscribed");
+            assert_decode_surfaces_tws_error::<AccountUpdateMulti>(10089, "Requested market data is not subscribed");
         }
     }
 

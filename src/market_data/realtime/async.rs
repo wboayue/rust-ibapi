@@ -288,10 +288,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_realtime_bars_error_handling() {
-        // Issue #434: when TWS returns an error on the realtime_bars request_id channel,
-        // it must surface as Some(Err(Error::Message(code, msg))) rather than a cryptic
-        // parse failure. Warning codes (2100-2169) are filtered at the dispatcher; this
-        // exercises a non-warning error.
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec!["4|2|9001|10089|Requested market data requires additional subscription for API|".to_owned()],
@@ -312,7 +308,7 @@ mod tests {
 
         match bars.next().await {
             Some(Err(crate::Error::Message(code, msg))) => {
-                assert_eq!(code, 10089, "expected error code 10089");
+                assert_eq!(code, 10089);
                 assert!(msg.contains("additional subscription"), "wrong error message: {msg}");
             }
             other => panic!("expected Some(Err(Error::Message(10089, _))), got {other:?}"),
