@@ -391,7 +391,7 @@ fn test_cancel_contract_details() {
 }
 
 #[test]
-fn matching_symbols_returns_server_error() {
+fn test_matching_symbols_returns_server_error() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
         "4|2|9000|321|invalid pattern|",
     )]));
@@ -404,7 +404,7 @@ fn matching_symbols_returns_server_error() {
 }
 
 #[test]
-fn matching_symbols_rejects_unexpected_message() {
+fn test_matching_symbols_rejects_unexpected_message() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("10|9000|")]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
@@ -415,7 +415,7 @@ fn matching_symbols_rejects_unexpected_message() {
 }
 
 #[test]
-fn matching_symbols_returns_empty_on_closed_stream() {
+fn test_matching_symbols_returns_empty_on_closed_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
@@ -424,7 +424,7 @@ fn matching_symbols_returns_empty_on_closed_stream() {
 }
 
 #[test]
-fn market_rule_returns_simple_error_on_empty_stream() {
+fn test_market_rule_returns_simple_error_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
 
@@ -436,7 +436,7 @@ fn market_rule_returns_simple_error_on_empty_stream() {
 }
 
 #[test]
-fn calculate_option_price_returns_simple_error_on_empty_stream() {
+fn test_calculate_option_price_returns_simple_error_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
@@ -449,7 +449,7 @@ fn calculate_option_price_returns_simple_error_on_empty_stream() {
 }
 
 #[test]
-fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
+fn test_calculate_implied_volatility_returns_simple_error_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);

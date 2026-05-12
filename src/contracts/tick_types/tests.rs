@@ -282,7 +282,7 @@ fn test_case_sensitivity() {
 
 #[test]
 fn test_display_output() {
-    let test_cases = vec![
+    let test_cases = [
         (TickType::Unknown, "Unknown"),
         (TickType::BidSize, "Bid Size"),
         (TickType::Bid, "Bid"),

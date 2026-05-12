@@ -89,7 +89,7 @@ fn test_security_type_from() {
 
 #[test]
 fn test_security_type_display_all_variants() {
-    let cases = vec![
+    let cases = [
         (SecurityType::Stock, "STK"),
         (SecurityType::Option, "OPT"),
         (SecurityType::Future, "FUT"),
@@ -131,9 +131,6 @@ fn assert_cusip_bond(bond: Contract, cusip: &str) {
 }
 
 fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
-    // ISIN country-code prefix → expected currency (per `Contract::bond_isin`
-    // / `Contract::bond` in mod.rs). Non-mapped prefixes and inputs shorter
-    // than 2 chars fall through to USD.
     let cases = [
         ("US0378331005", "USD"),
         ("CA1234567890", "USD"),
