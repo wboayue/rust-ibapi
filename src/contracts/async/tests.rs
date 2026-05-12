@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::common::test_tables::*;
-use crate::contracts::{Currency, Exchange, Symbol};
+use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -612,7 +612,7 @@ async fn market_rule_rejects_old_server_version() {
 async fn calculate_option_price_returns_simple_error_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
-    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
     let crate::Error::Simple(msg) = &err else {
@@ -625,7 +625,7 @@ async fn calculate_option_price_returns_simple_error_on_empty_stream() {
 async fn calculate_option_price_rejects_old_server_version() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE - 1);
-    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let result = client.calculate_option_price(&contract, 0.25, 155.0).await;
     assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
@@ -636,7 +636,7 @@ async fn calculate_option_price_rejects_old_server_version() {
 async fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
-    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
     let crate::Error::Simple(msg) = &err else {
@@ -649,7 +649,7 @@ async fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
 async fn calculate_implied_volatility_rejects_old_server_version() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_IMPLIED_VOLAT - 1);
-    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let result = client.calculate_implied_volatility(&contract, 8.5, 155.0).await;
     assert!(matches!(result, Err(crate::Error::ServerVersion(..))));

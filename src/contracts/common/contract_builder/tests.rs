@@ -21,7 +21,7 @@ fn test_contract_builder_field_setters() {
         .exchange("NASDAQ")
         .currency("USD")
         .strike(150.0)
-        .right("C")
+        .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
         .multiplier("100")
         .local_symbol("AAPL_123")
@@ -40,7 +40,7 @@ fn test_contract_builder_field_setters() {
     assert_eq!(builder.exchange, Some("NASDAQ".to_string()));
     assert_eq!(builder.currency, Some("USD".to_string()));
     assert_eq!(builder.strike, Some(150.0));
-    assert_eq!(builder.right, Some("C".to_string()));
+    assert_eq!(builder.right, Some(OptionRight::Call));
     assert_eq!(builder.last_trade_date_or_contract_month, Some("20231215".to_string()));
     assert_eq!(builder.multiplier, Some("100".to_string()));
     assert_eq!(builder.local_symbol, Some("AAPL_123".to_string()));
@@ -104,7 +104,7 @@ fn test_contract_builder_build_stock_success() {
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.contract_id, 12345);
     assert_eq!(contract.strike, 0.0);
-    assert_eq!(contract.right, "");
+    assert_eq!(contract.right, None);
     assert_eq!(contract.last_trade_date_or_contract_month, "");
     assert!(!contract.include_expired);
 }
@@ -113,7 +113,7 @@ fn test_contract_builder_build_stock_success() {
 fn test_contract_builder_build_option_success() {
     let contract = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
-        .right("C")
+        .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
         .build()
         .unwrap();
@@ -123,7 +123,7 @@ fn test_contract_builder_build_option_success() {
     assert_eq!(contract.exchange, "SMART");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.strike, 150.0);
-    assert_eq!(contract.right, "C");
+    assert_eq!(contract.right, Some(OptionRight::Call));
     assert_eq!(contract.last_trade_date_or_contract_month, "20231215");
 }
 
@@ -186,7 +186,7 @@ fn test_contract_builder_build_with_contract_id_only() {
 #[test]
 fn test_contract_builder_build_option_missing_strike() {
     let result = ContractBuilder::option("AAPL", "SMART", "USD")
-        .right("C")
+        .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
         .build();
 
@@ -204,13 +204,16 @@ fn test_contract_builder_build_option_missing_right() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "error occurred: Right (P for PUT or C for CALL) is required for options"
+        "error occurred: Right (OptionRight::Call or OptionRight::Put) is required for options"
     );
 }
 
 #[test]
 fn test_contract_builder_build_option_missing_expiration() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD").strike(150.0).right("C").build();
+    let result = ContractBuilder::option("AAPL", "SMART", "USD")
+        .strike(150.0)
+        .right(OptionRight::Call)
+        .build();
 
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "error occurred: Expiration date is required for options");
@@ -239,40 +242,10 @@ fn test_contract_builder_build_futures_option_missing_contract_month() {
 }
 
 #[test]
-fn test_contract_builder_build_invalid_option_right() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD")
-        .strike(150.0)
-        .right("INVALID")
-        .last_trade_date_or_contract_month("20231215")
-        .build();
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "error occurred: Option right must be P for PUT or C for CALL"
-    );
-}
-
-#[test]
-fn test_contract_builder_build_valid_option_rights() {
-    let valid_rights = ["P", "C", "p", "c"];
-
-    for right in &valid_rights {
-        let result = ContractBuilder::option("AAPL", "SMART", "USD")
-            .strike(150.0)
-            .right(*right)
-            .last_trade_date_or_contract_month("20231215")
-            .build();
-
-        assert!(result.is_ok(), "Right '{}' should be valid", right);
-    }
-}
-
-#[test]
 fn test_contract_builder_build_negative_strike() {
     let result = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(-10.0)
-        .right("C")
+        .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
         .build();
 
@@ -370,7 +343,7 @@ fn test_contract_builder_defaults() {
     assert_eq!(contract.security_type, SecurityType::Stock); // Default
     assert_eq!(contract.last_trade_date_or_contract_month, "");
     assert_eq!(contract.strike, 0.0);
-    assert_eq!(contract.right, "");
+    assert_eq!(contract.right, None);
     assert_eq!(contract.multiplier, "");
     assert_eq!(contract.exchange, "");
     assert_eq!(contract.currency, "");
@@ -405,7 +378,7 @@ fn setter_parity_with_contract_fields() {
         .security_type(SecurityType::Stock)
         .last_trade_date_or_contract_month("20241220")
         .strike(150.0)
-        .right("C")
+        .right(OptionRight::Call)
         .multiplier("100")
         .exchange("SMART")
         .currency("USD")
@@ -466,7 +439,7 @@ fn setter_parity_with_contract_fields() {
     assert_eq!(security_type, SecurityType::Stock);
     assert_eq!(last_trade_date_or_contract_month, "20241220");
     assert_eq!(strike, 150.0);
-    assert_eq!(right, "C");
+    assert_eq!(right, Some(OptionRight::Call));
     assert_eq!(multiplier, "100");
     assert_eq!(exchange, "SMART");
     assert_eq!(currency, "USD");

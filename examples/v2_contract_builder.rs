@@ -18,7 +18,10 @@ fn main() {
     let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
     println!(
         "Call option: {} {} strike {} exp {}",
-        call.symbol, call.right, call.strike, call.last_trade_date_or_contract_month
+        call.symbol,
+        call.right.map_or("", |r| r.as_str()),
+        call.strike,
+        call.last_trade_date_or_contract_month
     );
 
     // Put option with custom exchange
@@ -27,7 +30,12 @@ fn main() {
         .expires(ExpirationDate::new(2024, 3, 15))
         .on_exchange("CBOE")
         .build();
-    println!("Put option: {} {} strike {}", put.symbol, put.right, put.strike);
+    println!(
+        "Put option: {} {} strike {}",
+        put.symbol,
+        put.right.map_or("", |r| r.as_str()),
+        put.strike
+    );
 
     // Futures contract with auto-calculated multiplier
     let es_futures = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();

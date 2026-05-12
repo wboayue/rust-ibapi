@@ -204,7 +204,7 @@ impl OptionBuilder<Symbol, Strike, ExpirationDate> {
             symbol: self.symbol,
             security_type: SecurityType::Option,
             strike: self.strike.value(),
-            right: self.right.to_string(),
+            right: Some(self.right),
             last_trade_date_or_contract_month: self.expiry.to_string(),
             exchange: self.exchange,
             currency: self.currency,

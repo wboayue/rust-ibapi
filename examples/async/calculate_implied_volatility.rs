@@ -19,7 +19,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Calculating Implied Volatility ===");
     println!(
         "Contract: {} {} {} @ {}",
-        contract.symbol, contract.last_trade_date_or_contract_month, contract.right, contract.strike
+        contract.symbol,
+        contract.last_trade_date_or_contract_month,
+        contract.right.map_or("", |r| r.as_str()),
+        contract.strike
     );
     println!("Option Price: ${option_price:.2}");
     println!("Underlying Price: ${underlying_price:.2}");

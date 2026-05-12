@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  last_trade_date_or_contract_month: {}", d.contract.last_trade_date_or_contract_month);
         println!("  last_trade_date:                   {:?}", d.contract.last_trade_date);
         println!("  strike:                            {}", d.contract.strike);
-        println!("  right:                             {}", d.contract.right);
+        println!("  right:                             {}", d.contract.right.map_or("", |r| r.as_str()));
         println!("  local_symbol:                      {}", d.contract.local_symbol);
     }
 

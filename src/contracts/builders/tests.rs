@@ -33,7 +33,7 @@ fn test_call_option_builder() {
     assert_eq!(call.symbol, Symbol::from("AAPL"));
     assert_eq!(call.security_type, SecurityType::Option);
     assert_eq!(call.strike, 150.0);
-    assert_eq!(call.right, "C");
+    assert_eq!(call.right, Some(OptionRight::Call));
     assert_eq!(call.last_trade_date_or_contract_month, "20241220");
     assert_eq!(call.multiplier, "100");
 }
@@ -53,7 +53,7 @@ fn test_put_option_builder() {
     assert_eq!(put.symbol, Symbol::from("SPY"));
     assert_eq!(put.security_type, SecurityType::Option);
     assert_eq!(put.strike, 450.0);
-    assert_eq!(put.right, "P");
+    assert_eq!(put.right, Some(OptionRight::Put));
     assert_eq!(put.last_trade_date_or_contract_month, "20240315");
     assert_eq!(put.exchange, Exchange::from("CBOE"));
     assert_eq!(put.multiplier, "100");
@@ -276,12 +276,6 @@ fn test_currency_display() {
     assert_eq!(Currency("EUR".to_string()).to_string(), "EUR");
     assert_eq!(Currency("JPY".to_string()).to_string(), "JPY");
     assert_eq!(Currency("XXX".to_string()).to_string(), "XXX");
-}
-
-#[test]
-fn test_option_right_display() {
-    assert_eq!(OptionRight::Call.to_string(), "C");
-    assert_eq!(OptionRight::Put.to_string(), "P");
 }
 
 #[test]

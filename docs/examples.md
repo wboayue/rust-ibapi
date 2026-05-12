@@ -142,7 +142,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Contract Creation
 ```rust
-use ibapi::contracts::Contract;
+use ibapi::contracts::{Contract, OptionRight};
 
 // Stock
 let stock = Contract::stock("AAPL");
@@ -153,7 +153,7 @@ let future = Contract::futures("ES")
     .build();
 
 // Option
-let option = Contract::option("AAPL", "20240119", 150.0, "C");
+let option = Contract::option("AAPL", "20240119", 150.0, OptionRight::Call);
 
 // Forex
 let forex = Contract::forex("EUR", "USD");

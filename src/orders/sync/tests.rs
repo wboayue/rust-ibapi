@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
-use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, SecurityType, Symbol};
+use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, OrderStatusKind};
 use crate::stubs::MessageBusStub;
@@ -445,7 +445,7 @@ fn exercise_options() {
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: "20250919".to_string(),
         strike: 5800.0,
-        right: "C".to_string(),
+        right: Some(OptionRight::Call),
         ..Default::default()
     };
 

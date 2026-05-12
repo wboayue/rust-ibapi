@@ -72,7 +72,7 @@ pub fn encode_contract_with_order(contract: &Contract, order: Option<&Order>) ->
         sec_type: some_str(&contract.security_type.to_string()),
         last_trade_date_or_contract_month: some_str(&contract.last_trade_date_or_contract_month),
         strike: some_f64_ne(contract.strike, 0.0),
-        right: some_str(&contract.right),
+        right: contract.right.as_ref().map(|r| r.to_string()),
         multiplier: contract.multiplier.parse::<f64>().ok(),
         exchange: some_str(&contract.exchange.to_string()),
         primary_exch: some_str(&contract.primary_exchange.to_string()),

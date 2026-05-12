@@ -465,7 +465,7 @@ impl Default for OpenOrderResponse {
             security_type: "STK".to_string(),
             last_trade_date_or_contract_month: String::new(),
             strike: 0.0,
-            right: "?".to_string(),
+            right: String::new(),
             multiplier: String::new(),
             exchange: "SMART".to_string(),
             currency: "USD".to_string(),

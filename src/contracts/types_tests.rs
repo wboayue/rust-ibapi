@@ -106,11 +106,35 @@ fn symbol_default_is_empty() {
 }
 
 #[test]
-fn option_right_str_and_display() {
-    assert_eq!(OptionRight::Call.as_str(), "C");
-    assert_eq!(OptionRight::Put.as_str(), "P");
-    assert_eq!(format!("{}", OptionRight::Call), "C");
-    assert_eq!(format!("{}", OptionRight::Put), "P");
+fn option_right_display_round_trip() {
+    use std::str::FromStr;
+    for variant in [OptionRight::Call, OptionRight::Put] {
+        let wire = variant.as_str();
+        assert_eq!(variant.to_string(), wire);
+        assert_eq!(format!("{variant}"), wire);
+        assert_eq!(OptionRight::from_str(wire).unwrap(), variant);
+    }
+}
+
+#[test]
+fn option_right_from_str_rejects_unknown() {
+    use std::str::FromStr;
+    assert!(matches!(OptionRight::from_str("INVALID"), Err(crate::Error::Parse(_, _, _))));
+    assert!(matches!(OptionRight::from_str(""), Err(crate::Error::Parse(_, _, _))));
+    // Case-sensitive: lowercase must not match.
+    assert!(matches!(OptionRight::from_str("c"), Err(crate::Error::Parse(_, _, _))));
+    assert!(matches!(OptionRight::from_str("p"), Err(crate::Error::Parse(_, _, _))));
+    // Long form rejected: TWS wire only uses single-character form.
+    assert!(matches!(OptionRight::from_str("CALL"), Err(crate::Error::Parse(_, _, _))));
+    assert!(matches!(OptionRight::from_str("PUT"), Err(crate::Error::Parse(_, _, _))));
+}
+
+#[test]
+fn option_right_to_field_matches_display() {
+    use crate::ToField;
+    for variant in [OptionRight::Call, OptionRight::Put] {
+        assert_eq!(variant.to_field(), variant.to_string());
+    }
 }
 
 #[test]

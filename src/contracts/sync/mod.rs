@@ -143,11 +143,11 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, OptionRight};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::option("AAPL", "20251219", 150.0, "C");
+    /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
     /// let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
     /// println!("calculation: {calculation:?}");
     /// ```
@@ -177,11 +177,11 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, OptionRight};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::option("AAPL", "20230519", 150.0, "C");
+    /// let contract = Contract::option("AAPL", "20230519", 150.0, OptionRight::Call);
     /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
     /// println!("calculation: {calculation:?}");
     /// ```
