@@ -35,6 +35,34 @@ macro_rules! impl_str_partial_eq {
     };
 }
 
+/// Generate `Display` / `FromStr<Err = Error>` / `ToField` impls from
+/// hand-written `as_str(&self) -> &'static str` + `from_wire(&str) -> Option<Self>`
+/// methods. The data tables stay in normal Rust (visible to goto-def); only
+/// the boilerplate plumbing — `Display` via `as_str`, `FromStr` via `from_wire`
+/// with canonical `Error::Parse`, `ToField` via `Display` — runs through the
+/// macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
+/// macro is the only viable shape.
+macro_rules! impl_wire_enum {
+    ($name:ident) => {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+        impl ::std::str::FromStr for $name {
+            type Err = $crate::Error;
+            fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                Self::from_wire(s).ok_or_else(|| $crate::Error::Parse(0, s.to_string(), concat!("unknown ", stringify!($name)).into()))
+            }
+        }
+        impl $crate::ToField for $name {
+            fn to_field(&self) -> String {
+                self.to_string()
+            }
+        }
+    };
+}
+
 /// Strong type for trading symbols
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -227,30 +255,17 @@ impl OptionRight {
             OptionRight::Put => "P",
         }
     }
-}
 
-impl fmt::Display for OptionRight {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "C" => Some(Self::Call),
+            "P" => Some(Self::Put),
+            _ => None,
+        }
     }
 }
 
-impl std::str::FromStr for OptionRight {
-    type Err = crate::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "C" => Self::Call,
-            "P" => Self::Put,
-            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown OptionRight".into())),
-        })
-    }
-}
-
-impl ToField for OptionRight {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
+impl_wire_enum!(OptionRight);
 
 /// Validated strike price (must be positive)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -567,31 +582,18 @@ impl LegAction {
             LegAction::SellShort => "SSHORT",
         }
     }
-}
 
-impl fmt::Display for LegAction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "BUY" => Some(Self::Buy),
+            "SELL" => Some(Self::Sell),
+            "SSHORT" => Some(Self::SellShort),
+            _ => None,
+        }
     }
 }
 
-impl std::str::FromStr for LegAction {
-    type Err = crate::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "BUY" => Self::Buy,
-            "SELL" => Self::Sell,
-            "SSHORT" => Self::SellShort,
-            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown LegAction".into())),
-        })
-    }
-}
-
-impl ToField for LegAction {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
+impl_wire_enum!(LegAction);
 
 /// Marker type for missing required fields in type-state builders
 #[derive(Debug, Clone, Copy)]
