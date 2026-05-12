@@ -520,12 +520,10 @@ impl Contract {
         }
     }
 
-    /// Creates an option contract from the specified parameters.
+    /// Creates a simple option contract from the specified parameters.
     ///
-    /// Currency defaults to USD and exchange defaults to SMART.
-    ///
-    /// Creates a simple option contract (for backward compatibility).
-    /// For new code, prefer `Contract::call()` / `Contract::put()` builders.
+    /// Currency defaults to USD and exchange defaults to SMART. For new
+    /// code, prefer the `Contract::call()` / `Contract::put()` builders.
     ///
     /// # Arguments
     /// * `symbol` - Symbol of the underlying asset
