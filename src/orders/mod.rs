@@ -1592,6 +1592,45 @@ pub enum Orders {
     OrderStatus(OrderStatus),
 }
 
+/// Side filter on outbound execution requests. IBKR's wire vocabulary for
+/// `ExecutionFilter.side` is `"BUY"` / `"SELL"` only.
+///
+/// Distinct from [`Action`] — the outbound order-side vocabulary includes
+/// `SSHORT` / `SLONG`, neither accepted on the filter. A subset enum here
+/// makes invalid filter values unrepresentable.
+///
+/// No `Default` — [`ExecutionFilter::side`] carries the no-filter state via
+/// `None`. `#[non_exhaustive]` leaves headroom for IBKR vocabulary additions.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum ExecutionFilterSide {
+    /// Filter to buy fills only.
+    Buy,
+    /// Filter to sell fills only.
+    Sell,
+}
+
+impl ExecutionFilterSide {
+    /// Return the canonical IBKR wire string (`"BUY"` / `"SELL"`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExecutionFilterSide::Buy => "BUY",
+            ExecutionFilterSide::Sell => "SELL",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "BUY" => Some(Self::Buy),
+            "SELL" => Some(Self::Sell),
+            _ => None,
+        }
+    }
+}
+
+impl_wire_enum!(ExecutionFilterSide);
+
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 /// Filter criteria used to determine which execution reports are returned.
@@ -1609,8 +1648,9 @@ pub struct ExecutionFilter {
     pub security_type: String,
     /// The exchange at which the execution was produced
     pub exchange: String,
-    /// The Contract's side (BUY or SELL)
-    pub side: String,
+    /// Side filter — `None` for no filter, `Some(ExecutionFilterSide::Buy)`
+    /// or `Some(ExecutionFilterSide::Sell)` to restrict the response.
+    pub side: Option<ExecutionFilterSide>,
     /// Filter executions from the last N days (0 = no filter).
     pub last_n_days: i32,
     /// Filter executions for specific dates (format: yyyymmdd, e.g., "20260130").
