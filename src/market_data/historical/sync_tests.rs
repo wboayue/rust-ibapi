@@ -1,10 +1,13 @@
 use super::*;
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::Contract;
 use crate::market_data::historical::ToDuration;
 use crate::market_data::TradingHours;
 use crate::messages::OutgoingMessages;
+use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
@@ -12,6 +15,35 @@ use std::sync::{Arc, RwLock};
 use time::macros::{date, datetime};
 use time::OffsetDateTime;
 use time_tz::{self, PrimitiveDateTimeExt, Tz};
+
+// Pins server_version one below `feature.min_version` and asserts the call fails
+// with the feature name in the error. Custom helper (vs. `.expect_err`) because
+// subscription return types don't implement Debug.
+fn assert_version_check_fails<F, T>(feature: ProtocolFeature, call: F)
+where
+    F: FnOnce(Client) -> Result<T, Error>,
+{
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, feature.min_version - 1);
+    let Err(err) = call(client) else {
+        panic!("expected version-check failure ({})", feature.name);
+    };
+    assert!(err.to_string().contains(feature.name), "expected '{}', got: {err}", feature.name);
+}
+
+// Feeds a single wire-format response, asserts the call fails with
+// `Error::UnexpectedResponse`. Pairs with `assert_version_check_fails`.
+fn assert_unexpected_response<F, T>(server_version: i32, response: &str, call: F)
+where
+    F: FnOnce(Client) -> Result<T, Error>,
+{
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![response.to_owned()]));
+    let client = Client::stubbed(message_bus, server_version);
+    let Err(err) = call(client) else {
+        panic!("expected UnexpectedResponse failure");
+    };
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got: {err:?}");
+}
 
 #[test]
 fn test_head_timestamp() {
@@ -945,4 +977,386 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
         1,
         "should send cancel only once"
     );
+}
+
+#[test]
+fn test_head_timestamp_version_check() {
+    assert_version_check_fails(Features::HEAD_TIMESTAMP, |c| {
+        c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular)
+    });
+}
+
+#[test]
+fn test_head_timestamp_unexpected_response() {
+    // 17 = HistoricalData — wrong type for head_timestamp (expects 88).
+    assert_unexpected_response(server_versions::SIZE_RULES, "17|9000|20230315  09:30:00|20230315  10:30:00|0|", |c| {
+        c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular)
+    });
+}
+
+#[test]
+fn test_head_timestamp_end_of_stream() {
+    // Empty response set → channel closes → subscription.next() yields None.
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let result = client.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular);
+    assert!(
+        matches!(result, Err(Error::UnexpectedEndOfStream)),
+        "expected UnexpectedEndOfStream, got {result:?}"
+    );
+}
+
+#[test]
+fn test_historical_data_with_end_message() {
+    // server_version >= HISTORICAL_DATA_END (196): start/end live on a follow-on
+    // HistoricalDataEnd (108), not the HistoricalData (17) frame itself.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "17\09000\01\01678886400\0185.50\0186.00\0185.25\0185.75\01000\0185.70\0100\0".to_owned(),
+        "108\09000\020230315 09:30:00 UTC\020230315 10:30:00 UTC\0".to_owned(),
+    ]));
+
+    let mut client = Client::stubbed(message_bus, server_versions::HISTORICAL_DATA_END);
+    client.time_zone = Some(time_tz::timezones::db::UTC);
+
+    let data = client
+        .historical_data(
+            &Contract::stock("MSFT").build(),
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
+        .expect("historical_data should succeed");
+
+    assert_eq!(data.bars.len(), 1, "should have one bar");
+    assert_eq!(data.start, datetime!(2023-03-15 09:30:00 UTC), "start populated from end-message");
+    assert_eq!(data.end, datetime!(2023-03-15 10:30:00 UTC), "end populated from end-message");
+}
+
+#[test]
+fn test_historical_data_connection_reset_after_retries() {
+    // Empty responses → channel closes immediately → subscription.next() returns
+    // None on every retry → loop exhausts MAX_RETRIES and returns ConnectionReset.
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let result = client.historical_data(
+        &Contract::stock("MSFT").build(),
+        None,
+        Duration::days(1),
+        BarSize::Hour,
+        WhatToShow::Trades,
+        TradingHours::Regular,
+    );
+
+    // The first None response returns UnexpectedEndOfStream (the loop early-exits).
+    assert!(
+        matches!(result, Err(Error::UnexpectedEndOfStream)),
+        "expected UnexpectedEndOfStream, got {result:?}"
+    );
+}
+
+#[test]
+fn test_historical_data_error_message_response() {
+    // Type 4 = IncomingMessages::Error — exercises the explicit Error arm
+    // (Err::from(message)), distinct from the UnexpectedResponse arm.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "4\02\09000\0162\0Historical Market Data Service error message:No market data permissions.\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let result = client.historical_data(
+        &Contract::stock("MSFT").build(),
+        None,
+        Duration::days(1),
+        BarSize::Hour,
+        WhatToShow::Trades,
+        TradingHours::Regular,
+    );
+
+    let err = result.expect_err("expected error from server");
+    assert!(err.to_string().contains("No market data permissions"), "got: {err}");
+}
+
+#[test]
+fn test_historical_schedules_ending_now() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_SCHEDULE);
+
+    let contract = Contract::stock("MSFT").build();
+    let duration = 7.days();
+
+    let schedule = client
+        .historical_schedules_ending_now(&contract, duration)
+        .expect("historical schedules ending now should succeed");
+
+    assert_eq!(schedule.sessions.len(), 1);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .duration(duration)
+            .bar_size(BarSize::Day)
+            .what_to_show(Some(WhatToShow::Schedule))
+            .use_rth(true),
+    );
+}
+
+#[test]
+fn test_historical_schedule_version_check() {
+    assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| {
+        c.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1))
+    });
+}
+
+#[test]
+fn test_historical_schedule_trading_class_version_check() {
+    // contract.trading_class triggers the earlier TRADING_CLASS gate ahead of the
+    // HISTORICAL_SCHEDULE gate — pin below TRADING_CLASS so the former fires first.
+    let mut contract = Contract::stock("MSFT").build();
+    contract.trading_class = "ES".to_owned();
+    assert_version_check_fails(Features::TRADING_CLASS, move |c| {
+        c.historical_schedules_ending_now(&contract, Duration::days(1))
+    });
+}
+
+#[test]
+fn test_historical_schedule_unexpected_response() {
+    assert_unexpected_response(
+        server_versions::HISTORICAL_SCHEDULE,
+        "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
+        |c| c.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1)),
+    );
+}
+
+#[test]
+fn test_historical_schedule_end_of_stream() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE);
+    let result = client.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1));
+    assert!(
+        matches!(result, Err(Error::UnexpectedEndOfStream)),
+        "expected UnexpectedEndOfStream, got {result:?}"
+    );
+}
+
+#[test]
+fn test_cancel_historical_ticks() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
+
+    client.cancel_historical_ticks(9000).expect("cancel should succeed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request_msg_id(&message_bus, 0, OutgoingMessages::CancelHistoricalTicks);
+}
+
+#[test]
+fn test_cancel_historical_ticks_version_check() {
+    assert_version_check_fails(Features::CANCEL_CONTRACT_DATA, |c| c.cancel_historical_ticks(9000));
+}
+
+#[test]
+fn test_histogram_data_version_check() {
+    assert_version_check_fails(Features::HISTOGRAM, |c| {
+        c.histogram_data(&Contract::stock("MSFT").build(), TradingHours::Regular, BarSize::Day)
+    });
+}
+
+#[test]
+fn test_histogram_data_empty_response_returns_empty_vec() {
+    // None on the first subscription.next() → returns an empty Vec.
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let histogram = client
+        .histogram_data(&Contract::stock("MSFT").build(), TradingHours::Regular, BarSize::Day)
+        .expect("histogram_data should succeed with empty result");
+
+    assert!(histogram.is_empty(), "expected empty histogram, got {histogram:?}");
+}
+
+#[test]
+fn test_historical_data_streaming_trading_class_version_check() {
+    let mut contract = Contract::stock("MSFT").build();
+    contract.trading_class = "ES".to_owned();
+    assert_version_check_fails(Features::TRADING_CLASS, move |c| {
+        c.historical_data_streaming(
+            &contract,
+            Duration::days(1),
+            BarSize::Hour,
+            Some(WhatToShow::Trades),
+            TradingHours::Regular,
+            true,
+        )
+    });
+}
+
+#[test]
+fn test_historical_ticks_bid_ask_version_check() {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
+        c.historical_ticks_bid_ask(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular, false)
+    });
+}
+
+#[test]
+fn test_historical_ticks_mid_point_version_check() {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
+        c.historical_ticks_mid_point(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+    });
+}
+
+#[test]
+fn test_historical_ticks_trade_version_check() {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
+        c.historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+    });
+}
+
+#[test]
+fn test_tick_subscription_try_next_drains_buffer() {
+    // Pre-load a single batch with done=1 so try_next() can drain without blocking.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "98\09000\02\01681133400\00\012.00\0100\0NYSE\0\01681133401\00\012.01\0200\0NYSE\0\01\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+
+    let subscription = client
+        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .expect("subscription should be created");
+
+    // Drain via try_iter — each .next() goes through try_next() → next_helper(try_next).
+    let ticks: Vec<TickLast> = subscription.try_iter().collect();
+    assert_eq!(ticks.len(), 2, "should drain both ticks via try_next");
+    assert_eq!(ticks[0].price, 12.00);
+    assert_eq!(ticks[1].price, 12.01);
+
+    // After done, try_next returns None immediately.
+    assert!(subscription.try_next().is_none(), "no more ticks expected after done");
+}
+
+#[test]
+fn test_tick_subscription_next_timeout_drains_buffer() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "98\09000\01\01681133400\00\013.00\0100\0NYSE\0\01\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+
+    let subscription = client
+        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .expect("subscription should be created");
+
+    // Drive timeout_iter — each .next() goes through next_timeout() → next_helper.
+    let ticks: Vec<TickLast> = subscription.timeout_iter(std::time::Duration::from_millis(50)).collect();
+    assert_eq!(ticks.len(), 1, "should drain the single tick");
+    assert_eq!(ticks[0].price, 13.00);
+
+    // After done, next_timeout also returns None.
+    assert!(
+        subscription.next_timeout(std::time::Duration::from_millis(10)).is_none(),
+        "no more ticks expected after done"
+    );
+}
+
+#[test]
+fn test_tick_subscription_fill_buffer_error_response_via_channel() {
+    // Inject a RoutedItem::Error directly to exercise fill_buffer's Err arm and
+    // set_error() — paths the MessageBusStub mock_request path can't reach.
+    use crate::subscriptions::common::RoutedItem;
+    use crate::transport::SubscriptionBuilder;
+    use crossbeam::channel;
+
+    let message_bus = Arc::new(MessageBusStub::default());
+
+    let (sender, receiver) = channel::unbounded();
+    let (signaler, _signal_rx) = channel::unbounded();
+    sender.send(RoutedItem::Error(Error::Simple("injected".into()))).unwrap();
+    drop(sender);
+
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9300).build();
+
+    let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9300, message_bus);
+    assert!(subscription.next().is_none(), "Err response → set_error → next returns None");
+    subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
+}
+
+#[test]
+fn test_tick_subscription_fill_buffer_none_when_channel_closes() {
+    // Channel closes with no done=true → fill_buffer(None) returns Err(()) → next returns None.
+    use crate::subscriptions::common::RoutedItem;
+    use crate::transport::SubscriptionBuilder;
+    use crossbeam::channel;
+
+    let message_bus = Arc::new(MessageBusStub::default());
+
+    let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _signal_rx) = channel::unbounded();
+    drop(sender); // empty + closed immediately
+
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9301).build();
+
+    let subscription: TickSubscription<TickBidAsk> = TickSubscription::new(internal, 9301, message_bus);
+    assert!(subscription.next().is_none(), "closed channel → fill_buffer None → next returns None");
+    subscription.done.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
+    // Exercise try_next + next_timeout on the TickMidpoint monomorphization so
+    // every (TickT × iterator) combination shows up in coverage data.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "96\09000\01\01681133400\00\091.50\00\01\0".to_owned()
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+
+    let subscription = client
+        .historical_ticks_mid_point(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .expect("subscription should be created");
+
+    let ticks_try: Vec<TickMidpoint> = subscription.try_iter().collect();
+    assert_eq!(ticks_try.len(), 1);
+
+    // Timeout iterator after exhaustion — exercises next_timeout None path.
+    assert!(subscription.timeout_iter(std::time::Duration::from_millis(10)).next().is_none());
+}
+
+#[test]
+fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "97\09000\01\01681133399\00\011.63\011.83\02800\0100\01\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+
+    let subscription = client
+        .historical_ticks_bid_ask(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular, false)
+        .expect("subscription should be created");
+
+    let ticks_try: Vec<TickBidAsk> = subscription.try_iter().collect();
+    assert_eq!(ticks_try.len(), 1);
+    assert!(subscription.timeout_iter(std::time::Duration::from_millis(10)).next().is_none());
+}
+
+#[test]
+fn test_tick_subscription_skips_unexpected_message_then_yields() {
+    // First response is type 17 (HistoricalData) — fill_buffer should silently
+    // skip it (the `Some(Ok(message))` non-match arm) and loop to the next batch.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "17\09000\020230315  09:30:00\020230315  10:30:00\00\0".to_owned(),
+        "98\09000\01\01681133400\00\014.00\0100\0NYSE\0\01\0".to_owned(),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+
+    let subscription = client
+        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+        .expect("subscription should be created");
+
+    let tick = subscription.next().expect("should receive tick after skipping unexpected");
+    assert_eq!(tick.price, 14.00, "wrong price");
+    assert!(subscription.next().is_none(), "should be done");
 }
