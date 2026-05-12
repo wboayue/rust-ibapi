@@ -347,6 +347,32 @@ assert_eq!(bond.security_id_type, Some(SecurityIdType::Isin));
 
 If you match on the field, swap `if contract.security_id_type == "ISIN"` for `if contract.security_id_type == Some(SecurityIdType::Isin)`. To emit the wire string, call `.as_str()` (`SecurityIdType::Isin.as_str() == "ISIN"`).
 
+### 12. `ExecutionFilter.side` typed as `Option<ExecutionFilterSide>`
+
+`ExecutionFilter.side` was `String` in 2.x (empty string meant "no filter"). In 3.0 it is typed as `Option<ExecutionFilterSide>` — `None` for no filter, `Some(ExecutionFilterSide::Buy)` or `Some(ExecutionFilterSide::Sell)` to restrict the response. Invalid filter values are no longer expressible — they fail at compile time rather than at the server.
+
+`ExecutionFilterSide` is `#[non_exhaustive]` and implements `Display` (`"BUY"` / `"SELL"`) and `FromStr<Err = Error>`. `FromStr` is case-sensitive.
+
+**Note: distinct from [`Action`].** `Action` covers the outbound order-side vocabulary (including `SellShort` / `SellLong`), neither accepted on the filter. A subset enum here prevents constructing filter values the server rejects.
+
+```rust,ignore
+// v2.x
+let filter = ExecutionFilter {
+    side: "BUY".to_owned(),
+    ..ExecutionFilter::default()
+};
+
+// v3.0
+use ibapi::orders::ExecutionFilterSide;
+
+let filter = ExecutionFilter {
+    side: Some(ExecutionFilterSide::Buy),
+    ..ExecutionFilter::default()
+};
+```
+
+If you match on the field, swap `if filter.side == "BUY"` for `if filter.side == Some(ExecutionFilterSide::Buy)`.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

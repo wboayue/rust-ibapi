@@ -143,6 +143,33 @@ impl Client {
     }
 
     /// Requests current day's executions matching the filter.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::orders::{ExecutionFilter, ExecutionFilterSide};
+    /// use ibapi::subscriptions::SubscriptionItem;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let filter = ExecutionFilter {
+    ///         side: Some(ExecutionFilterSide::Buy),
+    ///         ..ExecutionFilter::default()
+    ///     };
+    ///     let mut subscription = client.executions(filter).await.expect("request failed");
+    ///
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(ex))  => println!("{ex:?}"),
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
+    ///             Err(e) => eprintln!("Error: {e}"),
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub async fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         let request_id = self.next_request_id();
         let request = encoders::encode_executions(request_id, &filter)?;

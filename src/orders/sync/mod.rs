@@ -127,12 +127,12 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::orders::ExecutionFilter;
+    /// use ibapi::orders::{ExecutionFilter, ExecutionFilterSide};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let filter = ExecutionFilter{
-    ///    side: "BUY".to_owned(),
+    /// let filter = ExecutionFilter {
+    ///    side: Some(ExecutionFilterSide::Buy),
     ///    ..ExecutionFilter::default()
     /// };
     ///

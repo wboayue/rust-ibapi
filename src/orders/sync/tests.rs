@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, OrderStatusKind};
+use crate::orders::{Action, ExecutionFilterSide, OrderStatusKind};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
@@ -320,7 +320,7 @@ fn executions() {
         symbol: "TSLA".to_owned(),
         security_type: "STK".to_owned(),
         exchange: "ISLAND".to_owned(),
-        side: "BUY".to_owned(),
+        side: Some(ExecutionFilterSide::Buy),
         ..Default::default()
     };
     let expected_filter = ExecutionFilter {
@@ -330,7 +330,7 @@ fn executions() {
         symbol: "TSLA".to_owned(),
         security_type: "STK".to_owned(),
         exchange: "ISLAND".to_owned(),
-        side: "BUY".to_owned(),
+        side: Some(ExecutionFilterSide::Buy),
         ..Default::default()
     };
     let results = client.executions(filter);

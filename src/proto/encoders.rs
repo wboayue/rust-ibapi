@@ -376,7 +376,7 @@ pub fn encode_execution_filter(filter: &orders::ExecutionFilter) -> proto::Execu
         symbol: some_str(&filter.symbol),
         sec_type: some_str(&filter.security_type),
         exchange: some_str(&filter.exchange),
-        side: some_str(&filter.side),
+        side: some_display(filter.side.as_ref()),
         last_n_days: some_i32_ne(filter.last_n_days, 0),
         specific_dates: filter.specific_dates.iter().filter_map(|d| d.parse::<i32>().ok()).collect(),
     }
@@ -616,7 +616,7 @@ mod tests {
             symbol: "AAPL".to_string(),
             security_type: "STK".to_string(),
             exchange: "SMART".to_string(),
-            side: "BUY".to_string(),
+            side: Some(orders::ExecutionFilterSide::Buy),
             last_n_days: 5,
             specific_dates: vec!["20240101".to_string()],
         };
@@ -625,6 +625,7 @@ mod tests {
         assert_eq!(proto.client_id, Some(1));
         assert_eq!(proto.acct_code.as_deref(), Some("DU123"));
         assert_eq!(proto.symbol.as_deref(), Some("AAPL"));
+        assert_eq!(proto.side.as_deref(), Some("BUY"));
         assert_eq!(proto.last_n_days, Some(5));
         assert_eq!(proto.specific_dates, vec![20240101]);
     }

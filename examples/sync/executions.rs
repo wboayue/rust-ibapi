@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     // filter.symbol = symbol.to_owned();
     // filter.security_type = security_type.to_owned();
     // filter.exchange = exchange.to_owned();
-    // filter.side = side.to_owned();
+    // filter.side = Some(ibapi::orders::ExecutionFilterSide::Buy);
 
     let client = Client::connect("127.0.0.1:4002", 100)?;
 
