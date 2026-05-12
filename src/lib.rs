@@ -38,6 +38,9 @@ compile_error!(
      You may also enable both to access the synchronous API under `client::blocking`."
 );
 
+#[macro_use]
+mod macros;
+
 /// Describes items present in an account.
 pub mod accounts;
 

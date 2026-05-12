@@ -744,9 +744,10 @@ pub enum OrderStatusKind {
     Inactive,
 }
 
-impl std::fmt::Display for OrderStatusKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
+impl OrderStatusKind {
+    /// Return the canonical wire string for this status.
+    pub fn as_str(&self) -> &'static str {
+        match self {
             OrderStatusKind::ApiPending => "ApiPending",
             OrderStatusKind::PendingSubmit => "PendingSubmit",
             OrderStatusKind::PendingCancel => "PendingCancel",
@@ -756,27 +757,26 @@ impl std::fmt::Display for OrderStatusKind {
             OrderStatusKind::Cancelled => "Cancelled",
             OrderStatusKind::Filled => "Filled",
             OrderStatusKind::Inactive => "Inactive",
-        })
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "ApiPending" => Some(Self::ApiPending),
+            "PendingSubmit" => Some(Self::PendingSubmit),
+            "PendingCancel" => Some(Self::PendingCancel),
+            "PreSubmitted" => Some(Self::PreSubmitted),
+            "Submitted" => Some(Self::Submitted),
+            "ApiCancelled" => Some(Self::ApiCancelled),
+            "Cancelled" => Some(Self::Cancelled),
+            "Filled" => Some(Self::Filled),
+            "Inactive" => Some(Self::Inactive),
+            _ => None,
+        }
     }
 }
 
-impl std::str::FromStr for OrderStatusKind {
-    type Err = crate::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "ApiPending" => Self::ApiPending,
-            "PendingSubmit" => Self::PendingSubmit,
-            "PendingCancel" => Self::PendingCancel,
-            "PreSubmitted" => Self::PreSubmitted,
-            "Submitted" => Self::Submitted,
-            "ApiCancelled" => Self::ApiCancelled,
-            "Cancelled" => Self::Cancelled,
-            "Filled" => Self::Filled,
-            "Inactive" => Self::Inactive,
-            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown OrderStatus".into())),
-        })
-    }
-}
+impl_wire_enum!(OrderStatusKind);
 
 impl OrderStatusKind {
     /// Order is still working in the market: `PreSubmitted`, `PendingSubmit`,

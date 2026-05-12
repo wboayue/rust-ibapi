@@ -59,6 +59,13 @@ pub(crate) fn some_bool(v: bool) -> Option<bool> {
     }
 }
 
+/// Map `Option<&T: Display>` to its wire string. `None` stays `None`; unlike
+/// `some_str`, no empty-string filtering — `Option::None` already carries the
+/// no-value state at the type level for typed wire enums.
+pub(crate) fn some_display<T: std::fmt::Display>(opt: Option<&T>) -> Option<String> {
+    opt.map(|v| v.to_string())
+}
+
 // === Contract ===
 
 pub fn encode_contract(contract: &Contract) -> proto::Contract {
@@ -72,14 +79,14 @@ pub fn encode_contract_with_order(contract: &Contract, order: Option<&Order>) ->
         sec_type: some_str(&contract.security_type.to_string()),
         last_trade_date_or_contract_month: some_str(&contract.last_trade_date_or_contract_month),
         strike: some_f64_ne(contract.strike, 0.0),
-        right: contract.right.as_ref().map(|r| r.to_string()),
+        right: some_display(contract.right.as_ref()),
         multiplier: contract.multiplier.parse::<f64>().ok(),
         exchange: some_str(&contract.exchange.to_string()),
         primary_exch: some_str(&contract.primary_exchange.to_string()),
         currency: some_str(&contract.currency.to_string()),
         local_symbol: some_str(&contract.local_symbol),
         trading_class: some_str(&contract.trading_class),
-        sec_id_type: contract.security_id_type.as_ref().map(|s| s.to_string()),
+        sec_id_type: some_display(contract.security_id_type.as_ref()),
         sec_id: some_str(&contract.security_id),
         description: some_str(&contract.description),
         issuer_id: some_str(&contract.issuer_id),
@@ -626,6 +633,13 @@ mod tests {
     fn test_some_str_empty() {
         assert!(some_str("").is_none());
         assert_eq!(some_str("hello"), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_some_display() {
+        assert!(some_display::<i32>(None).is_none());
+        assert_eq!(some_display(Some(&42_i32)), Some("42".to_string()));
+        assert_eq!(some_display(Some(&"text".to_string())), Some("text".to_string()));
     }
 
     #[test]
