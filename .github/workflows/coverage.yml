@@ -30,12 +30,15 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - name: Generate coverage (sync + async + doctests, merged)
+        # `+nightly` overrides rust-toolchain.toml (pinned to stable 1.95.0).
+        # Without it, rustdoc rejects `-Z unstable-options --persist-doctests`.
+        # Mirrors `just cover`.
         run: |
           mkdir -p coverage
-          cargo llvm-cov clean --workspace
-          cargo llvm-cov --no-report --doctests --no-default-features --features sync
-          cargo llvm-cov --no-report --doctests --no-default-features --features async
-          cargo llvm-cov report --lcov --output-path coverage/lcov.info
+          cargo +nightly llvm-cov clean --workspace
+          cargo +nightly llvm-cov --no-report --doctests --no-default-features --features sync
+          cargo +nightly llvm-cov --no-report --doctests --no-default-features --features async
+          cargo +nightly llvm-cov report --lcov --output-path coverage/lcov.info
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:
