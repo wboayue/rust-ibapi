@@ -105,71 +105,62 @@ fn symbol_default_is_empty() {
     assert_eq!(Symbol::default().as_str(), "");
 }
 
-#[test]
-fn option_right_display_round_trip() {
-    use std::str::FromStr;
-    for variant in [OptionRight::Call, OptionRight::Put] {
-        let wire = variant.as_str();
-        assert_eq!(variant.to_string(), wire);
-        assert_eq!(format!("{variant}"), wire);
-        assert_eq!(OptionRight::from_str(wire).unwrap(), variant);
+/// Assert `Display`, `FromStr`, and `ToField` agree on a hand-written
+/// `(variant, wire)` table. One helper covers every trait impl generated
+/// by `impl_wire_enum!` — independent verification (the table is not
+/// derived from `as_str()`, so a typo in either direction surfaces).
+fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
+where
+    T: Copy + std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
+{
+    for &(variant, wire) in table {
+        assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
+        assert_eq!(format!("{variant}"), wire, "format! for {variant:?}");
+        assert_eq!(T::from_str(wire).unwrap(), variant, "FromStr({wire})");
+        assert_eq!(variant.to_field(), wire, "ToField for {variant:?}");
     }
+}
+
+fn check_wire_enum_rejects_unknown<T>(unknowns: &[&str])
+where
+    T: std::str::FromStr<Err = crate::Error> + std::fmt::Debug,
+{
+    for &s in unknowns {
+        let err = T::from_str(s);
+        assert!(
+            matches!(err, Err(crate::Error::Parse(_, _, _))),
+            "expected Parse error for {s:?}, got {err:?}",
+        );
+    }
+}
+
+#[test]
+fn option_right_round_trip() {
+    check_wire_enum_round_trip(&[(OptionRight::Call, "C"), (OptionRight::Put, "P")]);
 }
 
 #[test]
 fn option_right_from_str_rejects_unknown() {
-    use std::str::FromStr;
-    assert!(matches!(OptionRight::from_str("INVALID"), Err(crate::Error::Parse(_, _, _))));
-    assert!(matches!(OptionRight::from_str(""), Err(crate::Error::Parse(_, _, _))));
-    // Case-sensitive: lowercase must not match.
-    assert!(matches!(OptionRight::from_str("c"), Err(crate::Error::Parse(_, _, _))));
-    assert!(matches!(OptionRight::from_str("p"), Err(crate::Error::Parse(_, _, _))));
-    // Long form rejected: TWS wire only uses single-character form.
-    assert!(matches!(OptionRight::from_str("CALL"), Err(crate::Error::Parse(_, _, _))));
-    assert!(matches!(OptionRight::from_str("PUT"), Err(crate::Error::Parse(_, _, _))));
+    // Empty + arbitrary garbage; case-sensitive (lowercase rejected);
+    // historical long forms `CALL`/`PUT` are not on the TWS wire.
+    check_wire_enum_rejects_unknown::<OptionRight>(&["", "INVALID", "c", "p", "CALL", "PUT"]);
 }
 
 #[test]
-fn option_right_to_field_matches_display() {
-    use crate::ToField;
-    for variant in [OptionRight::Call, OptionRight::Put] {
-        assert_eq!(variant.to_field(), variant.to_string());
-    }
-}
-
-#[test]
-fn leg_action_display_round_trip() {
-    use std::str::FromStr;
-    for variant in [LegAction::Buy, LegAction::Sell, LegAction::SellShort] {
-        let wire = variant.as_str();
-        assert_eq!(variant.to_string(), wire);
-        assert_eq!(format!("{variant}"), wire);
-        assert_eq!(LegAction::from_str(wire).unwrap(), variant);
-    }
+fn leg_action_round_trip() {
+    check_wire_enum_round_trip(&[(LegAction::Buy, "BUY"), (LegAction::Sell, "SELL"), (LegAction::SellShort, "SSHORT")]);
 }
 
 #[test]
 fn leg_action_from_str_rejects_unknown() {
-    use std::str::FromStr;
-    assert!(matches!(LegAction::from_str("INVALID"), Err(crate::Error::Parse(_, _, _))));
-    assert!(matches!(LegAction::from_str(""), Err(crate::Error::Parse(_, _, _))));
-    // Case-sensitive: lowercase must not match.
-    assert!(matches!(LegAction::from_str("buy"), Err(crate::Error::Parse(_, _, _))));
-    // SLONG is deliberately excluded from combo-leg vocabulary.
-    assert!(matches!(LegAction::from_str("SLONG"), Err(crate::Error::Parse(_, _, _))));
+    // Empty + arbitrary; case-sensitive (lowercase rejected); `SLONG` is
+    // deliberately excluded from the combo-leg vocabulary.
+    check_wire_enum_rejects_unknown::<LegAction>(&["", "INVALID", "buy", "SLONG"]);
 }
 
 #[test]
 fn leg_action_default_is_buy() {
     assert_eq!(LegAction::default(), LegAction::Buy);
-}
-
-#[test]
-fn leg_action_to_field_matches_display() {
-    use crate::ToField;
-    for variant in [LegAction::Buy, LegAction::Sell, LegAction::SellShort] {
-        assert_eq!(variant.to_field(), variant.to_string());
-    }
 }
 
 #[test]
