@@ -4,8 +4,10 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
+use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
 use futures::StreamExt;
@@ -24,20 +26,35 @@ fn test_contract() -> Contract {
     }
 }
 
-/// Drives a method against a stubbed client pinned below its required server version,
-/// asserts the failure surfaces `feature_name` in the error message. Sidesteps the
-/// `T: Debug` bound that blocks `.expect_err()` on subscription return types.
-async fn assert_version_check_fails<F, Fut, T>(server_version: i32, feature_name: &str, call: F)
+// Pins server_version one below `feature.min_version` and asserts the call fails
+// with the feature name in the error. Custom helper (vs. `.expect_err`) because
+// subscription return types don't implement Debug.
+async fn assert_version_check_fails<F, Fut, T>(feature: ProtocolFeature, call: F)
 where
     F: FnOnce(Client) -> Fut,
     Fut: std::future::Future<Output = Result<T, Error>>,
 {
     let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, feature.min_version - 1);
+    let Err(err) = call(client).await else {
+        panic!("expected version-check failure ({})", feature.name);
+    };
+    assert!(err.to_string().contains(feature.name), "expected '{}', got: {err}", feature.name);
+}
+
+// Feeds a single wire-format response, asserts the call fails with
+// `Error::UnexpectedResponse`. Pairs with `assert_version_check_fails`.
+async fn assert_unexpected_response<F, Fut, T>(server_version: i32, response: &str, call: F)
+where
+    F: FnOnce(Client) -> Fut,
+    Fut: std::future::Future<Output = Result<T, Error>>,
+{
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![response.to_owned()]));
     let client = Client::stubbed(message_bus, server_version);
     let Err(err) = call(client).await else {
-        panic!("expected version-check failure ({feature_name})");
+        panic!("expected UnexpectedResponse failure");
     };
-    assert!(err.to_string().contains(feature_name), "expected '{feature_name}', got: {err}");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got: {err:?}");
 }
 
 #[tokio::test]
@@ -187,7 +204,7 @@ async fn test_historical_data() {
 async fn test_historical_data_version_check() {
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
         c.historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
             .await
     })
@@ -243,20 +260,12 @@ async fn test_historical_data_error_response() {
 
 #[tokio::test]
 async fn test_historical_data_unexpected_response() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["1|2|9000|1|185.50|100|7|".to_owned()], // Wrong message type,
-        ordered_responses: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = test_contract();
-
-    let result = client
-        .historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
-        .await;
-    assert!(result.is_err(), "Should fail with unexpected response");
-    matches!(result.unwrap_err(), Error::UnexpectedResponse(_));
+    // 1 = TickPrice — wrong type for historical_data.
+    assert_unexpected_response(server_versions::SIZE_RULES, "1|2|9000|1|185.50|100|7|", |c| async move {
+        c.historical_data(&test_contract(), None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
+            .await
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -837,7 +846,7 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 
 #[tokio::test]
 async fn test_head_timestamp_version_check() {
-    assert_version_check_fails(server_versions::REQ_HEAD_TIMESTAMP - 1, "head timestamp", |c| async move {
+    assert_version_check_fails(Features::HEAD_TIMESTAMP, |c| async move {
         c.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await
     })
     .await;
@@ -845,33 +854,23 @@ async fn test_head_timestamp_version_check() {
 
 #[tokio::test]
 async fn test_head_timestamp_unexpected_response() {
-    // Send a non-HeadTimestamp message type to drive the UnexpectedResponse arm.
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        // 17 = HistoricalData (wrong type for head_timestamp)
-        response_messages: vec!["17|9000|20230315  09:30:00|20230315  10:30:00|0|".to_owned()],
-        ordered_responses: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
-    let result = client.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await;
-    matches!(result.unwrap_err(), Error::UnexpectedResponse(_));
+    // 17 = HistoricalData — wrong type for head_timestamp.
+    assert_unexpected_response(
+        server_versions::BOND_ISSUERID,
+        "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
+        |c| async move { c.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await },
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_data_with_end_message() {
-    // server_version >= HISTORICAL_DATA_END (196) → consume a follow-on HistoricalDataEnd (108)
-    // for the start/end window.
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalData (>= HISTORICAL_DATA_END): no start/end fields, just bars_count + bars.
-            "17|9000|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
-            // HistoricalDataEnd: type=108, request_id, start_str (with TZ), end_str (with TZ).
-            "108|9000|20230315 09:30:00 UTC|20230315 10:30:00 UTC|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    // server_version >= HISTORICAL_DATA_END (196): start/end live on a follow-on
+    // HistoricalDataEnd (108), not the HistoricalData (17) frame itself.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "17|9000|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
+        "108|9000|20230315 09:30:00 UTC|20230315 10:30:00 UTC|".to_owned(),
+    ]));
 
     let mut client = Client::stubbed(message_bus, server_versions::HISTORICAL_DATA_END);
     client.time_zone = Some(time_tz::timezones::db::UTC);
@@ -904,7 +903,7 @@ async fn test_historical_data_connection_reset_after_retries() {
 
 #[tokio::test]
 async fn test_historical_schedule_version_check() {
-    assert_version_check_fails(server_versions::HISTORICAL_SCHEDULE - 1, "historical schedule", |c| async move {
+    assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| async move {
         c.historical_schedule(&test_contract(), None, Duration::days(1)).await
     })
     .await;
@@ -912,12 +911,11 @@ async fn test_historical_schedule_version_check() {
 
 #[tokio::test]
 async fn test_historical_schedule_trading_class_version_check() {
-    // contract.trading_class non-empty triggers an earlier TRADING_CLASS check; pin
-    // the server version below TRADING_CLASS so the trading-class arm fires before
-    // the HISTORICAL_SCHEDULE arm.
+    // contract.trading_class triggers the earlier TRADING_CLASS gate ahead of the
+    // HISTORICAL_SCHEDULE gate — pin below TRADING_CLASS so the former fires first.
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
         c.historical_schedule(&contract, None, Duration::days(1)).await
     })
     .await;
@@ -925,21 +923,18 @@ async fn test_historical_schedule_trading_class_version_check() {
 
 #[tokio::test]
 async fn test_historical_schedule_unexpected_response() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        // 17 = HistoricalData (wrong type for historical_schedule which expects 106)
-        response_messages: vec!["17|9000|20230315  09:30:00|20230315  10:30:00|0|".to_owned()],
-        ordered_responses: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
-    let result = client.historical_schedule(&test_contract(), None, Duration::days(3)).await;
-    matches!(result.unwrap_err(), Error::UnexpectedResponse(_));
+    // 17 = HistoricalData — wrong type for historical_schedule (expects 106).
+    assert_unexpected_response(
+        server_versions::BOND_ISSUERID,
+        "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
+        |c| async move { c.historical_schedule(&test_contract(), None, Duration::days(3)).await },
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn test_historical_ticks_bid_ask_version_check() {
-    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
         c.historical_ticks_bid_ask(&test_contract(), None, None, 1, TradingHours::Regular, false)
             .await
     })
@@ -948,7 +943,7 @@ async fn test_historical_ticks_bid_ask_version_check() {
 
 #[tokio::test]
 async fn test_historical_ticks_mid_point_version_check() {
-    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
         c.historical_ticks_mid_point(&test_contract(), None, None, 1, TradingHours::Regular).await
     })
     .await;
@@ -956,7 +951,7 @@ async fn test_historical_ticks_mid_point_version_check() {
 
 #[tokio::test]
 async fn test_historical_ticks_trade_version_check() {
-    assert_version_check_fails(server_versions::HISTORICAL_TICKS - 1, "historical ticks", |c| async move {
+    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
         c.historical_ticks_trade(&test_contract(), None, None, 1, TradingHours::Regular).await
     })
     .await;
@@ -975,15 +970,12 @@ async fn test_cancel_historical_ticks() {
 
 #[tokio::test]
 async fn test_cancel_historical_ticks_version_check() {
-    assert_version_check_fails(server_versions::CANCEL_CONTRACT_DATA - 1, "cancel contract data", |c| async move {
-        c.cancel_historical_ticks(9000).await
-    })
-    .await;
+    assert_version_check_fails(Features::CANCEL_CONTRACT_DATA, |c| async move { c.cancel_historical_ticks(9000).await }).await;
 }
 
 #[tokio::test]
 async fn test_histogram_data_version_check() {
-    assert_version_check_fails(server_versions::REQ_HISTOGRAM - 1, "histogram", |c| async move {
+    assert_version_check_fails(Features::HISTOGRAM, |c| async move {
         c.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await
     })
     .await;
@@ -993,7 +985,7 @@ async fn test_histogram_data_version_check() {
 async fn test_historical_data_streaming_trading_class_version_check() {
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(server_versions::TRADING_CLASS - 1, "trading class", |c| async move {
+    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
         c.historical_data_streaming(
             &contract,
             Duration::days(1),
@@ -1016,30 +1008,23 @@ async fn test_tick_subscription_cancel_idempotent() {
 
     let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9200, message_bus.clone());
     subscription.cancel().await;
-    // Second call returns early via the cancelled flag — no duplicate cancel message.
     subscription.cancel().await;
 
     drop(subscription);
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(messages.len(), 1, "explicit cancel + idempotent re-cancel + drop = one message");
+    assert_eq!(messages.len(), 1, "cancel + cancel + drop should send exactly one message");
 }
 
 #[tokio::test]
 async fn test_tick_subscription_skips_unexpected_message_then_yields() {
-    // Drive fill_buffer through the "wrong message type" arm — it should debug-log
-    // and continue, eventually surfacing the matching tick payload that follows.
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // type=17 historical data — unexpected for a tick subscription
-            "17|9000|20230315  09:30:00|20230315  10:30:00|0|".to_owned(),
-            // type=98 HistoricalTickLast — expected, with one tick, done=1
-            "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        // 17 = HistoricalData — unexpected for a tick subscription, should be skipped.
+        "17|9000|20230315  09:30:00|20230315  10:30:00|0|".to_owned(),
+        // 98 = HistoricalTickLast — one tick, done=1.
+        "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
+    ]));
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
@@ -1055,10 +1040,6 @@ async fn test_tick_subscription_skips_unexpected_message_then_yields() {
 
 #[tokio::test]
 async fn test_tick_subscription_errors_terminate_stream() {
-    // Inject a RoutedItem::Error directly into the broadcast channel — fill_buffer
-    // surfaces it via Some(Err(_)) → next() returns None.
-    use crate::subscriptions::common::RoutedItem;
-
     let message_bus = Arc::new(MessageBusStub::default());
 
     let (tx, rx) = tokio::sync::broadcast::channel(16);
@@ -1073,8 +1054,8 @@ async fn test_tick_subscription_errors_terminate_stream() {
 
 #[tokio::test]
 async fn test_tick_subscription_returns_none_on_closed_channel() {
-    // Empty response_messages → broadcast channel closes immediately → fill_buffer
-    // sees None → next() returns None on the first call (no buffered items).
+    // Empty response_messages closes the broadcast channel immediately; the first
+    // fill_buffer sees None and next() returns None.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
