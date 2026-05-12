@@ -19,3 +19,6 @@ Cargo.lock
 /sandbox
 
 .vscode
+
+# Claude Code local state
+.claude/
