@@ -275,6 +275,37 @@ mod tests {
     }
 
     #[test]
+    fn test_realtime_bars_error_handling() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec!["4|2|9001|10089|Requested market data requires additional subscription for API|".to_owned()],
+        });
+
+        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let contract = Contract {
+            symbol: Symbol::from("AAPL"),
+            security_type: SecurityType::Stock,
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
+            ..Contract::default()
+        };
+
+        let bars = client
+            .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)
+            .expect("Failed to create realtime bars subscription");
+
+        assert!(bars.iter().next().is_none(), "subscription must terminate on TWS error");
+
+        match bars.error() {
+            Some(crate::Error::Message(code, msg)) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("additional subscription"), "wrong error message: {msg}");
+            }
+            other => panic!("expected Error::Message(10089, _), got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_tick_by_tick_all_last() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),

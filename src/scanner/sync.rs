@@ -5,14 +5,20 @@ use std::sync::Arc;
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{client::sync::Client, server_versions, Error};
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData, IncomingMessages::Error];
+
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        decoders::decode_scanner_message(message)
+        match message.message_type() {
+            IncomingMessages::ScannerData => decoders::decode_scanner_message(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
@@ -179,5 +185,11 @@ mod tests {
 
         // Verify cancel request was sent
         assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
+    }
+
+    #[test]
+    fn test_decode_error_message_surfaces_tws_error() {
+        use crate::common::test_utils::helpers::assert_decode_surfaces_tws_error;
+        assert_decode_surfaces_tws_error::<Vec<ScannerData>>(10089, "Requested market data is not subscribed");
     }
 }

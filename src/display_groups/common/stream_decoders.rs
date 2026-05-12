@@ -26,11 +26,12 @@ impl DisplayGroupUpdate {
 }
 
 impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::DisplayGroupUpdated => decoders::decode_display_group_updated(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -79,6 +80,12 @@ mod tests {
         let result = DisplayGroupUpdate::decode(&test_context(), &mut message);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_error_message_surfaces_tws_error() {
+        use crate::common::test_utils::helpers::assert_decode_surfaces_tws_error;
+        assert_decode_surfaces_tws_error::<DisplayGroupUpdate>(10089, "Requested market data is not subscribed");
     }
 
     #[test]

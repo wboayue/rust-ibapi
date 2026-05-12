@@ -13,10 +13,14 @@ use crate::{server_versions, Client, Error};
 
 #[cfg(not(feature = "sync"))]
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        decoders::decode_scanner_message(message)
+        match message.message_type() {
+            IncomingMessages::ScannerData => decoders::decode_scanner_message(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
@@ -270,5 +274,11 @@ mod tests {
         // Verify no additional cancel request was sent
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected still only 2 messages (no double cancel)");
+    }
+
+    #[test]
+    fn test_decode_error_message_surfaces_tws_error() {
+        use crate::common::test_utils::helpers::assert_decode_surfaces_tws_error;
+        assert_decode_surfaces_tws_error::<Vec<ScannerData>>(10089, "Requested market data is not subscribed");
     }
 }

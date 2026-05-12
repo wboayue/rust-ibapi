@@ -97,6 +97,36 @@ pub mod helpers {
             .collect()
     }
 
+    /// Asserts that `err` is `Error::Message(expected_code, msg)` and that `msg` contains `expected_substring`.
+    pub fn assert_tws_error_message(err: crate::Error, expected_code: i32, expected_substring: &str) {
+        match err {
+            crate::Error::Message(code, msg) => {
+                assert_eq!(code, expected_code, "wrong error code");
+                assert!(
+                    msg.contains(expected_substring),
+                    "error message {msg:?} does not contain {expected_substring:?}"
+                );
+            }
+            other => panic!("expected Error::Message({expected_code}, _), got {other:?}"),
+        }
+    }
+
+    pub fn decoder_test_context() -> crate::subscriptions::DecoderContext {
+        crate::subscriptions::DecoderContext::new(176, None)
+    }
+
+    /// Feeds a synthesized TWS error frame through `T::decode` and asserts the
+    /// decoder surfaces it as `Error::Message(error_code, error_msg)`.
+    pub fn assert_decode_surfaces_tws_error<T>(error_code: i32, error_msg: &str)
+    where
+        T: crate::subscriptions::StreamDecoder<T> + std::fmt::Debug,
+    {
+        let wire = format!("4|2|9000|{error_code}|{error_msg}|");
+        let mut message = crate::messages::ResponseMessage::from_simple(&wire);
+        let err = T::decode(&decoder_test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, error_code, error_msg);
+    }
+
     /// Asserts that a request message contains a specific substring
     pub fn assert_request_contains(message_bus: &MessageBusStub, index: usize, substring: &str) {
         let request_messages = get_request_messages(message_bus);

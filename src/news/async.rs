@@ -14,11 +14,12 @@ use crate::{server_versions, Client, Error};
 
 #[cfg(not(feature = "sync"))]
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -34,6 +35,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::HistoricalNews,
         IncomingMessages::HistoricalNewsEnd,
         IncomingMessages::TickNews,
+        IncomingMessages::Error,
     ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
@@ -41,6 +43,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -429,5 +432,17 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected 2 messages (request + cancel)");
         assert_eq!(request_messages[1].encode_simple(), "2|1|9000|");
+    }
+
+    #[test]
+    fn test_news_bulletin_decode_error_message() {
+        use crate::common::test_utils::helpers::assert_decode_surfaces_tws_error;
+        assert_decode_surfaces_tws_error::<NewsBulletin>(10089, "Requested market data is not subscribed");
+    }
+
+    #[test]
+    fn test_news_article_decode_error_message() {
+        use crate::common::test_utils::helpers::assert_decode_surfaces_tws_error;
+        assert_decode_surfaces_tws_error::<NewsArticle>(10089, "Requested market data is not subscribed");
     }
 }
