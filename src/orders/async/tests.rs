@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, SecurityType};
-use crate::contracts::{Currency, Exchange, Symbol};
+use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::OrderStatusKind;
 use crate::stubs::MessageBusStub;
@@ -361,7 +361,7 @@ async fn test_exercise_options() {
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: "20250919".to_string(),
         strike: 5800.0,
-        right: "C".to_string(),
+        right: Some(OptionRight::Call),
         ..Default::default()
     };
 

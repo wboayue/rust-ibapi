@@ -65,7 +65,10 @@ fn main() {
     println!("\nGetting contract details for option:");
     println!(
         "Symbol: {}, Strike: {}, Right: {}, Expiry: {}",
-        option_contract.symbol, option_contract.strike, option_contract.right, option_contract.last_trade_date_or_contract_month
+        option_contract.symbol,
+        option_contract.strike,
+        option_contract.right.map_or("", |r| r.as_str()),
+        option_contract.last_trade_date_or_contract_month
     );
 
     // Try to get contract details to validate and get the full contract info

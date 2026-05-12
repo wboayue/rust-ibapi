@@ -1,6 +1,6 @@
 use crate::{
     accounts::AccountSummaryTags,
-    contracts::{Currency, Exchange, Symbol},
+    contracts::{Currency, Exchange, OptionRight, Symbol},
     server_versions,
     testdata::responses,
 };
@@ -24,7 +24,7 @@ fn test_decode_positions() {
         "position.contract.last_trade_date_or_contract_month"
     );
     assert_eq!(position.contract.strike, 0.0, "position.contract.strike");
-    assert_eq!(position.contract.right, "", "position.contract.right");
+    assert_eq!(position.contract.right, None, "position.contract.right");
     assert_eq!(position.contract.multiplier, "", "position.contract.multiplier");
     assert_eq!(position.contract.exchange, Exchange::from("NASDAQ"), "position.contract.exchange");
     assert_eq!(position.contract.currency, Currency::from("USD"), "position.contract.currency");
@@ -58,7 +58,7 @@ fn test_decode_position_v1_message() {
         "contract.last_trade_date_or_contract_month"
     );
     assert_eq!(result.contract.strike, 0.0, "contract.strike");
-    assert_eq!(result.contract.right, "P", "contract.right");
+    assert_eq!(result.contract.right, Some(OptionRight::Put), "contract.right");
     assert_eq!(result.contract.multiplier, "MULT", "contract.multiplier");
     assert_eq!(result.contract.exchange, Exchange::from("EXCH"), "contract.exchange");
     assert_eq!(result.contract.currency, Currency::from("USD"), "contract.currency");
@@ -93,7 +93,7 @@ fn test_decode_position_v2_message() {
         "contract.last_trade_date_or_contract_month"
     );
     assert_eq!(result.contract.strike, 0.0, "contract.strike");
-    assert_eq!(result.contract.right, "P", "contract.right");
+    assert_eq!(result.contract.right, Some(OptionRight::Put), "contract.right");
     assert_eq!(result.contract.multiplier, "MULT", "contract.multiplier");
     assert_eq!(result.contract.exchange, Exchange::from("EXCH"), "contract.exchange");
     assert_eq!(result.contract.currency, Currency::from("USD"), "contract.currency");
@@ -122,7 +122,7 @@ fn test_decode_position_multi() {
         "position.contract.last_trade_date_or_contract_month"
     );
     assert_eq!(position.contract.strike, 0.0, "position.contract.strike");
-    assert_eq!(position.contract.right, "", "position.contract.right");
+    assert_eq!(position.contract.right, None, "position.contract.right");
     assert_eq!(position.contract.multiplier, "", "position.contract.multiplier");
     assert_eq!(position.contract.exchange, Exchange::from("NASDAQ"), "position.contract.exchange");
     assert_eq!(position.contract.currency, Currency::from("USD"), "position.contract.currency");
@@ -249,7 +249,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
         expected_sec_type: crate::contracts::SecurityType,
         expected_expiry: &'static str,
         expected_strike: f64,
-        expected_right: &'static str,
+        expected_right: Option<OptionRight>,
         expected_currency: &'static str,
         // Version-dependent contract fields
         expected_multiplier: &'static str,
@@ -370,7 +370,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "",
             expected_primary_exchange: "",
@@ -415,7 +415,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "",
             expected_primary_exchange: "",
@@ -460,7 +460,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "",
             expected_primary_exchange: "",
@@ -505,7 +505,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "",
             expected_primary_exchange: "",
@@ -550,7 +550,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "",
             expected_primary_exchange: "OVERRIDE_EXCH",
@@ -595,7 +595,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "MULT1",
             expected_primary_exchange: "PRIMEXCH1",
@@ -640,7 +640,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "MULT1",
             expected_primary_exchange: "PRIMEXCH1",
@@ -685,7 +685,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "MULT1",
             expected_primary_exchange: "PRIMEXCH1",
@@ -730,7 +730,7 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_sec_type: crate::contracts::SecurityType::Stock,
             expected_expiry: "251212",
             expected_strike: 0.0,
-            expected_right: "P",
+            expected_right: Some(OptionRight::Put),
             expected_currency: "USD",
             expected_multiplier: "MULT1",
             expected_primary_exchange: "PRIMEXCH1",

@@ -279,6 +279,38 @@ let leg = ComboLeg {
 
 `LegAction` implements `Display` (`"BUY"` / `"SELL"` / `"SSHORT"`) and `FromStr<Err = Error>`. The decoder propagates `Error::Parse` if TWS sends an empty or unknown action — silent fallback to `LegAction::default()` is off the table.
 
+### 10. `Contract.right` typed as `Option<OptionRight>`
+
+`Contract.right` was `String` in 2.x (empty string meant "no right"). In 3.0 it is typed as `Option<OptionRight>` — `None` on non-option contracts, `Some(OptionRight::Call)` or `Some(OptionRight::Put)` on options. The decoder rejects unknown wire values as `Error::Parse` rather than silently storing them as raw strings.
+
+`OptionRight` is `#[non_exhaustive]` and implements `Display` (`"C"` / `"P"`) and `FromStr<Err = Error>`. It is case-sensitive and accepts only the canonical single-character form; lowercase and the historical long forms (`"CALL"` / `"PUT"`) now produce `Err`.
+
+`Contract::option`'s 4th parameter changes from `&str` to `OptionRight`. `ContractBuilder::right()` changes from `impl Into<String>` to `OptionRight`. The builder's runtime "right must be P or C" validation has been removed — invalid rights are structurally unrepresentable.
+
+```rust,ignore
+// v2.x
+let call = Contract::option("AAPL", "20240119", 150.0, "C");
+assert_eq!(call.right, "C");
+
+let builder_call = ContractBuilder::option("AAPL", "SMART", "USD")
+    .strike(150.0)
+    .right("C")
+    .build()?;
+
+// v3.0
+use ibapi::contracts::OptionRight;
+
+let call = Contract::option("AAPL", "20240119", 150.0, OptionRight::Call);
+assert_eq!(call.right, Some(OptionRight::Call));
+
+let builder_call = ContractBuilder::option("AAPL", "SMART", "USD")
+    .strike(150.0)
+    .right(OptionRight::Call)
+    .build()?;
+```
+
+If you match on the field, swap `if contract.right == "C"` for `if contract.right == Some(OptionRight::Call)`. To emit the wire string, call `.as_str()` (`OptionRight::Call.as_str() == "C"`).
+
 ## Before / after: common subscription patterns
 
 ### Order construction

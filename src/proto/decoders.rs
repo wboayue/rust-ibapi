@@ -61,7 +61,6 @@ where
 /// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
 /// and text-protocol callers can pass `Some(text_str.as_str())` without
 /// allocating a wrapper.
-#[allow(dead_code)]
 pub(crate) fn parse_optional<T>(opt: Option<&str>) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr<Err = Error>,
@@ -91,7 +90,7 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
         security_type: SecurityType::from(proto.sec_type.as_deref().unwrap_or_default()),
         last_trade_date_or_contract_month: s(&proto.last_trade_date_or_contract_month),
         strike: proto.strike.unwrap_or_default(),
-        right: s(&proto.right),
+        right: parse_optional(proto.right.as_deref())?,
         multiplier: proto.multiplier.map(|m| m.to_string()).unwrap_or_default(),
         exchange: Exchange::from(s(&proto.exchange)),
         primary_exchange: Exchange::from(s(&proto.primary_exch)),

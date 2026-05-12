@@ -205,9 +205,13 @@ impl ToField for Currency {
 
 impl_str_partial_eq!(Currency);
 
-/// Option right (Call or Put)
+/// Option right (Call or Put). Matches IBKR's wire vocabulary `"C"` / `"P"`.
+///
+/// No `Default` — `Contract.right: Option<OptionRight>` carries the no-right
+/// state via `None`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub enum OptionRight {
     /// Call option right.
     Call,
@@ -216,8 +220,8 @@ pub enum OptionRight {
 }
 
 impl OptionRight {
-    /// Return the single-character representation (`"C"` or `"P"`).
-    pub fn as_str(&self) -> &str {
+    /// Return the canonical single-character wire string (`"C"` or `"P"`).
+    pub fn as_str(&self) -> &'static str {
         match self {
             OptionRight::Call => "C",
             OptionRight::Put => "P",
@@ -227,7 +231,24 @@ impl OptionRight {
 
 impl fmt::Display for OptionRight {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for OptionRight {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "C" => Self::Call,
+            "P" => Self::Put,
+            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown OptionRight".into())),
+        })
+    }
+}
+
+impl ToField for OptionRight {
+    fn to_field(&self) -> String {
+        self.to_string()
     }
 }
 

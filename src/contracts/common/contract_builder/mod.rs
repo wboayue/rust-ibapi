@@ -1,4 +1,4 @@
-use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
+use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, OptionRight, SecurityType, Symbol};
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -32,12 +32,12 @@ use crate::Error;
 /// ## Creating an Option Contract
 ///
 /// ```no_run
-/// use ibapi::contracts::{ContractBuilder, SecurityType};
+/// use ibapi::contracts::{ContractBuilder, OptionRight, SecurityType};
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
 ///     .strike(150.0)
-///     .right("C")  // Call option
+///     .right(OptionRight::Call)
 ///     .last_trade_date_or_contract_month("20241220")
 ///     .build()?;
 /// # Ok(())
@@ -72,10 +72,9 @@ use crate::Error;
 ///
 /// The builder performs validation when [build](ContractBuilder::build) is called:
 /// - Symbol is always required
-/// - Option contracts require strike, right (P/C), and expiration date
+/// - Option contracts require strike, right, and expiration date
 /// - Futures contracts require contract month
 /// - Strike prices cannot be negative
-/// - Option rights must be "P" or "C" (case insensitive)
 #[derive(Clone, Debug, Default)]
 pub struct ContractBuilder {
     pub(crate) contract_id: Option<i32>,
@@ -83,7 +82,7 @@ pub struct ContractBuilder {
     pub(crate) security_type: Option<SecurityType>,
     pub(crate) last_trade_date_or_contract_month: Option<String>,
     pub(crate) strike: Option<f64>,
-    pub(crate) right: Option<String>,
+    pub(crate) right: Option<OptionRight>,
     pub(crate) multiplier: Option<String>,
     pub(crate) exchange: Option<String>,
     pub(crate) currency: Option<String>,
@@ -169,12 +168,12 @@ impl ContractBuilder {
     ///
     /// # Examples
     /// ```no_run
-    /// use ibapi::contracts::ContractBuilder;
+    /// use ibapi::contracts::{ContractBuilder, OptionRight};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
     ///     .strike(150.0)
-    ///     .right("C")
+    ///     .right(OptionRight::Call)
     ///     .last_trade_date_or_contract_month("20241220")
     ///     .build()?;
     /// # Ok(())
@@ -185,13 +184,11 @@ impl ContractBuilder {
         self
     }
 
-    /// Sets the option right (Put or Call)
+    /// Sets the option right (Call or Put).
     ///
-    /// Required for option contracts. Valid values are:
-    /// - "P" or "p" for Put options
-    /// - "C" or "c" for Call options
-    pub fn right<S: Into<String>>(mut self, right: S) -> Self {
-        self.right = Some(right.into());
+    /// Required for option contracts.
+    pub fn right(mut self, right: OptionRight) -> Self {
+        self.right = Some(right);
         self
     }
 
@@ -350,12 +347,12 @@ impl ContractBuilder {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::contracts::ContractBuilder;
+    /// use ibapi::contracts::{ContractBuilder, OptionRight};
     ///
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
     ///     .strike(150.0)
-    ///     .right("C")
+    ///     .right(OptionRight::Call)
     ///     .last_trade_date_or_contract_month("20241220")
     ///     .build()?;
     /// # Ok(())
@@ -443,7 +440,6 @@ impl ContractBuilder {
     /// - Option contracts are missing required fields (strike, right, expiration)
     /// - Futures contracts are missing contract month
     /// - Strike price is negative
-    /// - Option right is not "P" or "C"
     pub fn build(self) -> Result<Contract, Error> {
         // Symbol is required unless local_symbol or contract_id is provided
         if self.symbol.is_none() && self.local_symbol.is_none() && self.contract_id.is_none() {
@@ -465,14 +461,9 @@ impl ContractBuilder {
             }
 
             if self.right.is_none() {
-                return Err(Error::Simple("Right (P for PUT or C for CALL) is required for options".into()));
-            }
-
-            if let Some(ref right) = self.right {
-                let right_upper = right.to_uppercase();
-                if right_upper != "P" && right_upper != "C" {
-                    return Err(Error::Simple("Option right must be P for PUT or C for CALL".into()));
-                }
+                return Err(Error::Simple(
+                    "Right (OptionRight::Call or OptionRight::Put) is required for options".into(),
+                ));
             }
 
             if self.last_trade_date_or_contract_month.is_none() {
@@ -492,7 +483,7 @@ impl ContractBuilder {
             security_type,
             last_trade_date_or_contract_month: self.last_trade_date_or_contract_month.unwrap_or_default(),
             strike: self.strike.unwrap_or(0.0),
-            right: self.right.unwrap_or_default(),
+            right: self.right,
             multiplier: self.multiplier.unwrap_or_default(),
             exchange: Exchange::from(self.exchange.unwrap_or_default()),
             currency: Currency::from(self.currency.unwrap_or_default()),

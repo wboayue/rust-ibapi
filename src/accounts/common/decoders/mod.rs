@@ -4,7 +4,7 @@ use prost::Message;
 
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::parse_f64 as parse_str_f64;
+use crate::proto::decoders::{parse_f64 as parse_str_f64, parse_optional};
 use crate::{proto, server_versions, Error};
 
 use super::super::{
@@ -29,7 +29,7 @@ pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position,
         position.contract.security_type = SecurityType::from(&msg.next_string()?);
         position.contract.last_trade_date_or_contract_month = msg.next_string()?;
         position.contract.strike = msg.next_double()?;
-        position.contract.right = msg.next_string()?;
+        position.contract.right = parse_optional(Some(msg.next_string()?.as_str()))?;
         position.contract.multiplier = msg.next_string()?;
         position.contract.exchange = Exchange::from(msg.next_string()?);
         position.contract.currency = Currency::from(msg.next_string()?);
@@ -65,7 +65,7 @@ pub(crate) fn decode_position_multi(message: &mut ResponseMessage) -> Result<Pos
         position.contract.security_type = SecurityType::from(&msg.next_string()?);
         position.contract.last_trade_date_or_contract_month = msg.next_string()?;
         position.contract.strike = msg.next_double()?;
-        position.contract.right = msg.next_string()?;
+        position.contract.right = parse_optional(Some(msg.next_string()?.as_str()))?;
         position.contract.multiplier = msg.next_string()?;
         position.contract.exchange = Exchange::from(msg.next_string()?);
         position.contract.currency = Currency::from(msg.next_string()?);
@@ -203,7 +203,7 @@ pub(crate) fn decode_account_portfolio_value(server_version: i32, message: &mut 
         contract.security_type = SecurityType::from(&msg.next_string()?);
         contract.last_trade_date_or_contract_month = msg.next_string()?;
         contract.strike = msg.next_double()?;
-        contract.right = msg.next_string()?;
+        contract.right = parse_optional(Some(msg.next_string()?.as_str()))?;
         if message_version >= 7 {
             contract.multiplier = msg.next_string()?;
             contract.primary_exchange = Exchange::from(msg.next_string()?);
