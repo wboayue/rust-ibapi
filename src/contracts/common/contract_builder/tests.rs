@@ -28,7 +28,7 @@ fn test_contract_builder_field_setters() {
         .primary_exchange("NASDAQ")
         .trading_class("AAPL")
         .include_expired(true)
-        .security_id_type("ISIN")
+        .security_id_type(SecurityIdType::Isin)
         .security_id("US0378331005")
         .combo_legs_description("Test combo")
         .issuer_id("ISSUER123")
@@ -47,7 +47,7 @@ fn test_contract_builder_field_setters() {
     assert_eq!(builder.primary_exchange, Some("NASDAQ".to_string()));
     assert_eq!(builder.trading_class, Some("AAPL".to_string()));
     assert_eq!(builder.include_expired, Some(true));
-    assert_eq!(builder.security_id_type, Some("ISIN".to_string()));
+    assert_eq!(builder.security_id_type, Some(SecurityIdType::Isin));
     assert_eq!(builder.security_id, Some("US0378331005".to_string()));
     assert_eq!(builder.combo_legs_description, Some("Test combo".to_string()));
     assert_eq!(builder.issuer_id, Some("ISSUER123".to_string()));
@@ -351,7 +351,7 @@ fn test_contract_builder_defaults() {
     assert_eq!(contract.primary_exchange, "");
     assert_eq!(contract.trading_class, "");
     assert!(!contract.include_expired);
-    assert_eq!(contract.security_id_type, "");
+    assert!(contract.security_id_type.is_none());
     assert_eq!(contract.security_id, "");
     assert_eq!(contract.combo_legs_description, "");
     assert!(contract.combo_legs.is_empty());
@@ -386,7 +386,7 @@ fn setter_parity_with_contract_fields() {
         .primary_exchange("NASDAQ")
         .trading_class("NMS")
         .include_expired(true)
-        .security_id_type("CUSIP")
+        .security_id_type(SecurityIdType::Cusip)
         .security_id("037833100")
         .combo_legs_description("desc")
         .combo_legs(vec![ComboLeg {
@@ -447,7 +447,7 @@ fn setter_parity_with_contract_fields() {
     assert_eq!(primary_exchange, "NASDAQ");
     assert_eq!(trading_class, "NMS");
     assert!(include_expired);
-    assert_eq!(security_id_type, "CUSIP");
+    assert_eq!(security_id_type, Some(SecurityIdType::Cusip));
     assert_eq!(security_id, "037833100");
     assert_eq!(combo_legs_description, "desc");
     assert_eq!(combo_legs.len(), 1);

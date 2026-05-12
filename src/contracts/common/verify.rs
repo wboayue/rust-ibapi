@@ -3,7 +3,7 @@ use crate::protocol::{check_version, Features};
 use crate::Error;
 
 pub(crate) fn verify_contract(server_version: i32, contract: &Contract) -> Result<(), Error> {
-    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
+    if contract.security_id_type.is_some() || !contract.security_id.is_empty() {
         check_version(server_version, Features::SEC_ID_TYPE)?
     }
 

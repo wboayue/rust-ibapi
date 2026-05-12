@@ -199,8 +199,12 @@ pub struct Contract {
     pub trading_class: String,
     /// If set to true, contract details requests and historical data queries can be performed pertaining to expired futures contracts. Expired options or other instrument types are not available.
     pub include_expired: bool,
-    /// Security's identifier when querying contract's details or placing orders ISIN - Example: Apple: US0378331005 CUSIP - Example: Apple: 037833100.
-    pub security_id_type: String,
+    /// Security identifier scheme used in conjunction with `security_id`.
+    ///
+    /// `None` on contracts without an external identifier (the wire field is
+    /// empty). When set, `security_id` carries the corresponding identifier
+    /// value — e.g. `Some(SecurityIdType::Isin)` paired with `"US0378331005"`.
+    pub security_id_type: Option<SecurityIdType>,
     /// Identifier of the security type.
     pub security_id: String,
     /// Description of the combo legs.
@@ -235,7 +239,7 @@ impl Default for Contract {
             primary_exchange: Exchange::from(""), // Empty, not "SMART"
             trading_class: String::new(),
             include_expired: false,
-            security_id_type: String::new(),
+            security_id_type: None,
             security_id: String::new(),
             combo_legs_description: String::new(),
             combo_legs: Vec::new(),
@@ -396,7 +400,7 @@ impl Contract {
         Contract {
             symbol: Symbol::new(cusip_str.clone()),
             security_type: SecurityType::Bond,
-            security_id_type: "CUSIP".to_string(),
+            security_id_type: Some(SecurityIdType::Cusip),
             security_id: cusip_str,
             exchange: "SMART".into(),
             currency: "USD".into(),
@@ -429,7 +433,7 @@ impl Contract {
         Contract {
             symbol: Symbol::new(isin_str.clone()),
             security_type: SecurityType::Bond,
-            security_id_type: "ISIN".to_string(),
+            security_id_type: Some(SecurityIdType::Isin),
             security_id: isin_str,
             exchange: "SMART".into(),
             currency: currency.into(),
@@ -454,7 +458,7 @@ impl Contract {
             BondIdentifier::Cusip(cusip) => Contract {
                 symbol: Symbol::new(cusip.to_string()),
                 security_type: SecurityType::Bond,
-                security_id_type: "CUSIP".to_string(),
+                security_id_type: Some(SecurityIdType::Cusip),
                 security_id: cusip.to_string(),
                 exchange: "SMART".into(),
                 currency: "USD".into(),
@@ -475,7 +479,7 @@ impl Contract {
                 Contract {
                     symbol: Symbol::new(isin.to_string()),
                     security_type: SecurityType::Bond,
-                    security_id_type: "ISIN".to_string(),
+                    security_id_type: Some(SecurityIdType::Isin),
                     security_id: isin.to_string(),
                     exchange: "SMART".into(),
                     currency: currency.into(),

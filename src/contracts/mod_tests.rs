@@ -124,7 +124,7 @@ fn test_option_security_type_to_field() {
 fn assert_cusip_bond(bond: Contract, cusip: &str) {
     assert_eq!(bond.symbol, Symbol::from(cusip));
     assert_eq!(bond.security_type, SecurityType::Bond);
-    assert_eq!(bond.security_id_type, "CUSIP");
+    assert_eq!(bond.security_id_type, Some(SecurityIdType::Cusip));
     assert_eq!(bond.security_id, cusip);
     assert_eq!(bond.exchange, Exchange::from("SMART"));
     assert_eq!(bond.currency, Currency::from("USD"));
@@ -151,7 +151,7 @@ fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
         let bond = make_bond(isin);
         assert_eq!(bond.symbol, Symbol::from(isin), "symbol for {isin}");
         assert_eq!(bond.security_type, SecurityType::Bond);
-        assert_eq!(bond.security_id_type, "ISIN");
+        assert_eq!(bond.security_id_type, Some(SecurityIdType::Isin));
         assert_eq!(bond.security_id, isin);
         assert_eq!(bond.exchange, Exchange::from("SMART"));
         assert_eq!(bond.currency, Currency::from(expected_currency), "currency for {isin}");

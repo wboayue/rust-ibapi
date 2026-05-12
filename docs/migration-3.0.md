@@ -311,6 +311,42 @@ let builder_call = ContractBuilder::option("AAPL", "SMART", "USD")
 
 If you match on the field, swap `if contract.right == "C"` for `if contract.right == Some(OptionRight::Call)`. To emit the wire string, call `.as_str()` (`OptionRight::Call.as_str() == "C"`).
 
+### 11. `Contract.security_id_type` typed as `Option<SecurityIdType>`
+
+`Contract.security_id_type` was `String` in 2.x (empty string meant "no identifier scheme"). In 3.0 it is typed as `Option<SecurityIdType>` — `None` on contracts without an external identifier, `Some(SecurityIdType::Isin)` / `::Cusip` / `::Sedol` / `::Ric` / `::Figi` when one is paired with `security_id`. The decoder rejects unknown wire values as `Error::Parse` rather than silently storing them as raw strings.
+
+`SecurityIdType` is `#[non_exhaustive]` (IBKR's catalogue grows over time) and implements `Display` returning the canonical uppercase wire string and `FromStr<Err = Error>`. `FromStr` is case-sensitive; lowercase forms now produce `Err`.
+
+`ContractBuilder::security_id_type()` changes from `impl Into<String>` to `SecurityIdType`. `Contract::bond_cusip` / `Contract::bond_isin` and `Contract::bond(BondIdentifier::*)` continue to set the field internally — no caller-side change for the bond constructors.
+
+```rust,ignore
+// v2.x
+let bond = ContractBuilder::new()
+    .symbol("AAPL")
+    .security_type(SecurityType::Stock)
+    .exchange("SMART")
+    .currency("USD")
+    .security_id_type("ISIN")
+    .security_id("US0378331005")
+    .build()?;
+assert_eq!(bond.security_id_type, "ISIN");
+
+// v3.0
+use ibapi::contracts::SecurityIdType;
+
+let bond = ContractBuilder::new()
+    .symbol("AAPL")
+    .security_type(SecurityType::Stock)
+    .exchange("SMART")
+    .currency("USD")
+    .security_id_type(SecurityIdType::Isin)
+    .security_id("US0378331005")
+    .build()?;
+assert_eq!(bond.security_id_type, Some(SecurityIdType::Isin));
+```
+
+If you match on the field, swap `if contract.security_id_type == "ISIN"` for `if contract.security_id_type == Some(SecurityIdType::Isin)`. To emit the wire string, call `.as_str()` (`SecurityIdType::Isin.as_str() == "ISIN"`).
+
 ## Before / after: common subscription patterns
 
 ### Order construction

@@ -267,6 +267,53 @@ impl OptionRight {
 
 impl_wire_enum!(OptionRight);
 
+/// Security identifier scheme. Matches IBKR's `secIdType` wire vocabulary.
+///
+/// No `Default` — `Contract.security_id_type: Option<SecurityIdType>` carries
+/// the no-identifier state via `None`. `#[non_exhaustive]` because IBKR's
+/// catalogue grows over time.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
+pub enum SecurityIdType {
+    /// CUSIP — North American security identifier.
+    Cusip,
+    /// ISIN — international security identifier.
+    Isin,
+    /// SEDOL — UK/Irish security identifier.
+    Sedol,
+    /// RIC — Reuters Instrument Code.
+    Ric,
+    /// FIGI — Bloomberg Financial Instrument Global Identifier.
+    Figi,
+}
+
+impl SecurityIdType {
+    /// Return the canonical IBKR wire string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SecurityIdType::Cusip => "CUSIP",
+            SecurityIdType::Isin => "ISIN",
+            SecurityIdType::Sedol => "SEDOL",
+            SecurityIdType::Ric => "RIC",
+            SecurityIdType::Figi => "FIGI",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "CUSIP" => Some(Self::Cusip),
+            "ISIN" => Some(Self::Isin),
+            "SEDOL" => Some(Self::Sedol),
+            "RIC" => Some(Self::Ric),
+            "FIGI" => Some(Self::Figi),
+            _ => None,
+        }
+    }
+}
+
+impl_wire_enum!(SecurityIdType);
+
 /// Validated strike price (must be positive)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -163,6 +163,23 @@ fn leg_action_default_is_buy() {
 }
 
 #[test]
+fn security_id_type_round_trip() {
+    check_wire_enum_round_trip(&[
+        (SecurityIdType::Cusip, "CUSIP"),
+        (SecurityIdType::Isin, "ISIN"),
+        (SecurityIdType::Sedol, "SEDOL"),
+        (SecurityIdType::Ric, "RIC"),
+        (SecurityIdType::Figi, "FIGI"),
+    ]);
+}
+
+#[test]
+fn security_id_type_from_str_rejects_unknown() {
+    // Empty + arbitrary; case-sensitive (lowercase + mixed-case rejected); trailing whitespace not on wire.
+    check_wire_enum_rejects_unknown::<SecurityIdType>(&["", "INVALID", "cusip", "isin ", "Figi"]);
+}
+
+#[test]
 fn strike_new_accepts_positive() {
     let s = Strike::new(150.25).expect("positive strike must succeed");
     assert_eq!(s.value(), 150.25);

@@ -1,4 +1,4 @@
-use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, OptionRight, SecurityType, Symbol};
+use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -90,7 +90,7 @@ pub struct ContractBuilder {
     pub(crate) primary_exchange: Option<String>,
     pub(crate) trading_class: Option<String>,
     pub(crate) include_expired: Option<bool>,
-    pub(crate) security_id_type: Option<String>,
+    pub(crate) security_id_type: Option<SecurityIdType>,
     pub(crate) security_id: Option<String>,
     pub(crate) combo_legs_description: Option<String>,
     pub(crate) combo_legs: Option<Vec<ComboLeg>>,
@@ -255,11 +255,9 @@ impl ContractBuilder {
         self
     }
 
-    /// Sets the security ID type
-    ///
-    /// Examples: "ISIN", "CUSIP", "SEDOL", "RIC"
-    pub fn security_id_type<S: Into<String>>(mut self, security_id_type: S) -> Self {
-        self.security_id_type = Some(security_id_type.into());
+    /// Sets the security ID scheme paired with [`security_id`](Self::security_id).
+    pub fn security_id_type(mut self, security_id_type: SecurityIdType) -> Self {
+        self.security_id_type = Some(security_id_type);
         self
     }
 
@@ -491,7 +489,7 @@ impl ContractBuilder {
             primary_exchange: Exchange::from(self.primary_exchange.unwrap_or_default()),
             trading_class: self.trading_class.unwrap_or_default(),
             include_expired: self.include_expired.unwrap_or(false),
-            security_id_type: self.security_id_type.unwrap_or_default(),
+            security_id_type: self.security_id_type,
             security_id: self.security_id.unwrap_or_default(),
             combo_legs_description: self.combo_legs_description.unwrap_or_default(),
             combo_legs: self.combo_legs.unwrap_or_default(),
