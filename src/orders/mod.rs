@@ -774,11 +774,7 @@ impl OrderStatusKind {
             _ => None,
         }
     }
-}
 
-impl_wire_enum!(OrderStatusKind);
-
-impl OrderStatusKind {
     /// Order is still working in the market: `PreSubmitted`, `PendingSubmit`,
     /// `PendingCancel`, `Submitted`.
     ///
@@ -795,6 +791,8 @@ impl OrderStatusKind {
         matches!(self, Self::Filled | Self::Cancelled | Self::ApiCancelled | Self::Inactive)
     }
 }
+
+impl_wire_enum!(OrderStatusKind);
 
 /// Time in force specifies how long an order remains active.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
