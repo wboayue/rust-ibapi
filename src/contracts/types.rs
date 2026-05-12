@@ -35,13 +35,13 @@ macro_rules! impl_str_partial_eq {
     };
 }
 
-/// Generate the three trait impls every typed-status enum needs from a
+/// Generate `Display` / `FromStr<Err = Error>` / `ToField` impls from
 /// hand-written `as_str(&self) -> &'static str` + `from_wire(&str) -> Option<Self>`
-/// pair. The data tables stay in normal Rust (visible to goto-def); only the
-/// boilerplate plumbing — `Display` via `as_str`, `FromStr` via `from_wire`
-/// with canonical `Error::Parse`, `ToField` via `Display` — collapses through
-/// the macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
-/// macro is the only way to deduplicate (CLAUDE.md rule 25).
+/// methods. The data tables stay in normal Rust (visible to goto-def); only
+/// the boilerplate plumbing — `Display` via `as_str`, `FromStr` via `from_wire`
+/// with canonical `Error::Parse`, `ToField` via `Display` — runs through the
+/// macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
+/// macro is the only viable shape.
 macro_rules! impl_wire_enum {
     ($name:ident) => {
         impl ::std::fmt::Display for $name {
@@ -256,12 +256,12 @@ impl OptionRight {
         }
     }
 
-    pub(crate) fn from_wire(s: &str) -> Option<Self> {
-        Some(match s {
-            "C" => Self::Call,
-            "P" => Self::Put,
-            _ => return None,
-        })
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "C" => Some(Self::Call),
+            "P" => Some(Self::Put),
+            _ => None,
+        }
     }
 }
 
@@ -583,13 +583,13 @@ impl LegAction {
         }
     }
 
-    pub(crate) fn from_wire(s: &str) -> Option<Self> {
-        Some(match s {
-            "BUY" => Self::Buy,
-            "SELL" => Self::Sell,
-            "SSHORT" => Self::SellShort,
-            _ => return None,
-        })
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "BUY" => Some(Self::Buy),
+            "SELL" => Some(Self::Sell),
+            "SSHORT" => Some(Self::SellShort),
+            _ => None,
+        }
     }
 }
 

@@ -115,7 +115,6 @@ where
 {
     for &(variant, wire) in table {
         assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
-        assert_eq!(format!("{variant}"), wire, "format! for {variant:?}");
         assert_eq!(T::from_str(wire).unwrap(), variant, "FromStr({wire})");
         assert_eq!(variant.to_field(), wire, "ToField for {variant:?}");
     }
