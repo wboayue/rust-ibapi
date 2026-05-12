@@ -22,3 +22,6 @@ tarpaulin-report.html
 /sandbox
 
 .vscode
+
+# Claude Code local state
+.claude/
