@@ -94,6 +94,13 @@ cargo build -p ibapi-integration-sync  --tests
 cargo build -p ibapi-integration-async --tests
 
 # Generate coverage report (opens HTML report in browser)
+# Uses `cargo +nightly llvm-cov --all-features --doctests` — nightly is required
+# because rustdoc's --persist-doctests (the hook llvm-cov needs to instrument
+# doc-tests) sits behind -Z unstable-options. Stable + --lib alone over-counts:
+# it misses every doc-test example AND inserts phantom uncovered regions on
+# `..Default::default()` and `/// ```` lines, so files like contracts/mod.rs
+# show ~12% phantom-uncovered that disappears under nightly + --doctests.
+# Stable still drives build/test/CI; this is a workflow-only nightly use.
 just cover
 ```
 
