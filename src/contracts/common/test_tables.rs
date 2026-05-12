@@ -625,6 +625,34 @@ pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
             should_error: true,
             error_contains: Some("trading class"),
         },
+        VerifyContractTestCase {
+            name: "contract with primary exchange - old server",
+            contract: Contract {
+                symbol: Symbol::from("AAPL"),
+                security_type: SecurityType::Stock,
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
+                primary_exchange: Exchange::from("NASDAQ"),
+                ..Default::default()
+            },
+            server_version: server_versions::LINKING - 1,
+            should_error: true,
+            error_contains: Some("linking"),
+        },
+        VerifyContractTestCase {
+            name: "contract with issuer ID - old server",
+            contract: Contract {
+                symbol: Symbol::from("AAPL"),
+                security_type: SecurityType::Bond,
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
+                issuer_id: "Q123".to_string(),
+                ..Default::default()
+            },
+            server_version: server_versions::BOND_ISSUERID - 1,
+            should_error: true,
+            error_contains: Some("bond issuer ID"),
+        },
     ]
 }
 
@@ -794,6 +822,22 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
             ordered_responses: vec![contract_data_end(9000)],
             should_error: false,
             error_contains: None,
+            expected_count: 0,
+        },
+        ContractDetailsErrorTestCase {
+            name: "unexpected message type",
+            contract: Contract::stock("AAPL").build(),
+            ordered_responses: vec![text_response("79|9000|0|")],
+            should_error: true,
+            error_contains: Some("UnexpectedResponse"),
+            expected_count: 0,
+        },
+        ContractDetailsErrorTestCase {
+            name: "stream closed without ContractDataEnd",
+            contract: Contract::stock("AAPL").build(),
+            ordered_responses: vec![],
+            should_error: true,
+            error_contains: Some("UnexpectedEndOfStream"),
             expected_count: 0,
         },
     ]

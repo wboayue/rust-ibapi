@@ -88,6 +88,97 @@ fn test_security_type_from() {
 }
 
 #[test]
+fn test_security_type_display_all_variants() {
+    let cases = [
+        (SecurityType::Stock, "STK"),
+        (SecurityType::Option, "OPT"),
+        (SecurityType::Future, "FUT"),
+        (SecurityType::ContinuousFuture, "CONTFUT"),
+        (SecurityType::Index, "IND"),
+        (SecurityType::FuturesOption, "FOP"),
+        (SecurityType::ForexPair, "CASH"),
+        (SecurityType::Spread, "BAG"),
+        (SecurityType::Warrant, "WAR"),
+        (SecurityType::Bond, "BOND"),
+        (SecurityType::Commodity, "CMDTY"),
+        (SecurityType::News, "NEWS"),
+        (SecurityType::MutualFund, "FUND"),
+        (SecurityType::Crypto, "CRYPTO"),
+        (SecurityType::CFD, "CFD"),
+        (SecurityType::Other("XYZ".to_string()), "XYZ"),
+    ];
+    for (variant, expected) in &cases {
+        assert_eq!(format!("{variant}"), *expected, "Display mismatch for {variant:?}");
+        assert_eq!(variant.to_field(), *expected, "ToField mismatch for {variant:?}");
+    }
+}
+
+#[test]
+fn test_option_security_type_to_field() {
+    let some: Option<SecurityType> = Some(SecurityType::Option);
+    assert_eq!(some.to_field(), "OPT");
+    let none: Option<SecurityType> = None;
+    assert_eq!(none.to_field(), "");
+}
+
+fn assert_cusip_bond(bond: Contract, cusip: &str) {
+    assert_eq!(bond.symbol, Symbol::from(cusip));
+    assert_eq!(bond.security_type, SecurityType::Bond);
+    assert_eq!(bond.security_id_type, "CUSIP");
+    assert_eq!(bond.security_id, cusip);
+    assert_eq!(bond.exchange, Exchange::from("SMART"));
+    assert_eq!(bond.currency, Currency::from("USD"));
+}
+
+fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
+    let cases = [
+        ("US0378331005", "USD"),
+        ("CA1234567890", "USD"),
+        ("GB0002374006", "GBP"),
+        ("JP3902900004", "JPY"),
+        ("CH0012032048", "CHF"),
+        ("AU000000BHP4", "AUD"),
+        ("DE0001102309", "EUR"),
+        ("FR0000131104", "EUR"),
+        ("IT0001234567", "EUR"),
+        ("ES0123456789", "EUR"),
+        ("NL0011794037", "EUR"),
+        ("BE0974293251", "EUR"),
+        ("XX0000000000", "USD"),
+        ("X", "USD"),
+    ];
+    for (isin, expected_currency) in cases {
+        let bond = make_bond(isin);
+        assert_eq!(bond.symbol, Symbol::from(isin), "symbol for {isin}");
+        assert_eq!(bond.security_type, SecurityType::Bond);
+        assert_eq!(bond.security_id_type, "ISIN");
+        assert_eq!(bond.security_id, isin);
+        assert_eq!(bond.exchange, Exchange::from("SMART"));
+        assert_eq!(bond.currency, Currency::from(expected_currency), "currency for {isin}");
+    }
+}
+
+#[test]
+fn test_bond_cusip_constructor() {
+    assert_cusip_bond(Contract::bond_cusip("912810RN0"), "912810RN0");
+}
+
+#[test]
+fn test_bond_constructor_cusip_variant() {
+    assert_cusip_bond(Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0"))), "912810RN0");
+}
+
+#[test]
+fn test_bond_isin_constructor_currency_mapping() {
+    assert_isin_currency_mapping(|isin| Contract::bond_isin(isin));
+}
+
+#[test]
+fn test_bond_constructor_isin_currency_mapping() {
+    assert_isin_currency_mapping(|isin| Contract::bond(BondIdentifier::Isin(Isin::new(isin))));
+}
+
+#[test]
 fn test_combo_leg_open_close() {
     // Test From<i32> implementation
     assert_eq!(ComboLegOpenClose::from(0), ComboLegOpenClose::Same, "0 should be Same");

@@ -15,7 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.95.0
+      # Coverage runs on nightly (not the pinned 1.95.0 toolchain used by
+      # build/test/CI) so doc-tests can be instrumented. rustdoc's
+      # --persist-doctests sits behind -Z unstable-options; without it the
+      # report misses every `# Examples` block AND inserts phantom uncovered
+      # regions on `..Default::default()` and `/// ```` lines. Mirrors `just
+      # cover`. Stable still gates build/clippy/test in ci.yml.
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
@@ -23,12 +29,12 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      - name: Generate coverage (sync + async, merged)
+      - name: Generate coverage (sync + async + doctests, merged)
         run: |
           mkdir -p coverage
           cargo llvm-cov clean --workspace
-          cargo llvm-cov --no-report --no-default-features --features sync
-          cargo llvm-cov --no-report --no-default-features --features async
+          cargo llvm-cov --no-report --doctests --no-default-features --features sync
+          cargo llvm-cov --no-report --doctests --no-default-features --features async
           cargo llvm-cov report --lcov --output-path coverage/lcov.info
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
