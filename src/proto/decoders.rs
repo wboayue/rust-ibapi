@@ -2,7 +2,7 @@ use prost::Message;
 
 use crate::contracts::{
     ComboLeg, ComboLegOpenClose, Contract, ContractDetails, Currency, DeltaNeutralContract, Exchange, FundAssetType, FundDistributionPolicyIndicator,
-    IneligibilityReason, LegAction, SecurityType, Symbol, TagValue,
+    IneligibilityReason, LegAction, SecurityIdType, SecurityType, Symbol, TagValue,
 };
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
@@ -98,7 +98,7 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
         local_symbol: s(&proto.local_symbol),
         trading_class: s(&proto.trading_class),
         include_expired: proto.include_expired.unwrap_or_default(),
-        security_id_type: s(&proto.sec_id_type),
+        security_id_type: parse_optional::<SecurityIdType>(proto.sec_id_type.as_deref())?,
         security_id: s(&proto.sec_id),
         description: s(&proto.description),
         issuer_id: s(&proto.issuer_id),

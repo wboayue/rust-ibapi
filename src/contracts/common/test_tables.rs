@@ -1,7 +1,7 @@
 //! Table-driven test data for contracts module tests
 
 use crate::common::test_utils::helpers::{proto_response, text_response};
-use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityType, Symbol};
+use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::server_versions;
 use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, symbol_samples, symbol_samples_entry};
@@ -604,7 +604,7 @@ pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
                 exchange: Exchange::from("SMART"),
                 currency: Currency::from("USD"),
                 security_id: "US0378331005".to_string(),
-                security_id_type: "ISIN".to_string(),
+                security_id_type: Some(SecurityIdType::Isin),
                 ..Default::default()
             },
             server_version: server_versions::SEC_ID_TYPE - 1,

@@ -208,7 +208,7 @@ pub(crate) fn verify_order_contract(client: &impl VersionedClient, contract: &Co
         client.check_version(server_versions::PLACE_ORDER_CONID, "It does not support contract_id parameter")?
     }
 
-    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
+    if contract.security_id_type.is_some() || !contract.security_id.is_empty() {
         client.check_version(server_versions::SEC_ID_TYPE, "It does not support sec_id_type and sec_id parameters")?
     }
 

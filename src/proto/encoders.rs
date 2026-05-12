@@ -79,7 +79,7 @@ pub fn encode_contract_with_order(contract: &Contract, order: Option<&Order>) ->
         currency: some_str(&contract.currency.to_string()),
         local_symbol: some_str(&contract.local_symbol),
         trading_class: some_str(&contract.trading_class),
-        sec_id_type: some_str(&contract.security_id_type),
+        sec_id_type: contract.security_id_type.as_ref().map(|s| s.to_string()),
         sec_id: some_str(&contract.security_id),
         description: some_str(&contract.description),
         issuer_id: some_str(&contract.issuer_id),
