@@ -121,60 +121,20 @@ fn test_option_security_type_to_field() {
     assert_eq!(none.to_field(), "");
 }
 
-#[test]
-fn test_bond_cusip_constructor() {
-    let bond = Contract::bond_cusip("912810RN0");
-    assert_eq!(bond.symbol, Symbol::from("912810RN0"));
+fn assert_cusip_bond(bond: Contract, cusip: &str) {
+    assert_eq!(bond.symbol, Symbol::from(cusip));
     assert_eq!(bond.security_type, SecurityType::Bond);
     assert_eq!(bond.security_id_type, "CUSIP");
-    assert_eq!(bond.security_id, "912810RN0");
+    assert_eq!(bond.security_id, cusip);
     assert_eq!(bond.exchange, Exchange::from("SMART"));
     assert_eq!(bond.currency, Currency::from("USD"));
 }
 
-#[test]
-fn test_bond_isin_constructor_currency_mapping() {
-    let cases = vec![
-        ("US0378331005", "USD"),
-        ("CA1234567890", "USD"),
-        ("GB0002374006", "GBP"),
-        ("JP3902900004", "JPY"),
-        ("CH0012032048", "CHF"),
-        ("AU000000BHP4", "AUD"),
-        ("DE0001102309", "EUR"),
-        ("FR0000131104", "EUR"),
-        ("IT0001234567", "EUR"),
-        ("ES0123456789", "EUR"),
-        ("NL0011794037", "EUR"),
-        ("BE0974293251", "EUR"),
-        ("XX0000000000", "USD"), // unknown country → USD default
-        ("X", "USD"),            // shorter than 2 chars → USD default
-    ];
-    for (isin, expected_currency) in &cases {
-        let bond = Contract::bond_isin(*isin);
-        assert_eq!(bond.symbol, Symbol::from(*isin), "symbol for {isin}");
-        assert_eq!(bond.security_type, SecurityType::Bond);
-        assert_eq!(bond.security_id_type, "ISIN");
-        assert_eq!(bond.security_id, *isin);
-        assert_eq!(bond.exchange, Exchange::from("SMART"));
-        assert_eq!(bond.currency, Currency::from(*expected_currency), "currency for {isin}");
-    }
-}
-
-#[test]
-fn test_bond_constructor_cusip_variant() {
-    let bond = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
-    assert_eq!(bond.symbol, Symbol::from("912810RN0"));
-    assert_eq!(bond.security_type, SecurityType::Bond);
-    assert_eq!(bond.security_id_type, "CUSIP");
-    assert_eq!(bond.security_id, "912810RN0");
-    assert_eq!(bond.exchange, Exchange::from("SMART"));
-    assert_eq!(bond.currency, Currency::from("USD"));
-}
-
-#[test]
-fn test_bond_constructor_isin_currency_mapping() {
-    let cases = vec![
+fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
+    // ISIN country-code prefix → expected currency (per `Contract::bond_isin`
+    // / `Contract::bond` in mod.rs). Non-mapped prefixes and inputs shorter
+    // than 2 chars fall through to USD.
+    let cases = [
         ("US0378331005", "USD"),
         ("CA1234567890", "USD"),
         ("GB0002374006", "GBP"),
@@ -190,15 +150,35 @@ fn test_bond_constructor_isin_currency_mapping() {
         ("XX0000000000", "USD"),
         ("X", "USD"),
     ];
-    for (isin, expected_currency) in &cases {
-        let bond = Contract::bond(BondIdentifier::Isin(Isin::new(*isin)));
-        assert_eq!(bond.symbol, Symbol::from(*isin), "symbol for {isin}");
+    for (isin, expected_currency) in cases {
+        let bond = make_bond(isin);
+        assert_eq!(bond.symbol, Symbol::from(isin), "symbol for {isin}");
         assert_eq!(bond.security_type, SecurityType::Bond);
         assert_eq!(bond.security_id_type, "ISIN");
-        assert_eq!(bond.security_id, *isin);
+        assert_eq!(bond.security_id, isin);
         assert_eq!(bond.exchange, Exchange::from("SMART"));
-        assert_eq!(bond.currency, Currency::from(*expected_currency), "currency for {isin}");
+        assert_eq!(bond.currency, Currency::from(expected_currency), "currency for {isin}");
     }
+}
+
+#[test]
+fn test_bond_cusip_constructor() {
+    assert_cusip_bond(Contract::bond_cusip("912810RN0"), "912810RN0");
+}
+
+#[test]
+fn test_bond_constructor_cusip_variant() {
+    assert_cusip_bond(Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0"))), "912810RN0");
+}
+
+#[test]
+fn test_bond_isin_constructor_currency_mapping() {
+    assert_isin_currency_mapping(|isin| Contract::bond_isin(isin));
+}
+
+#[test]
+fn test_bond_constructor_isin_currency_mapping() {
+    assert_isin_currency_mapping(|isin| Contract::bond(BondIdentifier::Isin(Isin::new(isin))));
 }
 
 #[test]
