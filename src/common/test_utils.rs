@@ -97,6 +97,20 @@ pub mod helpers {
             .collect()
     }
 
+    /// Asserts that `err` is `Error::Message(expected_code, msg)` and that `msg` contains `expected_substring`.
+    pub fn assert_tws_error_message(err: crate::Error, expected_code: i32, expected_substring: &str) {
+        match err {
+            crate::Error::Message(code, msg) => {
+                assert_eq!(code, expected_code, "wrong error code");
+                assert!(
+                    msg.contains(expected_substring),
+                    "error message {msg:?} does not contain {expected_substring:?}"
+                );
+            }
+            other => panic!("expected Error::Message({expected_code}, _), got {other:?}"),
+        }
+    }
+
     /// Asserts that a request message contains a specific substring
     pub fn assert_request_contains(message_bus: &MessageBusStub, index: usize, substring: &str) {
         let request_messages = get_request_messages(message_bus);
