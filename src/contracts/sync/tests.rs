@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, request_message_count, text_response, TEST_REQ_ID_FIRST};
 use crate::contracts::common::test_tables::*;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -388,4 +388,75 @@ fn test_cancel_contract_details() {
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &cancel_contract_data_request().request_id(42));
+}
+
+#[test]
+fn matching_symbols_returns_server_error() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
+        "4|2|9000|321|invalid pattern|",
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let Err(crate::Error::Simple(msg)) = client.matching_symbols("???") else {
+        panic!("expected Err(Error::Simple)");
+    };
+    assert!(msg.contains("unexpected error"), "got {msg}");
+}
+
+#[test]
+fn matching_symbols_rejects_unexpected_message() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("10|9000|")]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let Err(crate::Error::Simple(msg)) = client.matching_symbols("AAPL") else {
+        panic!("expected Err(Error::Simple)");
+    };
+    assert!(msg.contains("unexpected message"), "got {msg}");
+}
+
+#[test]
+fn matching_symbols_returns_empty_on_closed_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+
+    let symbols: Vec<_> = client.matching_symbols("AAPL").expect("ok on empty stream").collect();
+    assert!(symbols.is_empty());
+}
+
+#[test]
+fn market_rule_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
+
+    let err = client.market_rule(26).unwrap_err();
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no market rule found");
+}
+
+#[test]
+fn calculate_option_price_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
+
+    let err = client.calculate_option_price(&contract, 0.25, 155.0).unwrap_err();
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no data for option calculation");
+}
+
+#[test]
+fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
+    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
+
+    let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).unwrap_err();
+    let crate::Error::Simple(msg) = &err else {
+        panic!("expected Error::Simple, got {err:?}");
+    };
+    assert_eq!(msg, "no data for option calculation");
 }
