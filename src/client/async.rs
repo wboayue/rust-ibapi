@@ -339,7 +339,7 @@ impl Client {
 
     /// Creates a stubbed client for testing
     #[cfg(test)]
-    pub fn stubbed(message_bus: Arc<dyn AsyncMessageBus>, server_version: i32) -> Self {
+    pub(crate) fn stubbed(message_bus: Arc<dyn AsyncMessageBus>, server_version: i32) -> Self {
         use crate::connection::ConnectionMetadata;
 
         let connection_metadata = ConnectionMetadata {
@@ -352,12 +352,6 @@ impl Client {
         };
 
         Client::new(connection_metadata, message_bus).expect("Failed to create stubbed client")
-    }
-
-    /// Get a reference to the message bus for testing
-    #[cfg(test)]
-    pub fn message_bus(&self) -> &Arc<dyn AsyncMessageBus> {
-        &self.message_bus
     }
 }
 
