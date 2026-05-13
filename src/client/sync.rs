@@ -416,42 +416,6 @@ impl Debug for Client {
     }
 }
 
-/// Subscriptions facilitate handling responses from TWS that may be delayed or delivered periodically.
-///
-/// They offer both blocking and non-blocking methods for retrieving data.
-///
-/// In the simplest case a subscription can be implicitly converted to blocking iterator
-/// that cancels the subscription when it goes out of scope.
-///
-/// ```no_run
-/// use ibapi::contracts::Contract;
-/// use ibapi::market_data::TradingHours;
-/// use ibapi::client::blocking::Client;
-///
-/// let connection_url = "127.0.0.1:4002";
-/// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
-///
-/// // Request real-time bars data for AAPL with 5-second intervals
-/// let contract = Contract::stock("AAPL").build();
-/// let subscription = client
-///     .realtime_bars(&contract)
-///     .trading_hours(TradingHours::Extended)
-///     .subscribe()
-///     .expect("realtime bars request failed!");
-///
-/// // Use the subscription as a blocking iterator
-/// for bar in subscription {
-///     // Process each bar here (e.g., print or use in calculations)
-///     println!("Received bar: {bar:?}");
-/// }
-/// // The subscription goes out of scope and is automatically cancelled.
-/// ```
-///
-/// Subscriptions can be explicitly canceled using the [`cancel`](crate::subscriptions::sync::Subscription::cancel) method.
-///
-// Re-export SharesChannel trait from subscriptions module
-pub use crate::subscriptions::SharesChannel;
-
 #[cfg(test)]
 #[path = "sync_tests.rs"]
 mod tests;
