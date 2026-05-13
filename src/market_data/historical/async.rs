@@ -518,44 +518,30 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::{HistoricalBarUpdate, ToDuration};
     /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
-    /// use ibapi::subscriptions::SubscriptionItem;
+    /// use ibapi::subscriptions::SubscriptionItemStreamExt;
     ///
     /// #[tokio::main]
-    /// async fn main() {
+    /// async fn main() -> Result<(), ibapi::Error> {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
     ///     let contract = Contract::stock("SPY").build();
-    ///     let mut subscription = client
+    ///
+    ///     let subscription = client
     ///         .historical_data_streaming(
-    ///             &contract,
-    ///             3.days(),
-    ///             HistoricalBarSize::Min15,
-    ///             HistoricalWhatToShow::Trades,
-    ///             TradingHours::Extended,
-    ///             true,
+    ///             &contract, 3.days(), HistoricalBarSize::Min15,
+    ///             HistoricalWhatToShow::Trades, TradingHours::Extended, true,
     ///         )
     ///         .await
     ///         .expect("streaming request failed");
     ///
-    ///     while let Some(item) = subscription.next().await {
-    ///         match item {
-    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data))) => {
-    ///                 println!("Initial bars: {}", data.bars.len());
-    ///             }
-    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::Update(bar))) => {
-    ///                 println!("Streaming update: {bar:?}");
-    ///             }
-    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { start, end })) => {
-    ///                 println!("Stream ended: {start} - {end}");
-    ///                 break;
-    ///             }
-    ///             Ok(SubscriptionItem::Notice(notice)) => eprintln!("notice: {notice}"),
-    ///             Err(e) => {
-    ///                 eprintln!("error: {e}");
-    ///                 break;
-    ///             }
+    ///     let mut data = subscription.filter_data();
+    ///     while let Some(update) = data.next().await {
+    ///         match update? {
+    ///             HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
+    ///             HistoricalBarUpdate::Update(bar) => println!("Streaming update: {bar:?}"),
+    ///             HistoricalBarUpdate::End { start, end } => println!("Stream ended: {start} - {end}"),
     ///         }
     ///     }
+    ///     Ok(())
     /// }
     /// ```
     pub async fn historical_data_streaming(
@@ -598,11 +584,7 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
 }
 
 async fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
-    }
-
-    check_version(client.server_version(), Features::HISTORICAL_SCHEDULE)?;
+    common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
 
     loop {
         let builder = client.request();

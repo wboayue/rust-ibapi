@@ -520,11 +520,7 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
 }
 
 fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
-    }
-
-    check_version(client.server_version(), Features::HISTORICAL_SCHEDULE)?;
+    common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
 
     loop {
         let builder = client.request();
