@@ -37,12 +37,6 @@ pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
 #[cfg(feature = "sync")]
 pub(crate) use crate::subscriptions::StreamDecoder;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
-pub use crate::subscriptions::sync::Subscription;
-
-#[cfg(feature = "async")]
-pub use crate::subscriptions::r#async::Subscription;
-
 #[cfg(feature = "sync")]
 pub use crate::subscriptions::sync::SharesChannel;
 
