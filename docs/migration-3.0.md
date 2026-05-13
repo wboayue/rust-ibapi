@@ -387,6 +387,18 @@ use ibapi::subscriptions::Subscription;
 use ibapi::prelude::*;
 ```
 
+### 14. `SharesChannel` import path consolidation
+
+Mirror of §13 for the `SharesChannel` marker trait. `ibapi::client::SharesChannel` and `ibapi::client::sync::SharesChannel` were duplicate re-exports of `ibapi::subscriptions::SharesChannel`. In 3.0 both are removed; the canonical path is `ibapi::subscriptions::SharesChannel`. The labelled sync-explicit path `ibapi::client::blocking::SharesChannel` is unchanged.
+
+```rust,ignore
+// v2.x / pre-PR
+use ibapi::client::SharesChannel;
+
+// v3.0
+use ibapi::subscriptions::SharesChannel;
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction
