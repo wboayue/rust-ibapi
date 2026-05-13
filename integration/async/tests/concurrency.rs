@@ -48,22 +48,8 @@ async fn concurrent_historical_data() {
     rate_limit();
     rate_limit();
     let (r1, r2) = tokio::join!(
-        client.historical_data(
-            &aapl,
-            None,
-            Duration::days(5),
-            BarSize::Day,
-            Some(WhatToShow::Trades),
-            TradingHours::Regular
-        ),
-        client.historical_data(
-            &msft,
-            None,
-            Duration::days(5),
-            BarSize::Day,
-            Some(WhatToShow::Trades),
-            TradingHours::Regular
-        ),
+        client.historical_data(&aapl, None, Duration::days(5), BarSize::Day, WhatToShow::Trades, TradingHours::Regular),
+        client.historical_data(&msft, None, Duration::days(5), BarSize::Day, WhatToShow::Trades, TradingHours::Regular),
     );
 
     let d1 = r1.expect("AAPL historical_data failed");

@@ -56,7 +56,7 @@ async fn historical_data_daily() {
             None,
             Duration::days(5),
             BarSize::Day,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
         )
         .await
@@ -81,7 +81,7 @@ async fn historical_data_hourly() {
             None,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
         )
         .await
@@ -105,7 +105,7 @@ async fn historical_data_minute() {
             None,
             Duration::seconds(1800),
             BarSize::Min,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
         )
         .await
@@ -129,7 +129,7 @@ async fn historical_data_bid_ask() {
             None,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::BidAsk),
+            WhatToShow::BidAsk,
             TradingHours::Regular,
         )
         .await
@@ -153,7 +153,7 @@ async fn historical_data_midpoint() {
             None,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::MidPoint),
+            WhatToShow::MidPoint,
             TradingHours::Regular,
         )
         .await
@@ -172,9 +172,9 @@ async fn historical_schedule() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let schedule = client
-        .historical_schedule(&contract, None, Duration::months(1))
+        .historical_schedules_ending_now(&contract, Duration::months(1))
         .await
-        .expect("historical_schedule failed");
+        .expect("historical_schedules_ending_now failed");
 
     assert!(!schedule.sessions.is_empty(), "expected at least one session");
 }
@@ -278,7 +278,7 @@ async fn historical_data_streaming() {
             &contract,
             Duration::days(1),
             BarSize::Min15,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             false,
         )

@@ -1,15 +1,17 @@
 #![allow(clippy::uninlined_format_args)]
-//! Async historical schedule example
+//! Async historical schedules example
 //!
 //! This example demonstrates how to retrieve trading schedule information
-//! for a contract using the async API.
+//! for a contract using the async API. It exercises both
+//! [`historical_schedules_ending_now`] (relative-to-now) and
+//! [`historical_schedules`] (anchored to a specific end date).
 //!
 //! # Usage
 //!
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --features async --example async_historical_schedule
+//! cargo run --features async --example async_historical_schedules
 //! ```
 //!
 //! # Configuration
@@ -52,11 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (name, contract, exchange) in contracts {
         println!("\n{name} Trading Schedule ({exchange}):");
 
-        // Get last 30 days of trading schedule
-        let end_date = None; // Use current time
+        // Get last 30 days of trading schedule, anchored to current time
         let duration = 30.days();
 
-        match client.historical_schedule(&contract, end_date, duration).await {
+        match client.historical_schedules_ending_now(&contract, duration).await {
             Ok(schedule) => {
                 println!("  Schedule from {} to {}", schedule.start, schedule.end);
                 println!("  Timezone: {}", schedule.time_zone);
@@ -84,10 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example with specific date range
     println!("\n\nSpecific date range example (Thanksgiving week 2023):");
     let contract = Contract::stock("AAPL").build();
-    let end_date = Some(datetime!(2023-11-26 00:00 UTC));
+    let end_date = datetime!(2023-11-26 00:00 UTC);
     let duration = 7.days();
 
-    match client.historical_schedule(&contract, end_date, duration).await {
+    match client.historical_schedules(&contract, end_date, duration).await {
         Ok(schedule) => {
             println!("Schedule for Thanksgiving week:");
             for session in &schedule.sessions {

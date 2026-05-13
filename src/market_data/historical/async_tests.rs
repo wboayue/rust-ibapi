@@ -150,7 +150,7 @@ async fn test_historical_data() {
     let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
     let duration = Duration::seconds(3600);
     let bar_size = BarSize::Min30;
-    let what_to_show = Some(WhatToShow::Trades);
+    let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     let result = client
@@ -195,7 +195,7 @@ async fn test_historical_data() {
             .end_date(end_date)
             .duration(duration)
             .bar_size(bar_size)
-            .what_to_show(what_to_show)
+            .what_to_show(Some(what_to_show))
             .use_rth(trading_hours.use_rth()),
     );
 }
@@ -205,8 +205,15 @@ async fn test_historical_data_version_check() {
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
     assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
-            .await
+        c.historical_data(
+            &contract,
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
+        .await
     })
     .await;
 }
@@ -225,7 +232,7 @@ async fn test_historical_data_adjusted_last_validation() {
             end_date,
             Duration::days(1),
             BarSize::Day,
-            Some(WhatToShow::AdjustedLast),
+            WhatToShow::AdjustedLast,
             TradingHours::Regular,
         )
         .await;
@@ -249,7 +256,14 @@ async fn test_historical_data_error_response() {
     let contract = test_contract();
 
     let result = client
-        .historical_data(&contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
+        .historical_data(
+            &contract,
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
         .await;
     assert!(result.is_err(), "Should fail with error response");
     assert!(
@@ -262,14 +276,21 @@ async fn test_historical_data_error_response() {
 async fn test_historical_data_unexpected_response() {
     // 1 = TickPrice — wrong type for historical_data.
     assert_unexpected_response(server_versions::SIZE_RULES, "1|2|9000|1|185.50|100|7|", |c| async move {
-        c.historical_data(&test_contract(), None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
-            .await
+        c.historical_data(
+            &test_contract(),
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
+        .await
     })
     .await;
 }
 
 #[tokio::test]
-async fn test_historical_schedule() {
+async fn test_historical_schedules() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
@@ -281,11 +302,11 @@ async fn test_historical_schedule() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
     let contract = Contract::stock("AAPL").build();
-    let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
+    let end_date = datetime!(2023-03-15 16:00:00 UTC);
     let duration = Duration::days(3);
 
-    let result = client.historical_schedule(&contract, end_date, duration).await;
-    assert!(result.is_ok(), "historical_schedule should succeed");
+    let result = client.historical_schedules(&contract, end_date, duration).await;
+    assert!(result.is_ok(), "historical_schedules should succeed");
 
     let schedule = result.unwrap();
     assert_eq!(schedule.time_zone, "UTC", "Wrong time zone");
@@ -299,7 +320,7 @@ async fn test_historical_schedule() {
         &historical_data_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .end_date(end_date)
+            .end_date(Some(end_date))
             .duration(duration)
             .bar_size(BarSize::Day)
             .what_to_show(Some(WhatToShow::Schedule))
@@ -535,7 +556,14 @@ async fn test_historical_data_time_zone_handling() {
 
     let contract = test_contract();
     let result = client
-        .historical_data(&contract, None, Duration::seconds(3600), BarSize::Hour, None, TradingHours::Regular)
+        .historical_data(
+            &contract,
+            None,
+            Duration::seconds(3600),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
         .await;
 
     assert!(result.is_ok(), "historical_data should succeed with timezone");
@@ -581,7 +609,7 @@ async fn test_historical_data_streaming_with_updates() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )
@@ -639,7 +667,7 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             false, // keep_up_to_date = false
         )
@@ -688,7 +716,7 @@ async fn test_historical_data_streaming_error_response() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )
@@ -788,7 +816,7 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
                 &contract,
                 Duration::days(1),
                 BarSize::Hour,
-                Some(WhatToShow::Trades),
+                WhatToShow::Trades,
                 TradingHours::Regular,
                 true,
             )
@@ -824,7 +852,7 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
                 &contract,
                 Duration::days(1),
                 BarSize::Hour,
-                Some(WhatToShow::Trades),
+                WhatToShow::Trades,
                 TradingHours::Regular,
                 true,
             )
@@ -876,7 +904,14 @@ async fn test_historical_data_with_end_message() {
     client.time_zone = Some(time_tz::timezones::db::UTC);
 
     let data = client
-        .historical_data(&test_contract(), None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
+        .historical_data(
+            &test_contract(),
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
         .await
         .expect("historical_data should succeed");
 
@@ -893,7 +928,14 @@ async fn test_historical_data_connection_reset_after_retries() {
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let result = client
-        .historical_data(&test_contract(), None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular)
+        .historical_data(
+            &test_contract(),
+            None,
+            Duration::days(1),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            TradingHours::Regular,
+        )
         .await;
 
     assert!(matches!(result, Err(Error::ConnectionReset)), "expected ConnectionReset, got {result:?}");
@@ -902,32 +944,32 @@ async fn test_historical_data_connection_reset_after_retries() {
 }
 
 #[tokio::test]
-async fn test_historical_schedule_version_check() {
+async fn test_historical_schedules_ending_now_version_check() {
     assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| async move {
-        c.historical_schedule(&test_contract(), None, Duration::days(1)).await
+        c.historical_schedules_ending_now(&test_contract(), Duration::days(1)).await
     })
     .await;
 }
 
 #[tokio::test]
-async fn test_historical_schedule_trading_class_version_check() {
+async fn test_historical_schedules_ending_now_trading_class_version_check() {
     // contract.trading_class triggers the earlier TRADING_CLASS gate ahead of the
     // HISTORICAL_SCHEDULE gate — pin below TRADING_CLASS so the former fires first.
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
     assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_schedule(&contract, None, Duration::days(1)).await
+        c.historical_schedules_ending_now(&contract, Duration::days(1)).await
     })
     .await;
 }
 
 #[tokio::test]
-async fn test_historical_schedule_unexpected_response() {
-    // 17 = HistoricalData — wrong type for historical_schedule (expects 106).
+async fn test_historical_schedules_unexpected_response() {
+    // 17 = HistoricalData — wrong type for the schedule decoder (expects 106).
     assert_unexpected_response(
         server_versions::BOND_ISSUERID,
         "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
-        |c| async move { c.historical_schedule(&test_contract(), None, Duration::days(3)).await },
+        |c| async move { c.historical_schedules_ending_now(&test_contract(), Duration::days(3)).await },
     )
     .await;
 }
@@ -990,7 +1032,7 @@ async fn test_historical_data_streaming_trading_class_version_check() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )

@@ -133,14 +133,14 @@ fn test_historical_data() {
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("MSFT").build();
-    let interval_end = datetime!(2023-04-15 16:31:22 UTC);
+    let end_date = datetime!(2023-04-15 16:31:22 UTC);
     let duration = 2.days();
     let bar_size = BarSize::Hour;
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     let historical_data = client
-        .historical_data(&contract, Some(interval_end), duration, bar_size, what_to_show, trading_hours)
+        .historical_data(&contract, Some(end_date), duration, bar_size, what_to_show, trading_hours)
         .expect("historical data request failed");
 
     // Assert Response
@@ -166,7 +166,7 @@ fn test_historical_data() {
         &historical_data_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .end_date(Some(interval_end))
+            .end_date(Some(end_date))
             .duration(duration)
             .bar_size(bar_size)
             .what_to_show(Some(what_to_show))
@@ -175,7 +175,7 @@ fn test_historical_data() {
 }
 
 #[test]
-fn test_historical_schedule() {
+fn test_historical_schedules() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
@@ -626,14 +626,14 @@ fn test_historical_data_time_zone_handling() {
     client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
 
     let contract = Contract::stock("MSFT").build();
-    let interval_end = datetime!(2023-04-15 16:00:00 UTC);
+    let end_date = datetime!(2023-04-15 16:00:00 UTC);
     let duration = 2.days();
     let bar_size = BarSize::Day;
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     let historical_data = client
-        .historical_data(&contract, Some(interval_end), duration, bar_size, what_to_show, trading_hours)
+        .historical_data(&contract, Some(end_date), duration, bar_size, what_to_show, trading_hours)
         .expect("historical data request failed");
 
     // Assert that time zones are correctly handled
@@ -708,7 +708,7 @@ fn test_historical_data_streaming_with_updates() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )
@@ -774,7 +774,7 @@ fn test_historical_data_streaming_keep_up_to_date_false() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             false, // keep_up_to_date = false
         )
@@ -827,7 +827,7 @@ fn test_historical_data_streaming_error_response() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )
@@ -929,7 +929,7 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
                 &contract,
                 Duration::days(1),
                 BarSize::Hour,
-                Some(WhatToShow::Trades),
+                WhatToShow::Trades,
                 TradingHours::Regular,
                 true,
             )
@@ -962,7 +962,7 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
                 &contract,
                 Duration::days(1),
                 BarSize::Hour,
-                Some(WhatToShow::Trades),
+                WhatToShow::Trades,
                 TradingHours::Regular,
                 true,
             )
@@ -1191,7 +1191,7 @@ fn test_historical_data_streaming_trading_class_version_check() {
             &contract,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Trades),
+            WhatToShow::Trades,
             TradingHours::Regular,
             true,
         )

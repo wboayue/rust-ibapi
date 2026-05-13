@@ -95,10 +95,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .historical_data(
                 &contract,
                 Some(end_date),
-                1.days(),                           // Duration: 1 day
-                HistoricalBarSize::Min5,            // 5-minute bars
-                Some(HistoricalWhatToShow::Trades), // Trade data
-                TradingHours::Regular,              // Use regular trading hours
+                1.days(),                     // Duration: 1 day
+                HistoricalBarSize::Min5,      // 5-minute bars
+                HistoricalWhatToShow::Trades, // Trade data
+                TradingHours::Regular,        // Use regular trading hours
             )
             .await?;
 
@@ -141,10 +141,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .historical_data(
                 &contract,
                 Some(end_date),
-                1.months(),                         // Duration: 1 month
-                HistoricalBarSize::Day,             // Daily bars
-                Some(HistoricalWhatToShow::Trades), // Trade data
-                TradingHours::Regular,              // Use regular trading hours
+                1.months(),                   // Duration: 1 month
+                HistoricalBarSize::Day,       // Daily bars
+                HistoricalWhatToShow::Trades, // Trade data
+                TradingHours::Regular,        // Use regular trading hours
             )
             .await?;
 
@@ -171,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(end_date),
                 1.days(),
                 HistoricalBarSize::Min,
-                Some(HistoricalWhatToShow::Bid),
+                HistoricalWhatToShow::Bid,
                 TradingHours::Regular,
             )
             .await?;
@@ -193,7 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(end_date),
                 1.days(),
                 HistoricalBarSize::Min,
-                Some(HistoricalWhatToShow::Ask),
+                HistoricalWhatToShow::Ask,
                 TradingHours::Regular,
             )
             .await?;
@@ -233,7 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &contract,
             1.days(),               // Duration: 1 day of history
             HistoricalBarSize::Min, // 1-minute bars
-            Some(what_to_show),
+            what_to_show,
             TradingHours::Extended,
             true, // keep_up_to_date: stream live updates
         )

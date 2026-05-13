@@ -29,7 +29,7 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol.as_str()).build();
 
-    // to use WhatToShow::AdjustedLast, use historical_data() with None for interval_end
+    // to use WhatToShow::AdjustedLast, use historical_data() with None for end_date
     let historical_data = client
         .historical_data(&contract, None, 7.days(), BarSize::Day, WhatToShow::AdjustedLast, TradingHours::Regular)
         .expect("historical data request failed");
