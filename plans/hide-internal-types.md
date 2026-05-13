@@ -12,8 +12,8 @@ not the dispatcher.
 
 | # | Item | Today | External consumers | Decision |
 |---|---|---|---|---|
-| 1 | `Client::stubbed()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:342`) | none (gated out of downstream builds) | → `pub(crate)`; match sync (`src/client/sync.rs:357`) |
-| 2 | `Client::message_bus()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:359`) | none (same gating) | → `pub(crate)`; sync has no equivalent accessor |
+| 1 | `Client::stubbed()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:342`) | none (gated out of downstream builds) | **shipped PR #574** — `pub(crate)`; matches sync (`src/client/sync.rs:357`) |
+| 2 | `Client::message_bus()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:359`) | none (same gating) | **shipped PR #574** — deleted (zero callers anywhere; internal code reads the field) |
 | 3 | `pub mod proto` | `src/lib.rs:130` — generated prost bindings + `proto::{encoders,decoders}` helpers | zero hits in `examples/`, `integration/`, `docs/`, `README.md` | → `pub(crate) mod proto;` |
 | 4 | `pub mod messages` | `src/lib.rs:110` — mixed: a few legitimately-public types, many wire internals | `examples/record_interactions.rs` reaches `parser_registry::*` + the message-id enums | split: re-export user-facing types from crate root + prelude; demote `messages` to `#[doc(hidden)] pub` (escape hatch for the recording example) |
 | 5 | `subscriptions::common::SubscriptionItem` | `pub` inside `pub(crate) mod common` (`src/subscriptions/common.rs:18`); re-exported (`src/subscriptions/mod.rs:4`) | legitimate public API | **no change** |
@@ -41,11 +41,12 @@ PRs ship independently. PR 1 and PR 2 are commutable; PR 3 lands last (largest
 diff, most migration-guide surface). PR 4 is a no-code verification checkpoint
 that may not need to exist if 1–3 leave nothing to clean up.
 
-### PR 1 — async `stubbed` / `message_bus` → `pub(crate)`
+### PR 1 — async `stubbed` / `message_bus` → `pub(crate)` ✅ shipped #574
 
-Smallest, mechanical, restores sync/async parity. Items #1 and #2 in the
-audit. No migration guide entry (gated `#[cfg(test)]`, never on the external
-surface). Two attribute edits in `src/client/async.rs`.
+Items #1 and #2 in the audit. `stubbed` narrowed to `pub(crate)`;
+`message_bus()` deleted (zero callers; rule 9 "modernize touched module").
+No migration guide entry (gated `#[cfg(test)]`, never on the external
+surface).
 
 ### PR 2 — `pub mod proto` → `pub(crate) mod proto`
 
