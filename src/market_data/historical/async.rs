@@ -23,6 +23,33 @@ use crate::market_data::TradingHours;
 
 impl Client {
     /// Returns the timestamp of earliest available historical data for a contract and data type.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve the head timestamp for.
+    /// * `what_to_show` - requested bar type: [WhatToShow].
+    /// * `trading_hours` - Use [TradingHours::Regular] for data generated only during regular trading hours, or [TradingHours::Extended] to include data from outside regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::WhatToShow;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("MSFT").build();
+    ///     let result = client
+    ///         .head_timestamp(&contract, WhatToShow::Trades, TradingHours::Regular)
+    ///         .await
+    ///         .expect("head timestamp failed");
+    ///
+    ///     println!("head_timestamp: {result:?}");
+    /// }
+    /// ```
     pub async fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::HEAD_TIMESTAMP)?;
 
@@ -43,17 +70,60 @@ impl Client {
         }
     }
 
-    /// Requests historical data for a contract.
+    /// Requests interval of historical data ending at specified time for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`      - [Contract] to retrieve [HistoricalData] for.
+    /// * `end_date`      - optional end of the interval. If `None`, current time or last trading of contract is implied.
+    /// * `duration`      - duration of interval to retrieve [HistoricalData] for.
+    /// * `bar_size`      - [BarSize] to return.
+    /// * `what_to_show`  - requested bar type: [WhatToShow].
+    /// * `trading_hours` - Use [TradingHours::Regular] for data generated only during regular trading hours, or [TradingHours::Extended] to include data from outside regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA").build();
+    ///     let historical_data = client
+    ///         .historical_data(
+    ///             &contract,
+    ///             Some(datetime!(2023-04-15 0:00 UTC)),
+    ///             7.days(),
+    ///             BarSize::Day,
+    ///             WhatToShow::Trades,
+    ///             TradingHours::Regular,
+    ///         )
+    ///         .await
+    ///         .expect("historical data request failed");
+    ///
+    ///     println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    ///     for bar in &historical_data.bars {
+    ///         println!("{bar:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn historical_data(
         &self,
         contract: &Contract,
         end_date: Option<OffsetDateTime>,
         duration: Duration,
         bar_size: BarSize,
-        what_to_show: Option<WhatToShow>,
+        what_to_show: WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<HistoricalData, Error> {
-        common::validate_historical_data(self.server_version(), contract, end_date, what_to_show)?;
+        common::validate_historical_data(self.server_version(), contract, end_date, Some(what_to_show))?;
 
         for _ in 0..MAX_RETRIES {
             let builder = self.request();
@@ -63,7 +133,7 @@ impl Client {
                 end_date,
                 duration,
                 bar_size,
-                what_to_show,
+                Some(what_to_show),
                 trading_hours.use_rth(),
                 false,
                 &Vec::<crate::contracts::TagValue>::default(),
@@ -95,42 +165,118 @@ impl Client {
         Err(Error::ConnectionReset)
     }
 
-    /// Requests historical schedule data for a contract.
-    pub async fn historical_schedule(&self, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
-        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-            check_version(self.server_version(), Features::TRADING_CLASS)?;
-        }
-
-        check_version(self.server_version(), Features::HISTORICAL_SCHEDULE)?;
-
-        loop {
-            let builder = self.request();
-            let request = encoders::encode_request_historical_data(
-                builder.request_id(),
-                contract,
-                end_date,
-                duration,
-                BarSize::Day,
-                Some(WhatToShow::Schedule),
-                true,
-                false,
-                &Vec::<crate::contracts::TagValue>::default(),
-            )?;
-
-            let mut subscription = builder.send_raw(request).await?;
-
-            match subscription.next().await {
-                Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
-                    return decoders::decode_historical_schedule(&mut message)
-                }
-                Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-                Some(Err(e)) => return Err(e),
-                None => continue, // Connection reset, retry
-            }
-        }
+    /// Requests [Schedule] for an interval of given duration ending at specified date.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [Schedule] for.
+    /// * `end_date` - end of the interval to retrieve [Schedule] for.
+    /// * `duration` - duration of the interval to retrieve [Schedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM").build();
+    ///     let schedule = client
+    ///         .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
+    ///         .await
+    ///         .expect("historical schedule request failed");
+    ///
+    ///     println!("start: {:?}, end: {:?}", schedule.start, schedule.end);
+    ///
+    ///     for session in &schedule.sessions {
+    ///         println!("{session:?}");
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_schedules(&self, contract: &Contract, end_date: OffsetDateTime, duration: Duration) -> Result<Schedule, Error> {
+        historical_schedule(self, contract, Some(end_date), duration).await
     }
 
-    /// Requests historical bid/ask tick data.
+    /// Requests [Schedule] for an interval ending at the current time.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [Schedule] for.
+    /// * `duration` - [Duration] of the interval to retrieve [Schedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM").build();
+    ///     let schedule = client
+    ///         .historical_schedules_ending_now(&contract, 30.days())
+    ///         .await
+    ///         .expect("historical schedule request failed");
+    ///
+    ///     println!("start: {:?}, end: {:?}", schedule.start, schedule.end);
+    ///
+    ///     for session in &schedule.sessions {
+    ///         println!("{session:?}");
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_schedules_ending_now(&self, contract: &Contract, duration: Duration) -> Result<Schedule, Error> {
+        historical_schedule(self, contract, None, duration).await
+    }
+
+    /// Requests historical time & sales data (Bid/Ask) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract`        - [Contract] object that is subject of query
+    /// * `start`           - Start time. Either start time or end time is specified.
+    /// * `end`             - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA").build();
+    ///     let mut ticks = client
+    ///         .historical_ticks_bid_ask(
+    ///             &contract,
+    ///             Some(datetime!(2023-04-15 0:00 UTC)),
+    ///             None,
+    ///             100,
+    ///             TradingHours::Regular,
+    ///             false,
+    ///         )
+    ///         .await
+    ///         .expect("historical ticks request failed");
+    ///
+    ///     while let Some(tick) = ticks.next().await {
+    ///         println!("{tick:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn historical_ticks_bid_ask(
         &self,
         contract: &Contract,
@@ -159,7 +305,45 @@ impl Client {
         Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
-    /// Requests historical midpoint tick data.
+    /// Requests historical time & sales data (Midpoint) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract`        - [Contract] object that is subject of query
+    /// * `start`           - Start time. Either start time or end time is specified.
+    /// * `end`             - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA").build();
+    ///     let mut ticks = client
+    ///         .historical_ticks_mid_point(
+    ///             &contract,
+    ///             Some(datetime!(2023-04-15 0:00 UTC)),
+    ///             None,
+    ///             100,
+    ///             TradingHours::Regular,
+    ///         )
+    ///         .await
+    ///         .expect("historical ticks request failed");
+    ///
+    ///     while let Some(tick) = ticks.next().await {
+    ///         println!("{tick:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn historical_ticks_mid_point(
         &self,
         contract: &Contract,
@@ -187,7 +371,45 @@ impl Client {
         Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
-    /// Requests historical trade tick data.
+    /// Requests historical time & sales data (Trades) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract`        - [Contract] object that is subject of query
+    /// * `start`           - Start time. Either start time or end time is specified.
+    /// * `end`             - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA").build();
+    ///     let mut ticks = client
+    ///         .historical_ticks_trade(
+    ///             &contract,
+    ///             Some(datetime!(2023-04-15 0:00 UTC)),
+    ///             None,
+    ///             100,
+    ///             TradingHours::Regular,
+    ///         )
+    ///         .await
+    ///         .expect("historical ticks request failed");
+    ///
+    ///     while let Some(tick) = ticks.next().await {
+    ///         println!("{tick:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn historical_ticks_trade(
         &self,
         contract: &Contract,
@@ -216,6 +438,9 @@ impl Client {
     }
 
     /// Cancels an in-flight historical ticks request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID of the historical ticks subscription to cancel.
     pub async fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
         check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 
@@ -224,7 +449,36 @@ impl Client {
         Ok(())
     }
 
-    /// Requests histogram data for a contract.
+    /// Requests data histogram of specified contract.
+    ///
+    /// # Arguments
+    /// * `contract`      - [Contract] to retrieve [HistogramEntry] data for.
+    /// * `trading_hours` - Regular trading hours only, or include extended hours.
+    /// * `period`        - The time period of each histogram bar (e.g., `BarSize::Day`, `BarSize::Week`, `BarSize::Month`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::BarSize;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM").build();
+    ///     let histogram = client
+    ///         .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
+    ///         .await
+    ///         .expect("histogram request failed");
+    ///
+    ///     for item in &histogram {
+    ///         println!("{item:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
         check_version(self.server_version(), Features::HISTOGRAM)?;
 
@@ -242,12 +496,74 @@ impl Client {
     }
 
     /// Requests historical data with optional streaming updates.
+    ///
+    /// This method returns a subscription that first yields the initial historical bars.
+    /// When `keep_up_to_date` is `true`, it continues to yield streaming updates for
+    /// the current bar as it builds. IBKR sends updated bars every ~4-6 seconds until
+    /// the bar completes.
+    ///
+    /// # Arguments
+    /// * `contract`         - Contract object that is subject of query
+    /// * `duration`         - The amount of time for which the data needs to be retrieved
+    /// * `bar_size`         - The bar size (resolution)
+    /// * `what_to_show`     - The type of data to retrieve (Trades, MidPoint, etc.)
+    /// * `trading_hours`    - Regular trading hours only, or include extended hours
+    /// * `keep_up_to_date`  - If true, continue receiving streaming updates after initial data
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{HistoricalBarUpdate, ToDuration};
+    /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
+    /// use ibapi::subscriptions::SubscriptionItem;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("SPY").build();
+    ///     let mut subscription = client
+    ///         .historical_data_streaming(
+    ///             &contract,
+    ///             3.days(),
+    ///             HistoricalBarSize::Min15,
+    ///             HistoricalWhatToShow::Trades,
+    ///             TradingHours::Extended,
+    ///             true,
+    ///         )
+    ///         .await
+    ///         .expect("streaming request failed");
+    ///
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data))) => {
+    ///                 println!("Initial bars: {}", data.bars.len());
+    ///             }
+    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::Update(bar))) => {
+    ///                 println!("Streaming update: {bar:?}");
+    ///             }
+    ///             Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { start, end })) => {
+    ///                 println!("Stream ended: {start} - {end}");
+    ///                 break;
+    ///             }
+    ///             Ok(SubscriptionItem::Notice(notice)) => eprintln!("notice: {notice}"),
+    ///             Err(e) => {
+    ///                 eprintln!("error: {e}");
+    ///                 break;
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub async fn historical_data_streaming(
         &self,
         contract: &Contract,
         duration: Duration,
         bar_size: BarSize,
-        what_to_show: Option<WhatToShow>,
+        what_to_show: WhatToShow,
         trading_hours: TradingHours,
         keep_up_to_date: bool,
     ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
@@ -262,7 +578,7 @@ impl Client {
             None, // end_date must be None when keepUpToDate=true (IBKR requirement)
             duration,
             bar_size,
-            what_to_show,
+            Some(what_to_show),
             trading_hours.use_rth(),
             keep_up_to_date,
             &Vec::<crate::contracts::TagValue>::default(),
@@ -281,9 +597,43 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
     }
 }
 
+async fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        check_version(client.server_version(), Features::TRADING_CLASS)?;
+    }
+
+    check_version(client.server_version(), Features::HISTORICAL_SCHEDULE)?;
+
+    loop {
+        let builder = client.request();
+        let request = encoders::encode_request_historical_data(
+            builder.request_id(),
+            contract,
+            end_date,
+            duration,
+            BarSize::Day,
+            Some(WhatToShow::Schedule),
+            true,
+            false,
+            &Vec::<crate::contracts::TagValue>::default(),
+        )?;
+
+        let mut subscription = builder.send_raw(request).await?;
+
+        match subscription.next().await {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+                return decoders::decode_historical_schedule(&mut message)
+            }
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(e)) => return Err(e),
+            None => continue, // Connection reset, retry
+        }
+    }
+}
+
 // === TickSubscription and related types ===
 
-/// Async subscription for historical tick data
+/// Async subscription handle that decodes historical tick batches as they arrive.
 pub struct TickSubscription<T: TickDecoder<T> + Send> {
     done: bool,
     messages: AsyncInternalSubscription,
@@ -324,7 +674,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
         }
     }
 
-    /// Get the next tick from the subscription
+    /// Block until the next tick batch is available.
     pub async fn next(&mut self) -> Option<T> {
         self.clear_error();
 

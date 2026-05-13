@@ -152,8 +152,8 @@ path = "examples/async/head_timestamp.rs"
 required-features = ["async"]
 
 [[example]]
-name = "async_historical_schedule"
-path = "examples/async/historical_schedule.rs"
+name = "async_historical_schedules"
+path = "examples/async/historical_schedules.rs"
 required-features = ["async"]
 
 [[example]]

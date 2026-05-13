@@ -399,6 +399,42 @@ use ibapi::client::SharesChannel;
 use ibapi::subscriptions::SharesChannel;
 ```
 
+### 15. Historical data: sync/async parity
+
+The async historical API has been reshaped to mirror the sync surface; `what_to_show` is now required on both `historical_data` and `historical_data_streaming` (issue #210). The single async `historical_schedule(contract, Option<OffsetDateTime>, duration)` has been split into the two named methods sync already used, and the `interval_end` parameter on the sync side was renamed to `end_date` for consistency with the wire field name.
+
+**`historical_data` / `historical_data_streaming` — `what_to_show` is no longer optional:**
+
+```rust,ignore
+// v2.x — async wrapped what_to_show in Option
+client.historical_data(
+    &contract, Some(end), 1.days(), BarSize::Day,
+    Some(WhatToShow::Trades), TradingHours::Regular,
+).await?;
+
+// v3.0 — pass the variant directly
+client.historical_data(
+    &contract, Some(end), 1.days(), BarSize::Day,
+    WhatToShow::Trades, TradingHours::Regular,
+).await?;
+```
+
+**Async `historical_schedule` split into two named methods:**
+
+```rust,ignore
+// v2.x — single method with Option<OffsetDateTime>
+client.historical_schedule(&contract, None, 30.days()).await?;            // ending now
+client.historical_schedule(&contract, Some(end), 30.days()).await?;       // anchored to date
+
+// v3.0 — named methods, no magic None
+client.historical_schedules_ending_now(&contract, 30.days()).await?;
+client.historical_schedules(&contract, end, 30.days()).await?;
+```
+
+**Sync `interval_end` → `end_date`:**
+
+The keyword-arg style stays the same; only the parameter name changed. Positional callers (the common case) are unaffected.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

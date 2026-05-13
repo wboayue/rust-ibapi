@@ -60,7 +60,7 @@ impl Client {
     ///
     /// # Arguments
     /// * `contract`     - [Contract] to retrieve [HistoricalData] for.
-    /// * `interval_end` - optional end date of interval to retrieve [HistoricalData] for. If `None` current time or last trading of contract is implied.
+    /// * `end_date`     - optional end of the interval. If `None`, current time or last trading of contract is implied.
     /// * `duration`     - duration of interval to retrieve [HistoricalData] for.
     /// * `bar_size`     - [BarSize] to return.
     /// * `what_to_show` - requested bar type: [WhatToShow].
@@ -93,20 +93,20 @@ impl Client {
     pub fn historical_data(
         &self,
         contract: &Contract,
-        interval_end: Option<OffsetDateTime>,
+        end_date: Option<OffsetDateTime>,
         duration: Duration,
         bar_size: BarSize,
         what_to_show: WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<HistoricalData, Error> {
-        common::validate_historical_data(self.server_version(), contract, interval_end, Some(what_to_show))?;
+        common::validate_historical_data(self.server_version(), contract, end_date, Some(what_to_show))?;
 
         for _ in 0..MAX_RETRIES {
             let builder = self.request();
             let request = encoders::encode_request_historical_data(
                 builder.request_id(),
                 contract,
-                interval_end,
+                end_date,
                 duration,
                 bar_size,
                 Some(what_to_show),
@@ -171,7 +171,7 @@ impl Client {
     /// let subscription = client
     ///     .historical_data_streaming(
     ///         &contract, 3.days(), HistoricalBarSize::Min15,
-    ///         Some(HistoricalWhatToShow::Trades), TradingHours::Extended, true
+    ///         HistoricalWhatToShow::Trades, TradingHours::Extended, true
     ///     )
     ///     .expect("streaming request failed");
     ///
@@ -189,7 +189,7 @@ impl Client {
         contract: &Contract,
         duration: Duration,
         bar_size: BarSize,
-        what_to_show: Option<WhatToShow>,
+        what_to_show: WhatToShow,
         trading_hours: TradingHours,
         keep_up_to_date: bool,
     ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
@@ -204,7 +204,7 @@ impl Client {
             None, // end_date must be None when keepUpToDate=true (IBKR requirement)
             duration,
             bar_size,
-            what_to_show,
+            Some(what_to_show),
             trading_hours.use_rth(),
             keep_up_to_date,
             &Vec::<crate::contracts::TagValue>::default(),
@@ -217,9 +217,9 @@ impl Client {
     /// ending at specified date.
     ///
     /// # Arguments
-    /// * `contract`     - [Contract] to retrieve [Schedule] for.
-    /// * `interval_end` - end date of interval to retrieve [Schedule] for.
-    /// * `duration`     - duration of interval to retrieve [Schedule] for.
+    /// * `contract` - [Contract] to retrieve [Schedule] for.
+    /// * `end_date` - end of the interval to retrieve [Schedule] for.
+    /// * `duration` - duration of the interval to retrieve [Schedule] for.
     ///
     /// # Examples
     ///
@@ -243,8 +243,8 @@ impl Client {
     ///     println!("{session:?}");
     /// }
     /// ```
-    pub fn historical_schedules(&self, contract: &Contract, interval_end: OffsetDateTime, duration: Duration) -> Result<Schedule, Error> {
-        historical_schedule(self, contract, Some(interval_end), duration)
+    pub fn historical_schedules(&self, contract: &Contract, end_date: OffsetDateTime, duration: Duration) -> Result<Schedule, Error> {
+        historical_schedule(self, contract, Some(end_date), duration)
     }
 
     /// Requests [Schedule] for interval ending at current time.
