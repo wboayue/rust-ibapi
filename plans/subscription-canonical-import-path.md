@@ -125,23 +125,9 @@ This is a v3.0 breaking change but a small one — the path is functionally iden
 
 ---
 
-## Migration note (`docs/migration-3.0.md` §13 draft)
+## Migration note
 
-```markdown
-### 13. `Subscription` import path consolidation
-
-`ibapi::client::Subscription` was a duplicate re-export of `ibapi::subscriptions::Subscription`. In 3.0 it has been removed; the canonical path is `ibapi::subscriptions::Subscription` (or `use ibapi::prelude::*;` for the convenience re-export). The labelled sync-explicit path `ibapi::client::blocking::Subscription` is unchanged — use it when you need the sync `Subscription<T>` while both `sync` and `async` features are enabled.
-
-```rust,ignore
-// v2.x / pre-PR
-use ibapi::client::Subscription;
-
-// v3.0
-use ibapi::subscriptions::Subscription;
-// or:
-use ibapi::prelude::*;
-```
-```
+Shipped in [`docs/migration-3.0.md` §13](../docs/migration-3.0.md). One-line redirect; one before/after `use` snippet.
 
 ---
 

@@ -106,12 +106,18 @@ Related existing tracking docs in `plans/`:
     (rule 9, "modernize touched modules"). Drop the hand-rolled asserts,
     use the same loop-over-variants shape.
 
-- [ ] **One canonical `Subscription` import path.** `Subscription` is reachable from
-  `crate::subscriptions::Subscription` (canonical at `src/subscriptions/mod.rs:32,35`),
-  `crate::client::Subscription` (feature-gated at `src/client/mod.rs:41,44`), and
-  `crate::prelude::Subscription` (feature-gated at `src/prelude.rs:51,53`). Pick
-  `crate::subscriptions::Subscription` as canonical and keep the others as `pub use`
-  aliases (or remove the client-level paths).
+- [~] **One canonical `Subscription` import path.** PR #571 (open) consolidates
+  `Subscription`: drops `ibapi::client::Subscription`, sources the prelude
+  re-export directly from `crate::subscriptions::Subscription`, and preserves
+  `ibapi::client::blocking::Subscription` as the labelled sync-explicit path.
+  See [plans/subscription-canonical-import-path.md](subscription-canonical-import-path.md).
+  - **Follow-up: `SharesChannel` mirrors the same anti-pattern.** Re-exported
+    at `client::sync::SharesChannel` (`src/client/sync.rs:453`), `client::SharesChannel`
+    (`src/client/mod.rs`), AND inside `client::blocking` — two of those surface
+    `ibapi::client::SharesChannel`. Same consolidation shape as Subscription:
+    drop the duplicate `client::*` alias, keep the canonical
+    `ibapi::subscriptions::SharesChannel` + labelled `client::blocking::SharesChannel`.
+    Ride-along candidate for a small follow-up PR.
 
 - [x] **`NoticeStream` should not mirror `Subscription`'s sync/async toggle in the
   prelude.** Shipped — `src/prelude.rs:54` re-exports a single `NoticeStream`

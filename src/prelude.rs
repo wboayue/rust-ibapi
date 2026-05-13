@@ -35,10 +35,6 @@ pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, Wh
 pub use crate::market_data::{MarketDataType, TradingHours};
 
 // Order types
-#[cfg(all(feature = "sync", not(feature = "async")))]
-pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, OrderUpdate, Orders, PlaceOrder};
-
-#[cfg(feature = "async")]
 pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
