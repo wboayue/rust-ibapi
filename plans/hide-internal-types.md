@@ -14,7 +14,7 @@ not the dispatcher.
 |---|---|---|---|---|
 | 1 | `Client::stubbed()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:342`) | none (gated out of downstream builds) | **shipped PR #574** — `pub(crate)`; matches sync (`src/client/sync.rs:357`) |
 | 2 | `Client::message_bus()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:359`) | none (same gating) | **shipped PR #574** — deleted (zero callers anywhere; internal code reads the field) |
-| 3 | `pub mod proto` | `src/lib.rs:130` — generated prost bindings + `proto::{encoders,decoders}` helpers | zero hits in `examples/`, `integration/`, `docs/`, `README.md` | → `pub(crate) mod proto;` |
+| 3 | `pub mod proto` | `src/lib.rs:130` — generated prost bindings + `proto::{encoders,decoders}` helpers | zero hits in `examples/`, `integration/`, `docs/`, `README.md` | **shipped PR #575** — `pub(crate) mod proto;` + both child modules; deleted dead `decode_error_message` (rule 9) |
 | 4 | `pub mod messages` | `src/lib.rs:110` — mixed: a few legitimately-public types, many wire internals | `examples/record_interactions.rs` reaches `parser_registry::*` + the message-id enums | split: re-export user-facing types from crate root + prelude; demote `messages` to `#[doc(hidden)] pub` (escape hatch for the recording example) |
 | 5 | `subscriptions::common::SubscriptionItem` | `pub` inside `pub(crate) mod common` (`src/subscriptions/common.rs:18`); re-exported (`src/subscriptions/mod.rs:4`) | legitimate public API | **no change** |
 | 6 | `subscriptions::common::DecoderContext` / `StreamDecoder` | `pub`/`pub(crate)` inside `pub(crate) mod common`; re-exported `pub(crate)` (`src/subscriptions/mod.rs:5`) | none (already crate-private from downstream's view) | **no change** |
@@ -48,21 +48,20 @@ Items #1 and #2 in the audit. `stubbed` narrowed to `pub(crate)`;
 No migration guide entry (gated `#[cfg(test)]`, never on the external
 surface).
 
-### PR 2 — `pub mod proto` → `pub(crate) mod proto`
+### PR 2 — `pub mod proto` → `pub(crate) mod proto` ✅ shipped #575
 
-Item #3 in the audit. Zero external consumers, so the diff is a single line
-in `src/lib.rs:130` plus narrowing the two child `pub mod` declarations in
-`src/proto/mod.rs:5,7` to `pub(crate) mod`. All ~200 internal callsites use
-`crate::proto::*` and are unaffected.
+Item #3 in the audit. `pub mod proto` and both child modules
+(`decoders`, `encoders`) narrowed to `pub(crate)`. Internal callsites
+(~200, all via `crate::proto::*`) unaffected. Narrowing surfaced dead
+code that prior `pub` visibility had hidden:
 
-**Migration guide entry** (`docs/migration-3.0.md`):
+- `decode_error_message` — deleted (superseded by the richer
+  `decode_error_envelope` in `src/transport/routing.rs:49`, dead since #450).
+- Three prost-generated `*End` structs used only in `#[cfg(test)]`
+  testdata builders — `dead_code` added to the existing
+  `#![allow(missing_docs, clippy::all)]` at `src/proto/mod.rs:1`.
 
-> #### `ibapi::proto` is no longer public
->
-> The raw protobuf wire types and their encoders/decoders were never
-> intended as a stable surface. Consume the domain types (`Contract`,
-> `Order`, `Execution`, …) directly. If you need a conversion path,
-> file an issue.
+Migration guide §16 added.
 
 ### PR 3 — sort and trim `pub mod messages`
 
