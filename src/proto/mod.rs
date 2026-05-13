@@ -1,7 +1,7 @@
-#![allow(missing_docs, clippy::all)]
+#![allow(missing_docs, clippy::all, dead_code)]
 include!("protobuf.rs");
 
 #[allow(clippy::all)]
-pub mod decoders;
+pub(crate) mod decoders;
 
-pub mod encoders;
+pub(crate) mod encoders;

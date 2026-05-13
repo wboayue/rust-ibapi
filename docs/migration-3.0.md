@@ -435,6 +435,18 @@ client.historical_schedules(&contract, end, 30.days()).await?;
 
 The keyword-arg style stays the same; only the parameter name changed. Positional callers (the common case) are unaffected.
 
+### 16. `ibapi::proto` is no longer public
+
+The raw protobuf wire types and their encoders/decoders were never intended as a stable surface — they're a generated mirror of the upstream `.proto` files, and any upstream field rename would have been a silent breaking change for anyone who imported them. Consume the domain types (`Contract`, `Order`, `Execution`, …) directly. If you need a public conversion path, file an issue.
+
+```rust,ignore
+// v2.x — proto types reachable
+use ibapi::proto::Contract;
+
+// v3.0 — proto module is crate-private; use the domain type
+use ibapi::contracts::Contract;
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction
