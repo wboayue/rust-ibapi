@@ -46,12 +46,10 @@ pub use crate::accounts::{
     AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
 };
 
-// Client subscription type
-#[cfg(all(feature = "sync", not(feature = "async")))]
-pub use crate::client::Subscription;
-pub use crate::subscriptions::{NoticeStream, SubscriptionItem};
+// Subscription types (canonical home: crate::subscriptions)
 #[cfg(feature = "async")]
-pub use crate::subscriptions::{Subscription, SubscriptionItemStreamExt};
+pub use crate::subscriptions::SubscriptionItemStreamExt;
+pub use crate::subscriptions::{NoticeStream, Subscription, SubscriptionItem};
 
 // Async-specific imports
 #[cfg(feature = "async")]

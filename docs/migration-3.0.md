@@ -373,6 +373,20 @@ let filter = ExecutionFilter {
 
 If you match on the field, swap `if filter.side == "BUY"` for `if filter.side == Some(ExecutionFilterSide::Buy)`.
 
+### 13. `Subscription` import path consolidation
+
+`ibapi::client::Subscription` was a duplicate re-export of `ibapi::subscriptions::Subscription`. In 3.0 it has been removed; the canonical path is `ibapi::subscriptions::Subscription` (or `use ibapi::prelude::*;` for the convenience re-export). The labelled sync-explicit path `ibapi::client::blocking::Subscription` is unchanged — use it when you need the sync `Subscription<T>` while both `sync` and `async` features are enabled.
+
+```rust,ignore
+// v2.x / pre-PR
+use ibapi::client::Subscription;
+
+// v3.0
+use ibapi::subscriptions::Subscription;
+// or
+use ibapi::prelude::*;
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction
