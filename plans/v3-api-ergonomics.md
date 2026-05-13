@@ -113,8 +113,7 @@ Related existing tracking docs in `plans/`:
   Same shape applied to `SharesChannel` in the follow-up PR: dropped
   `ibapi::client::SharesChannel` and `ibapi::client::sync::SharesChannel`;
   canonical at `ibapi::subscriptions::SharesChannel`; `client::blocking::SharesChannel`
-  preserved for the labelled sync-explicit path.
-  See [plans/subscription-canonical-import-path.md](subscription-canonical-import-path.md).
+  preserved for the labelled sync-explicit path. (PRs #571, #572)
 
 - [x] **`NoticeStream` should not mirror `Subscription`'s sync/async toggle in the
   prelude.** Shipped — `src/prelude.rs:54` re-exports a single `NoticeStream`
