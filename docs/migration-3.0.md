@@ -447,6 +447,20 @@ use ibapi::proto::Contract;
 use ibapi::contracts::Contract;
 ```
 
+### 17. `ibapi::messages` is now opaque
+
+The user-facing types from `ibapi::messages` — `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`, `ResponseMessage`, and the notice-code-range constants (`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `ORDER_REJECTION_CODE_RANGE`, `ORDER_CANCELLED_CODE`) — are now re-exported from the crate root. `Notice` and `NoticeCategory` are also in the prelude. The wire-level types (`RequestMessage`, length-framing helpers, message-id index helpers) are crate-private in 3.0; downstream code never had a reason to reach them.
+
+```rust,ignore
+// v2.x
+use ibapi::messages::{Notice, NoticeCategory, IncomingMessages};
+
+// v3.0 — re-exports at crate root
+use ibapi::{Notice, NoticeCategory, IncomingMessages};
+// or simply
+use ibapi::prelude::*;
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction

@@ -107,7 +107,7 @@ pub mod contracts;
 pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
-pub mod messages;
+pub(crate) mod messages;
 /// APIs for retrieving news data including articles, bulletins, and providers
 pub mod news;
 /// Data types for building and placing orders.
@@ -138,6 +138,15 @@ pub use errors::Error;
 pub use client::Client;
 #[doc(inline)]
 pub use client::ClientBuilder;
+
+#[doc(inline)]
+pub use messages::{
+    IncomingMessages, Notice, NoticeCategory, OutgoingMessages, ResponseMessage, ORDER_CANCELLED_CODE, ORDER_REJECTION_CODE_RANGE,
+    SYSTEM_MESSAGE_CODES, WARNING_CODE_RANGE,
+};
+
+#[doc(hidden)]
+pub use messages::parser_registry;
 use std::sync::LazyLock;
 use time::{
     format_description::{self, BorrowedFormatItem},

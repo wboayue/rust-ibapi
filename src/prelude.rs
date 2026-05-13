@@ -22,6 +22,7 @@
 pub use crate::Client;
 pub use crate::ClientBuilder;
 pub use crate::Error;
+pub use crate::{Notice, NoticeCategory};
 
 // Contract types
 pub use crate::contracts::{BondIdentifier, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, Isin, LegAction, OptionRight, Strike, Symbol};

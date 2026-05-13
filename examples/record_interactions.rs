@@ -9,9 +9,8 @@ use std::path::Path;
 
 use ibapi::accounts::{AccountSummaryResult, PositionUpdate};
 use ibapi::client::blocking::Client;
-use ibapi::messages::parser_registry::{MessageParserRegistry, ParsedField};
-use ibapi::messages::*;
-use ibapi::trace;
+use ibapi::parser_registry::{self, MessageParserRegistry, ParsedField};
+use ibapi::{trace, IncomingMessages, OutgoingMessages};
 use serde::{Deserialize, Serialize};
 
 /// Represents a field in a TWS message
