@@ -1,5 +1,3 @@
-use prost::Message;
-
 use crate::contracts::{
     ComboLeg, ComboLegOpenClose, Contract, ContractDetails, Currency, DeltaNeutralContract, Exchange, FundAssetType, FundDistributionPolicyIndicator,
     IneligibilityReason, LegAction, SecurityIdType, SecurityType, Symbol, TagValue,
@@ -550,16 +548,6 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
         // defaults for fields not in protobuf
         last_trade_time: String::new(),
     })
-}
-
-pub fn decode_error_message(bytes: &[u8]) -> Result<(i32, i32, String, String), Error> {
-    let p = proto::ErrorMessage::decode(bytes)?;
-    Ok((
-        p.id.unwrap_or_default(),
-        p.error_code.unwrap_or_default(),
-        s(&p.error_msg),
-        s(&p.advanced_order_reject_json),
-    ))
 }
 
 #[cfg(test)]

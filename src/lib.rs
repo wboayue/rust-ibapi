@@ -127,7 +127,7 @@ pub mod prelude;
 pub mod protocol;
 
 /// Generated protobuf message types for the TWS API wire protocol.
-pub mod proto;
+pub(crate) mod proto;
 
 mod server_versions;
 
