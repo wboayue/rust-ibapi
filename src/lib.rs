@@ -140,10 +140,10 @@ pub use client::Client;
 pub use client::ClientBuilder;
 
 #[doc(inline)]
-pub use messages::{
-    IncomingMessages, Notice, NoticeCategory, OutgoingMessages, ResponseMessage, ORDER_CANCELLED_CODE, ORDER_REJECTION_CODE_RANGE,
-    SYSTEM_MESSAGE_CODES, WARNING_CODE_RANGE,
-};
+pub use messages::{IncomingMessages, Notice, NoticeCategory, OutgoingMessages, ResponseMessage};
+
+#[doc(inline)]
+pub use messages::{ORDER_CANCELLED_CODE, ORDER_REJECTION_CODE_RANGE, SYSTEM_MESSAGE_CODES, WARNING_CODE_RANGE};
 
 #[doc(hidden)]
 pub use messages::parser_registry;

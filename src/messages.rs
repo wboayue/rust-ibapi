@@ -776,8 +776,7 @@ pub(crate) struct RequestMessage {
     pub(crate) fields: Vec<String>,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
+#[cfg(all(test, feature = "sync"))]
 impl RequestMessage {
     /// Serialize all fields into the NUL-delimited wire format.
     pub(crate) fn encode(&self) -> String {
