@@ -97,6 +97,9 @@ impl<S: Stream> Connection<S> {
             match self.socket.reconnect() {
                 Ok(_) => {
                     info!("reconnected !!!");
+
+                    self.reset_connection_metadata();
+
                     // Reconnection doesn't use startup callback
                     self.establish_connection(None)?;
 
@@ -109,6 +112,14 @@ impl<S: Stream> Connection<S> {
         }
 
         Err(Error::ConnectionFailed)
+    }
+
+    fn reset_connection_metadata(&self) {
+        let mut connection_metadata = self.connection_metadata.lock().unwrap();
+        *connection_metadata = ConnectionMetadata {
+            client_id: self.client_id,
+            ..Default::default()
+        };
     }
 
     /// Establish connection to TWS
@@ -240,5 +251,37 @@ impl<S: Stream> Connection<S> {
             recorder: MessageRecorder::new(false, String::from("")),
             connection_handler: ConnectionHandler::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Connection;
+    use crate::client::common::tests::setup_connect;
+
+    const CLIENT_ID: i32 = 100;
+
+    #[test]
+    fn test_reset_connection_metadata_clears_handshake_state() {
+        let gateway = setup_connect();
+        let connection = Connection::connect_with_options(&gateway.address(), CLIENT_ID, Default::default()).expect("Failed to connect");
+
+        let metadata = connection.connection_metadata();
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, gateway.server_version());
+        assert_eq!(metadata.next_order_id, 90);
+        assert_eq!(metadata.managed_accounts, "2334");
+        assert!(metadata.connection_time.is_some());
+        assert!(metadata.time_zone.is_some());
+
+        connection.reset_connection_metadata();
+
+        let metadata = connection.connection_metadata();
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, 0);
+        assert_eq!(metadata.next_order_id, 0);
+        assert_eq!(metadata.managed_accounts, "");
+        assert!(metadata.connection_time.is_none());
+        assert!(metadata.time_zone.is_none());
     }
 }

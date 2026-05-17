@@ -288,7 +288,7 @@ impl AsyncConnection {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::AsyncConnection;
     use std::{
         io::{Read, Write},
@@ -366,20 +366,22 @@ mod tests {
         assert!(metadata.time_zone.is_some());
     }
 
-    struct PausedReconnectGateway {
+    pub(crate) struct PausedReconnectGateway {
         address: String,
-        server_version: i32,
+        pub(crate) server_version: i32,
         reconnect_handshake_started: mpsc::Receiver<()>,
         release_reconnect: Option<mpsc::Sender<()>>,
+        shutdown: Option<mpsc::Sender<()>>,
         handle: Option<thread::JoinHandle<()>>,
     }
 
     impl PausedReconnectGateway {
-        fn start(server_version: i32) -> Self {
+        pub(crate) fn start(server_version: i32) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind test gateway");
             let address = listener.local_addr().expect("Failed to read test gateway address");
             let (reconnect_handshake_started, reconnect_handshake_ready) = mpsc::channel();
             let (release_reconnect, reconnect_released) = mpsc::channel();
+            let (shutdown_tx, shutdown_rx) = mpsc::channel();
 
             let handle = thread::spawn(move || {
                 let (mut stream, _) = listener.accept().expect("Failed to accept initial connection");
@@ -389,6 +391,12 @@ mod tests {
                 let (mut stream, _) = listener.accept().expect("Failed to accept reconnect");
                 handle_startup(&mut stream, server_version, Some((reconnect_handshake_started, reconnect_released)))
                     .expect("Failed reconnect startup");
+
+                // Keep the reconnected stream alive until the test signals shutdown,
+                // so callers can observe post-reconnect state before the socket closes
+                // and triggers a fresh connection-error cycle.
+                let _ = shutdown_rx.recv();
+                drop(stream);
             });
 
             Self {
@@ -396,15 +404,16 @@ mod tests {
                 server_version,
                 reconnect_handshake_started: reconnect_handshake_ready,
                 release_reconnect: Some(release_reconnect),
+                shutdown: Some(shutdown_tx),
                 handle: Some(handle),
             }
         }
 
-        fn address(&self) -> String {
+        pub(crate) fn address(&self) -> String {
             self.address.clone()
         }
 
-        async fn wait_for_paused_reconnect_handshake(&self) {
+        pub(crate) async fn wait_for_paused_reconnect_handshake(&self) {
             tokio::time::timeout(Duration::from_secs(3), async {
                 loop {
                     match self.reconnect_handshake_started.try_recv() {
@@ -420,7 +429,7 @@ mod tests {
             .expect("Reconnect did not reach the server-version handshake wait point");
         }
 
-        fn release_reconnect_handshake(&mut self) {
+        pub(crate) fn release_reconnect_handshake(&mut self) {
             if let Some(release_reconnect) = self.release_reconnect.take() {
                 release_reconnect.send(()).expect("Failed to release reconnect handshake");
             }
@@ -430,6 +439,9 @@ mod tests {
     impl Drop for PausedReconnectGateway {
         fn drop(&mut self) {
             self.release_reconnect_handshake();
+            if let Some(shutdown) = self.shutdown.take() {
+                let _ = shutdown.send(());
+            }
             if let Some(handle) = self.handle.take() {
                 handle.join().expect("Failed to join test gateway thread");
             }
