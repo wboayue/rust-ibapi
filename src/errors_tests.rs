@@ -79,7 +79,7 @@ fn unsupported_timezone_display_contains_alias_and_helpers() {
 #[test]
 fn unexpected_response_display_includes_message_debug() {
     let msg = ResponseMessage::from("4\02\0-1\0200\0boom\0");
-    let error = Error::UnexpectedResponse(msg);
+    let error = Error::unexpected_response(&msg);
     assert!(error.to_string().starts_with("UnexpectedResponse:"));
 }
 
@@ -244,7 +244,7 @@ fn clone_preserves_payloaded_variants() {
         Error::Simple("s".into()),
         Error::InvalidArgument("a".into()),
         Error::UnsupportedTimeZone("US/Foo".into()),
-        Error::UnexpectedResponse(response),
+        Error::unexpected_response(&response),
         Error::Message(404, "nope".into()),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),

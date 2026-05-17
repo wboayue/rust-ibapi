@@ -8,7 +8,10 @@ use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 use crate::accounts::AccountUpdate;
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
-use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, PROTOBUF_MSG_ID};
+use crate::messages::{
+    encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE,
+    HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
+};
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
 
@@ -18,10 +21,12 @@ use crate::server_versions;
 /// TWS may emit any of these unsolicited at handshake time when the connection
 /// is bound to the configured Master Client ID (open-order + commission-report
 /// replays), or when the previous session left outstanding orders / account
-/// state worth resending. Anything not covered by a dedicated variant lands in
-/// `Other` so callers can still inspect the raw message; the `Other` arm is
-/// scheduled for removal in a follow-up PR (see
-/// `plans/retire-response-message-public-surface.md`).
+/// state worth resending. Frame kinds with no typed variant — and frames whose
+/// typed decoder fails — are routed to the notice stream
+/// ([`Client::notice_stream`](crate::Client::notice_stream)) instead, using
+/// the synthesized codes
+/// [`HANDSHAKE_UNKNOWN_FRAME_CODE`](crate::HANDSHAKE_UNKNOWN_FRAME_CODE) and
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`](crate::HANDSHAKE_DECODE_FAILURE_CODE).
 #[derive(Debug)]
 #[non_exhaustive]
 #[allow(clippy::large_enum_variant)]
@@ -53,13 +58,6 @@ pub enum StartupMessage {
     ExecutionDataEnd,
     /// End-of-completed-orders marker. No payload.
     CompletedOrdersEnd,
-    /// Anything else that arrived unsolicited during account-info exchange.
-    /// Inspect via [`ResponseMessage::message_type`] and decode as needed.
-    ///
-    /// Removed in a follow-up release; see
-    /// `plans/retire-response-message-public-surface.md`. New typed variants
-    /// will absorb every kind that previously landed here.
-    Other(ResponseMessage),
 }
 
 impl StartupMessage {
@@ -81,7 +79,6 @@ impl StartupMessage {
             StartupMessage::CompletedOrder(_) => IncomingMessages::CompletedOrder,
             StartupMessage::ExecutionDataEnd => IncomingMessages::ExecutionDataEnd,
             StartupMessage::CompletedOrdersEnd => IncomingMessages::CompletedOrdersEnd,
-            StartupMessage::Other(rm) => rm.message_type(),
         }
     }
 }
@@ -261,15 +258,45 @@ impl ConnectionProtocol for ConnectionHandler {
 /// consumes itself). Errors fan out to the notice sink (always present);
 /// typed frames (`OpenOrder` / `OrderStatus` / account-update / execution /
 /// commission / completed-order, plus the corresponding end markers) decode
-/// into typed [`StartupMessage`] values for the optional startup callback;
-/// anything else lands in `StartupMessage::Other` so the caller can still
-/// inspect it. Decode failures surface as `Other` rather than being silently
-/// dropped.
+/// into typed [`StartupMessage`] values for the optional startup callback.
+/// Decode failures and unknown frame kinds route to the notice sink with
+/// synthesized codes ([`HANDSHAKE_DECODE_FAILURE_CODE`] and
+/// [`HANDSHAKE_UNKNOWN_FRAME_CODE`]) so observers via
+/// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 
-    match message.message_type() {
+    /// Run a typed decoder; fire the callback with the typed payload on
+    /// success, or emit a synthesized decode-failure notice on error. The
+    /// decoder only runs when a callback is present, but the failure notice
+    /// always fires when a decode is attempted.
+    fn dispatch_typed<T>(
+        ctx: &StartupHandshakeContext<'_>,
+        kind: IncomingMessages,
+        decode: impl FnOnce() -> Result<T, Error>,
+        wrap: impl FnOnce(T) -> StartupMessage,
+    ) {
+        let Some(cb) = ctx.startup else { return };
+        match decode() {
+            Ok(t) => cb(wrap(t)),
+            Err(e) => ctx.notice_sink.deliver(Notice::synthesized(
+                HANDSHAKE_DECODE_FAILURE_CODE,
+                format!("handshake decoder failed for {kind:?}: {e}"),
+            )),
+        }
+    }
+
+    /// Fire the typed callback with a unit-marker variant if a callback is
+    /// installed. No payload to decode; no notice path.
+    fn dispatch_unit(ctx: &StartupHandshakeContext<'_>, msg: StartupMessage) {
+        if let Some(cb) = ctx.startup {
+            cb(msg);
+        }
+    }
+
+    let kind = message.message_type();
+    match kind {
         IncomingMessages::Error => {
             let notice = Notice::from(&*message);
             if notice.is_warning() || notice.is_system_message() {
@@ -279,81 +306,31 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
             }
             ctx.notice_sink.deliver(notice);
         }
-        IncomingMessages::OpenOrder => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_open_order(message)
-                    .map(StartupMessage::OpenOrder)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::OrderStatus => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_order_status(message)
-                    .map(StartupMessage::OrderStatus)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::OpenOrderEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::OpenOrderEnd);
-            }
-        }
+        IncomingMessages::OpenOrder => dispatch_typed(ctx, kind, || decode_open_order(message), StartupMessage::OpenOrder),
+        IncomingMessages::OrderStatus => dispatch_typed(ctx, kind, || decode_order_status(message), StartupMessage::OrderStatus),
+        IncomingMessages::OpenOrderEnd => dispatch_unit(ctx, StartupMessage::OpenOrderEnd),
         IncomingMessages::AccountValue
         | IncomingMessages::PortfolioValue
         | IncomingMessages::AccountUpdateTime
-        | IncomingMessages::AccountDownloadEnd => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_account_update_message(server_version, message)
-                    .map(StartupMessage::AccountUpdate)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::ExecutionData => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_execution_data(message)
-                    .map(StartupMessage::Execution)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::CommissionsReport => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_commission_report(message)
-                    .map(StartupMessage::CommissionReport)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::CompletedOrder => {
-            if let Some(cb) = ctx.startup {
-                let typed = decode_completed_order(message)
-                    .map(StartupMessage::CompletedOrder)
-                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
-                cb(typed);
-            }
-        }
-        IncomingMessages::ExecutionDataEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::ExecutionDataEnd);
-            }
-        }
-        IncomingMessages::CompletedOrdersEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::CompletedOrdersEnd);
-            }
-        }
+        | IncomingMessages::AccountDownloadEnd => dispatch_typed(
+            ctx,
+            kind,
+            || decode_account_update_message(server_version, message),
+            StartupMessage::AccountUpdate,
+        ),
+        IncomingMessages::ExecutionData => dispatch_typed(ctx, kind, || decode_execution_data(message), StartupMessage::Execution),
+        IncomingMessages::CommissionsReport => dispatch_typed(ctx, kind, || decode_commission_report(message), StartupMessage::CommissionReport),
+        IncomingMessages::CompletedOrder => dispatch_typed(ctx, kind, || decode_completed_order(message), StartupMessage::CompletedOrder),
+        IncomingMessages::ExecutionDataEnd => dispatch_unit(ctx, StartupMessage::ExecutionDataEnd),
+        IncomingMessages::CompletedOrdersEnd => dispatch_unit(ctx, StartupMessage::CompletedOrdersEnd),
         _ => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::Other(message.clone()));
-            } else {
-                warn!(
-                    "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
-                    message.message_type()
-                );
-            }
+            // Unknown frame kind: log + emit synthesized notice. Fires
+            // regardless of callback presence (no typed variant to receive).
+            warn!("unrouted handshake frame: {kind:?}");
+            ctx.notice_sink.deliver(Notice::synthesized(
+                HANDSHAKE_UNKNOWN_FRAME_CODE,
+                format!("unsolicited handshake frame with no typed variant: {kind:?}"),
+            ));
         }
     }
 }

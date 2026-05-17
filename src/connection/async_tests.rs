@@ -130,9 +130,11 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     // shape as ClientBuilder::connect_with_notice_stream's pre-bind.
     let mut notice_rx = connection.notice_sender.subscribe();
 
+    // OpenOrderEnd is a unit marker (no payload to decode), so the typed
+    // callback fires regardless of wire framing.
     let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
     stream.push_inbound(handshake_bytes.clone());
-    stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0123\0AAPL\0\0"));
+    stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
     stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\090\0"));
     stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
@@ -143,7 +145,7 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     assert_eq!(n1.code, 2104);
 
     stream.push_inbound(handshake_bytes);
-    stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0456\0MSFT\0\0"));
+    stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02106\0HMDS farm OK\0"));
     stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\091\0"));
     stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));

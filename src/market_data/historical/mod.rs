@@ -382,7 +382,7 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
                 Ok(Self::End { start, end })
             }
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -596,6 +596,13 @@ pub use sync::*;
 pub use r#async::TickSubscription;
 
 /// Trait implemented by historical tick types that can decode IB messages.
+///
+/// External users can name the trait as a bound on [`TickSubscription<T>`], but
+/// cannot call [`decode`](Self::decode) themselves — the argument
+/// `&mut ResponseMessage` is crate-private. Implementations are restricted to
+/// the three built-in tick types ([`TickBidAsk`], [`TickLast`],
+/// [`TickMidpoint`]); custom implementations are not supported.
+#[allow(private_interfaces)]
 pub trait TickDecoder<T> {
     /// Message discriminator emitted by TWS for this tick type.
     const MESSAGE_TYPE: IncomingMessages;
@@ -603,6 +610,7 @@ pub trait TickDecoder<T> {
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
+#[allow(private_interfaces)]
 impl TickDecoder<TickBidAsk> for TickBidAsk {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickBidAsk;
 
@@ -611,6 +619,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
     }
 }
 
+#[allow(private_interfaces)]
 impl TickDecoder<TickLast> for TickLast {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickLast;
 
@@ -619,6 +628,7 @@ impl TickDecoder<TickLast> for TickLast {
     }
 }
 
+#[allow(private_interfaces)]
 impl TickDecoder<TickMidpoint> for TickMidpoint {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTick;
 

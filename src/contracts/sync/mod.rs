@@ -50,7 +50,7 @@ impl Client {
                 }
                 Ok(message) if message.message_type() == IncomingMessages::ContractDataEnd => return Ok(contract_details),
                 Ok(message) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-                Ok(message) => return Err(Error::UnexpectedResponse(message)),
+                Ok(message) => return Err(Error::unexpected_response(&message)),
                 Err(e) => return Err(e),
             }
         }

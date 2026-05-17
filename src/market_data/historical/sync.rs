@@ -49,7 +49,7 @@ impl Client {
             Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
                 Ok(decoders::decode_head_timestamp(&mut message, self.time_zone())?)
             }
-            Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+            Some(Ok(message)) => Err(Error::unexpected_response(&message)),
             Some(Err(Error::ConnectionReset)) => self.head_timestamp(contract, what_to_show, trading_hours),
             Some(Err(e)) => Err(e),
             None => Err(Error::UnexpectedEndOfStream),
@@ -132,7 +132,7 @@ impl Client {
                     return Ok(data);
                 }
                 Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-                Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+                Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
                 Some(Err(Error::ConnectionReset)) => {}
                 Some(Err(e)) => return Err(e),
                 None => return Err(Error::UnexpectedEndOfStream),
@@ -542,7 +542,7 @@ fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<Of
             Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
                 return decoders::decode_historical_schedule(&mut message)
             }
-            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
             Some(Err(Error::ConnectionReset)) => {}
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),

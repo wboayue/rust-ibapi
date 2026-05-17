@@ -209,7 +209,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
             if n == 0 {
                 Err(Error::EndOfStream)
             } else {
-                Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
+                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
             }
         },
         None,
@@ -252,7 +252,7 @@ async fn test_subscription_skips_unexpected_messages_without_retry_limit() {
         move |_context, _msg| {
             let n = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if n < 20 {
-                Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
+                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
             } else {
                 Ok("success".to_string())
             }

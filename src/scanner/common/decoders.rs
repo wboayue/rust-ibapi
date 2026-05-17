@@ -11,7 +11,7 @@ pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) 
     match message.message_type() {
         IncomingMessages::ScannerData => decode_scanner_data(message),
         IncomingMessages::Error => Err(Error::from(message.clone())),
-        _ => Err(Error::UnexpectedResponse(message.clone())),
+        _ => Err(Error::unexpected_response(message)),
     }
 }
 

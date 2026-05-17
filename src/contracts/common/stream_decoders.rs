@@ -18,7 +18,7 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
         match message.message_type() {
             IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(context.server_version, message)?),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -49,7 +49,7 @@ impl StreamDecoder<OptionChain> for OptionChain {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }

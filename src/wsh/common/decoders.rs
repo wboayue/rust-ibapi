@@ -45,7 +45,7 @@ pub(in crate::wsh) fn decode_event_data_message(message: ResponseMessage) -> Res
     match message.message_type() {
         IncomingMessages::WshEventData => decode_wsh_event_data(message),
         IncomingMessages::Error => Err(Error::from(message)),
-        _ => Err(Error::UnexpectedResponse(message)),
+        _ => Err(Error::unexpected_response(&message)),
     }
 }
 

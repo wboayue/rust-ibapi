@@ -18,7 +18,7 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
             IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(message)?)),
             IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(message)?)),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }
@@ -37,7 +37,7 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
             IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(message)?)),
             IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(message)?)),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }
@@ -48,7 +48,7 @@ impl StreamDecoder<CancelOrder> for CancelOrder {
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
         match message.message_type() {
             IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(message)?)),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }
@@ -70,7 +70,7 @@ impl StreamDecoder<Orders> for Orders {
             IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }
@@ -87,7 +87,7 @@ impl StreamDecoder<Executions> for Executions {
             IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(message)?)),
             IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(message)?)),
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }
@@ -99,7 +99,7 @@ impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
         match message.message_type() {
             IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(message)?)),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 }

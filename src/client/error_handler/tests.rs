@@ -109,7 +109,7 @@ fn test_is_transient_error() {
     let test_cases = vec![
         TestCase {
             name: "unexpected_response",
-            error: Error::UnexpectedResponse(crate::messages::ResponseMessage {
+            error: Error::unexpected_response(&crate::messages::ResponseMessage {
                 i: 0,
                 fields: vec!["45".to_string()], // TickGeneric message type
                 server_version: 0,
@@ -180,7 +180,7 @@ fn test_should_retry_request() {
         },
         TestCase {
             name: "transient_error_first_retry",
-            error: Error::UnexpectedResponse(crate::messages::ResponseMessage {
+            error: Error::unexpected_response(&crate::messages::ResponseMessage {
                 i: 0,
                 fields: vec!["45".to_string()], // TickGeneric message type
                 server_version: 0,
@@ -440,7 +440,7 @@ fn test_error_categorization() {
         // Transient category
         TestCase {
             name: "unexpected_response",
-            error: Error::UnexpectedResponse(crate::messages::ResponseMessage {
+            error: Error::unexpected_response(&crate::messages::ResponseMessage {
                 i: 0,
                 fields: vec!["45".to_string()], // TickGeneric message type
                 server_version: 0,

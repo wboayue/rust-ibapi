@@ -85,9 +85,12 @@ pub enum Error {
     #[error("EndOfStream")]
     EndOfStream,
 
-    /// Received unexpected message type.
-    #[error("UnexpectedResponse: {0:?}")]
-    UnexpectedResponse(ResponseMessage),
+    /// Received unexpected message type. The string carries the `Debug` repr
+    /// of the offending wire envelope for diagnostic logging; the structured
+    /// payload is no longer exposed (rust-ibapi 3.x retired
+    /// `ResponseMessage` from the public surface).
+    #[error("UnexpectedResponse: {0}")]
+    UnexpectedResponse(String),
 
     /// Stream ended unexpectedly.
     #[error("UnexpectedEndOfStream")]
@@ -129,6 +132,17 @@ impl From<crate::transport::routing::DecodedError> for Error {
     /// message string instead of cloning.
     fn from(payload: crate::transport::routing::DecodedError) -> Error {
         Error::Message(payload.error_code, payload.error_message)
+    }
+}
+
+impl Error {
+    /// Build an [`Error::UnexpectedResponse`] from an internal `ResponseMessage`.
+    /// Captures the `Debug` repr in the variant's `String` payload — the
+    /// structured envelope is no longer exposed publicly. Crate-private; the
+    /// variant's pattern `Error::UnexpectedResponse(_)` remains matchable by
+    /// downstream code.
+    pub(crate) fn unexpected_response(message: &ResponseMessage) -> Error {
+        Error::UnexpectedResponse(format!("{message:?}"))
     }
 }
 

@@ -117,10 +117,14 @@ async fn connect_handshakes_against_real_socket() {
 
 #[tokio::test]
 async fn builder_startup_callback_receives_unsolicited_messages() {
+    // OpenOrderEnd (msg=53) is a unit marker — no payload to decode, so the
+    // typed callback fires regardless of wire framing. Sparse OpenOrder /
+    // OrderStatus frames would fail the proto-only decoder and route to the
+    // notice stream instead.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
     frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));
-    frames.push(binary_text(IncomingMessages::OpenOrder as i32, "1\0\0"));
+    frames.push(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     frames.push(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
 
     let (addr, _h) = spawn_handshake_listener(frames).await;
@@ -139,8 +143,8 @@ async fn builder_startup_callback_receives_unsolicited_messages() {
 
     let seen = captured.lock().unwrap();
     assert!(
-        seen.contains(&(IncomingMessages::OpenOrder as i32)),
-        "callback did not see OpenOrder; saw: {seen:?}"
+        seen.contains(&(IncomingMessages::OpenOrderEnd as i32)),
+        "callback did not see OpenOrderEnd; saw: {seen:?}"
     );
 }
 

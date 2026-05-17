@@ -12,7 +12,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
         match message.message_type() {
             IncomingMessages::ScannerData => decoders::decode_scanner_message(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
