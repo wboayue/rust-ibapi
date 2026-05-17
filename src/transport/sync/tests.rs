@@ -402,6 +402,45 @@ fn test_client_reconnect() -> Result<(), Error> {
     Ok(())
 }
 
+/// Regression: a previous version of `reset()` cleared `connected` *after* the
+/// dispatcher had restored it to true on successful reconnect, so
+/// `is_connected()` was permanently false after the first network blip.
+#[test]
+fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
+    let handler = ConnectionHandler::default();
+    let sv = handler.min_version;
+
+    let start_api_bytes = handler.format_start_api(28, sv);
+    let events = vec![
+        Exchange::simple("v210..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::new(
+            start_api_bytes.clone(),
+            vec![
+                ResponseMessage::from_simple("15|1|DU1234567|"),
+                ResponseMessage::from_simple("9|1|1|"),
+                ResponseMessage::from_simple("\0"),
+            ],
+        ), // RESTART
+        Exchange::simple("v210..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::new(
+            start_api_bytes,
+            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+        ),
+    ];
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
+    let bus = TcpMessageBus::new(connection)?;
+
+    assert!(bus.is_connected(), "bus should be connected after initial handshake");
+
+    bus.dispatch()?; // reads "\0", reconnects, restores connected=true
+
+    assert!(bus.is_connected(), "bus should still be connected after reconnect");
+
+    Ok(())
+}
+
 const AAPL_CONTRACT_RESPONSE: &str  = "AAPL|STK||0||SMART|USD|AAPL|NMS|NMS|265598|0.01||ACTIVETIM,AD,ADDONT,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SMARTSTG,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,NASDAQ,DRCTEDGE,BEX,BATS,EDGEA,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,IBEOS,OVERNIGHT,TPLUS0,PSX|1|0|APPLE INC|NASDAQ||Technology|Computers|Computers|US/Eastern|20250324:0400-20250324:2000;20250325:0400-20250325:2000;20250326:0400-20250326:2000;20250327:0400-20250327:2000;20250328:0400-20250328:2000|20250324:0930-20250324:1600;20250325:0930-20250325:1600;20250326:0930-20250326:1600;20250327:0930-20250327:1600;20250328:0930-20250328:1600|||1|ISIN|US0378331005|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|0.0001|0.0001|100|";
 
 #[test]

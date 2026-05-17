@@ -219,8 +219,6 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
-
-        self.connected.store(false, Ordering::Relaxed);
     }
 
     fn clean_request(&self, request_id: i32) {

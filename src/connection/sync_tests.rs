@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use time_tz::timezones;
@@ -160,4 +161,53 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");
     let n2 = notice_rx.try_recv().expect("second farm-status notice should be on the same stream");
     assert_eq!(n2.code, 2106);
+}
+
+/// During a reconnect, any caller of `connection_metadata()` must see cleared
+/// state rather than the prior session's `server_version` / `next_order_id` /
+/// `managed_accounts`. Sync mirror of the async test.
+#[test]
+fn reconnect_clears_metadata_while_waiting_for_handshake() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.server_version, SERVER_VERSION);
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+
+    let initial_capture_len = stream.captured().len();
+
+    // Spawn reconnect on a thread with no handshake responses queued: it will
+    // write the new handshake magic and block on the first read.
+    let connection = Arc::new(connection);
+    let conn_for_thread = Arc::clone(&connection);
+    let reconnect_thread = thread::spawn(move || conn_for_thread.reconnect());
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while stream.captured().len() == initial_capture_len {
+        assert!(Instant::now() < deadline, "reconnect must reach handshake-write phase");
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.client_id, CLIENT_ID);
+    assert_eq!(metadata.server_version, 0);
+    assert_eq!(metadata.next_order_id, 0);
+    assert_eq!(metadata.managed_accounts, "");
+    assert!(metadata.connection_time.is_none());
+    assert!(metadata.time_zone.is_none());
+
+    push_handshake(&stream);
+
+    reconnect_thread.join().expect("reconnect thread panicked").expect("reconnect failed");
+
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.server_version, SERVER_VERSION);
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
 }
