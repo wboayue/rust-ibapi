@@ -147,18 +147,16 @@ Related existing tracking docs in `plans/`:
   re-exported from `orders` (`src/orders/mod.rs:67`) for historical reasons. Move to
   `contracts` (or wherever it logically belongs) and drop the alias.
 
-- [x] **Hide internal types from the public surface.** Shipped via
-  [`plans/hide-internal-types.md`](hide-internal-types.md) — PRs #574
+- [x] **Hide internal types from the public surface.** Shipped — PRs #574
   (`Client::stubbed` / `message_bus` async-side narrowed), #575
   (`pub mod proto` → `pub(crate)`), #577 (`pub mod messages` → `pub(crate)`;
   user-facing types lifted to crate root + prelude; `parser_registry`
-  reachable via `#[doc(hidden)]` re-export for the recording example).
-  Verification pass on 2026-05-17 confirmed no external reach via
-  `ibapi::messages::*` or `ibapi::proto::*` (both fail with E0603 from a
-  downstream test crate), and that `DecoderContext` / `StreamDecoder` are
-  unreachable. One follow-up tracked in the plan: retire `ResponseMessage`
-  from the public surface by reshaping `StartupMessage::Other` to carry a
-  typed payload.
+  reachable via `#[doc(hidden)]` re-export for the recording example), and
+  #581 (`StartupMessage::Other` removed, `ResponseMessage` narrowed to
+  `pub(crate)`). Verification pass on 2026-05-17 confirmed no external
+  reach via `ibapi::messages::*` or `ibapi::proto::*` (both fail with
+  E0603 from a downstream test crate), and that `DecoderContext` /
+  `StreamDecoder` are unreachable.
 
 ## 4. Connection API
 
