@@ -1,5 +1,12 @@
 # Retire `ResponseMessage` From the Public Surface
 
+**Status:** ✅ shipped. All three PRs landed: `ResponseMessage` is now
+`pub(crate)`, the crate-root re-export is gone, `StartupMessage::Other` is
+removed, and `Error::UnexpectedResponse` carries a `String` instead of the
+wire envelope. Synthesized notice taxonomy
+(`HANDSHAKE_UNKNOWN_FRAME_CODE = -3`, `HANDSHAKE_DECODE_FAILURE_CODE = -4`)
++ `Notice::is_handshake_synthetic()` predicate landed in PR 3 (#581).
+
 **End goal:** `ResponseMessage` becomes `pub(crate)` in 3.0. The crate-root
 re-export at `src/lib.rs` is dropped; downstream code can no longer observe
 the raw wire envelope. Replace `StartupMessage::Other(ResponseMessage)` —
@@ -173,7 +180,7 @@ and future-proofs against further unsolicited-at-handshake kinds.
 
 Three PRs. Each is workspace-green; together they retire the leak.
 
-### PR 1 — capture which `IncomingMessages` actually land in `Other`
+### PR 1 — capture which `IncomingMessages` actually land in `Other` ✅ shipped (`ca69642`, folded into PR 2)
 
 **Optional gate.** The plan above assumes the three doc-comment kinds
 (`ExecutionData`, `CommissionsReport`, `CompletedOrder`) are the complete
@@ -201,7 +208,7 @@ This PR is a research deliverable, not code. The output is a short table
 appended below the audit, listing each observed `IncomingMessages` variant +
 frequency + whether a decoder exists.
 
-### PR 2 — add typed variants to `StartupMessage`
+### PR 2 — add typed variants to `StartupMessage` ✅ shipped (`ca69642`)
 
 Add the variants and `#[non_exhaustive]` together; `Other` stays in place
 until PR 3. Each new variant gets:
@@ -245,7 +252,7 @@ until PR 3. Each new variant gets:
 > }
 > ```
 
-### PR 3 — remove `StartupMessage::Other`; narrow `ResponseMessage` to `pub(crate)`
+### PR 3 — remove `StartupMessage::Other`; narrow `ResponseMessage` to `pub(crate)` ✅ shipped (#581)
 
 The terminal PR. Three coupled outcomes:
 
