@@ -180,6 +180,9 @@ pub struct AsyncTcpMessageBus {
     shutdown_requested: Arc<AtomicBool>,
     /// Notification to wake the message loop on shutdown
     shutdown_notify: Arc<Notify>,
+    /// Reflects live connection state: cleared during a reconnect window,
+    /// restored on successful reconnect. Observable via `is_connected()`.
+    connected: Arc<AtomicBool>,
 }
 
 impl Drop for AsyncTcpMessageBus {
@@ -222,6 +225,7 @@ impl AsyncTcpMessageBus {
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
             shutdown_notify: Arc::new(Notify::new()),
+            connected: Arc::new(AtomicBool::new(true)),
         };
 
         // Start cleanup task
@@ -289,10 +293,12 @@ impl AsyncTcpMessageBus {
                             }
                             Err(ref err) if is_connection_error(err) => {
                                 error!("Connection error detected, attempting to reconnect: {err:?}");
+                                message_bus.connected.store(false, Ordering::Relaxed);
 
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
                                         info!("Successfully reconnected to TWS/Gateway");
+                                        message_bus.connected.store(true, Ordering::Relaxed);
                                         message_bus.reset_channels().await;
                                     }
                                     Err(e) => {
@@ -395,6 +401,7 @@ impl AsyncTcpMessageBus {
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
 
@@ -811,11 +818,58 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
     }
 
     fn is_connected(&self) -> bool {
-        !self.shutdown_requested.load(Ordering::Relaxed)
+        self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::client::r#async::Client;
+    use crate::connection::r#async::tests::PausedReconnectGateway;
+    use crate::server_versions;
+
+    const CLIENT_ID: i32 = 100;
+
+    #[tokio::test]
+    async fn test_is_connected_flips_false_during_reconnect_then_true_after() {
+        let mut gateway = PausedReconnectGateway::start(server_versions::IPO_PRICES);
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        assert!(client.is_connected(), "client should be connected after initial handshake");
+
+        // Gateway drops its initial stream after the first handshake; the dispatcher
+        // will detect the connection error, set connected=false, and retry — at which
+        // point the gateway pauses mid-handshake.
+        gateway.wait_for_paused_reconnect_handshake().await;
+
+        assert!(
+            !client.is_connected(),
+            "client should be disconnected while reconnect handshake is paused"
+        );
+
+        gateway.release_reconnect_handshake();
+
+        // After the reconnect handshake completes, the dispatcher stores connected=true.
+        // The gateway holds the reconnected stream open (until drop) so we can observe
+        // the post-reconnect state before a fresh connection-error cycle begins.
+        let restored = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if client.is_connected() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+
+        assert!(restored.is_ok(), "client should reconnect within timeout");
     }
 }
