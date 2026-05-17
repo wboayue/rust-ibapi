@@ -147,16 +147,18 @@ Related existing tracking docs in `plans/`:
   re-exported from `orders` (`src/orders/mod.rs:67`) for historical reasons. Move to
   `contracts` (or wherever it logically belongs) and drop the alias.
 
-- [ ] **Hide internal types from the public surface.** Audit `pub` items that look
-  like plumbing:
-  - `Client::message_bus()` (`src/client/async.rs:359`) and `Client::stubbed()`
-    (`src/client/async.rs:342`) — both `pub` on the async side; sync has neither
-    in its public signature, so the async exposure looks accidental.
-  - `subscriptions::common::SubscriptionItem` (re-exported at module root — fine, but
-    confirm `DecoderContext`, `StreamDecoder` stay `pub(crate)`)
-  - `pub mod messages` and `pub mod proto` (`src/lib.rs:107, 127`) — confirm what
-    consumers actually need versus what's just exposed for tests/examples; consider
-    `#[doc(hidden)]` for the advanced bits.
+- [x] **Hide internal types from the public surface.** Shipped via
+  [`plans/hide-internal-types.md`](hide-internal-types.md) — PRs #574
+  (`Client::stubbed` / `message_bus` async-side narrowed), #575
+  (`pub mod proto` → `pub(crate)`), #577 (`pub mod messages` → `pub(crate)`;
+  user-facing types lifted to crate root + prelude; `parser_registry`
+  reachable via `#[doc(hidden)]` re-export for the recording example).
+  Verification pass on 2026-05-17 confirmed no external reach via
+  `ibapi::messages::*` or `ibapi::proto::*` (both fail with E0603 from a
+  downstream test crate), and that `DecoderContext` / `StreamDecoder` are
+  unreachable. One follow-up tracked in the plan: retire `ResponseMessage`
+  from the public surface by reshaping `StartupMessage::Other` to carry a
+  typed payload.
 
 ## 4. Connection API
 

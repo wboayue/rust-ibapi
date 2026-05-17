@@ -92,28 +92,47 @@ as the escape-hatch shape for tooling-only reach-ins.
 
 Migration guide §17 added.
 
-### PR 4 — verification checkpoint (no code expected)
+### PR 4 — verification checkpoint ✅ audit clean (2026-05-17)
 
-After 1–3 ship:
+After 1–3 shipped, ran the three checks. No PR needed.
 
-1. `cargo doc --no-deps` under each feature config — visually confirm no
-   `proto::*` or wire-internal types appear on the rendered surface.
-2. `rg '^pub (fn|struct|enum|trait|mod|use)' src/ | grep -v test` —
-   spot-check ~20 entries: "would a user need this?"
-3. Confirm `subscriptions::common::DecoderContext` and `StreamDecoder` are
-   unreachable from `ibapi::*` (a future contributor widening the module
-   visibility would silently re-leak them).
+1. **Rendered docs surface clean** — `cargo doc --no-deps` produces no links
+   from `target/doc/ibapi/index.html` to `messages/` or `proto/`. External
+   consumers cannot resolve `ibapi::messages::*` or `ibapi::proto::*` —
+   verified by building a downstream `test-vis` crate against each: both
+   fail with E0603 ("private module"). The `target/doc/ibapi/messages/`
+   directory is a rustdoc artifact (rustdoc traverses `pub(crate)` modules
+   to locate the canonical definition site of re-exported items); it isn't
+   reachable via the public navigation.
 
-If audit is clean, this PR doesn't exist. If it surfaces stragglers, ship
-the visibility-tightening as a small PR.
+2. **`pub` spot-check** — 932 `pub` declarations total. All top-level
+   `pub mod` declarations in `src/lib.rs` are intentional (domains +
+   `client` + `errors` + `prelude` + `protocol` + `trace`). Two
+   over-permissive `pub fn`/`pub struct` declarations inside `pub(crate)`
+   modules (`AsyncInternalSubscription` in `transport`, `parse_raw_message`
+   in `connection/common`) are crate-private externally and don't leak; a
+   `pub` → `pub(crate)` tighten-up on them is a separate cosmetic cleanup
+   if anyone cares.
+
+3. **`DecoderContext` / `StreamDecoder` unreachable** — `ibapi::subscriptions::DecoderContext`
+   and the suggested fallback `ibapi::subscriptions::common::DecoderContext`
+   both fail with E0603 from external code. `subscriptions::common` is
+   `pub(crate)`; the `pub(crate) use` re-export at
+   `src/subscriptions/mod.rs:5` confines both items to crate scope.
+
+**Correction to PR 3's follow-up entry**: `ResponseMessage` is exposed
+externally only via `StartupMessage::Other(ResponseMessage)`
+(`src/connection/common.rs:40`). `parse_raw_message` on the same file is
+inside `pub(crate) mod connection`, so it's not an external leak. The
+follow-up entry's reference to it was wrong and has been pruned.
 
 ## Follow-up (out of scope here)
 
 - **Retire `ResponseMessage` from the public surface.** PR 3 had to re-export
   it because `StartupMessage::Other(ResponseMessage)` (`src/connection/common.rs:40`)
-  and `connection::common::parse_raw_message` both expose it. Reshape
-  `StartupMessage::Other` to carry a typed payload instead of the raw wire
-  envelope — once that lands, `ResponseMessage` can become `pub(crate)`.
+  is on the public API surface. Reshape `StartupMessage::Other` to carry a
+  typed payload instead of the raw wire envelope — once that lands,
+  `ResponseMessage` can become `pub(crate)`.
 
 ## Out of scope
 
