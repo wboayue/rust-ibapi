@@ -124,6 +124,7 @@ impl<S: Stream> Connection<S> {
             match self.socket.reconnect() {
                 Ok(_) => {
                     info!("reconnected !!!");
+                    self.reset_connection_metadata();
                     self.establish_connection()?;
 
                     return Ok(());
@@ -135,6 +136,14 @@ impl<S: Stream> Connection<S> {
         }
 
         Err(Error::ConnectionFailed)
+    }
+
+    fn reset_connection_metadata(&self) {
+        let mut connection_metadata = self.connection_metadata.lock().unwrap();
+        *connection_metadata = ConnectionMetadata {
+            client_id: self.client_id,
+            ..Default::default()
+        };
     }
 
     /// Establish connection to TWS

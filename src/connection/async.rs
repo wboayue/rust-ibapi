@@ -133,6 +133,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             match self.socket.reconnect().await {
                 Ok(_) => {
                     info!("reconnected !!!");
+                    self.reset_connection_metadata().await;
                     self.establish_connection().await?;
                     return Ok(());
                 }
@@ -143,6 +144,16 @@ impl<S: AsyncStream> AsyncConnection<S> {
         }
 
         Err(Error::ConnectionFailed)
+    }
+
+    async fn reset_connection_metadata(&self) {
+        self.server_version_cache.store(0, Ordering::Release);
+
+        let mut connection_metadata = self.connection_metadata.lock().await;
+        *connection_metadata = ConnectionMetadata {
+            client_id: self.client_id,
+            ..Default::default()
+        };
     }
 
     /// Establish connection to TWS

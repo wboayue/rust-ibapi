@@ -225,3 +225,61 @@ async fn reconnect_returns_connection_failed_after_exhausting_attempts() {
     let err = connection.reconnect().await.expect_err("must give up after MAX_RECONNECT_ATTEMPTS");
     assert!(matches!(err, crate::errors::Error::ConnectionFailed), "got {err:?}");
 }
+
+/// During a reconnect, any caller of `connection_metadata()` must see cleared
+/// state rather than the prior session's `server_version` / `next_order_id` /
+/// `managed_accounts`. Without `reset_connection_metadata()` in the reconnect
+/// path, stale values are observable until the new handshake completes.
+#[tokio::test]
+async fn reconnect_clears_metadata_while_waiting_for_handshake() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("initial establish_connection failed");
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.server_version, SERVER_VERSION);
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+
+    let initial_capture_len = stream.captured().len();
+
+    // Spawn reconnect with no handshake responses queued: the task will write
+    // the new handshake magic and block on the first read.
+    let connection = Arc::new(connection);
+    let conn_for_task = Arc::clone(&connection);
+    let reconnect_task = tokio::spawn(async move { conn_for_task.reconnect().await });
+
+    // Wait until the reconnect's handshake bytes appear on the wire. By that
+    // point `reset_connection_metadata()` has already run.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if stream.captured().len() > initial_capture_len {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("reconnect must reach handshake-write phase");
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.client_id, CLIENT_ID);
+    assert_eq!(metadata.server_version, 0);
+    assert_eq!(metadata.next_order_id, 0);
+    assert_eq!(metadata.managed_accounts, "");
+    assert!(metadata.connection_time.is_none());
+    assert!(metadata.time_zone.is_none());
+
+    // Release: feed the reconnect handshake responses.
+    push_handshake(&stream);
+
+    reconnect_task.await.expect("reconnect task panicked").expect("reconnect failed");
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.server_version, SERVER_VERSION);
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
+}
