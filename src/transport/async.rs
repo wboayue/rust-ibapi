@@ -180,7 +180,6 @@ pub struct AsyncTcpMessageBus {
     shutdown_requested: Arc<AtomicBool>,
     /// Notification to wake the message loop on shutdown
     shutdown_notify: Arc<Notify>,
-    connected: Arc<AtomicBool>,
 }
 
 impl Drop for AsyncTcpMessageBus {
@@ -223,7 +222,6 @@ impl AsyncTcpMessageBus {
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
             shutdown_notify: Arc::new(Notify::new()),
-            connected: Arc::new(AtomicBool::new(true)),
         };
 
         // Start cleanup task
@@ -291,12 +289,10 @@ impl AsyncTcpMessageBus {
                             }
                             Err(ref err) if is_connection_error(err) => {
                                 error!("Connection error detected, attempting to reconnect: {err:?}");
-                                message_bus.connected.store(false, Ordering::Relaxed);
 
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
                                         info!("Successfully reconnected to TWS/Gateway");
-                                        message_bus.connected.store(true, Ordering::Relaxed);
                                         message_bus.reset_channels().await;
                                     }
                                     Err(e) => {
@@ -330,6 +326,14 @@ impl AsyncTcpMessageBus {
         });
 
         Ok(())
+    }
+
+    fn ensure_not_shutdown(&self) -> Result<(), Error> {
+        if self.shutdown_requested.load(Ordering::Relaxed) {
+            Err(Error::Shutdown)
+        } else {
+            Ok(())
+        }
     }
 
     /// Read a message and route it to the appropriate channel
@@ -391,8 +395,6 @@ impl AsyncTcpMessageBus {
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        // Set the shutdown flag and mark as disconnected
-        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
 
@@ -660,6 +662,8 @@ impl AsyncTcpMessageBus {
 #[async_trait]
 impl AsyncMessageBus for AsyncTcpMessageBus {
     async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_not_shutdown()?;
+
         // Create broadcast channel with reasonable buffer
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
@@ -681,6 +685,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_not_shutdown()?;
+
         // Same pattern for orders
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
@@ -699,6 +705,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_not_shutdown()?;
+
         // Get the pre-created broadcast receiver
         let receiver = {
             let channels = self.shared_channel_receivers.read().await;
@@ -724,11 +732,15 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
+        self.ensure_not_shutdown()?;
+
         // For fire-and-forget messages
         self.connection.write_message(&message).await
     }
 
     async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error> {
+        self.ensure_not_shutdown()?;
+
         self.connection.write_message(&message).await?;
 
         // Single write lock: the previous version held a read guard while
@@ -743,6 +755,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error> {
+        self.ensure_not_shutdown()?;
+
         self.connection.write_message(&message).await?;
 
         let mut channels = self.order_channels.write().await;
@@ -755,6 +769,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_not_shutdown()?;
+
         let mut order_update_stream = self.order_update_stream.write().await;
 
         if order_update_stream.is_some() {
@@ -795,12 +811,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
-        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
     }
 
     fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
+        !self.shutdown_requested.load(Ordering::Relaxed)
     }
 }

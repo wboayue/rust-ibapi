@@ -2153,6 +2153,8 @@ mod tests {
     use crate::client::common::tests::*;
     use crate::contracts::{Currency, Exchange, Symbol};
     use crate::market_data::TradingHours;
+    use crate::messages::{OutgoingMessages, RequestMessage};
+    use crate::Error;
 
     const CLIENT_ID: i32 = 100;
 
@@ -4776,5 +4778,32 @@ mod tests {
         })
         .await
         .expect("repeated disconnect did not complete in time");
+    }
+
+    #[tokio::test]
+    async fn test_requests_after_disconnect_return_shutdown() {
+        let gateway = setup_connect();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        client.disconnect().await;
+
+        let request = RequestMessage::from_simple("49|1|");
+
+        assert!(matches!(client.send_message(request.clone()).await, Err(Error::Shutdown)));
+        assert!(matches!(client.send_request(1, request.clone()).await, Err(Error::Shutdown)));
+        assert!(matches!(
+            client.send_shared_request(OutgoingMessages::RequestCurrentTime, request.clone()).await,
+            Err(Error::Shutdown)
+        ));
+        assert!(matches!(client.send_order(1, request.clone()).await, Err(Error::Shutdown)));
+        assert!(matches!(client.create_order_update_subscription().await, Err(Error::Shutdown)));
+        assert!(matches!(
+            client.message_bus().cancel_subscription(1, request.clone()).await,
+            Err(Error::Shutdown)
+        ));
+        assert!(matches!(
+            client.message_bus().cancel_order_subscription(1, request).await,
+            Err(Error::Shutdown)
+        ));
     }
 }

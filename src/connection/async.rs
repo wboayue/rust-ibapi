@@ -119,6 +119,8 @@ impl AsyncConnection {
                         *writer = new_writer;
                     }
 
+                    self.reset_connection_metadata().await;
+
                     // Reconnection doesn't use startup callback
                     self.establish_connection(None).await?;
 
@@ -131,6 +133,16 @@ impl AsyncConnection {
         }
 
         Err(Error::ConnectionFailed)
+    }
+
+    async fn reset_connection_metadata(&self) {
+        self.server_version_cache.store(0, Ordering::Release);
+
+        let mut connection_metadata = self.connection_metadata.lock().await;
+        *connection_metadata = ConnectionMetadata {
+            client_id: self.client_id,
+            ..Default::default()
+        };
     }
 
     /// Establish connection to TWS
@@ -272,5 +284,202 @@ impl AsyncConnection {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AsyncConnection;
+    use std::{
+        io::{Read, Write},
+        net::{TcpListener, TcpStream},
+        sync::{mpsc, Arc},
+        thread,
+        time::Duration,
+    };
+
+    use crate::{client::common::tests::setup_connect, messages::encode_length, server_versions};
+
+    const CLIENT_ID: i32 = 100;
+
+    #[tokio::test]
+    async fn test_reset_connection_metadata_clears_handshake_state() {
+        let gateway = setup_connect();
+        let connection = AsyncConnection::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let metadata = connection.connection_metadata().await;
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, gateway.server_version());
+        assert_eq!(metadata.next_order_id, 90);
+        assert_eq!(metadata.managed_accounts, "2334");
+        assert!(metadata.connection_time.is_some());
+        assert!(metadata.time_zone.is_some());
+
+        connection.reset_connection_metadata().await;
+
+        let metadata = connection.connection_metadata().await;
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, 0);
+        assert_eq!(metadata.next_order_id, 0);
+        assert_eq!(metadata.managed_accounts, "");
+        assert!(metadata.connection_time.is_none());
+        assert!(metadata.time_zone.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_reconnect_clears_metadata_while_waiting_for_server_version_handshake() {
+        let mut gateway = PausedReconnectGateway::start(server_versions::IPO_PRICES);
+        let connection = Arc::new(AsyncConnection::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect"));
+
+        let metadata = connection.connection_metadata().await;
+        assert_eq!(metadata.server_version, gateway.server_version);
+        assert_eq!(metadata.next_order_id, 90);
+        assert_eq!(metadata.managed_accounts, "2334");
+        assert!(metadata.connection_time.is_some());
+        assert!(metadata.time_zone.is_some());
+
+        let reconnect = {
+            let connection = Arc::clone(&connection);
+            tokio::spawn(async move { connection.reconnect().await })
+        };
+
+        gateway.wait_for_paused_reconnect_handshake().await;
+
+        let metadata = connection.connection_metadata().await;
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, 0);
+        assert_eq!(metadata.next_order_id, 0);
+        assert_eq!(metadata.managed_accounts, "");
+        assert!(metadata.connection_time.is_none());
+        assert!(metadata.time_zone.is_none());
+
+        gateway.release_reconnect_handshake();
+
+        reconnect.await.expect("reconnect task panicked").expect("reconnect failed");
+
+        let metadata = connection.connection_metadata().await;
+        assert_eq!(metadata.client_id, CLIENT_ID);
+        assert_eq!(metadata.server_version, gateway.server_version);
+        assert_eq!(metadata.next_order_id, 90);
+        assert_eq!(metadata.managed_accounts, "2334");
+        assert!(metadata.connection_time.is_some());
+        assert!(metadata.time_zone.is_some());
+    }
+
+    struct PausedReconnectGateway {
+        address: String,
+        server_version: i32,
+        reconnect_handshake_started: mpsc::Receiver<()>,
+        release_reconnect: Option<mpsc::Sender<()>>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl PausedReconnectGateway {
+        fn start(server_version: i32) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind test gateway");
+            let address = listener.local_addr().expect("Failed to read test gateway address");
+            let (reconnect_handshake_started, reconnect_handshake_ready) = mpsc::channel();
+            let (release_reconnect, reconnect_released) = mpsc::channel();
+
+            let handle = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().expect("Failed to accept initial connection");
+                handle_startup(&mut stream, server_version, None).expect("Failed initial startup");
+                drop(stream);
+
+                let (mut stream, _) = listener.accept().expect("Failed to accept reconnect");
+                handle_startup(&mut stream, server_version, Some((reconnect_handshake_started, reconnect_released)))
+                    .expect("Failed reconnect startup");
+            });
+
+            Self {
+                address: address.to_string(),
+                server_version,
+                reconnect_handshake_started: reconnect_handshake_ready,
+                release_reconnect: Some(release_reconnect),
+                handle: Some(handle),
+            }
+        }
+
+        fn address(&self) -> String {
+            self.address.clone()
+        }
+
+        async fn wait_for_paused_reconnect_handshake(&self) {
+            tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    match self.reconnect_handshake_started.try_recv() {
+                        Ok(()) => break,
+                        Err(mpsc::TryRecvError::Empty) => tokio::time::sleep(Duration::from_millis(10)).await,
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            panic!("Reconnect handshake signal channel closed")
+                        }
+                    }
+                }
+            })
+            .await
+            .expect("Reconnect did not reach the server-version handshake wait point");
+        }
+
+        fn release_reconnect_handshake(&mut self) {
+            if let Some(release_reconnect) = self.release_reconnect.take() {
+                release_reconnect.send(()).expect("Failed to release reconnect handshake");
+            }
+        }
+    }
+
+    impl Drop for PausedReconnectGateway {
+        fn drop(&mut self) {
+            self.release_reconnect_handshake();
+            if let Some(handle) = self.handle.take() {
+                handle.join().expect("Failed to join test gateway thread");
+            }
+        }
+    }
+
+    fn handle_startup(
+        stream: &mut TcpStream,
+        server_version: i32,
+        pause_before_handshake_response: Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>,
+    ) -> std::io::Result<()> {
+        let mut magic_token = [0u8; 4];
+        stream.read_exact(&mut magic_token)?;
+        assert_eq!(&magic_token, b"API\0");
+
+        let _supported_versions = read_message(stream)?;
+
+        if let Some((started, release)) = pause_before_handshake_response {
+            started.send(()).expect("Failed to signal reconnect handshake");
+            release
+                .recv_timeout(Duration::from_secs(3))
+                .expect("Timed out waiting to release reconnect handshake");
+        }
+
+        write_message(stream, format!("{server_version}\020240120 12:00:00 EST\0"))?;
+
+        let start_api = read_message(stream)?;
+        if server_version > 72 {
+            assert_eq!(start_api, "71\02\0100\0\0");
+        } else {
+            assert_eq!(start_api, "71\02\0100\0");
+        }
+
+        write_message(stream, "9\01\090\0".to_string())?;
+        write_message(stream, "15\01\02334\0".to_string())?;
+
+        Ok(())
+    }
+
+    fn read_message(stream: &mut TcpStream) -> std::io::Result<String> {
+        let mut length_bytes = [0u8; 4];
+        stream.read_exact(&mut length_bytes)?;
+        let message_length = u32::from_be_bytes(length_bytes) as usize;
+        let mut data = vec![0u8; message_length];
+        stream.read_exact(&mut data)?;
+        Ok(String::from_utf8_lossy(&data).into_owned())
+    }
+
+    fn write_message(stream: &mut TcpStream, message: String) -> std::io::Result<()> {
+        stream.write_all(&encode_length(&message))?;
+        stream.flush()
     }
 }
