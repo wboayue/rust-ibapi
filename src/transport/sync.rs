@@ -174,8 +174,6 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
-
-        self.connected.store(false, Ordering::Relaxed);
     }
 
     fn clean_request(&self, request_id: i32) {
@@ -1187,6 +1185,32 @@ mod tests {
         let client = Client::stubbed(bus.clone(), server_version);
 
         client.managed_accounts()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
+        // Regression: a previous version of `reset()` cleared `connected` *after* the
+        // dispatcher had restored it to true on successful reconnect, so `is_connected()`
+        // was permanently false after the first network blip.
+        let events = vec![
+            Exchange::simple("v100..200", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+            Exchange::simple("v100..200", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+        ];
+        let stream = MockSocket::new(events, 0);
+        let connection = Connection::stubbed(stream, 28);
+        connection.establish_connection(None)?;
+        let server_version = connection.server_version();
+        let bus = TcpMessageBus::new(connection)?;
+
+        assert!(bus.is_connected(), "bus should be connected after initial handshake");
+
+        bus.dispatch(server_version)?; // reads "\0", reconnects, restores connected=true
+
+        assert!(bus.is_connected(), "bus should still be connected after reconnect");
 
         Ok(())
     }
