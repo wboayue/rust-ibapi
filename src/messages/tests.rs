@@ -621,17 +621,6 @@ fn test_request_message_index_out_of_bounds() {
 }
 
 #[test]
-fn test_response_message_is_empty() {
-    let empty_message = ResponseMessage::default();
-    assert!(empty_message.is_empty());
-    assert_eq!(empty_message.len(), 0);
-
-    let non_empty_message = ResponseMessage::from("1\02\03\0");
-    assert!(!non_empty_message.is_empty());
-    assert_eq!(non_empty_message.len(), 3);
-}
-
-#[test]
 fn test_response_message_is_shutdown() {
     let shutdown_message = ResponseMessage::from("-2\0");
     assert!(shutdown_message.is_shutdown());
@@ -1461,9 +1450,7 @@ fn test_response_message_access_patterns() {
     assert_eq!(message.peek_int(1).unwrap(), 123);
     assert_eq!(message.peek_int(1).unwrap(), 123);
 
-    // Test len and is_empty
     assert_eq!(message.len(), 5);
-    assert!(!message.is_empty());
 }
 
 #[test]

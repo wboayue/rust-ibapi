@@ -121,8 +121,7 @@ fn connect_handshakes_against_real_socket() {
 #[test]
 fn builder_startup_callback_receives_unsolicited_messages() {
     // OpenOrderEnd (msg=53) is a unit marker (no payload to decode), so the
-    // typed callback fires regardless of wire framing. PR 3 routes typed
-    // decoder failures through the notice stream instead of the callback.
+    // typed callback fires regardless of wire framing.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
     frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));

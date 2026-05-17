@@ -83,30 +83,6 @@ impl StartupMessage {
     }
 }
 
-/// Build a synthesized notice signaling that a handshake-time frame's
-/// `IncomingMessages` kind has no typed [`StartupMessage`] variant. Routed to
-/// the notice sink (always present), distinguishable from TWS-emitted notices
-/// by [`Notice::is_handshake_synthetic`].
-fn synthesized_unknown_frame_notice(kind: IncomingMessages) -> Notice {
-    Notice {
-        code: HANDSHAKE_UNKNOWN_FRAME_CODE,
-        message: format!("unsolicited handshake frame with no typed variant: {kind:?}"),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
-
-/// Build a synthesized notice signaling that a typed handshake decoder failed
-/// on a known [`IncomingMessages`] kind.
-fn synthesized_decode_failure_notice(kind: IncomingMessages, err: &Error) -> Notice {
-    Notice {
-        code: HANDSHAKE_DECODE_FAILURE_CODE,
-        message: format!("handshake decoder failed for {kind:?}: {err}"),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
-
 /// Sink for unrouted notices observed during the handshake. Production impls
 /// forward to the per-feature notice broadcaster owned by `Connection`, so
 /// handshake-time notices reach any pre-bound `NoticeStream` the user obtained
@@ -291,11 +267,10 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 
-    /// Local helper: run a typed decoder and either fire the callback with
-    /// the typed payload, or emit a synthesized decode-failure notice. The
-    /// decoder only runs when a callback is present (matches the previous
-    /// behavior — nothing else consumes the typed payload), but the failure
-    /// notice always fires when a decode is attempted.
+    /// Run a typed decoder; fire the callback with the typed payload on
+    /// success, or emit a synthesized decode-failure notice on error. The
+    /// decoder only runs when a callback is present, but the failure notice
+    /// always fires when a decode is attempted.
     fn dispatch_typed<T>(
         ctx: &StartupHandshakeContext<'_>,
         kind: IncomingMessages,
@@ -305,7 +280,18 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         let Some(cb) = ctx.startup else { return };
         match decode() {
             Ok(t) => cb(wrap(t)),
-            Err(e) => ctx.notice_sink.deliver(synthesized_decode_failure_notice(kind, &e)),
+            Err(e) => ctx.notice_sink.deliver(Notice::synthesized(
+                HANDSHAKE_DECODE_FAILURE_CODE,
+                format!("handshake decoder failed for {kind:?}: {e}"),
+            )),
+        }
+    }
+
+    /// Fire the typed callback with a unit-marker variant if a callback is
+    /// installed. No payload to decode; no notice path.
+    fn dispatch_unit(ctx: &StartupHandshakeContext<'_>, msg: StartupMessage) {
+        if let Some(cb) = ctx.startup {
+            cb(msg);
         }
     }
 
@@ -322,11 +308,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         }
         IncomingMessages::OpenOrder => dispatch_typed(ctx, kind, || decode_open_order(message), StartupMessage::OpenOrder),
         IncomingMessages::OrderStatus => dispatch_typed(ctx, kind, || decode_order_status(message), StartupMessage::OrderStatus),
-        IncomingMessages::OpenOrderEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::OpenOrderEnd);
-            }
-        }
+        IncomingMessages::OpenOrderEnd => dispatch_unit(ctx, StartupMessage::OpenOrderEnd),
         IncomingMessages::AccountValue
         | IncomingMessages::PortfolioValue
         | IncomingMessages::AccountUpdateTime
@@ -339,22 +321,16 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         IncomingMessages::ExecutionData => dispatch_typed(ctx, kind, || decode_execution_data(message), StartupMessage::Execution),
         IncomingMessages::CommissionsReport => dispatch_typed(ctx, kind, || decode_commission_report(message), StartupMessage::CommissionReport),
         IncomingMessages::CompletedOrder => dispatch_typed(ctx, kind, || decode_completed_order(message), StartupMessage::CompletedOrder),
-        IncomingMessages::ExecutionDataEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::ExecutionDataEnd);
-            }
-        }
-        IncomingMessages::CompletedOrdersEnd => {
-            if let Some(cb) = ctx.startup {
-                cb(StartupMessage::CompletedOrdersEnd);
-            }
-        }
+        IncomingMessages::ExecutionDataEnd => dispatch_unit(ctx, StartupMessage::ExecutionDataEnd),
+        IncomingMessages::CompletedOrdersEnd => dispatch_unit(ctx, StartupMessage::CompletedOrdersEnd),
         _ => {
-            // Genuinely-unknown frame kind: log + emit synthesized notice.
-            // Always fires (callback presence is irrelevant — the callback
-            // has no typed variant to receive anyway).
+            // Unknown frame kind: log + emit synthesized notice. Fires
+            // regardless of callback presence (no typed variant to receive).
             warn!("unrouted handshake frame: {kind:?}");
-            ctx.notice_sink.deliver(synthesized_unknown_frame_notice(kind));
+            ctx.notice_sink.deliver(Notice::synthesized(
+                HANDSHAKE_UNKNOWN_FRAME_CODE,
+                format!("unsolicited handshake frame with no typed variant: {kind:?}"),
+            ));
         }
     }
 }

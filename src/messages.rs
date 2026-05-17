@@ -930,12 +930,6 @@ impl ResponseMessage {
         self.fields.len()
     }
 
-    /// Returns `true` if the message contains no fields.
-    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
-    pub fn is_empty(&self) -> bool {
-        self.fields.is_empty()
-    }
-
     /// Returns `true` if the message informs about API shutdown.
     #[cfg_attr(not(feature = "sync"), allow(dead_code))] // sync-transport-only caller
     pub fn is_shutdown(&self) -> bool {
@@ -1514,6 +1508,19 @@ impl From<&mut ResponseMessage> for Notice {
 }
 
 impl Notice {
+    /// Build a client-synthesized notice with no wire timestamp and no
+    /// advanced-order-reject JSON. Used by handshake-time observability
+    /// shims (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`] /
+    /// [`HANDSHAKE_DECODE_FAILURE_CODE`]).
+    pub(crate) fn synthesized(code: i32, message: String) -> Notice {
+        Notice {
+            code,
+            message,
+            error_time: None,
+            advanced_order_reject_json: String::new(),
+        }
+    }
+
     /// Returns `true` if this notice indicates an order was cancelled (code 202).
     ///
     /// Code 202 is sent by TWS to confirm an order cancellation. This is an

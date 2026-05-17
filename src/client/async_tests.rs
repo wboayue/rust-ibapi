@@ -117,12 +117,10 @@ async fn connect_handshakes_against_real_socket() {
 
 #[tokio::test]
 async fn builder_startup_callback_receives_unsolicited_messages() {
-    // Use OpenOrderEnd (msg=53) as the unsolicited handshake frame — it's a
-    // unit marker (no payload to decode), so the typed callback fires
-    // regardless of wire framing. A sparse OpenOrder/OrderStatus frame would
-    // fail the proto-only decoder; PR 3 routes that failure to the notice
-    // stream instead of the typed callback (see
-    // plans/retire-response-message-public-surface.md).
+    // OpenOrderEnd (msg=53) is a unit marker — no payload to decode, so the
+    // typed callback fires regardless of wire framing. Sparse OpenOrder /
+    // OrderStatus frames would fail the proto-only decoder and route to the
+    // notice stream instead.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
     frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));

@@ -56,9 +56,9 @@ fn notice_sink_ctx(sink: &CapturingSink) -> StartupHandshakeContext<'_> {
     }
 }
 
-/// Context with both a startup callback AND a capturing notice sink. Used by
-/// PR 3 tests that need to verify decode-failure routing (callback should NOT
-/// fire; sink should receive the synthesized notice).
+/// Context with both a startup callback AND a capturing notice sink. Used to
+/// verify decode-failure routing (callback should NOT fire; sink should
+/// receive the synthesized notice).
 fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a CapturingSink) -> StartupHandshakeContext<'a> {
     StartupHandshakeContext {
         startup: Some(cb),
@@ -97,8 +97,6 @@ fn test_parse_account_info_managed_accounts() {
 #[test]
 fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
     // Sparse text-framed OpenOrder — decoder calls require_proto() and rejects.
-    // Callback must NOT fire (no Other variant); notice_sink receives the
-    // synthesized HANDSHAKE_DECODE_FAILURE_CODE notice.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -196,10 +194,8 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
 
 #[test]
 fn test_dispatch_unsolicited_unknown_emits_notice() {
-    // NewsBulletins (msg_type=14) — no typed variant in StartupMessage and not
-    // an expected handshake-time kind. The catch-all fires the notice sink
-    // with HANDSHAKE_UNKNOWN_FRAME_CODE; the typed startup callback must NOT
-    // fire (no Other variant since PR 3).
+    // NewsBulletins (msg_type=14) — no typed variant in StartupMessage.
+    // Catch-all fires the notice sink with HANDSHAKE_UNKNOWN_FRAME_CODE.
     let mut message = ResponseMessage::from("14\0\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -940,10 +936,9 @@ fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
 
 #[test]
 fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
-    // NewsBulletins (14) — unknown handshake kind. PR 3 always fires the
-    // notice sink regardless of callback presence: the synthesized notice is
-    // for observability via `Client::notice_stream()`, decoupled from the
-    // typed startup callback.
+    // NewsBulletins (14). Unknown handshake kind always fires the notice
+    // sink regardless of callback presence — synthesized notices target
+    // `Client::notice_stream()`, decoupled from the typed startup callback.
     let mut message = ResponseMessage::from("14\0\0");
 
     let sink = CapturingSink::default();

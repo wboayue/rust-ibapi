@@ -139,8 +139,7 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
 
     // First handshake: handshake bytes + OpenOrderEnd marker + farm-status notice + NextValidId + ManagedAccounts.
     // OpenOrderEnd is a unit marker (no payload to decode), so the typed
-    // callback fires regardless of wire framing. PR 3 routes typed decoder
-    // failures through the notice stream instead of the callback.
+    // callback fires regardless of wire framing.
     let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
