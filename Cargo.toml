@@ -655,3 +655,8 @@ required-features = ["async"]
 name = "group_events"
 path = "examples/sync/group_events.rs"
 required-features = ["sync"]
+
+[[example]]
+name = "async_startup_capture"
+path = "examples/async/startup_capture.rs"
+required-features = ["async"]

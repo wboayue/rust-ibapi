@@ -7,4 +7,4 @@ pub(super) mod verify;
 
 // Narrow re-exports: only the handshake-time decoders escape the
 // `orders::common` boundary. The rest of `decoders` stays internal.
-pub(crate) use decoders::{decode_open_order, decode_order_status};
+pub(crate) use decoders::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};

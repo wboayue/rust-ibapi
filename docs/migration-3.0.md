@@ -698,6 +698,34 @@ let client = Client::builder()
 
 The async builder lives at `ibapi::Client::builder()` (top-level alias under default features); the sync builder at `ibapi::client::blocking::Client::builder()`.
 
+### `StartupMessage` gains typed `Execution` / `CommissionReport` / `CompletedOrder` variants
+
+If you matched on `StartupMessage::Other(rm)` and called `rm.message_type()` to dispatch on `ExecutionData` / `CommissionsReport` / `CompletedOrder` (typically when connected as the Master Client ID, where TWS replays open-order + commission-report history at handshake), switch to the new typed variants — the payload is pre-decoded:
+
+```rust,ignore
+// 2.x / earlier 3.0
+match msg {
+    StartupMessage::Other(rm) if rm.message_type() == IncomingMessages::ExecutionData => {
+        // ... decode rm yourself ...
+    }
+    StartupMessage::Other(rm) if rm.message_type() == IncomingMessages::CommissionsReport => { /* ... */ }
+    StartupMessage::Other(rm) if rm.message_type() == IncomingMessages::CompletedOrder => { /* ... */ }
+    // ...
+}
+
+// 3.x current
+match msg {
+    StartupMessage::Execution(execution) => { /* typed ExecutionData payload */ }
+    StartupMessage::CommissionReport(report) => { /* typed CommissionReport payload */ }
+    StartupMessage::CompletedOrder(order) => { /* typed OrderData; order_id is -1 */ }
+    StartupMessage::ExecutionDataEnd => { /* end-of-executions marker */ }
+    StartupMessage::CompletedOrdersEnd => { /* end-of-completed-orders marker */ }
+    // ...
+}
+```
+
+`StartupMessage` is now `#[non_exhaustive]`. Add a `_` arm to any exhaustive match if you weren't writing one already — future variants will land here as additional handshake-time message kinds are typed. The `Other(ResponseMessage)` variant is still present in this release; it will be removed in a follow-up PR (`plans/retire-response-message-public-surface.md` PR 3) once `ResponseMessage` itself becomes crate-private.
+
 ## Quick migration checklist
 
 1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.

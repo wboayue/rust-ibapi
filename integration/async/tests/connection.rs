@@ -29,9 +29,8 @@ async fn builder_startup_callback_fires_during_handshake() {
         .address("127.0.0.1:4002")
         .client_id(client_id.id())
         .startup_callback(move |msg| {
-            match msg {
-                StartupMessage::OpenOrder(o) => assert!(o.order_id >= 0),
-                StartupMessage::OrderStatus(_) | StartupMessage::OpenOrderEnd | StartupMessage::AccountUpdate(_) | StartupMessage::Other(_) => {}
+            if let StartupMessage::OpenOrder(ref o) = msg {
+                assert!(o.order_id >= 0);
             }
             *count_clone.lock().unwrap() += 1;
         })

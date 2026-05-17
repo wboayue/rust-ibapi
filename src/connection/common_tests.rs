@@ -171,9 +171,10 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
 
 #[test]
 fn test_dispatch_unsolicited_unknown_falls_to_other() {
-    // CompletedOrder (msg_type=101) — no typed variant in StartupMessage yet,
-    // so it should fall through to Other.
-    let mut message = ResponseMessage::from("101\0\0");
+    // NewsBulletins (msg_type=14) — no typed variant in StartupMessage and not
+    // an expected handshake-time kind, so it falls through to Other. PR 3
+    // replaces Other with a warn+notice safety net.
+    let mut message = ResponseMessage::from("14\0\0");
 
     let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
@@ -186,7 +187,7 @@ fn test_dispatch_unsolicited_unknown_falls_to_other() {
     };
 
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CompletedOrder));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::NewsBulletins));
 }
 
 #[test]
@@ -548,7 +549,7 @@ fn test_non_utf8_handshake_response() {
 #[test]
 fn test_startup_message_message_type_typed_variants() {
     use crate::accounts::{AccountPortfolioValue, AccountUpdateTime, AccountValue};
-    use crate::orders::{OrderData, OrderStatus};
+    use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 
     assert_eq!(
         StartupMessage::OpenOrder(OrderData::default()).message_type(),
@@ -575,6 +576,20 @@ fn test_startup_message_message_type_typed_variants() {
         StartupMessage::AccountUpdate(AccountUpdate::End).message_type(),
         IncomingMessages::AccountDownloadEnd
     );
+    assert_eq!(
+        StartupMessage::Execution(ExecutionData::default()).message_type(),
+        IncomingMessages::ExecutionData
+    );
+    assert_eq!(
+        StartupMessage::CommissionReport(CommissionReport::default()).message_type(),
+        IncomingMessages::CommissionsReport
+    );
+    assert_eq!(
+        StartupMessage::CompletedOrder(OrderData::default()).message_type(),
+        IncomingMessages::CompletedOrder
+    );
+    assert_eq!(StartupMessage::ExecutionDataEnd.message_type(), IncomingMessages::ExecutionDataEnd);
+    assert_eq!(StartupMessage::CompletedOrdersEnd.message_type(), IncomingMessages::CompletedOrdersEnd);
 }
 
 #[test]
@@ -689,10 +704,210 @@ fn test_dispatch_unsolicited_account_value_decode_failure_falls_to_other() {
     assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::AccountValue));
 }
 
+// =============================================================================
+// New typed-variant dispatch tests (PR 2 of retire-response-message-public-surface)
+// =============================================================================
+
+/// Build a proto-frame ResponseMessage for the given testdata builder.
+fn proto_frame<B: crate::testdata::builders::ResponseProtoEncoder>(kind: IncomingMessages, builder: &B) -> ResponseMessage {
+    ResponseMessage::from_protobuf(kind as i32, builder.encode_proto(), TEST_SERVER_VERSION)
+}
+
+#[test]
+fn test_dispatch_unsolicited_execution_typed() {
+    use crate::testdata::builders::orders::ExecutionDataResponse;
+
+    let builder = ExecutionDataResponse::default().symbol("TSLA").shares(100.0).price(196.52);
+    let mut message = proto_frame(IncomingMessages::ExecutionData, &builder);
+
+    let captured: Arc<Mutex<Option<crate::orders::ExecutionData>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::Execution(e) => *captured.lock().unwrap() = Some(e),
+        other => panic!("expected Execution, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
+    assert_eq!(got.contract.symbol.to_string(), "TSLA");
+    assert_eq!(got.execution.shares, 100.0);
+    assert_eq!(got.execution.price, 196.52);
+}
+
+#[test]
+fn test_dispatch_unsolicited_commission_report_typed() {
+    use crate::testdata::builders::orders::CommissionReportResponse;
+
+    let builder = CommissionReportResponse::default().commission(2.5).currency("USD");
+    let mut message = proto_frame(IncomingMessages::CommissionsReport, &builder);
+
+    let captured: Arc<Mutex<Option<crate::orders::CommissionReport>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::CommissionReport(c) => *captured.lock().unwrap() = Some(c),
+        other => panic!("expected CommissionReport, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
+    assert_eq!(got.commission, 2.5);
+    assert_eq!(got.currency, "USD");
+}
+
+#[test]
+fn test_dispatch_unsolicited_completed_order_typed() {
+    use crate::testdata::builders::orders::CompletedOrderResponse;
+
+    let builder = CompletedOrderResponse::default();
+    let mut message = proto_frame(IncomingMessages::CompletedOrder, &builder);
+
+    let captured: Arc<Mutex<Option<crate::orders::OrderData>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::CompletedOrder(o) => *captured.lock().unwrap() = Some(o),
+        other => panic!("expected CompletedOrder, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
+    // Completed orders carry the sentinel order_id = -1 per decode_completed_order_proto.
+    assert_eq!(got.order_id, -1);
+}
+
+#[test]
+fn test_dispatch_unsolicited_execution_data_end_typed() {
+    // ExecutionDataEnd: msg_type=55, version=1, request_id=42
+    let mut message = ResponseMessage::from("55\01\042\0");
+
+    let fired = Arc::new(Mutex::new(false));
+    let fired_clone = fired.clone();
+    let cb = move |msg: StartupMessage| {
+        if matches!(msg, StartupMessage::ExecutionDataEnd) {
+            *fired.lock().unwrap() = true;
+        } else {
+            panic!("expected ExecutionDataEnd, got {msg:?}");
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert!(*fired_clone.lock().unwrap(), "ExecutionDataEnd not delivered as typed variant");
+}
+
+#[test]
+fn test_dispatch_unsolicited_completed_orders_end_typed() {
+    // CompletedOrdersEnd: msg_type=102, no payload
+    let mut message = ResponseMessage::from("102\0");
+
+    let fired = Arc::new(Mutex::new(false));
+    let fired_clone = fired.clone();
+    let cb = move |msg: StartupMessage| {
+        if matches!(msg, StartupMessage::CompletedOrdersEnd) {
+            *fired.lock().unwrap() = true;
+        } else {
+            panic!("expected CompletedOrdersEnd, got {msg:?}");
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert!(*fired_clone.lock().unwrap(), "CompletedOrdersEnd not delivered as typed variant");
+}
+
+#[test]
+fn test_dispatch_unsolicited_execution_decode_failure_falls_to_other() {
+    // Text-framed ExecutionData — decoder calls require_proto() and rejects it.
+    let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
+
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
+        other => panic!("expected Other after decode failure, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::ExecutionData));
+}
+
+#[test]
+fn test_dispatch_unsolicited_commission_report_decode_failure_falls_to_other() {
+    let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
+
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
+        other => panic!("expected Other after decode failure, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CommissionsReport));
+}
+
+#[test]
+fn test_dispatch_unsolicited_completed_order_decode_failure_falls_to_other() {
+    let mut message = ResponseMessage::from("101\0\0");
+
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| match msg {
+        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
+        other => panic!("expected Other after decode failure, got {other:?}"),
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CompletedOrder));
+}
+
+#[test]
+fn test_dispatch_unsolicited_execution_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    assert_eq!(sink.count(), 0, "ExecutionData must not deliver to notice sink");
+}
+
+#[test]
+fn test_dispatch_unsolicited_commission_report_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_completed_order_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("101\0\0");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_execution_data_end_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("55\01\042\0");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    assert_eq!(sink.count(), 0);
+}
+
+#[test]
+fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
+    let mut message = ResponseMessage::from("102\0");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    assert_eq!(sink.count(), 0);
+}
+
 #[test]
 fn test_dispatch_unsolicited_unknown_no_callback_warns() {
-    // CompletedOrder (101) — no typed dispatch arm, no startup callback.
-    let mut message = ResponseMessage::from("101\0\0");
+    // NewsBulletins (14) — no typed dispatch arm, no startup callback. The
+    // catch-all logs at warn! and does NOT fan out to the notice sink.
+    let mut message = ResponseMessage::from("14\0\0");
 
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));

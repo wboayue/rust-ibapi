@@ -9,17 +9,21 @@ use crate::accounts::AccountUpdate;
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
 use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, PROTOBUF_MSG_ID};
-use crate::orders::{OrderData, OrderStatus};
+use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
 
 /// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).
 ///
-/// TWS may emit any of these unsolicited at handshake time when the previous
-/// session had outstanding orders, an active `reqAccountUpdates`, etc. Anything
-/// not covered by a dedicated variant lands in `Other` so callers can still
-/// inspect the raw message.
+/// TWS may emit any of these unsolicited at handshake time when the connection
+/// is bound to the configured Master Client ID (open-order + commission-report
+/// replays), or when the previous session left outstanding orders / account
+/// state worth resending. Anything not covered by a dedicated variant lands in
+/// `Other` so callers can still inspect the raw message; the `Other` arm is
+/// scheduled for removal in a follow-up PR (see
+/// `plans/retire-response-message-public-surface.md`).
 #[derive(Debug)]
+#[non_exhaustive]
 #[allow(clippy::large_enum_variant)]
 pub enum StartupMessage {
     /// Open order — typed via the order decoders.
@@ -34,9 +38,27 @@ pub enum StartupMessage {
     /// Reuses the existing [`AccountUpdate`] enum so the same patterns work at
     /// startup and at runtime.
     AccountUpdate(AccountUpdate),
-    /// Anything else that arrived unsolicited during account-info exchange —
-    /// e.g. `ExecutionData`, `CommissionReport`, `CompletedOrder`. Inspect via
-    /// [`ResponseMessage::message_type`] and decode as needed.
+    /// Execution detail — TWS replays prior fills to the Master Client ID
+    /// after `start_api` when the previous session bound them.
+    Execution(ExecutionData),
+    /// Commission and fees report — TWS replays the per-fill commission to
+    /// the Master Client ID alongside [`Execution`](Self::Execution).
+    CommissionReport(CommissionReport),
+    /// Completed (terminal-state) order — TWS replays the closed-order history
+    /// at handshake time when a prior session requested
+    /// `reqCompletedOrders`. The contained [`OrderData::order_id`] is the
+    /// legacy sentinel `-1` (no live order id for completed orders).
+    CompletedOrder(OrderData),
+    /// End-of-executions marker. No payload.
+    ExecutionDataEnd,
+    /// End-of-completed-orders marker. No payload.
+    CompletedOrdersEnd,
+    /// Anything else that arrived unsolicited during account-info exchange.
+    /// Inspect via [`ResponseMessage::message_type`] and decode as needed.
+    ///
+    /// Removed in a follow-up release; see
+    /// `plans/retire-response-message-public-surface.md`. New typed variants
+    /// will absorb every kind that previously landed here.
     Other(ResponseMessage),
 }
 
@@ -54,6 +76,11 @@ impl StartupMessage {
                 AccountUpdate::UpdateTime(_) => IncomingMessages::AccountUpdateTime,
                 AccountUpdate::End => IncomingMessages::AccountDownloadEnd,
             },
+            StartupMessage::Execution(_) => IncomingMessages::ExecutionData,
+            StartupMessage::CommissionReport(_) => IncomingMessages::CommissionsReport,
+            StartupMessage::CompletedOrder(_) => IncomingMessages::CompletedOrder,
+            StartupMessage::ExecutionDataEnd => IncomingMessages::ExecutionDataEnd,
+            StartupMessage::CompletedOrdersEnd => IncomingMessages::CompletedOrdersEnd,
             StartupMessage::Other(rm) => rm.message_type(),
         }
     }
@@ -232,13 +259,15 @@ impl ConnectionProtocol for ConnectionHandler {
 /// Dispatch an unsolicited message that arrived during the handshake — i.e. one
 /// that wasn't `NextValidId` / `ManagedAccounts` (which `parse_account_info`
 /// consumes itself). Errors fan out to the notice sink (always present);
-/// `OpenOrder` / `OrderStatus` / account-update frames are decoded into typed
-/// [`StartupMessage`] values for the optional startup callback; anything else
-/// lands in `StartupMessage::Other` so the caller can still inspect it. Decode
-/// failures surface as `Other` rather than being silently dropped.
+/// typed frames (`OpenOrder` / `OrderStatus` / account-update / execution /
+/// commission / completed-order, plus the corresponding end markers) decode
+/// into typed [`StartupMessage`] values for the optional startup callback;
+/// anything else lands in `StartupMessage::Other` so the caller can still
+/// inspect it. Decode failures surface as `Other` rather than being silently
+/// dropped.
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
-    use crate::orders::common::{decode_open_order, decode_order_status};
+    use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 
     match message.message_type() {
         IncomingMessages::Error => {
@@ -280,6 +309,40 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
                     .map(StartupMessage::AccountUpdate)
                     .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
                 cb(typed);
+            }
+        }
+        IncomingMessages::ExecutionData => {
+            if let Some(cb) = ctx.startup {
+                let typed = decode_execution_data(message)
+                    .map(StartupMessage::Execution)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        IncomingMessages::CommissionsReport => {
+            if let Some(cb) = ctx.startup {
+                let typed = decode_commission_report(message)
+                    .map(StartupMessage::CommissionReport)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        IncomingMessages::CompletedOrder => {
+            if let Some(cb) = ctx.startup {
+                let typed = decode_completed_order(message)
+                    .map(StartupMessage::CompletedOrder)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        IncomingMessages::ExecutionDataEnd => {
+            if let Some(cb) = ctx.startup {
+                cb(StartupMessage::ExecutionDataEnd);
+            }
+        }
+        IncomingMessages::CompletedOrdersEnd => {
+            if let Some(cb) = ctx.startup {
+                cb(StartupMessage::CompletedOrdersEnd);
             }
         }
         _ => {
