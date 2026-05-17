@@ -15,7 +15,7 @@ not the dispatcher.
 | 1 | `Client::stubbed()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:342`) | none (gated out of downstream builds) | **shipped PR #574** — `pub(crate)`; matches sync (`src/client/sync.rs:357`) |
 | 2 | `Client::message_bus()` async | `pub` + `#[cfg(test)]` (`src/client/async.rs:359`) | none (same gating) | **shipped PR #574** — deleted (zero callers anywhere; internal code reads the field) |
 | 3 | `pub mod proto` | `src/lib.rs:130` — generated prost bindings + `proto::{encoders,decoders}` helpers | zero hits in `examples/`, `integration/`, `docs/`, `README.md` | **shipped PR #575** — `pub(crate) mod proto;` + both child modules; deleted dead `decode_error_message` (rule 9) |
-| 4 | `pub mod messages` | `src/lib.rs:110` — mixed: a few legitimately-public types, many wire internals | `examples/record_interactions.rs` reaches `parser_registry::*` + the message-id enums | split: re-export user-facing types from crate root + prelude; demote `messages` to `#[doc(hidden)] pub` (escape hatch for the recording example) |
+| 4 | `pub mod messages` | `src/lib.rs:110` — mixed: a few legitimately-public types, many wire internals | `examples/record_interactions.rs` reaches `parser_registry::*` + the message-id enums | **shipped PR #577** — `pub(crate) mod messages`; user-facing types re-exported from crate root + prelude; `#[doc(hidden)] pub use parser_registry` for the recording example; dead `encode_request_binary_from_text` deleted |
 | 5 | `subscriptions::common::SubscriptionItem` | `pub` inside `pub(crate) mod common` (`src/subscriptions/common.rs:18`); re-exported (`src/subscriptions/mod.rs:4`) | legitimate public API | **no change** |
 | 6 | `subscriptions::common::DecoderContext` / `StreamDecoder` | `pub`/`pub(crate)` inside `pub(crate) mod common`; re-exported `pub(crate)` (`src/subscriptions/mod.rs:5`) | none (already crate-private from downstream's view) | **no change** |
 
@@ -63,57 +63,34 @@ code that prior `pub` visibility had hidden:
 
 Migration guide §16 added.
 
-### PR 3 — sort and trim `pub mod messages`
+### PR 3 — sort and trim `pub mod messages` ✅ shipped #577
 
-Item #4 in the audit. Three coupled outcomes, one PR:
+Item #4 in the audit. Shipped — `pub mod messages` → `pub(crate)`.
 
-**(a) Re-export user-facing types from crate root + prelude.**
+User-facing types re-exported from crate root (split into two
+`#[doc(inline)] pub use` blocks for types vs constants):
 `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`,
-`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `ORDER_REJECTION_CODE_RANGE`,
-`ORDER_CANCELLED_CODE`. New canonical paths: `ibapi::Notice`,
-`ibapi::NoticeCategory`, etc. Add `Notice` and `NoticeCategory` to
-`src/prelude.rs` next to the existing `Subscription` re-exports (line 48).
+`ResponseMessage`, plus the four code-range constants. `Notice` and
+`NoticeCategory` added to the prelude.
 
-Decision: re-export from `lib.rs`, not from `errors.rs` or a new module.
-Smallest diff, no taxonomy debate. `Notice` conceptually overlaps with errors
-but is distinct (non-terminal IB warnings vs. terminal `Error`), and the
-crate-root home is already where `Client` / `ClientBuilder` / `Error` /
-`StartupMessage` live.
+`ResponseMessage` stayed `pub` — forced by `StartupMessage::Other(ResponseMessage)`
+(`src/connection/common.rs:40`) and `connection::common::parse_raw_message`,
+both on the public API surface. Reshaping `StartupMessage::Other` to retire
+the leak is genuinely out of scope (see Follow-up below).
 
-**(b) Demote wire internals to `pub(crate)`.**
-`RequestMessage`, `ResponseMessage`, `PROTOBUF_MSG_ID`, `encode_length`,
-`encode_protobuf_message`, `encode_raw_length`, `encode_request_binary_from_text`,
-`order_id_index`, `request_id_index`. All internal callsites use
-`crate::messages::*`; visibility narrowing is transparent to them.
+Wire internals (`RequestMessage`, `PROTOBUF_MSG_ID`, framing helpers,
+message-id index helpers) demoted to `pub(crate)`. `RequestMessage::{encode,
+encode_simple, from, from_simple}` gated `#[cfg(all(test, feature = "sync"))]`
+on the impl block — all four are sync-only test helpers; the cfg is more
+honest than blanket `dead_code` suppression. Dead `encode_request_binary_from_text`
+deleted (rule 9).
 
-**(c) Preserve `record_interactions.rs` reachability.**
-The example imports `ibapi::messages::parser_registry::*` and
-`ibapi::messages::*` (`examples/record_interactions.rs:12-13`). It uses
-`MessageParserRegistry`, `ParsedField`, `IncomingMessages`, `OutgoingMessages`
-(verified by grep on the example). After (a), the message-id enums are
-reachable from crate root; for `parser_registry`, mark `pub mod messages`
-with `#[doc(hidden)]` and keep `parser_registry` `pub` underneath. The
-module stays callable (the example still compiles) but is hidden from
-docs.rs.
+`parser_registry` reachable via `#[doc(hidden)] pub use crate::messages::parser_registry;`
+at the crate root — the crate's first `#[doc(hidden)]` usage, established
+as the escape-hatch shape for tooling-only reach-ins.
+`examples/record_interactions.rs` updated to use the new crate-root paths.
 
-Alternative considered: relocate `parser_registry` to a labelled
-`_internal_recording` module. Rejected — adds a name with no downstream
-benefit; `#[doc(hidden)]` already signals "unstable, here for tooling."
-
-**Migration guide entry**:
-
-> #### `ibapi::messages` is now opaque
->
-> User-facing types (`Notice`, `NoticeCategory`, `IncomingMessages`,
-> `OutgoingMessages`, the warning/rejection code-range constants) are now
-> re-exported from the crate root and the prelude. Update
-> `use ibapi::messages::Notice` → `use ibapi::Notice` (or
-> `use ibapi::prelude::*`). Wire-level types (`RequestMessage`,
-> `ResponseMessage`, framing helpers) are crate-private in 3.0.
-
-**Self-review before opening:** grep `README.md`, every `docs/*.md`, and
-module rustdoc for `ibapi::messages::`; fix or remove every hit (rule 27
-sibling — `.md` blocks aren't compile-checked, so verify each manually).
+Migration guide §17 added.
 
 ### PR 4 — verification checkpoint (no code expected)
 
@@ -129,6 +106,14 @@ After 1–3 ship:
 
 If audit is clean, this PR doesn't exist. If it surfaces stragglers, ship
 the visibility-tightening as a small PR.
+
+## Follow-up (out of scope here)
+
+- **Retire `ResponseMessage` from the public surface.** PR 3 had to re-export
+  it because `StartupMessage::Other(ResponseMessage)` (`src/connection/common.rs:40`)
+  and `connection::common::parse_raw_message` both expose it. Reshape
+  `StartupMessage::Other` to carry a typed payload instead of the raw wire
+  envelope — once that lands, `ResponseMessage` can become `pub(crate)`.
 
 ## Out of scope
 
