@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::mem;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -29,29 +29,6 @@ use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMe
 use crate::Error;
 
 use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ConnectionState {
-    Ready = 0,
-    Reconnecting = 1,
-    ShuttingDown = 2,
-    Disconnected = 3,
-}
-
-impl ConnectionState {
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => Self::Ready,
-            1 => Self::Reconnecting,
-            2 => Self::ShuttingDown,
-            _ => Self::Disconnected,
-        }
-    }
-
-    fn as_u8(self) -> u8 {
-        self as u8
-    }
-}
 
 /// Asynchronous message bus trait
 #[async_trait]
@@ -203,14 +180,12 @@ pub struct AsyncTcpMessageBus {
     shutdown_requested: Arc<AtomicBool>,
     /// Notification to wake the message loop on shutdown
     shutdown_notify: Arc<Notify>,
-    connection_state: Arc<AtomicU8>,
 }
 
 impl Drop for AsyncTcpMessageBus {
     fn drop(&mut self) {
         debug!("dropping async tcp message bus");
         // Set the shutdown flag and notify the message loop to exit
-        self.set_connection_state(ConnectionState::ShuttingDown);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
     }
@@ -247,7 +222,6 @@ impl AsyncTcpMessageBus {
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
             shutdown_notify: Arc::new(Notify::new()),
-            connection_state: Arc::new(AtomicU8::new(ConnectionState::Ready.as_u8())),
         };
 
         // Start cleanup task
@@ -315,17 +289,14 @@ impl AsyncTcpMessageBus {
                             }
                             Err(ref err) if is_connection_error(err) => {
                                 error!("Connection error detected, attempting to reconnect: {err:?}");
-                                message_bus.set_connection_state(ConnectionState::Reconnecting);
 
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
                                         info!("Successfully reconnected to TWS/Gateway");
                                         message_bus.reset_channels().await;
-                                        message_bus.set_connection_state(ConnectionState::Ready);
                                     }
                                     Err(e) => {
                                         error!("Failed to reconnect to TWS/Gateway: {e:?}");
-                                        message_bus.set_connection_state(ConnectionState::Disconnected);
                                         message_bus.request_shutdown().await;
                                         break;
                                     }
@@ -357,23 +328,11 @@ impl AsyncTcpMessageBus {
         Ok(())
     }
 
-    fn connection_state(&self) -> ConnectionState {
-        ConnectionState::from_u8(self.connection_state.load(Ordering::Acquire))
-    }
-
-    fn set_connection_state(&self, state: ConnectionState) {
-        self.connection_state.store(state.as_u8(), Ordering::Release);
-    }
-
-    fn ensure_ready(&self) -> Result<(), Error> {
-        Self::ready_result(self.connection_state(), self.shutdown_requested.load(Ordering::Relaxed))
-    }
-
-    fn ready_result(state: ConnectionState, shutdown_requested: bool) -> Result<(), Error> {
-        match state {
-            ConnectionState::Ready if !shutdown_requested => Ok(()),
-            ConnectionState::ShuttingDown => Err(Error::Shutdown),
-            ConnectionState::Reconnecting | ConnectionState::Disconnected | ConnectionState::Ready => Err(Error::ConnectionReset),
+    fn ensure_not_shutdown(&self) -> Result<(), Error> {
+        if self.shutdown_requested.load(Ordering::Relaxed) {
+            Err(Error::Shutdown)
+        } else {
+            Ok(())
         }
     }
 
@@ -436,8 +395,6 @@ impl AsyncTcpMessageBus {
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        // Set the shutdown flag and mark as disconnected
-        self.set_connection_state(ConnectionState::ShuttingDown);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
 
@@ -705,7 +662,7 @@ impl AsyncTcpMessageBus {
 #[async_trait]
 impl AsyncMessageBus for AsyncTcpMessageBus {
     async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         // Create broadcast channel with reasonable buffer
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
@@ -728,7 +685,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         // Same pattern for orders
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
@@ -748,7 +705,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         // Get the pre-created broadcast receiver
         let receiver = {
@@ -775,14 +732,14 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         // For fire-and-forget messages
         self.connection.write_message(&message).await
     }
 
     async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         self.connection.write_message(&message).await?;
 
@@ -798,7 +755,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         self.connection.write_message(&message).await?;
 
@@ -812,7 +769,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
-        self.ensure_ready()?;
+        self.ensure_not_shutdown()?;
 
         let mut order_update_stream = self.order_update_stream.write().await;
 
@@ -854,39 +811,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
-        self.set_connection_state(ConnectionState::ShuttingDown);
         self.shutdown_requested.store(true, Ordering::Relaxed);
         self.shutdown_notify.notify_waiters();
     }
 
     fn is_connected(&self) -> bool {
-        self.connection_state() == ConnectionState::Ready && !self.shutdown_requested.load(Ordering::Relaxed)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{AsyncTcpMessageBus, ConnectionState};
-    use crate::Error;
-
-    #[test]
-    fn test_ready_result_for_lifecycle_states() {
-        assert!(AsyncTcpMessageBus::ready_result(ConnectionState::Ready, false).is_ok());
-        assert!(matches!(
-            AsyncTcpMessageBus::ready_result(ConnectionState::Ready, true),
-            Err(Error::ConnectionReset)
-        ));
-        assert!(matches!(
-            AsyncTcpMessageBus::ready_result(ConnectionState::Reconnecting, false),
-            Err(Error::ConnectionReset)
-        ));
-        assert!(matches!(
-            AsyncTcpMessageBus::ready_result(ConnectionState::Disconnected, false),
-            Err(Error::ConnectionReset)
-        ));
-        assert!(matches!(
-            AsyncTcpMessageBus::ready_result(ConnectionState::ShuttingDown, false),
-            Err(Error::Shutdown)
-        ));
+        !self.shutdown_requested.load(Ordering::Relaxed)
     }
 }
