@@ -103,7 +103,7 @@ mod from_str_tests {
 }
 
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
-pub const PROTOBUF_MSG_ID: i32 = 200;
+pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
 
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
@@ -398,7 +398,7 @@ impl FromStr for IncomingMessages {
 }
 
 /// Return the message field index containing the order id, if present.
-pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
+pub(crate) fn order_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
         IncomingMessages::ExecutionData | IncomingMessages::ExecutionDataEnd => Some(2),
@@ -407,7 +407,7 @@ pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
 }
 
 /// Return the message field index containing the request id, if present.
-pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
+pub(crate) fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary => Some(2),
         IncomingMessages::AccountSummaryEnd => Some(2),
@@ -749,12 +749,12 @@ impl FromStr for OutgoingMessages {
 }
 
 /// Encode the outbound message length prefix using the IB wire format.
-pub fn encode_length(message: &str) -> Vec<u8> {
+pub(crate) fn encode_length(message: &str) -> Vec<u8> {
     encode_raw_length(message.as_bytes())
 }
 
 /// Encode a protobuf outbound message: 4-byte BE (msg_id + 200) + proto bytes.
-pub fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
+pub(crate) fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(4 + proto_bytes.len());
     buf.write_i32::<BigEndian>(msg_id + PROTOBUF_MSG_ID).unwrap();
     buf.extend_from_slice(proto_bytes);
@@ -762,50 +762,30 @@ pub fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
 }
 
 /// Encode a length-prefixed raw message (4-byte BE length + data).
-pub fn encode_raw_length(data: &[u8]) -> Vec<u8> {
+pub(crate) fn encode_raw_length(data: &[u8]) -> Vec<u8> {
     let mut packet = Vec::with_capacity(data.len() + 4);
     packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
     packet.write_all(data).unwrap();
     packet
 }
 
-/// Encode a `RequestMessage` with binary message ID framing for server_version >= PROTOBUF.
-///
-/// Encode a NUL-delimited text message with binary msg_id framing (for test mock gateway).
-///
-/// Takes text like "9\01\090\0" and converts to binary: [4-byte len][4-byte msg_id][remaining text]
-#[cfg(test)]
-pub fn encode_request_binary_from_text(text: &str) -> Vec<u8> {
-    let fields: Vec<&str> = text.split_terminator('\0').collect();
-    let msg_id: i32 = fields.first().and_then(|f| f.parse().ok()).unwrap_or(0);
-    let remaining: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
-    let body_len = 4 + remaining.len();
-
-    let mut packet = Vec::with_capacity(4 + body_len);
-    packet.write_u32::<BigEndian>(body_len as u32).unwrap();
-    packet.write_i32::<BigEndian>(msg_id).unwrap();
-    packet.write_all(remaining.as_bytes()).unwrap();
-    packet
-}
-
 /// Builder for outbound TWS/Gateway request messages (test-only).
 #[cfg(test)]
 #[derive(Default, Debug, Clone)]
-pub struct RequestMessage {
+pub(crate) struct RequestMessage {
     pub(crate) fields: Vec<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sync"))]
 impl RequestMessage {
     /// Serialize all fields into the NUL-delimited wire format.
-    pub fn encode(&self) -> String {
+    pub(crate) fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
         data.push('\0');
         data
     }
 
     /// Serialize the message as a pipe-delimited string (test helper).
-    #[allow(dead_code)]
     pub(crate) fn encode_simple(&self) -> String {
         let mut data = self.fields.join("|");
         data.push('|');
@@ -813,14 +793,14 @@ impl RequestMessage {
     }
 
     /// Construct a request message from a NUL-delimited string (test helper).
-    pub fn from(fields: &str) -> RequestMessage {
+    pub(crate) fn from(fields: &str) -> RequestMessage {
         RequestMessage {
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
         }
     }
 
     /// Construct a request message from a pipe-delimited string (test helper).
-    pub fn from_simple(fields: &str) -> RequestMessage {
+    pub(crate) fn from_simple(fields: &str) -> RequestMessage {
         RequestMessage {
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
         }
@@ -977,8 +957,8 @@ impl ResponseMessage {
     /// Try to extract the request id from the message.
     ///
     /// For `server_version >= PROTOBUF`, the request id lives at proto tag 1
-    /// (int32) in `raw_bytes`. The text path reads it from the field index
-    /// returned by [`request_id_index`].
+    /// (int32) in `raw_bytes`. The text path reads it from the per-message-type
+    /// field index.
     pub fn request_id(&self) -> Option<i32> {
         let i = request_id_index(self.message_type())?;
         self.proto_or_text_int(i, |b| {
@@ -1461,7 +1441,7 @@ pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::messages::{Notice, NoticeCategory};
+/// use ibapi::{Notice, NoticeCategory};
 /// # let notice: Notice = unimplemented!();
 /// match notice.category() {
 ///     NoticeCategory::OrderRejection => eprintln!("rejected: {}", notice),
@@ -1567,7 +1547,7 @@ impl Notice {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::messages::Notice;
+    /// use ibapi::Notice;
     /// # let notice: Notice = unimplemented!();
     /// if notice.is_order_rejection() {
     ///     eprintln!("rejection: {}", notice);
@@ -1584,7 +1564,7 @@ impl Notice {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::messages::{Notice, NoticeCategory};
+    /// use ibapi::{Notice, NoticeCategory};
     /// # let notice: Notice = unimplemented!();
     /// let level = match notice.category() {
     ///     NoticeCategory::Cancellation
