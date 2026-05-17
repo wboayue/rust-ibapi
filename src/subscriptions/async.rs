@@ -350,6 +350,13 @@ pub struct FilterDataStream<S> {
     inner: S,
 }
 
+impl<S> FilterDataStream<S> {
+    /// Consume the adaptor and return the underly stream.
+    pub fn into_inner(self) -> S {
+        self.inner
+    }
+}
+
 impl<S, T> Stream for FilterDataStream<S>
 where
     S: Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin,
