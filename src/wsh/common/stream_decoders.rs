@@ -18,7 +18,7 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
         match message.message_type() {
             IncomingMessages::WshMetaData => decoders::decode_wsh_metadata(message.clone()),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -35,7 +35,7 @@ impl StreamDecoder<WshEventData> for WshEventData {
         match message.message_type() {
             IncomingMessages::WshEventData => decoders::decode_event_data_message(message.clone()),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 

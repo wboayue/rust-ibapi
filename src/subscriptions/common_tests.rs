@@ -5,7 +5,7 @@ use crate::messages::ResponseMessage;
 fn test_is_stream_end() {
     let test_msg = ResponseMessage::from_simple("test");
     assert!(is_stream_end(&Error::EndOfStream));
-    assert!(!is_stream_end(&Error::UnexpectedResponse(test_msg)));
+    assert!(!is_stream_end(&Error::unexpected_response(&test_msg)));
     assert!(!is_stream_end(&Error::ConnectionFailed));
 }
 
@@ -13,7 +13,7 @@ fn test_is_stream_end() {
 fn test_should_store_error() {
     let test_msg = ResponseMessage::from_simple("test");
     assert!(!should_store_error(&Error::EndOfStream));
-    assert!(should_store_error(&Error::UnexpectedResponse(test_msg)));
+    assert!(should_store_error(&Error::unexpected_response(&test_msg)));
     assert!(should_store_error(&Error::ConnectionFailed));
 }
 
@@ -33,7 +33,7 @@ fn test_process_decode_result() {
 
     // Test skip case (wrong-channel message)
     let test_msg = ResponseMessage::from_simple("test");
-    match process_decode_result::<i32>(Err(Error::UnexpectedResponse(test_msg))) {
+    match process_decode_result::<i32>(Err(Error::unexpected_response(&test_msg))) {
         ProcessingResult::Skip => {}
         _ => panic!("Expected Skip"),
     }

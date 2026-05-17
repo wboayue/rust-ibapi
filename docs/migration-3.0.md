@@ -176,20 +176,9 @@ match status.status {
 
 `Display`-format strings still match the IB wire vocabulary, so `format!("{}", status.status)` and `status.status.to_string()` produce the same values you saw in 2.x.
 
-### 6. `ResponseMessage::peek_string` returns `Result`
+### 6. `ResponseMessage` is crate-private
 
-`peek_string` previously returned `String` and panicked on out-of-bounds indices. It now returns `Result<String, Error>` matching its `peek_int` / `peek_long` siblings — the panic was the root cause of an issue where `CommissionsReport` proto messages (with `fields = [msg_id]`) crashed the dispatcher thread.
-
-```rust,ignore
-// v2.x
-let s = message.peek_string(2);
-
-// v3.0
-let s = message.peek_string(2)?;            // propagate
-let s = message.peek_string(2).unwrap_or_default();  // tolerate missing
-```
-
-This is a low-level cursor primitive most users will never touch directly; if you do, the upgrade is mechanical.
+`ResponseMessage` was a low-level wire envelope; in 3.0 it is `pub(crate)` and no longer re-exported. See ["StartupMessage::Other removed; ResponseMessage is crate-private"](#startupmessageother-removed-responsemessage-is-crate-private) for the route to handshake-time observability that replaces the previous escape hatches.
 
 ### 7. `Client::realtime_bars` is a builder
 
@@ -449,7 +438,7 @@ use ibapi::contracts::Contract;
 
 ### 17. `ibapi::messages` is now opaque
 
-The user-facing types from `ibapi::messages` — `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`, `ResponseMessage`, and the notice-code-range constants (`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `ORDER_REJECTION_CODE_RANGE`, `ORDER_CANCELLED_CODE`) — are now re-exported from the crate root. `Notice` and `NoticeCategory` are also in the prelude. The wire-level types (`RequestMessage`, length-framing helpers, message-id index helpers) are crate-private in 3.0; downstream code never had a reason to reach them.
+The user-facing types from `ibapi::messages` — `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`, and the notice-code-range constants (`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `ORDER_REJECTION_CODE_RANGE`, `ORDER_CANCELLED_CODE`, `HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`) — are now re-exported from the crate root. `Notice` and `NoticeCategory` are also in the prelude. The wire-level types (`RequestMessage`, `ResponseMessage`, length-framing helpers, message-id index helpers) are crate-private in 3.0; downstream code never had a reason to reach them.
 
 ```rust,ignore
 // v2.x
@@ -724,7 +713,38 @@ match msg {
 }
 ```
 
-`StartupMessage` is now `#[non_exhaustive]`. Add a `_` arm to any exhaustive match if you weren't writing one already — future variants will land here as additional handshake-time message kinds are typed. The `Other(ResponseMessage)` variant is still present in this release; it will be removed in a follow-up PR (`plans/retire-response-message-public-surface.md` PR 3) once `ResponseMessage` itself becomes crate-private.
+`StartupMessage` is now `#[non_exhaustive]`. Add a `_` arm to any exhaustive match if you weren't writing one already — future variants will land here as additional handshake-time message kinds are typed.
+
+### `StartupMessage::Other` removed; `ResponseMessage` is crate-private
+
+The `Other(ResponseMessage)` variant is gone, and `ibapi::ResponseMessage` is no longer reachable from outside the crate.
+
+Unsolicited handshake-time messages that aren't one of the typed kinds (or whose typed decoder fails) are now routed to `Client::notice_stream()` with synthesized codes:
+
+- `HANDSHAKE_UNKNOWN_FRAME_CODE` (`-3`) — TWS sent a frame kind that has no typed `StartupMessage` variant.
+- `HANDSHAKE_DECODE_FAILURE_CODE` (`-4`) — a typed decoder failed on a known kind (e.g. truncated wire bytes).
+
+Use `Notice::is_handshake_synthetic()` to detect them:
+
+```rust,ignore
+use ibapi::{Client, Notice};
+
+let (client, notices) = Client::builder()
+    .address("127.0.0.1:4002")
+    .client_id(0)
+    .connect_with_notice_stream()
+    .await?;
+
+for n in notices.iter() {
+    if n.is_handshake_synthetic() {
+        eprintln!("handshake observability: code={} msg={}", n.code, n);
+    }
+}
+```
+
+If you previously matched on `StartupMessage::Other(_)` to log "unexpected handshake frame," subscribe to the notice stream instead.
+
+The `Error::UnexpectedResponse` variant changed from `UnexpectedResponse(ResponseMessage)` to `UnexpectedResponse(String)`. The string carries the `Debug` repr of the offending wire envelope for diagnostic logging; the structured payload is no longer exposed. `matches!(err, Error::UnexpectedResponse(_))` continues to work unchanged.
 
 ## Quick migration checklist
 

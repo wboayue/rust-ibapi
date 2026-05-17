@@ -1343,6 +1343,41 @@ fn test_notice_category_partition() {
 }
 
 #[test]
+fn test_handshake_synthetic_constants_pinned() {
+    // Hard pin the wire values — these are part of the public API and may not
+    // shift silently. Negative codes never collide with TWS-emitted codes (TWS
+    // uses 0+); -2 is taken by `ResponseMessage::is_shutdown`.
+    assert_eq!(HANDSHAKE_UNKNOWN_FRAME_CODE, -3);
+    assert_eq!(HANDSHAKE_DECODE_FAILURE_CODE, -4);
+    assert_ne!(HANDSHAKE_UNKNOWN_FRAME_CODE, HANDSHAKE_DECODE_FAILURE_CODE);
+}
+
+#[test]
+fn test_is_handshake_synthetic() {
+    assert!(notice_with_code(HANDSHAKE_UNKNOWN_FRAME_CODE).is_handshake_synthetic());
+    assert!(notice_with_code(HANDSHAKE_DECODE_FAILURE_CODE).is_handshake_synthetic());
+
+    // TWS-emitted codes must not pass the predicate.
+    for code in [
+        0,
+        ORDER_CANCELLED_CODE,
+        *WARNING_CODE_RANGE.start(),
+        *WARNING_CODE_RANGE.end(),
+        SYSTEM_MESSAGE_CODES[0],
+        *ORDER_REJECTION_CODE_RANGE.start(),
+        *ORDER_REJECTION_CODE_RANGE.end(),
+        -2, // shutdown sentinel — distinct sentinel, must not be confused with handshake-synthetic
+        -1,
+        100,
+    ] {
+        assert!(
+            !notice_with_code(code).is_handshake_synthetic(),
+            "code {code} should not be flagged handshake-synthetic"
+        );
+    }
+}
+
+#[test]
 fn test_all_incoming_message_conversions() {
     // Test boundary values and ensure all message types are covered
     let test_cases = vec![

@@ -29,7 +29,7 @@ fn test_subscription_skips_unexpected_messages_without_limit() {
         fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<SkipThenSuccess, Error> {
             let n = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
             if n < 20 {
-                Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
+                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
             } else {
                 Ok(SkipThenSuccess)
             }

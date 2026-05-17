@@ -26,7 +26,7 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
             )?)),
             IncomingMessages::AccountSummaryEnd => Ok(AccountSummaryResult::End),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -43,7 +43,7 @@ impl StreamDecoder<PnL> for PnL {
         match message.message_type() {
             IncomingMessages::PnL => decoders::decode_pnl(context.server_version, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -60,7 +60,7 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
         match message.message_type() {
             IncomingMessages::PnLSingle => decoders::decode_pnl_single(context.server_version, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -78,7 +78,7 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
             IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
             IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -99,7 +99,7 @@ impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
             IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -128,7 +128,7 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
             IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
             IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -149,7 +149,7 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
             IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 

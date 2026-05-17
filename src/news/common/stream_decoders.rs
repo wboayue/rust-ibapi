@@ -13,7 +13,7 @@ impl StreamDecoder<NewsBulletin> for NewsBulletin {
         match message.message_type() {
             IncomingMessages::NewsBulletins => decoders::decode_news_bulletin(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 
@@ -36,7 +36,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => decoders::decode_tick_news(message.clone()),
             IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+            _ => Err(Error::unexpected_response(message)),
         }
     }
 

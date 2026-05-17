@@ -105,9 +105,17 @@ mod from_str_tests {
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
 
+// Wire sentinels used by the legacy text protocol and the `next_optional_*`
+// cursor primitives. `pub(crate) const` is enough since the cursor methods
+// using them are test-only; we keep them as plain `const` + `allow(dead_code)`
+// so they stay private even within the crate.
+#[allow(dead_code)]
 const INFINITY_STR: &str = "Infinity";
+#[allow(dead_code)]
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
+#[allow(dead_code)]
 const UNSET_INTEGER: &str = "2147483647";
+#[allow(dead_code)]
 const UNSET_LONG: &str = "9223372036854775807";
 
 /// Messages emitted by TWS/Gateway over the market data socket.
@@ -847,8 +855,11 @@ struct ExecutionMinimal {
 }
 
 /// Parsed inbound message from TWS/Gateway.
+///
+/// Crate-internal wire envelope; not part of the public API. All fields,
+/// constructors, and methods are crate-visible only.
 #[derive(Clone, Default, Debug)]
-pub struct ResponseMessage {
+pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.
     pub i: usize,
     /// Raw field buffer backing this message.
@@ -897,7 +908,7 @@ impl ResponseMessage {
     /// skip-classifies (per CLAUDE.md rule 20) rather than terminating the
     /// subscription.
     pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
-        self.raw_bytes().ok_or_else(|| crate::Error::UnexpectedResponse(self.clone()))
+        self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
     }
 
     /// Dispatch decoding based on whether the message is protobuf or text.
@@ -914,32 +925,19 @@ impl ResponseMessage {
         }
     }
 
-    /// Consuming variant of [`decode_proto_or_text`](Self::decode_proto_or_text)
-    /// for text decoders that take the message by value.
-    pub fn decode_proto_or_text_owned<T>(
-        self,
-        proto_decoder: impl FnOnce(&[u8]) -> Result<T, crate::Error>,
-        text_decoder: impl FnOnce(Self) -> Result<T, crate::Error>,
-    ) -> Result<T, crate::Error> {
-        if self.is_protobuf {
-            let bytes = self.raw_bytes().ok_or_else(|| crate::Error::Simple("missing protobuf bytes".into()))?;
-            proto_decoder(bytes)
-        } else {
-            text_decoder(self)
-        }
-    }
-
     /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
     }
 
     /// Returns `true` if the message contains no fields.
+    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn is_empty(&self) -> bool {
         self.fields.is_empty()
     }
 
     /// Returns `true` if the message informs about API shutdown.
+    #[cfg_attr(not(feature = "sync"), allow(dead_code))] // sync-transport-only caller
     pub fn is_shutdown(&self) -> bool {
         self.message_type() == IncomingMessages::Shutdown
     }
@@ -1075,6 +1073,7 @@ impl ResponseMessage {
     }
 
     /// Consume the next field returning `None` when unset.
+    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional int and found end of message".into()));
@@ -1121,6 +1120,7 @@ impl ResponseMessage {
     }
 
     /// Consume the next field as an optional i64.
+    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional long and found end of message".into()));
@@ -1194,6 +1194,7 @@ impl ResponseMessage {
     }
 
     /// Consume the next field as an optional floating-point value.
+    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional double and found end of message".into()));
@@ -1422,6 +1423,21 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 /// for partition semantics.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
+/// Synthesized notice code emitted when a handshake-time frame's
+/// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
+/// (TWS uses 0+); the only other sentinel in this range is `-2` for the
+/// gateway-initiated shutdown signal. See [`Notice::is_handshake_synthetic`].
+pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
+
+/// Synthesized notice code emitted when a typed handshake decoder fails for
+/// a known [`IncomingMessages`] kind (`OpenOrder`, `OrderStatus`,
+/// `AccountValue`/`PortfolioValue`/`AccountUpdateTime`/`AccountDownloadEnd`,
+/// `ExecutionData`, `CommissionsReport`, `CompletedOrder`). Distinct from
+/// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] so consumers can separate TWS schema
+/// drift from rust-ibapi decoder bugs. See
+/// [`Notice::is_handshake_synthetic`].
+pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
+
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all
@@ -1555,6 +1571,29 @@ impl Notice {
     /// ```
     pub fn is_order_rejection(&self) -> bool {
         ORDER_REJECTION_CODE_RANGE.contains(&self.code)
+    }
+
+    /// Returns `true` if this notice was synthesized client-side during the
+    /// connection handshake — i.e. carries either
+    /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] (an `IncomingMessages` kind with no
+    /// typed `StartupMessage` variant) or [`HANDSHAKE_DECODE_FAILURE_CODE`]
+    /// (a typed decoder failed on a known kind).
+    ///
+    /// Subscribers to [`Client::notice_stream`](crate::Client::notice_stream)
+    /// can use this to log + investigate without conflating with TWS-emitted
+    /// notices.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Notice;
+    /// # let notice: Notice = unimplemented!();
+    /// if notice.is_handshake_synthetic() {
+    ///     eprintln!("handshake observability: code={} {}", notice.code, notice);
+    /// }
+    /// ```
+    pub fn is_handshake_synthetic(&self) -> bool {
+        self.code == HANDSHAKE_UNKNOWN_FRAME_CODE || self.code == HANDSHAKE_DECODE_FAILURE_CODE
     }
 
     /// Classify this notice into a disjoint [`NoticeCategory`].

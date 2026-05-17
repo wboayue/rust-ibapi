@@ -58,7 +58,7 @@ impl Client {
                         }
                         IncomingMessages::ContractDataEnd => return Ok(contract_details),
                         IncomingMessages::Error => return Err(Error::from(response)),
-                        _ => return Err(Error::UnexpectedResponse(response)),
+                        _ => return Err(Error::unexpected_response(&response)),
                     }
                 }
                 Err(e) => return Err(e),

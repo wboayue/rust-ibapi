@@ -1,4 +1,5 @@
 use super::*;
+use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
@@ -55,6 +56,16 @@ fn notice_sink_ctx(sink: &CapturingSink) -> StartupHandshakeContext<'_> {
     }
 }
 
+/// Context with both a startup callback AND a capturing notice sink. Used by
+/// PR 3 tests that need to verify decode-failure routing (callback should NOT
+/// fire; sink should receive the synthesized notice).
+fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a CapturingSink) -> StartupHandshakeContext<'a> {
+    StartupHandshakeContext {
+        startup: Some(cb),
+        notice_sink: sink,
+    }
+}
+
 #[test]
 fn test_parse_account_info_next_valid_id() {
     let handler = ConnectionHandler::default();
@@ -84,30 +95,44 @@ fn test_parse_account_info_managed_accounts() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_open_order_invokes_callback() {
-    // Sparse OpenOrder frame — decoder fails, so the callback receives
-    // `StartupMessage::Other` with message_type OpenOrder. Either way, callback
-    // fires. The exhaustive typed-decode test uses a realistic frame below.
+fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
+    // Sparse text-framed OpenOrder — decoder calls require_proto() and rejects.
+    // Callback must NOT fire (no Other variant); notice_sink receives the
+    // synthesized HANDSHAKE_DECODE_FAILURE_CODE notice.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OpenOrder));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(
+        notice.message.contains("OpenOrder"),
+        "notice message should name the kind: {}",
+        notice.message
+    );
 }
 
 #[test]
-fn test_dispatch_unsolicited_order_status_invokes_callback() {
+fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OrderStatus));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(notice.message.contains("OrderStatus"), "notice should name the kind: {}", notice.message);
 }
 
 #[test]
@@ -170,24 +195,29 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_unknown_falls_to_other() {
+fn test_dispatch_unsolicited_unknown_emits_notice() {
     // NewsBulletins (msg_type=14) — no typed variant in StartupMessage and not
-    // an expected handshake-time kind, so it falls through to Other. PR 3
-    // replaces Other with a warn+notice safety net.
+    // an expected handshake-time kind. The catch-all fires the notice sink
+    // with HANDSHAKE_UNKNOWN_FRAME_CODE; the typed startup callback must NOT
+    // fire (no Other variant since PR 3).
     let mut message = ResponseMessage::from("14\0\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| {
-        if let StartupMessage::Other(rm) = msg {
-            *captured.lock().unwrap() = Some(rm.message_type());
-        } else {
-            panic!("expected Other for unknown message type, got {msg:?}");
-        }
-    };
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::NewsBulletins));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire for unknown handshake frame");
+    let notice = sink.last().expect("notice sink should receive unknown-frame notice");
+    assert_eq!(notice.code, HANDSHAKE_UNKNOWN_FRAME_CODE);
+    assert!(
+        notice.message.contains("NewsBulletins"),
+        "notice should name the kind: {}",
+        notice.message
+    );
+    assert!(notice.is_handshake_synthetic());
 }
 
 #[test]
@@ -282,15 +312,15 @@ fn test_parse_account_info_multiple_messages_callback() {
     };
     let cbs = startup_ctx(&cb);
 
-    // First message: OpenOrder (sparse → Other)
-    let mut msg1 = ResponseMessage::from("5\0123\0AAPL\0");
+    // First message: OpenOrderEnd (unit marker — no decoder, callback fires).
+    let mut msg1 = ResponseMessage::from("53\01\0");
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg1, &cbs).unwrap();
 
-    // Second message: OrderStatus (sparse → Other)
-    let mut msg2 = ResponseMessage::from("3\0456\0Filled\0");
+    // Second message: CompletedOrdersEnd (unit marker — callback fires).
+    let mut msg2 = ResponseMessage::from("102\0");
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg2, &cbs).unwrap();
 
-    // Third message: NextValidId (should NOT trigger callback)
+    // Third message: NextValidId (consumed internally — should NOT trigger callback)
     let mut msg3 = ResponseMessage::from("9\01\01000\0");
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg3, &cbs).unwrap();
 
@@ -686,22 +716,21 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_account_value_decode_failure_falls_to_other() {
+fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
     // Truncated AccountValue — too few fields to decode into AccountValue.
     let mut message = ResponseMessage::from("6\02\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| {
-        if let StartupMessage::Other(rm) = msg {
-            *captured.lock().unwrap() = Some(rm.message_type());
-        } else {
-            panic!("expected Other after decode failure, got {msg:?}");
-        }
-    };
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::AccountValue));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(notice.message.contains("AccountValue"));
 }
 
 // =============================================================================
@@ -813,49 +842,55 @@ fn test_dispatch_unsolicited_completed_orders_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_decode_failure_falls_to_other() {
+fn test_dispatch_unsolicited_execution_decode_failure_emits_notice() {
     // Text-framed ExecutionData — decoder calls require_proto() and rejects it.
     let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| match msg {
-        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
-        other => panic!("expected Other after decode failure, got {other:?}"),
-    };
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::ExecutionData));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(notice.message.contains("ExecutionData"));
 }
 
 #[test]
-fn test_dispatch_unsolicited_commission_report_decode_failure_falls_to_other() {
+fn test_dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| match msg {
-        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
-        other => panic!("expected Other after decode failure, got {other:?}"),
-    };
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CommissionsReport));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(notice.message.contains("CommissionsReport"));
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_order_decode_failure_falls_to_other() {
+fn test_dispatch_unsolicited_completed_order_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("101\0\0");
 
-    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| match msg {
-        StartupMessage::Other(rm) => *captured.lock().unwrap() = Some(rm.message_type()),
-        other => panic!("expected Other after decode failure, got {other:?}"),
-    };
+    let cb_fired = Arc::new(Mutex::new(false));
+    let cb_fired_clone = cb_fired.clone();
+    let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
+    let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CompletedOrder));
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+
+    assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
+    let notice = sink.last().expect("notice sink should receive decode-failure notice");
+    assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
+    assert!(notice.message.contains("CompletedOrder"));
 }
 
 #[test]
@@ -904,12 +939,16 @@ fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_unknown_no_callback_warns() {
-    // NewsBulletins (14) — no typed dispatch arm, no startup callback. The
-    // catch-all logs at warn! and does NOT fan out to the notice sink.
+fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
+    // NewsBulletins (14) — unknown handshake kind. PR 3 always fires the
+    // notice sink regardless of callback presence: the synthesized notice is
+    // for observability via `Client::notice_stream()`, decoupled from the
+    // typed startup callback.
     let mut message = ResponseMessage::from("14\0\0");
 
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
-    assert_eq!(sink.count(), 0, "unknown messages without a callback are dropped, not fan-out");
+    let notice = sink.last().expect("notice sink should receive unknown-frame notice");
+    assert_eq!(notice.code, HANDSHAKE_UNKNOWN_FRAME_CODE);
+    assert!(notice.is_handshake_synthetic());
 }
