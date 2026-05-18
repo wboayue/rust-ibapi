@@ -661,7 +661,7 @@ fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
         .expect_err("garbage protobuf must error");
-    assert!(matches!(err, Error::Simple(ref s) if s.contains("NextValidId")), "got {err:?}");
+    assert!(matches!(err, Error::ProtobufDecode(_)), "got {err:?}");
 }
 
 #[test]
@@ -672,7 +672,7 @@ fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
         .expect_err("garbage protobuf must error");
-    assert!(matches!(err, Error::Simple(ref s) if s.contains("ManagedAccounts")), "got {err:?}");
+    assert!(matches!(err, Error::ProtobufDecode(_)), "got {err:?}");
 }
 
 #[test]

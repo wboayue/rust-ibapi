@@ -95,7 +95,7 @@ pub(crate) fn encode_cancel_option_computation(message_type: OutgoingMessages, r
                 &request.encode_to_vec(),
             ))
         }
-        _ => Err(Error::Simple(format!(
+        _ => Err(Error::InvalidArgument(format!(
             "unexpected message type for cancel option computation: {message_type:?}"
         ))),
     }

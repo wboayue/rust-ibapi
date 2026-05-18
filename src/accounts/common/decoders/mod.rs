@@ -252,7 +252,7 @@ pub(crate) fn decode_account_update_time(message: &mut ResponseMessage) -> Resul
 pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     message.decode_proto_or_text(
         |bytes| {
-            let proto = proto::CurrentTime::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode CurrentTime: {e}")))?;
+            let proto = proto::CurrentTime::decode(bytes)?;
             let timestamp = proto.current_time.unwrap_or(0);
             OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
         },
@@ -268,7 +268,7 @@ pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<Offset
 pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     message.decode_proto_or_text(
         |bytes| {
-            let proto = proto::CurrentTimeInMillis::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode CurrentTimeInMillis: {e}")))?;
+            let proto = proto::CurrentTimeInMillis::decode(bytes)?;
             let millis = proto.current_time_in_millis.unwrap_or(0);
             OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
         },

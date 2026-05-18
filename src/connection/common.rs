@@ -223,8 +223,7 @@ impl ConnectionProtocol for ConnectionHandler {
             IncomingMessages::NextValidId => {
                 if message.is_protobuf {
                     if let Some(bytes) = message.raw_bytes() {
-                        let proto =
-                            crate::proto::NextValidId::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode NextValidId: {e}")))?;
+                        let proto = crate::proto::NextValidId::decode(bytes)?;
                         info.next_order_id = proto.order_id;
                     }
                 } else {
@@ -236,8 +235,7 @@ impl ConnectionProtocol for ConnectionHandler {
             IncomingMessages::ManagedAccounts => {
                 if message.is_protobuf {
                     if let Some(bytes) = message.raw_bytes() {
-                        let proto = crate::proto::ManagedAccounts::decode(bytes)
-                            .map_err(|e| Error::Simple(format!("failed to decode ManagedAccounts: {e}")))?;
+                        let proto = crate::proto::ManagedAccounts::decode(bytes)?;
                         info.managed_accounts = proto.accounts_list;
                     }
                 } else {

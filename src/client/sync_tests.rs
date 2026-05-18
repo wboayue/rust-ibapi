@@ -47,7 +47,7 @@ fn check_server_version_branches() {
     let err = client
         .check_server_version(SERVER_VERSION + 100, "future_feature")
         .expect_err("newer version fails");
-    matches!(err, Error::ServerVersion(_, _, _));
+    assert!(matches!(err, Error::ServerVersion(_, _, _)), "got {err:?}");
 }
 
 #[test]
