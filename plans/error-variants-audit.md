@@ -75,27 +75,24 @@ Follow-ups surfaced by /simplify (deferred — see [feedback_simplify_deferral_r
 - `Error::server_version(req, got, feature)` helper alongside the existing `Error::unexpected_response` factory at `src/errors.rs:144`. Would converge 4 call sites: `client/sync.rs:397`, `client/async.rs:308`, `protocol.rs:167`, `connection/common.rs:346`. Rule-of-three already met; land when the next consumer shows up or as a standalone cleanup.
 - `test_parse_account_info_{next_valid_id,managed_accounts}_protobuf_decode_error` in `connection/common_tests.rs` now both assert only `Error::ProtobufDecode(_)`. Could be parameterized or one dropped — low priority.
 
-### PR-4: Datetime / message-type parse → `Error::Parse` (~18)
+### PR-4: Datetime / message-type parse → `Error::Parse` (~18) — shipped (#587)
 
-Lands with the new `Error::parse_field` / `Error::parse_proto` constructors (see **Parse-shape decision** below) so the fake-`0` index stays encapsulated.
+Landed alongside the new `Error::parse_field` / `Error::parse_proto` constructors (resolution of parent §5.3 Option 4) so the fake-`0` index stays encapsulated.
 
-- Add the constructors to `src/errors.rs`:
-  ```rust
-  impl Error {
-      pub fn parse_field(value: impl Into<String>, reason: impl Into<String>) -> Self {
-          Error::Parse(0, value.into(), reason.into())
-      }
-      pub fn parse_proto(field: impl Into<String>, reason: impl Into<String>) -> Self {
-          Error::Parse(0, field.into(), reason.into())
-      }
-  }
-  ```
-  Additive — non-breaking (`Error` is `#[non_exhaustive]`).
-- 3× message-type parse in `src/messages.rs:403,753,754` ("Unknown incoming / Unknown outgoing / Invalid outgoing message type: …").
-- 5× datetime parse in `src/messages.rs:1342,1362,1365,1371,1375`.
-- 4× timestamp parse in `src/accounts/common/decoders/mod.rs:257,263,273,278` (`OffsetDateTime::from_unix_timestamp{,_nanos}().map_err`).
-- 2× news date parse in `src/news/common/decoders.rs:75,80`.
-- 4× historical-data parse in `src/market_data/historical/common/decoders/mod.rs:27,28,352,368`.
+- Added the constructors to `src/errors.rs` (impl block, sibling to `unexpected_response`). Shipped as `pub(crate)` rather than `pub` to keep the public surface minimal; promotion later is a one-line change. The bodies are identical (`Error::Parse(0, ...)`); the name distinguishes intent at the call site (`parse_field` = wire value, `parse_proto` = proto field name).
+- 3× message-type parse in `src/messages.rs:403,753,754` ("Unknown incoming / Unknown outgoing / Invalid outgoing message type: …") → `Error::parse_field(s, "<reason>")`.
+- 5× datetime parse in `src/messages.rs:1344,1364,1367,1373,1377` (line numbers shifted +2 post-#586) → `Error::parse_field(field, "<reason>")`. The `OffsetDateTime::from_unix_timestamp` arm and both `OffsetResult::{Ambiguous,None}` arms now carry the `field` value explicitly.
+- 4× timestamp parse in `src/accounts/common/decoders/mod.rs:257,263,273,278` — proto path uses `Error::parse_proto("current_time" / "current_time_in_millis", e.to_string())`; text path uses `Error::parse_field(timestamp.to_string(), e.to_string())` / `Error::parse_field(millis.to_string(), ...)`.
+- 2× news date parse in `src/news/common/decoders.rs::parse_unix_timestamp` — both `ParseInt` and `from_unix_timestamp` failures → `Error::parse_field(time, e.to_string())`. Also collapsed the trailing `match` into a single `.map_err` chain for clarity.
+- 4× historical-data parse in `src/market_data/historical/common/decoders/mod.rs` (`parse_unix_seconds_str` ×2, `parse_date_with_tz`, `parse_bar_date`) → `Error::parse_field(text, "<reason>")`.
+- No test fixture / pattern-match updates needed: cursor wrapper at `messages.rs:1155` already re-wraps `Simple|Parse → Parse(self.i, ..)`, and existing `Error::Parse | ParseInt | Simple` test-table arms still match.
+- /simplify follow-up cleanup: collapsed the two identical `Error::parse_field(s, format!("invalid unix-second timestamp: {e}"))` closures in `parse_unix_seconds_str` into a shared `mk_err: &dyn Display -> Error` local (−1 line; Quality #4 + Efficiency #3 lens).
+
+Follow-ups surfaced by /simplify (deferred):
+
+- **Collapse `parse_field` + `parse_proto`** into a single `Error::parse(...)` factory — only 2 `parse_proto` callsites; the split is real (proto field name vs wire value) but thin. Reassess on the 3rd `parse_proto` consumer.
+- **`impl Into<String>` → `impl Display`** on the constructors — would let callers drop `.to_string()` at `messages.rs:753`, `accounts/.../mod.rs:263,278`. Minor ergonomics; defer.
+- **Shared `parse_unix_seconds(s)` / `parse_unix_millis(s)` helpers** in `src/proto/decoders.rs` — 3 callers exist (accounts, historical, news). Rule-of-three on the edge; land standalone or wait for 4th caller.
 
 ### PR-5: Cursor EOF + unexpected response + decoder mismatch (~31)
 
