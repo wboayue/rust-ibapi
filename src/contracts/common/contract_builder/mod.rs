@@ -441,7 +441,7 @@ impl ContractBuilder {
     pub fn build(self) -> Result<Contract, Error> {
         // Symbol is required unless local_symbol or contract_id is provided
         if self.symbol.is_none() && self.local_symbol.is_none() && self.contract_id.is_none() {
-            return Err(Error::Simple("Symbol, local_symbol, or contract_id is required".into()));
+            return Err(Error::InvalidArgument("Symbol, local_symbol, or contract_id is required".into()));
         }
 
         let security_type = self.security_type.clone().unwrap_or_default();
@@ -449,30 +449,30 @@ impl ContractBuilder {
         // Validate option-specific requirements
         if security_type == SecurityType::Option || security_type == SecurityType::FuturesOption {
             if self.strike.is_none() {
-                return Err(Error::Simple("Strike price is required for options".into()));
+                return Err(Error::InvalidArgument("Strike price is required for options".into()));
             }
 
             if let Some(strike) = self.strike {
                 if strike < 0.0 {
-                    return Err(Error::Simple("Strike price cannot be negative".into()));
+                    return Err(Error::InvalidArgument("Strike price cannot be negative".into()));
                 }
             }
 
             if self.right.is_none() {
-                return Err(Error::Simple(
+                return Err(Error::InvalidArgument(
                     "Right (OptionRight::Call or OptionRight::Put) is required for options".into(),
                 ));
             }
 
             if self.last_trade_date_or_contract_month.is_none() {
-                return Err(Error::Simple("Expiration date is required for options".into()));
+                return Err(Error::InvalidArgument("Expiration date is required for options".into()));
             }
         }
 
         // Validate futures-specific requirements
         if (security_type == SecurityType::Future || security_type == SecurityType::FuturesOption) && self.last_trade_date_or_contract_month.is_none()
         {
-            return Err(Error::Simple("Contract month is required for futures".into()));
+            return Err(Error::InvalidArgument("Contract month is required for futures".into()));
         }
 
         Ok(Contract {

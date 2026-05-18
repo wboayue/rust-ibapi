@@ -513,7 +513,7 @@ impl SpreadBuilder {
     /// Finalize the spread contract, returning an error if no legs were added.
     pub fn build(self) -> Result<Contract, Error> {
         if self.legs.is_empty() {
-            return Err(Error::Simple("Spread must have at least one leg".into()));
+            return Err(Error::InvalidArgument("Spread must have at least one leg".into()));
         }
 
         let combo_legs: Vec<ComboLeg> = self
