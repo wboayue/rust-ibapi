@@ -176,41 +176,34 @@ Related existing tracking docs in `plans/`:
 
 ## 5. Errors
 
-- [~] **Audit remaining `Error::Simple` / `Error::Message` callers.** Enum is
-  `#[non_exhaustive]` (`src/errors.rs:18`) and the typed variants predominate
-  (`Io`, `Parse`, `ServerVersion`, `ConnectionFailed`, `ConnectionReset`,
-  `Cancelled`, `Shutdown`, `EndOfStream`, `UnexpectedResponse`,
-  `UnsupportedTimeZone`, `InvalidArgument`, etc.). Fresh audit (2026-05-17)
-  finds **~80 non-test sites** across 27 files — the original ~42 estimate
-  undercounted by ~2× (helpers in `common/error_helpers.rs` and decoder paths
-  in realtime/accounts/contracts/news/historical-data weren't tallied).
-  Tracked in [`plans/error-variants-audit.md`](error-variants-audit.md) with a
-  6-PR breakdown: validation → InvalidArgument; EOF → UnexpectedEndOfStream;
-  server-version + protobuf-decode; datetime/parse → Parse; cursor +
-  unexpected-response + decoder-mismatch; new `Error::ConnectionRejected(String)`
-  variant. §5.3 (Parse-shape) resolved with Option 4 — no-index constructors
-  `Error::parse_field` / `Error::parse_proto` land in PR-4.
+- [x] **Audit remaining `Error::Simple` / `Error::Message` callers.** Shipped
+  across 6 PRs in [`plans/error-variants-audit.md`](error-variants-audit.md):
+  PR-1 #584 (validation → `InvalidArgument`), PR-2 #585 (EOF/no-response →
+  `UnexpectedEndOfStream`), PR-3 #586 (server-version + protobuf-decode →
+  typed variants), PR-4 #587 (datetime + message-type parse → `Parse` via
+  new `parse_field`/`parse_proto` constructors), PR-5 #589 (cursor EOF +
+  unexpected-response + decoder-mismatch; introduced `Error::eof_at`),
+  PR-6 #590 (new `Error::ConnectionRejected(String)` variant for handshake
+  refusal). §5.3 Parse-shape resolved Option 4 (no-index constructors)
+  rather than changing the variant tuple. Net: ~80 sites typed, four
+  factory helpers (`unexpected_response`, `parse_field`, `parse_proto`,
+  `eof_at`) added to `errors.rs`.
 
 - [ ] **Distinguish "request rejected by server" from "transport error" in return
   types.** Today both come through `Result<_, Error>`. Consider promoting server-side
   rejections (TWS error codes 200-299, 300-399, 10000+) into a typed sub-enum so
   callers can pattern-match without string parsing.
 
-- [~] **Revisit `Error::Parse(usize, String, String)` shape — the index slot is a
-  legacy from text-protocol days.** Variant is `Parse(usize, String, String)`
-  (`src/errors.rs:49`): `(field_index, raw_value, message)`. In the
-  text-protocol era the index pointed at a positional field in the framed
-  message; under the protobuf-only floor (210, see [`plans/protobuf-migration.md`](protobuf-migration.md))
-  proto fields are name-keyed, not positional, so every new `FromStr<Err = Error>`
-  impl passes `0` as a placeholder.
-
-  **Resolved 2026-05-17 (Option 4)** — keep the variant shape; add no-index
+- [x] **Revisit `Error::Parse(usize, String, String)` shape.** Resolved
+  2026-05-17 with Option 4: keep the variant tuple, add no-index
   constructors `Error::parse_field(value, reason)` / `Error::parse_proto(field,
-  reason)` that internally write `0`. Non-breaking; future promotion to
-  `Option<usize>` or struct variant remains possible behind the constructors.
-  Lands in [`plans/error-variants-audit.md`](error-variants-audit.md) PR-4.
-  Typed-status sweep ([`plans/typed-status-sweep.md`](typed-status-sweep.md)) PRs
-  2–5 should also switch to the new constructors when they land.
+  reason)` / `Error::eof_at(i, label)` that absorb the `0` placeholder.
+  Non-breaking; future promotion to `Option<usize>` or a struct variant
+  remains possible behind the constructors. Shipped via
+  [`plans/error-variants-audit.md`](error-variants-audit.md) PR-4 #587 +
+  PR-5 #589. Typed-status sweep
+  ([`plans/typed-status-sweep.md`](typed-status-sweep.md)) PRs 2–5 should
+  use the new constructors when they land.
 
 ## 6. Examples & docs
 
