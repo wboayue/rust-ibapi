@@ -88,7 +88,7 @@ impl Client {
                 Ok(next_order_id)
             }
             Some(Err(e)) => Err(e),
-            None => Err(Error::Simple("no response from server".into())),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 

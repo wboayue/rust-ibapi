@@ -218,11 +218,10 @@ fn test_server_time() {
     // Scenario 2: No response (returns default)
     let (client_no_resp, message_bus_no_resp) = create_blocking_test_client();
     let result_no_resp = client_no_resp.server_time();
-    assert!(result_no_resp.is_err(), "Expected Err for no response");
-    match result_no_resp.err().unwrap() {
-        Error::Simple(msg) => assert_eq!(msg, "No response from server"),
-        other => panic!("Unexpected error type: {other:?}"),
-    }
+    assert!(
+        matches!(result_no_resp, Err(Error::UnexpectedEndOfStream)),
+        "Expected UnexpectedEndOfStream, got {result_no_resp:?}"
+    );
     assert_eq!(request_message_count(&message_bus_no_resp), 1);
     assert_request(&message_bus_no_resp, 0, &request_current_time());
 
@@ -442,13 +441,12 @@ fn test_server_time_comprehensive() {
                 assert!(result.is_ok(), "Expected Ok for {}, got: {:?}", test_case.scenario, result.err());
                 assert_eq!(result.unwrap(), expected_time, "Timestamp mismatch for {}", test_case.scenario);
             }
-            Err("No response from server") => {
-                assert!(result.is_err(), "Expected error for {}", test_case.scenario);
-                if let Err(Error::Simple(msg)) = result {
-                    assert_eq!(msg, "No response from server", "Error message mismatch for {}", test_case.scenario);
-                } else {
-                    panic!("Expected Simple error with 'No response from server' for {}", test_case.scenario);
-                }
+            Err("unexpected end of stream") => {
+                assert!(
+                    matches!(result, Err(Error::UnexpectedEndOfStream)),
+                    "Expected UnexpectedEndOfStream for {}, got {result:?}",
+                    test_case.scenario
+                );
             }
             Err(_) => {
                 assert!(result.is_err(), "Expected error for {}", test_case.scenario);
@@ -763,10 +761,10 @@ fn test_server_time_millis_no_response() {
     let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS);
 
     let result = client.server_time_millis();
-    match result.expect_err("expected error for no response") {
-        Error::Simple(msg) => assert_eq!(msg, "No response from server"),
-        other => panic!("unexpected error: {other:?}"),
-    }
+    assert!(
+        matches!(result, Err(Error::UnexpectedEndOfStream)),
+        "expected UnexpectedEndOfStream, got {result:?}"
+    );
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &request_current_time_in_millis());
 }

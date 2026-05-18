@@ -222,7 +222,7 @@ pub fn server_time_test_cases() -> Vec<ServerTimeTestCase> {
         ServerTimeTestCase {
             scenario: "no response",
             responses: vec![],
-            expected_result: Err("No response from server"),
+            expected_result: Err("unexpected end of stream"),
             expected_request: "49|1|",
         },
     ]

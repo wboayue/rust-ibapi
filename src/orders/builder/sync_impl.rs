@@ -43,7 +43,7 @@ impl<'a> OrderBuilder<'a, Client> {
             }
         }
 
-        Err(Error::Simple("What-if analysis did not return order state".to_string()))
+        Err(Error::UnexpectedEndOfStream)
     }
 }
 

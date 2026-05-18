@@ -414,13 +414,12 @@ async fn test_server_time_scenarios() {
                 assert!(result.is_ok(), "Expected Ok for {}, got: {:?}", test_case.scenario, result.err());
                 assert_eq!(result.unwrap(), expected_time, "Timestamp mismatch for {}", test_case.scenario);
             }
-            Err("No response from server") => {
-                assert!(result.is_err(), "Expected error for {}", test_case.scenario);
-                if let Err(Error::Simple(msg)) = result {
-                    assert_eq!(msg, "No response from server", "Error message mismatch for {}", test_case.scenario);
-                } else {
-                    panic!("Expected Simple error with 'No response from server' for {}", test_case.scenario);
-                }
+            Err("unexpected end of stream") => {
+                assert!(
+                    matches!(result, Err(Error::UnexpectedEndOfStream)),
+                    "Expected UnexpectedEndOfStream for {}, got {result:?}",
+                    test_case.scenario
+                );
             }
             Err(_) => {
                 assert!(result.is_err(), "Expected error for {}", test_case.scenario);
