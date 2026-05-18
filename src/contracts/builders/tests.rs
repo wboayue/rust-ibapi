@@ -259,7 +259,7 @@ fn test_spread_builder_custom_legs() {
 fn test_spread_builder_empty_fails() {
     let result = Contract::spread().build();
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Spread must have at least one leg");
+    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Spread must have at least one leg");
 }
 
 #[test]

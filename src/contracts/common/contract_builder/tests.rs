@@ -148,7 +148,7 @@ fn test_contract_builder_build_missing_identifier() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "error occurred: Symbol, local_symbol, or contract_id is required"
+        "InvalidArgument: Symbol, local_symbol, or contract_id is required"
     );
 }
 
@@ -191,7 +191,7 @@ fn test_contract_builder_build_option_missing_strike() {
         .build();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Strike price is required for options");
+    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price is required for options");
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn test_contract_builder_build_option_missing_right() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "error occurred: Right (OptionRight::Call or OptionRight::Put) is required for options"
+        "InvalidArgument: Right (OptionRight::Call or OptionRight::Put) is required for options"
     );
 }
 
@@ -216,7 +216,10 @@ fn test_contract_builder_build_option_missing_expiration() {
         .build();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Expiration date is required for options");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "InvalidArgument: Expiration date is required for options"
+    );
 }
 
 #[test]
@@ -224,7 +227,7 @@ fn test_contract_builder_build_futures_missing_contract_month() {
     let result = ContractBuilder::futures("ES", "CME", "USD").build();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Contract month is required for futures");
+    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Contract month is required for futures");
 }
 
 #[test]
@@ -238,7 +241,7 @@ fn test_contract_builder_build_futures_option_missing_contract_month() {
 
     assert!(result.is_err());
     // FuturesOption is checked as an option first, so it fails on missing strike price
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Strike price is required for options");
+    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price is required for options");
 }
 
 #[test]
@@ -250,7 +253,7 @@ fn test_contract_builder_build_negative_strike() {
         .build();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Strike price cannot be negative");
+    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price cannot be negative");
 }
 
 #[test]

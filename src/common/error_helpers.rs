@@ -6,7 +6,7 @@ use crate::Error;
 
 /// Ensures a value is present, returning an error with the specified message if None
 pub fn require<T>(value: Option<T>, error_message: &str) -> Result<T, Error> {
-    value.ok_or_else(|| Error::Simple(error_message.to_string()))
+    value.ok_or_else(|| Error::InvalidArgument(error_message.to_string()))
 }
 
 /// Ensures a value is present, returning an error with a formatted message if None
@@ -14,7 +14,7 @@ pub fn require_with<T, F>(value: Option<T>, error_fn: F) -> Result<T, Error>
 where
     F: FnOnce() -> String,
 {
-    value.ok_or_else(|| Error::Simple(error_fn()))
+    value.ok_or_else(|| Error::InvalidArgument(error_fn()))
 }
 
 /// Ensures a request ID is present, returning an error if None
@@ -33,7 +33,10 @@ where
     T: PartialOrd + std::fmt::Display,
 {
     if value < min || value > max {
-        Err(Error::Simple(format!("{} must be between {} and {}, got {}", name, min, max, value)))
+        Err(Error::InvalidArgument(format!(
+            "{} must be between {} and {}, got {}",
+            name, min, max, value
+        )))
     } else {
         Ok(value)
     }
@@ -42,7 +45,7 @@ where
 /// Ensures a string is not empty
 pub fn require_not_empty<'a>(value: &'a str, name: &str) -> Result<&'a str, Error> {
     if value.is_empty() {
-        Err(Error::Simple(format!("{} cannot be empty", name)))
+        Err(Error::InvalidArgument(format!("{} cannot be empty", name)))
     } else {
         Ok(value)
     }
@@ -51,7 +54,7 @@ pub fn require_not_empty<'a>(value: &'a str, name: &str) -> Result<&'a str, Erro
 /// Ensures a collection has at least one element
 pub fn require_not_empty_vec<'a, T>(value: &'a [T], name: &str) -> Result<&'a [T], Error> {
     if value.is_empty() {
-        Err(Error::Simple(format!("{} must contain at least one element", name)))
+        Err(Error::InvalidArgument(format!("{} must contain at least one element", name)))
     } else {
         Ok(value)
     }
@@ -62,7 +65,7 @@ pub fn map_error<T, E>(result: Result<T, E>, error_message: &str) -> Result<T, E
 where
     E: std::fmt::Display,
 {
-    result.map_err(|e| Error::Simple(format!("{}: {}", error_message, e)))
+    result.map_err(|e| Error::InvalidArgument(format!("{}: {}", error_message, e)))
 }
 
 /// Converts a Result<T, E> to Result<T, Error> with a custom error function
@@ -71,7 +74,7 @@ where
     E: std::fmt::Display,
     F: FnOnce(&E) -> String,
 {
-    result.map_err(|e| Error::Simple(error_fn(&e)))
+    result.map_err(|e| Error::InvalidArgument(error_fn(&e)))
 }
 
 #[cfg(test)]
@@ -89,7 +92,7 @@ mod tests {
     fn test_require_none_value() {
         let result: Result<i32, Error> = require(None, "Value required");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Value required"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Value required"));
     }
 
     #[test]
@@ -103,7 +106,7 @@ mod tests {
     fn test_require_with_none_value() {
         let result: Result<&str, Error> = require_with(None, || "Custom error message".to_string());
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Custom error message"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Custom error message"));
     }
 
     #[test]
@@ -117,7 +120,7 @@ mod tests {
     fn test_require_request_id_none() {
         let result = require_request_id(None);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Request ID required"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Request ID required"));
     }
 
     #[test]
@@ -131,7 +134,7 @@ mod tests {
     fn test_require_request_id_for_none() {
         let result = require_request_id_for(None, "cancel subscription");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Request ID required to cancel subscription"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Request ID required to cancel subscription"));
     }
 
     #[test]
@@ -145,14 +148,14 @@ mod tests {
     fn test_require_range_too_low() {
         let result = require_range(0, 1, 10, "value");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "value must be between 1 and 10, got 0"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "value must be between 1 and 10, got 0"));
     }
 
     #[test]
     fn test_require_range_too_high() {
         let result = require_range(15, 1, 10, "value");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "value must be between 1 and 10, got 15"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "value must be between 1 and 10, got 15"));
     }
 
     #[test]
@@ -172,7 +175,7 @@ mod tests {
     fn test_require_not_empty_invalid() {
         let result = require_not_empty("", "name");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "name cannot be empty"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "name cannot be empty"));
     }
 
     #[test]
@@ -188,7 +191,7 @@ mod tests {
         let vec: Vec<i32> = vec![];
         let result = require_not_empty_vec(&vec, "numbers");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "numbers must contain at least one element"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "numbers must contain at least one element"));
     }
 
     #[test]
@@ -204,7 +207,7 @@ mod tests {
         let err_result: Result<i32, &str> = Err("internal error");
         let result = map_error(err_result, "Failed to process");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Failed to process: internal error"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Failed to process: internal error"));
     }
 
     #[test]
@@ -220,7 +223,7 @@ mod tests {
         let err_result: Result<&str, &str> = Err("not found");
         let result = map_error_with(err_result, |e| format!("Could not find resource: {}", e));
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Could not find resource: not found"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Could not find resource: not found"));
     }
 
     #[test]
@@ -238,10 +241,10 @@ mod tests {
         // Test that error messages are properly formatted
         let result = require_range(-5, 0, 100, "temperature");
         assert!(result.is_err());
-        if let Err(Error::Simple(msg)) = result {
+        if let Err(Error::InvalidArgument(msg)) = result {
             assert_eq!(msg, "temperature must be between 0 and 100, got -5");
         } else {
-            panic!("Expected Error::Simple");
+            panic!("Expected Error::InvalidArgument");
         }
     }
 }

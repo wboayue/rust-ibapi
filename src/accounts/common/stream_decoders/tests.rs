@@ -60,7 +60,7 @@ mod account_summary_tests {
         let result = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(_)));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(_)));
     }
 
     #[test]
@@ -410,7 +410,7 @@ mod account_update_multi_tests {
         let result = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(_)));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(_)));
     }
 
     #[test]

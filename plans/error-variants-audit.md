@@ -43,12 +43,13 @@ Production constructors only. Targets reference variants already on `Error` in `
 
 Ordering rationale: validation first (most repeated pattern, mechanical, lowest review burden); then EOF and decode and datetime (one variant per PR, each clean); cursor and unexpected-response last (more semantic judgment per site). The cross-cutting `Error::Parse` shape change (parent §5.3) is resolved with no-index constructors that land in PR-4 — see **Parse-shape decision (resolved)** below.
 
-### PR-1: Validation → `Error::InvalidArgument` (~14 direct + 19 transitive)
+### PR-1: Validation → `Error::InvalidArgument` (~14 direct + 19 transitive) — shipped
 
-- Flip the 7 helpers in `src/common/error_helpers.rs` (`require`, `require_with`, `require_request_id`, `require_request_id_for`, `require_range`, `require_not_empty`, `require_not_empty_vec`, `map_error`, `map_error_with`) to emit `Error::InvalidArgument` instead of `Error::Simple`. Cascades to every caller automatically.
+- Flip the 9 helpers in `src/common/error_helpers.rs` (`require`, `require_with`, `require_request_id`, `require_request_id_for`, `require_range`, `require_not_empty`, `require_not_empty_vec`, `map_error`, `map_error_with`) to emit `Error::InvalidArgument` instead of `Error::Simple`. Cascades to every caller automatically.
 - Convert 6 sites in `src/contracts/common/contract_builder/mod.rs:444-475` (builder validation: missing symbol / strike / expiration / contract month / negative strike).
 - Convert 1 site in `src/contracts/builders.rs:516` (spread "must have at least one leg").
 - Update `src/common/error_helpers.rs` unit tests' `matches!(... Error::Simple(_))` patterns to `Error::InvalidArgument(_)`.
+- Also flipped 2 downstream consumer tests that pattern-matched `Error::Simple(_)` on the `require_request_id` path (`src/accounts/common/stream_decoders/tests.rs:63,413`) and the 7 `to_string()` assertions in `contracts/common/contract_builder/tests.rs` + 1 in `contracts/builders/tests.rs` (Display string prefix changed from `"error occurred:"` to `"InvalidArgument:"`).
 
 **Verify:** `cargo clippy --all-targets -- -D warnings` (default + sync + all-features); `cargo test`.
 
