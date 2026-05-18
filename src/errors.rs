@@ -144,6 +144,23 @@ impl Error {
     pub(crate) fn unexpected_response(message: &ResponseMessage) -> Error {
         Error::UnexpectedResponse(format!("{message:?}"))
     }
+
+    /// Build an [`Error::Parse`] when the failing input came from a text-protocol
+    /// wire field whose index is not load-bearing (e.g. inside a helper that has
+    /// lost the index, or in a proto codepath). Encapsulates the placeholder `0`
+    /// so the variant tuple stays the same shape across call sites while
+    /// readers don't have to remember the convention.
+    pub(crate) fn parse_field(value: impl Into<String>, reason: impl Into<String>) -> Error {
+        Error::Parse(0, value.into(), reason.into())
+    }
+
+    /// Same as [`Error::parse_field`], but named for proto-decoded inputs where
+    /// the first arg is a logical field/identifier rather than a wire-field
+    /// string value. Variant shape is identical; the name disambiguates intent
+    /// at the call site.
+    pub(crate) fn parse_proto(field: impl Into<String>, reason: impl Into<String>) -> Error {
+        Error::Parse(0, field.into(), reason.into())
+    }
 }
 
 // Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.

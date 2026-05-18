@@ -70,15 +70,12 @@ pub(in crate::news) fn decode_tick_news(mut message: ResponseMessage) -> Result<
 }
 
 fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
-    let time: i64 = time
+    let parsed: i64 = time
         .parse()
-        .map_err(|e: std::num::ParseIntError| Error::Simple(format!("parse error: \"{time}\" - {e}")))?;
-    let time = time / 1000;
+        .map_err(|e: std::num::ParseIntError| Error::parse_field(time, e.to_string()))?;
+    let seconds = parsed / 1000;
 
-    match OffsetDateTime::from_unix_timestamp(time) {
-        Ok(val) => Ok(val),
-        Err(err) => Err(Error::Simple(err.to_string())),
-    }
+    OffsetDateTime::from_unix_timestamp(seconds).map_err(|err| Error::parse_field(time, err.to_string()))
 }
 
 pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {

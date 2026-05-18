@@ -254,13 +254,13 @@ pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<Offset
         |bytes| {
             let proto = proto::CurrentTime::decode(bytes)?;
             let timestamp = proto.current_time.unwrap_or(0);
-            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_proto("current_time", e.to_string()))
         },
         |msg| {
             msg.skip(); // message type
             msg.skip(); // message version
             let timestamp = msg.next_long()?;
-            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_field(timestamp.to_string(), e.to_string()))
         },
     )
 }
@@ -270,12 +270,13 @@ pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result
         |bytes| {
             let proto = proto::CurrentTimeInMillis::decode(bytes)?;
             let millis = proto.current_time_in_millis.unwrap_or(0);
-            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000)
+                .map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
         },
         |msg| {
             msg.skip(); // message type
             let millis = msg.next_long()?;
-            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))
         },
     )
 }

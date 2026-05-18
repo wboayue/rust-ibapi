@@ -22,10 +22,9 @@ pub(crate) fn decode_head_timestamp(message: &mut ResponseMessage, time_zone: Op
 }
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
-    let secs: i64 = s
-        .parse()
-        .map_err(|e| Error::Simple(format!("invalid unix-second timestamp {s:?}: {e}")))?;
-    OffsetDateTime::from_unix_timestamp(secs).map_err(|e| Error::Simple(format!("invalid unix-second timestamp {s:?}: {e}")))
+    let mk_err = |e: &dyn std::fmt::Display| Error::parse_field(s, format!("invalid unix-second timestamp: {e}"));
+    let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| mk_err(&e))?;
+    OffsetDateTime::from_unix_timestamp(secs).map_err(|e| mk_err(&e))
 }
 
 pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, message: &mut ResponseMessage) -> Result<HistoricalData, Error> {
@@ -349,7 +348,7 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
     let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let (datetime_part, tz_name) = text
         .rsplit_once(' ')
-        .ok_or_else(|| Error::Simple(format!("expected 'YYYYMMDD HH:MM:SS TZ', got: {text}")))?;
+        .ok_or_else(|| Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS TZ'"))?;
     let tz = parse_time_zone(tz_name.trim())?;
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
     Ok(dt.assume_timezone(tz).unwrap())
@@ -365,7 +364,7 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     } else {
         let timestamp: i64 = text
             .parse()
-            .map_err(|e: std::num::ParseIntError| Error::Simple(format!("parse error: \"{text}\" - {e}")))?;
+            .map_err(|e: std::num::ParseIntError| Error::parse_field(text, e.to_string()))?;
         let date_utc = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
         Ok(date_utc.to_timezone(time_zone))
     }
