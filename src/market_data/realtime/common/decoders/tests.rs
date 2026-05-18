@@ -243,7 +243,10 @@ mod market_depth_tests {
             market_depth_data: None,
         };
         let err = decode_market_depth_proto(&msg.encode_to_vec()).expect_err("missing data should error");
-        assert!(err.to_string().contains("missing market_depth_data"));
+        assert!(
+            matches!(err, Error::Parse(_, ref field, _) if field == "market_depth_data"),
+            "got {err:?}"
+        );
     }
 
     #[test]

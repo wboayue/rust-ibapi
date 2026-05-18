@@ -1022,7 +1022,7 @@ impl ResponseMessage {
     /// Peek an integer field without advancing the cursor.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
-            return Err(Error::Simple("expected int and found end of message".into()));
+            return Err(Error::eof_at(i, "int"));
         }
 
         let field = &self.fields[i];
@@ -1035,7 +1035,7 @@ impl ResponseMessage {
     /// Peek a long field without advancing the cursor.
     pub fn peek_long(&self, i: usize) -> Result<i64, Error> {
         if i >= self.fields.len() {
-            return Err(Error::Simple("expected long and found end of message".into()));
+            return Err(Error::eof_at(i, "long"));
         }
 
         let field = &self.fields[i];
@@ -1048,7 +1048,7 @@ impl ResponseMessage {
     /// Peek a string field without advancing the cursor.
     pub fn peek_string(&self, i: usize) -> Result<String, Error> {
         if i >= self.fields.len() {
-            return Err(Error::Simple("expected string and found end of message".into()));
+            return Err(Error::eof_at(i, "string"));
         }
         Ok(self.fields[i].to_owned())
     }
@@ -1056,7 +1056,7 @@ impl ResponseMessage {
     /// Consume and parse the next integer field.
     pub fn next_int(&mut self) -> Result<i32, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected int and found end of message".into()));
+            return Err(Error::eof_at(self.i, "int"));
         }
 
         let field = &self.fields[self.i];
@@ -1072,7 +1072,7 @@ impl ResponseMessage {
     #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected optional int and found end of message".into()));
+            return Err(Error::eof_at(self.i, "optional int"));
         }
 
         let field = &self.fields[self.i];
@@ -1091,7 +1091,7 @@ impl ResponseMessage {
     /// Consume the next field as a boolean (`"0"` or `"1"`).
     pub fn next_bool(&mut self) -> Result<bool, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected bool and found end of message".into()));
+            return Err(Error::eof_at(self.i, "bool"));
         }
 
         let field = &self.fields[self.i];
@@ -1103,7 +1103,7 @@ impl ResponseMessage {
     /// Consume and parse the next i64 field.
     pub fn next_long(&mut self) -> Result<i64, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected long and found end of message".into()));
+            return Err(Error::eof_at(self.i, "long"));
         }
 
         let field = &self.fields[self.i];
@@ -1119,7 +1119,7 @@ impl ResponseMessage {
     #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected optional long and found end of message".into()));
+            return Err(Error::eof_at(self.i, "optional long"));
         }
 
         let field = &self.fields[self.i];
@@ -1143,18 +1143,18 @@ impl ResponseMessage {
     /// Consume the next field and parse it as a timestamp using an optional session timezone.
     pub fn next_date_time_with_timezone(&mut self, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected datetime and found end of message".into()));
+            return Err(Error::eof_at(self.i, "datetime"));
         }
 
         let field = &self.fields[self.i];
         self.i += 1;
 
         if field.is_empty() {
-            return Err(Error::Simple("expected timestamp and found empty string".into()));
+            return Err(Error::parse_field("", "expected timestamp and found empty string"));
         }
 
         parse_ib_date_time_with_timezone(field, time_zone).map_err(|err| match err {
-            Error::Parse(_, _, _) | Error::Simple(_) => Error::Parse(self.i, field.into(), err.to_string()),
+            Error::Parse(_, _, _) => Error::Parse(self.i, field.into(), err.to_string()),
             other => other,
         })
     }
@@ -1162,7 +1162,7 @@ impl ResponseMessage {
     /// Consume the next field as a string.
     pub fn next_string(&mut self) -> Result<String, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected string and found end of message".into()));
+            return Err(Error::eof_at(self.i, "string"));
         }
 
         let field = &self.fields[self.i];
@@ -1173,7 +1173,7 @@ impl ResponseMessage {
     /// Consume and parse the next floating-point field.
     pub fn next_double(&mut self) -> Result<f64, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected double and found end of message".into()));
+            return Err(Error::eof_at(self.i, "double"));
         }
 
         let field = &self.fields[self.i];
@@ -1193,7 +1193,7 @@ impl ResponseMessage {
     #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
     pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
         if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected optional double and found end of message".into()));
+            return Err(Error::eof_at(self.i, "optional double"));
         }
 
         let field = &self.fields[self.i];

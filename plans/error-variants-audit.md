@@ -1,6 +1,6 @@
 # `Error::Simple` / `Error::Message` audit
 
-**Status:** in progress · **Last audited:** 2026-05-17 (against `main` past PR #582) · **Parent:** [`plans/v3-api-ergonomics.md`](v3-api-ergonomics.md) §5 item 1
+**Status:** in progress · **Last audited:** 2026-05-17 (against `main` past PR #589) · **Parent:** [`plans/v3-api-ergonomics.md`](v3-api-ergonomics.md) §5 item 1
 
 ## Context
 
@@ -94,12 +94,16 @@ Follow-ups surfaced by /simplify (deferred):
 - **`impl Into<String>` → `impl Display`** on the constructors — would let callers drop `.to_string()` at `messages.rs:753`, `accounts/.../mod.rs:263,278`. Minor ergonomics; defer.
 - **Shared `parse_unix_seconds(s)` / `parse_unix_millis(s)` helpers** in `src/proto/decoders.rs` — 3 callers exist (accounts, historical, news). Rule-of-three on the edge; land standalone or wait for 4th caller.
 
-### PR-5: Cursor EOF + unexpected response + decoder mismatch (~31)
+### PR-5: Cursor EOF + unexpected response + decoder mismatch (~31) — shipped (#589)
 
-- 13× cursor `peek_*` EOF in `src/messages.rs:1023..1194`. These auto-promote through the existing `Parse(_,_,_) | Simple(_)` wrapper at `messages.rs:1155`, so they may already behave as Parse-typed at consumer-facing boundaries. Audit at PR time — either keep `Simple` as the placeholder caught-by-wrapper (and document the contract), or switch to `Error::UnexpectedEndOfStream` for honest typing.
-- 12× unexpected-response sites in contracts sync/async (×10), `display_groups/common/decoders.rs:15`, `accounts/common/decoders/mod.rs:429`, `market_data/realtime/common/decoders/mod.rs:307,321` → prefer the `Error::unexpected_response(message)` helper when the source is a `ResponseMessage`; otherwise `Error::UnexpectedResponse(format!(...))`.
-- 6× decoder protocol-mismatch in `market_data/realtime/common/decoders/mod.rs:134,137,158,161,181,184` → `Error::Parse(0, field, msg)`.
+- 13× cursor `peek_*` / `next_*` EOF in `src/messages.rs:1023..1194` → `Error::Parse(i, "", "expected X and found end of message")` (honest typing; keeps the field index that earlier `Simple` lost). Removes the only `Simple` sources inside the cursor; the existing wrapper at `messages.rs:1155` still catches the `Parse | Simple` shape from `parse_ib_date_time_with_timezone`, so no wrapper change needed. The empty-string sibling at `messages.rs:1153` switched to `Error::parse_field("", "expected timestamp and found empty string")` for consistency.
+- 7× unexpected-response sites that have a `ResponseMessage` in scope → `Error::unexpected_response(message)` helper: `contracts/sync/mod.rs:123,127`, `contracts/async/mod.rs:107,111` (matching_symbols Error / catch-all arms), `display_groups/common/decoders.rs:15`, `accounts/common/decoders/mod.rs:429` (catch-all on account-update dispatch — `other` pattern collapsed to `_` since the variant payload is now unused).
+- 2× unexpected-response in `market_data/realtime/common/decoders/mod.rs:307,321` → `Error::UnexpectedResponse("missing market_depth_data".into())` (no `ResponseMessage` in scope; helper not applicable).
+- 6× contract / option-computation None-channel sites → `Error::UnexpectedEndOfStream`. Reclassified from "unexpected response" because the structural cause is end-of-stream (subscription closed without any data), not a wrong response shape. Sites: `contracts/sync/mod.rs:87,165,199`, `contracts/async/mod.rs:155,176,202`.
+- 6× decoder protocol-mismatch in `market_data/realtime/common/decoders/mod.rs:134,137,158,161,181,184` → `Error::parse_field(tick_type.to_string(), "Unexpected tick_type")` for the tick-type guard and `Error::parse_proto("tick", "missing HistoricalTick* in TickByTickData")` for the missing-variant guard. Test-asserted substrings ("Unexpected tick_type", "missing HistoricalTick*") preserved verbatim in the reason field.
 - 1× shared-channel dispatch in `transport/async.rs:717` → `Error::InvalidArgument` (programmer-error wiring miss).
+
+Downstream test updates: `contracts/sync/tests.rs` and `contracts/async/tests.rs` swapped 8 `Error::Simple(msg) ... assert!(msg.contains(...))` blocks to `assert!(matches!(err, Error::UnexpectedResponse(_) | Error::UnexpectedEndOfStream))` patterns; `transport/async_tests.rs::test_send_shared_request_unsupported_returns_error` swapped `Error::Simple(_)` → `Error::InvalidArgument(_)`; `display_groups/common/decoders.rs::test_decode_display_group_updated_wrong_message_type` swapped string-contains assertion for typed match. Tests in `market_data/realtime/common/decoders/tests.rs` continue to pass unchanged — their `err.to_string().contains(...)` assertions match the preserved substrings under both new variants' `Display` impls.
 
 ### PR-6: New `Error::ConnectionRejected(String)` variant (2 sites)
 
