@@ -305,10 +305,7 @@ impl Client {
     /// Check server version requirement
     pub fn check_server_version(&self, required_version: i32, feature: &str) -> Result<(), Error> {
         if self.server_version < required_version {
-            return Err(Error::Simple(format!(
-                "Server version {} is too old. {} requires version {}",
-                self.server_version, feature, required_version
-            )));
+            return Err(Error::ServerVersion(required_version, self.server_version, feature.into()));
         }
         Ok(())
     }

@@ -43,7 +43,7 @@ Production constructors only. Targets reference variants already on `Error` in `
 
 Ordering rationale: validation first (most repeated pattern, mechanical, lowest review burden); then EOF and decode and datetime (one variant per PR, each clean); cursor and unexpected-response last (more semantic judgment per site). The cross-cutting `Error::Parse` shape change (parent §5.3) is resolved with no-index constructors that land in PR-4 — see **Parse-shape decision (resolved)** below.
 
-### PR-1: Validation → `Error::InvalidArgument` (~14 direct + 19 transitive) — shipped
+### PR-1: Validation → `Error::InvalidArgument` (~14 direct + 19 transitive) — shipped (#584)
 
 - Flip the 9 helpers in `src/common/error_helpers.rs` (`require`, `require_with`, `require_request_id`, `require_request_id_for`, `require_range`, `require_not_empty`, `require_not_empty_vec`, `map_error`, `map_error_with`) to emit `Error::InvalidArgument` instead of `Error::Simple`. Cascades to every caller automatically.
 - Convert 6 sites in `src/contracts/common/contract_builder/mod.rs:444-475` (builder validation: missing symbol / strike / expiration / contract month / negative strike).
@@ -53,7 +53,7 @@ Ordering rationale: validation first (most repeated pattern, mechanical, lowest 
 
 **Verify:** `cargo clippy --all-targets -- -D warnings` (default + sync + all-features); `cargo test`.
 
-### PR-2: EOF / no response → `Error::UnexpectedEndOfStream` (~8) — shipped
+### PR-2: EOF / no response → `Error::UnexpectedEndOfStream` (~8) — shipped (#585)
 
 - `accounts/sync/mod.rs:35,48` and `accounts/async/mod.rs:368,382` ×4 "No response from server".
 - `orders/sync/mod.rs:204` and `orders/async/mod.rs:91` ×2 "no response from server".
@@ -61,12 +61,19 @@ Ordering rationale: validation first (most repeated pattern, mechanical, lowest 
 
 Each is `or_else(|| Err(Error::Simple("...".into())))`-style; mechanical swap. Downstream test updates: `accounts/sync/tests.rs:223,766`, `accounts/{sync,async}/tests.rs` table-driven server-time arms (with `accounts/common/test_tables.rs` sentinel renamed `"No response from server"` → `"unexpected end of stream"`), and `orders/builder/{sync_impl,async_impl}/tests.rs` what-if assertions + parallel mock implementations.
 
-### PR-3: Server version + protobuf decode (~5)
+### PR-3: Server version + protobuf decode (~5) — shipped (#586)
 
-- `src/client/async.rs:308` — `Error::Simple(format!("Server version ... too old. ..."))` → `Error::ServerVersion(required, server, feature)`. Has a sync counterpart in `src/client/sync.rs` to align (the variant payload shape is identical for both).
+- `src/client/async.rs:308` — `Error::Simple(format!("Server version ... too old. ..."))` → `Error::ServerVersion(required, server, feature)`. The sync counterpart at `src/client/sync.rs:397` was already on `ServerVersion`; no production change needed there.
 - `src/connection/common.rs:227,240` — `prost::Message::decode(...).map_err(|e| Error::Simple(...))` → `?` via the existing `From<prost::DecodeError>` impl on `Error`.
 - `src/accounts/common/decoders/mod.rs:255,271` — same prost-decode shape.
-- One small additive: `src/contracts/common/encoders.rs:98` and `src/messages.rs:921` ("missing protobuf bytes") — both internal-invariant `unreachable`-ish; convert to `Error::InvalidArgument` or escalate with a `debug_assert!`. Decide at PR time.
+- Internal-invariant additives: `src/contracts/common/encoders.rs:98` (encoder dispatch fall-through) and `src/messages.rs:921` ("missing protobuf bytes") both went to `Error::InvalidArgument` (programmer-error shape; preferred over `debug_assert!` so failures are diagnosable instead of panicking).
+- Downstream test updates: `client/async_tests::check_server_version_branches` swapped `matches!(err, Error::Simple(_));` → `assert!(matches!(err, Error::ServerVersion(_,_,_)))`; `connection/common_tests` two `parse_account_info_*_protobuf_decode_error` cases swapped to `Error::ProtobufDecode(_)` (lost the contextual `"NextValidId"` / `"ManagedAccounts"` Display fragment — acceptable trade since the variant + file:line is enough for triage).
+- /simplify follow-up cleanup (rule 9): upgraded the no-op `matches!(err, ...);` statements in `client/{sync,async}_tests::check_server_version_branches` and `create_order_update_subscription_is_unique` to `assert!(matches!(..))` — the previous form discarded the bool result.
+
+Follow-ups surfaced by /simplify (deferred — see [feedback_simplify_deferral_rule_of_three](../../.claude/projects/-Users-wboayue-projects-rust-ibapi/memory/feedback_simplify_deferral_rule_of_three.md) once a 3rd occurrence appears):
+
+- `Error::server_version(req, got, feature)` helper alongside the existing `Error::unexpected_response` factory at `src/errors.rs:144`. Would converge 4 call sites: `client/sync.rs:397`, `client/async.rs:308`, `protocol.rs:167`, `connection/common.rs:346`. Rule-of-three already met; land when the next consumer shows up or as a standalone cleanup.
+- `test_parse_account_info_{next_valid_id,managed_accounts}_protobuf_decode_error` in `connection/common_tests.rs` now both assert only `Error::ProtobufDecode(_)`. Could be parameterized or one dropped — low priority.
 
 ### PR-4: Datetime / message-type parse → `Error::Parse` (~18)
 

@@ -47,7 +47,7 @@ fn check_server_version_branches() {
     let err = client
         .check_server_version(SERVER_VERSION + 100, "future_feature")
         .expect_err("newer version fails");
-    matches!(err, Error::ServerVersion(_, _, _));
+    assert!(matches!(err, Error::ServerVersion(_, _, _)), "got {err:?}");
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn create_order_update_subscription_is_unique() {
     let client = stubbed_client();
     client.create_order_update_subscription().expect("first subscription");
     let err = client.create_order_update_subscription().expect_err("duplicate fails");
-    matches!(err, Error::AlreadySubscribed);
+    assert!(matches!(err, Error::AlreadySubscribed), "got {err:?}");
 }
 
 fn handshake_frames() -> Vec<Vec<u8>> {

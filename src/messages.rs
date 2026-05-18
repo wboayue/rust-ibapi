@@ -918,7 +918,9 @@ impl ResponseMessage {
         text_decoder: impl FnOnce(&mut Self) -> Result<T, crate::Error>,
     ) -> Result<T, crate::Error> {
         if self.is_protobuf {
-            let bytes = self.raw_bytes().ok_or_else(|| crate::Error::Simple("missing protobuf bytes".into()))?;
+            let bytes = self
+                .raw_bytes()
+                .ok_or_else(|| crate::Error::InvalidArgument("missing protobuf bytes".into()))?;
             proto_decoder(bytes)
         } else {
             text_decoder(self)
