@@ -201,7 +201,7 @@ impl Client {
 
             Ok(next_order_id)
         } else {
-            Err(Error::Simple("no response from server".into()))
+            Err(Error::UnexpectedEndOfStream)
         }
     }
 

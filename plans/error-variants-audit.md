@@ -53,13 +53,13 @@ Ordering rationale: validation first (most repeated pattern, mechanical, lowest 
 
 **Verify:** `cargo clippy --all-targets -- -D warnings` (default + sync + all-features); `cargo test`.
 
-### PR-2: EOF / no response → `Error::UnexpectedEndOfStream` (~8)
+### PR-2: EOF / no response → `Error::UnexpectedEndOfStream` (~8) — shipped
 
 - `accounts/sync/mod.rs:35,48` and `accounts/async/mod.rs:368,382` ×4 "No response from server".
 - `orders/sync/mod.rs:204` and `orders/async/mod.rs:91` ×2 "no response from server".
 - `orders/builder/sync_impl.rs:46` and `orders/builder/async_impl.rs:50` ×2 "What-if analysis did not return order state" (same no-response shape).
 
-Each is `or_else(|| Err(Error::Simple("...".into())))`-style; mechanical swap.
+Each is `or_else(|| Err(Error::Simple("...".into())))`-style; mechanical swap. Downstream test updates: `accounts/sync/tests.rs:223,766`, `accounts/{sync,async}/tests.rs` table-driven server-time arms (with `accounts/common/test_tables.rs` sentinel renamed `"No response from server"` → `"unexpected end of stream"`), and `orders/builder/{sync_impl,async_impl}/tests.rs` what-if assertions + parallel mock implementations.
 
 ### PR-3: Server version + protobuf decode (~5)
 

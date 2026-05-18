@@ -365,7 +365,7 @@ impl Client {
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
             decoders::decode_server_time,
-            || Err(Error::Simple("No response from server".to_string())),
+            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -379,7 +379,7 @@ impl Client {
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
             decoders::decode_server_time_millis,
-            || Err(Error::Simple("No response from server".to_string())),
+            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }

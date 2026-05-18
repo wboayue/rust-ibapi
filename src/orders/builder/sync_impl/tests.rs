@@ -64,7 +64,7 @@ impl<'a> OrderBuilder<'a, MockOrderClient> {
             }
         }
 
-        Err(Error::Simple("What-if analysis did not return order state".to_string()))
+        Err(Error::UnexpectedEndOfStream)
     }
 }
 
@@ -290,6 +290,5 @@ fn test_analyze_no_response() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00);
 
     let result = builder.analyze();
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("What-if analysis did not return order state"));
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }

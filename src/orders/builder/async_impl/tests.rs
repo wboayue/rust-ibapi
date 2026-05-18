@@ -73,7 +73,7 @@ impl<'a> OrderBuilder<'a, AsyncMockClient> {
             }
         }
 
-        Err(Error::Simple("What-if analysis did not return order state".to_string()))
+        Err(Error::UnexpectedEndOfStream)
     }
 
     /// Submit order and return a stream of updates
@@ -314,8 +314,7 @@ async fn test_async_analyze_no_response() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00);
 
     let result = builder.analyze().await;
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("What-if analysis did not return order state"));
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }
 
 #[tokio::test]
