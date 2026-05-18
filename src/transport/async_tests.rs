@@ -758,7 +758,7 @@ async fn test_send_shared_request_unsupported_returns_error() {
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
     match mb.send_shared_request(OutgoingMessages::PlaceOrder, b"x".to_vec()).await {
-        Err(Error::Simple(_)) => {}
-        other => panic!("expected Error::Simple, got {:?}", other.err()),
+        Err(Error::InvalidArgument(_)) => {}
+        other => panic!("expected Error::InvalidArgument, got {:?}", other.err()),
     }
 }

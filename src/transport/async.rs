@@ -714,7 +714,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             if let Some(receiver) = channels.get(&message_type) {
                 receiver.resubscribe()
             } else {
-                return Err(Error::Simple(format!(
+                return Err(Error::InvalidArgument(format!(
                     "No shared channel configured for message type: {:?}",
                     message_type
                 )));

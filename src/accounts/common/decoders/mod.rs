@@ -427,7 +427,7 @@ pub(crate) fn decode_account_update_message(server_version: i32, message: &mut R
         IncomingMessages::PortfolioValue => decode_account_portfolio_value(server_version, message).map(AccountUpdate::PortfolioValue),
         IncomingMessages::AccountUpdateTime => decode_account_update_time(message).map(AccountUpdate::UpdateTime),
         IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
-        other => Err(Error::Simple(format!("not an account-update message: {other:?}"))),
+        _ => Err(Error::unexpected_response(message)),
     }
 }
 

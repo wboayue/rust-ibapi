@@ -549,10 +549,7 @@ async fn matching_symbols_returns_server_error() {
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
     let err = client.matching_symbols("???").await.unwrap_err();
-    let crate::Error::Simple(msg) = &err else {
-        panic!("expected Error::Simple, got {err:?}");
-    };
-    assert!(msg.contains("unexpected error"), "got {msg}");
+    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
 }
 
 #[tokio::test]
@@ -561,10 +558,7 @@ async fn matching_symbols_rejects_unexpected_message() {
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
     let err = client.matching_symbols("AAPL").await.unwrap_err();
-    let crate::Error::Simple(msg) = &err else {
-        panic!("expected Error::Simple, got {err:?}");
-    };
-    assert!(msg.contains("unexpected message"), "got {msg}");
+    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
 }
 
 #[tokio::test]
@@ -587,15 +581,12 @@ async fn matching_symbols_rejects_old_server_version() {
 }
 
 #[tokio::test]
-async fn market_rule_returns_simple_error_on_empty_stream() {
+async fn market_rule_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
 
     let err = client.market_rule(26).await.unwrap_err();
-    let crate::Error::Simple(msg) = &err else {
-        panic!("expected Error::Simple, got {err:?}");
-    };
-    assert_eq!(msg, "no market rule found");
+    assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
 #[tokio::test]
@@ -609,16 +600,13 @@ async fn market_rule_rejects_old_server_version() {
 }
 
 #[tokio::test]
-async fn calculate_option_price_returns_simple_error_on_empty_stream() {
+async fn calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
-    let crate::Error::Simple(msg) = &err else {
-        panic!("expected Error::Simple, got {err:?}");
-    };
-    assert_eq!(msg, "no data for option calculation");
+    assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
 #[tokio::test]
@@ -633,16 +621,13 @@ async fn calculate_option_price_rejects_old_server_version() {
 }
 
 #[tokio::test]
-async fn calculate_implied_volatility_returns_simple_error_on_empty_stream() {
+async fn calculate_implied_volatility_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
-    let crate::Error::Simple(msg) = &err else {
-        panic!("expected Error::Simple, got {err:?}");
-    };
-    assert_eq!(msg, "no data for option calculation");
+    assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
 #[tokio::test]

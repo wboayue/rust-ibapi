@@ -12,7 +12,7 @@ use super::stream_decoders::DisplayGroupUpdate;
 pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Result<DisplayGroupUpdate, Error> {
     // Validate message type
     if message.message_type() != IncomingMessages::DisplayGroupUpdated {
-        return Err(Error::Simple(format!("unexpected message type: {:?}", message.message_type())));
+        return Err(Error::unexpected_response(message));
     }
 
     // DisplayGroupUpdated: message_type, version, request_id, contract_info
@@ -66,9 +66,7 @@ mod tests {
 
         let result = decode_display_group_updated(&mut message);
 
-        assert!(result.is_err());
-        let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(err_msg.contains("unexpected message type"));
+        assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "got {result:?}");
     }
 
     #[test]

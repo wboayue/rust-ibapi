@@ -98,22 +98,19 @@ impl Client {
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(Ok(mut message)) => {
-                match message.message_type() {
-                    IncomingMessages::SymbolSamples => {
-                        return decoders::decode_contract_descriptions(self.server_version(), &mut message);
-                    }
-                    IncomingMessages::Error => {
-                        // TODO custom error
-                        error!("unexpected error: {message:?}");
-                        return Err(Error::Simple(format!("unexpected error: {message:?}")));
-                    }
-                    _ => {
-                        info!("unexpected message: {message:?}");
-                        return Err(Error::Simple(format!("unexpected message: {message:?}")));
-                    }
+            Some(Ok(mut message)) => match message.message_type() {
+                IncomingMessages::SymbolSamples => {
+                    return decoders::decode_contract_descriptions(self.server_version(), &mut message);
                 }
-            }
+                IncomingMessages::Error => {
+                    error!("unexpected error: {message:?}");
+                    return Err(Error::unexpected_response(&message));
+                }
+                _ => {
+                    info!("unexpected message: {message:?}");
+                    return Err(Error::unexpected_response(&message));
+                }
+            },
             Some(Err(e)) => return Err(e),
             None => {}
         }
@@ -152,7 +149,7 @@ impl Client {
         match subscription.next().await {
             Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
             Some(Err(e)) => Err(e),
-            None => Err(Error::Simple("no market rule found".into())),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 
@@ -173,7 +170,7 @@ impl Client {
         match subscription.next().await {
             Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
             Some(Err(e)) => Err(e),
-            None => Err(Error::Simple("no data for option calculation".into())),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 
@@ -199,7 +196,7 @@ impl Client {
         match subscription.next().await {
             Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
             Some(Err(e)) => Err(e),
-            None => Err(Error::Simple("no data for option calculation".into())),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 

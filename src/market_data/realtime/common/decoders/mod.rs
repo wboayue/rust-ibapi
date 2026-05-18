@@ -131,10 +131,10 @@ pub(crate) fn decode_trade_tick_proto(bytes: &[u8]) -> Result<Trade, Error> {
     let msg = crate::proto::TickByTickData::decode(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if !(tick_type == 1 || tick_type == 2) {
-        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
+        return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(t)) = msg.tick else {
-        return Err(Error::Simple("missing HistoricalTickLast in TickByTickData".into()));
+        return Err(Error::parse_proto("tick", "missing HistoricalTickLast in TickByTickData"));
     };
     let attr = t.tick_attrib_last.as_ref();
     Ok(Trade {
@@ -155,10 +155,10 @@ pub(crate) fn decode_bid_ask_tick_proto(bytes: &[u8]) -> Result<BidAsk, Error> {
     let msg = crate::proto::TickByTickData::decode(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 3 {
-        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
+        return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(t)) = msg.tick else {
-        return Err(Error::Simple("missing HistoricalTickBidAsk in TickByTickData".into()));
+        return Err(Error::parse_proto("tick", "missing HistoricalTickBidAsk in TickByTickData"));
     };
     let attr = t.tick_attrib_bid_ask.as_ref();
     Ok(BidAsk {
@@ -178,10 +178,10 @@ pub(crate) fn decode_mid_point_tick_proto(bytes: &[u8]) -> Result<MidPoint, Erro
     let msg = crate::proto::TickByTickData::decode(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 4 {
-        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
+        return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(t)) = msg.tick else {
-        return Err(Error::Simple("missing HistoricalTickMidPoint in TickByTickData".into()));
+        return Err(Error::parse_proto("tick", "missing HistoricalTickMidPoint in TickByTickData"));
     };
     Ok(MidPoint {
         time: ts(t.time.unwrap_or_default()),
@@ -304,7 +304,9 @@ pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<Optio
 pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
     let msg = crate::proto::MarketDepth::decode(bytes)?;
 
-    let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
+    let data = msg
+        .market_depth_data
+        .ok_or_else(|| Error::UnexpectedResponse("missing market_depth_data".into()))?;
 
     Ok(MarketDepth {
         position: data.position.unwrap_or_default(),
@@ -318,7 +320,9 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
 pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2, Error> {
     let msg = crate::proto::MarketDepthL2::decode(bytes)?;
 
-    let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
+    let data = msg
+        .market_depth_data
+        .ok_or_else(|| Error::UnexpectedResponse("missing market_depth_data".into()))?;
 
     Ok(MarketDepthL2 {
         position: data.position.unwrap_or_default(),
