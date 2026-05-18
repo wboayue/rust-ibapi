@@ -85,7 +85,7 @@ async fn create_order_update_subscription_is_unique() {
     let client = stubbed_client();
     let _first = client.create_order_update_subscription().await.expect("first subscription");
     let err = client.create_order_update_subscription().await.err().expect("duplicate fails");
-    matches!(err, Error::AlreadySubscribed);
+    assert!(matches!(err, Error::AlreadySubscribed), "got {err:?}");
 }
 
 fn handshake_frames() -> Vec<Vec<u8>> {
