@@ -1,6 +1,6 @@
 # `Error::Simple` / `Error::Message` audit
 
-**Status:** in progress · **Last audited:** 2026-05-17 (against `main` past PR #589) · **Parent:** [`plans/v3-api-ergonomics.md`](v3-api-ergonomics.md) §5 item 1
+**Status:** complete · **Last audited:** 2026-05-18 (PR-6 shipped) · **Parent:** [`plans/v3-api-ergonomics.md`](v3-api-ergonomics.md) §5 item 1
 
 ## Context
 
@@ -105,18 +105,12 @@ Follow-ups surfaced by /simplify (deferred):
 
 Downstream test updates: `contracts/sync/tests.rs` and `contracts/async/tests.rs` swapped 8 `Error::Simple(msg) ... assert!(msg.contains(...))` blocks to `assert!(matches!(err, Error::UnexpectedResponse(_) | Error::UnexpectedEndOfStream))` patterns; `transport/async_tests.rs::test_send_shared_request_unsupported_returns_error` swapped `Error::Simple(_)` → `Error::InvalidArgument(_)`; `display_groups/common/decoders.rs::test_decode_display_group_updated_wrong_message_type` swapped string-contains assertion for typed match. Tests in `market_data/realtime/common/decoders/tests.rs` continue to pass unchanged — their `err.to_string().contains(...)` assertions match the preserved substrings under both new variants' `Display` impls.
 
-### PR-6: New `Error::ConnectionRejected(String)` variant (2 sites)
+### PR-6: New `Error::ConnectionRejected(String)` variant (2 sites) — shipped (#590)
 
-Decided 2026-05-17 — add a new variant alongside the existing unit `ConnectionFailed`. Additive (non-breaking via `#[non_exhaustive]`); preserves the `io::Error` detail; lets downstream code match `ConnectionRejected` separately from generic `ConnectionFailed`.
-
-- Add to `src/errors.rs`:
-  ```rust
-  #[error("connection rejected: {0}")]
-  ConnectionRejected(String),
-  ```
-  Also extend the `Clone` impl. The `#[error(...)]` format keeps the hint verbatim — no leading "The server may be..." preamble; callers pass the full diagnostic string.
-- Convert `src/connection/sync.rs:224` and `src/connection/async.rs:229` to `Error::ConnectionRejected(format!("server may be rejecting connections from this host: {err}"))`.
-- Independent of PRs 1–5; can land in any order.
+- Added `Error::ConnectionRejected(String)` to `src/errors.rs` with `#[error("connection rejected: {0}")]`; extended the manual `Clone` impl. Sits alongside the existing unit `ConnectionFailed` so callers can distinguish handshake-time rejection (allow-list mismatch) from generic connection failure without string-matching.
+- Converted `src/connection/sync.rs:224` and `src/connection/async.rs:229` to `Error::ConnectionRejected(format!("server may be rejecting connections from this host: {err}"))`.
+- Test updates: `connection/async_tests.rs::handshake_unexpected_eof_returns_rejection_simple_error` → renamed to `handshake_unexpected_eof_returns_connection_rejected`, swapped `Error::Simple` arm to `Error::ConnectionRejected`. Added a sync counterpart in `connection/sync_tests.rs` (no parallel test existed before; the sync handshake was previously untested at this layer).
+- `docs/migration-3.0.md` got a paragraph documenting the new variant under the existing "Error" discussion (additive, non-breaking, but a v3.0 ergonomics win worth signaling).
 
 ## Parse-shape decision (resolved)
 

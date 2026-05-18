@@ -213,3 +213,23 @@ fn reconnect_clears_metadata_while_waiting_for_handshake() {
     assert_eq!(metadata.managed_accounts, "DU1234567");
     assert_eq!(metadata.time_zone, Some(timezones::db::EST));
 }
+
+/// A closed stream surfaces `Io(UnexpectedEof)` from `read_message`, which
+/// `handshake` must translate to `Error::ConnectionRejected` — the
+/// user-visible signal for a host allow-list mismatch.
+#[test]
+fn handshake_unexpected_eof_returns_connection_rejected() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+
+    // EOF before any handshake response: read_message → UnexpectedEof.
+    stream.close();
+
+    let err = connection.handshake().expect_err("must surface rejection error");
+    match err {
+        crate::errors::Error::ConnectionRejected(ref msg) => {
+            assert!(msg.contains("server may be rejecting"), "unexpected message: {msg}");
+        }
+        other => panic!("expected Error::ConnectionRejected, got {other:?}"),
+    }
+}
