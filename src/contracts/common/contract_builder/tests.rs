@@ -143,12 +143,10 @@ fn test_contract_builder_build_futures_success() {
 
 #[test]
 fn test_contract_builder_build_missing_identifier() {
-    let result = ContractBuilder::new().build();
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "InvalidArgument: Symbol, local_symbol, or contract_id is required"
+    let err = ContractBuilder::new().build().unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, or contract_id is required"),
+        "got {err:?}"
     );
 }
 
@@ -185,75 +183,80 @@ fn test_contract_builder_build_with_contract_id_only() {
 
 #[test]
 fn test_contract_builder_build_option_missing_strike() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD")
+    let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
-        .build();
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price is required for options");
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Strike price is required for options"),
+        "got {err:?}"
+    );
 }
 
 #[test]
 fn test_contract_builder_build_option_missing_right() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD")
+    let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
         .last_trade_date_or_contract_month("20231215")
-        .build();
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "InvalidArgument: Right (OptionRight::Call or OptionRight::Put) is required for options"
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Right (OptionRight::Call or OptionRight::Put) is required for options"),
+        "got {err:?}"
     );
 }
 
 #[test]
 fn test_contract_builder_build_option_missing_expiration() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD")
+    let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
         .right(OptionRight::Call)
-        .build();
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "InvalidArgument: Expiration date is required for options"
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Expiration date is required for options"),
+        "got {err:?}"
     );
 }
 
 #[test]
 fn test_contract_builder_build_futures_missing_contract_month() {
-    let result = ContractBuilder::futures("ES", "CME", "USD").build();
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Contract month is required for futures");
+    let err = ContractBuilder::futures("ES", "CME", "USD").build().unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Contract month is required for futures"),
+        "got {err:?}"
+    );
 }
 
 #[test]
 fn test_contract_builder_build_futures_option_missing_contract_month() {
-    let result = ContractBuilder::new()
+    // FuturesOption is checked as an option first, so it fails on missing strike price
+    let err = ContractBuilder::new()
         .symbol("ES")
         .security_type(SecurityType::FuturesOption)
         .exchange("CME")
         .currency("USD")
-        .build();
-
-    assert!(result.is_err());
-    // FuturesOption is checked as an option first, so it fails on missing strike price
-    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price is required for options");
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Strike price is required for options"),
+        "got {err:?}"
+    );
 }
 
 #[test]
 fn test_contract_builder_build_negative_strike() {
-    let result = ContractBuilder::option("AAPL", "SMART", "USD")
+    let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(-10.0)
         .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
-        .build();
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "InvalidArgument: Strike price cannot be negative");
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Strike price cannot be negative"),
+        "got {err:?}"
+    );
 }
 
 #[test]
