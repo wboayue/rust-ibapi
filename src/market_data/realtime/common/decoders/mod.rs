@@ -306,7 +306,7 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
 
     let data = msg
         .market_depth_data
-        .ok_or_else(|| Error::UnexpectedResponse("missing market_depth_data".into()))?;
+        .ok_or_else(|| Error::parse_proto("market_depth_data", "missing in MarketDepth"))?;
 
     Ok(MarketDepth {
         position: data.position.unwrap_or_default(),
@@ -322,7 +322,7 @@ pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2
 
     let data = msg
         .market_depth_data
-        .ok_or_else(|| Error::UnexpectedResponse("missing market_depth_data".into()))?;
+        .ok_or_else(|| Error::parse_proto("market_depth_data", "missing in MarketDepth"))?;
 
     Ok(MarketDepthL2 {
         position: data.position.unwrap_or_default(),

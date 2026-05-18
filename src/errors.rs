@@ -161,6 +161,15 @@ impl Error {
     pub(crate) fn parse_proto(field: impl Into<String>, reason: impl Into<String>) -> Error {
         Error::Parse(0, field.into(), reason.into())
     }
+
+    /// Build an [`Error::Parse`] for cursor EOF: the message ran out of fields
+    /// while the caller was trying to read field index `i`. `label` names the
+    /// expected type ("int", "string", "datetime", ...) so the resulting
+    /// `parse error: i -  - expected <label> and found end of message`
+    /// pinpoints both location and intent.
+    pub(crate) fn eof_at(i: usize, label: &str) -> Error {
+        Error::Parse(i, String::new(), format!("expected {label} and found end of message"))
+    }
 }
 
 // Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.
