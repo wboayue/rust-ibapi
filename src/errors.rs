@@ -65,6 +65,12 @@ pub enum Error {
     #[error("ConnectionFailed")]
     ConnectionFailed,
 
+    /// TWS/Gateway accepted the TCP connection but closed before completing
+    /// the handshake — typically a host allow-list mismatch on the gateway.
+    /// Payload carries the underlying diagnostic.
+    #[error("connection rejected: {0}")]
+    ConnectionRejected(String),
+
     /// IB Gateway sent a timezone name that could not be mapped to an IANA zone.
     #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
     UnsupportedTimeZone(String),
@@ -189,6 +195,7 @@ impl Clone for Error {
             Error::Simple(s) => Error::Simple(s.clone()),
             Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
             Error::ConnectionFailed => Error::ConnectionFailed,
+            Error::ConnectionRejected(s) => Error::ConnectionRejected(s.clone()),
             Error::UnsupportedTimeZone(s) => Error::UnsupportedTimeZone(s.clone()),
             Error::ConnectionReset => Error::ConnectionReset,
             Error::Cancelled => Error::Cancelled,

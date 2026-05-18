@@ -167,11 +167,10 @@ fn debug_impl_formats_connection() {
 }
 
 /// A closed stream surfaces `Io(UnexpectedEof)` from `read_message`, which
-/// `handshake` must translate to `Error::Simple` with the "server may be
-/// rejecting connections" hint — the user-visible signal for a host
-/// allow-list mismatch.
+/// `handshake` must translate to `Error::ConnectionRejected` — the
+/// user-visible signal for a host allow-list mismatch.
 #[tokio::test]
-async fn handshake_unexpected_eof_returns_rejection_simple_error() {
+async fn handshake_unexpected_eof_returns_connection_rejected() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
 
@@ -180,10 +179,10 @@ async fn handshake_unexpected_eof_returns_rejection_simple_error() {
 
     let err = connection.handshake().await.expect_err("must surface rejection error");
     match err {
-        crate::errors::Error::Simple(ref msg) => {
+        crate::errors::Error::ConnectionRejected(ref msg) => {
             assert!(msg.contains("server may be rejecting"), "unexpected message: {msg}");
         }
-        other => panic!("expected Error::Simple, got {other:?}"),
+        other => panic!("expected Error::ConnectionRejected, got {other:?}"),
     }
 }
 

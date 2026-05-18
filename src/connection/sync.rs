@@ -221,7 +221,9 @@ impl<S: Stream> Connection<S> {
                 connection_metadata.time_zone = tz;
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
+                return Err(Error::ConnectionRejected(format!(
+                    "server may be rejecting connections from this host: {err}"
+                )));
             }
             Err(err) => {
                 return Err(err);

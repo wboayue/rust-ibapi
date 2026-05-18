@@ -746,6 +746,18 @@ If you previously matched on `StartupMessage::Other(_)` to log "unexpected hands
 
 The `Error::UnexpectedResponse` variant changed from `UnexpectedResponse(ResponseMessage)` to `UnexpectedResponse(String)`. The string carries the `Debug` repr of the offending wire envelope for diagnostic logging; the structured payload is no longer exposed. `matches!(err, Error::UnexpectedResponse(_))` continues to work unchanged.
 
+New in 3.0: `Error::ConnectionRejected(String)` is fired by `Client::connect` when TWS/Gateway accepts the TCP socket and then closes before completing the handshake — typically a host allow-list mismatch on the gateway. Previously this surfaced as `Error::Simple` with a `"The server may be rejecting connections from this host: ..."` prefix; the typed variant lets callers distinguish allow-list failure from generic connection failure without string matching.
+
+```rust
+match Client::connect("127.0.0.1:4002", 100) {
+    Ok(client) => { /* ... */ }
+    Err(Error::ConnectionRejected(msg)) => {
+        eprintln!("gateway rejected connection: {msg} — check 'Trusted IPs' in TWS/Gateway settings");
+    }
+    Err(err) => eprintln!("connect failed: {err}"),
+}
+```
+
 ## Quick migration checklist
 
 1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
