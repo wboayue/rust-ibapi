@@ -11,7 +11,7 @@ fn error_message() -> ResponseMessage {
 
 #[test]
 fn test_news_bulletin_decode_error_message() {
-    // Error on the request_id channel surfaces as Error::Message, not silently
+    // Error on the request_id channel surfaces as Error::Notice, not silently
     // skipped via UnexpectedResponse (#434).
     let mut message = error_message();
     let err = NewsBulletin::decode(&test_context(), &mut message).unwrap_err();

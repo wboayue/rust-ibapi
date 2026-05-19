@@ -934,11 +934,11 @@ fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error
 
     let item = sub.next_timeout_routed(TICK).expect("error not delivered");
     match item {
-        RoutedItem::Error(Error::Message(code, msg)) => {
-            assert_eq!(code, 200);
-            assert_eq!(msg, "No security definition found");
+        RoutedItem::Error(Error::Notice(notice)) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "No security definition found");
         }
-        other => panic!("expected RoutedItem::Error(Message), got {other:?}"),
+        other => panic!("expected RoutedItem::Error(Notice), got {other:?}"),
     }
     Ok(())
 }
@@ -1063,11 +1063,11 @@ fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
-        Some(Err(Error::Message(code, message))) => {
-            assert_eq!(code, 200);
-            assert_eq!(message, "No security definition found");
+        Some(Err(Error::Notice(notice))) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "No security definition found");
         }
-        other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
+        other => panic!("expected Some(Err(Error::Notice)), got {other:?}"),
     }
 
     assert!(subscription.next_timeout(TICK).is_none(), "stream must end after terminal error");

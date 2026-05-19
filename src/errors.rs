@@ -7,7 +7,7 @@ use std::{num::ParseIntError, string::FromUtf8Error};
 use thiserror::Error;
 
 use crate::market_data::historical::HistoricalParseError;
-use crate::messages::ResponseMessage;
+use crate::messages::{Notice, ResponseMessage};
 use crate::orders::builder::ValidationError;
 
 /// The main error type for IBAPI operations.
@@ -102,10 +102,16 @@ pub enum Error {
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
 
-    /// Error message from TWS/Gateway.
-    /// Contains: (error_code, error_message)
-    #[error("[{0}] {1}")]
-    Message(i32, String),
+    /// An IB notice frame (TWS error/warning/system message) received in
+    /// response to a request. Carries the full typed [`Notice`] — code,
+    /// message, optional timestamp, and advanced-order-reject JSON.
+    ///
+    /// Use [`Notice::category`] / [`Notice::is_order_rejection`] /
+    /// [`Notice::is_warning`] to classify without string-parsing. Distinct
+    /// from [`Error::ConnectionRejected`] (handshake-time refusal) and the
+    /// transport variants ([`Error::Io`], [`Error::ConnectionReset`]).
+    #[error("{0}")]
+    Notice(Notice),
 
     /// Attempted to create a duplicate subscription.
     #[error("AlreadySubscribed")]
@@ -122,22 +128,17 @@ pub enum Error {
 
 impl From<ResponseMessage> for Error {
     fn from(err: ResponseMessage) -> Error {
-        if err.is_protobuf {
-            if let Some(decoded) = err.raw_bytes().and_then(crate::transport::routing::decode_error_envelope) {
-                return Error::from(decoded);
-            }
-        }
-        Error::Message(err.error_code(), err.error_message())
+        Error::Notice(Notice::from(&err))
     }
 }
 
 impl From<crate::transport::routing::DecodedError> for Error {
-    /// Project a dispatcher-decoded error payload to `Error::Message`. Mirrors
-    /// the existing `From<ResponseMessage>` projection but skips the wire-message
-    /// re-parse since the dispatcher already extracted the fields, and moves the
-    /// message string instead of cloning.
+    /// Project a dispatcher-decoded error payload to [`Error::Notice`].
+    /// Mirrors the [`From<ResponseMessage>`] projection but skips the
+    /// wire-message re-parse since the dispatcher already extracted the
+    /// fields, and moves the message string instead of cloning.
     fn from(payload: crate::transport::routing::DecodedError) -> Error {
-        Error::Message(payload.error_code, payload.error_message)
+        Error::Notice(Notice::from(payload))
     }
 }
 
@@ -203,7 +204,7 @@ impl Clone for Error {
             Error::EndOfStream => Error::EndOfStream,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
-            Error::Message(c, m) => Error::Message(*c, m.clone()),
+            Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,
             Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),

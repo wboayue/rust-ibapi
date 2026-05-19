@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_wsh_metadata_decode_error_message() {
-        // Error on the wsh request_id channel surfaces as Error::Message (#434).
+        // Error on the wsh request_id channel surfaces as Error::Notice (#434).
         let mut message = error_message();
         let err = WshMetadata::decode(&test_context(), &mut message).unwrap_err();
         assert_tws_error_message(err, 10089, "not subscribed");

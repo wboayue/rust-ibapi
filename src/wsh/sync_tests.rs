@@ -328,7 +328,7 @@ fn test_wsh_event_data_decode_table() {
         if test_case.should_error {
             assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
             match test_case.error_type {
-                Some("Message") => assert!(matches!(result.unwrap_err(), Error::Message(_, _))),
+                Some("Message") => assert!(matches!(result.unwrap_err(), Error::Notice(_))),
                 Some("UnexpectedResponse") => assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_))),
                 _ => panic!("Unknown error type for test '{}'", test_case.name),
             }

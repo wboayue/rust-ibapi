@@ -67,7 +67,7 @@ pub(crate) fn error_message(error: &Error) -> String {
         Error::ServerVersion(required, actual, feature) => {
             format!("Server version {required} required for {feature}, but connected to version {actual}")
         }
-        Error::Message(code, msg) => format!("TWS Error [{code}]: {msg}"),
+        Error::Notice(n) => format!("TWS Error [{}]: {}", n.code, n.message),
         _ => error.to_string(),
     }
 }
@@ -93,7 +93,7 @@ pub(crate) fn categorize_error(error: &Error) -> ErrorCategory {
         Error::Io(io_err) if is_timeout_io_error(io_err) => ErrorCategory::Timeout,
         Error::Parse(_, _, _) | Error::ParseInt(_) | Error::FromUtf8(_) | Error::ParseTime(_) => ErrorCategory::Parsing,
         Error::InvalidArgument(_) | Error::ServerVersion(_, _, _) => ErrorCategory::Validation,
-        Error::Message(_, _) => ErrorCategory::ServerError,
+        Error::Notice(_) => ErrorCategory::ServerError,
         Error::Cancelled => ErrorCategory::Cancelled,
         Error::Shutdown | Error::NotImplemented | Error::AlreadySubscribed => ErrorCategory::Fatal,
         Error::UnexpectedResponse(_) | Error::UnexpectedEndOfStream => ErrorCategory::Transient,

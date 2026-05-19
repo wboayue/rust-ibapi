@@ -37,8 +37,8 @@ async fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order)
                 break;
             }
             Ok(SubscriptionItem::Data(_)) => continue,
-            Err(Error::Message(201, msg)) => panic!("TWS rejected conditional order [201]: {msg}"),
-            Err(Error::Message(_, _)) => {
+            Err(Error::Notice(n)) if n.code == 201 => panic!("TWS rejected conditional order [201]: {}", n.message),
+            Err(Error::Notice(_)) => {
                 acknowledged = true;
                 break;
             }

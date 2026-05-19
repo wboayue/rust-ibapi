@@ -56,8 +56,8 @@ fn test_notice_from_decoded_missing_optionals() {
 }
 
 #[test]
-fn test_error_from_decoded_projects_to_message() {
-    // `From<DecodedError> for Error` projects code+message to Error::Message,
+fn test_error_from_decoded_projects_to_notice() {
+    // `From<DecodedError> for Error` projects to Error::Notice(Notice),
     // mirroring the existing `From<ResponseMessage>` projection.
     let payload = DecodedError {
         request_id: 42,
@@ -69,11 +69,11 @@ fn test_error_from_decoded_projects_to_message() {
     let err = crate::Error::from(payload);
 
     match err {
-        crate::Error::Message(code, msg) => {
-            assert_eq!(code, 200);
-            assert_eq!(msg, "no security");
+        crate::Error::Notice(notice) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "no security");
         }
-        other => panic!("expected Error::Message, got {other:?}"),
+        other => panic!("expected Error::Notice, got {other:?}"),
     }
 }
 

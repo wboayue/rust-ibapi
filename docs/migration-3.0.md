@@ -758,6 +758,38 @@ match Client::connect("127.0.0.1:4002", 100) {
 }
 ```
 
+### `Error::Message` → `Error::Notice(Notice)`
+
+TWS-emitted error frames now arrive as `Error::Notice(Notice)` instead of `Error::Message(i32, String)` on `Result<_, Error>` returns. The new variant carries the full typed [`Notice`] (code, message, `error_time`, `advanced_order_reject_json`) and exposes the same classification API as the streaming side:
+
+```rust
+// before
+match client.contract_details(&contract) {
+    Ok(details) => { /* ... */ }
+    Err(Error::Message(code, msg)) if (200..=399).contains(&code) => {
+        eprintln!("rejection [{code}]: {msg}");
+    }
+    Err(Error::Message(code, msg)) => eprintln!("TWS error [{code}]: {msg}"),
+    Err(err) => eprintln!("transport: {err}"),
+}
+
+// after
+match client.contract_details(&contract) {
+    Ok(details) => { /* ... */ }
+    Err(Error::Notice(n)) if n.is_order_rejection() => eprintln!("rejection: {n}"),
+    Err(Error::Notice(n)) => match n.category() {
+        NoticeCategory::Warning       => eprintln!("warn: {n}"),
+        NoticeCategory::SystemMessage => eprintln!("system: {n}"),
+        _                             => eprintln!("error: {n}"),
+    },
+    Err(err) => eprintln!("transport: {err}"),
+}
+```
+
+This makes `Result<_, Error>` returns symmetric with `Subscription<T>` items, which already yield `SubscriptionItem::Notice(Notice)` for the same wire frame. As a bonus, the projection now preserves `error_time` and `advanced_order_reject_json` — the old `Error::Message` shape dropped both.
+
+Distinct from `Error::ConnectionRejected` (handshake-time refusal, above) and the transport variants (`Error::Io`, `Error::ConnectionReset`).
+
 ## Quick migration checklist
 
 1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
