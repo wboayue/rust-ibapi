@@ -177,17 +177,17 @@ Related existing tracking docs in `plans/`:
 ## 5. Errors
 
 - [x] **Audit remaining `Error::Simple` / `Error::Message` callers.** Shipped
-  across 6 PRs in [`plans/error-variants-audit.md`](error-variants-audit.md):
-  PR-1 #584 (validation → `InvalidArgument`), PR-2 #585 (EOF/no-response →
-  `UnexpectedEndOfStream`), PR-3 #586 (server-version + protobuf-decode →
-  typed variants), PR-4 #587 (datetime + message-type parse → `Parse` via
-  new `parse_field`/`parse_proto` constructors), PR-5 #589 (cursor EOF +
-  unexpected-response + decoder-mismatch; introduced `Error::eof_at`),
-  PR-6 #590 (new `Error::ConnectionRejected(String)` variant for handshake
-  refusal). §5.3 Parse-shape resolved Option 4 (no-index constructors)
-  rather than changing the variant tuple. Net: ~80 sites typed, four
-  factory helpers (`unexpected_response`, `parse_field`, `parse_proto`,
-  `eof_at`) added to `errors.rs`.
+  across 6 PRs: PR-1 #584 (validation → `InvalidArgument`), PR-2 #585
+  (EOF/no-response → `UnexpectedEndOfStream`), PR-3 #586 (server-version +
+  protobuf-decode → typed variants), PR-4 #587 (datetime + message-type
+  parse → `Parse` via new `parse_field`/`parse_proto` constructors),
+  PR-5 #589 (cursor EOF + unexpected-response + decoder-mismatch;
+  introduced `Error::eof_at`), PR-6 #590 (new
+  `Error::ConnectionRejected(String)` variant for handshake refusal).
+  §5.3 Parse-shape resolved Option 4 (no-index constructors) rather than
+  changing the variant tuple. Net: ~80 sites typed, four factory helpers
+  (`unexpected_response`, `parse_field`, `parse_proto`, `eof_at`) added
+  to `errors.rs`.
 
 - [x] **Distinguish "request rejected by server" from "transport error" in return
   types.** Shipped 2026-05-19 in PR #591. `Error::Message(i32, String)` replaced
@@ -200,16 +200,15 @@ Related existing tracking docs in `plans/`:
   edits. Bonus: the projection now preserves `error_time` and
   `advanced_order_reject_json` that the old tuple dropped. Distinct from
   `Error::ConnectionRejected` (handshake-time refusal) and the transport
-  variants. Plan: [`plans/typed-rejection-error.md`](typed-rejection-error.md).
+  variants.
 
 - [x] **Revisit `Error::Parse(usize, String, String)` shape.** Resolved
   2026-05-17 with Option 4: keep the variant tuple, add no-index
   constructors `Error::parse_field(value, reason)` / `Error::parse_proto(field,
   reason)` / `Error::eof_at(i, label)` that absorb the `0` placeholder.
   Non-breaking; future promotion to `Option<usize>` or a struct variant
-  remains possible behind the constructors. Shipped via
-  [`plans/error-variants-audit.md`](error-variants-audit.md) PR-4 #587 +
-  PR-5 #589. Typed-status sweep
+  remains possible behind the constructors. Shipped via PR-4 #587 +
+  PR-5 #589 (see §5.1). Typed-status sweep
   ([`plans/typed-status-sweep.md`](typed-status-sweep.md)) PRs 2–5 should
   use the new constructors when they land.
 
