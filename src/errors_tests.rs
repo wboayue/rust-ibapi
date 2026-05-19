@@ -1,6 +1,7 @@
 use super::*;
+use crate::common::test_utils::helpers::tws_error_notice;
 use crate::market_data::historical::HistoricalParseError;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::builder::ValidationError;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;
@@ -54,10 +55,7 @@ fn error_display() {
         (Error::Shutdown, "Shutdown"),
         (Error::EndOfStream, "EndOfStream"),
         (Error::UnexpectedEndOfStream, "UnexpectedEndOfStream"),
-        (
-            Error::Notice(Notice::synthesized(200, "No security found".to_string())),
-            "[200] No security found",
-        ),
+        (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
             Error::HistoricalParseError(HistoricalParseError::BarSize("bogus".to_string())),
@@ -248,7 +246,7 @@ fn clone_preserves_payloaded_variants() {
         Error::InvalidArgument("a".into()),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
-        Error::Notice(Notice::synthesized(404, "nope".into())),
+        tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),
     ];

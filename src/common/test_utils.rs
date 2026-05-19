@@ -175,6 +175,15 @@ pub mod helpers {
             .count()
     }
 
+    /// Builds an `Error::Notice` carrying a synthesized [`Notice`](crate::messages::Notice)
+    /// — no wire timestamp, no advanced-order-reject JSON. Test-only sugar for the
+    /// `Error::Notice(Notice::synthesized(code, msg))` shape used by Result-path tests
+    /// (production code never builds these; the wire path goes through
+    /// `From<ResponseMessage> for Error`).
+    pub fn tws_error_notice(code: i32, message: impl Into<String>) -> crate::Error {
+        crate::Error::Notice(crate::messages::Notice::synthesized(code, message.into()))
+    }
+
     /// Asserts that `err` is `Error::Notice(notice)` where `notice.code == expected_code`
     /// and `notice.message` contains `expected_substring`.
     pub fn assert_tws_error_message(err: crate::Error, expected_code: i32, expected_substring: &str) {
