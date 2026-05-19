@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::tws_error_notice;
 use std::io;
 
 #[test]
@@ -311,7 +312,7 @@ fn test_error_message() {
         },
         TestCase {
             name: "tws_message",
-            error: Error::Message(200, "test error".to_string()),
+            error: tws_error_notice(200, "test error"),
             expected: "TWS Error [200]: test error",
         },
     ];
@@ -412,7 +413,7 @@ fn test_error_categorization() {
         // Server error category
         TestCase {
             name: "tws_message",
-            error: Error::Message(200, "test".to_string()),
+            error: tws_error_notice(200, "test"),
             expected: ErrorCategory::ServerError,
         },
         // Cancelled category

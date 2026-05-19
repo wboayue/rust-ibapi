@@ -189,10 +189,18 @@ Related existing tracking docs in `plans/`:
   factory helpers (`unexpected_response`, `parse_field`, `parse_proto`,
   `eof_at`) added to `errors.rs`.
 
-- [ ] **Distinguish "request rejected by server" from "transport error" in return
-  types.** Today both come through `Result<_, Error>`. Consider promoting server-side
-  rejections (TWS error codes 200-299, 300-399, 10000+) into a typed sub-enum so
-  callers can pattern-match without string parsing.
+- [x] **Distinguish "request rejected by server" from "transport error" in return
+  types.** Shipped 2026-05-19 in PR #591. `Error::Message(i32, String)` replaced
+  by `Error::Notice(Notice)`; the new variant carries the full typed `Notice`
+  (code, message, `error_time`, `advanced_order_reject_json`) and exposes the
+  same classification API as `SubscriptionItem::Notice` — `Notice::category()`,
+  `is_order_rejection`, `is_warning`. `From<ResponseMessage>` and
+  `From<DecodedError>` absorbed the variant change so the ~25
+  dispatcher/decoder sites that emit `Err(Error::from(message))` needed no
+  edits. Bonus: the projection now preserves `error_time` and
+  `advanced_order_reject_json` that the old tuple dropped. Distinct from
+  `Error::ConnectionRejected` (handshake-time refusal) and the transport
+  variants. Plan: [`plans/typed-rejection-error.md`](typed-rejection-error.md).
 
 - [x] **Revisit `Error::Parse(usize, String, String)` shape.** Resolved
   2026-05-17 with Option 4: keep the variant tuple, add no-index

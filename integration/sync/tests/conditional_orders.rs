@@ -41,11 +41,11 @@ fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order) {
                 break;
             }
             Ok(SubscriptionItem::Data(_)) => continue,
-            // Code 201 = hard rejection. Other Error::Message values (399 after-hours
+            // Code 201 = hard rejection. Other Error::Notice values (399 after-hours
             // queueing, 2174 timezone warning, etc.) are non-fatal — TWS *accepted*
             // the order and the dispatcher just terminates the subscription on them.
-            Err(Error::Message(201, msg)) => panic!("TWS rejected conditional order [201]: {msg}"),
-            Err(Error::Message(_, _)) => {
+            Err(Error::Notice(n)) if n.code == 201 => panic!("TWS rejected conditional order [201]: {}", n.message),
+            Err(Error::Notice(_)) => {
                 acknowledged = true;
                 break;
             }

@@ -173,7 +173,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
                 ProcessingResult::Error(err) => {
                     match &err {
-                        Error::Message(code, msg) => warn!("subscription terminated by TWS error [{code}] {msg}"),
+                        Error::Notice(n) => warn!("subscription terminated by TWS error {n}"),
                         _ => error!("error decoding message: {err}"),
                     }
                     self.stream_ended.store(true, Ordering::Relaxed);

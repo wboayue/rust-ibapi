@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn test_option_computation_decode_error_message() {
-        // Error on the subscription's request_id channel surfaces as Error::Message,
+        // Error on the subscription's request_id channel surfaces as Error::Notice,
         // not a parse failure or "unexpected message" error (#434).
         let mut message = error_message();
         let err = OptionComputation::decode(&test_context(), &mut message).unwrap_err();

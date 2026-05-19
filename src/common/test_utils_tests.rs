@@ -132,12 +132,12 @@ fn assert_request_msg_id_panics_on_short_buffer() {
 
 #[test]
 fn assert_tws_error_message_matches_code_and_substring() {
-    let err = crate::Error::Message(10089, "not subscribed to market data".to_string());
+    let err = tws_error_notice(10089, "not subscribed to market data");
     assert_tws_error_message(err, 10089, "not subscribed");
 }
 
 #[test]
-#[should_panic(expected = "expected Error::Message(10089, _)")]
+#[should_panic(expected = "expected Error::Notice(code=10089)")]
 fn assert_tws_error_message_panics_on_wrong_variant() {
     let err = crate::Error::Simple("nope".to_string());
     assert_tws_error_message(err, 10089, "not subscribed");
@@ -146,14 +146,14 @@ fn assert_tws_error_message_panics_on_wrong_variant() {
 #[test]
 #[should_panic(expected = "wrong error code")]
 fn assert_tws_error_message_panics_on_wrong_code() {
-    let err = crate::Error::Message(1, "not subscribed".to_string());
+    let err = tws_error_notice(1, "not subscribed");
     assert_tws_error_message(err, 10089, "not subscribed");
 }
 
 #[test]
 #[should_panic(expected = "does not contain")]
 fn assert_tws_error_message_panics_on_missing_substring() {
-    let err = crate::Error::Message(10089, "other text".to_string());
+    let err = tws_error_notice(10089, "other text");
     assert_tws_error_message(err, 10089, "not subscribed");
 }
 

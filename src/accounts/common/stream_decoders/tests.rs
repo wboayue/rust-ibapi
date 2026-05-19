@@ -42,7 +42,7 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_error_message() {
-        // Error on the same request_id channel surfaces as Error::Message, not a
+        // Error on the same request_id channel surfaces as Error::Notice, not a
         // parse failure or "unexpected message" error (#434).
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
         let err = AccountSummaryResult::decode(&test_context(), &mut message).unwrap_err();

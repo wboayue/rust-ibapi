@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn test_decode_error_message_surfaces_tws_error() {
         // Previously decode_scanner_message was called blindly, producing a parse
-        // failure. Now the scanner request_id channel surfaces Error::Message (#434).
+        // failure. Now the scanner request_id channel surfaces Error::Notice (#434).
         let mut message = ResponseMessage::from_simple("4|2|9000|10089|Requested market data is not subscribed|");
         let err = Vec::<ScannerData>::decode(&test_context(), &mut message).unwrap_err();
         assert_tws_error_message(err, 10089, "not subscribed");

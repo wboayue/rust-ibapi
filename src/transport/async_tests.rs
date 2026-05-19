@@ -259,11 +259,11 @@ async fn test_hard_error_with_request_id_terminates_subscription() {
 
     let item = next_routed(&mut sub).await;
     match item {
-        RoutedItem::Error(Error::Message(code, msg)) => {
-            assert_eq!(code, 200);
-            assert_eq!(msg, "No security definition found");
+        RoutedItem::Error(Error::Notice(notice)) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "No security definition found");
         }
-        other => panic!("expected RoutedItem::Error(Message), got {other:?}"),
+        other => panic!("expected RoutedItem::Error(Notice), got {other:?}"),
     }
 }
 
@@ -381,11 +381,11 @@ async fn test_subscription_hard_error_terminates_stream() {
     bus.read_and_route_message().await.unwrap();
 
     match next_item(&mut subscription).await {
-        Some(Err(Error::Message(code, message))) => {
-            assert_eq!(code, 200);
-            assert_eq!(message, "No security definition found");
+        Some(Err(Error::Notice(notice))) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "No security definition found");
         }
-        other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
+        other => panic!("expected Some(Err(Error::Notice)), got {other:?}"),
     }
 
     assert!(next_item(&mut subscription).await.is_none(), "stream must end after terminal error");

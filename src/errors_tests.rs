@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::tws_error_notice;
 use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::builder::ValidationError;
@@ -54,7 +55,7 @@ fn error_display() {
         (Error::Shutdown, "Shutdown"),
         (Error::EndOfStream, "EndOfStream"),
         (Error::UnexpectedEndOfStream, "UnexpectedEndOfStream"),
-        (Error::Message(200, "No security found".to_string()), "[200] No security found"),
+        (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
             Error::HistoricalParseError(HistoricalParseError::BarSize("bogus".to_string())),
@@ -130,7 +131,7 @@ fn from_protobuf_decode_error() {
 fn from_text_response_message_extracts_code_and_message() {
     let msg = ResponseMessage::from("4\02\0-1\0200\0No security found\0");
     let error: Error = msg.into();
-    assert!(matches!(error, Error::Message(200, ref m) if m == "No security found"));
+    assert!(matches!(error, Error::Notice(ref n) if n.code == 200 && n.message == "No security found"));
 }
 
 #[test]
@@ -145,7 +146,7 @@ fn from_protobuf_response_message_decodes_envelope() {
     let raw = prost::Message::encode_to_vec(&envelope);
     let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, raw, crate::server_versions::PROTOBUF);
     let error: Error = msg.into();
-    assert!(matches!(error, Error::Message(2104, ref m) if m == "Market data farm OK"));
+    assert!(matches!(error, Error::Notice(ref n) if n.code == 2104 && n.message == "Market data farm OK"));
 }
 
 #[test]
@@ -153,11 +154,11 @@ fn from_protobuf_response_message_falls_back_when_decode_fails() {
     // Bad protobuf bytes -> falls back to text accessors (both default to 0 / empty).
     let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, vec![0xff, 0xff, 0xff, 0xff], crate::server_versions::PROTOBUF);
     let error: Error = msg.into();
-    assert!(matches!(error, Error::Message(0, _)));
+    assert!(matches!(error, Error::Notice(ref n) if n.code == 0));
 }
 
 #[test]
-fn from_decoded_error_moves_into_message_variant() {
+fn from_decoded_error_moves_into_notice_variant() {
     let decoded = DecodedError {
         request_id: 42,
         error_code: 321,
@@ -166,7 +167,7 @@ fn from_decoded_error_moves_into_message_variant() {
         advanced_order_reject_json: String::new(),
     };
     let error: Error = decoded.into();
-    assert!(matches!(error, Error::Message(321, ref m) if m == "rejected"));
+    assert!(matches!(error, Error::Notice(ref n) if n.code == 321 && n.message == "rejected"));
 }
 
 #[test]
@@ -245,7 +246,7 @@ fn clone_preserves_payloaded_variants() {
         Error::InvalidArgument("a".into()),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
-        Error::Message(404, "nope".into()),
+        tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),
     ];
