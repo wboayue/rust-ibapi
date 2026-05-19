@@ -25,10 +25,24 @@ all-features = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-# Async is enabled by default; opt into `sync` (or disable defaults) as needed.
+## Default features: enables the async client.
+##
+## Disable defaults (`default-features = false`) and opt into `sync` for a
+## blocking-only build, or combine `sync` + `async` to get both clients.
 default = ["async"]
-sync = ["dep:crossbeam"]
+
+## Async (tokio-based) client. When enabled alone, the async API is exposed as
+## `client::Client`. When combined with `sync`, the async client remains at
+## `client::Client` and the blocking client moves to `client::blocking::Client`.
 async = ["dep:tokio", "dep:tokio-stream", "dep:futures", "dep:async-trait"]
+
+## Synchronous, blocking client backed by `crossbeam` channels. When enabled
+## alone, the blocking API is exposed as `client::Client`; when combined with
+## `async`, it lives at `client::blocking::Client`.
+sync = ["dep:crossbeam"]
+
+## Derive `utoipa::ToSchema` on public data types to participate in OpenAPI
+## schema generation for downstream HTTP services.
 utoipa = ["dep:utoipa"]
 
 [dependencies]
