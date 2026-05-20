@@ -1,3 +1,18 @@
+//! Historical market data API.
+//!
+//! ## Canonical paths
+//!
+//! Historical-data methods are inherent methods on `ibapi::Client` — call
+//! `client.historical_data(...)`, `client.historical_ticks_mid_point(...)`,
+//! etc. The public types (`Bar`, `BarSize`, `WhatToShow`, `TickSubscription`,
+//! and the per-tick payload types) live at
+//! `ibapi::market_data::historical::*` and via `ibapi::prelude::*`.
+//!
+//! The `historical::sync` and `historical::r#async` submodules where the impls
+//! live are `#[doc(hidden)]`: still reachable as paths for crate-internal use,
+//! but intentionally absent from the docs.rs navigation. Prefer the canonical
+//! `Client` method calls and the `market_data::historical::*` type spellings.
+
 use std::fmt::{self, Debug, Display};
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -12,11 +27,11 @@ use crate::{Error, ToField};
 
 pub(crate) mod common;
 
+#[doc(hidden)]
 #[cfg(feature = "sync")]
-/// Synchronous historical market data API.
 pub mod sync;
 
-/// Async historical market data API.
+#[doc(hidden)]
 #[cfg(feature = "async")]
 pub mod r#async;
 

@@ -1,3 +1,19 @@
+//! Real-time market data API.
+//!
+//! ## Canonical paths
+//!
+//! Real-time methods are inherent methods on `ibapi::Client` — call
+//! `client.realtime_bars(...)`, `client.tick_by_tick_*(...)`, etc. The public
+//! types (`Bar`, `BidAsk`, `MidPoint`, `Trade`, `TickTypes`,
+//! `RealtimeBarsBuilder`, etc.) live at `ibapi::market_data::realtime::*` and
+//! via `ibapi::prelude::*`.
+//!
+//! The `realtime::sync` and `realtime::r#async` submodules where the impls
+//! live are `#[doc(hidden)]`: still reachable as paths for crate-internal
+//! use, but intentionally absent from the docs.rs navigation. Prefer the
+//! canonical `Client` method calls and the `market_data::realtime::*` type
+//! spellings.
+
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -13,11 +29,11 @@ mod builder;
 pub use builder::RealtimeBarsBuilder;
 
 // Feature-specific implementations
+#[doc(hidden)]
 #[cfg(feature = "sync")]
-/// Synchronous real-time market data API.
 pub mod sync;
 
-/// Asynchronous real-time market data API.
+#[doc(hidden)]
 #[cfg(feature = "async")]
 pub mod r#async;
 

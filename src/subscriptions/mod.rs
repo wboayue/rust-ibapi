@@ -1,12 +1,33 @@
-//! Subscription types for sync/async streaming data
+//! Subscription types for sync/async streaming data.
+//!
+//! ## Canonical paths
+//!
+//! - **Async `Subscription` / extensions** — `ibapi::Subscription`,
+//!   `ibapi::subscriptions::SubscriptionItemStreamExt`. The crate-root and
+//!   `subscriptions::*` re-exports resolve to the async implementation
+//!   whenever the `async` feature is on (which is the default).
+//! - **Blocking (sync) `Subscription` / iterators** — `ibapi::client::blocking::Subscription`
+//!   (and `SubscriptionIter`, `SubscriptionOwnedIter`, etc.). The labelled
+//!   `blocking` submodule is the canonical sync-explicit path. When only
+//!   `sync` is enabled, `ibapi::Subscription` also resolves to the blocking
+//!   form.
+//!
+//! The `subscriptions::sync` and `subscriptions::r#async` submodules where
+//! the impls live are `#[doc(hidden)]`: still reachable as paths for
+//! crate-internal use, but intentionally absent from the docs.rs navigation.
+//! Prefer the canonical spellings above. Raw-identifier syntax
+//! (`subscriptions::r#async::Subscription`) is the giveaway that the spelling
+//! is non-canonical.
 
 pub(crate) mod common;
 pub use common::SubscriptionItem;
 pub(crate) use common::{DecoderContext, StreamDecoder};
 
+#[doc(hidden)]
 #[cfg(feature = "sync")]
 pub mod sync;
 
+#[doc(hidden)]
 #[cfg(feature = "async")]
 pub mod r#async;
 
