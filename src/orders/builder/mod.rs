@@ -25,6 +25,4 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-// `OrderBuilder`, `BracketOrderBuilder`, `BracketOrderIds`, and `OrderId` are
-// re-exported at the canonical `orders::*` path only — see `orders/mod.rs`.
 pub use types::{AuctionType, OrderAnalysis, OrderType, Price, Quantity, TimeInForce, ValidationError};
