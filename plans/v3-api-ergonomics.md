@@ -128,12 +128,17 @@ Related existing tracking docs in `plans/`:
 
 ## 3. Naming, layout, prelude
 
-- [ ] **Eliminate prelude collisions.** `BarSize` and `WhatToShow` exist for both
-  historical and realtime market data and are re-exported as `HistoricalBarSize` /
-  `RealtimeBarSize` in the prelude (`src/prelude.rs:31-34`). Options:
-  - Rename one (e.g. `RealtimeBarSize` already differs in variants — rename in source
-    too, drop the alias).
-  - Or keep the aliases but document them as the canonical names.
+- [x] **Eliminate prelude collisions.** Resolved 2026-05-19 by doc convention,
+  not source rename. The prelude `as` aliases (`HistoricalBarSize` /
+  `RealtimeBarSize` / `HistoricalWhatToShow` / `RealtimeWhatToShow`) are
+  canonical for `use ibapi::prelude::*;` callers; module-qualified short names
+  (`historical::BarSize`, `realtime::BarSize`, etc.) are canonical for
+  module-qualified imports. Documented in `src/prelude.rs` rustdoc.
+  Rejected the source-rename options (`realtime::RealtimeBarSize` stutters
+  module path; `HistoricalBarSize::Min` is verbose at every callsite) — the
+  collision only bites in `historical::*` + `realtime::*` flat-import scopes,
+  which the prelude already paves over. Realtime's degenerate `BarSize` (single
+  `Sec5` variant) makes the rename cost-to-benefit ratio especially bad.
 
 - [ ] **Async-vs-blocking naming asymmetry.** `ibapi::Client` is the async client when
   `async` is on; the sync client lives at `ibapi::client::blocking::Client`
