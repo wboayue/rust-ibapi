@@ -6,8 +6,8 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
 use crate::client::sync::Client;
+use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
-use crate::orders::TagValue;
 use crate::{server_versions, Error};
 
 impl Client {
@@ -18,7 +18,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::scanner::ScannerSubscription;
-    /// use ibapi::orders::TagValue; // Or ensure common::TagValue is the correct path
+    /// use ibapi::contracts::TagValue;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -80,7 +80,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::scanner::ScannerSubscription;
-    /// use ibapi::orders::TagValue;
+    /// use ibapi::contracts::TagValue;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///

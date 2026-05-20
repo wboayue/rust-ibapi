@@ -2,8 +2,8 @@
 
 use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
-use crate::orders::TagValue;
 use crate::proto;
 use crate::scanner::ScannerSubscription;
 

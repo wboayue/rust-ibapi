@@ -2,8 +2,8 @@
 
 use super::common::{decoders, encoders};
 use super::*;
+use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
-use crate::orders::TagValue;
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 

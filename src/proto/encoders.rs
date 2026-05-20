@@ -386,7 +386,7 @@ pub fn encode_execution_filter(filter: &orders::ExecutionFilter) -> proto::Execu
 
 pub fn encode_scanner_subscription(
     subscription: &crate::scanner::ScannerSubscription,
-    filter: &[crate::orders::TagValue],
+    filter: &[crate::contracts::TagValue],
 ) -> proto::ScannerSubscription {
     proto::ScannerSubscription {
         number_of_rows: some_i32_ne(subscription.number_of_rows, i32::MAX),
@@ -427,7 +427,7 @@ pub fn encode_order_cancel(manual_order_cancel_time: &str) -> proto::OrderCancel
 
 // === Utilities ===
 
-pub fn tag_values_to_map(tags: &[crate::orders::TagValue]) -> std::collections::HashMap<String, String> {
+pub fn tag_values_to_map(tags: &[crate::contracts::TagValue]) -> std::collections::HashMap<String, String> {
     tags.iter().map(|tv| (tv.tag.clone(), tv.value.clone())).collect()
 }
 
@@ -646,11 +646,11 @@ mod tests {
     #[test]
     fn test_tag_values_to_map() {
         let tags = vec![
-            crate::orders::TagValue {
+            crate::contracts::TagValue {
                 tag: "k1".to_string(),
                 value: "v1".to_string(),
             },
-            crate::orders::TagValue {
+            crate::contracts::TagValue {
                 tag: "k2".to_string(),
                 value: "v2".to_string(),
             },

@@ -470,6 +470,20 @@ let _ = client.cancel_order(order_id, "").await?;     // intentional drop
 let _builder = order_builder;                          // keep alive without finalizing
 ```
 
+### 19. `TagValue` moved out of `ibapi::orders`
+
+`TagValue` is a generic key/value pair used across scanner filters, market-data options, order misc options, and combo routing — it never belonged in `orders`. In 3.0 it lives only at its canonical home `ibapi::contracts::TagValue`; the historical `ibapi::orders::TagValue` re-export is removed.
+
+```rust,ignore
+// v2.x
+use ibapi::orders::TagValue;
+
+// v3.0
+use ibapi::contracts::TagValue;
+```
+
+No type changes — `TagValue` itself is unchanged. Only the import path moves.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

@@ -61,10 +61,7 @@ use crate::{encode_option_field, ToField};
 
 // Public types - always available regardless of feature flags
 
-/// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
-/// is possible is by trying to place such order manually using the TWS.
-/// Before contacting our API support team please refer to the available documentation.
-pub use crate::contracts::TagValue;
+use crate::contracts::TagValue;
 
 pub(crate) const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
 

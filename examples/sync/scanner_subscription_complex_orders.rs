@@ -7,7 +7,7 @@
 //! ```
 
 use ibapi::client::blocking::Client;
-use ibapi::{orders, scanner};
+use ibapi::{contracts, scanner};
 
 // This example demonstrates setting up a market scanner.
 
@@ -17,7 +17,7 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let scanner_subscription = complex_orders_and_trades();
-    let filter = vec![orders::TagValue {
+    let filter = vec![contracts::TagValue {
         tag: "underConID".to_string(),
         value: "265598".to_string(),
     }];

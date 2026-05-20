@@ -1,5 +1,5 @@
+use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
-use crate::orders::TagValue;
 use crate::Error;
 
 use super::super::ScannerSubscription;
