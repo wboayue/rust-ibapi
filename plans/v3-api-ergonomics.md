@@ -268,11 +268,23 @@ Related existing tracking docs in `plans/`:
   re-exports (`pub use foo::Bar;` in two modules). The crate root, `prelude`, and the
   domain module should each pick one home for each type.
 
-- [ ] **`#[non_exhaustive]` on every public enum and struct that may grow.** Avoids
-  future breaking releases for additive variants/fields. Coverage today is **very
-  low**: only `Error` carries the attribute. Public enums like `Action`,
-  `SecurityType`, `OrderStatusKind`, `Liquidity` are unannotated. Sweep before
-  3.0 cuts.
+- [-] **`#[non_exhaustive]` on every public enum and struct that may grow.**
+  Rejected 2026-05-19. **Rule: `#[non_exhaustive]` is deliberate, not the
+  default.** Don't annotate just because a type *might* grow; annotate when
+  there's a concrete reason and the lost compile-time signal is acceptable.
+  Why the default tips the other way: an exhaustive `match` is the most
+  useful regression-detection signal a downstream caller has. A trading
+  library's caller writing `match status { Filled => …, Cancelled => …, …
+  }` *wants* a hard compile error when IBKR (and we) add a new
+  `OrderStatusKind` variant — that's what forces the caller to acknowledge
+  the new state. `#[non_exhaustive]` replaces that with silent default
+  behavior (`_ => unreachable!()`, or worse, a noop arm) and ships the new
+  variant into production behavior unconsidered. Existing precedents stand
+  as deliberate per-type calls: `Error` (error-class-grow is intrinsic),
+  `LegAction` / `OptionRight` / `SecurityIdType` / `ExecutionFilterSide`
+  (typed-status sweep wave; external IBKR vocabularies that demonstrably
+  grow over time). Future new public enums and structs: justify the choice
+  in the PR; don't retrofit existing types by sweep.
 
 - [x] **`#[must_use]` on every builder and `Subscription`.** Shipped 2026-05-19.
   31 builders annotated (`ContractBuilder` + 8 typed contract builders
