@@ -1,47 +1,53 @@
 # API Patterns
 
+## Prelude
+
+`use ibapi::prelude::*;` is the canonical front door. It re-exports the
+crate-root `Client` (async when the `async` feature is on, blocking otherwise),
+`Contract` + the typed contract wrappers, the order-side `Action` enum, the
+`Subscription` / `SubscriptionItem` / `Notice` / `NoticeCategory` types, and
+the historical/realtime `BarSize` / `WhatToShow` enums (disambiguated as
+`HistoricalBarSize` / `RealtimeBarSize` etc. — see the
+[`prelude` rustdoc](https://docs.rs/ibapi/latest/ibapi/prelude/) for the full
+list and the naming convention for the BarSize/WhatToShow disambiguation).
+
+Use the prelude in examples, integration tests, and idiomatic user code:
+
+```rust
+use ibapi::prelude::*;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+    // ...
+}
+```
+
+When both `sync` and `async` features are enabled, the blocking client lives at
+`ibapi::client::blocking::Client`; the prelude's `Client` is still the async
+one. See [`src/client/mod.rs`](https://docs.rs/ibapi/latest/ibapi/client/) for
+the canonical-path convention.
+
 ## Builder Patterns
 
 The library provides unified builder patterns to simplify common operations in both sync and async modes.
 
 ### Contract Builder
 
-The V2 contract builder API uses type-state patterns to ensure compile-time safety:
+Contracts are constructed via type-state builders that enforce required fields
+at compile time and provide strongly-typed wrappers for exchanges, currencies,
+and option rights:
 
 ```rust
-use ibapi::contracts::{Contract, ContractMonth};
+use ibapi::contracts::Contract;
 
-// Stock builder - simple with defaults
 let stock = Contract::stock("AAPL").build();
-
-// Stock with customization
-let intl_stock = Contract::stock("7203")
-    .on_exchange("TSEJ")
-    .in_currency("JPY")
-    .build();
-
-// Option builder - enforces required fields at compile time
-let option = Contract::call("AAPL")
-    .strike(150.0)  // Required - validates positive value
-    .expires_on(2024, 12, 20)  // Required
-    .build();  // Only available when all required fields are set
-
-// This won't compile - missing required fields:
-// let invalid = Contract::call("AAPL").build();  // Error: build() not available
-
-// Futures with smart defaults
-let futures = Contract::futures("ES")
-    .expires_in(ContractMonth::new(2024, 3))
-    .build();
+let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
 ```
 
-The contract builder pattern provides:
-- **Type-state tracking**: Required fields enforced at compile time
-- **Smart defaults**: Sensible defaults for common use cases
-- **Strong typing**: Type-safe wrappers for exchanges, currencies, and option rights
-- **Zero invalid states**: Can't build incomplete contracts
-
-For comprehensive documentation, see the [Contract Builder Guide](contract-builder.md).
+The full per-asset-type reference (stocks, options, futures, forex, crypto,
+bonds, spreads, etc.) lives in the [Contract Builder Guide](contract-builder.md);
+that's the canonical home for builder usage. This section is just the pointer.
 
 ### Request Builder
 

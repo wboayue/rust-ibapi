@@ -1,6 +1,6 @@
 # Contract Builder API
 
-The V2 Contract Builder API provides a type-safe, ergonomic way to create contracts for various financial instruments. It leverages Rust's type system to prevent invalid contracts at compile time while offering an intuitive, discoverable interface.
+The Contract Builder API provides a type-safe, ergonomic way to create contracts for various financial instruments. It leverages Rust's type system to prevent invalid contracts at compile time while offering an intuitive, discoverable interface.
 
 ## Table of Contents
 
@@ -298,7 +298,7 @@ let butterfly = Contract::spread()
 
 ## Strong Types
 
-The V2 API uses strong types instead of strings to prevent errors:
+The API uses strong types instead of strings to prevent errors:
 
 ### Exchanges
 
