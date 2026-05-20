@@ -265,19 +265,12 @@ Related existing tracking docs in `plans/`:
 ## 7. Cross-cutting
 
 - [x] **One way to spell each thing.** Shipped 2026-05-20 across 4 PRs:
-  PR #600 dropped the `TickType` cross-domain re-export
-  (`market_data::realtime::TickType` → canonical `contracts::tick_types::TickType`);
-  PR #601 narrowed `contracts::builders` and `contracts::types` to
-  `pub(crate)` (canonical at `contracts::*` via `pub use *::*`);
-  PR #602 dropped the four duplicate `orders::builder::{OrderBuilder,
-  BracketOrderBuilder, BracketOrderIds, OrderId}` paths (canonical at
-  `orders::*`); PR #603 added `#[doc(hidden)]` on the `historical::sync` /
-  `realtime::sync` / `subscriptions::sync` (and `r#async`) impl modules,
-  mirroring §3's `client::sync` treatment. Zero external callers of the
-  duplicate paths per audit grep — no caller-modernization PRs needed
-  (rule 23 N/A). Migration guide §20/§21/§22 document the path moves;
-  PR 4 was non-breaking (docs.rs nav only). The original 5-PR plan at
-  `plans/one-way-to-spell.md` was pruned after close-out.
+  - PR #600 — dropped `market_data::realtime::TickType` re-export; canonical at `contracts::tick_types::TickType`.
+  - PR #601 — narrowed `contracts::builders` / `contracts::types` to `pub(crate)`; canonical at `contracts::*` via `pub use *::*`.
+  - PR #602 — dropped `orders::builder::{OrderBuilder, BracketOrderBuilder, BracketOrderIds, OrderId}`; canonical at `orders::*`.
+  - PR #603 — `#[doc(hidden)]` on `historical::sync` / `realtime::sync` / `subscriptions::sync` (and `r#async`) impl modules, mirroring §3's `client::sync` treatment. Non-breaking (docs.rs nav only).
+
+  Migration guide §20/§21/§22 cover PRs #600/#601/#602.
 
 - [-] **`#[non_exhaustive]` on every public enum and struct that may grow.**
   Rejected 2026-05-19. **Rule: `#[non_exhaustive]` is deliberate, not the
