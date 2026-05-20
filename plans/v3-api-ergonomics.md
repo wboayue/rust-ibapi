@@ -248,9 +248,17 @@ Related existing tracking docs in `plans/`:
   `docs/migration-3.0.md` in sync with v3.0 work" — this is enforced as a PR-time
   check, not a one-shot deliverable).
 
-- [ ] **Consolidate the docs index.** `docs/api-patterns.md` and `docs/contract-builder.md`
-  overlap. Merge or cross-link cleanly so the prelude + builders are documented in one
-  obvious place.
+- [x] **Consolidate the docs index.** Shipped 2026-05-19. `docs/api-patterns.md`
+  becomes the docs index: opens with a `## Prelude` section pointing to the
+  canonical front door (`use ibapi::prelude::*;`) and the `src/prelude.rs`
+  rustdoc; the `### Contract Builder` subsection slimmed from 37 duplicate
+  lines of code samples down to a 2-line intro + a 6-line minimal example +
+  a hard pointer to `docs/contract-builder.md` (which is the canonical home
+  for per-asset-type builder reference). Dropped stale "V2"/"V1 → V2" qualifier
+  from both files' opening prose — there's no live v2 split today; the API is
+  just the API. The v1→v2 historical migration section in
+  `contract-builder.md` retained as-is (out of scope; still useful to v1
+  users).
 
 ## 7. Cross-cutting
 
