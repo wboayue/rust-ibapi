@@ -149,7 +149,6 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
-    /// use ibapi::client::r#async::Client;
     ///
     /// #[tokio::main]
     /// async fn main() {
