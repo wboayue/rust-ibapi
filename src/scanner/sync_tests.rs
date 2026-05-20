@@ -1,9 +1,8 @@
 use super::*;
 use crate::client::blocking::Client;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
-use crate::contracts::{Exchange, SecurityType, Symbol};
+use crate::contracts::{Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::IncomingMessages;
-use crate::orders::TagValue;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::scanner::{

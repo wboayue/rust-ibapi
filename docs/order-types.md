@@ -1163,7 +1163,8 @@ advanced / BYO-id path: build an `Order` value directly, allocate the id with
 `submit_order` (fire-and-forget):
 
 ```rust
-use ibapi::orders::{Order, Action, TagValue};
+use ibapi::contracts::TagValue;
+use ibapi::orders::{Order, Action};
 
 let order = Order {
     order_type: "LMT".to_string(),

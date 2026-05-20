@@ -2,8 +2,9 @@ use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
 use crate::contracts::Contract;
+use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
-use crate::orders::{Action, Order, OrderComboLeg, OrderCondition, TagValue};
+use crate::orders::{Action, Order, OrderComboLeg, OrderCondition};
 
 #[cfg(test)]
 mod tests;

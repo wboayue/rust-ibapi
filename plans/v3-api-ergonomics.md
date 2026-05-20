@@ -143,9 +143,12 @@ Related existing tracking docs in `plans/`:
   as the two canonical paths, or (b) expose `client::r#async::Client` as a sibling
   for symmetry in docs/examples.
 
-- [ ] **Reorganize re-exports out of `orders` for non-order types.** `TagValue` is
-  re-exported from `orders` (`src/orders/mod.rs:67`) for historical reasons. Move to
-  `contracts` (or wherever it logically belongs) and drop the alias.
+- [x] **Reorganize re-exports out of `orders` for non-order types.** Shipped
+  2026-05-20. `TagValue` lives only at `ibapi::contracts::TagValue` (its
+  definition site); the historical `pub use crate::contracts::TagValue;` in
+  `src/orders/mod.rs` removed along with all internal/external callsites
+  (scanner, market-data realtime, proto encoders, order-builder, examples,
+  `docs/order-types.md`). Migration guide §19 documents the path move.
 
 - [x] **Hide internal types from the public surface.** Shipped — PRs #574
   (`Client::stubbed` / `message_bus` async-side narrowed), #575

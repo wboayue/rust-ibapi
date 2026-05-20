@@ -1,9 +1,8 @@
 use log::debug;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
-use crate::contracts::Contract;
+use crate::contracts::{Contract, TagValue};
 use crate::messages::OutgoingMessages;
-use crate::orders::TagValue;
 use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
