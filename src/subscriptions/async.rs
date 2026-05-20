@@ -69,6 +69,7 @@ type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<
 /// 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc. — are not delivered
 /// here. Subscribe to them via [`Client::notice_stream`](crate::Client::notice_stream)
 /// instead.
+#[must_use = "Subscription must be polled (via .next().await or .filter_data()) to receive data; dropping it cancels the request"]
 pub struct Subscription<T> {
     inner: SubscriptionInner<T>,
     /// Metadata for cancellation

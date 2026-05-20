@@ -50,7 +50,7 @@ async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .expect("placing order after cancel should succeed");
     assert!(order_id.0 > 0, "new order id should be positive");
     rate_limit();
-    client.cancel_order(order_id.0, "").await.expect("cleanup cancel failed");
+    let _ = client.cancel_order(order_id.0, "").await.expect("cleanup cancel failed");
     order_id
 }
 
@@ -121,7 +121,7 @@ async fn place_limit_buy() {
     assert!(item.unwrap().is_some(), "expected order status update");
 
     rate_limit();
-    client.cancel_order(order_id, "").await.expect("cancel_order failed");
+    let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
 #[tokio::test]
@@ -141,7 +141,7 @@ async fn place_limit_sell() {
     assert!(item.unwrap().is_some(), "expected order status update");
 
     rate_limit();
-    client.cancel_order(order_id, "").await.expect("cancel_order failed");
+    let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
 #[tokio::test]
@@ -192,7 +192,7 @@ async fn order_builder_limit() {
 
     // Cancel the placed order
     rate_limit();
-    client.cancel_order(order_id.0, "").await.expect("cancel_order failed");
+    let _ = client.cancel_order(order_id.0, "").await.expect("cancel_order failed");
 }
 
 // Regression test for https://github.com/wboayue/rust-ibapi/issues/426

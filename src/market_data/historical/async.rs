@@ -616,6 +616,7 @@ async fn historical_schedule(client: &Client, contract: &Contract, end_date: Opt
 // === TickSubscription and related types ===
 
 /// Async subscription handle that decodes historical tick batches as they arrive.
+#[must_use = "TickSubscription must be polled (.next().await) to receive ticks; dropping it cancels the request"]
 pub struct TickSubscription<T: TickDecoder<T> + Send> {
     done: bool,
     messages: AsyncInternalSubscription,

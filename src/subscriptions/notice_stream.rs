@@ -21,6 +21,7 @@ pub mod sync_impl {
     ///
     /// Each `NoticeStream` owns one slot in the dispatcher's broadcaster; dropping
     /// the stream releases that slot at the next broadcast (lazy prune).
+    #[must_use = "NoticeStream must be polled (.next() / .iter()) to receive notices; dropping it releases the dispatcher slot"]
     pub struct NoticeStream {
         receiver: Receiver<Notice>,
     }
@@ -81,6 +82,7 @@ pub mod async_impl {
     /// If the channel lags (broadcaster wraps around because a subscriber didn't
     /// keep up), the missed items are skipped with a debug log and `next` resumes
     /// from the most recent notice.
+    #[must_use = "NoticeStream must be polled (.next().await / .stream()) to receive notices; dropping it releases the dispatcher slot"]
     pub struct NoticeStream {
         receiver: broadcast::Receiver<Notice>,
     }

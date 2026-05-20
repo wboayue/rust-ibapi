@@ -6,6 +6,7 @@ use crate::Error;
 mod tests;
 
 /// Builder for creating market data subscriptions with a fluent interface
+#[must_use = "MarketDataBuilder does nothing until you call .subscribe()"]
 pub struct MarketDataBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,

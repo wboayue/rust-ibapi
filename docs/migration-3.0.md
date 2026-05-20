@@ -450,6 +450,26 @@ use ibapi::{Notice, NoticeCategory, IncomingMessages};
 use ibapi::prelude::*;
 ```
 
+### 18. `#[must_use]` on builders and subscription handles
+
+Every fluent builder and subscription handle now carries `#[must_use]`. Forgetting the terminator (`.build()` / `.submit()` / `.subscribe()` / polling via `.next()` / `.next().await` / `.iter()`) used to be a silent no-op — the request never went out, the stream was dropped before reading. In 3.0 the same code emits an `unused_must_use` warning at the call site.
+
+Affected types:
+
+- **Subscription handles** — `Subscription<T>` (sync + async), `NoticeStream` (sync + async), `DisplayGroupSubscription` (sync + async), `TickSubscription` (sync + async). Dropping immediately cancels the request.
+- **Contract builders** — `ContractBuilder` (field-minimal) and the typed entry points: `StockBuilder`, `OptionBuilder`, `FuturesBuilder`, `ContinuousFuturesBuilder`, `ForexBuilder`, `CryptoBuilder`, `SpreadBuilder`, `LegBuilder`. Terminate with `.build()` (or `.done()` for `LegBuilder`).
+- **Order builders** — `OrderBuilder`, `BracketOrderBuilder`. Terminate with `.submit()` (canonical) or `.build()` (offline construction).
+- **Market data builders** — `MarketDataBuilder`, `RealtimeBarsBuilder`. Terminate with `.subscribe()`.
+- **Algo + condition builders** — 14 algo builders (`VwapBuilder`, `TwapBuilder`, `PctVolBuilder`, `ArrivalPriceBuilder`, `AdaptiveBuilder`, `ClosePriceBuilder`, `DarkIceBuilder`, `AccumulateDistributeBuilder`, `BalanceImpactRiskBuilder`, `MinimiseImpactBuilder`, `PctVolPriceBuilder`, `PctVolSizeBuilder`, `PctVolTimeBuilder`, `AccuDistrBuilder`) and 6 condition builders (`PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `ExecutionConditionBuilder`, `VolumeConditionBuilder`, `PercentChangeConditionBuilder`). Terminate with `.build()`.
+- `ClientBuilder` already carried `#[must_use]` in earlier 3.0 work.
+
+Not a hard break — code compiles unless you build with `-D warnings`. If you intentionally need to discard a handle (e.g. fire-and-forget cancel-order in a cleanup path), bind it explicitly:
+
+```rust,ignore
+let _ = client.cancel_order(order_id, "").await?;     // intentional drop
+let _builder = order_builder;                          // keep alive without finalizing
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction
