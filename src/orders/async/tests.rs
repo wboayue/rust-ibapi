@@ -482,7 +482,7 @@ async fn test_order_update_stream_drop_releases_subscription() {
     tokio::task::yield_now().await;
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    client.order_update_stream().await.expect("should be re-subscribable after drop");
+    let _stream2 = client.order_update_stream().await.expect("should be re-subscribable after drop");
 }
 
 #[tokio::test]

@@ -249,9 +249,17 @@ Related existing tracking docs in `plans/`:
   `SecurityType`, `OrderStatusKind`, `Liquidity` are unannotated. Sweep before
   3.0 cuts.
 
-- [ ] **`#[must_use]` on every builder and `Subscription`.** Forgetting `.subscribe()`
-  / `.submit()` / `.build()` should produce a lint, not silent no-ops. Today: zero
-  `#[must_use]` annotations on `ContractBuilder`, `OrderBuilder`, or `Subscription`.
+- [x] **`#[must_use]` on every builder and `Subscription`.** Shipped 2026-05-19.
+  31 builders annotated (`ContractBuilder` + 8 typed contract builders
+  Stock/Option/Futures/ContinuousFutures/Forex/Crypto/Spread/Leg, `OrderBuilder` +
+  `BracketOrderBuilder`, `MarketDataBuilder`, `RealtimeBarsBuilder`, 14 algo
+  builders, 6 condition builders; `ClientBuilder` already had it). Subscription
+  surface: `Subscription` (sync/async), `NoticeStream` (sync/async),
+  `DisplayGroupSubscription` (sync/async), `TickSubscription` (sync/async).
+  Forgetting the terminator (`.build()` / `.submit()` / `.subscribe()` /
+  `.next().await`) is now a compile-time warning. The new lint surfaced 9 real
+  callsites (1 unit test + 8 integration cleanup-cancel paths) that intentionally
+  drop the result; each got an explicit `let _ = ...` bind.
 
 - [x] **No `block_on` in async paths.** Verified clean across `src/` on 2026-05-06
   (no `futures::executor::block_on` usages). Project rule (`CLAUDE.md` §10) keeps

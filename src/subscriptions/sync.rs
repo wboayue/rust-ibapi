@@ -34,6 +34,7 @@ use crate::transport::{InternalSubscription, MessageBus};
 /// here. Subscribe to them via [`Client::notice_stream`](crate::client::blocking::Client::notice_stream)
 /// instead.
 #[allow(private_bounds)]
+#[must_use = "Subscription must be iterated (via .next(), .iter_data(), or .into_iter()) to receive data; dropping it cancels the request"]
 pub struct Subscription<T: StreamDecoder<T>> {
     context: DecoderContext,
     message_bus: Arc<dyn MessageBus>,

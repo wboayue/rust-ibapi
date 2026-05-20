@@ -553,6 +553,7 @@ fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<Of
 // TickSubscription and related types
 
 /// Shared subscription handle that decodes historical tick batches as they arrive.
+#[must_use = "TickSubscription must be polled (.next() or .iter()) to receive ticks; dropping it cancels the request"]
 pub struct TickSubscription<T: TickDecoder<T>> {
     done: AtomicBool,
     messages: InternalSubscription,

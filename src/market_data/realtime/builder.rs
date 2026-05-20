@@ -14,6 +14,7 @@ mod tests;
 /// `BarSize` is intentionally absent from the public surface — TWS only accepts
 /// 5-second bars on the wire. A `.bar_size(...)` method can be added
 /// non-breakingly if IB ever expands support.
+#[must_use = "RealtimeBarsBuilder does nothing until you call .subscribe()"]
 pub struct RealtimeBarsBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,

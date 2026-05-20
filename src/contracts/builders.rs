@@ -6,6 +6,7 @@ use crate::Error;
 
 /// Stock contract builder with type-safe API
 #[derive(Debug, Clone)]
+#[must_use = "StockBuilder does nothing until you call .build()"]
 pub struct StockBuilder<S = Missing> {
     symbol: S,
     exchange: Exchange,
@@ -68,6 +69,7 @@ impl StockBuilder<Symbol> {
 
 /// Option contract builder with type states for required fields
 #[derive(Debug, Clone)]
+#[must_use = "OptionBuilder does nothing until you call .build()"]
 pub struct OptionBuilder<Symbol = Missing, Strike = Missing, Expiry = Missing> {
     symbol: Symbol,
     right: OptionRight,
@@ -218,6 +220,7 @@ impl OptionBuilder<Symbol, Strike, ExpirationDate> {
 
 /// Futures contract builder with type states
 #[derive(Debug, Clone)]
+#[must_use = "FuturesBuilder does nothing until you call .build()"]
 pub struct FuturesBuilder<Symbol = Missing, Month = Missing> {
     symbol: Symbol,
     contract_month: Month,
@@ -299,6 +302,7 @@ impl FuturesBuilder<Symbol, ContractMonth> {
 
 /// Continuous futures contract builder with type states
 #[derive(Debug, Clone)]
+#[must_use = "ContinuousFuturesBuilder does nothing until you call .build()"]
 pub struct ContinuousFuturesBuilder<Symbol = Missing> {
     symbol: Symbol,
     exchange: Exchange,
@@ -352,6 +356,7 @@ impl ContinuousFuturesBuilder<Symbol> {
 
 /// Forex pair builder
 #[derive(Debug, Clone)]
+#[must_use = "ForexBuilder does nothing until you call .build()"]
 pub struct ForexBuilder {
     base: Currency,
     quote: Currency,
@@ -388,6 +393,7 @@ impl ForexBuilder {
 
 /// Crypto currency builder
 #[derive(Debug, Clone)]
+#[must_use = "CryptoBuilder does nothing until you call .build()"]
 pub struct CryptoBuilder {
     symbol: Symbol,
     exchange: Exchange,
@@ -430,6 +436,7 @@ impl CryptoBuilder {
 
 /// Spread/Combo builder
 #[derive(Debug, Clone)]
+#[must_use = "SpreadBuilder does nothing until you call .build()"]
 pub struct SpreadBuilder {
     legs: Vec<Leg>,
     currency: Currency,
@@ -539,6 +546,7 @@ impl SpreadBuilder {
 }
 
 /// Builder for individual spread legs
+#[must_use = "LegBuilder must be terminated with .done() to add the leg to the SpreadBuilder"]
 pub struct LegBuilder {
     parent: SpreadBuilder,
     leg: Leg,

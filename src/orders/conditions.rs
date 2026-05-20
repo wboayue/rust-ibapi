@@ -365,6 +365,7 @@ pub struct PercentChangeCondition {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "PriceConditionBuilder does nothing until you call .build()"]
 pub struct PriceConditionBuilder {
     contract_id: i32,
     exchange: String,
@@ -470,6 +471,7 @@ impl PriceConditionBuilder {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "TimeConditionBuilder does nothing until you call .build()"]
 pub struct TimeConditionBuilder {
     time: Option<String>,
     is_more: bool,
@@ -553,6 +555,7 @@ impl Default for TimeConditionBuilder {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "MarginConditionBuilder does nothing until you call .build()"]
 pub struct MarginConditionBuilder {
     percent: Option<i32>,
     is_more: bool,
@@ -628,6 +631,7 @@ impl Default for MarginConditionBuilder {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "ExecutionConditionBuilder does nothing until you call .build()"]
 pub struct ExecutionConditionBuilder {
     symbol: String,
     security_type: String,
@@ -696,6 +700,7 @@ impl ExecutionConditionBuilder {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "VolumeConditionBuilder does nothing until you call .build()"]
 pub struct VolumeConditionBuilder {
     contract_id: i32,
     exchange: String,
@@ -781,6 +786,7 @@ impl VolumeConditionBuilder {
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "PercentChangeConditionBuilder does nothing until you call .build()"]
 pub struct PercentChangeConditionBuilder {
     contract_id: i32,
     exchange: String,

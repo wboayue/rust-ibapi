@@ -12,6 +12,7 @@ mod tests;
 ///
 /// All validation is deferred to the build() method to ensure
 /// no silent failures occur during order construction.
+#[must_use = "OrderBuilder does nothing until you call .submit() (place it) or .build() (offline construction)"]
 pub struct OrderBuilder<'a, C> {
     pub(crate) client: &'a C,
     pub(crate) contract: &'a Contract,
@@ -1011,6 +1012,7 @@ enum BracketEntryType {
 }
 
 /// Builder for bracket orders
+#[must_use = "BracketOrderBuilder does nothing until you call .submit()"]
 pub struct BracketOrderBuilder<'a, C> {
     pub(crate) parent_builder: OrderBuilder<'a, C>,
     entry_type: BracketEntryType,

@@ -49,7 +49,7 @@ fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .expect("placing order after cancel should succeed");
     assert!(order_id.0 > 0, "new order id should be positive");
     rate_limit();
-    client.cancel_order(order_id.0, "").expect("cleanup cancel failed");
+    let _ = client.cancel_order(order_id.0, "").expect("cleanup cancel failed");
     order_id
 }
 
@@ -121,7 +121,7 @@ fn place_limit_buy() {
 
     // Cancel the order
     rate_limit();
-    client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn place_limit_sell() {
     assert!(item.is_some(), "expected order status update");
 
     rate_limit();
-    client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn order_builder_limit() {
 
     // Cancel the placed order
     rate_limit();
-    client.cancel_order(order_id.0, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id.0, "").expect("cancel_order failed");
 }
 
 // Regression test for https://github.com/wboayue/rust-ibapi/issues/426

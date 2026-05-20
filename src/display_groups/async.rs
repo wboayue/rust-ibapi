@@ -38,6 +38,7 @@ use super::encoders;
 ///
 /// This is a Rust language quirk, not a subscription-shape issue. The same
 /// reborrow applies to any Deref-wrapping subscription type.
+#[must_use = "DisplayGroupSubscription must be polled (deref to Subscription, then .next().await) to receive updates; dropping it releases the subscription"]
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
     message_bus: Arc<dyn AsyncMessageBus>,

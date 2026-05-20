@@ -76,6 +76,7 @@ use crate::Error;
 /// - Futures contracts require contract month
 /// - Strike prices cannot be negative
 #[derive(Clone, Debug, Default)]
+#[must_use = "ContractBuilder does nothing until you call .build()"]
 pub struct ContractBuilder {
     pub(crate) contract_id: Option<i32>,
     pub(crate) symbol: Option<String>,

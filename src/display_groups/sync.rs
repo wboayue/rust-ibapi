@@ -15,6 +15,7 @@ use super::encoders;
 ///
 /// Created by [`Client::subscribe_to_group_events`](crate::client::blocking::Client::subscribe_to_group_events).
 /// Derefs to `Subscription<DisplayGroupUpdate>` for `next()`, `cancel()`, `iter()`, etc.
+#[must_use = "DisplayGroupSubscription must be polled (deref to Subscription, then .next() or .iter()) to receive updates; dropping it releases the subscription"]
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
     message_bus: Arc<dyn MessageBus>,

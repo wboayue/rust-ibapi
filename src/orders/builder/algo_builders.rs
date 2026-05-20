@@ -129,6 +129,7 @@ impl From<&str> for AlgoParams {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "VwapBuilder does nothing until you call .build()"]
 pub struct VwapBuilder {
     max_pct_vol: Option<f64>,
     start_time: Option<String>,
@@ -273,6 +274,7 @@ impl TwapStrategyType {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "TwapBuilder does nothing until you call .build()"]
 pub struct TwapBuilder {
     strategy_type: Option<TwapStrategyType>,
     start_time: Option<String>,
@@ -364,6 +366,7 @@ impl TwapBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "PctVolBuilder does nothing until you call .build()"]
 pub struct PctVolBuilder {
     pct_vol: Option<f64>,
     start_time: Option<String>,
@@ -484,6 +487,7 @@ impl RiskAversion {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "ArrivalPriceBuilder does nothing until you call .build()"]
 pub struct ArrivalPriceBuilder {
     max_pct_vol: Option<f64>,
     risk_aversion: Option<RiskAversion>,
@@ -625,6 +629,7 @@ impl AdaptivePriority {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "AdaptiveBuilder does nothing until you call .build()"]
 pub struct AdaptiveBuilder {
     priority: Option<AdaptivePriority>,
 }
@@ -678,6 +683,7 @@ impl AdaptiveBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "ClosePriceBuilder does nothing until you call .build()"]
 pub struct ClosePriceBuilder {
     max_pct_vol: Option<f64>,
     risk_aversion: Option<RiskAversion>,
@@ -773,6 +779,7 @@ impl ClosePriceBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "DarkIceBuilder does nothing until you call .build()"]
 pub struct DarkIceBuilder {
     display_size: Option<i32>,
     start_time: Option<String>,
@@ -866,6 +873,7 @@ impl DarkIceBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "AccumulateDistributeBuilder does nothing until you call .build()"]
 pub struct AccumulateDistributeBuilder {
     component_size: Option<i32>,
     time_between_orders: Option<i32>,
@@ -1022,6 +1030,7 @@ impl AccumulateDistributeBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "BalanceImpactRiskBuilder does nothing until you call .build()"]
 pub struct BalanceImpactRiskBuilder {
     max_pct_vol: Option<f64>,
     risk_aversion: Option<RiskAversion>,
@@ -1101,6 +1110,7 @@ impl BalanceImpactRiskBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "MinimiseImpactBuilder does nothing until you call .build()"]
 pub struct MinimiseImpactBuilder {
     max_pct_vol: Option<f64>,
 }
@@ -1162,6 +1172,7 @@ impl MinimiseImpactBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "PctVolPriceBuilder does nothing until you call .build()"]
 pub struct PctVolPriceBuilder {
     pct_vol: Option<f64>,
     delta_pct_vol: Option<f64>,
@@ -1302,6 +1313,7 @@ impl PctVolPriceBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "PctVolSizeBuilder does nothing until you call .build()"]
 pub struct PctVolSizeBuilder {
     start_pct_vol: Option<f64>,
     end_pct_vol: Option<f64>,
@@ -1383,6 +1395,7 @@ impl PctVolSizeBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "PctVolTimeBuilder does nothing until you call .build()"]
 pub struct PctVolTimeBuilder {
     start_pct_vol: Option<f64>,
     end_pct_vol: Option<f64>,
@@ -1473,6 +1486,7 @@ impl PctVolTimeBuilder {
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
+#[must_use = "AccuDistrBuilder does nothing until you call .build()"]
 pub struct AccuDistrBuilder {
     time_between_orders: Option<i32>,
     route_order_type: Option<String>,
