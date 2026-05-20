@@ -1,6 +1,7 @@
 use futures::StreamExt;
 
-use super::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
+use super::order_builder::{BracketOrderBuilder, OrderBuilder};
+use super::types::{BracketOrderIds, OrderId};
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::subscriptions::SubscriptionItemStreamExt;

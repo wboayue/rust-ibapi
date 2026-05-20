@@ -42,8 +42,10 @@ pub mod conditions;
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
 
-// Re-export builder types
-pub use builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
+// Builder types: `order_builder` and `types` are `pub(crate)` so `orders::*`
+// is the only public spelling.
+pub use builder::order_builder::{BracketOrderBuilder, OrderBuilder};
+pub use builder::types::{BracketOrderIds, OrderId};
 
 // Re-export condition types and builders
 pub use conditions::{
