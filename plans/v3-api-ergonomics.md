@@ -264,9 +264,16 @@ Related existing tracking docs in `plans/`:
 
 ## 7. Cross-cutting
 
-- [ ] **One way to spell each thing.** After the moves above, audit for duplicate
-  re-exports (`pub use foo::Bar;` in two modules). The crate root, `prelude`, and the
-  domain module should each pick one home for each type.
+- [~] **One way to spell each thing.** Audit complete 2026-05-19; tracked in
+  [`plans/one-way-to-spell.md`](one-way-to-spell.md). 5-PR breakdown:
+  PR 1 drops the `TickType` cross-domain re-export, PR 2 narrows
+  `contracts::builders` and `contracts::types` to `pub(crate)`, PR 3 drops
+  the four duplicate `orders::builder::{OrderBuilder, BracketOrderBuilder,
+  BracketOrderIds, OrderId}` paths (only test code reaches them), PR 4
+  `#[doc(hidden)]` on the `historical::sync` / `realtime::sync` /
+  `subscriptions::sync` impl modules (mirrors §3's `client::sync` treatment),
+  PR 5 migration-guide consolidation. Zero external callers of the duplicate
+  paths per audit grep — no caller-modernization PRs needed (rule 23 N/A).
 
 - [-] **`#[non_exhaustive]` on every public enum and struct that may grow.**
   Rejected 2026-05-19. **Rule: `#[non_exhaustive]` is deliberate, not the

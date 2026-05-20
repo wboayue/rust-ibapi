@@ -21,8 +21,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-// Re-export tick types
-pub use crate::contracts::tick_types::TickType;
+use crate::contracts::tick_types::TickType;
 
 // === Models ===
 

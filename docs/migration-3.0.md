@@ -484,6 +484,20 @@ use ibapi::contracts::TagValue;
 
 No type changes — `TagValue` itself is unchanged. Only the import path moves.
 
+### 20. `TickType` moved out of `ibapi::market_data::realtime`
+
+`TickType` is the tick-discriminator enum (`Bid`, `Ask`, `Last`, `BidSize`, …) used in real-time tick payloads. In 3.0 it lives only at its canonical home `ibapi::contracts::tick_types::TickType`; the historical `ibapi::market_data::realtime::TickType` re-export is removed.
+
+```rust,ignore
+// v2.x
+use ibapi::market_data::realtime::TickType;
+
+// v3.0
+use ibapi::contracts::tick_types::TickType;
+```
+
+No type changes — `TickType` itself is unchanged. Only the import path moves.
+
 ## Before / after: common subscription patterns
 
 ### Order construction
