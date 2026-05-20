@@ -498,6 +498,20 @@ use ibapi::contracts::tick_types::TickType;
 
 No type changes — `TickType` itself is unchanged. Only the import path moves.
 
+### 21. `contracts::builders::*` and `contracts::types::*` paths removed
+
+`ibapi::contracts::builders` and `ibapi::contracts::types` were internal grouping submodules; their public items were already re-exported at `ibapi::contracts::*` via `pub use builders::*;` and `pub use types::*;`. Both submodules are now `pub(crate)` so the canonical short path is the only one. No types moved — all items remain reachable at `ibapi::contracts::*` (and via the prelude).
+
+```rust,ignore
+// v2.x
+use ibapi::contracts::builders::{StockBuilder, OptionBuilder, FuturesBuilder};
+use ibapi::contracts::types::{Symbol, Exchange, Currency};
+
+// v3.0
+use ibapi::contracts::{StockBuilder, OptionBuilder, FuturesBuilder};
+use ibapi::contracts::{Symbol, Exchange, Currency};
+```
+
 ## Before / after: common subscription patterns
 
 ### Order construction

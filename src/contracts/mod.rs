@@ -24,9 +24,11 @@ pub use types::*;
 // Common implementation modules
 mod common;
 
-// V2 API modules
-pub mod builders;
-pub mod types;
+// V2 API modules — internal grouping; their `pub` items are re-exported above
+// via `pub use builders::*;` / `pub use types::*;`. Users reach the types as
+// `ibapi::contracts::*`, not via these submodule paths.
+pub(crate) mod builders;
+pub(crate) mod types;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
