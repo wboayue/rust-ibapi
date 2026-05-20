@@ -90,21 +90,20 @@ Related existing tracking docs in `plans/`:
   `is_terminal()` etc. Examples now use `.is_terminal()` (lines 61, 143).
 
 - [~] **Continue the typed-status sweep.** Tracked in
-  [`plans/typed-status-sweep.md`](typed-status-sweep.md). Audit complete; 5 PRs
-  staged (ComboLeg.action → Contract.right → Contract.security_id_type →
-  ExecutionFilter.side → Execution.side via live-diagnostic split). Note:
-  the parent's original vocab claim for `Execution.side` was wrong —
-  `BOT`/`SLD` is the wire (`Buy/Sell/SShort/SLng` belongs to `Action`); the
-  tracker has the corrected analysis.
-  - PR 1 shipped (PR #556) — `ComboLeg.action: LegAction` + shared
-    `parse_required` / `parse_optional` helpers in `proto/decoders.rs`.
-  - **PR 2 scope add: modernize `OptionRight` tests.** The existing
-    `OptionRight` per-variant asserts at `src/contracts/types_tests.rs:107-114`
-    are hand-rolled; PR 1's new `LegAction` tests at `:117-149` use a
-    table-driven loop (CLAUDE.md rule 21). PR 2 types `Contract.right` as
-    `Option<OptionRight>` — fold the test-shape rewrite into that PR
-    (rule 9, "modernize touched modules"). Drop the hand-rolled asserts,
-    use the same loop-over-variants shape.
+  [`plans/typed-status-sweep.md`](typed-status-sweep.md). Shipped:
+  - PR #556 (PR 1) — `ComboLeg.action: LegAction` + shared `parse_required` / `parse_optional` helpers in `proto/decoders.rs`.
+  - PR #559 (PR 2) — `Contract.right: Option<OptionRight>`; folded the test-shape rewrite (table-driven loop over variants, CLAUDE.md rule 21) for the previously hand-rolled `OptionRight` asserts.
+  - PR #558 + #564 (PR 3a) — `parse_required(Option<&str>, ...)` precursor signature change + `impl_wire_enum!` macro.
+  - PR #568 (PR 3b) — `Contract.security_id_type: Option<SecurityIdType>`.
+  - PR #569 (PR 4a) — `impl_wire_enum!` crate-wide promotion + `some_display` + `OrderStatusKind` retrofit + shared `wire_enum` test helpers.
+  - PR #570 (PR 4b) — `ExecutionFilter.side: Option<ExecutionFilterSide>`.
+
+  Open: PR 5 — `Execution.side: ExecutionSide`. PR 5a diagnostic branch
+  `typed-status-sweep-pr5a-diagnostic` not merged; Phase-1 paper capture
+  yielded `{BOT, SLD}` only (no short-sale fills). PR 5b strict enum gated
+  on a stock-RTH short-sale capture. The parent's original
+  `Buy/Sell/SShort/SLng` vocab claim for `Execution.side` was wrong —
+  `BOT`/`SLD` is the actual wire (`Buy/Sell/SShort/SLng` belongs to `Action`).
 
 - [x] **One canonical `Subscription` import path.** Shipped in PR #571
   (`Subscription`): dropped `ibapi::client::Subscription`, sourced the prelude
