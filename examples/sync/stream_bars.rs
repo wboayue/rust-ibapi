@@ -40,8 +40,14 @@ fn main() -> anyhow::Result<()> {
 
     let bars = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe()?;
 
-    for (i, bar) in bars.iter().enumerate().take(60) {
-        println!("bar: {i:?} {bar:?}");
+    for (i, bar) in bars.iter_data().enumerate().take(60) {
+        match bar {
+            Ok(bar) => println!("bar: {i:?} {bar:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 
     thread::sleep(Duration::from_secs(5));

@@ -235,8 +235,14 @@ fn main() {
         .subscribe()
         .expect("realtime bars request failed!");
 
-    for bar in subscription.iter_data().flatten() {
-        println!("bar: {bar:?}");
+    for bar in subscription.iter_data() {
+        match bar {
+            Ok(bar) => println!("bar: {bar:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 }
 ```
@@ -314,8 +320,15 @@ fn main() {
         .subscribe()
         .expect("realtime bars request failed!");
 
-    for (aapl, nvda) in subscription_aapl.iter_data().flatten().zip(subscription_nvda.iter_data().flatten()) {
-        println!("AAPL {}, NVDA {}", aapl.close, nvda.close);
+    for (bar_aapl, bar_nvda) in subscription_aapl.iter_data().zip(subscription_nvda.iter_data()) {
+        let (bar_aapl, bar_nvda) = match (bar_aapl, bar_nvda) {
+            (Ok(a), Ok(n)) => (a, n),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
+        println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
     }
 }
 ```
@@ -629,8 +642,14 @@ fn main() {
         .subscribe()
         .expect("realtime bars request failed");
 
-    for bar in subscription.iter_data().flatten() {
-        println!("bar: {bar:?}");
+    for bar in subscription.iter_data() {
+        match bar {
+            Ok(bar) => println!("bar: {bar:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 }
 ```
@@ -696,8 +715,14 @@ fn main() {
                 .subscribe()
                 .expect("realtime bars request failed!");
 
-            for bar in subscription.iter_data().flatten() {
-                println!("bar: {bar:?}");
+            for bar in subscription.iter_data() {
+                match bar {
+                    Ok(bar) => println!("bar: {bar:?}"),
+                    Err(e) => {
+                        eprintln!("error: {e:?}");
+                        break;
+                    }
+                }
             }
         });
         handles.push(handle);
@@ -731,8 +756,14 @@ fn main() {
                 .subscribe()
                 .expect("realtime bars request failed!");
 
-            for bar in subscription.iter_data().flatten() {
-                println!("bar: {bar:?}");
+            for bar in subscription.iter_data() {
+                match bar {
+                    Ok(bar) => println!("bar: {bar:?}"),
+                    Err(e) => {
+                        eprintln!("error: {e:?}");
+                        break;
+                    }
+                }
             }
         });
         handles.push(handle);

@@ -20,7 +20,13 @@ fn main() {
     let provider_codes = ["DJ-N"];
 
     let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
-    for article in subscription {
-        println!("{article:?}");
+    for article in subscription.iter_data() {
+        match article {
+            Ok(article) => println!("{article:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 }

@@ -31,9 +31,14 @@ fn main() {
                 .subscribe()
                 .expect("realtime bars request failed!");
 
-            for bar in subscription {
-                // Process each bar here (e.g., print or use in calculations)
-                println!("bar: {bar:?}");
+            for bar in subscription.iter_data() {
+                match bar {
+                    Ok(bar) => println!("bar: {bar:?}"),
+                    Err(e) => {
+                        eprintln!("error: {e:?}");
+                        break;
+                    }
+                }
             }
         });
         handles.push(handle);

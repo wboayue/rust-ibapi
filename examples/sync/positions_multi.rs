@@ -21,7 +21,13 @@ pub fn main() {
     let subscription = client
         .positions_multi(Some(&AccountId(account)), None)
         .expect("error requesting positions by model");
-    for position in subscription.iter() {
-        println!("{position:?}")
+    for position in subscription.iter_data() {
+        match position {
+            Ok(position) => println!("{position:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 }
