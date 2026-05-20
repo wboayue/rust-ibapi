@@ -17,6 +17,25 @@
 //! # #![allow(unused_imports)]
 //! use ibapi::prelude::*;
 //! ```
+//!
+//! ## Type naming: `BarSize` and `WhatToShow`
+//!
+//! Both `market_data::historical` and `market_data::realtime` define their own
+//! `BarSize` and `WhatToShow` enums (different variant sets — historical has 21
+//! `BarSize` variants and 10 `WhatToShow` variants; realtime has only `Sec5` and
+//! a 4-variant subset). Two canonical spellings depending on import style:
+//!
+//! - **Prelude (flat) imports** — use the disambiguated names
+//!   `HistoricalBarSize` / `HistoricalWhatToShow` / `RealtimeBarSize` /
+//!   `RealtimeWhatToShow`. These are the canonical names for
+//!   `use ibapi::prelude::*;` callers.
+//! - **Module-qualified imports** — use the short names directly:
+//!   `use ibapi::market_data::historical::{BarSize, WhatToShow};` or
+//!   `use ibapi::market_data::realtime::{BarSize, WhatToShow};`. The module
+//!   path provides the namespace; the short name is idiomatic Rust.
+//!
+//! Both spellings refer to the same type — the prelude entries are `pub use`
+//! re-exports with `as` aliasing, not separate types.
 
 // Core client
 pub use crate::Client;
