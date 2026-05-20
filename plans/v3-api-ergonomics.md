@@ -140,13 +140,20 @@ Related existing tracking docs in `plans/`:
   which the prelude already paves over. Realtime's degenerate `BarSize` (single
   `Sec5` variant) makes the rename cost-to-benefit ratio especially bad.
 
-- [ ] **Async-vs-blocking naming asymmetry.** `ibapi::Client` is the async client when
-  `async` is on; the sync client lives at `ibapi::client::blocking::Client`
-  (`src/client/mod.rs:15`). `async` is a reserved keyword so a literal
-  `client::async::Client` path needs `r#async` (already used internally). Decision:
-  either (a) keep the asymmetry and document `Client` (root) + `client::blocking::Client`
-  as the two canonical paths, or (b) expose `client::r#async::Client` as a sibling
-  for symmetry in docs/examples.
+- [x] **Async-vs-blocking naming asymmetry.** Resolved 2026-05-19. Kept the
+  asymmetric convention (option (a)): `ibapi::Client` is the canonical async
+  path; `ibapi::client::blocking::Client` is the canonical sync-explicit path.
+  README/MIGRATION already used this; the gap was discoverability + outliers.
+  Shipped: (1) `## Canonical paths` rustdoc section in `src/client/mod.rs`
+  spelling out the convention; (2) `#[doc(hidden)]` on `pub mod sync` and
+  `pub mod r#async` so docs.rs only surfaces the two canonical paths in the
+  navigation tree (the modules remain `pub` — no source-breaking change);
+  (3) fixed the two stray doc-examples
+  (`src/market_data/realtime/builder.rs`, `src/market_data/builder/market_data_builder.rs`)
+  that imported `ibapi::client::r#async::Client` to use `ibapi::prelude::*`
+  instead. Rejected (b) — raw-identifier `r#async::` in user code is uglier
+  than root `Client`. A future `pub(crate)` narrowing remains possible behind
+  rule 23 (split modernize-callers + restrict) if hard enforcement is wanted.
 
 - [x] **Reorganize re-exports out of `orders` for non-order types.** Shipped
   2026-05-20. `TagValue` lives only at `ibapi::contracts::TagValue` (its

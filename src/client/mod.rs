@@ -1,12 +1,35 @@
-//! Client implementation with sync/async support
+//! Client implementation with sync/async support.
+//!
+//! ## Canonical paths
+//!
+//! Two canonical spellings for the `Client` type, depending on which client
+//! you want and which features are enabled:
+//!
+//! - **Async client** — `ibapi::Client`. The crate-root `Client` re-export
+//!   resolves to the async client whenever the `async` feature is on (which
+//!   is the default).
+//! - **Blocking (sync) client** — `ibapi::client::blocking::Client`. The
+//!   labelled `blocking` submodule is the canonical sync-explicit path. Use
+//!   it whenever both `sync` and `async` features are enabled, since the root
+//!   `ibapi::Client` resolves to async in that configuration. When only `sync`
+//!   is enabled, `ibapi::Client` also resolves to the blocking client.
+//!
+//! The `client::sync` and `client::r#async` submodules where the impls live
+//! are `#[doc(hidden)]`: still reachable as paths for crate-internal use, but
+//! intentionally absent from the docs.rs navigation. Prefer the root `Client`
+//! / `client::blocking::Client` spellings in user code, examples, and docs.
+//! Raw-identifier syntax (`client::r#async::Client`) is the giveaway that the
+//! spelling is non-canonical.
 
 pub(crate) mod builders;
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
 
+#[doc(hidden)]
 #[cfg(feature = "sync")]
 pub mod sync;
 
+#[doc(hidden)]
 #[cfg(feature = "async")]
 pub mod r#async;
 
