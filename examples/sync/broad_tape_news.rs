@@ -18,7 +18,13 @@ fn main() {
     let news_source = "BRFG";
 
     let subscription = client.broad_tape_news(news_source).expect("request broad tape news failed");
-    for article in subscription {
-        println!("{article:?}");
+    for article in subscription.iter_data() {
+        match article {
+            Ok(article) => println!("{article:?}"),
+            Err(e) => {
+                eprintln!("error: {e:?}");
+                break;
+            }
+        }
     }
 }

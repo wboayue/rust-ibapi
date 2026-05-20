@@ -229,19 +229,21 @@ Related existing tracking docs in `plans/`:
 
 ## 6. Examples & docs
 
-- [~] **Modernize every example to use the canonical happy path.** After the
-  decisions above land, sweep `examples/sync/*.rs` and `examples/async/*.rs`:
-  - `Contract::stock("AAPL").build()` not bare struct literals.
-  - `client.order(c).buy(n).limit(p).submit()` for orders (drop `next_order_id`
-    boilerplate where possible).
-  - `while let Some(item) = stream.next().await` for streams.
-  - No magic-number notice code comparisons.
-
-  Status (2026-05-10): order construction sweep done — all `examples/{sync,async}/*.rs`
-  + `examples/conditional_orders.rs` use the fluent path or are reframed as the
-  advanced/offline layer. Stream-shape sweep done in PR #550 (async examples now
-  use `subscription.next().await` / `filter_data()`). Market-data sweep still
-  pending.
+- [x] **Modernize every example to use the canonical happy path.** Shipped
+  2026-05-19. Final piece was the sync stream-shape sweep: 8 examples doing
+  `for x in subscription` (yields `SubscriptionItem`, including notices) or
+  `subscription.iter()` (same) converted to canonical
+  `subscription.iter_data() + match { Ok(t) => …, Err(e) => break }`.
+  Sites: `broad_tape_news.rs`, `completed_orders.rs`, `contract_news.rs`,
+  `readme_realtime_data_1.rs`, `readme_multi_threading_{1,2}.rs`,
+  `stream_bars.rs`, `positions_multi.rs`. Also fixed 4 paired snippets in
+  `README.md` that used `iter_data().flatten()` (silently drops `Err` per
+  `feedback_result_flatten_drops_errors.md`) — converted to the explicit
+  `Ok/Err` match form; the zip-two-streams snippet now mirrors
+  `examples/sync/readme_realtime_data_2.rs`'s `match (Ok(a), Ok(n))` shape.
+  Prior pieces: order construction (PR #549 et al), async stream shape
+  (PR #550), contract-builder lockdown (PR #548), typed `OrderStatusKind`
+  (PR #518).
 
 - [x] **Migration guide created.** `docs/migration-3.0.md` exists. Keep updating it
   in lockstep with breaking changes (see `CLAUDE.md` § "Keep `README.md` and
