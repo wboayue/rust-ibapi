@@ -55,7 +55,7 @@ pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, Wh
 pub use crate::market_data::{MarketDataType, TradingHours};
 
 // Order types
-pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, OrderUpdate, Orders, PlaceOrder};
+pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
 pub use crate::accounts::{

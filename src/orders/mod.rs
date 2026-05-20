@@ -1465,9 +1465,9 @@ pub struct Execution {
     pub account_number: String,
     /// The exchange where the execution took place.
     pub exchange: String,
-    /// Specifies if the transaction was buy or sale
-    /// BOT for bought, SLD for sold
-    pub side: String,
+    /// Specifies if the transaction was buy or sale: [`ExecutionSide::Bought`]
+    /// for `"BOT"`, [`ExecutionSide::Sold`] for `"SLD"`.
+    pub side: ExecutionSide,
     /// The number of shares filled.
     pub shares: f64,
     /// The order's execution price excluding commissions.
@@ -1629,6 +1629,53 @@ impl ExecutionFilterSide {
 }
 
 impl_wire_enum!(ExecutionFilterSide);
+
+/// Side of an [`Execution`] report — direction of a filled order.
+///
+/// IBKR's documented wire vocabulary for `Execution.side` is two values
+/// ([C# `Execution.cs:83`](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/Execution.cs)):
+/// `"BOT"` for bought, `"SLD"` for sold. Short-sale fills (orders with
+/// [`Action::SellShort`]) emit `"SLD"` on the execution — the short-sale
+/// designation lives on the originating order, not the execution.
+///
+/// Exhaustive on purpose: the field is binary in the IBKR spec, so callers
+/// get a compile-time signal if a hypothetical third variant is ever added.
+/// The strict `FromStr` rejects unknown wire strings as [`Error::Parse`](crate::Error::Parse)
+/// in the decoder, so a surprise addition fails loudly before any `match` fires.
+///
+/// `Default` is [`ExecutionSide::Bought`] — arbitrary, only observed on
+/// placeholder [`Execution::default()`] instances built when an upstream
+/// `ExecutionDetails` proto omits its inner `execution` field. Real
+/// fills always set the variant from the wire.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum ExecutionSide {
+    /// Buy fill — IBKR wire value `"BOT"`.
+    #[default]
+    Bought,
+    /// Sell fill — IBKR wire value `"SLD"`.
+    Sold,
+}
+
+impl ExecutionSide {
+    /// Return the canonical IBKR wire string (`"BOT"` / `"SLD"`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExecutionSide::Bought => "BOT",
+            ExecutionSide::Sold => "SLD",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "BOT" => Some(Self::Bought),
+            "SLD" => Some(Self::Sold),
+            _ => None,
+        }
+    }
+}
+
+impl_wire_enum!(ExecutionSide);
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]

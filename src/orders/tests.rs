@@ -37,6 +37,19 @@ fn execution_filter_side_from_str_rejects_unknown() {
 }
 
 #[test]
+fn execution_side_round_trip() {
+    check_wire_enum_round_trip(&[(ExecutionSide::Bought, "BOT"), (ExecutionSide::Sold, "SLD")]);
+}
+
+#[test]
+fn execution_side_from_str_rejects_unknown() {
+    // Empty + arbitrary; case-sensitive (lowercase rejected); ExecutionFilter
+    // vocab (BUY/SELL) and Action vocab (SSHORT/SLONG) both rejected on the
+    // execution-side field — field-scoped vocabulary per C# Execution.cs:83.
+    check_wire_enum_rejects_unknown::<ExecutionSide>(&["", "INVALID", "bot", "sld", "BUY", "SELL", "SSHORT", "SLONG"]);
+}
+
+#[test]
 fn is_active_and_is_terminal_partition_eight_of_nine_variants() {
     // Exhaustive check: exactly one helper returns true for 8 variants;
     // ApiPending is the documented gap (neither active nor terminal).

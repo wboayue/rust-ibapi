@@ -4,8 +4,8 @@ use crate::contracts::{
 };
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, Execution, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState, ReferencePriceType,
-    Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
+    Action, Execution, ExecutionSide, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState,
+    ReferencePriceType, Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
 };
 use crate::proto;
 use crate::Error;
@@ -424,15 +424,15 @@ fn decode_order_allocation(proto: &proto::OrderAllocation) -> OrderAllocation {
     }
 }
 
-pub fn decode_execution(proto: &proto::Execution) -> Execution {
-    Execution {
+pub fn decode_execution(proto: &proto::Execution) -> Result<Execution, Error> {
+    Ok(Execution {
         order_id: proto.order_id.unwrap_or_default(),
         client_id: proto.client_id.unwrap_or_default(),
         execution_id: s(&proto.exec_id),
         time: s(&proto.time),
         account_number: s(&proto.acct_number),
         exchange: s(&proto.exchange),
-        side: s(&proto.side),
+        side: parse_required::<ExecutionSide>(proto.side.as_deref(), "Execution.side")?,
         shares: parse_f64(&proto.shares),
         price: proto.price.unwrap_or_default(),
         perm_id: proto.perm_id.unwrap_or_default(),
@@ -446,7 +446,7 @@ pub fn decode_execution(proto: &proto::Execution) -> Execution {
         last_liquidity: Liquidity::from(proto.last_liquidity.unwrap_or_default()),
         pending_price_revision: proto.is_price_revision_pending.unwrap_or_default(),
         submitter: s(&proto.submitter),
-    }
+    })
 }
 
 pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: &proto::ContractDetails) -> Result<ContractDetails, Error> {

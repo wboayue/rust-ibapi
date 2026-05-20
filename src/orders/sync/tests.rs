@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, OrderStatusKind};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderStatusKind};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
@@ -535,7 +535,7 @@ fn order_update_stream() {
         assert_eq!(exec_data.execution.order_id, 13, "execution.order_id");
         assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
         assert_eq!(exec_data.execution.price, 196.52, "execution.price");
-        assert_eq!(exec_data.execution.side, "BOT", "execution.side");
+        assert_eq!(exec_data.execution.side, ExecutionSide::Bought, "execution.side");
     } else {
         assert!(false, "expected execution data notification");
     }

@@ -83,7 +83,12 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
             .map(crate::proto::decoders::decode_contract)
             .transpose()?
             .unwrap_or_default(),
-        execution: p.execution.as_ref().map(crate::proto::decoders::decode_execution).unwrap_or_default(),
+        execution: p
+            .execution
+            .as_ref()
+            .map(crate::proto::decoders::decode_execution)
+            .transpose()?
+            .unwrap_or_default(),
     })
 }
 
