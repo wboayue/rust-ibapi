@@ -12,7 +12,8 @@
 //! live are `#[doc(hidden)]`: still reachable as paths for crate-internal
 //! use, but intentionally absent from the docs.rs navigation. Prefer the
 //! canonical `Client` method calls and the `market_data::realtime::*` type
-//! spellings.
+//! spellings. Raw-identifier syntax (`market_data::realtime::r#async::...`)
+//! is the giveaway that the spelling is non-canonical.
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

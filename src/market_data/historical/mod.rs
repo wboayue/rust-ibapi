@@ -12,6 +12,8 @@
 //! live are `#[doc(hidden)]`: still reachable as paths for crate-internal use,
 //! but intentionally absent from the docs.rs navigation. Prefer the canonical
 //! `Client` method calls and the `market_data::historical::*` type spellings.
+//! Raw-identifier syntax (`market_data::historical::r#async::...`) is the
+//! giveaway that the spelling is non-canonical.
 
 use std::fmt::{self, Debug, Display};
 use std::num::ParseIntError;
