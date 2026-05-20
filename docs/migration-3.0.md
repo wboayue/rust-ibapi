@@ -512,6 +512,20 @@ use ibapi::contracts::{StockBuilder, OptionBuilder, FuturesBuilder};
 use ibapi::contracts::{Symbol, Exchange, Currency};
 ```
 
+### 22. `orders::builder::{OrderBuilder, BracketOrderBuilder, BracketOrderIds, OrderId}` paths removed
+
+These four types were reachable at both `orders::*` (the canonical home, hoisted via `pub use builder::{...}`) and `orders::builder::*` (the duplicate, hoisted via `pub use order_builder::{...}` / `pub use types::{...}` inside `orders/builder/mod.rs`). The `orders::builder` duplicate is removed; the canonical `orders::*` path is unchanged.
+
+```rust,ignore
+// v2.x
+use ibapi::orders::builder::{OrderBuilder, BracketOrderBuilder, BracketOrderIds, OrderId};
+
+// v3.0
+use ibapi::orders::{OrderBuilder, BracketOrderBuilder, BracketOrderIds, OrderId};
+```
+
+The low-level fluent layer (`orders::builder::price`, `orders::builder::time`, algo builders, etc.) is unchanged — only the four duplicate top-level builder/id paths move.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

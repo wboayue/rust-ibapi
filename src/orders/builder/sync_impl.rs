@@ -1,4 +1,5 @@
-use super::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
+use super::order_builder::{BracketOrderBuilder, OrderBuilder};
+use super::types::{BracketOrderIds, OrderId};
 use crate::client::sync::Client;
 use crate::contracts::Contract;
 use crate::errors::Error;

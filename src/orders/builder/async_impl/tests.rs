@@ -1,8 +1,10 @@
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::async_mock_client::mock::AsyncMockClient;
-use crate::orders::builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
-use crate::orders::{Action, Order, OrderData, OrderState, OrderStatus, OrderStatusKind, OrderUpdate, PlaceOrder, TimeInForce};
+use crate::orders::{
+    Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderData, OrderId, OrderState, OrderStatus, OrderStatusKind, OrderUpdate,
+    PlaceOrder, TimeInForce,
+};
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
 

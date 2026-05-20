@@ -1,8 +1,8 @@
 pub mod algo_builders;
 pub mod algo_helpers;
 pub mod condition_helpers;
-mod order_builder;
-mod types;
+pub(crate) mod order_builder;
+pub(crate) mod types;
 mod validation;
 
 // Feature-specific implementations
@@ -25,5 +25,6 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-pub use order_builder::{BracketOrderBuilder, OrderBuilder};
-pub use types::{AuctionType, BracketOrderIds, OrderAnalysis, OrderId, OrderType, Price, Quantity, TimeInForce, ValidationError};
+// `OrderBuilder`, `BracketOrderBuilder`, `BracketOrderIds`, and `OrderId` are
+// re-exported at the canonical `orders::*` path only — see `orders/mod.rs`.
+pub use types::{AuctionType, OrderAnalysis, OrderType, Price, Quantity, TimeInForce, ValidationError};

@@ -28,7 +28,7 @@
 //!   build the [`Order`](crate::orders::Order) here and submit via the lower-level
 //!   `place_order` / `submit_order` methods on [`Client`](crate::Client). For BYO-id
 //!   with the fluent builder,
-//!   [`OrderBuilder::build_order`](crate::orders::builder::OrderBuilder::build_order)
+//!   [`OrderBuilder::build_order`](crate::orders::OrderBuilder::build_order)
 //!   returns the bare [`Order`](crate::orders::Order) without submitting.
 //! - **Offline construction**: tests, fixtures, or examples that illustrate order shapes
 //!   without a live connection.

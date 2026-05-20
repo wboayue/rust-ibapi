@@ -1,8 +1,7 @@
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::mock_client::mock::MockOrderClient;
-use crate::orders::builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
-use crate::orders::{Action, Order, OrderData, OrderState, PlaceOrder, TimeInForce};
+use crate::orders::{Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderData, OrderId, OrderState, PlaceOrder, TimeInForce};
 
 fn create_stock_contract(symbol: &str) -> Contract {
     Contract {

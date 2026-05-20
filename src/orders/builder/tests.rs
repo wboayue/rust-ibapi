@@ -5,7 +5,7 @@
 mod sync_integration_tests {
     use super::mock_client::mock::MockOrderClient;
     use crate::contracts::{Contract, Currency, Exchange, Symbol};
-    use crate::orders::builder::OrderBuilder;
+    use crate::orders::OrderBuilder;
     use crate::orders::{Action, OcaType, TimeInForce};
 
     fn create_stock_contract(symbol: &str) -> Contract {
@@ -82,8 +82,8 @@ mod sync_integration_tests {
 mod async_integration_tests {
     use super::async_mock_client::mock::AsyncMockClient;
     use crate::contracts::{Contract, Currency, Exchange, Symbol};
-    use crate::orders::builder::OrderBuilder;
     use crate::orders::Action;
+    use crate::orders::OrderBuilder;
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
@@ -207,11 +207,11 @@ pub mod mock_client {
                 }
             }
 
-            pub fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::builder::OrderId>, Error> {
+            pub fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::OrderId>, Error> {
                 let mut order_ids = Vec::new();
                 for (contract, order) in orders.iter() {
                     let order_id = self.next_order_id();
-                    order_ids.push(crate::orders::builder::OrderId::new(order_id));
+                    order_ids.push(crate::orders::OrderId::new(order_id));
                     self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
                 }
                 self.oca_orders.lock().unwrap().push(orders);
@@ -327,11 +327,11 @@ pub mod async_mock_client {
                 Ok(Box::pin(stream::iter(updates)))
             }
 
-            pub async fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::builder::OrderId>, Error> {
+            pub async fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::OrderId>, Error> {
                 let mut order_ids = Vec::new();
                 for (contract, order) in orders.iter() {
                     let order_id = self.next_order_id();
-                    order_ids.push(crate::orders::builder::OrderId::new(order_id));
+                    order_ids.push(crate::orders::OrderId::new(order_id));
                     self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
                 }
                 Ok(order_ids)
