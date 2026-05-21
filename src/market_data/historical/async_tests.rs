@@ -305,7 +305,7 @@ async fn test_historical_schedules() {
     let end_date = datetime!(2023-03-15 16:00:00 UTC);
     let duration = Duration::days(3);
 
-    let result = client.historical_schedules(&contract, end_date, duration).await;
+    let result = client.historical_schedules(&contract, duration).ending(end_date).fetch().await;
     assert!(result.is_ok(), "historical_schedules should succeed");
 
     let schedule = result.unwrap();
@@ -946,7 +946,7 @@ async fn test_historical_data_connection_reset_after_retries() {
 #[tokio::test]
 async fn test_historical_schedules_ending_now_version_check() {
     assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| async move {
-        c.historical_schedules_ending_now(&test_contract(), Duration::days(1)).await
+        c.historical_schedules(&test_contract(), Duration::days(1)).fetch().await
     })
     .await;
 }
@@ -958,7 +958,7 @@ async fn test_historical_schedules_ending_now_trading_class_version_check() {
     let mut contract = test_contract();
     contract.trading_class = "ES".to_owned();
     assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_schedules_ending_now(&contract, Duration::days(1)).await
+        c.historical_schedules(&contract, Duration::days(1)).fetch().await
     })
     .await;
 }
@@ -969,7 +969,7 @@ async fn test_historical_schedules_unexpected_response() {
     assert_unexpected_response(
         server_versions::BOND_ISSUERID,
         "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
-        |c| async move { c.historical_schedules_ending_now(&test_contract(), Duration::days(3)).await },
+        |c| async move { c.historical_schedules(&test_contract(), Duration::days(3)).fetch().await },
     )
     .await;
 }

@@ -191,7 +191,9 @@ fn test_historical_schedules() {
     let duration = 7.days();
 
     let schedule = client
-        .historical_schedules(&contract, end_date, duration)
+        .historical_schedules(&contract, duration)
+        .ending(end_date)
+        .fetch()
         .expect("historical schedule request failed");
 
     // Assert Response
@@ -1090,7 +1092,8 @@ fn test_historical_schedules_ending_now() {
     let duration = 7.days();
 
     let schedule = client
-        .historical_schedules_ending_now(&contract, duration)
+        .historical_schedules(&contract, duration)
+        .fetch()
         .expect("historical schedules ending now should succeed");
 
     assert_eq!(schedule.sessions.len(), 1);
@@ -1111,7 +1114,7 @@ fn test_historical_schedules_ending_now() {
 #[test]
 fn test_historical_schedule_version_check() {
     assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| {
-        c.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1))
+        c.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch()
     });
 }
 
@@ -1122,7 +1125,7 @@ fn test_historical_schedule_trading_class_version_check() {
     let mut contract = Contract::stock("MSFT").build();
     contract.trading_class = "ES".to_owned();
     assert_version_check_fails(Features::TRADING_CLASS, move |c| {
-        c.historical_schedules_ending_now(&contract, Duration::days(1))
+        c.historical_schedules(&contract, Duration::days(1)).fetch()
     });
 }
 
@@ -1131,7 +1134,7 @@ fn test_historical_schedule_unexpected_response() {
     assert_unexpected_response(
         server_versions::HISTORICAL_SCHEDULE,
         "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
-        |c| c.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1)),
+        |c| c.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch(),
     );
 }
 
@@ -1139,7 +1142,7 @@ fn test_historical_schedule_unexpected_response() {
 fn test_historical_schedule_end_of_stream() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE);
-    let result = client.historical_schedules_ending_now(&Contract::stock("MSFT").build(), Duration::days(1));
+    let result = client.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch();
     assert!(
         matches!(result, Err(Error::UnexpectedEndOfStream)),
         "expected UnexpectedEndOfStream, got {result:?}"

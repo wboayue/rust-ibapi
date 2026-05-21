@@ -165,75 +165,48 @@ impl Client {
         Err(Error::ConnectionReset)
     }
 
-    /// Requests [Schedule] for an interval of given duration ending at specified date.
+    /// Build a request for [`Schedule`] data over the given duration.
+    ///
+    /// Defaults to anchoring at the current time. Use [`HistoricalScheduleBuilder::ending`](super::HistoricalScheduleBuilder::ending)
+    /// to anchor at a specific end date.
     ///
     /// # Arguments
     /// * `contract` - [Contract] to retrieve [Schedule] for.
-    /// * `end_date` - end of the interval to retrieve [Schedule] for.
-    /// * `duration` - duration of the interval to retrieve [Schedule] for.
+    /// * `duration` - [Duration] of the interval to retrieve.
     ///
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::prelude::*;
     /// use time::macros::datetime;
     ///
-    /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::ToDuration;
-    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
     ///     let contract = Contract::stock("GM").build();
+    ///
+    ///     // Ending now:
     ///     let schedule = client
-    ///         .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
+    ///         .historical_schedules(&contract, 30.days())
+    ///         .fetch()
     ///         .await
     ///         .expect("historical schedule request failed");
     ///
-    ///     println!("start: {:?}, end: {:?}", schedule.start, schedule.end);
+    ///     // Anchored to a specific end date:
+    ///     let schedule = client
+    ///         .historical_schedules(&contract, 30.days())
+    ///         .ending(datetime!(2023-04-15 0:00 UTC))
+    ///         .fetch()
+    ///         .await
+    ///         .expect("historical schedule request failed");
     ///
     ///     for session in &schedule.sessions {
     ///         println!("{session:?}");
     ///     }
     /// }
     /// ```
-    pub async fn historical_schedules(&self, contract: &Contract, end_date: OffsetDateTime, duration: Duration) -> Result<Schedule, Error> {
-        historical_schedule(self, contract, Some(end_date), duration).await
-    }
-
-    /// Requests [Schedule] for an interval ending at the current time.
-    ///
-    /// # Arguments
-    /// * `contract` - [Contract] to retrieve [Schedule] for.
-    /// * `duration` - [Duration] of the interval to retrieve [Schedule] for.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::ToDuration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
-    ///     let contract = Contract::stock("GM").build();
-    ///     let schedule = client
-    ///         .historical_schedules_ending_now(&contract, 30.days())
-    ///         .await
-    ///         .expect("historical schedule request failed");
-    ///
-    ///     println!("start: {:?}, end: {:?}", schedule.start, schedule.end);
-    ///
-    ///     for session in &schedule.sessions {
-    ///         println!("{session:?}");
-    ///     }
-    /// }
-    /// ```
-    pub async fn historical_schedules_ending_now(&self, contract: &Contract, duration: Duration) -> Result<Schedule, Error> {
-        historical_schedule(self, contract, None, duration).await
+    pub fn historical_schedules<'a>(&'a self, contract: &'a Contract, duration: Duration) -> super::HistoricalScheduleBuilder<'a, Self> {
+        super::HistoricalScheduleBuilder::new(self, contract, duration)
     }
 
     /// Requests historical time & sales data (Bid/Ask) for an instrument.
@@ -583,7 +556,12 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
     }
 }
 
-async fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
+pub(crate) async fn fetch_historical_schedule(
+    client: &Client,
+    contract: &Contract,
+    end_date: Option<OffsetDateTime>,
+    duration: Duration,
+) -> Result<Schedule, Error> {
     common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
 
     loop {

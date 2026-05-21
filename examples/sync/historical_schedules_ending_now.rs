@@ -29,7 +29,8 @@ fn main() {
     let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let schedule = client
-        .historical_schedules_ending_now(&contract, 7.days())
+        .historical_schedules(&contract, 7.days())
+        .fetch()
         .expect("historical schedule request failed");
 
     println!("start: {}, end: {}, time_zone: {}", schedule.start, schedule.end, schedule.time_zone);

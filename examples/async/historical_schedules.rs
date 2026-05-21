@@ -2,9 +2,9 @@
 //! Async historical schedules example
 //!
 //! This example demonstrates how to retrieve trading schedule information
-//! for a contract using the async API. It exercises both
-//! [`historical_schedules_ending_now`] (relative-to-now) and
-//! [`historical_schedules`] (anchored to a specific end date).
+//! for a contract using the async API. It exercises the
+//! `historical_schedules` builder both without `.ending()` (anchors at
+//! current time) and with `.ending(date)` (anchors at a specific end date).
 //!
 //! # Usage
 //!
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Get last 30 days of trading schedule, anchored to current time
         let duration = 30.days();
 
-        match client.historical_schedules_ending_now(&contract, duration).await {
+        match client.historical_schedules(&contract, duration).fetch().await {
             Ok(schedule) => {
                 println!("  Schedule from {} to {}", schedule.start, schedule.end);
                 println!("  Timezone: {}", schedule.time_zone);
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let end_date = datetime!(2023-11-26 00:00 UTC);
     let duration = 7.days();
 
-    match client.historical_schedules(&contract, end_date, duration).await {
+    match client.historical_schedules(&contract, duration).ending(end_date).fetch().await {
         Ok(schedule) => {
             println!("Schedule for Thanksgiving week:");
             for session in &schedule.sessions {
