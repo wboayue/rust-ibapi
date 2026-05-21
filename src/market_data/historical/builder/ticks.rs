@@ -1,9 +1,9 @@
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
-use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, WhatToShow};
 #[cfg(feature = "async")]
 use crate::market_data::historical::r#async::TickSubscription;
+use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
 
@@ -21,12 +21,6 @@ pub enum IgnoreSize {
     Yes,
     /// Tick sizes are included in the response.
     No,
-}
-
-impl IgnoreSize {
-    fn as_bool(self) -> bool {
-        matches!(self, IgnoreSize::Yes)
-    }
 }
 
 /// Builder for the historical-ticks API.
@@ -181,7 +175,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
             self.number_of_ticks,
             WhatToShow::BidAsk,
             self.trading_hours,
-            ignore_size.as_bool(),
+            matches!(ignore_size, IgnoreSize::Yes),
         )
     }
 }
@@ -302,7 +296,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
             self.number_of_ticks,
             WhatToShow::BidAsk,
             self.trading_hours,
-            ignore_size.as_bool(),
+            matches!(ignore_size, IgnoreSize::Yes),
         )
         .await
     }
