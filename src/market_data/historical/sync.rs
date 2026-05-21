@@ -495,7 +495,7 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
     }
 }
 
-pub(crate) fn fetch_historical_schedule(
+pub(crate) fn historical_schedule(
     client: &Client,
     contract: &Contract,
     end_date: Option<OffsetDateTime>,

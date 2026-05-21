@@ -9,8 +9,6 @@ use crate::Error;
 mod tests;
 
 /// Builder for the historical-schedule API.
-///
-/// Default: `ending = None` (anchors at current time).
 #[must_use = "HistoricalScheduleBuilder does nothing until you call .fetch()"]
 pub struct HistoricalScheduleBuilder<'a, C> {
     client: &'a C,
@@ -69,7 +67,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn fetch(self) -> Result<Schedule, Error> {
-        crate::market_data::historical::sync::fetch_historical_schedule(self.client, self.contract, self.ending, self.duration)
+        crate::market_data::historical::sync::historical_schedule(self.client, self.contract, self.ending, self.duration)
     }
 }
 
@@ -102,6 +100,6 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn fetch(self) -> Result<Schedule, Error> {
-        crate::market_data::historical::r#async::fetch_historical_schedule(self.client, self.contract, self.ending, self.duration).await
+        crate::market_data::historical::r#async::historical_schedule(self.client, self.contract, self.ending, self.duration).await
     }
 }

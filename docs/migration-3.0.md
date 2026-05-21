@@ -570,7 +570,7 @@ let schedule = client
     .fetch()?;
 ```
 
-`historical_schedules_ending_now` is removed. The two-method shape it produced existed as the documented intermediate (the original async API used magic `None` for "ending now," which the PR #573 split rejected); the builder is the next step in that 3-step evolution.
+`historical_schedules_ending_now` is removed.
 
 ## Before / after: common subscription patterns
 
