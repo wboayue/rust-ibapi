@@ -14,9 +14,7 @@ use crate::transport::{InternalSubscription, MessageBus, Response};
 use crate::{client::sync::Client, Error, MAX_RETRIES};
 
 use super::common::{self, decoders, encoders};
-use super::{
-    BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow,
-};
+use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
 
 impl Client {
@@ -254,177 +252,52 @@ impl Client {
         super::HistoricalScheduleBuilder::new(self, contract, duration)
     }
 
-    /// Requests historical time & sales data (Bid/Ask) for an instrument.
+    /// Build a request for historical time & sales data (tick-by-tick).
+    ///
+    /// The terminal method selects the tick type:
+    /// [`HistoricalTicksBuilder::trade`](super::HistoricalTicksBuilder::trade) /
+    /// `.mid_point()` / `.bid_ask(IgnoreSize)`. Use
+    /// [`HistoricalTicksBuilder::starting`](super::HistoricalTicksBuilder::starting) /
+    /// `.ending()` to anchor the query (at least one is required per IBKR).
     ///
     /// # Arguments
     /// * `contract` - [Contract] object that is subject of query
-    /// * `start`    - Start time. Either start time or end time is specified.
-    /// * `end`      - End time. Either start time or end time is specified.
     /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `trading_hours`   - Regular trading hours only, or include extended hours
-    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
     ///
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::IgnoreSize;
+    /// use ibapi::market_data::TradingHours;
     /// use time::macros::datetime;
     ///
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::market_data::TradingHours;
-    ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
     /// let contract = Contract::stock("TSLA").build();
     ///
-    /// let ticks = client
-    ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular, false)
+    /// // Trade ticks anchored at a start date:
+    /// let trades = client
+    ///     .historical_ticks(&contract, 100)
+    ///     .starting(datetime!(2023-04-15 0:00 UTC))
+    ///     .trading_hours(TradingHours::Regular)
+    ///     .trade()
     ///     .expect("historical ticks request failed");
     ///
-    /// for tick in ticks {
-    ///     println!("{tick:?}");
-    /// }
-    /// ```
-    pub fn historical_ticks_bid_ask(
-        &self,
-        contract: &Contract,
-        start: Option<OffsetDateTime>,
-        end: Option<OffsetDateTime>,
-        number_of_ticks: i32,
-        trading_hours: TradingHours,
-        ignore_size: bool,
-    ) -> Result<TickSubscription<TickBidAsk>, Error> {
-        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
-
-        let builder = self.request();
-        let request = encoders::encode_request_historical_ticks(
-            builder.request_id(),
-            contract,
-            start,
-            end,
-            number_of_ticks,
-            WhatToShow::BidAsk,
-            trading_hours.use_rth(),
-            ignore_size,
-        )?;
-        let request_id = builder.request_id();
-        let subscription = builder.send_raw(request)?;
-
-        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
-    }
-
-    /// Requests historical time & sales data (Midpoint) for an instrument.
-    ///
-    /// # Arguments
-    /// * `contract` - [Contract] object that is subject of query
-    /// * `start`    - Start time. Either start time or end time is specified.
-    /// * `end`      - End time. Either start time or end time is specified.
-    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `trading_hours`   - Regular trading hours only, or include extended hours
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use time::macros::datetime;
-    ///
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::market_data::TradingHours;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("TSLA").build();
-    ///
-    /// let ticks = client
-    ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
+    /// // Bid/ask ticks anchored at an end date, ignoring tick sizes:
+    /// let quotes = client
+    ///     .historical_ticks(&contract, 100)
+    ///     .ending(datetime!(2023-04-15 0:00 UTC))
+    ///     .bid_ask(IgnoreSize::Yes)
     ///     .expect("historical ticks request failed");
     ///
-    /// for tick in ticks {
+    /// for tick in trades {
     ///     println!("{tick:?}");
     /// }
+    /// # let _ = quotes;
     /// ```
-    pub fn historical_ticks_mid_point(
-        &self,
-        contract: &Contract,
-        start: Option<OffsetDateTime>,
-        end: Option<OffsetDateTime>,
-        number_of_ticks: i32,
-        trading_hours: TradingHours,
-    ) -> Result<TickSubscription<TickMidpoint>, Error> {
-        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
-
-        let builder = self.request();
-        let request = encoders::encode_request_historical_ticks(
-            builder.request_id(),
-            contract,
-            start,
-            end,
-            number_of_ticks,
-            WhatToShow::MidPoint,
-            trading_hours.use_rth(),
-            false,
-        )?;
-        let request_id = builder.request_id();
-        let subscription = builder.send_raw(request)?;
-
-        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
-    }
-
-    /// Requests historical time & sales data (Trades) for an instrument.
-    ///
-    /// # Arguments
-    /// * `contract` - [Contract] object that is subject of query
-    /// * `start`    - Start time. Either start time or end time is specified.
-    /// * `end`      - End time. Either start time or end time is specified.
-    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `trading_hours`   - Regular trading hours only, or include extended hours
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use time::macros::datetime;
-    ///
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::market_data::TradingHours;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("TSLA").build();
-    ///
-    /// let ticks = client
-    ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
-    ///     .expect("historical ticks request failed");
-    ///
-    /// for tick in ticks {
-    ///     println!("{tick:?}");
-    /// }
-    /// ```
-    pub fn historical_ticks_trade(
-        &self,
-        contract: &Contract,
-        start: Option<OffsetDateTime>,
-        end: Option<OffsetDateTime>,
-        number_of_ticks: i32,
-        trading_hours: TradingHours,
-    ) -> Result<TickSubscription<TickLast>, Error> {
-        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
-
-        let builder = self.request();
-        let request = encoders::encode_request_historical_ticks(
-            builder.request_id(),
-            contract,
-            start,
-            end,
-            number_of_ticks,
-            WhatToShow::Trades,
-            trading_hours.use_rth(),
-            false,
-        )?;
-        let request_id = builder.request_id();
-        let subscription = builder.send_raw(request)?;
-
-        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
+    pub fn historical_ticks<'a>(&'a self, contract: &'a Contract, number_of_ticks: i32) -> super::HistoricalTicksBuilder<'a, Self> {
+        super::HistoricalTicksBuilder::new(self, contract, number_of_ticks)
     }
 
     /// Cancels an in-flight historical ticks request.
@@ -493,6 +366,36 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
         warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
         time_tz::timezones::db::UTC
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn historical_ticks<T: TickDecoder<T>>(
+    client: &Client,
+    contract: &Contract,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
+    number_of_ticks: i32,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+    ignore_size: bool,
+) -> Result<TickSubscription<T>, Error> {
+    check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
+
+    let builder = client.request();
+    let request = encoders::encode_request_historical_ticks(
+        builder.request_id(),
+        contract,
+        start,
+        end,
+        number_of_ticks,
+        what_to_show,
+        trading_hours.use_rth(),
+        ignore_size,
+    )?;
+    let request_id = builder.request_id();
+    let subscription = builder.send_raw(request)?;
+
+    Ok(TickSubscription::new(subscription, request_id, Arc::clone(&client.message_bus)))
 }
 
 pub(crate) fn historical_schedule(

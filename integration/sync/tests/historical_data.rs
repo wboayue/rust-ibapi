@@ -2,7 +2,7 @@ use std::time::Duration as StdDuration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
+use ibapi::market_data::historical::{BarSize, Duration, IgnoreSize, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
@@ -184,7 +184,9 @@ fn historical_ticks_trade() {
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
-        .historical_ticks_trade(&contract, None, Some(end), 100, TradingHours::Regular)
+        .historical_ticks(&contract, 100)
+        .ending(end)
+        .trade()
         .expect("historical_ticks_trade failed");
 
     let _tick = subscription.next_timeout(StdDuration::from_secs(10));
@@ -201,7 +203,9 @@ fn historical_ticks_bid_ask() {
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
-        .historical_ticks_bid_ask(&contract, None, Some(end), 100, TradingHours::Regular, false)
+        .historical_ticks(&contract, 100)
+        .ending(end)
+        .bid_ask(IgnoreSize::No)
         .expect("historical_ticks_bid_ask failed");
 
     let _tick = subscription.next_timeout(StdDuration::from_secs(10));
@@ -218,7 +222,9 @@ fn historical_ticks_mid_point() {
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
-        .historical_ticks_mid_point(&contract, None, Some(end), 100, TradingHours::Regular)
+        .historical_ticks(&contract, 100)
+        .ending(end)
+        .mid_point()
         .expect("historical_ticks_mid_point failed");
 
     let _tick = subscription.next_timeout(StdDuration::from_secs(10));

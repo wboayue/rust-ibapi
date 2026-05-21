@@ -2,6 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST,
 };
+use crate::market_data::historical::{IgnoreSize, TickLast};
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{Features, ProtocolFeature};
@@ -347,7 +348,8 @@ async fn test_tick_subscription_methods() {
     let contract = test_contract();
 
     let mut subscription = client
-        .historical_ticks_bid_ask(&contract, None, None, 3, TradingHours::Regular, false)
+        .historical_ticks(&contract, 3)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create tick subscription");
 
@@ -396,7 +398,8 @@ async fn test_tick_subscription_buffer_and_iteration() {
     let contract = test_contract();
 
     let mut subscription = client
-        .historical_ticks_bid_ask(&contract, None, None, 3, TradingHours::Regular, false)
+        .historical_ticks(&contract, 3)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create tick subscription");
 
@@ -426,14 +429,17 @@ async fn test_tick_subscription_bid_ask() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
     let contract = test_contract();
-    let start = Some(datetime!(2023-03-15 09:00:00 UTC));
-    let end = Some(datetime!(2023-03-15 10:00:00 UTC));
+    let start = datetime!(2023-03-15 09:00:00 UTC);
+    let end = datetime!(2023-03-15 10:00:00 UTC);
     let number_of_ticks = 1;
     let trading_hours = TradingHours::Regular;
-    let ignore_size = false;
 
     let mut subscription = client
-        .historical_ticks_bid_ask(&contract, start, end, number_of_ticks, trading_hours, ignore_size)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start)
+        .ending(end)
+        .trading_hours(trading_hours)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create bid/ask tick subscription");
 
@@ -453,12 +459,12 @@ async fn test_tick_subscription_bid_ask() {
         &historical_ticks_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .start(start)
-            .end(end)
+            .start(Some(start))
+            .end(Some(end))
             .number_of_ticks(number_of_ticks)
             .what_to_show(WhatToShow::BidAsk)
             .use_rth(trading_hours.use_rth())
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -478,7 +484,8 @@ async fn test_tick_subscription_midpoint() {
     let contract = test_contract();
 
     let mut subscription = client
-        .historical_ticks_mid_point(&contract, None, None, 1, TradingHours::Regular)
+        .historical_ticks(&contract, 1)
+        .mid_point()
         .await
         .expect("Failed to create midpoint tick subscription");
 
@@ -516,7 +523,8 @@ async fn test_historical_ticks_trade() {
     let contract = test_contract();
 
     let mut subscription = client
-        .historical_ticks_trade(&contract, None, None, 1, TradingHours::Regular)
+        .historical_ticks(&contract, 1)
+        .trade()
         .await
         .expect("Failed to create trade tick subscription");
 
@@ -977,8 +985,7 @@ async fn test_historical_schedules_unexpected_response() {
 #[tokio::test]
 async fn test_historical_ticks_bid_ask_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks_bid_ask(&test_contract(), None, None, 1, TradingHours::Regular, false)
-            .await
+        c.historical_ticks(&test_contract(), 1).bid_ask(IgnoreSize::No).await
     })
     .await;
 }
@@ -986,7 +993,7 @@ async fn test_historical_ticks_bid_ask_version_check() {
 #[tokio::test]
 async fn test_historical_ticks_mid_point_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks_mid_point(&test_contract(), None, None, 1, TradingHours::Regular).await
+        c.historical_ticks(&test_contract(), 1).mid_point().await
     })
     .await;
 }
@@ -994,7 +1001,7 @@ async fn test_historical_ticks_mid_point_version_check() {
 #[tokio::test]
 async fn test_historical_ticks_trade_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks_trade(&test_contract(), None, None, 1, TradingHours::Regular).await
+        c.historical_ticks(&test_contract(), 1).trade().await
     })
     .await;
 }
@@ -1071,7 +1078,8 @@ async fn test_tick_subscription_skips_unexpected_message_then_yields() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let mut subscription = client
-        .historical_ticks_trade(&test_contract(), None, None, 1, TradingHours::Regular)
+        .historical_ticks(&test_contract(), 1)
+        .trade()
         .await
         .expect("subscription should be created");
 
@@ -1102,7 +1110,8 @@ async fn test_tick_subscription_returns_none_on_closed_channel() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let mut subscription = client
-        .historical_ticks_mid_point(&test_contract(), None, None, 1, TradingHours::Regular)
+        .historical_ticks(&test_contract(), 1)
+        .mid_point()
         .await
         .expect("subscription should be created");
 

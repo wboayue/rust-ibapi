@@ -42,7 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trading_hours = TradingHours::Extended; // Include all hours for forex
 
     let mut tick_subscription = client
-        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start)
+        .ending(end)
+        .trading_hours(trading_hours)
+        .mid_point()
         .await?;
 
     println!("Time range: {} to {}", start, end);
@@ -97,12 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n\nExample 2: Recent midpoint ticks (last hour)");
     let contract2 = Contract::stock("AAPL").build();
 
-    // Use end time only to get most recent data
-    let start2 = None;
-    let end2 = None; // Current time
-    let mut tick_subscription2 = client
-        .historical_ticks_mid_point(&contract2, start2, end2, 100, TradingHours::Regular)
-        .await?;
+    let mut tick_subscription2 = client.historical_ticks(&contract2, 100).mid_point().await?;
 
     println!("\nLast 10 midpoint ticks for AAPL:");
     println!("Time                     | Midpoint Price");

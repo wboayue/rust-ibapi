@@ -37,13 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Request historical trade ticks from a specific time range
     let start_time = datetime!(2024-01-05 15:55 UTC);
     let end_time = datetime!(2024-01-05 16:00 UTC);
-    let start = Some(start_time);
-    let end = Some(end_time);
     let number_of_ticks = 1000; // Max 1000 ticks per request
-    let trading_hours = TradingHours::Regular; // Only regular trading hours
 
     let mut tick_subscription = client
-        .historical_ticks_trade(&contract, start, end, number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start_time)
+        .ending(end_time)
+        .trade()
         .await?;
 
     println!("Time range: {} to {}", start_time, end_time);
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Get most recent trades (no start time)
     println!("\n\nExample 2: Most recent {} trades", 20);
-    let mut recent_trades = client.historical_ticks_trade(&contract, None, None, 20, TradingHours::Regular).await?;
+    let mut recent_trades = client.historical_ticks(&contract, 20).trade().await?;
 
     println!("\nTime                     | Price    | Size");
     println!("-------------------------|----------|------");
