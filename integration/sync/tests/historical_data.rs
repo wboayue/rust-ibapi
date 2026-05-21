@@ -166,7 +166,8 @@ fn historical_schedule() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let schedule = client
-        .historical_schedules_ending_now(&contract, Duration::months(1))
+        .historical_schedules(&contract, Duration::months(1))
+        .fetch()
         .expect("historical_schedule failed");
 
     assert!(!schedule.sessions.is_empty(), "expected at least one session");

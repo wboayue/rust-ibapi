@@ -48,7 +48,7 @@ pub use crate::contracts::{BondIdentifier, ContractMonth, Currency, Cusip, Excha
 pub use crate::contracts::{Contract, SecurityType};
 
 // Market data types - historical
-pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};
+pub use crate::market_data::historical::{BarSize as HistoricalBarSize, HistoricalScheduleBuilder, ToDuration, WhatToShow as HistoricalWhatToShow};
 
 // Market data types - realtime
 pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, WhatToShow as RealtimeWhatToShow};

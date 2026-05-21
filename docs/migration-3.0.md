@@ -545,6 +545,33 @@ match exec.side {
 
 `ExecutionSide` implements `Display` (round-trips back to the wire string), `FromStr` (returns `Err(Error::Parse)` on unknown / empty inputs — the decoder fails loudly rather than silently defaulting), and is exposed via `ibapi::prelude::*`. Existing `println!("{}", exec.side)` callsites continue to print `"BOT"` / `"SLD"` unchanged thanks to `Display`.
 
+### 24. `historical_schedules` collapses to a builder
+
+In 2.x there were two methods:
+
+```rust,ignore
+// v2.x — anchored to a specific end date
+let schedule = client.historical_schedules(&contract, end_date, 30.days())?;
+
+// v2.x — anchored at current time
+let schedule = client.historical_schedules_ending_now(&contract, 30.days())?;
+```
+
+In 3.0 both collapse into one [`HistoricalScheduleBuilder`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/struct.HistoricalScheduleBuilder.html). Default anchors at the current time; call `.ending(end_date)` to anchor at a specific date:
+
+```rust,ignore
+// v3.0 — anchored at current time (default)
+let schedule = client.historical_schedules(&contract, 30.days()).fetch()?;
+
+// v3.0 — anchored to a specific end date
+let schedule = client
+    .historical_schedules(&contract, 30.days())
+    .ending(end_date)
+    .fetch()?;
+```
+
+`historical_schedules_ending_now` is removed.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

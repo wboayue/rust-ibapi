@@ -29,6 +29,9 @@ use crate::{Error, ToField};
 
 pub(crate) mod common;
 
+mod builder;
+pub use builder::HistoricalScheduleBuilder;
+
 #[doc(hidden)]
 #[cfg(feature = "sync")]
 pub mod sync;
