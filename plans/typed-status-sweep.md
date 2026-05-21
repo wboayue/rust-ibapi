@@ -15,7 +15,7 @@
 - `Contract.security_id_type: Option<SecurityIdType>` — shipped PR #568 (PR 3b).
 - `impl_wire_enum!` crate-wide promotion + `some_display` + `OrderStatusKind` retrofit + shared `wire_enum` test helpers — shipped PR #569 (PR 4a).
 - `ExecutionFilter.side: Option<ExecutionFilterSide>` — shipped PR #570 (PR 4b).
-- `Execution.side: ExecutionSide` — diagnostic branch `typed-status-sweep-pr5a-diagnostic` (PR 5a, not merged); strict-enum PR 5b gated on stock-RTH short-sale capture.
+- `Execution.side: ExecutionSide` — shipped (PR 5b). C# `Execution.cs:83` is authoritative: documented vocabulary is two values, `"BOT"` and `"SLD"`. The original "wait for short-sale capture" gate was over-conservative — short-sale fills emit `"SLD"` (the SSHORT designation lives on the originating `Action`, not on `Execution.side`). Exhaustive enum (no `#[non_exhaustive]`) since the field is binary; strict `FromStr` fails loudly on unknown values so a hypothetical IBKR addition surfaces in the decoder before any `match` fires. Diagnostic branch `typed-status-sweep-pr5a-diagnostic` (PR 5a) was not merged; its Phase-1 capture (`{BOT, SLD}`) matched the spec.
 
 ## Audit summary
 
@@ -25,7 +25,7 @@
 | `Contract.right: String` | `C`/`P` (and `CALL`/`PUT` historically) | C# `Contract.cs:Right`; IBKR option docs | **shipped #559** |
 | `Contract.security_id_type: String` | `CUSIP`/`ISIN`/`SEDOL`/`RIC`/`FIGI` | C# `Contract.cs:104-109`; IBKR secIdType reference | **shipped #564, #568** |
 | `ExecutionFilter.side: String` | `BUY`/`SELL` only (filter; empty = no filter) | doc comment `src/orders/mod.rs:1614`; `proto/encoders.rs:612` fixture | **shipped #569, #570** |
-| `Execution.side: String` | `BOT`/`SLD` confirmed (futures Phase-1 capture); short-sale variants unverified | C# `Execution.cs:83`; PR 5a Phase-1 capture | **in progress** — PR 5a diagnostic branch; PR 5b blocked on stock-short capture |
+| `Execution.side: String` | `BOT`/`SLD` (binary; short-sale fills emit `SLD`) | C# `Execution.cs:83`; PR 5a Phase-1 capture matched | **shipped PR 5b** |
 
 ### Plan-text correction
 

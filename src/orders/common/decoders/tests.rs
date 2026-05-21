@@ -198,6 +198,7 @@ fn test_decode_execution_data_proto() {
     assert_eq!(result.execution.shares, 50.0);
     assert_eq!(result.execution.price, 152.5);
     assert_eq!(result.execution.perm_id, 99999);
+    assert_eq!(result.execution.side, crate::orders::ExecutionSide::Bought);
 }
 
 #[test]
@@ -364,6 +365,7 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
     assert_eq!(result.execution.shares, 50.0);
     assert_eq!(result.execution.price, 152.5);
     assert_eq!(result.execution.perm_id, 99999);
+    assert_eq!(result.execution.side, crate::orders::ExecutionSide::Bought);
 }
 
 // =============================================================================

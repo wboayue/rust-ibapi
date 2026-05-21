@@ -526,6 +526,25 @@ use ibapi::orders::{OrderBuilder, BracketOrderBuilder, BracketOrderIds, OrderId}
 
 The low-level fluent layer (`orders::builder::price`, `orders::builder::time`, algo builders, etc.) is unchanged — only the four duplicate top-level builder/id paths move.
 
+### 23. `Execution.side` typed as `ExecutionSide`
+
+Was `String` in 2.x; in 3.0 it is `ExecutionSide`, a two-variant enum matching IBKR's documented wire vocabulary (C# `Execution.cs:83`): `"BOT"` → [`ExecutionSide::Bought`](https://docs.rs/ibapi/latest/ibapi/orders/enum.ExecutionSide.html), `"SLD"` → `ExecutionSide::Sold`. Short-sale fills emit `"SLD"` — the SSHORT designation lives on the originating [`Action`](https://docs.rs/ibapi/latest/ibapi/orders/enum.Action.html), not on the execution.
+
+```rust,ignore
+// v2.x — magic-string compare
+if exec.side == "BOT" {
+    handle_buy_fill();
+}
+
+// v3.0 — typed match
+match exec.side {
+    ExecutionSide::Bought => handle_buy_fill(),
+    ExecutionSide::Sold   => handle_sell_fill(),
+}
+```
+
+`ExecutionSide` implements `Display` (round-trips back to the wire string), `FromStr` (returns `Err(Error::Parse)` on unknown / empty inputs — the decoder fails loudly rather than silently defaulting), and is exposed via `ibapi::prelude::*`. Existing `println!("{}", exec.side)` callsites continue to print `"BOT"` / `"SLD"` unchanged thanks to `Display`.
+
 ## Before / after: common subscription patterns
 
 ### Order construction
