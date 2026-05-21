@@ -38,15 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Get last 100 trades
     println!("=== Historical Trades (last 100) ===");
-    let mut tick_subscription = client
-        .historical_ticks_trade(
-            &contract,
-            None,                  // Start time (None = use number_of_ticks)
-            None,                  // End time (None = now)
-            100,                   // Number of ticks
-            TradingHours::Regular, // Use RTH
-        )
-        .await?;
+    let mut tick_subscription = client.historical_ticks(&contract, 100).trade().await?;
 
     let mut trade_count = 0;
     while let Some(tick) = tick_subscription.next().await {
@@ -72,13 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = end_time - Duration::minutes(30); // Last 30 minutes
 
     let mut tick_subscription = client
-        .historical_ticks_trade(
-            &contract,
-            Some(start_time),
-            Some(end_time),
-            0,                     // 0 = get all ticks in range
-            TradingHours::Regular, // Use RTH
-        )
+        .historical_ticks(&contract, 0) // 0 = get all ticks in range
+        .starting(start_time)
+        .ending(end_time)
+        .trade()
         .await?;
 
     let mut period_trades = 0;
@@ -106,16 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Get historical bid/ask quotes
     println!("\n=== Historical Bid/Ask Quotes ===");
-    let mut tick_subscription = client
-        .historical_ticks_bid_ask(
-            &contract,
-            None,                  // Start time
-            None,                  // End time
-            50,                    // Number of ticks
-            TradingHours::Regular, // Use RTH
-            false,                 // Don't ignore size
-        )
-        .await?;
+    let mut tick_subscription = client.historical_ticks(&contract, 50).bid_ask(IgnoreSize::No).await?;
 
     let mut quote_count = 0;
     let mut total_spread = 0.0;
@@ -146,15 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 4: Get historical midpoint data
     println!("\n=== Historical Midpoint Data ===");
-    let mut tick_subscription = client
-        .historical_ticks_mid_point(
-            &contract,
-            None,                  // Start time
-            None,                  // End time
-            30,                    // Number of ticks
-            TradingHours::Regular, // Use RTH
-        )
-        .await?;
+    let mut tick_subscription = client.historical_ticks(&contract, 30).mid_point().await?;
 
     let mut midpoint_count = 0;
     while let Some(tick) = tick_subscription.next().await {

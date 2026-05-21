@@ -6,4 +6,6 @@
 //! [`HistoricalScheduleBuilder`] for the canonical example.
 
 pub mod schedule;
+pub mod ticks;
 pub use schedule::HistoricalScheduleBuilder;
+pub use ticks::{HistoricalTicksBuilder, IgnoreSize};

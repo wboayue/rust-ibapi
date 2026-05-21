@@ -13,7 +13,6 @@ use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::TradingHours;
 
 fn main() {
     env_logger::init();
@@ -41,7 +40,9 @@ fn main() {
     let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let ticks = client
-        .historical_ticks_mid_point(&contract, Some(interval_start), None, number_of_ticks, TradingHours::Regular)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(interval_start)
+        .mid_point()
         .expect("historical data request failed");
 
     for tick in ticks {

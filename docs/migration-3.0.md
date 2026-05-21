@@ -572,6 +572,28 @@ let schedule = client
 
 `historical_schedules_ending_now` is removed.
 
+### 25. `historical_ticks_*` trio collapses to a builder
+
+In 2.x there were three methods, one per tick type, with near-identical 5–6 arg signatures:
+
+```rust,ignore
+// v2.x
+let trades = client.historical_ticks_trade(&contract, Some(start), None, 100, TradingHours::Regular)?;
+let mids   = client.historical_ticks_mid_point(&contract, Some(start), None, 100, TradingHours::Regular)?;
+let quotes = client.historical_ticks_bid_ask(&contract, Some(start), None, 100, TradingHours::Regular, false)?;
+```
+
+In 3.0 the three collapse into one [`HistoricalTicksBuilder`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/struct.HistoricalTicksBuilder.html). The terminal method selects the tick type:
+
+```rust,ignore
+// v3.0
+let trades = client.historical_ticks(&contract, 100).starting(start).trade()?;
+let mids   = client.historical_ticks(&contract, 100).starting(start).mid_point()?;
+let quotes = client.historical_ticks(&contract, 100).starting(start).bid_ask(IgnoreSize::No)?;
+```
+
+The `ignore_size: bool` parameter (previously only valid for the bid/ask variant) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it. Other setters: `.ending(end)` to anchor at an end date, `.trading_hours(TradingHours)` to override the default `Regular`.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

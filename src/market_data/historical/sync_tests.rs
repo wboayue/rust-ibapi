@@ -4,7 +4,7 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
-use crate::market_data::historical::ToDuration;
+use crate::market_data::historical::{IgnoreSize, TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::TradingHours;
 use crate::messages::OutgoingMessages;
 use crate::protocol::{Features, ProtocolFeature};
@@ -251,14 +251,17 @@ fn test_historical_ticks_bid_ask() {
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
-    let start = Some(datetime!(2023-04-01 09:30:00 UTC));
-    let end = Some(datetime!(2023-04-01 16:00:00 UTC));
+    let start = datetime!(2023-04-01 09:30:00 UTC);
+    let end = datetime!(2023-04-01 16:00:00 UTC);
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
-    let ignore_size = true;
 
     let _tick_subscription = client
-        .historical_ticks_bid_ask(&contract, start, end, number_of_ticks, trading_hours, ignore_size)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start)
+        .ending(end)
+        .trading_hours(trading_hours)
+        .bid_ask(IgnoreSize::Yes)
         .expect("historical ticks bid ask request failed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -268,12 +271,12 @@ fn test_historical_ticks_bid_ask() {
         &historical_ticks_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .start(start)
-            .end(end)
+            .start(Some(start))
+            .end(Some(end))
             .number_of_ticks(number_of_ticks)
             .what_to_show(WhatToShow::BidAsk)
             .use_rth(trading_hours.use_rth())
-            .ignore_size(ignore_size),
+            .ignore_size(true),
     );
 }
 
@@ -288,13 +291,17 @@ fn test_historical_ticks_mid_point() {
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
-    let start = Some(datetime!(2023-04-01 09:30:00 UTC));
-    let end = Some(datetime!(2023-04-01 16:00:00 UTC));
+    let start = datetime!(2023-04-01 09:30:00 UTC);
+    let end = datetime!(2023-04-01 16:00:00 UTC);
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
 
     let _tick_subscription = client
-        .historical_ticks_mid_point(&contract, start, end, number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start)
+        .ending(end)
+        .trading_hours(trading_hours)
+        .mid_point()
         .expect("historical ticks mid point request failed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -304,8 +311,8 @@ fn test_historical_ticks_mid_point() {
         &historical_ticks_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .start(start)
-            .end(end)
+            .start(Some(start))
+            .end(Some(end))
             .number_of_ticks(number_of_ticks)
             .what_to_show(WhatToShow::MidPoint)
             .use_rth(trading_hours.use_rth()),
@@ -323,13 +330,17 @@ fn test_historical_ticks_trade() {
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
-    let start = Some(datetime!(2023-04-01 09:30:00 UTC));
-    let end = Some(datetime!(2023-04-01 16:00:00 UTC));
+    let start = datetime!(2023-04-01 09:30:00 UTC);
+    let end = datetime!(2023-04-01 16:00:00 UTC);
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
 
     let _tick_subscription = client
-        .historical_ticks_trade(&contract, start, end, number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .starting(start)
+        .ending(end)
+        .trading_hours(trading_hours)
+        .trade()
         .expect("historical ticks trade request failed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -339,8 +350,8 @@ fn test_historical_ticks_trade() {
         &historical_ticks_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .start(start)
-            .end(end)
+            .start(Some(start))
+            .end(Some(end))
             .number_of_ticks(number_of_ticks)
             .what_to_show(WhatToShow::Trades)
             .use_rth(trading_hours.use_rth()),
@@ -472,7 +483,9 @@ fn test_tick_subscription_methods() {
     let trading_hours = TradingHours::Regular;
 
     let tick_subscription = client
-        .historical_ticks_trade(&contract, None, None, number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .trading_hours(trading_hours)
+        .trade()
         .expect("historical ticks trade request failed");
 
     // Just test that these methods can be called without panicking
@@ -506,7 +519,9 @@ fn test_tick_subscription_buffer_and_iteration() {
     let trading_hours = TradingHours::Regular;
 
     let tick_subscription = client
-        .historical_ticks_trade(&contract, None, None, number_of_ticks, trading_hours)
+        .historical_ticks(&contract, number_of_ticks)
+        .trading_hours(trading_hours)
+        .trade()
         .expect("historical ticks trade request failed");
 
     // Test standard iterator
@@ -539,7 +554,8 @@ fn test_tick_subscription_owned_iterator() {
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
-        .historical_ticks_trade(&contract, None, None, 10, TradingHours::Regular)
+        .historical_ticks(&contract, 10)
+        .trade()
         .expect("historical ticks trade request failed");
 
     // Convert to owned iterator
@@ -565,7 +581,8 @@ fn test_tick_subscription_bid_ask() {
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
-        .historical_ticks_bid_ask(&contract, None, None, 10, TradingHours::Regular, false)
+        .historical_ticks(&contract, 10)
+        .bid_ask(IgnoreSize::No)
         .expect("historical ticks bid_ask request failed");
 
     // Collect ticks
@@ -597,7 +614,8 @@ fn test_tick_subscription_midpoint() {
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
-        .historical_ticks_mid_point(&contract, None, None, 10, TradingHours::Regular)
+        .historical_ticks(&contract, 10)
+        .mid_point()
         .expect("historical ticks mid_point request failed");
 
     // Collect ticks
@@ -1204,21 +1222,21 @@ fn test_historical_data_streaming_trading_class_version_check() {
 #[test]
 fn test_historical_ticks_bid_ask_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks_bid_ask(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular, false)
+        c.historical_ticks(&Contract::stock("MSFT").build(), 1).bid_ask(IgnoreSize::No)
     });
 }
 
 #[test]
 fn test_historical_ticks_mid_point_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks_mid_point(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+        c.historical_ticks(&Contract::stock("MSFT").build(), 1).mid_point()
     });
 }
 
 #[test]
 fn test_historical_ticks_trade_version_check() {
     assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+        c.historical_ticks(&Contract::stock("MSFT").build(), 1).trade()
     });
 }
 
@@ -1231,7 +1249,8 @@ fn test_tick_subscription_try_next_drains_buffer() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let subscription = client
-        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .historical_ticks(&Contract::stock("MSFT").build(), 10)
+        .trade()
         .expect("subscription should be created");
 
     // Drain via try_iter — each .next() goes through try_next() → next_helper(try_next).
@@ -1252,7 +1271,8 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let subscription = client
-        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .historical_ticks(&Contract::stock("MSFT").build(), 10)
+        .trade()
         .expect("subscription should be created");
 
     // Drive timeout_iter — each .next() goes through next_timeout() → next_helper.
@@ -1319,7 +1339,8 @@ fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let subscription = client
-        .historical_ticks_mid_point(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular)
+        .historical_ticks(&Contract::stock("MSFT").build(), 10)
+        .mid_point()
         .expect("subscription should be created");
 
     let ticks_try: Vec<TickMidpoint> = subscription.try_iter().collect();
@@ -1337,7 +1358,8 @@ fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let subscription = client
-        .historical_ticks_bid_ask(&Contract::stock("MSFT").build(), None, None, 10, TradingHours::Regular, false)
+        .historical_ticks(&Contract::stock("MSFT").build(), 10)
+        .bid_ask(IgnoreSize::No)
         .expect("subscription should be created");
 
     let ticks_try: Vec<TickBidAsk> = subscription.try_iter().collect();
@@ -1356,7 +1378,8 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
     let subscription = client
-        .historical_ticks_trade(&Contract::stock("MSFT").build(), None, None, 1, TradingHours::Regular)
+        .historical_ticks(&Contract::stock("MSFT").build(), 1)
+        .trade()
         .expect("subscription should be created");
 
     let tick = subscription.next().expect("should receive tick after skipping unexpected");
