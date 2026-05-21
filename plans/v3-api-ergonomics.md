@@ -89,7 +89,7 @@ Related existing tracking docs in `plans/`:
   (commit `b9ed884`). `src/orders/mod.rs:1557` is `pub status: OrderStatusKind` with
   `is_terminal()` etc. Examples now use `.is_terminal()` (lines 61, 143).
 
-- [~] **Continue the typed-status sweep.** Tracked in
+- [x] **Continue the typed-status sweep.** Tracked in
   [`plans/typed-status-sweep.md`](typed-status-sweep.md). Shipped:
   - PR #556 (PR 1) — `ComboLeg.action: LegAction` + shared `parse_required` / `parse_optional` helpers in `proto/decoders.rs`.
   - PR #559 (PR 2) — `Contract.right: Option<OptionRight>`; folded the test-shape rewrite (table-driven loop over variants, CLAUDE.md rule 21) for the previously hand-rolled `OptionRight` asserts.
@@ -97,13 +97,7 @@ Related existing tracking docs in `plans/`:
   - PR #568 (PR 3b) — `Contract.security_id_type: Option<SecurityIdType>`.
   - PR #569 (PR 4a) — `impl_wire_enum!` crate-wide promotion + `some_display` + `OrderStatusKind` retrofit + shared `wire_enum` test helpers.
   - PR #570 (PR 4b) — `ExecutionFilter.side: Option<ExecutionFilterSide>`.
-
-  Open: PR 5 — `Execution.side: ExecutionSide`. PR 5a diagnostic branch
-  `typed-status-sweep-pr5a-diagnostic` not merged; Phase-1 paper capture
-  yielded `{BOT, SLD}` only (no short-sale fills). PR 5b strict enum gated
-  on a stock-RTH short-sale capture. The parent's original
-  `Buy/Sell/SShort/SLng` vocab claim for `Execution.side` was wrong —
-  `BOT`/`SLD` is the actual wire (`Buy/Sell/SShort/SLng` belongs to `Action`).
+  - PR #606 (PR 5b) — `Execution.side: ExecutionSide`. Exhaustive enum (no `#[non_exhaustive]`) since C# `Execution.cs:83` documents the field as binary (`BOT`/`SLD`); short-sale fills emit `SLD` (SSHORT lives on `Action`, not on the execution). The parent's original `Buy/Sell/SShort/SLng` vocab claim was wrong. PR 5a diagnostic branch was not merged — its Phase-1 capture (`{BOT, SLD}`) matched the spec; deleted from origin post-close-out. Migration §23.
 
 - [x] **One canonical `Subscription` import path.** Shipped in PR #571
   (`Subscription`): dropped `ibapi::client::Subscription`, sourced the prelude
