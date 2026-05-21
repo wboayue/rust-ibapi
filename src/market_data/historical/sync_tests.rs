@@ -140,7 +140,11 @@ fn test_historical_data() {
     let trading_hours = TradingHours::Regular;
 
     let historical_data = client
-        .historical_data(&contract, Some(end_date), duration, bar_size, what_to_show, trading_hours)
+        .historical_data(&contract, bar_size)
+        .what_to_show(what_to_show)
+        .duration(duration)
+        .ending(end_date)
+        .fetch()
         .expect("historical data request failed");
 
     // Assert Response
@@ -380,7 +384,12 @@ fn test_historical_data_version_check() {
     let trading_hours = TradingHours::Regular;
 
     // This should return an error due to server version
-    let result = client.historical_data(&contract, Some(end_date), duration, bar_size, WhatToShow::Trades, trading_hours);
+    let result = client
+        .historical_data(&contract, bar_size)
+        .duration(duration)
+        .ending(end_date)
+        .trading_hours(trading_hours)
+        .fetch();
     assert!(result.is_err(), "Expected error due to server version incompatibility");
 }
 
@@ -394,14 +403,18 @@ fn test_historical_data_adjusted_last_validation() {
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("MSFT").build();
-    let end_date = Some(datetime!(2023-04-15 16:31:22 UTC));
+    let end_date = datetime!(2023-04-15 16:31:22 UTC);
     let duration = 2.days();
     let bar_size = BarSize::Hour;
     let what_to_show = WhatToShow::AdjustedLast;
-    let trading_hours = TradingHours::Regular;
 
     // This should return an error because AdjustedLast can't be used with end_date
-    let result = client.historical_data(&contract, end_date, duration, bar_size, what_to_show, trading_hours);
+    let result = client
+        .historical_data(&contract, bar_size)
+        .what_to_show(what_to_show)
+        .duration(duration)
+        .ending(end_date)
+        .fetch();
     assert!(result.is_err(), "Expected error due to AdjustedLast with end_date");
 
     match result {
@@ -431,7 +444,12 @@ fn test_historical_data_error_response() {
     let trading_hours = TradingHours::Regular;
 
     // This should return an error because the server sent an error response
-    let result = client.historical_data(&contract, None, duration, bar_size, what_to_show, trading_hours);
+    let result = client
+        .historical_data(&contract, bar_size)
+        .what_to_show(what_to_show)
+        .trading_hours(trading_hours)
+        .duration(duration)
+        .fetch();
     assert!(result.is_err(), "Expected error due to error response from server");
 }
 
@@ -454,7 +472,12 @@ fn test_historical_data_unexpected_response() {
     let trading_hours = TradingHours::Regular;
 
     // This should return an error because the server sent an unexpected response
-    let result = client.historical_data(&contract, None, duration, bar_size, what_to_show, trading_hours);
+    let result = client
+        .historical_data(&contract, bar_size)
+        .what_to_show(what_to_show)
+        .trading_hours(trading_hours)
+        .duration(duration)
+        .fetch();
     assert!(result.is_err(), "Expected error due to unexpected response type");
 
     match result {
@@ -650,10 +673,13 @@ fn test_historical_data_time_zone_handling() {
     let duration = 2.days();
     let bar_size = BarSize::Day;
     let what_to_show = WhatToShow::Trades;
-    let trading_hours = TradingHours::Regular;
 
     let historical_data = client
-        .historical_data(&contract, Some(end_date), duration, bar_size, what_to_show, trading_hours)
+        .historical_data(&contract, bar_size)
+        .what_to_show(what_to_show)
+        .duration(duration)
+        .ending(end_date)
+        .fetch()
         .expect("historical data request failed");
 
     // Assert that time zones are correctly handled
@@ -724,14 +750,9 @@ fn test_historical_data_streaming_with_updates() {
     let contract = Contract::stock("SPY").build();
 
     let subscription = client
-        .historical_data_streaming(
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-            true,
-        )
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
@@ -774,59 +795,6 @@ fn test_historical_data_streaming_with_updates() {
 }
 
 #[test]
-fn test_historical_data_streaming_keep_up_to_date_false() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Initial historical data only
-            "17\09000\020230315  09:30:00\020230315  10:30:00\01\01678886400\0185.50\0186.00\0185.25\0185.75\01000\0185.70\0100\0".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
-
-    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
-
-    let contract = Contract::stock("SPY").build();
-
-    let subscription = client
-        .historical_data_streaming(
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-            false, // keep_up_to_date = false
-        )
-        .expect("streaming request should succeed");
-
-    // Receive initial historical data
-    let update1 = subscription.next_data();
-    assert!(update1.is_some(), "Should receive initial historical data");
-    match update1.unwrap().expect("expected Ok") {
-        HistoricalBarUpdate::Historical(data) => {
-            assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
-        }
-        _ => panic!("Expected Historical variant"),
-    }
-
-    // Verify request message was sent
-    assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &historical_data_request()
-            .request_id(TEST_REQ_ID_FIRST)
-            .contract(&contract)
-            .duration(Duration::days(1))
-            .bar_size(BarSize::Hour)
-            .what_to_show(Some(WhatToShow::Trades))
-            .use_rth(true)
-            .keep_up_to_date(false),
-    );
-}
-
-#[test]
 fn test_historical_data_streaming_error_response() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
@@ -843,14 +811,9 @@ fn test_historical_data_streaming_error_response() {
     let contract = Contract::stock("SPY").build();
 
     let subscription = client
-        .historical_data_streaming(
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-            true,
-        )
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
         .expect("streaming request should succeed");
 
     // Error now flows via the Err arm of next_data()
@@ -945,14 +908,9 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
 
     {
         let _subscription = client
-            .historical_data_streaming(
-                &contract,
-                Duration::days(1),
-                BarSize::Hour,
-                WhatToShow::Trades,
-                TradingHours::Regular,
-                true,
-            )
+            .historical_data(&contract, BarSize::Hour)
+            .duration(Duration::days(1))
+            .stream()
             .expect("streaming request should succeed");
     }
 
@@ -978,14 +936,9 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 
     {
         let subscription = client
-            .historical_data_streaming(
-                &contract,
-                Duration::days(1),
-                BarSize::Hour,
-                WhatToShow::Trades,
-                TradingHours::Regular,
-                true,
-            )
+            .historical_data(&contract, BarSize::Hour)
+            .duration(Duration::days(1))
+            .stream()
             .expect("streaming request should succeed");
 
         subscription.cancel();
@@ -1039,14 +992,9 @@ fn test_historical_data_with_end_message() {
     client.time_zone = Some(time_tz::timezones::db::UTC);
 
     let data = client
-        .historical_data(
-            &Contract::stock("MSFT").build(),
-            None,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
         .expect("historical_data should succeed");
 
     assert_eq!(data.bars.len(), 1, "should have one bar");
@@ -1061,14 +1009,10 @@ fn test_historical_data_connection_reset_after_retries() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let result = client.historical_data(
-        &Contract::stock("MSFT").build(),
-        None,
-        Duration::days(1),
-        BarSize::Hour,
-        WhatToShow::Trades,
-        TradingHours::Regular,
-    );
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch();
 
     // The first None response returns UnexpectedEndOfStream (the loop early-exits).
     assert!(
@@ -1086,14 +1030,10 @@ fn test_historical_data_error_message_response() {
     ]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-    let result = client.historical_data(
-        &Contract::stock("MSFT").build(),
-        None,
-        Duration::days(1),
-        BarSize::Hour,
-        WhatToShow::Trades,
-        TradingHours::Regular,
-    );
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch();
 
     let err = result.expect_err("expected error from server");
     assert!(err.to_string().contains("No market data permissions"), "got: {err}");
@@ -1208,14 +1148,7 @@ fn test_historical_data_streaming_trading_class_version_check() {
     let mut contract = Contract::stock("MSFT").build();
     contract.trading_class = "ES".to_owned();
     assert_version_check_fails(Features::TRADING_CLASS, move |c| {
-        c.historical_data_streaming(
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-            true,
-        )
+        c.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).stream()
     });
 }
 

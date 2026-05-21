@@ -49,7 +49,8 @@ pub use crate::contracts::{Contract, SecurityType};
 
 // Market data types - historical
 pub use crate::market_data::historical::{
-    BarSize as HistoricalBarSize, HistoricalScheduleBuilder, HistoricalTicksBuilder, IgnoreSize, ToDuration, WhatToShow as HistoricalWhatToShow,
+    BarSize as HistoricalBarSize, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, IgnoreSize, ToDuration,
+    WhatToShow as HistoricalWhatToShow,
 };
 
 // Market data types - realtime

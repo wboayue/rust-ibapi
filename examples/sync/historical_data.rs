@@ -30,14 +30,11 @@ fn main() {
     let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let historical_data = client
-        .historical_data(
-            &contract,
-            Some(datetime!(2023-04-11 20:00 UTC)),
-            1.days(),
-            HistoricalBarSize::Hour,
-            HistoricalWhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, HistoricalBarSize::Hour)
+        .what_to_show(HistoricalWhatToShow::Trades)
+        .duration(1.days())
+        .ending(datetime!(2023-04-11 20:00 UTC))
+        .fetch()
         .expect("historical data request failed");
 
     println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);

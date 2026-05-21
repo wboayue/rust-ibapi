@@ -5,7 +5,9 @@
 //! setters, per-feature terminal `impl` blocks. See
 //! [`HistoricalScheduleBuilder`] for the canonical example.
 
+pub mod data;
 pub mod schedule;
 pub mod ticks;
+pub use data::HistoricalDataBuilder;
 pub use schedule::HistoricalScheduleBuilder;
 pub use ticks::{HistoricalTicksBuilder, IgnoreSize};

@@ -21,14 +21,10 @@ fn main() {
     let contract = Contract::call("AMZN").strike(230.0).expires_on(2025, 1, 31).build();
 
     let historical_data = client
-        .historical_data(
-            &contract,
-            None,
-            10.days(),
-            HistoricalBarSize::Hour,
-            HistoricalWhatToShow::AdjustedLast,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, HistoricalBarSize::Hour)
+        .what_to_show(HistoricalWhatToShow::AdjustedLast)
+        .duration(10.days())
+        .fetch()
         .expect("historical data request failed");
 
     println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);

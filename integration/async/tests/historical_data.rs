@@ -51,14 +51,9 @@ async fn historical_data_daily() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
-        .historical_data(
-            &contract,
-            None,
-            Duration::days(5),
-            BarSize::Day,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, BarSize::Day)
+        .duration(Duration::days(5))
+        .fetch()
         .await
         .expect("historical_data failed");
 
@@ -76,14 +71,9 @@ async fn historical_data_hourly() {
     rate_limit();
     let contract = Contract::stock("MSFT").build();
     let data = client
-        .historical_data(
-            &contract,
-            None,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
         .await
         .expect("historical_data failed");
 
@@ -100,14 +90,9 @@ async fn historical_data_minute() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
-        .historical_data(
-            &contract,
-            None,
-            Duration::seconds(1800),
-            BarSize::Min,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, BarSize::Min)
+        .duration(Duration::seconds(1800))
+        .fetch()
         .await
         .expect("historical_data failed");
 
@@ -124,14 +109,10 @@ async fn historical_data_bid_ask() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
-        .historical_data(
-            &contract,
-            None,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::BidAsk,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, BarSize::Hour)
+        .what_to_show(WhatToShow::BidAsk)
+        .duration(Duration::days(1))
+        .fetch()
         .await
         .expect("historical_data failed");
 
@@ -148,14 +129,10 @@ async fn historical_data_midpoint() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
-        .historical_data(
-            &contract,
-            None,
-            Duration::days(1),
-            BarSize::Hour,
-            WhatToShow::MidPoint,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, BarSize::Hour)
+        .what_to_show(WhatToShow::MidPoint)
+        .duration(Duration::days(1))
+        .fetch()
         .await
         .expect("historical_data failed");
 
@@ -281,14 +258,9 @@ async fn historical_data_streaming() {
     rate_limit();
     let contract = Contract::stock("SPY").build();
     let mut subscription = client
-        .historical_data_streaming(
-            &contract,
-            Duration::days(1),
-            BarSize::Min15,
-            WhatToShow::Trades,
-            TradingHours::Regular,
-            false,
-        )
+        .historical_data(&contract, BarSize::Min15)
+        .duration(Duration::days(1))
+        .stream()
         .await
         .expect("historical_data_streaming failed");
 

@@ -54,161 +54,48 @@ impl Client {
         }
     }
 
-    /// Requests interval of historical data ending at specified time for [Contract].
+    /// Build a request for historical bar data.
     ///
-    /// # Arguments
-    /// * `contract`     - [Contract] to retrieve [HistoricalData] for.
-    /// * `end_date`     - optional end of the interval. If `None`, current time or last trading of contract is implied.
-    /// * `duration`     - duration of interval to retrieve [HistoricalData] for.
-    /// * `bar_size`     - [BarSize] to return.
-    /// * `what_to_show` - requested bar type: [WhatToShow].
-    /// * `trading_hours` - Use [TradingHours::Regular] for data generated only during regular trading hours, or [TradingHours::Extended] to include data from outside regular trading hours.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use time::macros::datetime;
-    ///
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
-    /// use ibapi::market_data::TradingHours;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("TSLA").build();
-    ///
-    /// let historical_data = client
-    ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, TradingHours::Regular)
-    ///     .expect("historical data request failed");
-    ///
-    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
-    ///
-    /// for bar in &historical_data.bars {
-    ///     println!("{bar:?}");
-    /// }
-    /// ```
-    pub fn historical_data(
-        &self,
-        contract: &Contract,
-        end_date: Option<OffsetDateTime>,
-        duration: Duration,
-        bar_size: BarSize,
-        what_to_show: WhatToShow,
-        trading_hours: TradingHours,
-    ) -> Result<HistoricalData, Error> {
-        common::validate_historical_data(self.server_version(), contract, end_date, Some(what_to_show))?;
-
-        for _ in 0..MAX_RETRIES {
-            let builder = self.request();
-            let request = encoders::encode_request_historical_data(
-                builder.request_id(),
-                contract,
-                end_date,
-                duration,
-                bar_size,
-                Some(what_to_show),
-                trading_hours.use_rth(),
-                false,
-                &Vec::<crate::contracts::TagValue>::default(),
-            )?;
-
-            let subscription = builder.send_raw(request)?;
-
-            match subscription.next() {
-                Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                    let mut data = decoders::decode_historical_data(self.server_version, time_zone(self), &mut message)?;
-
-                    if self.server_version >= crate::server_versions::HISTORICAL_DATA_END {
-                        if let Some(Ok(mut end_msg)) = subscription.next() {
-                            let (start, end) = decoders::decode_historical_data_end(self.server_version, time_zone(self), &mut end_msg)?;
-                            data.start = start;
-                            data.end = end;
-                        }
-                    }
-
-                    return Ok(data);
-                }
-                Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-                Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
-                Some(Err(Error::ConnectionReset)) => {}
-                Some(Err(e)) => return Err(e),
-                None => return Err(Error::UnexpectedEndOfStream),
-            }
-        }
-
-        Err(Error::ConnectionReset)
-    }
-
-    /// Requests historical data with optional streaming updates.
-    ///
-    /// This method returns a subscription that first yields the initial historical bars.
-    /// When `keep_up_to_date` is `true`, it continues to yield streaming updates for
-    /// the current bar as it builds. IBKR sends updated bars every ~4-6 seconds until
-    /// the bar completes.
+    /// Required: a date spec via either [`HistoricalDataBuilder::duration`](super::HistoricalDataBuilder::duration)
+    /// (with optional [`HistoricalDataBuilder::ending`](super::HistoricalDataBuilder::ending)) or
+    /// [`HistoricalDataBuilder::between`](super::HistoricalDataBuilder::between). Terminals:
+    /// [`HistoricalDataBuilder::fetch`](super::HistoricalDataBuilder::fetch) for a one-shot
+    /// [`HistoricalData`] result; [`HistoricalDataBuilder::stream`](super::HistoricalDataBuilder::stream)
+    /// for a `Subscription<HistoricalBarUpdate>` that yields bars as they arrive.
     ///
     /// # Arguments
     /// * `contract` - Contract object that is subject of query
-    /// * `duration` - The amount of time for which the data needs to be retrieved
-    /// * `bar_size` - The bar size (resolution)
-    /// * `what_to_show` - The type of data to retrieve (Trades, MidPoint, etc.)
-    /// * `trading_hours` - Regular trading hours only, or include extended hours
-    /// * `keep_up_to_date` - If true, continue receiving streaming updates after initial data
+    /// * `bar_size` - Bar size (resolution)
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::contracts::Contract;
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::market_data::historical::{ToDuration, HistoricalBarUpdate};
-    /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::stock("SPY").build();
+    /// let contract = Contract::stock("AAPL").build();
     ///
-    /// let subscription = client
-    ///     .historical_data_streaming(
-    ///         &contract, 3.days(), HistoricalBarSize::Min15,
-    ///         HistoricalWhatToShow::Trades, TradingHours::Extended, true
-    ///     )
-    ///     .expect("streaming request failed");
+    /// // IBKR-native: amount of data ending at a specific time (or now if `.ending` is unset)
+    /// let bars = client
+    ///     .historical_data(&contract, BarSize::Hour)
+    ///     .what_to_show(WhatToShow::Trades)
+    ///     .duration(7.days())
+    ///     .fetch()
+    ///     .expect("historical data request failed");
     ///
-    /// while let Some(update) = subscription.next_data() {
-    ///     match update? {
-    ///         HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
-    ///         HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
-    ///         HistoricalBarUpdate::End { start, end } => println!("Stream ended: {} - {}", start, end),
-    ///     }
-    /// }
-    /// # Ok::<(), ibapi::Error>(())
+    /// // Convenience: explicit date range (computes duration internally)
+    /// let bars = client
+    ///     .historical_data(&contract, BarSize::Hour)
+    ///     .between(datetime!(2023-04-08 0:00 UTC), datetime!(2023-04-15 0:00 UTC))
+    ///     .fetch()
+    ///     .expect("historical data request failed");
+    /// # let _ = bars;
     /// ```
-    pub fn historical_data_streaming(
-        &self,
-        contract: &Contract,
-        duration: Duration,
-        bar_size: BarSize,
-        what_to_show: WhatToShow,
-        trading_hours: TradingHours,
-        keep_up_to_date: bool,
-    ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
-        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-            check_version(self.server_version(), Features::TRADING_CLASS)?;
-        }
-
-        let builder = self.request();
-        let request = encoders::encode_request_historical_data(
-            builder.request_id(),
-            contract,
-            None, // end_date must be None when keepUpToDate=true (IBKR requirement)
-            duration,
-            bar_size,
-            Some(what_to_show),
-            trading_hours.use_rth(),
-            keep_up_to_date,
-            &Vec::<crate::contracts::TagValue>::default(),
-        )?;
-
-        builder.send::<HistoricalBarUpdate>(request)
+    pub fn historical_data<'a>(&'a self, contract: &'a Contract, bar_size: BarSize) -> super::HistoricalDataBuilder<'a, Self> {
+        super::HistoricalDataBuilder::new(self, contract, bar_size)
     }
 
     /// Build a request for [`Schedule`] data over the given duration.
@@ -366,6 +253,86 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
         warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
         time_tz::timezones::db::UTC
     }
+}
+
+pub(crate) fn historical_data(
+    client: &Client,
+    contract: &Contract,
+    end_date: Option<OffsetDateTime>,
+    duration: Duration,
+    bar_size: BarSize,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+) -> Result<HistoricalData, Error> {
+    common::validate_historical_data(client.server_version(), contract, end_date, Some(what_to_show))?;
+
+    for _ in 0..MAX_RETRIES {
+        let builder = client.request();
+        let request = encoders::encode_request_historical_data(
+            builder.request_id(),
+            contract,
+            end_date,
+            duration,
+            bar_size,
+            Some(what_to_show),
+            trading_hours.use_rth(),
+            false,
+            &Vec::<crate::contracts::TagValue>::default(),
+        )?;
+
+        let subscription = builder.send_raw(request)?;
+
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                let mut data = decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)?;
+
+                if client.server_version >= crate::server_versions::HISTORICAL_DATA_END {
+                    if let Some(Ok(mut end_msg)) = subscription.next() {
+                        let (start, end) = decoders::decode_historical_data_end(client.server_version, time_zone(client), &mut end_msg)?;
+                        data.start = start;
+                        data.end = end;
+                    }
+                }
+
+                return Ok(data);
+            }
+            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
+            Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
+            Some(Err(Error::ConnectionReset)) => {}
+            Some(Err(e)) => return Err(e),
+            None => return Err(Error::UnexpectedEndOfStream),
+        }
+    }
+
+    Err(Error::ConnectionReset)
+}
+
+pub(crate) fn historical_data_stream(
+    client: &Client,
+    contract: &Contract,
+    duration: Duration,
+    bar_size: BarSize,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+) -> Result<Subscription<HistoricalBarUpdate>, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        check_version(client.server_version(), Features::TRADING_CLASS)?;
+    }
+
+    let builder = client.request();
+    let request = encoders::encode_request_historical_data(
+        builder.request_id(),
+        contract,
+        None, // IBKR requires end_date=None when keep_up_to_date=true
+        duration,
+        bar_size,
+        Some(what_to_show),
+        trading_hours.use_rth(),
+        true, // keep_up_to_date — the whole point of .stream()
+        &Vec::<crate::contracts::TagValue>::default(),
+    )?;
+
+    builder.send::<HistoricalBarUpdate>(request)
 }
 
 #[allow(clippy::too_many_arguments)]
