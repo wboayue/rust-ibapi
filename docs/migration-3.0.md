@@ -594,6 +594,51 @@ let quotes = client.historical_ticks(&contract, 100).starting(start).bid_ask(Ign
 
 The `ignore_size: bool` parameter (previously only valid for the bid/ask variant) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it. Other setters: `.ending(end)` to anchor at an end date, `.trading_hours(TradingHours)` to override the default `Regular`.
 
+### 26. `historical_data` + `historical_data_streaming` collapse to a builder
+
+In 2.x there were two methods, both with 6 args:
+
+```rust,ignore
+// v2.x
+let bars = client.historical_data(
+    &contract, Some(end_date), 7.days(),
+    BarSize::Hour, WhatToShow::Trades, TradingHours::Regular,
+)?;
+
+let sub = client.historical_data_streaming(
+    &contract, 1.days(), BarSize::Min15, WhatToShow::Trades,
+    TradingHours::Regular, true, // keep_up_to_date
+)?;
+```
+
+In 3.0 both collapse into one [`HistoricalDataBuilder`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/struct.HistoricalDataBuilder.html) with terminal-typed output:
+
+```rust,ignore
+// v3.0 — one-shot
+let bars = client
+    .historical_data(&contract, BarSize::Hour)
+    .duration(7.days())
+    .ending(end_date)
+    .fetch()?;
+
+// v3.0 — streaming (keep_up_to_date always true)
+let sub = client
+    .historical_data(&contract, BarSize::Min15)
+    .duration(1.days())
+    .stream()?;
+```
+
+Two date-spec styles are supported and mutually exclusive at the terminal:
+
+- **IBKR-native**: `.duration(D)` (defaults `end_date = None` → now) with optional `.ending(end)` to anchor a specific end date.
+- **Range** (convenience): `.between(start, end)` — computes duration internally and sets `end_date = end`.
+
+Mixing the two (`.between` together with `.duration` or `.ending`) returns `Err(Error::InvalidArgument)` from the terminal. `.stream()` rejects builders that called `.ending(...)` or `.between(...)` — IBKR requires `end_date = None` for `keep_up_to_date = true`.
+
+Other setters: `.what_to_show(WhatToShow)` (default `Trades`), `.trading_hours(TradingHours)` (default `Regular`).
+
+The `historical_data_streaming` method's `keep_up_to_date: bool` parameter is gone — `.stream()` always sets it to `true`. The `keep_up_to_date = false` case wasn't a useful public-API combination (the same wire shape is reachable via `.fetch()` with a different return type).
+
 ## Before / after: common subscription patterns
 
 ### Order construction

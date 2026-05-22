@@ -92,14 +92,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n=== Recent Intraday Data (5-min bars) ===");
         let end_date = OffsetDateTime::now_utc();
         let historical_data = client
-            .historical_data(
-                &contract,
-                Some(end_date),
-                1.days(),                     // Duration: 1 day
-                HistoricalBarSize::Min5,      // 5-minute bars
-                HistoricalWhatToShow::Trades, // Trade data
-                TradingHours::Regular,        // Use regular trading hours
-            )
+            .historical_data(&contract, HistoricalBarSize::Min5)
+            .what_to_show(HistoricalWhatToShow::Trades)
+            .duration(1.days())
+            .ending(end_date)
+            .fetch()
             .await?;
 
         println!("Period: {} to {}", historical_data.start, historical_data.end);
@@ -138,14 +135,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Example 3: Get daily data for past month
         println!("\n=== Daily Data (past month) ===");
         let daily_data = client
-            .historical_data(
-                &contract,
-                Some(end_date),
-                1.months(),                   // Duration: 1 month
-                HistoricalBarSize::Day,       // Daily bars
-                HistoricalWhatToShow::Trades, // Trade data
-                TradingHours::Regular,        // Use regular trading hours
-            )
+            .historical_data(&contract, HistoricalBarSize::Day)
+            .what_to_show(HistoricalWhatToShow::Trades)
+            .duration(1.months())
+            .ending(end_date)
+            .fetch()
             .await?;
 
         println!("Daily bars received: {}", daily_data.bars.len());
@@ -166,14 +160,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Bid data (last 1 day)
         let bid_data = client
-            .historical_data(
-                &contract,
-                Some(end_date),
-                1.days(),
-                HistoricalBarSize::Min,
-                HistoricalWhatToShow::Bid,
-                TradingHours::Regular,
-            )
+            .historical_data(&contract, HistoricalBarSize::Min)
+            .what_to_show(HistoricalWhatToShow::Bid)
+            .duration(1.days())
+            .ending(end_date)
+            .fetch()
             .await?;
         println!("Bid bars (1-min): {} bars", bid_data.bars.len());
         if let Some(bar) = bid_data.bars.first() {
@@ -188,14 +179,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Ask data (last 1 day)
         let ask_data = client
-            .historical_data(
-                &contract,
-                Some(end_date),
-                1.days(),
-                HistoricalBarSize::Min,
-                HistoricalWhatToShow::Ask,
-                TradingHours::Regular,
-            )
+            .historical_data(&contract, HistoricalBarSize::Min)
+            .what_to_show(HistoricalWhatToShow::Ask)
+            .duration(1.days())
+            .ending(end_date)
+            .fetch()
             .await?;
         println!("Ask bars (1-min): {} bars", ask_data.bars.len());
         if let Some(bar) = ask_data.bars.first() {
@@ -229,14 +217,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let subscription = client
-        .historical_data_streaming(
-            &contract,
-            1.days(),               // Duration: 1 day of history
-            HistoricalBarSize::Min, // 1-minute bars
-            what_to_show,
-            TradingHours::Extended,
-            true, // keep_up_to_date: stream live updates
-        )
+        .historical_data(&contract, HistoricalBarSize::Min)
+        .what_to_show(what_to_show)
+        .trading_hours(TradingHours::Extended)
+        .duration(1.days())
+        .stream()
         .await?;
 
     let mut subscription = subscription.filter_data();

@@ -1,7 +1,6 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
-use ibapi::market_data::TradingHours;
+use ibapi::market_data::historical::{BarSize, Duration};
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
@@ -48,8 +47,8 @@ async fn concurrent_historical_data() {
     rate_limit();
     rate_limit();
     let (r1, r2) = tokio::join!(
-        client.historical_data(&aapl, None, Duration::days(5), BarSize::Day, WhatToShow::Trades, TradingHours::Regular),
-        client.historical_data(&msft, None, Duration::days(5), BarSize::Day, WhatToShow::Trades, TradingHours::Regular),
+        client.historical_data(&aapl, BarSize::Day).duration(Duration::days(5)).fetch(),
+        client.historical_data(&msft, BarSize::Day).duration(Duration::days(5)).fetch(),
     );
 
     let d1 = r1.expect("AAPL historical_data failed");
