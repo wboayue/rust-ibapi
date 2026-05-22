@@ -30,6 +30,8 @@ pub(crate) mod common;
 mod builder;
 pub use builder::{MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
 
+pub mod generic_tick;
+
 // Feature-specific implementations
 #[doc(hidden)]
 #[cfg(feature = "sync")]
