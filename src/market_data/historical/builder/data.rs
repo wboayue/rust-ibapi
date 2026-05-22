@@ -52,30 +52,19 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
         self
     }
 
-    /// Amount of data going back from `ending` (or from now if `ending` is unset).
-    ///
-    /// IBKR-native shape; pairs with [`ending`](Self::ending). Cannot be combined
-    /// with [`between`](Self::between).
+    /// Amount of data going back from the end date (now if [`ending`](Self::ending) is unset).
     pub fn duration(mut self, duration: Duration) -> Self {
         self.duration = Some(duration);
         self
     }
 
     /// Anchor the query at a specific end date (defaults to now).
-    ///
-    /// IBKR-native shape; pairs with [`duration`](Self::duration). Cannot be
-    /// combined with [`between`](Self::between) or with [`stream`](Self::stream)
-    /// (IBKR requires `end_date = None` for streaming updates).
     pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
         self.ending = Some(end_date);
         self
     }
 
-    /// Convenience: specify an explicit date range. Computes `duration = end - start`
-    /// and sets `end_date = end` internally.
-    ///
-    /// Cannot be combined with [`duration`](Self::duration) / [`ending`](Self::ending)
-    /// or with [`stream`](Self::stream) (IBKR requires `end_date = None` for streaming).
+    /// Convenience: specify an explicit date range (computes duration internally).
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self

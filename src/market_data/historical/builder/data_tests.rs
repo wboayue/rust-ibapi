@@ -1,7 +1,24 @@
-// Minimal valid HistoricalData response (msg type 17) so .fetch() returns Ok
-// and the test can proceed to the request assertion.
 const HISTORICAL_DATA_RESPONSE: &str =
     "17\09000\020230315  09:30:00\020230315  10:30:00\01\01678886400\0185.50\0186.00\0185.25\0185.75\01000\0185.70\0100\0";
+
+// `Subscription<T>` doesn't impl Debug, so `{:?}` formatting on `Result<Subscription<_>, _>`
+// won't compile. These helpers match the Err arm manually for the .stream() terminals.
+// Sync + async use their own variants because the `Subscription` type differs per feature.
+#[cfg(feature = "sync")]
+fn assert_stream_invalid_argument_sync(
+    result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalBarUpdate>, crate::Error>,
+) {
+    let Err(err) = result else { panic!("expected InvalidArgument error") };
+    assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
+}
+
+#[cfg(feature = "async")]
+fn assert_stream_invalid_argument_async(
+    result: Result<crate::subscriptions::r#async::Subscription<crate::market_data::historical::HistoricalBarUpdate>, crate::Error>,
+) {
+    let Err(err) = result else { panic!("expected InvalidArgument error") };
+    assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
+}
 
 #[cfg(feature = "sync")]
 mod sync_tests {
@@ -149,12 +166,6 @@ mod sync_tests {
         );
     }
 
-    // Subscription<T> doesn't impl Debug — match the Err without {:?}.
-    fn assert_invalid_argument(result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalBarUpdate>, Error>) {
-        let Err(err) = result else { panic!("expected InvalidArgument error") };
-        assert!(matches!(err, Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
-    }
-
     #[test]
     fn stream_rejects_ending() {
         let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
@@ -166,7 +177,7 @@ mod sync_tests {
             .ending(datetime!(2026-04-15 0:00 UTC))
             .stream();
 
-        assert_invalid_argument(result);
+        super::assert_stream_invalid_argument_sync(result);
     }
 
     #[test]
@@ -179,7 +190,7 @@ mod sync_tests {
             .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
             .stream();
 
-        assert_invalid_argument(result);
+        super::assert_stream_invalid_argument_sync(result);
     }
 }
 
@@ -274,10 +285,20 @@ mod async_tests {
             .stream()
             .await;
 
-        // Subscription<T> doesn't implement Debug, so match without {:?}.
-        let Err(err) = result else {
-            panic!("expected InvalidArgument error from .stream() with .ending()")
-        };
-        assert!(matches!(err, Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
+        super::assert_stream_invalid_argument_async(result);
+    }
+
+    #[tokio::test]
+    async fn stream_rejects_between() {
+        let (client, _bus) = create_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_data(&contract, BarSize::Hour)
+            .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
+            .stream()
+            .await;
+
+        super::assert_stream_invalid_argument_async(result);
     }
 }
