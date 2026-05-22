@@ -274,7 +274,7 @@ fn test_market_depth() {
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
             .number_of_rows(number_of_rows)
-            .smart_depth(smart_depth.is_enabled()),
+            .smart_depth(matches!(smart_depth, SmartDepth::Yes)),
     );
 }
 

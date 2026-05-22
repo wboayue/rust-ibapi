@@ -28,7 +28,7 @@ impl<'a, C> MarketDepthBuilder<'a, C> {
             client,
             contract,
             number_of_rows,
-            smart_depth: SmartDepth::No,
+            smart_depth: SmartDepth::default(),
         }
     }
 

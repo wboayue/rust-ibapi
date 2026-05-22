@@ -215,7 +215,7 @@ pub(crate) fn market_depth(
     number_of_rows: i32,
     smart_depth: SmartDepth,
 ) -> Result<Subscription<MarketDepths>, Error> {
-    let is_smart_depth = smart_depth.is_enabled();
+    let is_smart_depth = matches!(smart_depth, SmartDepth::Yes);
     if is_smart_depth {
         check_version(client.server_version(), Features::SMART_DEPTH)?;
     }

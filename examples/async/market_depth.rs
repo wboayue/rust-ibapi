@@ -50,7 +50,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Request market depth (5 price levels, single-exchange depth).
     let market_depth = client.market_depth(&contract, 5).smart_depth(SmartDepth::No).subscribe().await?;
     println!("\nMarket depth subscription created");
     println!("Showing order book updates...\n");

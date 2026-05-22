@@ -68,13 +68,6 @@ pub enum SmartDepth {
     No,
 }
 
-impl SmartDepth {
-    /// Returns true when smart depth is enabled.
-    pub fn is_enabled(self) -> bool {
-        matches!(self, SmartDepth::Yes)
-    }
-}
-
 /// Market data type for switching between real-time and frozen/delayed.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
