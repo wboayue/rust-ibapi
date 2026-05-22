@@ -653,6 +653,30 @@ use ibapi::market_data::IgnoreSize;
 
 No type changes — `IgnoreSize` itself is unchanged (still `Yes` / `No`). The prelude entry is unchanged; users who import via `ibapi::prelude::*;` see no difference.
 
+### 28. `tick_by_tick_*` quartet collapses to a builder
+
+In 2.x there were four methods, one per tick type, all with the same 3-arg signature:
+
+```rust,ignore
+// v2.x
+let trades = client.tick_by_tick_all_last(&contract, 10, false)?;
+let lasts  = client.tick_by_tick_last(&contract, 10, false)?;
+let quotes = client.tick_by_tick_bid_ask(&contract, 10, false)?;
+let mids   = client.tick_by_tick_midpoint(&contract, 10, false)?;
+```
+
+In 3.0 the four collapse into one [`TickByTickBuilder`](https://docs.rs/ibapi/latest/ibapi/market_data/realtime/struct.TickByTickBuilder.html). The terminal method selects the tick stream:
+
+```rust,ignore
+// v3.0
+let trades = client.tick_by_tick(&contract, 10).all_last()?;
+let lasts  = client.tick_by_tick(&contract, 10).last()?;
+let quotes = client.tick_by_tick(&contract, 10).bid_ask(IgnoreSize::No)?;
+let mids   = client.tick_by_tick(&contract, 10).mid_point()?;
+```
+
+The `ignore_size: bool` parameter (only meaningful for the bid/ask variant — IBKR ignores it on the other three) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

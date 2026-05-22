@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
+use ibapi::market_data::IgnoreSize;
 
 // This example demonstrates how to stream tick by tick data for the bid and ask price of a contract.
 
@@ -22,7 +23,7 @@ fn main() {
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
     let contract = Contract::stock("NVDA").build();
-    let ticks = client.tick_by_tick_bid_ask(&contract, 0, false).expect("failed to get ticks");
+    let ticks = client.tick_by_tick(&contract, 0).bid_ask(IgnoreSize::No).expect("failed to get ticks");
 
     println!(
         "streaming bid/ask price for security_type: {:?}, symbol: {}",

@@ -32,12 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = Contract::stock("SPY").build();
     println!("\nSubscribing to tick-by-tick Last trades for {}", contract.symbol);
 
-    // Request tick-by-tick Last trades
-    // Parameters:
-    // - contract: The contract to get data for
-    // - number_of_ticks: 0 for streaming data, or 1-1000 for historical ticks
-    // - ignore_size: false to include size information
-    let trades = client.tick_by_tick_last(&contract, 0, false).await?;
+    // Request tick-by-tick Last trades. `0` requests streaming data; pass
+    // 1-1000 for historical ticks.
+    let trades = client.tick_by_tick(&contract, 0).last().await?;
 
     println!("Subscription created. Receiving Last trades only...\n");
     println!("Time                     | Price    | Size   | Exchange | Conditions");

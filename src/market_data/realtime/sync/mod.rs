@@ -7,8 +7,9 @@ use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, RealtimeBarsBuilder, TickTypes, Trade, WhatToShow};
+use super::{Bar, DepthMarketDataDescription, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
 use crate::market_data::TradingHours;
+use crate::subscriptions::StreamDecoder;
 
 // Validates that server supports the given request.
 pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
@@ -45,156 +46,46 @@ impl Client {
     ///     .subscribe()
     ///     .expect("realtime bars request failed");
     ///
-    /// for (i, bar) in subscription.iter().enumerate().take(60) {
-    ///     println!("bar[{i}]: {bar:?}");
+    /// for (i, bar) in subscription.iter_data().enumerate().take(60) {
+    ///     match bar {
+    ///         Ok(bar) => println!("bar[{i}]: {bar:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn realtime_bars<'a>(&'a self, contract: &'a Contract) -> RealtimeBarsBuilder<'a, Self> {
         RealtimeBarsBuilder::new(self, contract)
     }
 
-    /// Requests tick by tick AllLast ticks.
+    /// Returns a builder for a tick-by-tick real-time subscription.
     ///
-    /// # Arguments
-    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
-    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
-    /// * `ignore_size`     - Specifies if tick sizes should be ignored.
+    /// Pick the tick stream with the terminal — `.last()` / `.all_last()` /
+    /// `.bid_ask(IgnoreSize)` / `.mid_point()`. See [`TickByTickBuilder`].
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::IgnoreSize;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
     /// let contract = Contract::stock("AAPL").build();
-    /// let number_of_ticks = 10; // Request a small number of ticks for the example
-    /// let ignore_size = false;
     ///
-    /// let subscription = client.tick_by_tick_all_last(&contract, number_of_ticks, ignore_size)
-    ///     .expect("tick-by-tick all last data request failed");
+    /// let quotes = client
+    ///     .tick_by_tick(&contract, 10)
+    ///     .bid_ask(IgnoreSize::No)
+    ///     .expect("tick-by-tick bid/ask request failed");
     ///
-    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("All Last Tick: {tick:?}");
+    /// for quote in quotes.iter_data().take(10) {
+    ///     match quote {
+    ///         Ok(quote) => println!("{quote:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
-    pub fn tick_by_tick_all_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
-
-        builder.send(request)
-    }
-
-    /// Requests tick by tick BidAsk ticks.
-    ///
-    /// # Arguments
-    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
-    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
-    /// * `ignore_size`     - Specifies if tick sizes should be ignored. (typically true for BidAsk ticks to get changes based on price).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let number_of_ticks = 10; // Request a small number of ticks for the example
-    /// let ignore_size = false;
-    ///
-    /// let subscription = client.tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
-    ///     .expect("tick-by-tick bid/ask data request failed");
-    ///
-    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("BidAsk Tick: {tick:?}");
-    /// }
-    /// ```
-    pub fn tick_by_tick_bid_ask(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<BidAsk>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
-
-        builder.send(request)
-    }
-
-    /// Requests tick by tick Last ticks.
-    ///
-    /// # Arguments
-    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
-    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
-    /// * `ignore_size`     - Specifies if tick sizes should be ignored (typically false for Last ticks).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let number_of_ticks = 10; // Request a small number of ticks for the example
-    /// let ignore_size = false;
-    ///
-    /// let subscription = client.tick_by_tick_last(&contract, number_of_ticks, ignore_size)
-    ///     .expect("tick-by-tick last data request failed");
-    ///
-    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("Last Tick: {tick:?}");
-    /// }
-    /// ```
-    pub fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
-
-        builder.send(request)
-    }
-
-    /// Requests tick by tick MidPoint ticks.
-    ///
-    /// # Arguments
-    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
-    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
-    /// * `ignore_size`     - Specifies if tick sizes should be ignored.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let number_of_ticks = 10; // Request a small number of ticks for the example
-    /// let ignore_size = false;
-    ///
-    /// let subscription = client.tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
-    ///     .expect("tick-by-tick mid-point data request failed");
-    ///
-    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("MidPoint Tick: {tick:?}");
-    /// }
-    /// ```
-    pub fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
-
-        builder.send(request)
+    pub fn tick_by_tick<'a>(&'a self, contract: &'a Contract, number_of_ticks: i32) -> TickByTickBuilder<'a, Self> {
+        TickByTickBuilder::new(self, contract, number_of_ticks)
     }
 
     /// Requests the contract's market depth (order book).
@@ -323,6 +214,20 @@ pub(crate) fn realtime_bars(
     let builder = client.request();
     let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
 
+    builder.send(request)
+}
+
+pub(crate) fn tick_by_tick<T: StreamDecoder<T>>(
+    client: &Client,
+    contract: &Contract,
+    tick_type: &str,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> Result<Subscription<T>, Error> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    let builder = client.request();
+    let request = encoders::encode_tick_by_tick(builder.request_id(), contract, tick_type, number_of_ticks, ignore_size)?;
     builder.send(request)
 }
 

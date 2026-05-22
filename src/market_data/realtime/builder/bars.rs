@@ -4,7 +4,7 @@ use crate::market_data::TradingHours;
 use crate::Error;
 
 #[cfg(test)]
-#[path = "builder_tests.rs"]
+#[path = "bars_tests.rs"]
 mod tests;
 
 /// Builder for real-time 5-second bar subscriptions.
@@ -75,8 +75,11 @@ impl<'a> RealtimeBarsBuilder<'a, crate::client::sync::Client> {
     ///     .subscribe()
     ///     .expect("realtime bars request failed");
     ///
-    /// for (i, bar) in subscription.iter().enumerate().take(60) {
-    ///     println!("bar[{i}]: {bar:?}");
+    /// for (i, bar) in subscription.iter_data().enumerate().take(60) {
+    ///     match bar {
+    ///         Ok(bar) => println!("bar[{i}]: {bar:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<Bar>, Error> {

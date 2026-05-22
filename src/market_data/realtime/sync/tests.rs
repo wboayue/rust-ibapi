@@ -2,7 +2,8 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
-use crate::market_data::TradingHours;
+use crate::market_data::realtime::{BidAsk, MidPoint, Trade};
+use crate::market_data::{IgnoreSize, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -162,10 +163,9 @@ fn test_tick_by_tick_all_last() {
         ..Contract::default()
     };
     let number_of_ticks = 2;
-    let ignore_size = false;
 
     // Test subscription creation
-    let trades = client.tick_by_tick_all_last(&contract, number_of_ticks, ignore_size);
+    let trades = client.tick_by_tick(&contract, number_of_ticks).all_last();
     let trades = trades.expect("Failed to create tick-by-tick subscription");
 
     // Test receiving data
@@ -194,7 +194,7 @@ fn test_tick_by_tick_all_last() {
             .contract(&contract)
             .tick_type("AllLast")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -334,10 +334,9 @@ fn test_tick_by_tick_bid_ask() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
-    let result = client.tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size);
+    let result = client.tick_by_tick(&contract, number_of_ticks).bid_ask(IgnoreSize::No);
 
     // Test receiving data
     let subscription = result.expect("Failed to create bid/ask subscription");
@@ -360,7 +359,7 @@ fn test_tick_by_tick_bid_ask() {
             .contract(&contract)
             .tick_type("BidAsk")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -387,10 +386,9 @@ fn test_tick_by_tick_midpoint() {
         ..Contract::default()
     };
     let number_of_ticks = 0;
-    let ignore_size = false;
 
     // Test subscription creation
-    let midpoints = client.tick_by_tick_midpoint(&contract, number_of_ticks, ignore_size);
+    let midpoints = client.tick_by_tick(&contract, number_of_ticks).mid_point();
     let midpoints = midpoints.expect("Failed to create tick-by-tick midpoint subscription");
 
     // Test receiving data
@@ -425,7 +423,7 @@ fn test_tick_by_tick_midpoint() {
             .contract(&contract)
             .tick_type("MidPoint")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -635,10 +633,9 @@ fn test_tick_by_tick_last() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
-    let result = client.tick_by_tick_last(&contract, number_of_ticks, ignore_size);
+    let result = client.tick_by_tick(&contract, number_of_ticks).last();
 
     // Test receiving data
     let trades = result.expect("Failed to receive tick-by-tick last data");
@@ -661,6 +658,6 @@ fn test_tick_by_tick_last() {
             .contract(&contract)
             .tick_type("Last")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }

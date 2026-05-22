@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: All Last trades (includes all trades)
     println!("=== All Last Trades ===");
-    let all_last_ticks = client.tick_by_tick_all_last(&contract, 0, false).await?;
+    let all_last_ticks = client.tick_by_tick(&contract, 0).all_last().await?;
 
     let mut all_last_ticks = all_last_ticks.filter_data();
     let mut count = 0;
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Bid/Ask quotes
     println!("\n=== Bid/Ask Quotes ===");
-    let bid_ask_ticks = client.tick_by_tick_bid_ask(&contract, 0, false).await?;
+    let bid_ask_ticks = client.tick_by_tick(&contract, 0).bid_ask(IgnoreSize::No).await?;
 
     let mut bid_ask_ticks = bid_ask_ticks.filter_data();
     let mut count = 0;
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Midpoint ticks
     println!("\n=== Midpoint Ticks ===");
-    let midpoint_ticks = client.tick_by_tick_midpoint(&contract, 0, false).await?;
+    let midpoint_ticks = client.tick_by_tick(&contract, 0).mid_point().await?;
 
     let mut midpoint_ticks = midpoint_ticks.filter_data();
     let mut count = 0;

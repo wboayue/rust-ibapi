@@ -2,6 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
+use crate::market_data::IgnoreSize;
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -169,11 +170,11 @@ async fn test_tick_by_tick_all_last() {
         ..Contract::default()
     };
     let number_of_ticks = 2;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut trades = client
-        .tick_by_tick_all_last(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .all_last()
         .await
         .expect("Failed to create tick-by-tick subscription");
 
@@ -208,7 +209,7 @@ async fn test_tick_by_tick_all_last() {
             .contract(&contract)
             .tick_type("AllLast")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -237,11 +238,11 @@ async fn test_tick_by_tick_last() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut trades = client
-        .tick_by_tick_last(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .last()
         .await
         .expect("Failed to receive tick-by-tick last data");
 
@@ -267,7 +268,7 @@ async fn test_tick_by_tick_last() {
             .contract(&contract)
             .tick_type("Last")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -292,11 +293,11 @@ async fn test_tick_by_tick_bid_ask() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut subscription = client
-        .tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create bid/ask subscription");
 
@@ -323,7 +324,7 @@ async fn test_tick_by_tick_bid_ask() {
             .contract(&contract)
             .tick_type("BidAsk")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -350,11 +351,11 @@ async fn test_tick_by_tick_midpoint() {
         ..Contract::default()
     };
     let number_of_ticks = 0;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut midpoints = client
-        .tick_by_tick_midpoint(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .mid_point()
         .await
         .expect("Failed to create tick-by-tick midpoint subscription");
 
@@ -395,7 +396,7 @@ async fn test_tick_by_tick_midpoint() {
             .contract(&contract)
             .tick_type("MidPoint")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 

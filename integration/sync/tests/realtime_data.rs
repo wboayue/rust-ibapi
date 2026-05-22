@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::{MarketDataType, TradingHours};
+use ibapi::market_data::{IgnoreSize, MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
@@ -100,7 +100,7 @@ fn tick_by_tick_all_last() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let subscription = client.tick_by_tick_all_last(&contract, 0, false).expect("tick_by_tick_all_last failed");
+    let subscription = client.tick_by_tick(&contract, 0).all_last().expect("tick_by_tick_all_last failed");
 
     if let Some(Ok(SubscriptionItem::Data(trade))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(trade.price > 0.0, "trade price should be positive");
@@ -115,7 +115,10 @@ fn tick_by_tick_bid_ask() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let subscription = client.tick_by_tick_bid_ask(&contract, 0, false).expect("tick_by_tick_bid_ask failed");
+    let subscription = client
+        .tick_by_tick(&contract, 0)
+        .bid_ask(IgnoreSize::No)
+        .expect("tick_by_tick_bid_ask failed");
 
     if let Some(Ok(SubscriptionItem::Data(tick))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(tick.bid_price > 0.0, "bid price should be positive");
@@ -131,7 +134,7 @@ fn tick_by_tick_midpoint() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let subscription = client.tick_by_tick_midpoint(&contract, 0, false).expect("tick_by_tick_midpoint failed");
+    let subscription = client.tick_by_tick(&contract, 0).mid_point().expect("tick_by_tick_midpoint failed");
 
     if let Some(Ok(SubscriptionItem::Data(mp))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(mp.mid_point > 0.0, "midpoint should be positive");

@@ -40,8 +40,9 @@ impl TradingHours {
 ///
 /// IBKR's bid/ask tick-by-tick request honors this flag; the other tick types
 /// (`Last` / `AllLast` / `MidPoint`) ignore it on the wire. Exposed only on
-/// the `.bid_ask(...)` terminals of [`HistoricalTicksBuilder`](crate::market_data::historical::HistoricalTicksBuilder)
-/// and (future) `TickByTickBuilder`.
+/// the `.bid_ask(...)` terminals of
+/// [`HistoricalTicksBuilder`](crate::market_data::historical::HistoricalTicksBuilder)
+/// and [`TickByTickBuilder`](crate::market_data::realtime::TickByTickBuilder).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IgnoreSize {
