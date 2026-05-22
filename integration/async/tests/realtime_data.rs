@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::{MarketDataType, TradingHours};
+use ibapi::market_data::{IgnoreSize, MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
@@ -112,10 +112,7 @@ async fn tick_by_tick_all_last() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let mut subscription = client
-        .tick_by_tick_all_last(&contract, 0, false)
-        .await
-        .expect("tick_by_tick_all_last failed");
+    let mut subscription = client.tick_by_tick(&contract, 0).all_last().await.expect("tick_by_tick_all_last failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(15), subscription.next()).await;
     if let Ok(Some(Ok(SubscriptionItem::Data(trade)))) = item {
@@ -132,7 +129,8 @@ async fn tick_by_tick_bid_ask() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .tick_by_tick_bid_ask(&contract, 0, false)
+        .tick_by_tick(&contract, 0)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("tick_by_tick_bid_ask failed");
 
@@ -151,10 +149,7 @@ async fn tick_by_tick_midpoint() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let mut subscription = client
-        .tick_by_tick_midpoint(&contract, 0, false)
-        .await
-        .expect("tick_by_tick_midpoint failed");
+    let mut subscription = client.tick_by_tick(&contract, 0).mid_point().await.expect("tick_by_tick_midpoint failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(15), subscription.next()).await;
     if let Ok(Some(Ok(SubscriptionItem::Data(mp)))) = item {

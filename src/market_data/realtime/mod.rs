@@ -27,7 +27,7 @@ use crate::Error;
 pub(crate) mod common;
 
 mod builder;
-pub use builder::RealtimeBarsBuilder;
+pub use builder::{RealtimeBarsBuilder, TickByTickBuilder};
 
 // Feature-specific implementations
 #[doc(hidden)]

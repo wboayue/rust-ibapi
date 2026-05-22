@@ -4,7 +4,7 @@ use crate::market_data::TradingHours;
 use crate::Error;
 
 #[cfg(test)]
-#[path = "builder_tests.rs"]
+#[path = "bars_tests.rs"]
 mod tests;
 
 /// Builder for real-time 5-second bar subscriptions.

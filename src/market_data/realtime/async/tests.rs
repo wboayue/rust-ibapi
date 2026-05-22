@@ -2,6 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
+use crate::market_data::IgnoreSize;
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -173,7 +174,8 @@ async fn test_tick_by_tick_all_last() {
 
     // Test subscription creation
     let mut trades = client
-        .tick_by_tick_all_last(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .all_last()
         .await
         .expect("Failed to create tick-by-tick subscription");
 
@@ -241,7 +243,8 @@ async fn test_tick_by_tick_last() {
 
     // Test subscription creation
     let mut trades = client
-        .tick_by_tick_last(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .last()
         .await
         .expect("Failed to receive tick-by-tick last data");
 
@@ -296,7 +299,8 @@ async fn test_tick_by_tick_bid_ask() {
 
     // Test subscription creation
     let mut subscription = client
-        .tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create bid/ask subscription");
 
@@ -354,7 +358,8 @@ async fn test_tick_by_tick_midpoint() {
 
     // Test subscription creation
     let mut midpoints = client
-        .tick_by_tick_midpoint(&contract, number_of_ticks, ignore_size)
+        .tick_by_tick(&contract, number_of_ticks)
+        .mid_point()
         .await
         .expect("Failed to create tick-by-tick midpoint subscription");
 

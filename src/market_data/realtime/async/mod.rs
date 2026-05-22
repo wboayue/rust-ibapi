@@ -8,8 +8,9 @@ use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, RealtimeBarsBuilder, TickTypes, Trade, WhatToShow};
+use super::{Bar, DepthMarketDataDescription, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
 use crate::market_data::TradingHours;
+use crate::subscriptions::StreamDecoder;
 
 impl Client {
     /// Switches market data type returned from market data request.
@@ -41,48 +42,12 @@ impl Client {
         builder.send::<Bar>(request).await
     }
 
-    /// Requests tick by tick AllLast ticks.
-    pub async fn tick_by_tick_all_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
-
-        builder.send::<Trade>(request).await
-    }
-
-    /// Requests tick by tick Last ticks.
-    pub async fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
-
-        builder.send::<Trade>(request).await
-    }
-
-    /// Requests tick by tick BidAsk ticks.
-    pub async fn tick_by_tick_bid_ask(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<BidAsk>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
-
-        builder.send::<BidAsk>(request).await
-    }
-
-    /// Requests tick by tick MidPoint ticks.
-    pub async fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
-        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
-
-        let builder = self.request();
-
-        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
-
-        builder.send::<MidPoint>(request).await
+    /// Returns a builder for a tick-by-tick real-time subscription.
+    ///
+    /// Pick the tick stream with the terminal — `.last()` / `.all_last()` /
+    /// `.bid_ask(IgnoreSize)` / `.mid_point()`. See [`TickByTickBuilder`].
+    pub fn tick_by_tick<'a>(&'a self, contract: &'a Contract, number_of_ticks: i32) -> TickByTickBuilder<'a, Self> {
+        TickByTickBuilder::new(self, contract, number_of_ticks)
     }
 
     /// Requests market depth data.
@@ -146,6 +111,20 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
     }
 
     Ok(())
+}
+
+pub(crate) async fn tick_by_tick<T: StreamDecoder<T> + Send + 'static>(
+    client: &Client,
+    contract: &Contract,
+    tick_type: &str,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> Result<Subscription<T>, Error> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    let builder = client.request();
+    let request = encoders::encode_tick_by_tick(builder.request_id(), contract, tick_type, number_of_ticks, ignore_size)?;
+    builder.send::<T>(request).await
 }
 
 #[cfg(test)]

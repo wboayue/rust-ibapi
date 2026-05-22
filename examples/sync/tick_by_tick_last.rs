@@ -22,7 +22,7 @@ fn main() {
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
     let contract = Contract::stock("NVDA").build();
-    let ticks = client.tick_by_tick_last(&contract, 0, false).expect("failed to get ticks");
+    let ticks = client.tick_by_tick(&contract, 0).last().expect("failed to get ticks");
 
     println!(
         "streaming last price for security_type: {:?}, symbol: {}",
