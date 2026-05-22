@@ -13,7 +13,7 @@ use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::IgnoreSize;
+use ibapi::market_data::IgnoreSize;
 
 fn main() {
     env_logger::init();

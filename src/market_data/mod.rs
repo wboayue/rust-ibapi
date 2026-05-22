@@ -36,6 +36,21 @@ impl TradingHours {
     }
 }
 
+/// Whether a tick-by-tick subscription should drop tick size information.
+///
+/// IBKR's bid/ask tick-by-tick request honors this flag; the other tick types
+/// (`Last` / `AllLast` / `MidPoint`) ignore it on the wire. Exposed only on
+/// the `.bid_ask(...)` terminals of [`HistoricalTicksBuilder`](crate::market_data::historical::HistoricalTicksBuilder)
+/// and (future) `TickByTickBuilder`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IgnoreSize {
+    /// Tick sizes are omitted from the response.
+    Yes,
+    /// Tick sizes are included in the response.
+    No,
+}
+
 /// Market data type for switching between real-time and frozen/delayed.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

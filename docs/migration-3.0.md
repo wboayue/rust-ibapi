@@ -639,6 +639,20 @@ Other setters: `.what_to_show(WhatToShow)` (default `Trades`), `.trading_hours(T
 
 The `historical_data_streaming` method's `keep_up_to_date: bool` parameter is gone — `.stream()` always sets it to `true`. The `keep_up_to_date = false` case wasn't a useful public-API combination (the same wire shape is reachable via `.fetch()` with a different return type).
 
+### 27. `IgnoreSize` moved from `historical::` to `market_data::`
+
+`IgnoreSize` (introduced in PR #613 as part of the historical-ticks builder) was scoped to `ibapi::market_data::historical::IgnoreSize`. The same wire flag applies to realtime tick-by-tick subscriptions, so the enum was lifted to `ibapi::market_data::IgnoreSize` to share between both submodules.
+
+```rust,ignore
+// v3 pre-#XXX
+use ibapi::market_data::historical::IgnoreSize;
+
+// v3 ≥ #XXX
+use ibapi::market_data::IgnoreSize;
+```
+
+No type changes — `IgnoreSize` itself is unchanged (still `Yes` / `No`). The prelude entry is unchanged; users who import via `ibapi::prelude::*;` see no difference.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

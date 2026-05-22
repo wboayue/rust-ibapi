@@ -1,6 +1,7 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, IgnoreSize, WhatToShow};
+use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
+use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};

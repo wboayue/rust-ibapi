@@ -156,7 +156,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::IgnoreSize;
+    /// use ibapi::market_data::IgnoreSize;
     /// use ibapi::market_data::TradingHours;
     /// use time::macros::datetime;
     ///

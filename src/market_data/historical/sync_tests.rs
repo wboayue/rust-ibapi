@@ -4,8 +4,8 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
-use crate::market_data::historical::{IgnoreSize, TickBidAsk, TickLast, TickMidpoint, ToDuration};
-use crate::market_data::TradingHours;
+use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
+use crate::market_data::{IgnoreSize, TradingHours};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;

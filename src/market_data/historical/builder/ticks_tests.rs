@@ -11,8 +11,8 @@ mod sync_tests {
     use super::{BID_ASK_RESPONSE, MID_POINT_RESPONSE, TRADE_RESPONSE};
     use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::market_data::historical::{IgnoreSize, WhatToShow};
-    use crate::market_data::TradingHours;
+    use crate::market_data::historical::WhatToShow;
+    use crate::market_data::{IgnoreSize, TradingHours};
     use crate::server_versions;
     use crate::testdata::builders::market_data::historical_ticks_request;
 
@@ -128,8 +128,8 @@ mod async_tests {
     use super::{BID_ASK_RESPONSE, MID_POINT_RESPONSE, TRADE_RESPONSE};
     use crate::common::test_utils::helpers::{assert_request, create_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::market_data::historical::{IgnoreSize, WhatToShow};
-    use crate::market_data::TradingHours;
+    use crate::market_data::historical::WhatToShow;
+    use crate::market_data::{IgnoreSize, TradingHours};
     use crate::server_versions;
     use crate::testdata::builders::market_data::historical_ticks_request;
 

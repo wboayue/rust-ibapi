@@ -175,7 +175,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
-    /// use ibapi::market_data::historical::IgnoreSize;
+    /// use ibapi::market_data::IgnoreSize;
     /// use time::macros::datetime;
     ///
     /// #[tokio::main]
