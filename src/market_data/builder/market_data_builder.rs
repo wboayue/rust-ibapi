@@ -34,28 +34,31 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// time, use [`Self::add_generic_tick`] instead.
     ///
     /// # Arguments
-    /// * `ticks` - Array of tick type IDs as strings (e.g., `["233", "236"]`)
+    /// * `ticks` - Slice of generic tick request IDs. Prefer the named
+    ///   constants in
+    ///   [`crate::market_data::realtime::generic_tick`] over raw numeric
+    ///   strings.
     ///
-    /// # Common tick types
-    /// * `"100"` - Option Volume (call + put)
-    /// * `"101"` - Option Open Interest (call + put)
-    /// * `"104"` - Option Historical Volatility
-    /// * `"106"` - Option Implied Volatility
-    /// * `"162"` - Index Future Premium
-    /// * `"165"` - Misc Stats (13/26/52-week ranges + 90-day average volume)
-    /// * `"225"` - Auction Values (volume, price, imbalance, regulatory imbalance)
-    /// * `"232"` - Mark Price
-    /// * `"233"` - RT Volume (Time & Sales, incl. unreportable trades)
-    /// * `"236"` - Shortable / Shortable Shares
-    /// * `"292"` - News
-    /// * `"293"` - Trade Count
-    /// * `"294"` - Trade Rate
-    /// * `"295"` - Volume Rate
-    /// * `"318"` - Last RTH Trade
-    /// * `"375"` - RT Trade Volume (excludes unreportable trades)
-    /// * `"411"` - RT Historical Volatility
-    /// * `"456"` - IB Dividends
-    /// * `"588"` - Futures Open Interest
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "sync")]
+    /// # {
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::generic_tick;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let subscription = client
+    ///     .market_data(&contract)
+    ///     .generic_ticks(&[generic_tick::RT_VOLUME, generic_tick::SHORTABLE])
+    ///     .subscribe()
+    ///     .expect("subscription failed");
+    /// # let _ = subscription;
+    /// # }
+    /// ```
     ///
     /// See: <https://interactivebrokers.github.io/tws-api/tick_types.html>
     pub fn generic_ticks(mut self, ticks: &[&str]) -> Self {
@@ -66,11 +69,13 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// Append a single generic tick ID to the subscription
     ///
     /// Multiple calls accumulate; use [`Self::generic_ticks`] to replace the
-    /// list in one shot. Pairs naturally with conditional composition
-    /// (e.g. only add `"236"` for stocks).
+    /// list in one shot. Pairs naturally with conditional composition (e.g.
+    /// only add [`generic_tick::SHORTABLE`] for stocks). Prefer the named
+    /// constants over raw numeric strings.
     ///
-    /// See [`Self::generic_ticks`] for the list of common IDs and
-    /// [`Self::subscribe`] for a runnable end-to-end example.
+    /// See [`Self::subscribe`] for a runnable end-to-end example.
+    ///
+    /// [`generic_tick::SHORTABLE`]: crate::market_data::realtime::generic_tick::SHORTABLE
     pub fn add_generic_tick(mut self, tick: impl AsRef<str>) -> Self {
         self.generic_ticks.push(tick.as_ref().to_string());
         self
@@ -116,14 +121,14 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::realtime::TickTypes;
+    /// use ibapi::market_data::realtime::{generic_tick, TickTypes};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     ///
     /// let subscription = client.market_data(&contract)
-    ///     .add_generic_tick("233")  // RT Volume
-    ///     .add_generic_tick("236")  // Shortable
+    ///     .add_generic_tick(generic_tick::RT_VOLUME)
+    ///     .add_generic_tick(generic_tick::SHORTABLE)
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
@@ -148,6 +153,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::market_data::realtime::generic_tick;
     /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
@@ -156,8 +162,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///     let contract = Contract::stock("AAPL").build();
     ///
     ///     let mut subscription = client.market_data(&contract)
-    ///         .add_generic_tick("233")  // RT Volume
-    ///         .add_generic_tick("236")  // Shortable
+    ///         .add_generic_tick(generic_tick::RT_VOLUME)
+    ///         .add_generic_tick(generic_tick::SHORTABLE)
     ///         .subscribe()
     ///         .await
     ///         .expect("subscription failed");
