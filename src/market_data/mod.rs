@@ -52,6 +52,22 @@ pub enum IgnoreSize {
     No,
 }
 
+/// Whether a market-depth subscription aggregates rows across exchanges.
+///
+/// `Yes` requests smart depth — TWS aggregates the order book across all
+/// reporting exchanges. `No` requests single-exchange depth (the default).
+/// Used by
+/// [`MarketDepthBuilder`](crate::market_data::realtime::MarketDepthBuilder).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SmartDepth {
+    /// Aggregate the order book across exchanges.
+    Yes,
+    /// Single-exchange depth (default).
+    #[default]
+    No,
+}
+
 /// Market data type for switching between real-time and frozen/delayed.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

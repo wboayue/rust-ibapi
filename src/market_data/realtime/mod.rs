@@ -3,10 +3,11 @@
 //! ## Canonical paths
 //!
 //! Real-time methods are inherent methods on `ibapi::Client` — call
-//! `client.realtime_bars(...)`, `client.tick_by_tick_*(...)`, etc. The public
-//! types (`Bar`, `BidAsk`, `MidPoint`, `Trade`, `TickTypes`,
-//! `RealtimeBarsBuilder`, etc.) live at `ibapi::market_data::realtime::*` and
-//! via `ibapi::prelude::*`.
+//! `client.realtime_bars(...)`, `client.tick_by_tick(...)`,
+//! `client.market_depth(...)`, etc. The public types (`Bar`, `BidAsk`,
+//! `MidPoint`, `Trade`, `TickTypes`, `RealtimeBarsBuilder`,
+//! `TickByTickBuilder`, `MarketDepthBuilder`, etc.) live at
+//! `ibapi::market_data::realtime::*` and via `ibapi::prelude::*`.
 //!
 //! The `realtime::sync` and `realtime::r#async` submodules where the impls
 //! live are `#[doc(hidden)]`: still reachable as paths for crate-internal
@@ -27,7 +28,7 @@ use crate::Error;
 pub(crate) mod common;
 
 mod builder;
-pub use builder::{RealtimeBarsBuilder, TickByTickBuilder};
+pub use builder::{MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
 
 // Feature-specific implementations
 #[doc(hidden)]

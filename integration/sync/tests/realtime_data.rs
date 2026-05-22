@@ -161,7 +161,7 @@ fn market_depth_receives_data() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let subscription = client.market_depth(&contract, 5, false).expect("market_depth failed");
+    let subscription = client.market_depth(&contract, 5).subscribe().expect("market_depth failed");
 
     let _item = subscription.next_timeout(Duration::from_secs(15));
 }

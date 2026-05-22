@@ -7,8 +7,8 @@ use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, DepthMarketDataDescription, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
-use crate::market_data::TradingHours;
+use super::{Bar, DepthMarketDataDescription, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
+use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
 
 // Validates that server supports the given request.
@@ -88,25 +88,27 @@ impl Client {
         TickByTickBuilder::new(self, contract, number_of_ticks)
     }
 
-    /// Requests the contract's market depth (order book).
+    /// Returns a builder for a level-2 market-depth (order book) subscription.
     ///
-    /// # Arguments
-    ///
-    /// * `contract` - The Contract for which the depth is being requested.
-    /// * `number_of_rows` - The number of rows on each side of the order book.
-    /// * `is_smart_depth` - Flag indicates that this is smart depth request.
+    /// Defaults to `SmartDepth::No`. See [`MarketDepthBuilder`] for the chained
+    /// methods.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::SmartDepth;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client
+    ///     .market_depth(&contract, 5)
+    ///     .smart_depth(SmartDepth::Yes)
+    ///     .subscribe()
+    ///     .expect("error requesting market depth");
     ///
-    /// let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
     /// for row in subscription.iter_data() {
     ///     match row {
     ///         Ok(row) => println!("row: {row:?}"),
@@ -117,18 +119,8 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<MarketDepths>, Error> {
-        if is_smart_depth {
-            check_version(self.server_version(), Features::SMART_DEPTH)?;
-        }
-        if !contract.primary_exchange.is_empty() {
-            check_version(self.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
-        }
-
-        let builder = self.request();
-        let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
-
-        builder.send_with_context(request, self.decoder_context().with_smart_depth(is_smart_depth))
+    pub fn market_depth<'a>(&'a self, contract: &'a Contract, number_of_rows: i32) -> MarketDepthBuilder<'a, Self> {
+        MarketDepthBuilder::new(self, contract, number_of_rows)
     }
 
     /// Requests venues for which market data is returned to market_depth (those with market makers)
@@ -215,6 +207,25 @@ pub(crate) fn realtime_bars(
     let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
 
     builder.send(request)
+}
+
+pub(crate) fn market_depth(
+    client: &Client,
+    contract: &Contract,
+    number_of_rows: i32,
+    smart_depth: SmartDepth,
+) -> Result<Subscription<MarketDepths>, Error> {
+    let is_smart_depth = matches!(smart_depth, SmartDepth::Yes);
+    if is_smart_depth {
+        check_version(client.server_version(), Features::SMART_DEPTH)?;
+    }
+    if !contract.primary_exchange.is_empty() {
+        check_version(client.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
+    }
+
+    let builder = client.request();
+    let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
+    builder.send_with_context(request, client.decoder_context().with_smart_depth(is_smart_depth))
 }
 
 pub(crate) fn tick_by_tick<T: StreamDecoder<T>>(
