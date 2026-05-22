@@ -46,8 +46,11 @@ impl Client {
     ///     .subscribe()
     ///     .expect("realtime bars request failed");
     ///
-    /// for (i, bar) in subscription.iter().enumerate().take(60) {
-    ///     println!("bar[{i}]: {bar:?}");
+    /// for (i, bar) in subscription.iter_data().enumerate().take(60) {
+    ///     match bar {
+    ///         Ok(bar) => println!("bar[{i}]: {bar:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn realtime_bars<'a>(&'a self, contract: &'a Contract) -> RealtimeBarsBuilder<'a, Self> {
@@ -74,8 +77,11 @@ impl Client {
     ///     .bid_ask(IgnoreSize::No)
     ///     .expect("tick-by-tick bid/ask request failed");
     ///
-    /// for quote in quotes.iter().take(10) {
-    ///     println!("{quote:?}");
+    /// for quote in quotes.iter_data().take(10) {
+    ///     match quote {
+    ///         Ok(quote) => println!("{quote:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn tick_by_tick<'a>(&'a self, contract: &'a Contract, number_of_ticks: i32) -> TickByTickBuilder<'a, Self> {

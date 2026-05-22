@@ -170,7 +170,6 @@ async fn test_tick_by_tick_all_last() {
         ..Contract::default()
     };
     let number_of_ticks = 2;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut trades = client
@@ -210,7 +209,7 @@ async fn test_tick_by_tick_all_last() {
             .contract(&contract)
             .tick_type("AllLast")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -239,7 +238,6 @@ async fn test_tick_by_tick_last() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut trades = client
@@ -270,7 +268,7 @@ async fn test_tick_by_tick_last() {
             .contract(&contract)
             .tick_type("Last")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -295,7 +293,6 @@ async fn test_tick_by_tick_bid_ask() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut subscription = client
@@ -327,7 +324,7 @@ async fn test_tick_by_tick_bid_ask() {
             .contract(&contract)
             .tick_type("BidAsk")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -354,7 +351,6 @@ async fn test_tick_by_tick_midpoint() {
         ..Contract::default()
     };
     let number_of_ticks = 0;
-    let ignore_size = false;
 
     // Test subscription creation
     let mut midpoints = client
@@ -400,7 +396,7 @@ async fn test_tick_by_tick_midpoint() {
             .contract(&contract)
             .tick_type("MidPoint")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 

@@ -163,7 +163,6 @@ fn test_tick_by_tick_all_last() {
         ..Contract::default()
     };
     let number_of_ticks = 2;
-    let ignore_size = false;
 
     // Test subscription creation
     let trades = client.tick_by_tick(&contract, number_of_ticks).all_last();
@@ -195,7 +194,7 @@ fn test_tick_by_tick_all_last() {
             .contract(&contract)
             .tick_type("AllLast")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -335,7 +334,6 @@ fn test_tick_by_tick_bid_ask() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let result = client.tick_by_tick(&contract, number_of_ticks).bid_ask(IgnoreSize::No);
@@ -361,7 +359,7 @@ fn test_tick_by_tick_bid_ask() {
             .contract(&contract)
             .tick_type("BidAsk")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -388,7 +386,6 @@ fn test_tick_by_tick_midpoint() {
         ..Contract::default()
     };
     let number_of_ticks = 0;
-    let ignore_size = false;
 
     // Test subscription creation
     let midpoints = client.tick_by_tick(&contract, number_of_ticks).mid_point();
@@ -426,7 +423,7 @@ fn test_tick_by_tick_midpoint() {
             .contract(&contract)
             .tick_type("MidPoint")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }
 
@@ -636,7 +633,6 @@ fn test_tick_by_tick_last() {
         ..Contract::default()
     };
     let number_of_ticks = 1;
-    let ignore_size = false;
 
     // Test subscription creation
     let result = client.tick_by_tick(&contract, number_of_ticks).last();
@@ -662,6 +658,6 @@ fn test_tick_by_tick_last() {
             .contract(&contract)
             .tick_type("Last")
             .number_of_ticks(number_of_ticks)
-            .ignore_size(ignore_size),
+            .ignore_size(false),
     );
 }

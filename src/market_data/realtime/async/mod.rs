@@ -46,6 +46,32 @@ impl Client {
     ///
     /// Pick the tick stream with the terminal — `.last()` / `.all_last()` /
     /// `.bid_ask(IgnoreSize)` / `.mid_point()`. See [`TickByTickBuilder`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     let mut quotes = client
+    ///         .tick_by_tick(&contract, 10)
+    ///         .bid_ask(IgnoreSize::No)
+    ///         .await
+    ///         .expect("tick-by-tick bid/ask request failed");
+    ///
+    ///     while let Some(item) = quotes.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(q)) => println!("{q:?}"),
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
+    ///             Err(e) => { eprintln!("error: {e}"); break; }
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn tick_by_tick<'a>(&'a self, contract: &'a Contract, number_of_ticks: i32) -> TickByTickBuilder<'a, Self> {
         TickByTickBuilder::new(self, contract, number_of_ticks)
     }

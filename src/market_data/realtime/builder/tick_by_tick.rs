@@ -57,8 +57,11 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     .last()
     ///     .expect("tick-by-tick last request failed");
     ///
-    /// for trade in trades.iter().take(10) {
-    ///     println!("{trade:?}");
+    /// for trade in trades.iter_data().take(10) {
+    ///     match trade {
+    ///         Ok(trade) => println!("{trade:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn last(self) -> Result<crate::subscriptions::sync::Subscription<Trade>, Error> {
@@ -81,8 +84,11 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     .all_last()
     ///     .expect("tick-by-tick all-last request failed");
     ///
-    /// for trade in trades.iter().take(10) {
-    ///     println!("{trade:?}");
+    /// for trade in trades.iter_data().take(10) {
+    ///     match trade {
+    ///         Ok(trade) => println!("{trade:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn all_last(self) -> Result<crate::subscriptions::sync::Subscription<Trade>, Error> {
@@ -107,8 +113,11 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     .bid_ask(IgnoreSize::No)
     ///     .expect("tick-by-tick bid/ask request failed");
     ///
-    /// for quote in quotes.iter().take(10) {
-    ///     println!("{quote:?}");
+    /// for quote in quotes.iter_data().take(10) {
+    ///     match quote {
+    ///         Ok(quote) => println!("{quote:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::sync::Subscription<BidAsk>, Error> {
@@ -137,8 +146,11 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     .mid_point()
     ///     .expect("tick-by-tick mid-point request failed");
     ///
-    /// for mp in midpoints.iter().take(10) {
-    ///     println!("{mp:?}");
+    /// for mp in midpoints.iter_data().take(10) {
+    ///     match mp {
+    ///         Ok(mp) => println!("{mp:?}"),
+    ///         Err(e) => { eprintln!("error: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn mid_point(self) -> Result<crate::subscriptions::sync::Subscription<MidPoint>, Error> {
