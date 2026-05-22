@@ -10,4 +10,4 @@ pub mod schedule;
 pub mod ticks;
 pub use data::HistoricalDataBuilder;
 pub use schedule::HistoricalScheduleBuilder;
-pub use ticks::{HistoricalTicksBuilder, IgnoreSize};
+pub use ticks::HistoricalTicksBuilder;

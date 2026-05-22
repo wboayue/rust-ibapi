@@ -2,7 +2,8 @@ use std::time::Duration as StdDuration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, IgnoreSize, WhatToShow};
+use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
+use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;

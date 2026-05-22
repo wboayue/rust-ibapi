@@ -4,24 +4,12 @@ use crate::contracts::Contract;
 #[cfg(feature = "async")]
 use crate::market_data::historical::r#async::TickSubscription;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, WhatToShow};
-use crate::market_data::TradingHours;
+use crate::market_data::{IgnoreSize, TradingHours};
 use crate::Error;
 
 #[cfg(test)]
 #[path = "ticks_tests.rs"]
 mod tests;
-
-/// Whether the `bid_ask` terminal should drop tick size information.
-///
-/// This is a wire flag — IBKR only honors it for `BidAsk` ticks, so it lives
-/// on the [`HistoricalTicksBuilder::bid_ask`] terminal rather than as a setter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IgnoreSize {
-    /// Tick sizes are omitted from the response.
-    Yes,
-    /// Tick sizes are included in the response.
-    No,
-}
 
 /// Builder for the historical-ticks API.
 ///
@@ -150,7 +138,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::IgnoreSize;
+    /// use ibapi::market_data::IgnoreSize;
     /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -267,7 +255,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
-    /// use ibapi::market_data::historical::IgnoreSize;
+    /// use ibapi::market_data::IgnoreSize;
     /// use time::macros::datetime;
     ///
     /// #[tokio::main]

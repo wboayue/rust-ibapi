@@ -49,13 +49,13 @@ pub use crate::contracts::{Contract, SecurityType};
 
 // Market data types - historical
 pub use crate::market_data::historical::{
-    BarSize as HistoricalBarSize, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, IgnoreSize, ToDuration,
+    BarSize as HistoricalBarSize, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, ToDuration,
     WhatToShow as HistoricalWhatToShow,
 };
 
 // Market data types - realtime
 pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, WhatToShow as RealtimeWhatToShow};
-pub use crate::market_data::{MarketDataType, TradingHours};
+pub use crate::market_data::{IgnoreSize, MarketDataType, TradingHours};
 
 // Order types
 pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderUpdate, Orders, PlaceOrder};

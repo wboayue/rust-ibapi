@@ -30,7 +30,7 @@ use crate::{Error, ToField};
 pub(crate) mod common;
 
 mod builder;
-pub use builder::{HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, IgnoreSize};
+pub use builder::{HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder};
 
 #[doc(hidden)]
 #[cfg(feature = "sync")]
