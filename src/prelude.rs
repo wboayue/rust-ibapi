@@ -54,8 +54,10 @@ pub use crate::market_data::historical::{
 };
 
 // Market data types - realtime
-pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickByTickBuilder, TickTypes, WhatToShow as RealtimeWhatToShow};
-pub use crate::market_data::{IgnoreSize, MarketDataType, TradingHours};
+pub use crate::market_data::realtime::{
+    BarSize as RealtimeBarSize, MarketDepthBuilder, TickByTickBuilder, TickTypes, WhatToShow as RealtimeWhatToShow,
+};
+pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 
 // Order types
 pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderUpdate, Orders, PlaceOrder};

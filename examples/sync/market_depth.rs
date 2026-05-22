@@ -8,6 +8,7 @@
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
+use ibapi::market_data::SmartDepth;
 
 // This example demonstrates how to request market depth data.
 
@@ -18,7 +19,11 @@ fn main() {
 
     let contract = Contract::stock("AAPL").build();
 
-    let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
+    let subscription = client
+        .market_depth(&contract, 5)
+        .smart_depth(SmartDepth::Yes)
+        .subscribe()
+        .expect("error requesting market depth");
     for row in subscription.iter_data() {
         match row {
             Ok(row) => println!("row: {row:?}"),

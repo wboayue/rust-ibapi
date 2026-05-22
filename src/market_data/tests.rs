@@ -29,6 +29,17 @@ fn market_data_type_from_i32() {
 }
 
 #[test]
+fn smart_depth_is_enabled() {
+    assert!(SmartDepth::Yes.is_enabled());
+    assert!(!SmartDepth::No.is_enabled());
+}
+
+#[test]
+fn smart_depth_default_is_no() {
+    assert_eq!(SmartDepth::default(), SmartDepth::No);
+}
+
+#[test]
 fn encode_request_market_data_type_round_trip() {
     let bytes = encoders::encode_request_market_data_type(MarketDataType::Delayed).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestMarketDataType);

@@ -677,6 +677,26 @@ let mids   = client.tick_by_tick(&contract, 10).mid_point()?;
 
 The `ignore_size: bool` parameter (only meaningful for the bid/ask variant — IBKR ignores it on the other three) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it.
 
+### 29. `market_depth` becomes a builder; `bool` → `SmartDepth`
+
+The 3-arg `market_depth(&contract, num_rows, is_smart_depth)` collapses into a [`MarketDepthBuilder`](https://docs.rs/ibapi/latest/ibapi/market_data/realtime/struct.MarketDepthBuilder.html) with a `.smart_depth(SmartDepth)` setter and a `.subscribe()` terminal. The stringly-typed `is_smart_depth: bool` is now a typed [`SmartDepth`](https://docs.rs/ibapi/latest/ibapi/market_data/enum.SmartDepth.html) enum (`Yes` / `No`, default `No`), mirroring [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/enum.IgnoreSize.html).
+
+```rust,ignore
+// v2.x
+let book = client.market_depth(&contract, 5, true)?;
+```
+
+```rust,ignore
+// v3.0
+use ibapi::market_data::SmartDepth;
+
+let book = client.market_depth(&contract, 5)
+    .smart_depth(SmartDepth::Yes)
+    .subscribe()?;
+```
+
+`SmartDepth::No` is the default — callers that previously passed `false` can omit `.smart_depth(...)` entirely.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

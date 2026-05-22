@@ -22,7 +22,11 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
-use ibapi::{contracts::Contract, market_data::realtime::MarketDepths, Client};
+use ibapi::{
+    contracts::Contract,
+    market_data::{realtime::MarketDepths, SmartDepth},
+    Client,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,13 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Request market depth
-    let market_depth = client
-        .market_depth(
-            &contract, 5,     // Number of rows (price levels)
-            false, // Not smart depth
-        )
-        .await?;
+    // Request market depth (5 price levels, single-exchange depth).
+    let market_depth = client.market_depth(&contract, 5).smart_depth(SmartDepth::No).subscribe().await?;
     println!("\nMarket depth subscription created");
     println!("Showing order book updates...\n");
 

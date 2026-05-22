@@ -5,6 +5,8 @@
 //! terminal `impl` blocks. See [`RealtimeBarsBuilder`] for the precedent.
 
 pub mod bars;
+pub mod market_depth;
 pub mod tick_by_tick;
 pub use bars::RealtimeBarsBuilder;
+pub use market_depth::MarketDepthBuilder;
 pub use tick_by_tick::TickByTickBuilder;

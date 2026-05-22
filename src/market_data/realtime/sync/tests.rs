@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::{assert_request, proto_response, request
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
 use crate::market_data::realtime::{BidAsk, MidPoint, Trade};
-use crate::market_data::{IgnoreSize, TradingHours};
+use crate::market_data::{IgnoreSize, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -233,10 +233,10 @@ fn test_market_depth() {
         ..Contract::default()
     };
     let number_of_rows = 10;
-    let is_smart_depth = false;
+    let smart_depth = SmartDepth::No;
 
     // Test subscription creation
-    let depth = client.market_depth(&contract, number_of_rows, is_smart_depth);
+    let depth = client.market_depth(&contract, number_of_rows).smart_depth(smart_depth).subscribe();
     let depth = depth.expect("Failed to create market depth subscription");
 
     // Test receiving data
@@ -274,7 +274,7 @@ fn test_market_depth() {
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
             .number_of_rows(number_of_rows)
-            .smart_depth(is_smart_depth),
+            .smart_depth(smart_depth.is_enabled()),
     );
 }
 

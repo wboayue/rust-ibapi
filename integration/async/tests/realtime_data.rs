@@ -177,7 +177,7 @@ async fn market_depth_receives_data() {
 
     rate_limit();
     let contract = Contract::stock("AAPL").build();
-    let mut subscription = client.market_depth(&contract, 5, false).await.expect("market_depth failed");
+    let mut subscription = client.market_depth(&contract, 5).subscribe().await.expect("market_depth failed");
 
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(15), subscription.next()).await;
 }
