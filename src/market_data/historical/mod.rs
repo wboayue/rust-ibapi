@@ -73,7 +73,9 @@ pub enum HistoricalParseError {
 /// fn format_bar_time(ts: &BarTimestamp) -> String {
 ///     match ts {
 ///         BarTimestamp::Date(d) => format!("{d}"),
-///         BarTimestamp::DateTime(dt) => format!("{:02}:{:02}", dt.hour(), dt.minute()),
+///         BarTimestamp::DateTime(dt) => {
+///             format!("{:02}:{:02}", dt.hour(), dt.minute())
+///         }
 ///     }
 /// }
 /// ```
@@ -86,11 +88,31 @@ pub enum BarTimestamp {
     DateTime(OffsetDateTime),
 }
 
+impl PartialOrd for BarTimestamp {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BarTimestamp {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Date(a), Self::Date(b)) => a.cmp(b),
+            (Self::DateTime(a), Self::DateTime(b)) => a.cmp(b),
+            (Self::Date(d), Self::DateTime(dt)) => d.midnight().assume_utc().cmp(dt),
+            (Self::DateTime(dt), Self::Date(d)) => dt.cmp(&d.midnight().assume_utc()),
+        }
+    }
+}
+
 impl Display for BarTimestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Date(d) => write!(f, "{d}"),
-            Self::DateTime(dt) => write!(f, "{dt}"),
+            Self::Date(d) => {
+                let fmt = format_description!("[year][month][day]");
+                write!(f, "{}", d.format(&fmt).unwrap_or_default())
+            }
+            Self::DateTime(dt) => write!(f, "{}", dt.unix_timestamp()),
         }
     }
 }
@@ -921,16 +943,20 @@ mod tests {
     }
 
     #[test]
-    fn test_bar_timestamp_display_date() {
+    fn test_bar_timestamp_display_roundtrip_date() {
         let ts = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
-        assert_eq!(ts.to_string(), "2023-04-11");
+        assert_eq!(ts.to_string(), "20230411");
+        let round_tripped: BarTimestamp = ts.to_string().parse().unwrap();
+        assert_eq!(round_tripped, ts);
     }
 
     #[test]
-    fn test_bar_timestamp_display_datetime() {
+    fn test_bar_timestamp_display_roundtrip_datetime() {
         let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
         let ts = BarTimestamp::DateTime(dt);
-        assert!(ts.to_string().contains("2023-04-10"));
+        assert_eq!(ts.to_string(), "1681133400");
+        let round_tripped: BarTimestamp = ts.to_string().parse().unwrap();
+        assert_eq!(round_tripped, ts);
     }
 
     #[test]
@@ -945,5 +971,38 @@ mod tests {
         let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
         let ts: BarTimestamp = dt.into();
         assert_eq!(ts, BarTimestamp::DateTime(dt));
+    }
+
+    #[test]
+    fn test_bar_timestamp_ord_same_variant() {
+        let a = BarTimestamp::Date(time::macros::date!(2023 - 04 - 10));
+        let b = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
+        assert!(a < b);
+
+        let c = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 13:00:00 UTC));
+        let d = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 14:00:00 UTC));
+        assert!(c < d);
+    }
+
+    #[test]
+    fn test_bar_timestamp_ord_cross_variant() {
+        let date = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
+        let before = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 23:59:59 UTC));
+        let after = BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 00:00:01 UTC));
+        assert!(before < date);
+        assert!(date < after);
+    }
+
+    #[test]
+    fn test_bar_timestamp_sort() {
+        let mut timestamps = [
+            BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)),
+            BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)),
+            BarTimestamp::DateTime(time::macros::datetime!(2023-04-09 08:00:00 UTC)),
+        ];
+        timestamps.sort();
+        assert_eq!(timestamps[0], BarTimestamp::DateTime(time::macros::datetime!(2023-04-09 08:00:00 UTC)));
+        assert_eq!(timestamps[1], BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)));
+        assert_eq!(timestamps[2], BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)));
     }
 }

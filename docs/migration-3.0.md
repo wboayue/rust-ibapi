@@ -727,7 +727,9 @@ match &bar.date {
 }
 ```
 
-`BarTimestamp` implements `Display`, `FromStr`, `From<Date>`, and `From<OffsetDateTime>`. The realtime `Bar` (in `market_data::realtime`) is unchanged — it always carries `OffsetDateTime`.
+`BarTimestamp` implements `Display`, `FromStr`, `Ord`, `From<Date>`, and `From<OffsetDateTime>`. Cross-variant ordering treats `Date` as midnight UTC. The realtime `Bar` (in `market_data::realtime`) is unchanged — it always carries `OffsetDateTime`.
+
+**Serde**: the serialized format of `Bar.date` changed from a flat `OffsetDateTime` value to an externally-tagged enum (`{"Date": ...}` / `{"DateTime": ...}`). Persisted `Bar` data serialized under v2.x must be migrated or re-ingested.
 
 ## Before / after: common subscription patterns
 
