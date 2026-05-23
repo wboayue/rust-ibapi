@@ -2,7 +2,8 @@ use super::*;
 use crate::common::test_utils::helpers::*;
 use crate::messages::OutgoingMessages;
 use crate::testdata::builders::accounts::{
-    account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
+    account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_update_time, account_value,
+    portfolio_value,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 // Test data
@@ -341,29 +342,7 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_portfolio_value() {
-        use crate::proto;
-        use prost::Message;
-
-        let portfolio = proto::PortfolioValue {
-            contract: Some(proto::Contract {
-                con_id: Some(12345),
-                symbol: Some("AAPL".into()),
-                sec_type: Some("STK".into()),
-                exchange: Some("NASDAQ".into()),
-                currency: Some("USD".into()),
-                local_symbol: Some("AAPL".into()),
-                trading_class: Some("NMS".into()),
-                ..Default::default()
-            }),
-            position: Some("100".into()),
-            market_price: Some(155.0),
-            market_value: Some(15500.0),
-            average_cost: Some(150.0),
-            unrealized_pnl: Some(500.0),
-            realized_pnl: Some(0.0),
-            account_name: Some(TEST_ACCOUNT.into()),
-        };
-        let mut message = proto_response(IncomingMessages::PortfolioValue, portfolio.encode_to_vec());
+        let mut message = proto_response(IncomingMessages::PortfolioValue, portfolio_value().contract_id(12345).encode_proto());
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -381,13 +360,10 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_update_time() {
-        use crate::proto;
-        use prost::Message;
-
-        let update_time = proto::AccountUpdateTime {
-            time_stamp: Some("14:30:00".into()),
-        };
-        let mut message = proto_response(IncomingMessages::AccountUpdateTime, update_time.encode_to_vec());
+        let mut message = proto_response(
+            IncomingMessages::AccountUpdateTime,
+            account_update_time().timestamp("14:30:00").encode_proto(),
+        );
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 

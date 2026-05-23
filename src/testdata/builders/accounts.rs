@@ -6,6 +6,7 @@ use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_MODEL_CODE, TEST_TICKER_ID};
 use crate::messages::OutgoingMessages;
 use crate::proto;
+use crate::proto::encoders::{some_f64_ne, some_i32_ne, some_str};
 
 // =============================================================================
 // Response builders
@@ -198,6 +199,136 @@ impl ResponseEncoder for AccountValueResponse {
             fields.push(account.clone());
         }
         fields
+    }
+}
+
+// --- AccountUpdateTime (msg 8) ---
+
+#[derive(Clone, Debug)]
+pub struct AccountUpdateTimeResponse {
+    pub timestamp: String,
+}
+
+impl Default for AccountUpdateTimeResponse {
+    fn default() -> Self {
+        Self {
+            timestamp: "14:30:00".to_string(),
+        }
+    }
+}
+
+impl AccountUpdateTimeResponse {
+    pub fn timestamp(mut self, v: impl Into<String>) -> Self {
+        self.timestamp = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for AccountUpdateTimeResponse {
+    type Proto = proto::AccountUpdateTime;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::AccountUpdateTime {
+            time_stamp: Some(self.timestamp.clone()),
+        }
+    }
+}
+
+// --- PortfolioValue (msg 7) ---
+
+#[derive(Clone, Debug)]
+pub struct PortfolioValueResponse {
+    pub account: String,
+    pub contract_id: i32,
+    pub symbol: String,
+    pub security_type: String,
+    pub exchange: String,
+    pub currency: String,
+    pub local_symbol: String,
+    pub trading_class: String,
+    pub position: f64,
+    pub market_price: f64,
+    pub market_value: f64,
+    pub average_cost: f64,
+    pub unrealized_pnl: f64,
+    pub realized_pnl: f64,
+}
+
+impl Default for PortfolioValueResponse {
+    fn default() -> Self {
+        Self {
+            account: TEST_ACCOUNT.to_string(),
+            contract_id: TEST_CONTRACT_ID,
+            symbol: "AAPL".to_string(),
+            security_type: "STK".to_string(),
+            exchange: "NASDAQ".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "AAPL".to_string(),
+            trading_class: "NMS".to_string(),
+            position: 100.0,
+            market_price: 155.0,
+            market_value: 15500.0,
+            average_cost: 150.0,
+            unrealized_pnl: 500.0,
+            realized_pnl: 0.0,
+        }
+    }
+}
+
+impl PortfolioValueResponse {
+    pub fn account(mut self, v: impl Into<String>) -> Self {
+        self.account = v.into();
+        self
+    }
+    pub fn contract_id(mut self, v: i32) -> Self {
+        self.contract_id = v;
+        self
+    }
+    pub fn symbol(mut self, v: impl Into<String>) -> Self {
+        self.symbol = v.into();
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+    pub fn position(mut self, v: f64) -> Self {
+        self.position = v;
+        self
+    }
+    pub fn market_price(mut self, v: f64) -> Self {
+        self.market_price = v;
+        self
+    }
+    pub fn market_value(mut self, v: f64) -> Self {
+        self.market_value = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for PortfolioValueResponse {
+    type Proto = proto::PortfolioValue;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::PortfolioValue {
+            contract: Some(proto::Contract {
+                con_id: some_i32_ne(self.contract_id, 0),
+                symbol: some_str(&self.symbol),
+                sec_type: some_str(&self.security_type),
+                exchange: some_str(&self.exchange),
+                currency: some_str(&self.currency),
+                local_symbol: some_str(&self.local_symbol),
+                trading_class: some_str(&self.trading_class),
+                ..Default::default()
+            }),
+            position: Some(self.position.to_string()),
+            market_price: some_f64_ne(self.market_price, 0.0),
+            market_value: some_f64_ne(self.market_value, 0.0),
+            average_cost: some_f64_ne(self.average_cost, 0.0),
+            unrealized_pnl: some_f64_ne(self.unrealized_pnl, 0.0),
+            realized_pnl: some_f64_ne(self.realized_pnl, 0.0),
+            account_name: Some(self.account.clone()),
+        }
     }
 }
 
@@ -909,6 +1040,14 @@ pub fn account_value() -> AccountValueResponse {
 
 pub fn account_download_end() -> AccountDownloadEndResponse {
     AccountDownloadEndResponse::default()
+}
+
+pub fn account_update_time() -> AccountUpdateTimeResponse {
+    AccountUpdateTimeResponse::default()
+}
+
+pub fn portfolio_value() -> PortfolioValueResponse {
+    PortfolioValueResponse::default()
 }
 
 pub fn account_update_multi() -> AccountUpdateMultiResponse {
