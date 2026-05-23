@@ -7,15 +7,12 @@ use super::super::{ArticleType, NewsArticle, NewsArticleBody, NewsBulletin, News
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-// All originating outgoing-request gates for NewsProviders / NewsBulletins /
-// HistoricalNews / NewsArticle (`PROTOBUF_NEWS_DATA` = 209) sit at or below
-// the connection floor (`PROTOBUF_SCAN_DATA` = 210), so the server always
-// emits proto framing for these messages — text-framed arrival is rejected
-// via `ResponseMessage::require_proto` and skip-classifies (rule 20).
-//
-// `decode_tick_news` stays text-framed: it's part of the realtime market_data
-// family (`PROTOBUF_MARKET_DATA` = 206) and gets dropped in that family's
-// cleanup PR.
+// All originating outgoing-request gates for the news-domain messages
+// (`PROTOBUF_MARKET_DATA` = 206 for `TickNews`, `PROTOBUF_NEWS_DATA` = 209 for
+// the rest) sit at or below the connection floor (`PROTOBUF_SCAN_DATA` = 210),
+// so the server always emits proto framing for these messages — text-framed
+// arrival is rejected via `ResponseMessage::require_proto` and skip-classifies
+// (rule 20).
 
 pub(in crate::news) fn decode_news_providers(message: &ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
     decode_news_providers_proto(message.require_proto()?)
@@ -53,29 +50,23 @@ pub(in crate::news) fn decode_news_article(message: &ResponseMessage) -> Result<
     decode_news_article_proto(message.require_proto()?)
 }
 
-pub(in crate::news) fn decode_tick_news(mut message: ResponseMessage) -> Result<NewsArticle, Error> {
-    message.skip(); // message type
-    message.skip(); // request id
+pub(in crate::news) fn decode_tick_news(message: &ResponseMessage) -> Result<NewsArticle, Error> {
+    decode_tick_news_proto(message.require_proto()?)
+}
 
-    let time = message.next_string()?;
-    let time = parse_unix_timestamp(&time)?;
+pub(crate) fn decode_tick_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
+    let p = crate::proto::TickNews::decode(bytes)?;
+
+    let millis = p.timestamp.unwrap_or_default();
+    let time = OffsetDateTime::from_unix_timestamp(millis / 1000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))?;
 
     Ok(NewsArticle {
         time,
-        provider_code: message.next_string()?,
-        article_id: message.next_string()?,
-        headline: message.next_string()?,
-        extra_data: message.next_string()?,
+        provider_code: p.provider_code.unwrap_or_default(),
+        article_id: p.article_id.unwrap_or_default(),
+        headline: p.headline.unwrap_or_default(),
+        extra_data: p.extra_data.unwrap_or_default(),
     })
-}
-
-fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
-    let parsed: i64 = time
-        .parse()
-        .map_err(|e: std::num::ParseIntError| Error::parse_field(time, e.to_string()))?;
-    let seconds = parsed / 1000;
-
-    OffsetDateTime::from_unix_timestamp(seconds).map_err(|err| Error::parse_field(time, err.to_string()))
 }
 
 pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {

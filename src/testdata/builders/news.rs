@@ -377,6 +377,72 @@ impl ResponseProtoEncoder for NewsArticleResponse {
     }
 }
 
+/// Builder for `TickNews` (msg 84) responses.
+#[derive(Clone, Debug)]
+pub struct TickNewsResponse {
+    pub request_id: i32,
+    pub timestamp_millis: i64,
+    pub provider_code: String,
+    pub article_id: String,
+    pub headline: String,
+    pub extra_data: String,
+}
+
+impl Default for TickNewsResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            timestamp_millis: 0,
+            provider_code: String::new(),
+            article_id: String::new(),
+            headline: String::new(),
+            extra_data: String::new(),
+        }
+    }
+}
+
+impl TickNewsResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn timestamp_millis(mut self, v: i64) -> Self {
+        self.timestamp_millis = v;
+        self
+    }
+    pub fn provider_code(mut self, v: impl Into<String>) -> Self {
+        self.provider_code = v.into();
+        self
+    }
+    pub fn article_id(mut self, v: impl Into<String>) -> Self {
+        self.article_id = v.into();
+        self
+    }
+    pub fn headline(mut self, v: impl Into<String>) -> Self {
+        self.headline = v.into();
+        self
+    }
+    pub fn extra_data(mut self, v: impl Into<String>) -> Self {
+        self.extra_data = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickNewsResponse {
+    type Proto = proto::TickNews;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickNews {
+            req_id: Some(self.request_id),
+            timestamp: Some(self.timestamp_millis),
+            provider_code: some_str(&self.provider_code),
+            article_id: some_str(&self.article_id),
+            headline: some_str(&self.headline),
+            extra_data: some_str(&self.extra_data),
+        }
+    }
+}
+
 // =============================================================================
 // Entry-point functions
 // =============================================================================
@@ -419,4 +485,8 @@ pub fn historical_news_end() -> HistoricalNewsEndResponse {
 
 pub fn news_article() -> NewsArticleResponse {
     NewsArticleResponse::default()
+}
+
+pub fn tick_news() -> TickNewsResponse {
+    TickNewsResponse::default()
 }

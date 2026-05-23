@@ -1,19 +1,4 @@
 use super::*;
-use time::macros::datetime;
-
-#[test]
-fn test_parse_unix_timestamp() {
-    let result = parse_unix_timestamp("1681133400000").unwrap();
-    assert_eq!(result, datetime!(2023-04-10 13:30:00 UTC));
-}
-
-#[test]
-fn test_parse_unix_timestamp_invalid() {
-    let err = parse_unix_timestamp("not_a_number").unwrap_err();
-    let msg = err.to_string();
-    assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
-    assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
-}
 
 #[test]
 fn test_decode_news_bulletin_proto() {
@@ -130,5 +115,34 @@ fn test_decode_historical_news_rejects_text_framing() {
 fn test_decode_news_article_rejects_text_framing() {
     let message = ResponseMessage::from("83\09000\00\0body\0");
     let err = decode_news_article(&message).unwrap_err();
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+}
+
+#[test]
+fn test_decode_tick_news_proto() {
+    let proto_msg = crate::proto::TickNews {
+        req_id: Some(9000),
+        timestamp: Some(1_672_531_200_000),
+        provider_code: Some("BZ".into()),
+        article_id: Some("BZ$123".into()),
+        headline: Some("Breaking news headline".into()),
+        extra_data: Some("TSLA:123".into()),
+    };
+
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_tick_news_proto(&bytes).unwrap();
+    assert_eq!(result.provider_code, "BZ");
+    assert_eq!(result.article_id, "BZ$123");
+    assert_eq!(result.headline, "Breaking news headline");
+    assert_eq!(result.extra_data, "TSLA:123");
+    assert_eq!(result.time.unix_timestamp(), 1_672_531_200);
+}
+
+#[test]
+fn test_decode_tick_news_rejects_text_framing() {
+    let message = ResponseMessage::from("84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0");
+    let err = decode_tick_news(&message).unwrap_err();
     assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
 }
