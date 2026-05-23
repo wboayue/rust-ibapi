@@ -1136,11 +1136,17 @@ impl ResponseMessage {
     }
 
     /// Consume the next field and parse it as an IB timestamp.
+    ///
+    /// Text-protocol helper: no production decoder uses this at floor 210, but
+    /// kept (with tests) until the broader "Helper APIs that go away" cleanup
+    /// per `plans/legacy-text-protocol-cleanup.md`.
+    #[allow(dead_code)]
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
         self.next_date_time_with_timezone(None)
     }
 
     /// Consume the next field and parse it as a timestamp using an optional session timezone.
+    #[allow(dead_code)]
     pub fn next_date_time_with_timezone(&mut self, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::eof_at(self.i, "datetime"));
@@ -1328,6 +1334,7 @@ impl ResponseMessage {
     }
 }
 
+#[allow(dead_code)] // text-protocol helper — see next_date_time
 pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
     let utc_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
     if let Ok(dt) = PrimitiveDateTime::parse(field, utc_format) {
@@ -1367,6 +1374,7 @@ pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&T
     Err(Error::parse_field(field, "failed to parse IB datetime field"))
 }
 
+#[allow(dead_code)] // text-protocol helper — see next_date_time
 fn resolve_primitive_date_time(field: &str, date_time: PrimitiveDateTime, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     match date_time.assume_timezone(time_zone) {
         OffsetResult::Some(value) => Ok(value),

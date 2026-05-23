@@ -1,24 +1,17 @@
-use time::macros::{format_description, time};
+use time::macros::format_description;
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
-use time_tz::{OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
+use time_tz::{PrimitiveDateTimeExt, Tz};
 
 use crate::common::timezone::find_timezone;
 use crate::messages::ResponseMessage;
-use crate::{server_versions, Error};
+use crate::Error;
 
 use crate::market_data::historical::{
     Bar, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
 };
 
-pub(crate) fn decode_head_timestamp(message: &mut ResponseMessage, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
-    message.decode_proto_or_text(
-        |bytes| parse_unix_seconds_str(&decode_head_timestamp_proto(bytes)?),
-        |msg| {
-            msg.skip(); // message type
-            msg.skip(); // request_id
-            msg.next_date_time_with_timezone(time_zone)
-        },
-    )
+pub(crate) fn decode_head_timestamp(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
+    parse_unix_seconds_str(&decode_head_timestamp_proto(message.require_proto()?)?)
 }
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
@@ -27,293 +20,46 @@ fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
     OffsetDateTime::from_unix_timestamp(secs).map_err(|e| mk_err(&e))
 }
 
-pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, message: &mut ResponseMessage) -> Result<HistoricalData, Error> {
-    message.decode_proto_or_text(
-        |bytes| {
-            let bars = decode_historical_data_proto(bytes)?;
-            // start/end come on the separate HistoricalDataEnd message in proto / newer-server flow.
-            Ok(HistoricalData {
-                start: OffsetDateTime::now_utc(),
-                end: OffsetDateTime::now_utc(),
-                bars,
-            })
-        },
-        |msg| {
-            msg.skip(); // message type
-
-            let mut message_version = i32::MAX;
-            if server_version < server_versions::SYNT_REALTIME_BARS {
-                message_version = msg.next_int()?;
-            }
-
-            msg.skip(); // request_id
-
-            let mut start = OffsetDateTime::now_utc();
-            let mut end = OffsetDateTime::now_utc();
-            if message_version > 2 && server_version < server_versions::HISTORICAL_DATA_END {
-                start = parse_date(&msg.next_string()?, time_zone)?;
-                end = parse_date(&msg.next_string()?, time_zone)?;
-            }
-
-            let mut bars = Vec::new();
-
-            let bars_count = msg.next_int()?;
-            for _ in 0..bars_count {
-                let date = msg.next_string()?;
-                let open = msg.next_double()?;
-                let high = msg.next_double()?;
-                let low = msg.next_double()?;
-                let close = msg.next_double()?;
-                let volume = msg.next_double()?;
-                let wap = msg.next_double()?;
-
-                if server_version < server_versions::SYNT_REALTIME_BARS {
-                    // hasGaps
-                    msg.skip();
-                }
-
-                let mut bar_count = -1;
-                if message_version >= 3 {
-                    bar_count = msg.next_int()?;
-                }
-
-                bars.push(Bar {
-                    date: parse_bar_date(&date, time_zone)?,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    wap,
-                    count: bar_count,
-                })
-            }
-
-            Ok(HistoricalData { start, end, bars })
-        },
-    )
-}
-
-pub(crate) fn decode_historical_data_end(
-    server_version: i32,
-    time_zone: &Tz,
-    message: &mut ResponseMessage,
-) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
-    message.decode_proto_or_text(decode_historical_data_end_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-
-        let start_str = msg.next_string()?;
-        let end_str = msg.next_string()?;
-
-        if server_version >= server_versions::HISTORICAL_DATA_END {
-            let start = parse_date_with_tz(&start_str)?;
-            let end = parse_date_with_tz(&end_str)?;
-            Ok((start, end))
-        } else {
-            let start = parse_date(&start_str, time_zone)?;
-            let end = parse_date(&end_str, time_zone)?;
-            Ok((start, end))
-        }
+pub(crate) fn decode_historical_data(message: &ResponseMessage) -> Result<HistoricalData, Error> {
+    let bars = decode_historical_data_proto(message.require_proto()?)?;
+    // start/end always come on the separate HistoricalDataEnd message at floor 210.
+    Ok(HistoricalData {
+        start: OffsetDateTime::UNIX_EPOCH,
+        end: OffsetDateTime::UNIX_EPOCH,
+        bars,
     })
 }
 
-pub(crate) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
-    message.decode_proto_or_text(decode_historical_schedule_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-
-        let start = msg.next_string()?;
-        let end = msg.next_string()?;
-        let time_zone_name = msg.next_string()?;
-
-        let time_zone = parse_time_zone(&time_zone_name)?;
-
-        let sessions_count = msg.next_int()?;
-        let mut sessions = Vec::<Session>::with_capacity(sessions_count as usize);
-        for _ in 0..sessions_count {
-            let session_start = msg.next_string()?;
-            let session_end = msg.next_string()?;
-            let session_reference = msg.next_string()?;
-
-            sessions.push(Session {
-                start: parse_schedule_date_time(&session_start, time_zone)?,
-                end: parse_schedule_date_time(&session_end, time_zone)?,
-                reference: parse_schedule_date(&session_reference)?,
-            })
-        }
-
-        Ok(Schedule {
-            start: parse_schedule_date_time(&start, time_zone)?,
-            end: parse_schedule_date_time(&end, time_zone)?,
-            time_zone: time_zone_name,
-            sessions,
-        })
-    })
+pub(crate) fn decode_historical_data_end(message: &ResponseMessage) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
+    decode_historical_data_end_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
-    message.decode_proto_or_text(decode_historical_ticks_bid_ask_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-
-        let number_of_ticks = msg.next_int()?;
-        let mut ticks = Vec::with_capacity(number_of_ticks as usize);
-
-        for _ in 0..number_of_ticks {
-            let timestamp = msg.next_date_time()?;
-
-            let mask = msg.next_int()?;
-            let tick_attribute_bid_ask = TickAttributeBidAsk {
-                ask_past_high: (mask & 0x01) == 0x01,
-                bid_past_low: (mask & 0x02) == 0x02,
-            };
-
-            let price_bid = msg.next_double()?;
-            let price_ask = msg.next_double()?;
-            let size_bid = msg.next_int()?;
-            let size_ask = msg.next_int()?;
-
-            ticks.push(TickBidAsk {
-                timestamp,
-                tick_attribute_bid_ask,
-                price_bid,
-                price_ask,
-                size_bid,
-                size_ask,
-            });
-        }
-
-        let done = msg.next_bool()?;
-
-        Ok((ticks, done))
-    })
+pub(crate) fn decode_historical_schedule(message: &ResponseMessage) -> Result<Schedule, Error> {
+    decode_historical_schedule_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    message.decode_proto_or_text(decode_historical_ticks_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-
-        let number_of_ticks = msg.next_int()?;
-        let mut ticks = Vec::with_capacity(number_of_ticks as usize);
-
-        for _ in 0..number_of_ticks {
-            let timestamp = msg.next_date_time()?;
-            msg.skip(); // for consistency
-            let price = msg.next_double()?;
-            let size = msg.next_int()?;
-
-            ticks.push(TickMidpoint { timestamp, price, size });
-        }
-
-        let done = msg.next_bool()?;
-
-        Ok((ticks, done))
-    })
+pub(crate) fn decode_historical_ticks_bid_ask(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+    decode_historical_ticks_bid_ask_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
-    message.decode_proto_or_text(decode_historical_ticks_last_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-
-        let number_of_ticks = msg.next_int()?;
-        let mut ticks = Vec::with_capacity(number_of_ticks as usize);
-
-        for _ in 0..number_of_ticks {
-            let timestamp = msg.next_date_time()?;
-
-            let mask = msg.next_int()?;
-            let tick_attribute_last = TickAttributeLast {
-                past_limit: (mask & 0x01) == 0x01,
-                unreported: (mask & 0x02) == 0x02,
-            };
-
-            let price = msg.next_double()?;
-            let size = msg.next_int()?;
-            let exchange = msg.next_string()?;
-            let special_conditions = msg.next_string()?;
-
-            ticks.push(TickLast {
-                timestamp,
-                tick_attribute_last,
-                price,
-                size,
-                exchange,
-                special_conditions,
-            });
-        }
-
-        let done = msg.next_bool()?;
-
-        Ok((ticks, done))
-    })
+pub(crate) fn decode_historical_ticks_mid_point(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+    decode_historical_ticks_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
-    message.decode_proto_or_text(decode_histogram_data_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request id
+pub(crate) fn decode_historical_ticks_last(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+    decode_historical_ticks_last_proto(message.require_proto()?)
+}
 
-        let count = msg.next_int()?;
-        let mut items = Vec::with_capacity(count as usize);
-
-        for _ in 0..count {
-            items.push(HistogramEntry {
-                price: msg.next_double()?,
-                size: msg.next_int()?,
-            });
-        }
-
-        Ok(items)
-    })
+pub(crate) fn decode_histogram_data(message: &ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
+    decode_histogram_data_proto(message.require_proto()?)
 }
 
 /// Decode a HistoricalDataUpdate message (message type 90).
 ///
-/// This message is sent when historical data is requested with keepUpToDate=true.
-/// IBKR sends updates approximately every 4-6 seconds for the current (incomplete) bar.
-///
-/// Message format:
-/// - message_type (90)
-/// - request_id
-/// - bar_count (always -1 for streaming updates)
-/// - date (unix timestamp as string)
-/// - open
-/// - high
-/// - low
-/// - close
-/// - volume
-/// - wap
-/// - count
-pub(crate) fn decode_historical_data_update(time_zone: &Tz, message: &mut ResponseMessage) -> Result<Bar, Error> {
-    message.decode_proto_or_text(decode_historical_data_update_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request_id
-        msg.skip(); // bar_count (always -1 for updates)
-
-        let date = msg.next_string()?;
-        let open = msg.next_double()?;
-        let high = msg.next_double()?;
-        let low = msg.next_double()?;
-        let close = msg.next_double()?;
-        let volume = msg.next_double()?;
-        let wap = msg.next_double()?;
-        // count field is optional in streaming updates - may not be present
-        let count = msg.next_int().unwrap_or(0);
-
-        Ok(Bar {
-            date: parse_bar_date(&date, time_zone)?,
-            open,
-            high,
-            low,
-            close,
-            volume,
-            wap,
-            count,
-        })
-    })
+/// Sent when historical data is requested with `keepUpToDate=true`. IBKR
+/// emits updates approximately every 4-6 seconds for the current (incomplete) bar.
+pub(crate) fn decode_historical_data_update(message: &ResponseMessage) -> Result<Bar, Error> {
+    decode_historical_data_update_proto(message.require_proto()?)
 }
 
 fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
@@ -336,14 +82,8 @@ fn parse_schedule_date(text: &str) -> Result<Date, Error> {
     Ok(schedule_date)
 }
 
-/// Parses "YYYYMMDD  HH:MM:SS" (double space, no timezone).
-fn parse_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
-    let fmt = format_description!("[year][month][day]  [hour]:[minute]:[second]");
-    let dt = PrimitiveDateTime::parse(text, fmt)?;
-    Ok(dt.assume_timezone(time_zone).unwrap())
-}
-
-/// Parses "YYYYMMDD HH:MM:SS TZ" (single space + embedded timezone).
+/// Parses "YYYYMMDD HH:MM:SS TZ" (single space + embedded timezone) — the
+/// shape `HistoricalDataEnd` carries in its `start_date_str` / `end_date_str`.
 fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
     let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let (datetime_part, tz_name) = text
@@ -352,22 +92,6 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
     let tz = parse_time_zone(tz_name.trim())?;
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
     Ok(dt.assume_timezone(tz).unwrap())
-}
-
-fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
-    if text.len() == 8 {
-        let date_format = format_description!("[year][month][day]");
-        let bar_date = Date::parse(text, date_format)?;
-        let bar_date = bar_date.with_time(time!(00:00));
-
-        Ok(bar_date.assume_timezone_utc(time_tz::timezones::db::UTC))
-    } else {
-        let timestamp: i64 = text
-            .parse()
-            .map_err(|e: std::num::ParseIntError| Error::parse_field(text, e.to_string()))?;
-        let date_utc = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
-        Ok(date_utc.to_timezone(time_zone))
-    }
 }
 
 // === Protobuf decoders ===

@@ -1,17 +1,23 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST,
+    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::TickLast;
 use crate::market_data::IgnoreSize;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
-use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
+use crate::testdata::builders::market_data::{
+    head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
+    historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response, historical_schedule_response,
+    historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response, historical_ticks_last_response,
+    historical_ticks_request, historical_ticks_response,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -61,13 +67,12 @@ where
 
 #[tokio::test]
 async fn test_head_timestamp() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["88|9000|1678838400|".to_owned()], // 2023-03-15 00:00:00 UTC,
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HeadTimestamp,
+        head_timestamp_response().unix_timestamp(1_678_838_400).encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
@@ -92,13 +97,16 @@ async fn test_head_timestamp() {
 
 #[tokio::test]
 async fn test_histogram_data() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["96|9000|3|185.50|100|185.75|150|186.00|200|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistogramData,
+        histogram_data_response()
+            .entry(histogram_entry(185.50, 100))
+            .entry(histogram_entry(185.75, 150))
+            .entry(histogram_entry(186.00, 200))
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_HISTOGRAM);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
     let trading_hours = TradingHours::Regular;
     let period = BarSize::Day;
@@ -135,18 +143,36 @@ async fn test_histogram_data() {
 
 #[tokio::test]
 async fn test_historical_data() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "17|9000|20230315  09:30:00|20230315  10:30:00|2|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|1678890000|185.75|186.25|185.50|186.00|1500|185.85|150|"
-                .to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_bar(1_678_886_400)
+                        .ohlc(185.50, 186.00, 185.25, 185.75)
+                        .volume(1000.0)
+                        .wap(185.70)
+                        .count(100),
+                )
+                .bar(
+                    historical_data_bar(1_678_890_000)
+                        .ohlc(185.75, 186.25, 185.50, 186.00)
+                        .volume(1500.0)
+                        .wap(185.85)
+                        .count(150),
+                )
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 10:30:00 UTC")
+                .encode_proto(),
+        ),
+    ]));
 
-    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-    // Set client timezone for test
-    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
 
     let contract = test_contract();
     let end_date = datetime!(2023-03-15 16:00:00 UTC);
@@ -271,16 +297,22 @@ async fn test_historical_data_unexpected_response() {
 
 #[tokio::test]
 async fn test_historical_schedules() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "106|9000|20230313-09:30:00|20230315-16:00:00|UTC|3|20230313-09:30:00|20230313-16:00:00|20230313|20230314-09:30:00|20230314-16:00:00|20230314|20230315-09:30:00|20230315-16:00:00|20230315|"
-                .to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    use crate::testdata::builders::market_data::historical_session;
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalSchedule,
+        historical_schedule_response()
+            .start_date_time("20230313-09:30:00")
+            .end_date_time("20230315-16:00:00")
+            .time_zone("UTC")
+            .sessions(vec![
+                historical_session("20230313-09:30:00", "20230313-16:00:00", "20230313"),
+                historical_session("20230314-09:30:00", "20230314-16:00:00", "20230314"),
+                historical_session("20230315-09:30:00", "20230315-16:00:00", "20230315"),
+            ])
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = Contract::stock("AAPL").build();
     let end_date = datetime!(2023-03-15 16:00:00 UTC);
     let duration = Duration::days(3);
@@ -310,20 +342,31 @@ async fn test_historical_schedules() {
 
 #[tokio::test]
 async fn test_tick_subscription_methods() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalTickBidAsk = 97
-            // First response with 2 ticks, not done
-            // Format: message_type|request_id|num_ticks|timestamp|mask|bid|ask|bid_size|ask_size|...|done
-            "97|9000|2|1678838400|10|185.50|186.00|100|200|1678838401|11|185.55|186.05|105|205|0|".to_owned(),
-            // Second response with 1 tick, done
-            "97|9000|1|1678838500|10|185.75|186.25|150|250|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    // mask = 10 (binary 1010) → bid_past_low=true,  ask_past_high=false
+    // mask = 11 (binary 1011) → bid_past_low=true,  ask_past_high=true
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalTickBidAsk,
+            historical_ticks_bid_ask_response()
+                .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200).bid_past_low(true))
+                .tick(
+                    historical_tick_bid_ask(1_678_838_401, 185.55, 186.05, 105, 205)
+                        .bid_past_low(true)
+                        .ask_past_high(true),
+                )
+                .done(false)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalTickBidAsk,
+            historical_ticks_bid_ask_response()
+                .tick(historical_tick_bid_ask(1_678_838_500, 185.75, 186.25, 150, 250).bid_past_low(true))
+                .done(true)
+                .encode_proto(),
+        ),
+    ]));
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
 
     let mut subscription = client
@@ -363,17 +406,17 @@ async fn test_tick_subscription_methods() {
 
 #[tokio::test]
 async fn test_tick_subscription_buffer_and_iteration() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalTickBidAsk = 97
-            // Response with 3 ticks at once, done = true
-            "97|9000|3|1678838400|8|185.50|186.00|100|200|1678838401|9|185.60|186.10|110|210|1678838402|10|185.70|186.20|120|220|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTickBidAsk,
+        historical_ticks_bid_ask_response()
+            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200))
+            .tick(historical_tick_bid_ask(1_678_838_401, 185.60, 186.10, 110, 210))
+            .tick(historical_tick_bid_ask(1_678_838_402, 185.70, 186.20, 120, 220))
+            .done(true)
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
 
     let mut subscription = client
@@ -396,17 +439,16 @@ async fn test_tick_subscription_buffer_and_iteration() {
 
 #[tokio::test]
 async fn test_tick_subscription_bid_ask() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalTickBidAsk = 97
-            // mask = 2 (binary 10) = bid_past_low = true, ask_past_high = false
-            "97|9000|1|1678838400|2|185.50|186.00|100|200|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    // bid_past_low = true, ask_past_high = false
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTickBidAsk,
+        historical_ticks_bid_ask_response()
+            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200).bid_past_low(true))
+            .done(true)
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
     let start = datetime!(2023-03-15 09:00:00 UTC);
     let end = datetime!(2023-03-15 10:00:00 UTC);
@@ -449,17 +491,15 @@ async fn test_tick_subscription_bid_ask() {
 
 #[tokio::test]
 async fn test_tick_subscription_midpoint() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalTick = 96 (for midpoint)
-            // Format: message_type|request_id|num_ticks|timestamp|skip|price|size|...|done
-            "96|9000|1|1678838400|0|185.75|100|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTick,
+        historical_ticks_response()
+            .tick(historical_tick_mid(1_678_838_400, 185.75, 100))
+            .done(true)
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
 
     let mut subscription = client
@@ -488,17 +528,15 @@ async fn test_tick_subscription_midpoint() {
 
 #[tokio::test]
 async fn test_historical_ticks_trade() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // HistoricalTickLast = 98
-            // Format: message_type|request_id|num_ticks|timestamp|mask|price|size|exchange|conditions|...|done
-            "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTickLast,
+        historical_ticks_last_response()
+            .tick(historical_tick_last(1_678_838_400, 185.50, 100, "ISLAND").special_conditions("APR"))
+            .done(true)
+            .encode_proto(),
+    )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
     let contract = test_contract();
 
     let mut subscription = client
@@ -531,15 +569,25 @@ async fn test_historical_ticks_trade() {
 
 #[tokio::test]
 async fn test_historical_data_time_zone_handling() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned()],
-        ordered_responses: vec![],
-    });
+    // At floor 210, the decoder ignores client.time_zone — bar dates are UTC
+    // from unix seconds; start/end carry their TZ in HistoricalDataEnd.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_bar(1_678_886_400)
+                        .ohlc(185.50, 186.00, 185.25, 185.75)
+                        .volume(1000.0)
+                        .wap(185.70)
+                        .count(100),
+                )
+                .encode_proto(),
+        ),
+        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
+    ]));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    // Set client timezone to Eastern
-    client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
 
     let contract = test_contract();
     let result = client
@@ -552,37 +600,40 @@ async fn test_historical_data_time_zone_handling() {
     let data = result.unwrap();
     assert_eq!(data.bars.len(), 1, "Should receive 1 bar");
 
-    // The timestamp should be parsed in the client's timezone
-    // 1678886400 = 2023-03-15 12:00:00 UTC = 2023-03-15 08:00:00 EDT
     let bar = &data.bars[0];
-    assert_eq!(bar.date.unix_timestamp(), 1678886400, "Timestamp should match");
-}
-
-#[tokio::test]
-async fn test_time_zone_fallback() {
-    let mut client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::SIZE_RULES);
-    // Client without timezone set
-    client.time_zone = None;
-
-    let tz = time_zone(&client);
-    assert_eq!(tz, time_tz::timezones::db::UTC, "Should fallback to UTC when timezone not set");
+    assert_eq!(bar.date.unix_timestamp(), 1_678_886_400, "Timestamp should match");
 }
 
 #[tokio::test]
 async fn test_historical_data_streaming_with_updates() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Initial historical data (message type 17)
-            "17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
-            // Streaming update (message type 90)
-            "90|9000|-1|1678890000|185.80|186.10|185.60|185.90|500|185.85|50|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_bar(1_678_886_400)
+                        .ohlc(185.50, 186.00, 185.25, 185.75)
+                        .volume(1000.0)
+                        .wap(185.70)
+                        .count(100),
+                )
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataUpdate,
+            historical_data_update_response()
+                .bar(
+                    historical_data_bar(1_678_890_000)
+                        .ohlc(185.80, 186.10, 185.60, 185.90)
+                        .volume(500.0)
+                        .wap(185.85)
+                        .count(50),
+                )
+                .encode_proto(),
+        ),
+    ]));
 
-    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
 
     let contract = Contract::stock("SPY").build();
 
@@ -806,15 +857,30 @@ async fn test_head_timestamp_unexpected_response() {
 
 #[tokio::test]
 async fn test_historical_data_with_end_message() {
-    // server_version >= HISTORICAL_DATA_END (196): start/end live on a follow-on
-    // HistoricalDataEnd (108), not the HistoricalData (17) frame itself.
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        "17|9000|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
-        "108|9000|20230315 09:30:00 UTC|20230315 10:30:00 UTC|".to_owned(),
+    // start/end always come on the follow-on HistoricalDataEnd (108) frame at floor 210.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_bar(1_678_886_400)
+                        .ohlc(185.50, 186.00, 185.25, 185.75)
+                        .volume(1000.0)
+                        .wap(185.70)
+                        .count(100),
+                )
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 10:30:00 UTC")
+                .encode_proto(),
+        ),
     ]));
 
-    let mut client = Client::stubbed(message_bus, server_versions::HISTORICAL_DATA_END);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
 
     let data = client
         .historical_data(&test_contract(), BarSize::Hour)
@@ -955,14 +1021,19 @@ async fn test_tick_subscription_cancel_idempotent() {
 
 #[tokio::test]
 async fn test_tick_subscription_skips_unexpected_message_then_yields() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        // 17 = HistoricalData — unexpected for a tick subscription, should be skipped.
-        "17|9000|20230315  09:30:00|20230315  10:30:00|0|".to_owned(),
-        // 98 = HistoricalTickLast — one tick, done=1.
-        "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        // HistoricalData is unexpected for a tick subscription → should be skipped.
+        proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
+        proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                .tick(historical_tick_last(1_678_838_400, 185.50, 100, "ISLAND").special_conditions("APR"))
+                .done(true)
+                .encode_proto(),
+        ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
 
     let mut subscription = client
         .historical_ticks(&test_contract(), 1)
