@@ -694,8 +694,6 @@ fn test_tick_subscription_midpoint() {
 
 #[test]
 fn test_historical_data_time_zone_handling() {
-    // HistoricalDataEnd carries the timezone inline; proto path decodes it via
-    // parse_date_with_tz. Client.time_zone no longer feeds the decoder.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,

@@ -14,8 +14,8 @@ use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response, historical_schedule_response,
-    historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response, historical_ticks_last_response,
-    historical_ticks_request, historical_ticks_response,
+    historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
+    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -297,7 +297,6 @@ async fn test_historical_data_unexpected_response() {
 
 #[tokio::test]
 async fn test_historical_schedules() {
-    use crate::testdata::builders::market_data::historical_session;
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalSchedule,
         historical_schedule_response()
@@ -569,8 +568,6 @@ async fn test_historical_ticks_trade() {
 
 #[tokio::test]
 async fn test_historical_data_time_zone_handling() {
-    // At floor 210, the decoder ignores client.time_zone — bar dates are UTC
-    // from unix seconds; start/end carry their TZ in HistoricalDataEnd.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,

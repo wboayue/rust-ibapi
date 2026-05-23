@@ -151,19 +151,19 @@ pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<Ti
 
     let ticks = msg
         .historical_ticks_last
-        .iter()
+        .into_iter()
         .map(|t| {
-            let attr = t.tick_attrib_last.as_ref();
+            let attr = t.tick_attrib_last;
             TickLast {
                 timestamp: ts(t.time.unwrap_or_default()),
                 tick_attribute_last: TickAttributeLast {
-                    past_limit: attr.and_then(|a| a.past_limit).unwrap_or_default(),
+                    past_limit: attr.as_ref().and_then(|a| a.past_limit).unwrap_or_default(),
                     unreported: attr.and_then(|a| a.unreported).unwrap_or_default(),
                 },
                 price: t.price.unwrap_or_default(),
                 size: parse_str_i32(&t.size),
-                exchange: t.exchange.clone().unwrap_or_default(),
-                special_conditions: t.special_conditions.clone().unwrap_or_default(),
+                exchange: t.exchange.unwrap_or_default(),
+                special_conditions: t.special_conditions.unwrap_or_default(),
             }
         })
         .collect();

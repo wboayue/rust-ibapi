@@ -1,5 +1,4 @@
 use super::*;
-use crate::messages::IncomingMessages;
 use prost::Message;
 use time::macros::{date, datetime};
 
@@ -360,11 +359,4 @@ fn test_decode_histogram_data_rejects_text_framing() {
     let message = text_message("89\09000\01\0125.50\01000\0");
     let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
-}
-
-// Silence unused-import lint when only some IncomingMessages variants are
-// referenced indirectly via require_proto().
-#[allow(dead_code)]
-fn _imports_kept_for_diagnostics() {
-    let _ = IncomingMessages::HistoricalData;
 }

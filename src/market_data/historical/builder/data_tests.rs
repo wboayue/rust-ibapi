@@ -4,9 +4,6 @@ use crate::messages::ResponseMessage;
 use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response};
 use crate::testdata::builders::ResponseProtoEncoder;
 
-/// Minimal HistoricalData + HistoricalDataEnd proto pair for happy-path
-/// fetches. Tests in this file only need the call to succeed; the bar/end
-/// payloads are not assertion targets.
 fn historical_data_response_pair() -> Vec<ResponseMessage> {
     vec![
         proto_response(
