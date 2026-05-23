@@ -34,7 +34,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         match message.message_type() {
             IncomingMessages::HistoricalNews => decoders::decode_historical_news(message),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
-            IncomingMessages::TickNews => decoders::decode_tick_news(message.clone()),
+            IncomingMessages::TickNews => decoders::decode_tick_news(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
