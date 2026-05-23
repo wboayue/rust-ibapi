@@ -135,8 +135,20 @@ fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
 
 #[test]
 fn test_dispatch_unsolicited_account_value_typed() {
-    // AccountValue text frame: msg_type=6, version=2, key, value, currency, account
-    let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123456.78\0USD\0DU1234567\0");
+    use crate::common::test_utils::helpers::proto_response;
+    use crate::messages::IncomingMessages;
+    use crate::testdata::builders::accounts::account_value;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let mut message = proto_response(
+        IncomingMessages::AccountValue,
+        account_value()
+            .key("NetLiquidation")
+            .value("123456.78")
+            .currency("USD")
+            .account("DU1234567")
+            .encode_proto(),
+    );
 
     let captured: Arc<Mutex<Option<crate::accounts::AccountValue>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
@@ -704,7 +716,20 @@ fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
 
 #[test]
 fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
-    let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123.45\0USD\0DU1\0");
+    use crate::common::test_utils::helpers::proto_response;
+    use crate::messages::IncomingMessages;
+    use crate::testdata::builders::accounts::account_value;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let mut message = proto_response(
+        IncomingMessages::AccountValue,
+        account_value()
+            .key("NetLiquidation")
+            .value("123.45")
+            .currency("USD")
+            .account("DU1")
+            .encode_proto(),
+    );
 
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
@@ -713,8 +738,11 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
 
 #[test]
 fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
-    // Truncated AccountValue — too few fields to decode into AccountValue.
-    let mut message = ResponseMessage::from("6\02\0");
+    use crate::common::test_utils::helpers::proto_response;
+    use crate::messages::IncomingMessages;
+
+    // Garbage proto bytes for AccountValue: prost::DecodeError surfaces as a synthesized notice.
+    let mut message = proto_response(IncomingMessages::AccountValue, vec![0xFF, 0xFF, 0xFF]);
 
     let cb_fired = Arc::new(Mutex::new(false));
     let cb_fired_clone = cb_fired.clone();

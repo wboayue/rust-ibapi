@@ -1,6 +1,11 @@
 use super::*;
 use crate::common::test_utils::helpers::*;
 use crate::messages::OutgoingMessages;
+use crate::testdata::builders::accounts::{
+    account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_update_time, account_value,
+    portfolio_value,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 // Test data
 const TEST_REQUEST_ID: i32 = 123;
 const TEST_SERVER_VERSION: i32 = 151;
@@ -14,8 +19,10 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_account_summary() {
-        // Format: message_type\0version\0request_id\0account\0tag\0value\0currency\0
-        let mut message = ResponseMessage::from("63\01\0123\0DU1234567\0NetLiquidation\0123456.78\0USD\0");
+        let mut message = proto_response(
+            IncomingMessages::AccountSummary,
+            account_summary().tag("NetLiquidation").value("123456.78").currency("USD").encode_proto(),
+        );
 
         let result = AccountSummaryResult::decode(&test_context(), &mut message).unwrap();
 
@@ -32,8 +39,7 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_account_summary_end() {
-        // Format: message_type\0version\0request_id\0
-        let mut message = ResponseMessage::from("64\01\0123\0");
+        let mut message = proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto());
 
         let result = AccountSummaryResult::decode(&test_context(), &mut message).unwrap();
 
@@ -78,11 +84,18 @@ mod account_summary_tests {
 
 mod pnl_tests {
     use super::*;
+    use crate::testdata::builders::accounts::pnl;
 
     #[test]
     fn test_decode_pnl() {
-        // Format: message_type\0request_id\0daily_pnl\0unrealized_pnl\0realized_pnl\0
-        let mut message = ResponseMessage::from("94\0123\01234.56\02345.67\03456.78\0");
+        let mut message = proto_response(
+            IncomingMessages::PnL,
+            pnl()
+                .daily_pnl(1234.56)
+                .unrealized_pnl(Some(2345.67))
+                .realized_pnl(Some(3456.78))
+                .encode_proto(),
+        );
 
         let result = PnL::decode(&test_context(), &mut message).unwrap();
 
@@ -119,11 +132,20 @@ mod pnl_tests {
 
 mod pnl_single_tests {
     use super::*;
+    use crate::testdata::builders::accounts::pnl_single;
 
     #[test]
     fn test_decode_pnl_single() {
-        // Format: message_type\0request_id\0position\0daily_pnl\0unrealized_pnl\0realized_pnl\0value\0
-        let mut message = ResponseMessage::from("95\0123\0100\01234.56\02345.67\03456.78\04567.89\0");
+        let mut message = proto_response(
+            IncomingMessages::PnLSingle,
+            pnl_single()
+                .position(100.0)
+                .daily_pnl(1234.56)
+                .unrealized_pnl(2345.67)
+                .realized_pnl(3456.78)
+                .value(4567.89)
+                .encode_proto(),
+        );
 
         let result = PnLSingle::decode(&test_context(), &mut message).unwrap();
 
@@ -155,11 +177,22 @@ mod pnl_single_tests {
 
 mod position_update_tests {
     use super::*;
+    use crate::testdata::builders::positions::{position, position_end};
+    use crate::testdata::builders::ResponseProtoEncoder;
 
     #[test]
     fn test_decode_position() {
-        // Format: message_type\0version\0account\0contract_id\0symbol\0sec_type\0last_trade_date\0strike\0right\0multiplier\0exchange\0currency\0local_symbol\0trading_class\0position\0avg_cost\0
-        let mut message = ResponseMessage::from("61\03\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0NASDAQ\0USD\0AAPL\0NMS\0100\050.25\0");
+        let mut message = proto_response(
+            IncomingMessages::Position,
+            position()
+                .account(TEST_ACCOUNT)
+                .contract_id(12345)
+                .symbol("AAPL")
+                .exchange("NASDAQ")
+                .position(100.0)
+                .average_cost(50.25)
+                .encode_proto(),
+        );
 
         let result = PositionUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -176,8 +209,7 @@ mod position_update_tests {
 
     #[test]
     fn test_decode_position_end() {
-        // Format: message_type\0version\0
-        let mut message = ResponseMessage::from("62\01\0");
+        let mut message = proto_response(IncomingMessages::PositionEnd, position_end().encode_proto());
 
         let result = PositionUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -208,12 +240,21 @@ mod position_update_tests {
 
 mod position_update_multi_tests {
     use super::*;
+    use crate::testdata::builders::positions::{position_multi, position_multi_end};
 
     #[test]
     fn test_decode_position_multi() {
-        // Format: message_type\0version\0request_id\0account\0contract_id\0symbol\0sec_type\0last_trade_date\0strike\0right\0multiplier\0exchange\0currency\0local_symbol\0trading_class\0position\0avg_cost\0model_code\0
-        let mut message =
-            ResponseMessage::from("71\01\0123\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0NASDAQ\0USD\0AAPL\0NMS\0100\050.25\0TARGET2024\0");
+        let mut message = proto_response(
+            IncomingMessages::PositionMulti,
+            position_multi()
+                .contract_id(12345)
+                .symbol("AAPL")
+                .exchange("NASDAQ")
+                .position(100.0)
+                .average_cost(50.25)
+                .model_code(TEST_MODEL_CODE)
+                .encode_proto(),
+        );
 
         let result = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap();
 
@@ -231,8 +272,7 @@ mod position_update_multi_tests {
 
     #[test]
     fn test_decode_position_multi_end() {
-        // Format: message_type\0version\0request_id\0
-        let mut message = ResponseMessage::from("72\01\0123\0");
+        let mut message = proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto());
 
         let result = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap();
 
@@ -277,8 +317,15 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_account_value() {
-        // Format: message_type\0version\0key\0value\0currency\0account\0
-        let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123456.78\0USD\0DU1234567\0");
+        let mut message = proto_response(
+            IncomingMessages::AccountValue,
+            account_value()
+                .key("NetLiquidation")
+                .value("123456.78")
+                .currency("USD")
+                .account(TEST_ACCOUNT)
+                .encode_proto(),
+        );
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -295,10 +342,7 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_portfolio_value() {
-        // Format: message_type\0version\0contract_id\0symbol\0sec_type\0last_trade_date\0strike\0right\0multiplier\0primary_exchange\0currency\0local_symbol\0trading_class\0position\0market_price\0market_value\0avg_cost\0unrealized_pnl\0realized_pnl\0account\0
-        let mut message = ResponseMessage::from(
-            "7\08\012345\0AAPL\0STK\020230101\0150.0\0\0\0NASDAQ\0USD\0AAPL\0NMS\0100\0155.0\015500.0\0150.0\0500.0\00.0\0DU1234567\0",
-        );
+        let mut message = proto_response(IncomingMessages::PortfolioValue, portfolio_value().contract_id(12345).encode_proto());
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -316,8 +360,10 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_update_time() {
-        // Format: message_type\0version\0timestamp\0
-        let mut message = ResponseMessage::from("8\01\014:30:00\0");
+        let mut message = proto_response(
+            IncomingMessages::AccountUpdateTime,
+            account_update_time().timestamp("14:30:00").encode_proto(),
+        );
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -331,8 +377,7 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_account_download_end() {
-        // Format: message_type\0version\0account\0
-        let mut message = ResponseMessage::from("54\01\0DU1234567\0");
+        let mut message = proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto());
 
         let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
 
@@ -372,8 +417,15 @@ mod account_update_multi_tests {
 
     #[test]
     fn test_decode_account_multi_value() {
-        // Format: message_type\0version\0request_id\0account\0model_code\0key\0value\0currency\0
-        let mut message = ResponseMessage::from("73\01\0123\0DU1234567\0TARGET2024\0NetLiquidation\0123456.78\0USD\0");
+        let mut message = proto_response(
+            IncomingMessages::AccountUpdateMulti,
+            account_update_multi()
+                .model_code(TEST_MODEL_CODE)
+                .key("NetLiquidation")
+                .value("123456.78")
+                .currency("USD")
+                .encode_proto(),
+        );
 
         let result = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap();
 
@@ -391,8 +443,7 @@ mod account_update_multi_tests {
 
     #[test]
     fn test_decode_account_multi_end() {
-        // Format: message_type\0version\0request_id\0
-        let mut message = ResponseMessage::from("74\01\0123\0");
+        let mut message = proto_response(IncomingMessages::AccountUpdateMultiEnd, account_update_multi_end().encode_proto());
 
         let result = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap();
 
@@ -477,11 +528,16 @@ mod integration_tests {
 
     #[test]
     fn test_full_account_summary_flow() {
-        // Test decoding a series of account summary messages
         let messages = vec![
-            ResponseMessage::from("63\01\0123\0DU1234567\0NetLiquidation\0100000.00\0USD\0"),
-            ResponseMessage::from("63\01\0123\0DU1234567\0TotalCashValue\050000.00\0USD\0"),
-            ResponseMessage::from("64\01\0123\0"),
+            proto_response(
+                IncomingMessages::AccountSummary,
+                account_summary().tag("NetLiquidation").value("100000.00").currency("USD").encode_proto(),
+            ),
+            proto_response(
+                IncomingMessages::AccountSummary,
+                account_summary().tag("TotalCashValue").value("50000.00").currency("USD").encode_proto(),
+            ),
+            proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
         ];
 
         let mut results = Vec::new();
@@ -498,11 +554,19 @@ mod integration_tests {
 
     #[test]
     fn test_full_position_update_flow() {
-        // Test decoding a series of position messages
+        use crate::testdata::builders::positions::{position, position_end};
+        use crate::testdata::builders::ResponseProtoEncoder;
+
         let messages = vec![
-            ResponseMessage::from("61\03\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0NASDAQ\0USD\0AAPL\0NMS\0100\050.25\0"),
-            ResponseMessage::from("61\03\0DU7654321\067890\0GOOGL\0STK\0\00.0\0\0\0NASDAQ\0USD\0GOOGL\0NMS\0200\075.50\0"),
-            ResponseMessage::from("62\01\0"),
+            proto_response(
+                IncomingMessages::Position,
+                position().account(TEST_ACCOUNT).symbol("AAPL").position(100.0).encode_proto(),
+            ),
+            proto_response(
+                IncomingMessages::Position,
+                position().account(TEST_ACCOUNT_2).symbol("GOOGL").position(200.0).encode_proto(),
+            ),
+            proto_response(IncomingMessages::PositionEnd, position_end().encode_proto()),
         ];
 
         let mut results = Vec::new();
