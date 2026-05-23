@@ -383,12 +383,7 @@ pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Err
 }
 
 fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) -> Bar {
-    let date = b
-        .date
-        .as_deref()
-        .and_then(|s| s.parse::<i64>().ok())
-        .and_then(|t| OffsetDateTime::from_unix_timestamp(t).ok())
-        .unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let date = b.date.as_deref().and_then(parse_proto_bar_date).unwrap_or(OffsetDateTime::UNIX_EPOCH);
     Bar {
         date,
         open: b.open.unwrap_or_default(),
@@ -399,6 +394,16 @@ fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) 
         wap: parse_str_f64(&b.wap),
         count: b.bar_count.unwrap_or(default_count),
     }
+}
+
+fn parse_proto_bar_date(text: &str) -> Option<OffsetDateTime> {
+    let text = text.trim();
+    if text.len() == 8 && text.bytes().all(|b| b.is_ascii_digit()) {
+        let date_format = format_description!("[year][month][day]");
+        let bar_date = Date::parse(text, date_format).ok()?.with_time(time!(00:00));
+        return Some(bar_date.assume_timezone_utc(time_tz::timezones::db::UTC));
+    }
+    text.parse::<i64>().ok().and_then(|t| OffsetDateTime::from_unix_timestamp(t).ok())
 }
 
 pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error> {

@@ -275,7 +275,7 @@ fn test_decode_historical_data_proto() {
                 bar_count: Some(150),
             },
             crate::proto::HistoricalDataBar {
-                date: Some("1681219800".into()),
+                date: Some("20230411".into()),
                 open: Some(186.00),
                 high: Some(187.00),
                 low: Some(185.50),
@@ -303,6 +303,7 @@ fn test_decode_historical_data_proto() {
     assert_eq!(bars[0].count, 150);
 
     assert_eq!(bars[1].open, 186.00);
+    assert_eq!(bars[1].date, datetime!(2023-04-11 0:00:00 UTC));
     assert_eq!(bars[1].count, 300);
 }
 
