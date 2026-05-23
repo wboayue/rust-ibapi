@@ -141,6 +141,20 @@ fn test_decode_tick_news_proto() {
 }
 
 #[test]
+fn test_decode_tick_news_proto_invalid_timestamp() {
+    let proto_msg = crate::proto::TickNews {
+        timestamp: Some(i64::MAX),
+        ..Default::default()
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let err = decode_tick_news_proto(&bytes).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains(&i64::MAX.to_string()), "error should include the bad value: {msg}");
+}
+
+#[test]
 fn test_decode_tick_news_rejects_text_framing() {
     let message = ResponseMessage::from("84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0");
     let err = decode_tick_news(&message).unwrap_err();

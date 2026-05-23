@@ -58,7 +58,8 @@ pub(crate) fn decode_tick_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error>
     let p = crate::proto::TickNews::decode(bytes)?;
 
     let millis = p.timestamp.unwrap_or_default();
-    let time = OffsetDateTime::from_unix_timestamp(millis / 1000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))?;
+    let time =
+        OffsetDateTime::from_unix_timestamp_nanos((millis as i128) * 1_000_000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))?;
 
     Ok(NewsArticle {
         time,
