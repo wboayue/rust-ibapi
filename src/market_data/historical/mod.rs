@@ -388,17 +388,12 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
         IncomingMessages::Error,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        let tz = context.time_zone.unwrap_or(time_tz::timezones::db::UTC);
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::HistoricalData => Ok(Self::Historical(common::decoders::decode_historical_data(
-                context.server_version,
-                tz,
-                message,
-            )?)),
-            IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(tz, message)?)),
+            IncomingMessages::HistoricalData => Ok(Self::Historical(common::decoders::decode_historical_data(message)?)),
+            IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(message)?)),
             IncomingMessages::HistoricalDataEnd => {
-                let (start, end) = common::decoders::decode_historical_data_end(context.server_version, tz, message)?;
+                let (start, end) = common::decoders::decode_historical_data_end(message)?;
                 Ok(Self::End { start, end })
             }
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -627,14 +622,14 @@ pub trait TickDecoder<T> {
     /// Message discriminator emitted by TWS for this tick type.
     const MESSAGE_TYPE: IncomingMessages;
     /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
-    fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
+    fn decode(message: &ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
 #[allow(private_interfaces)]
 impl TickDecoder<TickBidAsk> for TickBidAsk {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickBidAsk;
 
-    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+    fn decode(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
         common::decoders::decode_historical_ticks_bid_ask(message)
     }
 }
@@ -643,7 +638,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
 impl TickDecoder<TickLast> for TickLast {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickLast;
 
-    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+    fn decode(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
         common::decoders::decode_historical_ticks_last(message)
     }
 }
@@ -652,7 +647,7 @@ impl TickDecoder<TickLast> for TickLast {
 impl TickDecoder<TickMidpoint> for TickMidpoint {
     const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTick;
 
-    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+    fn decode(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
         common::decoders::decode_historical_ticks_mid_point(message)
     }
 }

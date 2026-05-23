@@ -1,266 +1,14 @@
 use super::*;
+use prost::Message;
 use time::macros::{date, datetime};
-use time_tz;
 
-#[test]
-fn test_decode_head_timestamp() {
-    let mut message = ResponseMessage::from("88\09000\01560346200\0");
-
-    let head_timestamp = super::decode_head_timestamp(&mut message, None).expect("error decoding trade tick");
-
-    assert_eq!(head_timestamp, datetime!(2019-06-12 13:30).assume_utc(), "head_timestamp");
-}
-
-#[test]
-fn test_decode_historical_schedule() {
-    let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
-
-    let mut message =
-        ResponseMessage::from("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
-
-    let schedule = decode_historical_schedule(&mut message).expect("error decoding historical schedule");
-
-    assert_eq!(
-        schedule.start,
-        datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(),
-        "schedule.start"
-    );
-    assert_eq!(
-        schedule.end,
-        datetime!(2023-04-14 16:00:00).assume_timezone(time_zone).unwrap(),
-        "schedule.end"
-    );
-    assert_eq!(schedule.time_zone, "US/Eastern", "schedule.time_zone");
-
-    assert_eq!(schedule.sessions.len(), 1, "schedule.sessions.len()");
-    assert_eq!(schedule.sessions[0].reference, date!(2023 - 04 - 14), "schedule.sessions[0].reference");
-    assert_eq!(
-        schedule.sessions[0].start,
-        datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(),
-        "schedule.sessions[0].start"
-    );
-    assert_eq!(
-        schedule.sessions[0].end,
-        datetime!(2023-04-14 16:00:00.0).assume_timezone(time_zone).unwrap(),
-        "schedule.sessions[0].end"
-    );
-}
-
-#[test]
-fn test_decode_historical_schedule_unknown_timezone_errors() {
-    // Gateway sent an unmappable timezone — must surface as Error, not panic.
-    let mut message = ResponseMessage::from(
-        "106\09000\020230414-09:30:00\020230414-16:00:00\0Bogus Standard Time\01\020230414-09:30:00\020230414-16:00:00\020230414\0",
-    );
-
-    let err = decode_historical_schedule(&mut message).expect_err("unknown tz must error");
-    assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
-    let rendered = err.to_string();
-    assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
-    assert!(
-        rendered.contains("register_timezone_alias"),
-        "missing programmatic-fix pointer: {rendered}"
-    );
-    assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
-}
-
-#[test]
-fn test_decode_historical_data() {
-    let mut message = ResponseMessage::from("17\09000\020230413  16:31:22\020230415  16:31:22\02\020230413\0182.9400\0186.5000\0180.9400\0185.9000\0948837.22\0184.869\0324891\020230414\0183.8800\0186.2800\0182.0100\0185.0000\0810998.27\0183.9865\0277547\0");
-
-    let server_version = server_versions::HISTORICAL_SCHEDULE;
-    let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
-
-    let historical_data = decode_historical_data(server_version, time_zone, &mut message).expect("error decoding historical data");
-
-    assert_eq!(
-        historical_data.start,
-        datetime!(2023-04-13 16:31:22).assume_timezone(time_zone).unwrap(),
-        "historical_data.start"
-    );
-    assert_eq!(
-        historical_data.end,
-        datetime!(2023-04-15 16:31:22).assume_timezone(time_zone).unwrap(),
-        "historical_data.end"
-    );
-
-    assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
-    assert_eq!(
-        historical_data.bars[0].date,
-        datetime!(2023-04-13 0:00:00 UTC),
-        "historical_data.bars[0].date"
-    );
-    assert_eq!(historical_data.bars[0].open, 182.94, "historical_data.bars[0].open");
-    assert_eq!(historical_data.bars[0].high, 186.50, "historical_data.bars[0].high");
-    assert_eq!(historical_data.bars[0].low, 180.94, "historical_data.bars[0].low");
-    assert_eq!(historical_data.bars[0].close, 185.90, "historical_data.bars[0].close");
-    assert_eq!(historical_data.bars[0].volume, 948837.22, "historical_data.bars[0].volume");
-    assert_eq!(historical_data.bars[0].wap, 184.869, "historical_data.bars[0].wap");
-    assert_eq!(historical_data.bars[0].count, 324891, "historical_data.bars[0].count");
-}
-
-#[test]
-fn test_decode_historical_tick_bid_ask() {
-    let sample_message = "97\09000\04\01681133399\00\011.63\011.83\02800\0100\01681133400\00\011.63\011.83\02800\0200\01681133400\00\011.63\011.72\02800\0100\01681133400\00\011.63\011.83\02800\0200\01\0";
-    let mut message = ResponseMessage::from(sample_message);
-
-    let (ticks, done) = decode_historical_ticks_bid_ask(&mut message).unwrap();
-
-    assert_eq!(ticks.len(), 4, "ticks.len()");
-    assert!(done, "done");
-
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:59 UTC), "ticks[0].timestamp");
-    assert_eq!(
-        ticks[0].tick_attribute_bid_ask,
-        TickAttributeBidAsk {
-            bid_past_low: false,
-            ask_past_high: false
-        },
-        "ticks[0].tick_attribute_bid_ask"
-    );
-    assert_eq!(ticks[0].price_bid, 11.63, "ticks[0].price_bid");
-    assert_eq!(ticks[0].price_ask, 11.83, "ticks[0].price_ask");
-    assert_eq!(ticks[0].size_bid, 2800, "ticks[0].size_bid");
-    assert_eq!(ticks[0].size_ask, 100, "ticks[0].size_ask");
-
-    assert_eq!(ticks[3].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
-    assert_eq!(
-        ticks[3].tick_attribute_bid_ask,
-        TickAttributeBidAsk {
-            bid_past_low: false,
-            ask_past_high: false
-        },
-        "ticks[0].tick_attribute_bid_ask"
-    );
-    assert_eq!(ticks[3].price_bid, 11.63, "ticks[0].price_bid");
-    assert_eq!(ticks[3].price_ask, 11.83, "ticks[0].price_ask");
-    assert_eq!(ticks[3].size_bid, 2800, "ticks[0].size_bid");
-    assert_eq!(ticks[3].size_ask, 200, "ticks[0].size_ask");
-}
-
-#[test]
-fn test_decode_historical_tick_last() {
-    let sample_message = "98\09000\07\01681133400\00\011.63\024547\0ISLAND\0 O X\01681133400\02\011.73\01\0DRCTEDGE\0   I\01681133401\00\011.63\0179\0FINRA\0\01681133401\02\011.73\01\0FINRA\0   I\01681133402\02\011.63\01\0FINRA\0 4 I\01681133402\02\011.73\01\0FINRA\0   I\01681133402\02\011.73\01\0FINRA\0   I\01\0";
-    let mut message = ResponseMessage::from(sample_message);
-
-    let (ticks, done) = decode_historical_ticks_last(&mut message).unwrap();
-
-    assert_eq!(ticks.len(), 7, "ticks.len()");
-    assert!(done, "done");
-
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:0 UTC), "ticks[0].timestamp");
-    assert_eq!(
-        ticks[0].tick_attribute_last,
-        TickAttributeLast {
-            past_limit: false,
-            unreported: false
-        },
-        "ticks[0].tick_attribute_last"
-    );
-    assert_eq!(ticks[0].price, 11.63, "ticks[0].price");
-    assert_eq!(ticks[0].size, 24547, "ticks[0].size");
-    assert_eq!(ticks[0].exchange, "ISLAND", "ticks[0].exchange");
-    assert_eq!(ticks[0].special_conditions, " O X", "ticks[0].special_conditions");
-
-    assert_eq!(ticks[6].timestamp, datetime!(2023-04-10 13:30:02 UTC), "ticks[6].timestamp");
-    assert_eq!(
-        ticks[6].tick_attribute_last,
-        TickAttributeLast {
-            past_limit: false,
-            unreported: true
-        },
-        "ticks[6].tick_attribute_last"
-    );
-    assert_eq!(ticks[6].price, 11.73, "ticks[6].price");
-    assert_eq!(ticks[6].size, 1, "ticks[6].size");
-    assert_eq!(ticks[6].exchange, "FINRA", "ticks[6].exchange");
-    assert_eq!(ticks[6].special_conditions, "   I", "ticks[6].special_conditions");
-}
-
-#[test]
-fn test_decode_historical_tick_midpoint() {
-    let sample_message = "96\09000\024\01681133398\00\091.36\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.345\00\01681133400\00\091.35\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.335\00\01681133400\00\091.33\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.31\00\01\0";
-    let mut message = ResponseMessage::from(sample_message);
-
-    let (ticks, done) = decode_historical_ticks_mid_point(&mut message).unwrap();
-
-    assert_eq!(ticks.len(), 24, "ticks.len()");
-    assert!(done, "done");
-
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:58 UTC), "ticks[0].timestamp");
-    assert_eq!(ticks[0].price, 91.36, "ticks[0].price");
-    assert_eq!(ticks[0].size, 0, "ticks[0].size");
-
-    assert_eq!(ticks[23].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
-    assert_eq!(ticks[23].price, 91.31, "ticks[0].price");
-    assert_eq!(ticks[23].size, 0, "ticks[0].size");
-}
-
-#[test]
-fn test_decode_historical_data_update() {
-    let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
-
-    // Message format: message_type|request_id|bar_count|timestamp|open|high|low|close|volume|wap|count
-    let mut message = ResponseMessage::from("90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0150\0");
-
-    let bar = decode_historical_data_update(time_zone, &mut message).expect("error decoding historical data update");
-
-    assert_eq!(bar.date, datetime!(2023-04-10 13:30:00 UTC), "bar.date");
-    assert_eq!(bar.open, 185.50, "bar.open");
-    assert_eq!(bar.high, 186.00, "bar.high");
-    assert_eq!(bar.low, 185.00, "bar.low");
-    assert_eq!(bar.close, 185.75, "bar.close");
-    assert_eq!(bar.volume, 1000.5, "bar.volume");
-    assert_eq!(bar.wap, 185.625, "bar.wap");
-    assert_eq!(bar.count, 150, "bar.count");
-}
-
-#[test]
-fn test_decode_historical_data_update_without_count() {
-    let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
-
-    // Message without count field (optional in streaming updates)
-    let mut message = ResponseMessage::from("90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0");
-
-    let bar = decode_historical_data_update(time_zone, &mut message).expect("error decoding historical data update");
-
-    assert_eq!(bar.date, datetime!(2023-04-10 13:30:00 UTC), "bar.date");
-    assert_eq!(bar.open, 185.50, "bar.open");
-    assert_eq!(bar.high, 186.00, "bar.high");
-    assert_eq!(bar.low, 185.00, "bar.low");
-    assert_eq!(bar.close, 185.75, "bar.close");
-    assert_eq!(bar.volume, 1000.5, "bar.volume");
-    assert_eq!(bar.wap, 185.625, "bar.wap");
-    assert_eq!(bar.count, 0, "bar.count should default to 0 when missing");
-}
-
-#[test]
-fn test_parse_bar_date_yyyymmdd() {
-    let tz = time_tz::timezones::db::UTC;
-    let result = parse_bar_date("20230414", tz).unwrap();
-    assert_eq!(result, datetime!(2023-04-14 0:00:00 UTC));
-}
-
-#[test]
-fn test_parse_bar_date_unix_timestamp() {
-    let tz = time_tz::timezones::db::america::NEW_YORK;
-    let result = parse_bar_date("1681133400", tz).unwrap();
-    assert_eq!(result, datetime!(2023-04-10 9:30:00).assume_timezone(tz).unwrap());
-}
-
-#[test]
-fn test_parse_bar_date_invalid_timestamp() {
-    let tz = time_tz::timezones::db::UTC;
-    let err = parse_bar_date("not_a_number", tz).unwrap_err();
-    let msg = err.to_string();
-    assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
-    assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
-}
+// ---------------------------------------------------------------------------
+// Happy-path proto decoders. Each test drives bytes through the `*_proto`
+// helper directly (scanner precedent: src/scanner/common/decoders_tests.rs).
+// ---------------------------------------------------------------------------
 
 #[test]
 fn test_decode_historical_data_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::HistoricalData {
         req_id: Some(1),
         historical_data_bars: vec![
@@ -287,10 +35,7 @@ fn test_decode_historical_data_proto() {
         ],
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let bars = decode_historical_data_proto(&bytes).unwrap();
+    let bars = decode_historical_data_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(bars.len(), 2);
 
     assert_eq!(bars[0].date, datetime!(2023-04-10 13:30:00 UTC));
@@ -308,8 +53,6 @@ fn test_decode_historical_data_proto() {
 
 #[test]
 fn test_decode_historical_ticks_last_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::HistoricalTicksLast {
         req_id: Some(1),
         historical_ticks_last: vec![
@@ -339,10 +82,7 @@ fn test_decode_historical_ticks_last_proto() {
         is_done: Some(true),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let (ticks, done) = decode_historical_ticks_last_proto(&bytes).unwrap();
+    let (ticks, done) = decode_historical_ticks_last_proto(&proto_msg.encode_to_vec()).unwrap();
     assert!(done);
     assert_eq!(ticks.len(), 2);
 
@@ -363,24 +103,17 @@ fn test_decode_historical_ticks_last_proto() {
 
 #[test]
 fn test_decode_head_timestamp_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::HeadTimestamp {
         req_id: Some(1),
         head_timestamp: Some("1609459200".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_head_timestamp_proto(&bytes).unwrap();
+    let result = decode_head_timestamp_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result, "1609459200");
 }
 
 #[test]
 fn test_decode_historical_ticks_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::HistoricalTicks {
         req_id: Some(1),
         historical_ticks: vec![
@@ -398,10 +131,7 @@ fn test_decode_historical_ticks_proto() {
         is_done: Some(false),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let (ticks, done) = decode_historical_ticks_proto(&bytes).unwrap();
+    let (ticks, done) = decode_historical_ticks_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(ticks.len(), 2);
     assert!(!done);
     assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
@@ -411,8 +141,6 @@ fn test_decode_historical_ticks_proto() {
 
 #[test]
 fn test_decode_historical_ticks_bid_ask_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::HistoricalTicksBidAsk {
         req_id: Some(1),
         historical_ticks_bid_ask: vec![crate::proto::HistoricalTickBidAsk {
@@ -429,10 +157,7 @@ fn test_decode_historical_ticks_bid_ask_proto() {
         is_done: Some(true),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let (ticks, done) = decode_historical_ticks_bid_ask_proto(&bytes).unwrap();
+    let (ticks, done) = decode_historical_ticks_bid_ask_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(ticks.len(), 1);
     assert!(done);
     assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
@@ -446,7 +171,6 @@ fn test_decode_historical_ticks_bid_ask_proto() {
 
 #[test]
 fn test_decode_histogram_data_proto() {
-    use prost::Message;
     let proto_msg = crate::proto::HistogramData {
         req_id: Some(1),
         histogram_data_entries: vec![
@@ -460,10 +184,8 @@ fn test_decode_histogram_data_proto() {
             },
         ],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let result = decode_histogram_data_proto(&bytes).unwrap();
+    let result = decode_histogram_data_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].price, 100.5);
     assert_eq!(result[0].size, 50);
@@ -473,17 +195,14 @@ fn test_decode_histogram_data_proto() {
 
 #[test]
 fn test_decode_historical_data_end_proto() {
-    use prost::Message;
     // Wire format for start/end uses "YYYYMMDD HH:MM:SS TZ".
     let proto_msg = crate::proto::HistoricalDataEnd {
         req_id: Some(1),
         start_date_str: Some("20260101 09:30:00 US/Eastern".into()),
         end_date_str: Some("20260105 16:00:00 US/Eastern".into()),
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let (start, end) = decode_historical_data_end_proto(&bytes).unwrap();
+    let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).unwrap();
     assert!(start < end);
     assert_eq!(start.year(), 2026);
     assert_eq!(end.year(), 2026);
@@ -491,7 +210,6 @@ fn test_decode_historical_data_end_proto() {
 
 #[test]
 fn test_decode_historical_schedule_proto() {
-    use prost::Message;
     let proto_msg = crate::proto::HistoricalSchedule {
         req_id: Some(1),
         start_date_time: Some("20260101-09:30:00".into()),
@@ -503,18 +221,37 @@ fn test_decode_historical_schedule_proto() {
             ref_date: Some("20260102".into()),
         }],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let result = decode_historical_schedule_proto(&bytes).unwrap();
+    let result = decode_historical_schedule_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result.time_zone, "US/Eastern");
     assert_eq!(result.sessions.len(), 1);
     assert_eq!(result.sessions[0].reference, date!(2026 - 01 - 02));
 }
 
 #[test]
+fn test_decode_historical_schedule_unknown_timezone_errors() {
+    // Gateway sends an unmappable timezone — must surface as Error::UnsupportedTimeZone.
+    let proto_msg = crate::proto::HistoricalSchedule {
+        req_id: Some(1),
+        start_date_time: Some("20230414-09:30:00".into()),
+        end_date_time: Some("20230414-16:00:00".into()),
+        time_zone: Some("Bogus Standard Time".into()),
+        historical_sessions: vec![],
+    };
+
+    let err = decode_historical_schedule_proto(&proto_msg.encode_to_vec()).expect_err("unknown tz must error");
+    assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
+    let rendered = err.to_string();
+    assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
+    assert!(
+        rendered.contains("register_timezone_alias"),
+        "missing programmatic-fix pointer: {rendered}"
+    );
+    assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
+}
+
+#[test]
 fn test_decode_historical_data_update_proto() {
-    use prost::Message;
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
@@ -528,10 +265,8 @@ fn test_decode_historical_data_update_proto() {
             bar_count: Some(42),
         }),
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let result = decode_historical_data_update_proto(&bytes).unwrap();
+    let result = decode_historical_data_update_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result.open, 150.0);
     assert_eq!(result.high, 151.0);
     assert_eq!(result.low, 149.5);
@@ -544,15 +279,84 @@ fn test_decode_historical_data_update_proto() {
 
 #[test]
 fn test_decode_historical_data_update_proto_missing_bar_defaults() {
-    use prost::Message;
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: None,
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let result = decode_historical_data_update_proto(&bytes).unwrap();
+    let result = decode_historical_data_update_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result.count, 0);
     assert_eq!(result.date, time::OffsetDateTime::UNIX_EPOCH);
+}
+
+// ---------------------------------------------------------------------------
+// Public-wrapper guards. Each `decode_X(message)` rejects text framing with
+// `Error::ServerVersion` via `require_proto()` — scanner precedent #532.
+// ---------------------------------------------------------------------------
+
+fn text_message(payload: &str) -> ResponseMessage {
+    ResponseMessage::from(payload)
+}
+
+#[test]
+fn test_decode_head_timestamp_rejects_text_framing() {
+    let message = text_message("88\09000\01560346200\0");
+    let err = decode_head_timestamp(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_data_rejects_text_framing() {
+    let message = text_message("17\09000\01\020230413\0182.94\0186.50\0180.94\0185.90\0948837.22\0184.869\0324891\0");
+    let err = decode_historical_data(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_data_end_rejects_text_framing() {
+    let message = text_message("108\09000\020230315 09:30:00 UTC\020230315 10:30:00 UTC\0");
+    let err = decode_historical_data_end(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_schedule_rejects_text_framing() {
+    let message = text_message("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
+    let err = decode_historical_schedule(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_data_update_rejects_text_framing() {
+    let message = text_message("90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0150\0");
+    let err = decode_historical_data_update(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_ticks_mid_point_rejects_text_framing() {
+    let message = text_message("96\09000\01\01681133398\00\091.36\00\01\0");
+    let err = decode_historical_ticks_mid_point(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_ticks_bid_ask_rejects_text_framing() {
+    let message = text_message("97\09000\01\01681133399\00\011.63\011.83\02800\0100\01\0");
+    let err = decode_historical_ticks_bid_ask(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_historical_ticks_last_rejects_text_framing() {
+    let message = text_message("98\09000\01\01681133400\00\011.63\024547\0ISLAND\0 O X\01\0");
+    let err = decode_historical_ticks_last(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+#[test]
+fn test_decode_histogram_data_rejects_text_framing() {
+    let message = text_message("89\09000\01\0125.50\01000\0");
+    let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
 }

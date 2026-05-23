@@ -1,20 +1,39 @@
-const SCHEDULE_RESPONSE: &str = "106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0";
+use crate::common::test_utils::helpers::proto_response;
+use crate::messages::IncomingMessages;
+use crate::messages::ResponseMessage;
+use crate::testdata::builders::market_data::historical_schedule_response;
+use crate::testdata::builders::ResponseProtoEncoder;
+
+fn schedule_response() -> Vec<ResponseMessage> {
+    vec![proto_response(
+        IncomingMessages::HistoricalSchedule,
+        historical_schedule_response().encode_proto(),
+    )]
+}
 
 #[cfg(feature = "sync")]
 mod sync_tests {
+    use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::SCHEDULE_RESPONSE;
-    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_responses_and_version, request_message_count};
+    use super::schedule_response;
+    use crate::client::blocking::Client;
+    use crate::common::test_utils::helpers::{assert_request, request_message_count};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::server_versions;
+    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
+
+    fn client_with_schedule() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(schedule_response()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
 
     #[test]
     fn defaults_anchor_at_now() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![SCHEDULE_RESPONSE.to_owned()], server_versions::HISTORICAL_SCHEDULE);
+        let (client, bus) = client_with_schedule();
         let contract = Contract::stock("AAPL").build();
 
         client.historical_schedules(&contract, 7.days()).fetch().expect("fetch failed");
@@ -35,8 +54,7 @@ mod sync_tests {
 
     #[test]
     fn ending_anchors_at_explicit_date() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![SCHEDULE_RESPONSE.to_owned()], server_versions::HISTORICAL_SCHEDULE);
+        let (client, bus) = client_with_schedule();
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 0:00 UTC);
 
@@ -62,18 +80,27 @@ mod sync_tests {
 
 #[cfg(feature = "async")]
 mod async_tests {
+    use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::SCHEDULE_RESPONSE;
-    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_responses_and_version};
+    use super::schedule_response;
+    use crate::client::r#async::Client;
+    use crate::common::test_utils::helpers::assert_request;
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::server_versions;
+    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
+
+    fn client_with_schedule() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(schedule_response()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
 
     #[tokio::test]
     async fn defaults_anchor_at_now() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![SCHEDULE_RESPONSE.to_owned()], server_versions::HISTORICAL_SCHEDULE);
+        let (client, bus) = client_with_schedule();
         let contract = Contract::stock("AAPL").build();
 
         client.historical_schedules(&contract, 7.days()).fetch().await.expect("fetch failed");
@@ -93,7 +120,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn ending_anchors_at_explicit_date() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![SCHEDULE_RESPONSE.to_owned()], server_versions::HISTORICAL_SCHEDULE);
+        let (client, bus) = client_with_schedule();
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 0:00 UTC);
 

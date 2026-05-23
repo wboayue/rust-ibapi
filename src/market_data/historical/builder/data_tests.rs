@@ -1,5 +1,32 @@
-const HISTORICAL_DATA_RESPONSE: &str =
-    "17\09000\020230315  09:30:00\020230315  10:30:00\01\01678886400\0185.50\0186.00\0185.25\0185.75\01000\0185.70\0100\0";
+use crate::common::test_utils::helpers::proto_response;
+use crate::messages::IncomingMessages;
+use crate::messages::ResponseMessage;
+use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response};
+use crate::testdata::builders::ResponseProtoEncoder;
+
+fn historical_data_response_pair() -> Vec<ResponseMessage> {
+    vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_bar(1_678_886_400)
+                        .ohlc(185.50, 186.00, 185.25, 185.75)
+                        .volume(1000.0)
+                        .wap(185.70)
+                        .count(100),
+                )
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 10:30:00 UTC")
+                .encode_proto(),
+        ),
+    ]
+}
 
 // `Subscription<T>` doesn't impl Debug, so `{:?}` formatting on `Result<Subscription<_>, _>`
 // won't compile. These helpers match the Err arm manually for the .stream() terminals.
@@ -22,21 +49,29 @@ fn assert_stream_invalid_argument_async(
 
 #[cfg(feature = "sync")]
 mod sync_tests {
+    use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::HISTORICAL_DATA_RESPONSE;
+    use super::historical_data_response_pair;
+    use crate::client::blocking::Client;
     use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::market_data::TradingHours;
     use crate::server_versions;
+    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
     use crate::Error;
 
+    fn client_with_data_pair() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
+
     #[test]
     fn duration_defaults_ending_at_now() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![HISTORICAL_DATA_RESPONSE.to_owned()], server_versions::SIZE_RULES);
+        let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
 
         client
@@ -61,8 +96,7 @@ mod sync_tests {
 
     #[test]
     fn ending_anchors_end_date() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![HISTORICAL_DATA_RESPONSE.to_owned()], server_versions::SIZE_RULES);
+        let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 16:00:00 UTC);
 
@@ -91,8 +125,7 @@ mod sync_tests {
 
     #[test]
     fn between_computes_duration_from_range() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![HISTORICAL_DATA_RESPONSE.to_owned()], server_versions::SIZE_RULES);
+        let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-08 0:00 UTC);
         let end = datetime!(2026-04-15 0:00 UTC);
@@ -196,19 +229,28 @@ mod sync_tests {
 
 #[cfg(feature = "async")]
 mod async_tests {
+    use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::HISTORICAL_DATA_RESPONSE;
+    use super::historical_data_response_pair;
+    use crate::client::r#async::Client;
     use crate::common::test_utils::helpers::{assert_request, create_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::server_versions;
+    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
     use crate::Error;
 
+    fn client_with_data_pair() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
+
     #[tokio::test]
     async fn duration_defaults_ending_at_now() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![HISTORICAL_DATA_RESPONSE.to_owned()], server_versions::SIZE_RULES);
+        let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
 
         client
@@ -234,7 +276,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn between_computes_duration_from_range() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![HISTORICAL_DATA_RESPONSE.to_owned()], server_versions::SIZE_RULES);
+        let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-08 0:00 UTC);
         let end = datetime!(2026-04-15 0:00 UTC);

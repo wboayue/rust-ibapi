@@ -587,6 +587,679 @@ pub fn market_data_request() -> MarketDataRequestBuilder {
 }
 
 // =============================================================================
+// Historical response builders (HeadTimestamp, HistoricalData/Update/End,
+// HistoricalSchedule, HistoricalTicks*, HistogramData) — pair with
+// `proto_response()` in tests.
+// =============================================================================
+
+/// One bar in a `HistoricalData` / `HistoricalDataUpdate` proto response.
+/// Mirrors the (stringified) on-wire encoding of `proto::HistoricalDataBar`:
+/// `date` is unix seconds as a string, `volume` / `wap` are f64 stringified.
+#[derive(Clone, Debug)]
+pub struct HistoricalDataBarFields {
+    pub date: i64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+    pub wap: f64,
+    pub count: i32,
+}
+
+impl HistoricalDataBarFields {
+    fn to_proto(&self) -> proto::HistoricalDataBar {
+        proto::HistoricalDataBar {
+            date: Some(self.date.to_string()),
+            open: Some(self.open),
+            high: Some(self.high),
+            low: Some(self.low),
+            close: Some(self.close),
+            volume: Some(self.volume.to_string()),
+            wap: Some(self.wap.to_string()),
+            bar_count: Some(self.count),
+        }
+    }
+}
+
+/// Convenience constructor for a `HistoricalDataBarFields` row.
+pub fn historical_data_bar(date: i64) -> HistoricalDataBarFields {
+    HistoricalDataBarFields {
+        date,
+        open: 0.0,
+        high: 0.0,
+        low: 0.0,
+        close: 0.0,
+        volume: 0.0,
+        wap: 0.0,
+        count: 0,
+    }
+}
+
+impl HistoricalDataBarFields {
+    pub fn ohlc(mut self, open: f64, high: f64, low: f64, close: f64) -> Self {
+        self.open = open;
+        self.high = high;
+        self.low = low;
+        self.close = close;
+        self
+    }
+    pub fn volume(mut self, v: f64) -> Self {
+        self.volume = v;
+        self
+    }
+    pub fn wap(mut self, v: f64) -> Self {
+        self.wap = v;
+        self
+    }
+    pub fn count(mut self, v: i32) -> Self {
+        self.count = v;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HeadTimestampResponse {
+    pub request_id: i32,
+    /// Unix epoch seconds rendered as a string (TWS's actual wire shape).
+    pub head_timestamp: String,
+}
+
+impl Default for HeadTimestampResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            head_timestamp: "1678323335".to_string(),
+        }
+    }
+}
+
+impl HeadTimestampResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn head_timestamp(mut self, v: impl Into<String>) -> Self {
+        self.head_timestamp = v.into();
+        self
+    }
+    pub fn unix_timestamp(self, v: i64) -> Self {
+        self.head_timestamp(v.to_string())
+    }
+}
+
+impl ResponseProtoEncoder for HeadTimestampResponse {
+    type Proto = proto::HeadTimestamp;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HeadTimestamp {
+            req_id: Some(self.request_id),
+            head_timestamp: Some(self.head_timestamp.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalDataResponse {
+    pub request_id: i32,
+    pub bars: Vec<HistoricalDataBarFields>,
+}
+
+impl Default for HistoricalDataResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            bars: Vec::new(),
+        }
+    }
+}
+
+impl HistoricalDataResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn bar(mut self, b: HistoricalDataBarFields) -> Self {
+        self.bars.push(b);
+        self
+    }
+    pub fn bars(mut self, bars: Vec<HistoricalDataBarFields>) -> Self {
+        self.bars = bars;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalDataResponse {
+    type Proto = proto::HistoricalData;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalData {
+            req_id: Some(self.request_id),
+            historical_data_bars: self.bars.iter().map(HistoricalDataBarFields::to_proto).collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalDataEndResponse {
+    pub request_id: i32,
+    /// `"YYYYMMDD HH:MM:SS TZ"` (decoder splits on the trailing space).
+    pub start_date_str: String,
+    pub end_date_str: String,
+}
+
+impl Default for HistoricalDataEndResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            start_date_str: "20230315 09:30:00 UTC".to_string(),
+            end_date_str: "20230315 10:30:00 UTC".to_string(),
+        }
+    }
+}
+
+impl HistoricalDataEndResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn start_date_str(mut self, v: impl Into<String>) -> Self {
+        self.start_date_str = v.into();
+        self
+    }
+    pub fn end_date_str(mut self, v: impl Into<String>) -> Self {
+        self.end_date_str = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalDataEndResponse {
+    type Proto = proto::HistoricalDataEnd;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalDataEnd {
+            req_id: Some(self.request_id),
+            start_date_str: Some(self.start_date_str.clone()),
+            end_date_str: Some(self.end_date_str.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalDataUpdateResponse {
+    pub request_id: i32,
+    pub bar: Option<HistoricalDataBarFields>,
+}
+
+impl Default for HistoricalDataUpdateResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            bar: None,
+        }
+    }
+}
+
+impl HistoricalDataUpdateResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn bar(mut self, b: HistoricalDataBarFields) -> Self {
+        self.bar = Some(b);
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalDataUpdateResponse {
+    type Proto = proto::HistoricalDataUpdate;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalDataUpdate {
+            req_id: Some(self.request_id),
+            historical_data_bar: self.bar.as_ref().map(HistoricalDataBarFields::to_proto),
+        }
+    }
+}
+
+/// One session row in a `HistoricalSchedule` response.
+#[derive(Clone, Debug)]
+pub struct HistoricalSessionFields {
+    pub start_date_time: String,
+    pub end_date_time: String,
+    pub ref_date: String,
+}
+
+pub fn historical_session(
+    start_date_time: impl Into<String>,
+    end_date_time: impl Into<String>,
+    ref_date: impl Into<String>,
+) -> HistoricalSessionFields {
+    HistoricalSessionFields {
+        start_date_time: start_date_time.into(),
+        end_date_time: end_date_time.into(),
+        ref_date: ref_date.into(),
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalScheduleResponse {
+    pub request_id: i32,
+    pub start_date_time: String,
+    pub end_date_time: String,
+    /// Load-bearing: `parse_time_zone` rejects empty strings.
+    pub time_zone: String,
+    pub sessions: Vec<HistoricalSessionFields>,
+}
+
+impl Default for HistoricalScheduleResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            start_date_time: "20230414-09:30:00".to_string(),
+            end_date_time: "20230414-16:00:00".to_string(),
+            time_zone: "US/Eastern".to_string(),
+            sessions: vec![historical_session("20230414-09:30:00", "20230414-16:00:00", "20230414")],
+        }
+    }
+}
+
+impl HistoricalScheduleResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn start_date_time(mut self, v: impl Into<String>) -> Self {
+        self.start_date_time = v.into();
+        self
+    }
+    pub fn end_date_time(mut self, v: impl Into<String>) -> Self {
+        self.end_date_time = v.into();
+        self
+    }
+    pub fn time_zone(mut self, v: impl Into<String>) -> Self {
+        self.time_zone = v.into();
+        self
+    }
+    pub fn sessions(mut self, v: Vec<HistoricalSessionFields>) -> Self {
+        self.sessions = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalScheduleResponse {
+    type Proto = proto::HistoricalSchedule;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalSchedule {
+            req_id: Some(self.request_id),
+            start_date_time: Some(self.start_date_time.clone()),
+            end_date_time: Some(self.end_date_time.clone()),
+            time_zone: Some(self.time_zone.clone()),
+            historical_sessions: self
+                .sessions
+                .iter()
+                .map(|s| proto::HistoricalSession {
+                    start_date_time: Some(s.start_date_time.clone()),
+                    end_date_time: Some(s.end_date_time.clone()),
+                    ref_date: Some(s.ref_date.clone()),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTickMidFields {
+    pub time: i64,
+    pub price: f64,
+    pub size: i32,
+}
+
+pub fn historical_tick_mid(time: i64, price: f64, size: i32) -> HistoricalTickMidFields {
+    HistoricalTickMidFields { time, price, size }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTicksResponse {
+    pub request_id: i32,
+    pub ticks: Vec<HistoricalTickMidFields>,
+    pub done: bool,
+}
+
+impl Default for HistoricalTicksResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            ticks: Vec::new(),
+            done: true,
+        }
+    }
+}
+
+impl HistoricalTicksResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick(mut self, t: HistoricalTickMidFields) -> Self {
+        self.ticks.push(t);
+        self
+    }
+    pub fn ticks(mut self, t: Vec<HistoricalTickMidFields>) -> Self {
+        self.ticks = t;
+        self
+    }
+    pub fn done(mut self, v: bool) -> Self {
+        self.done = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalTicksResponse {
+    type Proto = proto::HistoricalTicks;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalTicks {
+            req_id: Some(self.request_id),
+            historical_ticks: self
+                .ticks
+                .iter()
+                .map(|t| proto::HistoricalTick {
+                    time: Some(t.time),
+                    price: Some(t.price),
+                    size: Some(t.size.to_string()),
+                })
+                .collect(),
+            is_done: Some(self.done),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTickLastFields {
+    pub time: i64,
+    pub past_limit: bool,
+    pub unreported: bool,
+    pub price: f64,
+    pub size: i32,
+    pub exchange: String,
+    pub special_conditions: String,
+}
+
+pub fn historical_tick_last(time: i64, price: f64, size: i32, exchange: impl Into<String>) -> HistoricalTickLastFields {
+    HistoricalTickLastFields {
+        time,
+        past_limit: false,
+        unreported: false,
+        price,
+        size,
+        exchange: exchange.into(),
+        special_conditions: String::new(),
+    }
+}
+
+impl HistoricalTickLastFields {
+    pub fn past_limit(mut self, v: bool) -> Self {
+        self.past_limit = v;
+        self
+    }
+    pub fn unreported(mut self, v: bool) -> Self {
+        self.unreported = v;
+        self
+    }
+    pub fn special_conditions(mut self, v: impl Into<String>) -> Self {
+        self.special_conditions = v.into();
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTicksLastResponse {
+    pub request_id: i32,
+    pub ticks: Vec<HistoricalTickLastFields>,
+    pub done: bool,
+}
+
+impl Default for HistoricalTicksLastResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            ticks: Vec::new(),
+            done: true,
+        }
+    }
+}
+
+impl HistoricalTicksLastResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick(mut self, t: HistoricalTickLastFields) -> Self {
+        self.ticks.push(t);
+        self
+    }
+    pub fn ticks(mut self, t: Vec<HistoricalTickLastFields>) -> Self {
+        self.ticks = t;
+        self
+    }
+    pub fn done(mut self, v: bool) -> Self {
+        self.done = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalTicksLastResponse {
+    type Proto = proto::HistoricalTicksLast;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalTicksLast {
+            req_id: Some(self.request_id),
+            historical_ticks_last: self
+                .ticks
+                .iter()
+                .map(|t| proto::HistoricalTickLast {
+                    time: Some(t.time),
+                    tick_attrib_last: Some(proto::TickAttribLast {
+                        past_limit: Some(t.past_limit),
+                        unreported: Some(t.unreported),
+                    }),
+                    price: Some(t.price),
+                    size: Some(t.size.to_string()),
+                    exchange: Some(t.exchange.clone()),
+                    special_conditions: Some(t.special_conditions.clone()),
+                })
+                .collect(),
+            is_done: Some(self.done),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTickBidAskFields {
+    pub time: i64,
+    pub bid_past_low: bool,
+    pub ask_past_high: bool,
+    pub price_bid: f64,
+    pub price_ask: f64,
+    pub size_bid: i32,
+    pub size_ask: i32,
+}
+
+pub fn historical_tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_bid: i32, size_ask: i32) -> HistoricalTickBidAskFields {
+    HistoricalTickBidAskFields {
+        time,
+        bid_past_low: false,
+        ask_past_high: false,
+        price_bid,
+        price_ask,
+        size_bid,
+        size_ask,
+    }
+}
+
+impl HistoricalTickBidAskFields {
+    pub fn bid_past_low(mut self, v: bool) -> Self {
+        self.bid_past_low = v;
+        self
+    }
+    pub fn ask_past_high(mut self, v: bool) -> Self {
+        self.ask_past_high = v;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalTicksBidAskResponse {
+    pub request_id: i32,
+    pub ticks: Vec<HistoricalTickBidAskFields>,
+    pub done: bool,
+}
+
+impl Default for HistoricalTicksBidAskResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            ticks: Vec::new(),
+            done: true,
+        }
+    }
+}
+
+impl HistoricalTicksBidAskResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick(mut self, t: HistoricalTickBidAskFields) -> Self {
+        self.ticks.push(t);
+        self
+    }
+    pub fn ticks(mut self, t: Vec<HistoricalTickBidAskFields>) -> Self {
+        self.ticks = t;
+        self
+    }
+    pub fn done(mut self, v: bool) -> Self {
+        self.done = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistoricalTicksBidAskResponse {
+    type Proto = proto::HistoricalTicksBidAsk;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistoricalTicksBidAsk {
+            req_id: Some(self.request_id),
+            historical_ticks_bid_ask: self
+                .ticks
+                .iter()
+                .map(|t| proto::HistoricalTickBidAsk {
+                    time: Some(t.time),
+                    tick_attrib_bid_ask: Some(proto::TickAttribBidAsk {
+                        bid_past_low: Some(t.bid_past_low),
+                        ask_past_high: Some(t.ask_past_high),
+                    }),
+                    price_bid: Some(t.price_bid),
+                    price_ask: Some(t.price_ask),
+                    size_bid: Some(t.size_bid.to_string()),
+                    size_ask: Some(t.size_ask.to_string()),
+                })
+                .collect(),
+            is_done: Some(self.done),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistogramDataEntryFields {
+    pub price: f64,
+    pub size: i32,
+}
+
+pub fn histogram_entry(price: f64, size: i32) -> HistogramDataEntryFields {
+    HistogramDataEntryFields { price, size }
+}
+
+#[derive(Clone, Debug)]
+pub struct HistogramDataResponse {
+    pub request_id: i32,
+    pub entries: Vec<HistogramDataEntryFields>,
+}
+
+impl Default for HistogramDataResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            entries: Vec::new(),
+        }
+    }
+}
+
+impl HistogramDataResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn entry(mut self, e: HistogramDataEntryFields) -> Self {
+        self.entries.push(e);
+        self
+    }
+    pub fn entries(mut self, e: Vec<HistogramDataEntryFields>) -> Self {
+        self.entries = e;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for HistogramDataResponse {
+    type Proto = proto::HistogramData;
+    fn to_proto(&self) -> Self::Proto {
+        proto::HistogramData {
+            req_id: Some(self.request_id),
+            histogram_data_entries: self
+                .entries
+                .iter()
+                .map(|e| proto::HistogramDataEntry {
+                    price: Some(e.price),
+                    size: Some(e.size.to_string()),
+                })
+                .collect(),
+        }
+    }
+}
+
+// Historical response entry-point functions
+
+pub fn head_timestamp_response() -> HeadTimestampResponse {
+    HeadTimestampResponse::default()
+}
+
+pub fn historical_data_response() -> HistoricalDataResponse {
+    HistoricalDataResponse::default()
+}
+
+pub fn historical_data_end_response() -> HistoricalDataEndResponse {
+    HistoricalDataEndResponse::default()
+}
+
+pub fn historical_data_update_response() -> HistoricalDataUpdateResponse {
+    HistoricalDataUpdateResponse::default()
+}
+
+pub fn historical_schedule_response() -> HistoricalScheduleResponse {
+    HistoricalScheduleResponse::default()
+}
+
+pub fn historical_ticks_response() -> HistoricalTicksResponse {
+    HistoricalTicksResponse::default()
+}
+
+pub fn historical_ticks_last_response() -> HistoricalTicksLastResponse {
+    HistoricalTicksLastResponse::default()
+}
+
+pub fn historical_ticks_bid_ask_response() -> HistoricalTicksBidAskResponse {
+    HistoricalTicksBidAskResponse::default()
+}
+
+pub fn histogram_data_response() -> HistogramDataResponse {
+    HistogramDataResponse::default()
+}
+
+// =============================================================================
 // Realtime response builders (RealTimeBars, TickByTick, MarketDepth,
 // TickPrice/Size/String/Generic) — pair with `proto_response()` in tests.
 // =============================================================================

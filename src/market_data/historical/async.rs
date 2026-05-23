@@ -56,9 +56,7 @@ impl Client {
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
-                Ok(decoders::decode_head_timestamp(&mut message, self.time_zone())?)
-            }
+            Some(Ok(message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&message)?),
             Some(Ok(message)) => Err(Error::unexpected_response(&message)),
             Some(Err(e)) => Err(e),
             None => {
@@ -259,20 +257,11 @@ impl Client {
             let mut subscription = builder.send_raw(request).await?;
 
             match subscription.next().await {
-                Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+                Some(Ok(message)) => return decoders::decode_histogram_data(&message),
                 Some(Err(e)) => return Err(e),
                 None => continue, // Connection reset, retry
             }
         }
-    }
-}
-
-pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
-    if let Some(tz) = client.time_zone {
-        tz
-    } else {
-        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-        time_tz::timezones::db::UTC
     }
 }
 
@@ -304,15 +293,13 @@ pub(crate) async fn historical_data(
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                let mut data = decoders::decode_historical_data(client.server_version(), time_zone(client), &mut message)?;
+            Some(Ok(message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                let mut data = decoders::decode_historical_data(&message)?;
 
-                if client.server_version() >= crate::server_versions::HISTORICAL_DATA_END {
-                    if let Some(Ok(mut end_msg)) = subscription.next().await {
-                        let (start, end) = decoders::decode_historical_data_end(client.server_version(), time_zone(client), &mut end_msg)?;
-                        data.start = start;
-                        data.end = end;
-                    }
+                if let Some(Ok(end_msg)) = subscription.next().await {
+                    let (start, end) = decoders::decode_historical_data_end(&end_msg)?;
+                    data.start = start;
+                    data.end = end;
                 }
 
                 return Ok(data);
@@ -410,8 +397,8 @@ pub(crate) async fn historical_schedule(
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
-                return decoders::decode_historical_schedule(&mut message)
+            Some(Ok(message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+                return decoders::decode_historical_schedule(&message)
             }
             Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
             Some(Err(e)) => return Err(e),
@@ -486,8 +473,8 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     async fn fill_buffer(&mut self) -> Result<(), ()> {
         match self.messages.next().await {
-            Some(Ok(mut message)) if message.message_type() == T::MESSAGE_TYPE => {
-                let (ticks, done) = T::decode(&mut message).unwrap();
+            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
+                let (ticks, done) = T::decode(&message).unwrap();
                 self.buffer.extend(ticks);
                 self.done = done;
                 Ok(())
