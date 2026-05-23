@@ -261,7 +261,7 @@ impl ConnectionProtocol for ConnectionHandler {
 /// synthesized codes ([`HANDSHAKE_DECODE_FAILURE_CODE`] and
 /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`]) so observers via
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
-pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
+pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 
@@ -310,12 +310,7 @@ pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut Re
         IncomingMessages::AccountValue
         | IncomingMessages::PortfolioValue
         | IncomingMessages::AccountUpdateTime
-        | IncomingMessages::AccountDownloadEnd => dispatch_typed(
-            ctx,
-            kind,
-            || decode_account_update_message(server_version, message),
-            StartupMessage::AccountUpdate,
-        ),
+        | IncomingMessages::AccountDownloadEnd => dispatch_typed(ctx, kind, || decode_account_update_message(message), StartupMessage::AccountUpdate),
         IncomingMessages::ExecutionData => dispatch_typed(ctx, kind, || decode_execution_data(message), StartupMessage::Execution),
         IncomingMessages::CommissionsReport => dispatch_typed(ctx, kind, || decode_commission_report(message), StartupMessage::CommissionReport),
         IncomingMessages::CompletedOrder => dispatch_typed(ctx, kind, || decode_completed_order(message), StartupMessage::CompletedOrder),

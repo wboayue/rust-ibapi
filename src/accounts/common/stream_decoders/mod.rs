@@ -18,12 +18,9 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
         IncomingMessages::Error,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaryResult::Summary(decoders::decode_account_summary(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::AccountSummary => Ok(AccountSummaryResult::Summary(decoders::decode_account_summary(message)?)),
             IncomingMessages::AccountSummaryEnd => Ok(AccountSummaryResult::End),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
@@ -39,9 +36,9 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
 impl StreamDecoder<PnL> for PnL {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnL, IncomingMessages::Error];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::PnL => decoders::decode_pnl(context.server_version, message),
+            IncomingMessages::PnL => decoders::decode_pnl(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
@@ -56,9 +53,9 @@ impl StreamDecoder<PnL> for PnL {
 impl StreamDecoder<PnLSingle> for PnLSingle {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnLSingle, IncomingMessages::Error];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::PnLSingle => decoders::decode_pnl_single(context.server_version, message),
+            IncomingMessages::PnLSingle => decoders::decode_pnl_single(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
@@ -118,13 +115,10 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
         IncomingMessages::Error,
     ];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
-            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
-                context.server_version,
-                message,
-            )?)),
+            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(message)?)),
             IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
             IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
             IncomingMessages::Error => Err(Error::from(message.clone())),

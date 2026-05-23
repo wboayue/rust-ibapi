@@ -1,7 +1,7 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
 use crate::common::test_utils::helpers::*;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
     cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time,
@@ -11,9 +11,9 @@ use crate::testdata::builders::accounts::{
 use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
 };
-use crate::testdata::builders::ResponseEncoder;
+use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 use crate::{client::blocking::Client, server_versions, stubs::MessageBusStub, Error};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 #[test]
 fn test_pnl() {
@@ -52,7 +52,11 @@ fn test_pnl_single() {
 fn test_positions() {
     use crate::accounts::PositionUpdate;
 
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![position().encode_pipe(), position_end().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::Position, position().encode_proto()),
+        proto_response(IncomingMessages::PositionEnd, position_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let subscription = client.positions().expect("request positions failed");
 
@@ -81,11 +85,10 @@ fn test_positions() {
 fn test_positions_multi() {
     use crate::accounts::PositionUpdateMulti;
 
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::PositionMulti, position_multi().encode_proto()),
+        proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto()),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -126,8 +129,11 @@ fn test_positions_multi() {
 fn test_account_summary() {
     use crate::accounts::AccountSummaryResult;
 
-    let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::AccountSummary, account_summary().encode_proto()),
+        proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let group = AccountGroup("All".to_string());
     let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
@@ -239,7 +245,11 @@ fn test_account_updates() {
 
     let account_name = AccountId(TEST_ACCOUNT.to_string());
 
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![account_value().encode_pipe(), account_download_end().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::AccountValue, account_value().encode_proto()),
+        proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let subscription = client.account_updates(&account_name).expect("subscribe failed");
 
@@ -315,20 +325,25 @@ fn test_family_codes() {
 
 #[test]
 fn test_account_updates_multi() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            account_update_multi().key("CashBalance").value("94629.71").currency("USD").encode_pipe(),
-            account_update_multi().key("Currency").value("USD").currency("USD").encode_pipe(),
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::AccountUpdateMulti,
+            account_update_multi().key("CashBalance").value("94629.71").currency("USD").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::AccountUpdateMulti,
+            account_update_multi().key("Currency").value("USD").currency("USD").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::AccountUpdateMulti,
             account_update_multi()
                 .key("StockMarketValue")
                 .value("0.00")
                 .currency("BASE")
-                .encode_pipe(),
-            account_update_multi_end().encode_pipe(),
-        ],
-        ordered_responses: vec![],
-    });
+                .encode_proto(),
+        ),
+        proto_response(IncomingMessages::AccountUpdateMultiEnd, account_update_multi_end().encode_proto()),
+    ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -474,8 +489,11 @@ fn test_account_summary_comprehensive() {
         let group = AccountGroup(test_case.group.clone());
 
         if test_case.expect_responses {
-            let (client, message_bus) =
-                create_blocking_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
+            let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+                proto_response(IncomingMessages::AccountSummary, account_summary().encode_proto()),
+                proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
+            ]));
+            let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
             let subscription = client
                 .account_summary(&group, &test_case.tags)
@@ -587,7 +605,11 @@ fn test_positions_multi_parameter_combinations() {
     use super::common::test_tables::positions_multi_parameter_test_cases;
 
     let test_cases = positions_multi_parameter_test_cases();
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::PositionMulti, position_multi().encode_proto()),
+        proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let mut subscriptions = Vec::new();
 
     // Create all subscriptions
@@ -681,12 +703,13 @@ fn test_subscription_lifecycle() {
 fn test_account_updates_stream_handling() {
     use crate::accounts::AccountUpdate;
 
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![
-        account_value().encode_pipe(),
-        account_value().encode_pipe(),
-        account_value().encode_pipe(),
-        account_download_end().encode_pipe(),
-    ]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::AccountValue, account_value().encode_proto()),
+        proto_response(IncomingMessages::AccountValue, account_value().encode_proto()),
+        proto_response(IncomingMessages::AccountValue, account_value().encode_proto()),
+        proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let account = AccountId(TEST_ACCOUNT.to_string());
     let subscription = client.account_updates(&account).expect("account_updates failed");
