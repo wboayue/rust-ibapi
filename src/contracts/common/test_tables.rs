@@ -5,6 +5,7 @@ use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRigh
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::server_versions;
 use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, symbol_samples, symbol_samples_entry};
+use crate::testdata::builders::market_data::tick_option_computation;
 use crate::testdata::builders::ResponseProtoEncoder;
 
 /// Test case for contract details tests
@@ -46,7 +47,7 @@ pub struct OptionCalculationTestCase {
     pub volatility: Option<f64>,
     pub option_price: Option<f64>,
     pub underlying_price: f64,
-    pub response_message: String,
+    pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request_prefix: &'static str,
     pub expected_price: f64,
     pub expected_delta: f64,
@@ -492,8 +493,7 @@ pub fn market_rule_test_cases() -> Vec<MarketRuleTestCase> {
     ]
 }
 
-/// Test cases for option calculations (still text-framed: TickOptionComputation gates at 206 but
-/// `decode_option_computation` is shared with realtime market_data and migrated separately.)
+/// Test cases for option calculations.
 pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
     vec![
         OptionCalculationTestCase {
@@ -512,7 +512,21 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             volatility: Some(0.3),
             option_price: None,
             underlying_price: 145.0,
-            response_message: "21\06\09000\013\00.3\00.42\07.85\0-0.03\00.65\0-0.002\00.98\06.87\0145.0\07.85\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::TickOptionComputation,
+                tick_option_computation()
+                    .request_id(9000)
+                    .tick_type(13)
+                    .implied_volatility(0.3)
+                    .delta(0.42)
+                    .option_price(7.85)
+                    .present_value_dividend(-0.03)
+                    .gamma(0.65)
+                    .vega(-0.002)
+                    .theta(0.98)
+                    .underlying_price(6.87)
+                    .encode_proto(),
+            )],
             expected_request_prefix: "54|3|9000|0|AAPL|OPT|20231215|150|C|100|SMART||USD||0.3|145|",
             expected_price: 7.85,
             expected_delta: 0.42,
@@ -533,7 +547,21 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             volatility: None,
             option_price: Some(5.0),
             underlying_price: 145.0,
-            response_message: "21\06\09000\013\00.25\00.32\05.0\0-0.02\00.45\0-0.001\00.25\04.55\0145.0\05.0\0".to_string(),
+            ordered_responses: vec![proto_response(
+                IncomingMessages::TickOptionComputation,
+                tick_option_computation()
+                    .request_id(9000)
+                    .tick_type(13)
+                    .implied_volatility(0.25)
+                    .delta(0.32)
+                    .option_price(5.0)
+                    .present_value_dividend(-0.02)
+                    .gamma(0.45)
+                    .vega(-0.001)
+                    .theta(0.25)
+                    .underlying_price(4.55)
+                    .encode_proto(),
+            )],
             expected_request_prefix: "54|3|9000|0|AAPL|OPT|20231215|150|C|100|SMART||USD||5|145|",
             expected_price: 5.0,
             expected_delta: 0.32,
@@ -661,7 +689,21 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
     vec![
         StreamDecoderTestCase {
             name: "valid option computation",
-            message: text_response("21|6|9000|13|0.3|0.35|5.25|-0.025|0.55|-0.0015|0.3|4.75|140.0|5.25|"),
+            message: proto_response(
+                IncomingMessages::TickOptionComputation,
+                tick_option_computation()
+                    .request_id(9000)
+                    .tick_type(13)
+                    .implied_volatility(0.3)
+                    .delta(0.35)
+                    .option_price(5.25)
+                    .present_value_dividend(-0.025)
+                    .gamma(0.55)
+                    .vega(-0.0015)
+                    .theta(0.3)
+                    .underlying_price(4.75)
+                    .encode_proto(),
+            ),
             expected_result: StreamDecoderResult::OptionComputation { price: 5.25, delta: 0.35 },
         },
         StreamDecoderTestCase {
@@ -725,12 +767,10 @@ pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
 
 #[cfg(feature = "sync")]
 /// Test case for client method tests (tests that use the Client convenience methods).
-/// Stays text-framed: TickOptionComputation (msg 21) gates at 206 but `decode_option_computation`
-/// is shared with realtime market_data and migrated separately.
 pub struct ClientMethodTestCase {
     pub name: &'static str,
     pub test_type: ClientMethodTest,
-    pub response_messages: Vec<String>,
+    pub ordered_responses: Vec<ResponseMessage>,
     #[allow(dead_code)]
     pub expected_request: &'static str,
     pub expected_result: ClientMethodResult,
@@ -769,7 +809,21 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
                 volatility: 0.25,
                 underlying_price: 155.0,
             },
-            response_messages: vec!["21|6|9000|13|0.25|0.42|85.5|-0.03|0.65|-0.002|0.98|6.87|155.0|85.5|".to_string()],
+            ordered_responses: vec![proto_response(
+                IncomingMessages::TickOptionComputation,
+                tick_option_computation()
+                    .request_id(9000)
+                    .tick_type(13)
+                    .implied_volatility(0.25)
+                    .delta(0.42)
+                    .option_price(85.5)
+                    .present_value_dividend(-0.03)
+                    .gamma(0.65)
+                    .vega(-0.002)
+                    .theta(0.98)
+                    .underlying_price(6.87)
+                    .encode_proto(),
+            )],
             expected_request: "54|3|9000|0|AAPL|OPT|20231215|150|C||SMART||USD||0.25|155|",
             expected_result: ClientMethodResult::OptionComputation {
                 option_price: Some(85.5),
@@ -783,7 +837,21 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
                 option_price: 8.5,
                 underlying_price: 155.0,
             },
-            response_messages: vec!["21|6|9000|13|0.45|0.32|8.5|-0.02|0.45|-0.001|0.25|4.55|155.0|8.5|".to_string()],
+            ordered_responses: vec![proto_response(
+                IncomingMessages::TickOptionComputation,
+                tick_option_computation()
+                    .request_id(9000)
+                    .tick_type(13)
+                    .implied_volatility(0.45)
+                    .delta(0.32)
+                    .option_price(8.5)
+                    .present_value_dividend(-0.02)
+                    .gamma(0.45)
+                    .vega(-0.001)
+                    .theta(0.25)
+                    .underlying_price(4.55)
+                    .encode_proto(),
+            )],
             expected_request: "54|3|9000|0|AAPL|OPT|20231215|150|C||SMART||USD||8.5|155|",
             expected_result: ClientMethodResult::OptionComputation {
                 implied_volatility: Some(0.45),

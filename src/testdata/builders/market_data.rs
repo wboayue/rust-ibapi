@@ -1822,6 +1822,106 @@ impl ResponseProtoEncoder for TickGenericResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TickOptionComputationResponse {
+    pub request_id: i32,
+    pub tick_type: i32,
+    pub tick_attrib: Option<i32>,
+    pub implied_volatility: Option<f64>,
+    pub delta: Option<f64>,
+    pub option_price: Option<f64>,
+    pub present_value_dividend: Option<f64>,
+    pub gamma: Option<f64>,
+    pub vega: Option<f64>,
+    pub theta: Option<f64>,
+    pub underlying_price: Option<f64>,
+}
+
+impl Default for TickOptionComputationResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            tick_type: 0,
+            tick_attrib: None,
+            implied_volatility: None,
+            delta: None,
+            option_price: None,
+            present_value_dividend: None,
+            gamma: None,
+            vega: None,
+            theta: None,
+            underlying_price: None,
+        }
+    }
+}
+
+impl TickOptionComputationResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tick_type(mut self, v: i32) -> Self {
+        self.tick_type = v;
+        self
+    }
+    pub fn tick_attrib(mut self, v: i32) -> Self {
+        self.tick_attrib = Some(v);
+        self
+    }
+    pub fn implied_volatility(mut self, v: f64) -> Self {
+        self.implied_volatility = Some(v);
+        self
+    }
+    pub fn delta(mut self, v: f64) -> Self {
+        self.delta = Some(v);
+        self
+    }
+    pub fn option_price(mut self, v: f64) -> Self {
+        self.option_price = Some(v);
+        self
+    }
+    pub fn present_value_dividend(mut self, v: f64) -> Self {
+        self.present_value_dividend = Some(v);
+        self
+    }
+    pub fn gamma(mut self, v: f64) -> Self {
+        self.gamma = Some(v);
+        self
+    }
+    pub fn vega(mut self, v: f64) -> Self {
+        self.vega = Some(v);
+        self
+    }
+    pub fn theta(mut self, v: f64) -> Self {
+        self.theta = Some(v);
+        self
+    }
+    pub fn underlying_price(mut self, v: f64) -> Self {
+        self.underlying_price = Some(v);
+        self
+    }
+}
+
+impl ResponseProtoEncoder for TickOptionComputationResponse {
+    type Proto = proto::TickOptionComputation;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::TickOptionComputation {
+            req_id: Some(self.request_id),
+            tick_type: Some(self.tick_type),
+            tick_attrib: self.tick_attrib,
+            implied_vol: self.implied_volatility,
+            delta: self.delta,
+            opt_price: self.option_price,
+            pv_dividend: self.present_value_dividend,
+            gamma: self.gamma,
+            vega: self.vega,
+            theta: self.theta,
+            und_price: self.underlying_price,
+        }
+    }
+}
+
 pub fn realtime_bar_tick() -> RealTimeBarTickResponse {
     RealTimeBarTickResponse::default()
 }
@@ -1856,4 +1956,8 @@ pub fn tick_string() -> TickStringResponse {
 
 pub fn tick_generic() -> TickGenericResponse {
     TickGenericResponse::default()
+}
+
+pub fn tick_option_computation() -> TickOptionComputationResponse {
+    TickOptionComputationResponse::default()
 }

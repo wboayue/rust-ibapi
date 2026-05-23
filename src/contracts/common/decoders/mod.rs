@@ -1,6 +1,13 @@
-use crate::{contracts::tick_types::TickType, messages::ResponseMessage, server_versions, Error};
+use crate::messages::ResponseMessage;
+use crate::Error;
 
-use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation};
+use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain};
+
+// `TickOptionComputation` (msg 21, gate 206 PROTOBUF_MARKET_DATA) is decoded
+// in `market_data/realtime/common/decoders` and routed here via the narrow
+// re-export below — same proto, same `OptionComputation` struct, no point
+// duplicating the decoder.
+pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_option_computation;
 
 // All originating outgoing-request gates for ContractData / SymbolSamples /
 // MarketRule / SecurityDefinitionOptionParameter are <= the connection floor
@@ -25,53 +32,6 @@ pub(in crate::contracts) fn decode_market_rule(message: &mut ResponseMessage) ->
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
     decode_option_chain_proto(message.require_proto()?)
-}
-
-pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
-    message.skip(); // message type
-
-    let message_version = if server_version >= server_versions::PRICE_BASED_VOLATILITY {
-        i32::MAX
-    } else {
-        message.next_int()?
-    };
-
-    message.skip(); // request id
-
-    let mut computation = OptionComputation {
-        field: TickType::from(message.next_int()?),
-        ..Default::default()
-    };
-
-    if server_version >= server_versions::PRICE_BASED_VOLATILITY {
-        computation.tick_attribute = Some(message.next_int()?);
-    }
-
-    computation.implied_volatility = next_optional_double(message, -1.0)?;
-    computation.delta = next_optional_double(message, -2.0)?;
-
-    if message_version >= 6 || computation.field == TickType::ModelOption || computation.field == TickType::DelayedModelOption {
-        computation.option_price = next_optional_double(message, -1.0)?;
-        computation.present_value_dividend = next_optional_double(message, -1.0)?;
-    }
-
-    if message_version >= 6 {
-        computation.gamma = next_optional_double(message, -2.0)?;
-        computation.vega = next_optional_double(message, -2.0)?;
-        computation.theta = next_optional_double(message, -2.0)?;
-        computation.underlying_price = next_optional_double(message, -1.0)?;
-    }
-
-    Ok(computation)
-}
-
-fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Result<Option<f64>, Error> {
-    let value = message.next_double()?;
-    if value == none_value {
-        Ok(None)
-    } else {
-        Ok(Some(value))
-    }
 }
 
 // === Protobuf decoders ===

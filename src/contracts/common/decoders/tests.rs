@@ -1,39 +1,5 @@
 use super::*;
-use crate::contracts::tick_types::TickType;
-
-#[test]
-fn test_next_optional_double() {
-    let mut message = ResponseMessage::from_simple("1.25|2.50|-1.0|-2.0|");
-
-    let result1 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
-    let result2 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
-    let result3 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
-    let result4 = next_optional_double(&mut message, -2.0).expect("error decoding optional double");
-
-    assert_eq!(result1, Some(1.25), "result1 should be Some(1.25)");
-    assert_eq!(result2, Some(2.50), "result2 should be Some(2.50)");
-    assert_eq!(result3, None, "result3 should be None because it matches none_value (-1.0)");
-    assert_eq!(result4, None, "result4 should be None because it matches none_value (-2.0)");
-}
-
-#[test]
-fn test_decode_option_computation() {
-    // Message format: message_type, request_id, tick_type, tick_attribute, implied_vol, delta, option_price, dividend, gamma, vega, theta, underlying_price
-    let mut message = ResponseMessage::from_simple("10|123|13|1|0.25|0.45|155.25|0.75|0.05|0.15|0.10|150.0|");
-
-    let computation = decode_option_computation(server_versions::PRICE_BASED_VOLATILITY, &mut message).expect("error decoding option computation");
-
-    assert_eq!(computation.field, TickType::ModelOption, "computation.field");
-    assert_eq!(computation.tick_attribute, Some(1), "computation.tick_attribute");
-    assert_eq!(computation.implied_volatility, Some(0.25), "computation.implied_volatility");
-    assert_eq!(computation.delta, Some(0.45), "computation.delta");
-    assert_eq!(computation.option_price, Some(155.25), "computation.option_price");
-    assert_eq!(computation.present_value_dividend, Some(0.75), "computation.present_value_dividend");
-    assert_eq!(computation.gamma, Some(0.05), "computation.gamma");
-    assert_eq!(computation.vega, Some(0.15), "computation.vega");
-    assert_eq!(computation.theta, Some(0.10), "computation.theta");
-    assert_eq!(computation.underlying_price, Some(150.0), "computation.underlying_price");
-}
+use crate::server_versions;
 
 use prost::Message;
 

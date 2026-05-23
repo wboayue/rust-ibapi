@@ -14,9 +14,9 @@ use super::encoders;
 impl StreamDecoder<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation, IncomingMessages::Error];
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(context.server_version, message)?),
+            IncomingMessages::TickOptionComputation => decoders::decode_tick_option_computation(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
