@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
-use ibapi::market_data::historical::HistoricalBarUpdate;
+use ibapi::market_data::historical::{BarTimestamp, HistoricalBarUpdate};
 use ibapi::prelude::*;
 use time::OffsetDateTime;
 
@@ -45,6 +45,13 @@ enum AssetType {
     Stock,
     Forex,
     Futures,
+}
+
+fn format_time(ts: &BarTimestamp) -> String {
+    match ts {
+        BarTimestamp::Date(d) => format!("{:04}-{:02}-{:02}", d.year(), d.month() as u8, d.day()),
+        BarTimestamp::DateTime(dt) => format!("{:02}:{:02}:{:02}", dt.hour(), dt.minute(), dt.second()),
+    }
 }
 
 #[tokio::main]
@@ -107,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Bar {}: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
                 i + 1,
-                format!("{:02}:{:02}", bar.date.hour(), bar.date.minute()),
+                format_time(&bar.date),
                 bar.open,
                 bar.high,
                 bar.low,
@@ -122,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "Bar {}: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
                     start_idx + i + 1,
-                    format!("{:02}:{:02}", bar.date.hour(), bar.date.minute()),
+                    format_time(&bar.date),
                     bar.open,
                     bar.high,
                     bar.low,
@@ -146,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for bar in daily_data.bars.iter().take(5) {
             println!(
                 "{}: O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}K",
-                format!("{:04}-{:02}-{:02}", bar.date.year(), bar.date.month() as u8, bar.date.day()),
+                format_time(&bar.date),
                 bar.open,
                 bar.high,
                 bar.low,
@@ -168,13 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         println!("Bid bars (1-min): {} bars", bid_data.bars.len());
         if let Some(bar) = bid_data.bars.first() {
-            println!(
-                "  First bar: {:02}:{:02}:{:02} - Bid: ${:.2}",
-                bar.date.hour(),
-                bar.date.minute(),
-                bar.date.second(),
-                bar.close
-            );
+            println!("  First bar: {} - Bid: ${:.2}", format_time(&bar.date), bar.close);
         }
 
         // Ask data (last 1 day)
@@ -187,13 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         println!("Ask bars (1-min): {} bars", ask_data.bars.len());
         if let Some(bar) = ask_data.bars.first() {
-            println!(
-                "  First bar: {:02}:{:02}:{:02} - Ask: ${:.2}",
-                bar.date.hour(),
-                bar.date.minute(),
-                bar.date.second(),
-                bar.close
-            );
+            println!("  First bar: {} - Ask: ${:.2}", format_time(&bar.date), bar.close);
         }
 
         // Example 5: Get histogram data
@@ -232,7 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(bar) = data.bars.last() {
                     println!(
                         "  Latest: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}",
-                        format!("{:02}:{:02}", bar.date.hour(), bar.date.minute()),
+                        format_time(&bar.date),
                         bar.open,
                         bar.high,
                         bar.low,
@@ -244,7 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(HistoricalBarUpdate::Update(bar)) => {
                 println!(
                     "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
-                    format!("{:02}:{:02}:{:02}", bar.date.hour(), bar.date.minute(), bar.date.second()),
+                    format_time(&bar.date),
                     bar.open,
                     bar.high,
                     bar.low,

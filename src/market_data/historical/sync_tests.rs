@@ -4,6 +4,7 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
+use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::{IgnoreSize, TradingHours};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -182,7 +183,11 @@ fn test_historical_data() {
     assert_eq!(historical_data.end, datetime!(2023-04-15 16:31:22 UTC), "historical_data.end");
     assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
 
-    assert_eq!(historical_data.bars[0].date, datetime!(2023-04-13 00:00:00 UTC), "bar.date");
+    assert_eq!(
+        historical_data.bars[0].date,
+        BarTimestamp::DateTime(datetime!(2023-04-13 00:00:00 UTC)),
+        "bar.date"
+    );
     assert_eq!(historical_data.bars[0].open, 182.94, "bar.open");
     assert_eq!(historical_data.bars[0].high, 186.50, "bar.high");
     assert_eq!(historical_data.bars[0].low, 180.94, "bar.low");

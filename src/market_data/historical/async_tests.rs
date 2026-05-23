@@ -3,6 +3,7 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
+use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::TickLast;
 use crate::market_data::IgnoreSize;
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -195,7 +196,11 @@ async fn test_historical_data() {
     // Verify first bar
     let bar = &data.bars[0];
     // 1678886400 = 2023-03-15 13:20:00 UTC
-    assert_eq!(bar.date, datetime!(2023-03-15 13:20:00 UTC), "Wrong date for first bar");
+    assert_eq!(
+        bar.date,
+        BarTimestamp::DateTime(datetime!(2023-03-15 13:20:00 UTC)),
+        "Wrong date for first bar"
+    );
     assert_eq!(bar.open, 185.50, "Wrong open for first bar");
     assert_eq!(bar.high, 186.00, "Wrong high for first bar");
     assert_eq!(bar.low, 185.25, "Wrong low for first bar");
@@ -207,7 +212,11 @@ async fn test_historical_data() {
     // Verify second bar
     let bar = &data.bars[1];
     // 1678890000 = 2023-03-15 14:20:00 UTC
-    assert_eq!(bar.date, datetime!(2023-03-15 14:20:00 UTC), "Wrong date for second bar");
+    assert_eq!(
+        bar.date,
+        BarTimestamp::DateTime(datetime!(2023-03-15 14:20:00 UTC)),
+        "Wrong date for second bar"
+    );
     assert_eq!(bar.open, 185.75, "Wrong open for second bar");
     assert_eq!(bar.high, 186.25, "Wrong high for second bar");
     assert_eq!(bar.low, 185.50, "Wrong low for second bar");
@@ -598,7 +607,11 @@ async fn test_historical_data_time_zone_handling() {
     assert_eq!(data.bars.len(), 1, "Should receive 1 bar");
 
     let bar = &data.bars[0];
-    assert_eq!(bar.date.unix_timestamp(), 1_678_886_400, "Timestamp should match");
+    assert_eq!(
+        bar.date,
+        BarTimestamp::DateTime(datetime!(2023-03-15 13:20:00 UTC)),
+        "Timestamp should match"
+    );
 }
 
 #[tokio::test]
