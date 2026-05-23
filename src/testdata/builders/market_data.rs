@@ -594,10 +594,11 @@ pub fn market_data_request() -> MarketDataRequestBuilder {
 
 /// One bar in a `HistoricalData` / `HistoricalDataUpdate` proto response.
 /// Mirrors the (stringified) on-wire encoding of `proto::HistoricalDataBar`:
-/// `date` is unix seconds as a string, `volume` / `wap` are f64 stringified.
+/// `date_str` is either unix seconds (intraday) or `YYYYMMDD` (daily+),
+/// `volume` / `wap` are f64 stringified.
 #[derive(Clone, Debug)]
 pub struct HistoricalDataBarFields {
-    pub date: i64,
+    pub date_str: String,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -610,7 +611,7 @@ pub struct HistoricalDataBarFields {
 impl HistoricalDataBarFields {
     fn to_proto(&self) -> proto::HistoricalDataBar {
         proto::HistoricalDataBar {
-            date: Some(self.date.to_string()),
+            date: Some(self.date_str.clone()),
             open: Some(self.open),
             high: Some(self.high),
             low: Some(self.low),
@@ -622,10 +623,24 @@ impl HistoricalDataBarFields {
     }
 }
 
-/// Convenience constructor for a `HistoricalDataBarFields` row.
+/// Intraday bar fixture — date encoded as unix seconds string.
 pub fn historical_data_bar(date: i64) -> HistoricalDataBarFields {
     HistoricalDataBarFields {
-        date,
+        date_str: date.to_string(),
+        open: 0.0,
+        high: 0.0,
+        low: 0.0,
+        close: 0.0,
+        volume: 0.0,
+        wap: 0.0,
+        count: 0,
+    }
+}
+
+/// Daily bar fixture — date encoded as `YYYYMMDD` string.
+pub fn historical_data_daily_bar(date_str: &str) -> HistoricalDataBarFields {
+    HistoricalDataBarFields {
+        date_str: date_str.to_string(),
         open: 0.0,
         high: 0.0,
         low: 0.0,

@@ -697,6 +697,40 @@ let book = client.market_depth(&contract, 5)
 
 `SmartDepth::No` is the default — callers that previously passed `false` can omit `.smart_depth(...)` entirely.
 
+### 30. `Bar.date` typed as `BarTimestamp` (historical bars)
+
+Historical `Bar.date` was `OffsetDateTime`. Daily bars carried a `YYYYMMDD` wire value that was coerced to midnight UTC — semantically wrong (a trading day is not a point in time).
+
+`Bar.date` is now `BarTimestamp`, an enum that preserves the wire distinction:
+
+```rust,ignore
+pub enum BarTimestamp {
+    Date(time::Date),           // daily / weekly / monthly bars
+    DateTime(time::OffsetDateTime), // intraday bars
+}
+```
+
+**Before (v2.x / v3 pre-#627):**
+
+```rust,ignore
+println!("{:02}:{:02}", bar.date.hour(), bar.date.minute());
+```
+
+**After (v3 ≥ #627):**
+
+```rust,ignore
+use ibapi::market_data::historical::BarTimestamp;
+
+match &bar.date {
+    BarTimestamp::Date(d) => println!("{d}"),
+    BarTimestamp::DateTime(dt) => println!("{:02}:{:02}", dt.hour(), dt.minute()),
+}
+```
+
+`BarTimestamp` implements `Display`, `FromStr`, `Ord`, `From<Date>`, and `From<OffsetDateTime>`. Cross-variant ordering treats `Date` as midnight UTC. The realtime `Bar` (in `market_data::realtime`) is unchanged — it always carries `OffsetDateTime`.
+
+**Serde**: the serialized format of `Bar.date` changed from a flat `OffsetDateTime` value to an externally-tagged enum (`{"Date": ...}` / `{"DateTime": ...}`). Persisted `Bar` data serialized under v2.x must be migrated or re-ingested.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

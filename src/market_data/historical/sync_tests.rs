@@ -4,6 +4,7 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
+use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::{IgnoreSize, TradingHours};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -12,9 +13,9 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
-    historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response, historical_schedule_response,
-    historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response, historical_ticks_last_response,
-    historical_ticks_request, historical_ticks_response,
+    historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
+    historical_schedule_response, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
+    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::{Arc, RwLock};
@@ -142,7 +143,7 @@ fn test_historical_data() {
                         .count(324_891),
                 )
                 .bar(
-                    historical_data_bar(1_681_430_400) // 2023-04-14 UTC
+                    historical_data_daily_bar("20230414")
                         .ohlc(183.88, 186.28, 182.01, 185.00)
                         .volume(810_998.27)
                         .wap(183.9865)
@@ -182,7 +183,11 @@ fn test_historical_data() {
     assert_eq!(historical_data.end, datetime!(2023-04-15 16:31:22 UTC), "historical_data.end");
     assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
 
-    assert_eq!(historical_data.bars[0].date, datetime!(2023-04-13 00:00:00 UTC), "bar.date");
+    assert_eq!(
+        historical_data.bars[0].date,
+        BarTimestamp::DateTime(datetime!(2023-04-13 00:00:00 UTC)),
+        "bar.date"
+    );
     assert_eq!(historical_data.bars[0].open, 182.94, "bar.open");
     assert_eq!(historical_data.bars[0].high, 186.50, "bar.high");
     assert_eq!(historical_data.bars[0].low, 180.94, "bar.low");
@@ -190,6 +195,9 @@ fn test_historical_data() {
     assert_eq!(historical_data.bars[0].volume, 948837.22, "bar.volume");
     assert_eq!(historical_data.bars[0].wap, 184.869, "bar.wap");
     assert_eq!(historical_data.bars[0].count, 324891, "bar.count");
+
+    assert_eq!(historical_data.bars[1].date, BarTimestamp::Date(date!(2023 - 04 - 14)), "daily bar.date");
+    assert_eq!(historical_data.bars[1].open, 183.88, "bar[1].open");
 
     // Assert Request
     assert_eq!(request_message_count(&message_bus), 1);

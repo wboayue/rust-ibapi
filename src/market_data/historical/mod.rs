@@ -21,6 +21,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
+use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use crate::messages::{IncomingMessages, ResponseMessage};
@@ -57,13 +58,113 @@ pub enum HistoricalParseError {
     ParseIntError(String, ParseIntError),
 }
 
+/// Timestamp of a historical bar.
+///
+/// Daily (and longer) bars carry only a calendar date (`YYYYMMDD` on the
+/// wire); intraday bars carry a full UTC datetime (unix seconds on the wire).
+/// `BarTimestamp` preserves that distinction instead of coercing daily bars to
+/// midnight UTC.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::market_data::historical::BarTimestamp;
+///
+/// fn format_bar_time(ts: &BarTimestamp) -> String {
+///     match ts {
+///         BarTimestamp::Date(d) => format!("{d}"),
+///         BarTimestamp::DateTime(dt) => {
+///             format!("{:02}:{:02}", dt.hour(), dt.minute())
+///         }
+///     }
+/// }
+/// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Serialize, Deserialize)]
+pub enum BarTimestamp {
+    /// Daily / weekly / monthly bars — only the trading day is meaningful.
+    Date(Date),
+    /// Intraday bars — full point-in-time timestamp.
+    DateTime(OffsetDateTime),
+}
+
+impl PartialOrd for BarTimestamp {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BarTimestamp {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Date(a), Self::Date(b)) => a.cmp(b),
+            (Self::DateTime(a), Self::DateTime(b)) => a.cmp(b),
+            (Self::Date(d), Self::DateTime(dt)) => d.midnight().assume_utc().cmp(dt),
+            (Self::DateTime(dt), Self::Date(d)) => dt.cmp(&d.midnight().assume_utc()),
+        }
+    }
+}
+
+impl Display for BarTimestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Date(d) => {
+                let fmt = format_description!("[year][month][day]");
+                write!(f, "{}", d.format(&fmt).unwrap_or_default())
+            }
+            Self::DateTime(dt) => write!(f, "{}", dt.unix_timestamp()),
+        }
+    }
+}
+
+impl FromStr for BarTimestamp {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) {
+            let fmt = format_description!("[year][month][day]");
+            let d = Date::parse(s, fmt).map_err(|e| Error::parse_field(s, e.to_string()))?;
+            return Ok(Self::Date(d));
+        }
+        let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| Error::parse_field(s, e.to_string()))?;
+        OffsetDateTime::from_unix_timestamp(secs)
+            .map(Self::DateTime)
+            .map_err(|e| Error::parse_field(s, e.to_string()))
+    }
+}
+
+impl BarTimestamp {
+    /// Returns `true` for the [`Date`](Self::Date) variant.
+    pub fn is_date(&self) -> bool {
+        matches!(self, Self::Date(_))
+    }
+
+    /// Returns `true` for the [`DateTime`](Self::DateTime) variant.
+    pub fn is_date_time(&self) -> bool {
+        matches!(self, Self::DateTime(_))
+    }
+}
+
+impl From<Date> for BarTimestamp {
+    fn from(d: Date) -> Self {
+        Self::Date(d)
+    }
+}
+
+impl From<OffsetDateTime> for BarTimestamp {
+    fn from(dt: OffsetDateTime) -> Self {
+        Self::DateTime(dt)
+    }
+}
+
 /// Bar describes the historical data bar.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
-    /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
-    // pub time: OffsetDateTime,
-    pub date: OffsetDateTime,
+    /// The bar's timestamp — either a calendar date (daily+ bars) or a full
+    /// datetime (intraday bars). See [`BarTimestamp`] for details.
+    pub date: BarTimestamp,
     /// The bar's open price.
     pub open: f64,
     /// The bar's high price.
@@ -817,5 +918,91 @@ mod tests {
         for (error, expected) in cases {
             assert_eq!(error.to_string(), expected);
         }
+    }
+
+    #[test]
+    fn test_bar_timestamp_from_str_date() {
+        let ts: BarTimestamp = "20230411".parse().unwrap();
+        assert_eq!(ts, BarTimestamp::Date(time::macros::date!(2023 - 04 - 11)));
+        assert!(ts.is_date());
+        assert!(!ts.is_date_time());
+    }
+
+    #[test]
+    fn test_bar_timestamp_from_str_datetime() {
+        let ts: BarTimestamp = "1681133400".parse().unwrap();
+        assert_eq!(ts, BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 13:30:00 UTC)));
+        assert!(ts.is_date_time());
+        assert!(!ts.is_date());
+    }
+
+    #[test]
+    fn test_bar_timestamp_from_str_invalid() {
+        assert!("not-a-date".parse::<BarTimestamp>().is_err());
+        assert!("".parse::<BarTimestamp>().is_err());
+    }
+
+    #[test]
+    fn test_bar_timestamp_display_roundtrip_date() {
+        let ts = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
+        assert_eq!(ts.to_string(), "20230411");
+        let round_tripped: BarTimestamp = ts.to_string().parse().unwrap();
+        assert_eq!(round_tripped, ts);
+    }
+
+    #[test]
+    fn test_bar_timestamp_display_roundtrip_datetime() {
+        let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
+        let ts = BarTimestamp::DateTime(dt);
+        assert_eq!(ts.to_string(), "1681133400");
+        let round_tripped: BarTimestamp = ts.to_string().parse().unwrap();
+        assert_eq!(round_tripped, ts);
+    }
+
+    #[test]
+    fn test_bar_timestamp_from_date() {
+        let d = time::macros::date!(2023 - 04 - 11);
+        let ts: BarTimestamp = d.into();
+        assert_eq!(ts, BarTimestamp::Date(d));
+    }
+
+    #[test]
+    fn test_bar_timestamp_from_offset_date_time() {
+        let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
+        let ts: BarTimestamp = dt.into();
+        assert_eq!(ts, BarTimestamp::DateTime(dt));
+    }
+
+    #[test]
+    fn test_bar_timestamp_ord_same_variant() {
+        let a = BarTimestamp::Date(time::macros::date!(2023 - 04 - 10));
+        let b = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
+        assert!(a < b);
+
+        let c = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 13:00:00 UTC));
+        let d = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 14:00:00 UTC));
+        assert!(c < d);
+    }
+
+    #[test]
+    fn test_bar_timestamp_ord_cross_variant() {
+        let date = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
+        let before = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 23:59:59 UTC));
+        let after = BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 00:00:01 UTC));
+        assert!(before < date);
+        assert!(date < after);
+    }
+
+    #[test]
+    fn test_bar_timestamp_sort() {
+        let mut timestamps = [
+            BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)),
+            BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)),
+            BarTimestamp::DateTime(time::macros::datetime!(2023-04-09 08:00:00 UTC)),
+        ];
+        timestamps.sort();
+        assert_eq!(timestamps[0], BarTimestamp::DateTime(time::macros::datetime!(2023-04-09 08:00:00 UTC)));
+        assert_eq!(timestamps[1], BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)));
+        assert_eq!(timestamps[2], BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)));
     }
 }

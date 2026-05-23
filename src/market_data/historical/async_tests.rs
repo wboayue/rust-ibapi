@@ -3,6 +3,7 @@ use crate::common::test_utils::helpers::{
     assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
+use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::TickLast;
 use crate::market_data::IgnoreSize;
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -13,15 +14,15 @@ use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
-    historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response, historical_schedule_response,
-    historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
-    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
+    historical_schedule_response, historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid,
+    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::RwLock;
-use time::macros::datetime;
+use time::macros::{date, datetime};
 
 fn test_contract() -> Contract {
     Contract {
@@ -155,7 +156,7 @@ async fn test_historical_data() {
                         .count(100),
                 )
                 .bar(
-                    historical_data_bar(1_678_890_000)
+                    historical_data_daily_bar("20230315")
                         .ohlc(185.75, 186.25, 185.50, 186.00)
                         .volume(1500.0)
                         .wap(185.85)
@@ -195,7 +196,11 @@ async fn test_historical_data() {
     // Verify first bar
     let bar = &data.bars[0];
     // 1678886400 = 2023-03-15 13:20:00 UTC
-    assert_eq!(bar.date, datetime!(2023-03-15 13:20:00 UTC), "Wrong date for first bar");
+    assert_eq!(
+        bar.date,
+        BarTimestamp::DateTime(datetime!(2023-03-15 13:20:00 UTC)),
+        "Wrong date for first bar"
+    );
     assert_eq!(bar.open, 185.50, "Wrong open for first bar");
     assert_eq!(bar.high, 186.00, "Wrong high for first bar");
     assert_eq!(bar.low, 185.25, "Wrong low for first bar");
@@ -204,10 +209,9 @@ async fn test_historical_data() {
     assert_eq!(bar.wap, 185.70, "Wrong WAP for first bar");
     assert_eq!(bar.count, 100, "Wrong count for first bar");
 
-    // Verify second bar
+    // Verify second bar (daily bar — YYYYMMDD wire format)
     let bar = &data.bars[1];
-    // 1678890000 = 2023-03-15 14:20:00 UTC
-    assert_eq!(bar.date, datetime!(2023-03-15 14:20:00 UTC), "Wrong date for second bar");
+    assert_eq!(bar.date, BarTimestamp::Date(date!(2023 - 03 - 15)), "Wrong date for second bar");
     assert_eq!(bar.open, 185.75, "Wrong open for second bar");
     assert_eq!(bar.high, 186.25, "Wrong high for second bar");
     assert_eq!(bar.low, 185.50, "Wrong low for second bar");
@@ -598,7 +602,11 @@ async fn test_historical_data_time_zone_handling() {
     assert_eq!(data.bars.len(), 1, "Should receive 1 bar");
 
     let bar = &data.bars[0];
-    assert_eq!(bar.date.unix_timestamp(), 1_678_886_400, "Timestamp should match");
+    assert_eq!(
+        bar.date,
+        BarTimestamp::DateTime(datetime!(2023-03-15 13:20:00 UTC)),
+        "Timestamp should match"
+    );
 }
 
 #[tokio::test]

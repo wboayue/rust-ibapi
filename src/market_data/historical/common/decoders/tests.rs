@@ -2,6 +2,8 @@ use super::*;
 use prost::Message;
 use time::macros::{date, datetime};
 
+use crate::market_data::historical::BarTimestamp;
+
 // ---------------------------------------------------------------------------
 // Happy-path proto decoders. Each test drives bytes through the `*_proto`
 // helper directly (scanner precedent: src/scanner/common/decoders_tests.rs).
@@ -38,7 +40,7 @@ fn test_decode_historical_data_proto() {
     let bars = decode_historical_data_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(bars.len(), 2);
 
-    assert_eq!(bars[0].date, datetime!(2023-04-10 13:30:00 UTC));
+    assert_eq!(bars[0].date, BarTimestamp::DateTime(datetime!(2023-04-10 13:30:00 UTC)));
     assert_eq!(bars[0].open, 185.50);
     assert_eq!(bars[0].high, 186.00);
     assert_eq!(bars[0].low, 185.00);
@@ -48,7 +50,7 @@ fn test_decode_historical_data_proto() {
     assert_eq!(bars[0].count, 150);
 
     assert_eq!(bars[1].open, 186.00);
-    assert_eq!(bars[1].date, datetime!(2023-04-11 0:00:00 UTC));
+    assert_eq!(bars[1].date, BarTimestamp::Date(date!(2023 - 04 - 11)));
     assert_eq!(bars[1].count, 300);
 }
 
@@ -275,7 +277,7 @@ fn test_decode_historical_data_update_proto() {
     assert_eq!(result.volume, 1000.0);
     assert_eq!(result.wap, 150.5);
     assert_eq!(result.count, 42);
-    assert_eq!(result.date, datetime!(2023-04-10 13:30:00 UTC));
+    assert_eq!(result.date, BarTimestamp::DateTime(datetime!(2023-04-10 13:30:00 UTC)));
 }
 
 #[test]
@@ -287,7 +289,7 @@ fn test_decode_historical_data_update_proto_missing_bar_defaults() {
 
     let result = decode_historical_data_update_proto(&proto_msg.encode_to_vec()).unwrap();
     assert_eq!(result.count, 0);
-    assert_eq!(result.date, time::OffsetDateTime::UNIX_EPOCH);
+    assert_eq!(result.date, BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
 }
 
 // ---------------------------------------------------------------------------
