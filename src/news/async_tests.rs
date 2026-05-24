@@ -9,15 +9,13 @@ use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::market_data_request;
 use crate::testdata::builders::news::{
     cancel_news_bulletins_request, historical_news, historical_news_end, historical_news_request, news_article, news_article_request, news_bulletin,
-    news_bulletins_request, news_providers, news_providers_request,
+    news_bulletins_request, news_providers, news_providers_request, tick_news,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
 use futures::StreamExt;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use time::macros::datetime;
-
-const NEWS_ARTICLE_RESPONSE: &str = "84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|";
 
 #[tokio::test]
 async fn test_news_providers() {
@@ -153,11 +151,17 @@ async fn test_news_article() {
 
 #[tokio::test]
 async fn test_contract_news() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::TickNews,
+        tick_news()
+            .request_id(9000)
+            .timestamp_millis(1_672_531_200_000)
+            .provider_code("BZ")
+            .article_id("BZ$123")
+            .headline("Breaking news headline")
+            .extra_data("TSLA:123")
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -183,16 +187,22 @@ async fn test_contract_news() {
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
     assert_eq!(article.extra_data, "TSLA:123");
-    assert_eq!(article.time.unix_timestamp(), 1672531);
+    assert_eq!(article.time.unix_timestamp(), 1_672_531_200);
 }
 
 #[tokio::test]
 async fn test_broad_tape_news() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::TickNews,
+        tick_news()
+            .request_id(9000)
+            .timestamp_millis(1_672_531_200_000)
+            .provider_code("BZ")
+            .article_id("BZ$123")
+            .headline("Breaking news headline")
+            .extra_data("TSLA:123")
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -215,7 +225,7 @@ async fn test_broad_tape_news() {
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
     assert_eq!(article.extra_data, "TSLA:123");
-    assert_eq!(article.time.unix_timestamp(), 1672531);
+    assert_eq!(article.time.unix_timestamp(), 1_672_531_200);
 }
 
 #[tokio::test]
@@ -245,11 +255,17 @@ async fn test_news_bulletin_cancellation() {
 
 #[tokio::test]
 async fn test_contract_news_cancellation() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::TickNews,
+        tick_news()
+            .request_id(9000)
+            .timestamp_millis(1_672_531_200_000)
+            .provider_code("BZ")
+            .article_id("BZ$123")
+            .headline("Breaking news headline")
+            .extra_data("TSLA:123")
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
