@@ -85,7 +85,7 @@ async fn test_market_rule() {
 #[tokio::test]
 async fn test_option_calculations() {
     for test_case in option_calculation_test_cases() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![test_case.response_message.clone()]));
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
 

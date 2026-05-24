@@ -42,7 +42,7 @@ text decoders are still load-bearing for servers below the family's gate.
 | Domain                                    | Text-decoders | Proto-decoders | Dual-format calls |
 |-------------------------------------------|--------------:|---------------:|------------------:|
 | `accounts/common/decoders/`               |             4 |             11 |                 4 |
-| `contracts/common/decoders/`              |             1 |              4 |                 0 |
+| `contracts/common/decoders/`              |             0 |              4 |                 0 |
 | `orders/common/decoders/`                 |             0 |              5 |                 1 |
 | `market_data/realtime/common/decoders/`   |             2 |             13 |                 1 |
 | `market_data/historical/common/decoders/` |             0 |              9 |                 0 |
@@ -65,7 +65,8 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 - `decode_commission_report` (orders) — proto-only since [#529](https://github.com/wboayue/rust-ibapi/pull/529)
 - `decode_order_status` (orders) — proto-only since [#531](https://github.com/wboayue/rust-ibapi/pull/531)
 - `decode_scanner_data`, `decode_scanner_parameters` (scanner) — proto-only since [#532](https://github.com/wboayue/rust-ibapi/pull/532)
-- `decode_contract_details`, `decode_contract_descriptions`, `decode_market_rule`, `decode_option_chain` (contracts) — proto-only at floor 210; `decode_option_computation` stays text (shared with realtime market_data)
+- `decode_contract_details`, `decode_contract_descriptions`, `decode_market_rule`, `decode_option_chain` (contracts) — proto-only at floor 210
+- `decode_option_computation` (contracts, gate 206 PROTOBUF_MARKET_DATA) — deleted; dispatcher routes `TickOptionComputation` to realtime's `decode_tick_option_computation` via a narrow re-export (same proto, same `OptionComputation` struct). Deleted `next_optional_double` helper, dropped `server_version` arg from the dispatcher, added `TickOptionComputationResponse` builder in `src/testdata/builders/market_data.rs` (decoder-locality), migrated 3 fixture groups in `src/contracts/common/test_tables.rs` (`option_calculation_test_cases`, `client_method_test_cases`, `stream_decoder_test_cases`) from text to proto.
 - `decode_news_providers`, `decode_news_bulletin`, `decode_historical_news`, `decode_news_article` (news) — proto-only at floor 210
 - `decode_tick_news` (news, gate 206 PROTOBUF_MARKET_DATA) — proto-only via `decode_tick_news_proto` (new); added `TickNewsResponse` builder in `src/testdata/builders/news.rs`; deleted `parse_unix_timestamp` helper + its tests; flipped receiver to `&ResponseMessage`
 - `decode_open_order`, `decode_completed_order` (orders) — proto-only since [#539](https://github.com/wboayue/rust-ibapi/pull/539); deleted `OrderDecoder` (~750 lines) + 6 condition text decoders + `decode_open_order_borrowed` wrapper; added `OpenOrderResponse` / `CompletedOrderResponse` field-minimal builders
@@ -76,7 +77,7 @@ Floor is now `PROTOBUF_SCAN_DATA` (210). Already-shipped deletions:
 Decoders whose text branch is now unreachable at floor 210 and can be deleted
 in follow-up PRs (originating outgoing-request gates all ≤ 210):
 
-- `contracts/common/decoders/` — `decode_option_computation` left over (gate 206), to fold into a follow-up
+- (none — all gate-≤-210 decoders are proto-only)
 
 Decoders that **stay** dual-format at floor 210 because at least one
 originating outgoing-request gate is > 210:
