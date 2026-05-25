@@ -296,7 +296,7 @@ cargo build -p ibapi-integration-async --tests
 
 ### PR-C — per-decoder text-branch deletions
 
-**Status: 📋 Pending** — unblocks once PR-B merges.
+**Status: 🚧 In progress** — PR-B merged 2026-05-25; C6 shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633).
 
 Six follow-up PRs after PR-B. Each is a thin proto-only conversion + fixture
 migration following the gate-206 / historical precedent (PRs #626, #629, #630).
@@ -319,7 +319,7 @@ add `_rejects_text_framing` regression test per decoder.
 | C3    | `decode_managed_accounts`                               | `accounts/common/decoders/`     | `ManagedAccountsResponse`              |
 | C4    | `decode_market_depth_exchanges`                         | `market_data/realtime/common/decoders/` | `MktDepthExchangesResponse`    |
 | C5    | `decode_display_group_updated` (collapse PR-A wrapper)  | `display_groups/common/`        | `DisplayGroupUpdatedResponse`          |
-| C6    | `NextValidId` / `ManagedAccounts` `is_protobuf` branches in `connection/common.rs:223-244` | `connection/` | n/a (delete-only)             |
+| ~~C6~~ | ~~`NextValidId` / `ManagedAccounts` `is_protobuf` branches in `connection/common.rs`~~ — shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633) | `connection/` | n/a (delete-only)             |
 
 Each PR also:
 

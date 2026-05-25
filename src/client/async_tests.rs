@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use super::*;
+use crate::common::test_utils::helpers::{managed_accounts_frame, next_valid_id_frame};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -91,8 +92,8 @@ async fn create_order_update_subscription_is_unique() {
 fn handshake_frames() -> Vec<Vec<u8>> {
     vec![
         format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes(),
-        binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"),
-        binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"),
+        next_valid_id_frame(9000),
+        managed_accounts_frame("DU1234567"),
     ]
 }
 
@@ -123,9 +124,9 @@ async fn builder_startup_callback_receives_unsolicited_messages() {
     // notice stream instead.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
-    frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));
+    frames.push(next_valid_id_frame(9000));
     frames.push(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    frames.push(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+    frames.push(managed_accounts_frame("DU1234567"));
 
     let (addr, _h) = spawn_handshake_listener(frames).await;
     let captured = Arc::new(Mutex::new(Vec::<i32>::new()));
@@ -169,9 +170,9 @@ async fn builder_connect_with_notice_stream_captures_handshake_notice() {
     // Frames: handshake + farm-status notice during account-info phase + ManagedAccounts + NextValidId.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
-    frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));
+    frames.push(next_valid_id_frame(9000));
     frames.push(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
-    frames.push(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+    frames.push(managed_accounts_frame("DU1234567"));
 
     let (addr, _h) = spawn_handshake_listener(frames).await;
 

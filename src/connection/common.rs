@@ -221,28 +221,12 @@ impl ConnectionProtocol for ConnectionHandler {
 
         match message.message_type() {
             IncomingMessages::NextValidId => {
-                if message.is_protobuf {
-                    if let Some(bytes) = message.raw_bytes() {
-                        let proto = crate::proto::NextValidId::decode(bytes)?;
-                        info.next_order_id = proto.order_id;
-                    }
-                } else {
-                    message.skip(); // message type
-                    message.skip(); // message version
-                    info.next_order_id = Some(message.next_int()?);
-                }
+                let proto = crate::proto::NextValidId::decode(message.require_proto()?)?;
+                info.next_order_id = proto.order_id;
             }
             IncomingMessages::ManagedAccounts => {
-                if message.is_protobuf {
-                    if let Some(bytes) = message.raw_bytes() {
-                        let proto = crate::proto::ManagedAccounts::decode(bytes)?;
-                        info.managed_accounts = proto.accounts_list;
-                    }
-                } else {
-                    message.skip(); // message type
-                    message.skip(); // message version
-                    info.managed_accounts = Some(message.next_string()?);
-                }
+                let proto = crate::proto::ManagedAccounts::decode(message.require_proto()?)?;
+                info.managed_accounts = proto.accounts_list;
             }
             _ => dispatch_unsolicited_message(server_version, message, ctx),
         }

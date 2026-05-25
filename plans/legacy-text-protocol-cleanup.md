@@ -115,7 +115,6 @@ These exist solely to support text-format messages. Each can be deleted once no 
 - `src/messages.rs:1024, 1033, 1434` — proto-aware `peek_*` accessors and `From<&ResponseMessage> for Notice` (per rule 22)
 - `src/errors.rs:116` — inside `From<ResponseMessage> for Error`
 - `src/transport/routing.rs:105` — error decode dispatch (proto envelope vs text fields)
-- `src/connection/common.rs:200, 213` — handshake `NextValidId` / `ManagedAccounts` parsing
 
 ### Sentinel-message uses of the text constructor
 

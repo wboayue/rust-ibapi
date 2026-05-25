@@ -67,34 +67,6 @@ fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a Captur
 }
 
 #[test]
-fn test_parse_account_info_next_valid_id() {
-    let handler = ConnectionHandler::default();
-    // NextValidId message: message_type=9, version=1, next_order_id=1000
-    let mut message = ResponseMessage::from("9\01\01000\0");
-
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx());
-    assert!(result.is_ok());
-
-    let info = result.unwrap();
-    assert_eq!(info.next_order_id, Some(1000));
-    assert_eq!(info.managed_accounts, None);
-}
-
-#[test]
-fn test_parse_account_info_managed_accounts() {
-    let handler = ConnectionHandler::default();
-    // ManagedAccounts message: message_type=15, version=1, accounts="DU123,DU456"
-    let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
-
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx());
-    assert!(result.is_ok());
-
-    let info = result.unwrap();
-    assert_eq!(info.next_order_id, None);
-    assert_eq!(info.managed_accounts, Some("DU123,DU456".to_string()));
-}
-
-#[test]
 fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
     // Sparse text-framed OpenOrder — decoder calls require_proto() and rejects.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
@@ -279,9 +251,12 @@ fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
 
 #[test]
 fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
+    use prost::Message;
+
     // NextValidId is consumed internally — neither callback fires.
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from("9\01\01000\0");
+    let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
 
     let fired = Arc::new(Mutex::new(false));
     let fired_clone = fired.clone();
@@ -296,8 +271,14 @@ fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
 
 #[test]
 fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
+    use prost::Message;
+
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from("15\01\0DU123\0");
+    let bytes = crate::proto::ManagedAccounts {
+        accounts_list: Some("DU123".to_string()),
+    }
+    .encode_to_vec();
+    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, bytes, TEST_SERVER_VERSION);
 
     let fired = Arc::new(Mutex::new(false));
     let fired_clone = fired.clone();
@@ -312,6 +293,8 @@ fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
 
 #[test]
 fn test_parse_account_info_multiple_messages_callback() {
+    use prost::Message;
+
     let handler = ConnectionHandler::default();
     let count = Arc::new(Mutex::new(0));
     let count_clone = count.clone();
@@ -329,10 +312,31 @@ fn test_parse_account_info_multiple_messages_callback() {
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg2, &cbs).unwrap();
 
     // Third message: NextValidId (consumed internally — should NOT trigger callback)
-    let mut msg3 = ResponseMessage::from("9\01\01000\0");
+    let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
+    let mut msg3 = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg3, &cbs).unwrap();
 
     assert_eq!(*count.lock().unwrap(), 2, "callback should be invoked exactly twice");
+}
+
+#[test]
+fn test_parse_account_info_next_valid_id_rejects_text_framing() {
+    let handler = ConnectionHandler::default();
+    let mut message = ResponseMessage::from("9\01\01000\0");
+    let err = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect_err("text-framed NextValidId must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+}
+
+#[test]
+fn test_parse_account_info_managed_accounts_rejects_text_framing() {
+    let handler = ConnectionHandler::default();
+    let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
+    let err = handler
+        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .expect_err("text-framed ManagedAccounts must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
 }
 
 #[test]

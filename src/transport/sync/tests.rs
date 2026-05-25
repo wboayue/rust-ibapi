@@ -153,10 +153,15 @@ impl Io for MockSocket {
         debug!("mock read {:?}", &encoded);
 
         // Handshake responses use pure text format.
-        // All other responses use binary-text format (4-byte BE msg_id + text payload).
+        // Protobuf-framed responses: 4-byte BE (msg_id + PROTOBUF_MSG_ID) + proto bytes.
+        // Other responses use binary-text format (4-byte BE msg_id + text payload).
         if exchange.is_handshake {
             let expected = encode_length(&encoded);
             read_message(&mut expected.as_slice())
+        } else if response.is_protobuf {
+            let raw = response.raw_bytes().unwrap_or_default();
+            let msg_id = response.message_type() as i32;
+            Ok(crate::messages::encode_protobuf_message(msg_id, raw))
         } else {
             let fields: Vec<&str> = encoded.split_terminator('\0').collect();
             let msg_id: i32 = fields[0].parse().unwrap_or(0);
@@ -238,6 +243,29 @@ impl Exchange {
     }
 }
 
+fn managed_accounts_response(accounts: &str) -> ResponseMessage {
+    use prost::Message;
+    let bytes = crate::proto::ManagedAccounts {
+        accounts_list: Some(accounts.to_string()),
+    }
+    .encode_to_vec();
+    ResponseMessage::from_protobuf(
+        crate::messages::IncomingMessages::ManagedAccounts as i32,
+        bytes,
+        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
+    )
+}
+
+fn next_valid_id_response(order_id: i32) -> ResponseMessage {
+    use prost::Message;
+    let bytes = crate::proto::NextValidId { order_id: Some(order_id) }.encode_to_vec();
+    ResponseMessage::from_protobuf(
+        crate::messages::IncomingMessages::NextValidId as i32,
+        bytes,
+        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
+    )
+}
+
 #[test]
 fn test_bus_send_order_request() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
@@ -251,8 +279,8 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v213..221", &[&format!("{sv}|20250415 19:38:30 British Summer Time|")]),
         Exchange::new(start_api_bytes, vec![
-            ResponseMessage::from_simple("15|1|DU1234567|"),
-            ResponseMessage::from_simple("9|1|5|"),
+            managed_accounts_response("DU1234567"),
+            next_valid_id_response(5),
         ]),
         Exchange::request(request.clone(),
             &[
@@ -293,8 +321,8 @@ fn test_connection_establish_connection() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes,
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("4|2|-1|2104|Market data farm connection is OK:usfarm||"),
             ],
         ),
@@ -317,8 +345,8 @@ fn test_reconnect_failed() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes,
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("\0"),
             ],
         ),
@@ -347,16 +375,13 @@ fn test_reconnect_success() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes.clone(),
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("\0"),
             ],
         ),
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
     let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
@@ -379,15 +404,12 @@ fn test_client_reconnect() -> Result<(), Error> {
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::new(managed_req.clone(), vec![ResponseMessage::from_simple("\0")]),
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
-        Exchange::new(managed_req, vec![ResponseMessage::from_simple("15|1|DU1234567|")]),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
+        Exchange::new(managed_req, vec![managed_accounts_response("DU1234567")]),
     ];
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
@@ -416,16 +438,13 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes.clone(),
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
@@ -458,16 +477,13 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes.clone(),
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
         Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
     ];
 
@@ -504,14 +520,11 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::request(packet.clone(), &["\0"]), // RESTART
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -546,17 +559,14 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
         Exchange::new(
             start_api_bytes.clone(),
             vec![
-                ResponseMessage::from_simple("15|1|DU1234567|"),
-                ResponseMessage::from_simple("9|1|1|"),
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(1),
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::request(packet.clone(), &[]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -591,14 +601,11 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::request(packet.clone(), &["\0"]),
         Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
-        Exchange::new(
-            start_api_bytes,
-            vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
-        ),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
 
     let stream = MockSocket::new(events, 0);

@@ -128,6 +128,32 @@ pub mod helpers {
         crate::messages::ResponseMessage::from_protobuf(msg_type as i32, bytes, server_versions::PROTOBUF_REST_MESSAGES_3)
     }
 
+    /// Build a proto-framed wire payload (4-byte BE `msg_id + PROTOBUF_MSG_ID`
+    /// followed by `proto.encode_to_vec()`). For `MemoryStream::push_inbound`
+    /// and `spawn_handshake_listener` fixtures that need raw bytes, not a
+    /// parsed `ResponseMessage`.
+    pub fn binary_proto<M: prost::Message>(msg_id: i32, proto: &M) -> Vec<u8> {
+        crate::messages::encode_protobuf_message(msg_id, &proto.encode_to_vec())
+    }
+
+    /// `NextValidId` proto-framed handshake frame.
+    pub fn next_valid_id_frame(order_id: i32) -> Vec<u8> {
+        binary_proto(
+            crate::messages::IncomingMessages::NextValidId as i32,
+            &crate::proto::NextValidId { order_id: Some(order_id) },
+        )
+    }
+
+    /// `ManagedAccounts` proto-framed handshake frame.
+    pub fn managed_accounts_frame(accounts: &str) -> Vec<u8> {
+        binary_proto(
+            crate::messages::IncomingMessages::ManagedAccounts as i32,
+            &crate::proto::ManagedAccounts {
+                accounts_list: Some(accounts.to_string()),
+            },
+        )
+    }
+
     /// Common test constants that can be used across modules
     pub mod constants {
         /// Test account identifiers
