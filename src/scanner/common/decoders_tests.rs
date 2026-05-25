@@ -75,11 +75,11 @@ fn test_decode_scanner_parameters_proto_empty() {
 
 #[test]
 fn test_decode_scanner_data_rejects_text_framing() {
-    // Servers ≥ PROTOBUF_SCAN_DATA (210) always emit ScannerData in proto.
+    // Servers ≥ the connection floor always emit ScannerData in proto.
     // Text-framed arrival skip-classifies via `UnexpectedResponse` (rule 20)
     // rather than terminating the subscription.
     let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0")
-        .with_server_version(server_versions::PROTOBUF_SCAN_DATA);
+        .with_server_version(server_versions::PROTOBUF_REST_MESSAGES_3);
     let err = decode_scanner_data(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
@@ -89,7 +89,7 @@ fn test_decode_scanner_data_rejects_text_framing() {
 
 #[test]
 fn test_decode_scanner_parameters_rejects_text_framing() {
-    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0").with_server_version(server_versions::PROTOBUF_SCAN_DATA);
+    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0").with_server_version(server_versions::PROTOBUF_REST_MESSAGES_3);
     let err = decode_scanner_parameters(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),

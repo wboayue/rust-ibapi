@@ -248,7 +248,7 @@ The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>
 
 `ComboLeg.action` was `String` in 2.x. In 3.0 it is typed as `LegAction`, a strict 3-variant enum (`Buy`, `Sell`, `SellShort`) matching IBKR's combo-leg wire vocabulary. `LegAction` already existed as the `SpreadBuilder::add_leg(_, LegAction)` parameter type; 3.0 reuses it as the struct field and adds the `SellShort` variant.
 
-`SLONG` is intentionally excluded — combo legs do not accept it (only the `SSHORT_COMBO_LEGS` gate exists in the C# reference at server version 35, well below our floor of 213; no `SLONG` gate exists for combo legs). If you need long-undelivered semantics, that's the outer `Order.action: Action::SellLong`, not a combo leg.
+`SLONG` is intentionally excluded — combo legs do not accept it (only the `SSHORT_COMBO_LEGS` gate exists in the C# reference at server version 35, well below our floor; no `SLONG` gate exists for combo legs). If you need long-undelivered semantics, that's the outer `Order.action: Action::SellLong`, not a combo leg.
 
 ```rust,ignore
 // v2.x

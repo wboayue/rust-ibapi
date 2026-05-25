@@ -372,13 +372,13 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
 // Text-framing rejection (rule 20)
 // =============================================================================
 //
-// Servers ≥ floor (PROTOBUF_SCAN_DATA = 210) always emit these messages in
+// Servers ≥ the connection floor always emit these messages in
 // proto framing. Text-framed arrival skip-classifies via UnexpectedResponse
 // rather than terminating the subscription.
 
 #[test]
 fn test_decode_open_order_rejects_text_framing() {
-    let _ = server_versions::PROTOBUF_SCAN_DATA;
+    let _ = server_versions::PROTOBUF_REST_MESSAGES_3;
     let mut message = ResponseMessage::from("5\013\076792991\0AAPL\0STK\0");
     let err = decode_open_order(&mut message).expect_err("text framing must be rejected");
     assert!(

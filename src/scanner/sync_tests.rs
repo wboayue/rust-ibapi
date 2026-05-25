@@ -18,7 +18,7 @@ fn test_scanner_parameters() {
         scanner_parameters().encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_SCAN_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let scanner_params = client.scanner_parameters().expect("request scanner parameters failed");
 
@@ -42,7 +42,7 @@ fn test_scanner_subscription() {
         scanner_data().request_id(TEST_REQ_ID_FIRST).rows(rows).encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_SCAN_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription_params = ScannerSubscription {
         number_of_rows: 10,
