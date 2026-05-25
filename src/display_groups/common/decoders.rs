@@ -10,21 +10,19 @@ use super::stream_decoders::DisplayGroupUpdate;
 
 /// Decodes a DisplayGroupUpdated message.
 pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Result<DisplayGroupUpdate, Error> {
-    // Validate message type
     if message.message_type() != IncomingMessages::DisplayGroupUpdated {
         return Err(Error::unexpected_response(message));
     }
-
-    // DisplayGroupUpdated: message_type, version, request_id, contract_info
-    let contract_info = message.peek_string(3).unwrap_or_else(|_| {
-        warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", message.len());
-        String::new()
-    });
-
-    Ok(DisplayGroupUpdate::new(contract_info))
+    message.decode_proto_or_text(decode_display_group_updated_proto, |msg| {
+        // text layout: message_type, version, request_id, contract_info
+        let contract_info = msg.peek_string(3).unwrap_or_else(|_| {
+            warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", msg.len());
+            String::new()
+        });
+        Ok(DisplayGroupUpdate::new(contract_info))
+    })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_display_group_updated_proto(bytes: &[u8]) -> Result<DisplayGroupUpdate, Error> {
     let p = crate::proto::DisplayGroupUpdated::decode(bytes)?;
     Ok(DisplayGroupUpdate::new(p.contract_info.unwrap_or_default()))
@@ -82,6 +80,22 @@ mod tests {
         proto_msg.encode(&mut bytes).unwrap();
 
         let result = decode_display_group_updated_proto(&bytes).unwrap();
+        assert_eq!(result.contract_info, "265598@SMART");
+    }
+
+    #[test]
+    fn test_decode_display_group_updated_dispatches_proto() {
+        use crate::common::test_utils::helpers::proto_response;
+        use prost::Message;
+
+        let bytes = crate::proto::DisplayGroupUpdated {
+            req_id: None,
+            contract_info: Some("265598@SMART".into()),
+        }
+        .encode_to_vec();
+        let mut message = proto_response(IncomingMessages::DisplayGroupUpdated, bytes);
+
+        let result = decode_display_group_updated(&mut message).expect("decoding failed");
         assert_eq!(result.contract_info, "265598@SMART");
     }
 }
