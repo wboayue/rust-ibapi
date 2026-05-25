@@ -10,7 +10,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - `Client::builder()` is the canonical entry point, replacing `connect_with_callback` / `connect_with_options`. Two terminals: `.connect()` and `.connect_with_notice_stream()`. `ConnectionOptions`, `StartupMessageCallback`, and `StartupNoticeCallback` are removed.
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
 - `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
-- The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway with server version **210 (`PROTOBUF_SCAN_DATA`) or later**. Older servers are rejected with `Error::ServerVersion` immediately after the handshake.
+- The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway with server version **213 (`PROTOBUF_REST_MESSAGES_3`) or later**. Older servers are rejected with `Error::ServerVersion` immediately after the handshake.
 - `Contract` is `#[non_exhaustive]`. Build via the typed entry points (`Contract::stock`/`call`/`put`/`futures`/`forex`/`crypto`/`index`/`bond_*`/`spread`) or `ContractBuilder::new()` for the field-minimal escape hatch. Bare `Contract { … ..Default::default() }` no longer compiles outside the crate.
 
 ## Notification handling: the new shape
@@ -248,7 +248,7 @@ The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>
 
 `ComboLeg.action` was `String` in 2.x. In 3.0 it is typed as `LegAction`, a strict 3-variant enum (`Buy`, `Sell`, `SellShort`) matching IBKR's combo-leg wire vocabulary. `LegAction` already existed as the `SpreadBuilder::add_leg(_, LegAction)` parameter type; 3.0 reuses it as the struct field and adds the `SellShort` variant.
 
-`SLONG` is intentionally excluded — combo legs do not accept it (only the `SSHORT_COMBO_LEGS` gate exists in the C# reference at server version 35, well below our floor of 210; no `SLONG` gate exists for combo legs). If you need long-undelivered semantics, that's the outer `Order.action: Action::SellLong`, not a combo leg.
+`SLONG` is intentionally excluded — combo legs do not accept it (only the `SSHORT_COMBO_LEGS` gate exists in the C# reference at server version 35, well below our floor; no `SLONG` gate exists for combo legs). If you need long-undelivered semantics, that's the outer `Order.action: Action::SellLong`, not a combo leg.
 
 ```rust,ignore
 // v2.x

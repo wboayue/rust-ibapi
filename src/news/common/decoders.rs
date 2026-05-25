@@ -9,10 +9,9 @@ use crate::Error;
 
 // All originating outgoing-request gates for the news-domain messages
 // (`PROTOBUF_MARKET_DATA` = 206 for `TickNews`, `PROTOBUF_NEWS_DATA` = 209 for
-// the rest) sit at or below the connection floor (`PROTOBUF_SCAN_DATA` = 210),
-// so the server always emits proto framing for these messages — text-framed
-// arrival is rejected via `ResponseMessage::require_proto` and skip-classifies
-// (rule 20).
+// the rest) sit at or below the connection floor, so the server always emits
+// proto framing for these messages — text-framed arrival is rejected via
+// `ResponseMessage::require_proto` and skip-classifies (rule 20).
 
 pub(in crate::news) fn decode_news_providers(message: &ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
     decode_news_providers_proto(message.require_proto()?)

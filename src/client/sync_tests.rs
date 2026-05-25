@@ -8,7 +8,7 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::transport::sync::test_listener::spawn_handshake_listener;
 
-const SERVER_VERSION: i32 = server_versions::PROTOBUF_SCAN_DATA;
+const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
 fn stubbed_client() -> Client {
     Client::stubbed(Arc::new(MessageBusStub::default()), SERVER_VERSION)

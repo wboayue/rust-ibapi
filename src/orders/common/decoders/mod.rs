@@ -3,10 +3,9 @@ use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::Error;
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
-// OrderStatus, ExecutionData, and CommissionReport are <= the connection floor
-// (`PROTOBUF_SCAN_DATA` = 210). The server always emits proto framing for these
-// messages; text-framed arrival is rejected via `ResponseMessage::require_proto`
-// and skip-classifies (rule 20).
+// OrderStatus, ExecutionData, and CommissionReport are <= the connection floor.
+// The server always emits proto framing for these messages; text-framed arrival
+// is rejected via `ResponseMessage::require_proto` and skip-classifies (rule 20).
 
 pub(crate) fn decode_open_order(message: &mut ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order_proto(message.require_proto()?)

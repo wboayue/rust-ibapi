@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
 
-const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_SCAN_DATA;
+const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
 /// Test sink that drops every notice. Used when the test cares about the
 /// startup callback, not the notice fan-out.
@@ -337,22 +337,22 @@ fn test_parse_account_info_multiple_messages_callback() {
 
 #[test]
 fn test_require_protobuf_support_accepts_minimum() {
-    require_protobuf_support(server_versions::PROTOBUF_SCAN_DATA).expect("floor version must be accepted");
+    require_protobuf_support(server_versions::PROTOBUF_REST_MESSAGES_3).expect("floor version must be accepted");
 }
 
 #[test]
 fn test_require_protobuf_support_accepts_newer() {
-    require_protobuf_support(server_versions::PROTOBUF_SCAN_DATA + 5).expect("newer versions must be accepted");
+    require_protobuf_support(server_versions::PROTOBUF_REST_MESSAGES_3 + 5).expect("newer versions must be accepted");
 }
 
 #[test]
 fn test_require_protobuf_support_rejects_older() {
-    let actual = server_versions::PROTOBUF_SCAN_DATA - 1;
+    let actual = server_versions::PROTOBUF_REST_MESSAGES_3 - 1;
     let err = require_protobuf_support(actual).expect_err("older versions must be rejected");
 
     match &err {
         Error::ServerVersion(required, got, msg) => {
-            assert_eq!(*required, server_versions::PROTOBUF_SCAN_DATA);
+            assert_eq!(*required, server_versions::PROTOBUF_REST_MESSAGES_3);
             assert_eq!(*got, actual);
             assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
             assert!(msg.contains("upgrade"), "message should tell user to upgrade: {msg}");
@@ -361,22 +361,23 @@ fn test_require_protobuf_support_rejects_older() {
     }
 
     let rendered = err.to_string();
-    let expected_required = format!("server version {} required", server_versions::PROTOBUF_SCAN_DATA);
+    let expected_required = format!("server version {} required", server_versions::PROTOBUF_REST_MESSAGES_3);
     assert!(rendered.contains(&expected_required), "rendered: {rendered}");
     assert!(rendered.contains(&actual.to_string()), "rendered: {rendered}");
 }
 
 #[test]
-fn test_require_protobuf_support_rejects_previous_place_order_floor() {
-    // Servers in [203, 209] don't yet emit the
-    // CompletedOrder/ContractData/MarketData/AccountsPositions/HistoricalData/News
-    // families in protobuf and we have no text-decode fallback, so the floor
+fn test_require_protobuf_support_rejects_previous_scan_data_floor() {
+    // Servers in [210, 212] don't yet emit the REST_MESSAGES_1/2 families
+    // (ExerciseOptions, calc, FA, SecDefOpt, FamilyCodes, MarketRule, …) in
+    // protobuf and we no longer carry text-decode fallback, so the floor
     // must reject them.
-    let err = require_protobuf_support(server_versions::PROTOBUF_PLACE_ORDER).expect_err("203 is below new floor");
+    let previous_floor = server_versions::PROTOBUF_SCAN_DATA;
+    let err = require_protobuf_support(previous_floor).expect_err("previous floor must now be rejected");
     match err {
         Error::ServerVersion(required, got, _) => {
-            assert_eq!(required, server_versions::PROTOBUF_SCAN_DATA);
-            assert_eq!(got, server_versions::PROTOBUF_PLACE_ORDER);
+            assert_eq!(required, server_versions::PROTOBUF_REST_MESSAGES_3);
+            assert_eq!(got, previous_floor);
         }
         other => panic!("expected Error::ServerVersion, got {other:?}"),
     }

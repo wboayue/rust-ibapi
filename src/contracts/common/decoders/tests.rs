@@ -135,7 +135,7 @@ fn test_decode_option_chain_proto() {
     assert_eq!(result.strikes, vec![150.0, 175.0, 200.0]);
 }
 
-// Servers ≥ PROTOBUF_SCAN_DATA (210) always emit ContractData / SymbolSamples /
+// Servers ≥ the connection floor always emit ContractData / SymbolSamples /
 // MarketRule / SecurityDefinitionOptionParameter in proto. Text-framed arrival
 // skip-classifies via `UnexpectedResponse` (rule 20) rather than terminating
 // the subscription.
@@ -143,7 +143,7 @@ fn test_decode_option_chain_proto() {
 #[test]
 fn test_decode_contract_details_rejects_text_framing() {
     let mut message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
-    let err = decode_contract_details(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
+    let err = decode_contract_details(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"
@@ -153,7 +153,7 @@ fn test_decode_contract_details_rejects_text_framing() {
 #[test]
 fn test_decode_contract_descriptions_rejects_text_framing() {
     let mut message = ResponseMessage::from("79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0");
-    let err = decode_contract_descriptions(server_versions::PROTOBUF_SCAN_DATA, &mut message).expect_err("text framing must be rejected");
+    let err = decode_contract_descriptions(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"

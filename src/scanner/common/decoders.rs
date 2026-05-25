@@ -16,7 +16,7 @@ pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) 
 }
 
 // Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
-// which equals the connection floor (`require_protobuf_support`), so the server
+// at or below the connection floor (`require_protobuf_support`), so the server
 // always emits proto framing for these messages — text-framed arrival is
 // rejected via `ResponseMessage::require_proto` and skip-classifies (rule 20).
 

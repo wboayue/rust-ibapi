@@ -73,7 +73,7 @@ async fn test_head_timestamp() {
         head_timestamp_response().unix_timestamp(1_678_838_400).encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
@@ -107,7 +107,7 @@ async fn test_histogram_data() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
     let trading_hours = TradingHours::Regular;
     let period = BarSize::Day;
@@ -173,7 +173,7 @@ async fn test_historical_data() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = test_contract();
     let end_date = datetime!(2023-03-15 16:00:00 UTC);
@@ -315,7 +315,7 @@ async fn test_historical_schedules() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = Contract::stock("AAPL").build();
     let end_date = datetime!(2023-03-15 16:00:00 UTC);
     let duration = Duration::days(3);
@@ -369,7 +369,7 @@ async fn test_tick_subscription_methods() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
 
     let mut subscription = client
@@ -419,7 +419,7 @@ async fn test_tick_subscription_buffer_and_iteration() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
 
     let mut subscription = client
@@ -451,7 +451,7 @@ async fn test_tick_subscription_bid_ask() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
     let start = datetime!(2023-03-15 09:00:00 UTC);
     let end = datetime!(2023-03-15 10:00:00 UTC);
@@ -502,7 +502,7 @@ async fn test_tick_subscription_midpoint() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
 
     let mut subscription = client
@@ -539,7 +539,7 @@ async fn test_historical_ticks_trade() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
 
     let mut subscription = client
@@ -588,7 +588,7 @@ async fn test_historical_data_time_zone_handling() {
         proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = test_contract();
     let result = client
@@ -638,7 +638,7 @@ async fn test_historical_data_streaming_with_updates() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("SPY").build();
 
@@ -885,7 +885,7 @@ async fn test_historical_data_with_end_message() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let data = client
         .historical_data(&test_contract(), BarSize::Hour)
@@ -1038,7 +1038,7 @@ async fn test_tick_subscription_skips_unexpected_message_then_yields() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let mut subscription = client
         .historical_ticks(&test_contract(), 1)
