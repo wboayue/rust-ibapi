@@ -16,8 +16,8 @@ const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 fn push_handshake(stream: &MemoryStream) {
     let handshake = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION);
     stream.push_inbound(handshake.into_bytes());
-    stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\090\0"));
-    stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+    stream.push_inbound(next_valid_id_frame(90));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
 }
 
 fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
@@ -25,6 +25,26 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data.extend_from_slice(&msg_id.to_be_bytes());
     data.extend_from_slice(payload.as_bytes());
     data
+}
+
+fn binary_proto<M: prost::Message>(msg_id: i32, proto: &M) -> Vec<u8> {
+    crate::messages::encode_protobuf_message(msg_id, &proto.encode_to_vec())
+}
+
+fn next_valid_id_frame(order_id: i32) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::NextValidId as i32,
+        &crate::proto::NextValidId { order_id: Some(order_id) },
+    )
+}
+
+fn managed_accounts_frame(accounts: &str) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ManagedAccounts as i32,
+        &crate::proto::ManagedAccounts {
+            accounts_list: Some(accounts.to_string()),
+        },
+    )
 }
 
 /// `-2` is the clean-shutdown sentinel TWS sends when it wants the client
@@ -144,8 +164,8 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
-    stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\090\0"));
-    stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+    stream.push_inbound(next_valid_id_frame(90));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
 
     connection.establish_connection().expect("first establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 1, "startup callback should fire on first handshake");
@@ -156,8 +176,8 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     stream.push_inbound(handshake_bytes);
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02106\0HMDS farm OK\0"));
-    stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\091\0"));
-    stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+    stream.push_inbound(next_valid_id_frame(91));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
 
     connection.establish_connection().expect("second establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");

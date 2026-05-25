@@ -296,7 +296,7 @@ cargo build -p ibapi-integration-async --tests
 
 ### PR-C — per-decoder text-branch deletions
 
-**Status: 📋 Pending** — unblocks once PR-B merges.
+**Status: 🚧 In progress** — PR-B merged 2026-05-25; C6 open.
 
 Six follow-up PRs after PR-B. Each is a thin proto-only conversion + fixture
 migration following the gate-206 / historical precedent (PRs #626, #629, #630).
