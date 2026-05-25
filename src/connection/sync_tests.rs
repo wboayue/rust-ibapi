@@ -6,6 +6,7 @@ use time_tz::timezones;
 
 use super::*;
 use crate::client::sync::Client;
+use crate::common::test_utils::helpers::{managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::sync::{MemoryStream, TcpMessageBus};
@@ -25,26 +26,6 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data.extend_from_slice(&msg_id.to_be_bytes());
     data.extend_from_slice(payload.as_bytes());
     data
-}
-
-fn binary_proto<M: prost::Message>(msg_id: i32, proto: &M) -> Vec<u8> {
-    crate::messages::encode_protobuf_message(msg_id, &proto.encode_to_vec())
-}
-
-fn next_valid_id_frame(order_id: i32) -> Vec<u8> {
-    binary_proto(
-        IncomingMessages::NextValidId as i32,
-        &crate::proto::NextValidId { order_id: Some(order_id) },
-    )
-}
-
-fn managed_accounts_frame(accounts: &str) -> Vec<u8> {
-    binary_proto(
-        IncomingMessages::ManagedAccounts as i32,
-        &crate::proto::ManagedAccounts {
-            accounts_list: Some(accounts.to_string()),
-        },
-    )
 }
 
 /// `-2` is the clean-shutdown sentinel TWS sends when it wants the client

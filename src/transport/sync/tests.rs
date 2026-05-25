@@ -153,7 +153,7 @@ impl Io for MockSocket {
         debug!("mock read {:?}", &encoded);
 
         // Handshake responses use pure text format.
-        // Protobuf-framed responses: 4-byte BE (msg_id + 200) + proto bytes.
+        // Protobuf-framed responses: 4-byte BE (msg_id + PROTOBUF_MSG_ID) + proto bytes.
         // Other responses use binary-text format (4-byte BE msg_id + text payload).
         if exchange.is_handshake {
             let expected = encode_length(&encoded);
