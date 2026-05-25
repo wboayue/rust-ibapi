@@ -85,16 +85,15 @@ mod tests {
 
     #[test]
     fn test_decode_display_group_updated_dispatches_proto() {
+        use crate::common::test_utils::helpers::proto_response;
         use prost::Message;
 
-        let proto_msg = crate::proto::DisplayGroupUpdated {
-            req_id: Some(9000),
+        let bytes = crate::proto::DisplayGroupUpdated {
+            req_id: None,
             contract_info: Some("265598@SMART".into()),
-        };
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
-
-        let mut message = ResponseMessage::from_protobuf(IncomingMessages::DisplayGroupUpdated as i32, bytes, 213);
+        }
+        .encode_to_vec();
+        let mut message = proto_response(IncomingMessages::DisplayGroupUpdated, bytes);
 
         let result = decode_display_group_updated(&mut message).expect("decoding failed");
         assert_eq!(result.contract_info, "265598@SMART");
