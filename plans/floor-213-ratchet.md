@@ -86,11 +86,20 @@ skip in #530.
 
 ### PR-A — display_groups: wire the orphan proto decoder
 
+**Status: ✅ Shipped in [#631](https://github.com/wboayue/rust-ibapi/pull/631)** (merged 2026-05-25).
+
 The single blocker. `decode_display_group_updated` at
 `src/display_groups/common/decoders.rs:12` reads `peek_string(3)` directly
 with no proto branch. The proto decoder `decode_display_group_updated_proto`
 already exists at line 28 of the same file, marked `#[allow(dead_code)]`. Wire
 it through `decode_proto_or_text`.
+
+**Deviations from the original plan**: (a) receiver stayed `&mut ResponseMessage`
+(not `&ResponseMessage` as planned) — `decode_proto_or_text` takes `&mut self`,
+so no flip. The receiver flip will happen in PR-C5 when we collapse to
+`require_proto()`. (b) /simplify swapped the manual `from_protobuf` test
+fixture for the existing `proto_response()` helper at `src/common/test_utils.rs:127`
+and dropped the unused `req_id` field.
 
 Post-bump failure mode if skipped: every `DisplayGroupUpdate` returns an empty
 `contract_info` string (the `peek_string(3).unwrap_or_else(|_| ...)` path
@@ -154,7 +163,24 @@ stays alive until floor 213 (will be deleted in PR-C5 below).
 
 ### PR-B — the ratchet
 
+**Status: 🚧 Open in [#632](https://github.com/wboayue/rust-ibapi/pull/632)** (pushed 2026-05-25, awaiting merge).
+
 Mechanical. Three edits + a doc sweep.
+
+**Actual diff scope** (12 + 11 files, two commits):
+- 4 sites in `connection/common.rs` (the load-bearing bump)
+- ~30 test-fixture sites (`SERVER_VERSION` consts in connection/client tests;
+  `PROTOBUF_HISTORICAL_DATA` → `PROTOBUF_REST_MESSAGES_3` in historical +
+  realtime tests; 17 hardcoded `"v210..221"` mock handshake strings in
+  `transport/sync/tests.rs`)
+- /simplify follow-up: 6 scanner fixtures + 4 `_rejects_text_framing` tests
+  (contracts/scanner/orders) + the `proto_response()` helper default +
+  decoder doc-comments (drop the inline `(PROTOBUF_SCAN_DATA = 210)`
+  parentheticals so comments don't rot at every bump)
+- Renamed `test_require_protobuf_support_rejects_previous_place_order_floor`
+  → `_rejects_previous_scan_data_floor` per the per-bump-rename convention
+- `docs/migration-3.0.md` floor reference updated; SLONG note reverted to
+  "well below our floor" (no version pin)
 
 #### 1. Bump the constant
 
@@ -270,6 +296,8 @@ cargo build -p ibapi-integration-async --tests
 
 ### PR-C — per-decoder text-branch deletions
 
+**Status: 📋 Pending** — unblocks once PR-B merges.
+
 Six follow-up PRs after PR-B. Each is a thin proto-only conversion + fixture
 migration following the gate-206 / historical precedent (PRs #626, #629, #630).
 
@@ -313,6 +341,8 @@ C6 is the smallest (~10 lines). C1-C5 each follow the same shape and take
 roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
+
+**Status: 📋 Pending** — unblocks once all PR-C series merge.
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
