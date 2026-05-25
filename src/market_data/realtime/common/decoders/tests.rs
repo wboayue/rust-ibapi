@@ -40,7 +40,7 @@ mod realtime_bar_tests {
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::RealTimeBars as i32,
             fixture(),
-            server_versions::PROTOBUF_HISTORICAL_DATA,
+            server_versions::PROTOBUF_REST_MESSAGES_3,
         );
         let bar = decode_realtime_bar(&mut message).expect("decode failed");
         assert_eq!(bar.open, 4028.75);
@@ -121,7 +121,7 @@ mod trade_tick_tests {
         let mut message = ResponseMessage::from_protobuf(
             crate::messages::IncomingMessages::TickByTick as i32,
             fixture(1).encode_proto(),
-            server_versions::PROTOBUF_HISTORICAL_DATA,
+            server_versions::PROTOBUF_REST_MESSAGES_3,
         );
         let trade = decode_trade_tick(&mut message).expect("decode failed");
         assert_eq!(trade.price, 3895.25);

@@ -59,7 +59,7 @@ fn test_head_timestamp() {
         head_timestamp_response().unix_timestamp(1678323335).encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let what_to_show = WhatToShow::Trades;
@@ -94,7 +94,7 @@ fn test_histogram_data() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let trading_hours = TradingHours::Regular;
@@ -160,7 +160,7 @@ fn test_historical_data() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let end_date = datetime!(2023-04-15 16:31:22 UTC);
@@ -222,7 +222,7 @@ fn test_historical_schedules() {
         historical_schedule_response().encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let end_date = datetime!(2023-04-15 16:31:22 UTC);
@@ -577,7 +577,7 @@ fn test_tick_subscription_buffer_and_iteration() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let number_of_ticks = 10;
@@ -617,7 +617,7 @@ fn test_tick_subscription_owned_iterator() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
@@ -645,7 +645,7 @@ fn test_tick_subscription_bid_ask() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
@@ -681,7 +681,7 @@ fn test_tick_subscription_midpoint() {
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
@@ -731,7 +731,7 @@ fn test_historical_data_time_zone_handling() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let end_date = datetime!(2023-04-15 16:00:00 UTC);
@@ -791,7 +791,7 @@ fn test_historical_data_streaming_with_updates() {
         ),
     ]));
 
-    let mut client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let mut client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     client.time_zone = Some(time_tz::timezones::db::UTC);
 
     let contract = Contract::stock("SPY").build();
@@ -1051,7 +1051,7 @@ fn test_historical_data_with_end_message() {
         ),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let data = client
         .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
@@ -1107,7 +1107,7 @@ fn test_historical_schedules_ending_now() {
         IncomingMessages::HistoricalSchedule,
         historical_schedule_response().encode_proto(),
     )]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let contract = Contract::stock("MSFT").build();
     let duration = 7.days();
@@ -1247,7 +1247,7 @@ fn test_tick_subscription_try_next_drains_buffer() {
             .done(true)
             .encode_proto(),
     )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
@@ -1273,7 +1273,7 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
             .done(true)
             .encode_proto(),
     )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
@@ -1345,7 +1345,7 @@ fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
             .done(true)
             .encode_proto(),
     )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
@@ -1368,7 +1368,7 @@ fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
             .done(true)
             .encode_proto(),
     )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
@@ -1394,7 +1394,7 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
                 .encode_proto(),
         ),
     ]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 1)

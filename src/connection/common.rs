@@ -168,7 +168,7 @@ pub struct ConnectionHandler {
 impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
-            min_version: server_versions::PROTOBUF_SCAN_DATA,
+            min_version: server_versions::PROTOBUF_REST_MESSAGES_3,
             max_version: server_versions::UPDATE_CONFIG,
         }
     }
@@ -337,13 +337,13 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
 /// domain. Fail fast after the handshake with a descriptive error rather than
 /// letting the gateway silently drop our messages.
 pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
-    if server_version < server_versions::PROTOBUF_SCAN_DATA {
+    if server_version < server_versions::PROTOBUF_REST_MESSAGES_3 {
         return Err(Error::ServerVersion(
-            server_versions::PROTOBUF_SCAN_DATA,
+            server_versions::PROTOBUF_REST_MESSAGES_3,
             server_version,
             format!(
                 "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version {} or later; please upgrade",
-                server_versions::PROTOBUF_SCAN_DATA
+                server_versions::PROTOBUF_REST_MESSAGES_3
             ),
         ));
     }
