@@ -1,6 +1,4 @@
 use prost::Message;
-use time::macros::datetime;
-use time_tz::timezones::db::america::NEW_YORK;
 
 use super::*;
 
@@ -20,26 +18,14 @@ struct ResponseMessageParseTestCase {
 
 enum ParseType {
     Int,
-    OptionalInt,
-    Long,
-    OptionalLong,
     Double,
-    OptionalDouble,
     String,
-    Bool,
-    DateTime,
 }
 
 enum ParseResult {
     Int(i32),
-    OptionalInt(Option<i32>),
-    Long(i64),
-    OptionalLong(Option<i64>),
     Double(f64),
-    OptionalDouble(Option<f64>),
     String(String),
-    Bool(bool),
-    DateTime(Result<time::OffsetDateTime, ()>),
     Error,
 }
 
@@ -78,41 +64,6 @@ fn response_message_parse_test_cases() -> Vec<ResponseMessageParseTestCase> {
             expected: ParseResult::Error,
         },
         ResponseMessageParseTestCase {
-            name: "parse_optional_int_present",
-            input: "1\0123\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalInt,
-            expected: ParseResult::OptionalInt(Some(123)),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_optional_int_empty",
-            input: "1\0\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalInt,
-            expected: ParseResult::OptionalInt(None),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_optional_int_unset",
-            input: "1\02147483647\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalInt,
-            expected: ParseResult::OptionalInt(None),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_long",
-            input: "1\09876543210\0456\0",
-            field_index: 1,
-            parse_type: ParseType::Long,
-            expected: ParseResult::Long(9876543210),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_optional_long_unset",
-            input: "1\09223372036854775807\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalLong,
-            expected: ParseResult::OptionalLong(None),
-        },
-        ResponseMessageParseTestCase {
             name: "parse_double",
             input: "1\03.14567\0456\0",
             field_index: 1,
@@ -127,46 +78,11 @@ fn response_message_parse_test_cases() -> Vec<ResponseMessageParseTestCase> {
             expected: ParseResult::Double(0.0),
         },
         ResponseMessageParseTestCase {
-            name: "parse_optional_double_infinity",
-            input: "1\0Infinity\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalDouble,
-            expected: ParseResult::OptionalDouble(Some(f64::INFINITY)),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_optional_double_unset",
-            input: "1\01.7976931348623157E308\0456\0",
-            field_index: 1,
-            parse_type: ParseType::OptionalDouble,
-            expected: ParseResult::OptionalDouble(None),
-        },
-        ResponseMessageParseTestCase {
             name: "parse_string",
             input: "1\0hello world\0456\0",
             field_index: 1,
             parse_type: ParseType::String,
             expected: ParseResult::String("hello world".to_string()),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_bool_true",
-            input: "1\01\0456\0",
-            field_index: 1,
-            parse_type: ParseType::Bool,
-            expected: ParseResult::Bool(true),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_bool_false",
-            input: "1\00\0456\0",
-            field_index: 1,
-            parse_type: ParseType::Bool,
-            expected: ParseResult::Bool(false),
-        },
-        ResponseMessageParseTestCase {
-            name: "parse_datetime",
-            input: "1\01609459200\0456\0", // 2021-01-01 00:00:00 UTC
-            field_index: 1,
-            parse_type: ParseType::DateTime,
-            expected: ParseResult::DateTime(Ok(datetime!(2021-01-01 00:00:00 UTC))),
         },
     ]
 }
@@ -263,17 +179,6 @@ fn test_incoming_message_from_i32() {
 }
 
 #[test]
-fn test_order_id_index() {
-    assert_eq!(order_id_index(IncomingMessages::OpenOrder), Some(1));
-    assert_eq!(order_id_index(IncomingMessages::OrderStatus), Some(1));
-
-    assert_eq!(order_id_index(IncomingMessages::ExecutionData), Some(2));
-    assert_eq!(order_id_index(IncomingMessages::ExecutionDataEnd), Some(2));
-
-    assert_eq!(order_id_index(IncomingMessages::NotValid), None);
-}
-
-#[test]
 fn test_request_id_index() {
     assert_eq!(request_id_index(IncomingMessages::ContractData), Some(1));
     assert_eq!(request_id_index(IncomingMessages::TickByTick), Some(1));
@@ -339,18 +244,6 @@ fn test_response_message_parsing() {
             (ParseType::Int, ParseResult::Error) => {
                 assert!(message.next_int().is_err(), "Test '{}' failed: expected error", test_case.name);
             }
-            (ParseType::OptionalInt, ParseResult::OptionalInt(expected)) => match message.next_optional_int() {
-                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
-                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
-            },
-            (ParseType::Long, ParseResult::Long(expected)) => match message.next_long() {
-                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
-                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
-            },
-            (ParseType::OptionalLong, ParseResult::OptionalLong(expected)) => match message.next_optional_long() {
-                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
-                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
-            },
             (ParseType::Double, ParseResult::Double(expected)) => match message.next_double() {
                 Ok(val) => assert!(
                     (val - expected).abs() < f64::EPSILON,
@@ -361,42 +254,9 @@ fn test_response_message_parsing() {
                 ),
                 Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
             },
-            (ParseType::OptionalDouble, ParseResult::OptionalDouble(expected)) => match (message.next_optional_double(), expected) {
-                (Ok(Some(val)), Some(exp)) if exp.is_infinite() => {
-                    assert!(
-                        val.is_infinite() && val.is_sign_positive() == exp.is_sign_positive(),
-                        "Test '{}' failed: expected {:?}, got {:?}",
-                        test_case.name,
-                        expected,
-                        val
-                    );
-                }
-                (Ok(Some(val)), Some(exp)) => {
-                    assert!(
-                        (val - exp).abs() < f64::EPSILON,
-                        "Test '{}' failed: expected {:?}, got {:?}",
-                        test_case.name,
-                        expected,
-                        val
-                    );
-                }
-                (Ok(None), None) => {}
-                (result, exp) => panic!("Test '{}' failed: expected {:?}, got {:?}", test_case.name, exp, result),
-            },
             (ParseType::String, ParseResult::String(expected)) => match message.next_string() {
                 Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
                 Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
-            },
-            (ParseType::Bool, ParseResult::Bool(expected)) => match message.next_bool() {
-                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
-                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
-            },
-            (ParseType::DateTime, ParseResult::DateTime(expected)) => match (message.next_date_time(), expected) {
-                (Ok(val), Ok(exp)) => {
-                    assert_eq!(val, *exp, "Test '{}' failed", test_case.name);
-                }
-                (Err(_), Err(_)) => {}
-                (result, exp) => panic!("Test '{}' failed: expected {:?}, got {:?}", test_case.name, exp, result),
             },
             _ => panic!("Test case type mismatch"),
         }
@@ -410,14 +270,8 @@ fn test_response_message_boundary_conditions() {
     message.i = 3; // Beyond the last field
 
     assert!(message.next_int().is_err());
-    assert!(message.next_optional_int().is_err());
-    assert!(message.next_long().is_err());
-    assert!(message.next_optional_long().is_err());
     assert!(message.next_double().is_err());
-    assert!(message.next_optional_double().is_err());
     assert!(message.next_string().is_err());
-    assert!(message.next_bool().is_err());
-    assert!(message.next_date_time().is_err());
 }
 
 #[test]
@@ -429,11 +283,6 @@ fn test_response_message_peek_operations() {
     assert_eq!(message.peek_int(3).unwrap(), 456);
     assert!(message.peek_int(2).is_err()); // "abc" is not an int
     assert!(message.peek_int(4).is_err()); // Out of bounds (only 4 fields, indices 0-3)
-
-    // Test peek_string
-    assert_eq!(message.peek_string(2).unwrap(), "abc");
-    assert_eq!(message.peek_string(0).unwrap(), "1");
-    assert!(message.peek_string(99).is_err()); // Out of bounds
 }
 
 #[test]
@@ -454,34 +303,16 @@ fn test_response_message_skip() {
 }
 
 #[test]
-fn test_response_message_special_fields() {
-    // OpenOrder message (message type 5) - order_id is at index 1
+fn test_text_framed_message_has_no_order_id_or_execution_id() {
+    // order_id() and execution_id() are proto-only at floor 213. A
+    // text-framed message (raw_bytes = None) returns None even if its text
+    // layout happens to match a historical order_id/exec_id field position.
     let open_order = ResponseMessage::from("5\0123\0field2\0field3\0");
-    assert_eq!(open_order.order_id(), Some(123));
+    assert_eq!(open_order.order_id(), None);
     assert_eq!(open_order.execution_id(), None);
 
-    // OrderStatus message (message type 3) - order_id is at index 1
-    let order_status = ResponseMessage::from("3\0456\0field2\0field3\0");
-    assert_eq!(order_status.order_id(), Some(456));
-
-    // ExecutionData message (message type 11) - order_id is at index 2, execution_id at index 14
-    let mut exec_fields = vec!["11"];
-    for i in 1..=14 {
-        if i == 2 {
-            exec_fields.push("789"); // order_id at index 2
-        } else if i == 14 {
-            exec_fields.push("exec789"); // execution_id at index 14
-        } else {
-            exec_fields.push("field");
-        }
-    }
-    let exec_message = ResponseMessage::from(&exec_fields.join("\0"));
-    assert_eq!(exec_message.order_id(), Some(789));
-    assert_eq!(exec_message.execution_id(), Some("exec789".to_string()));
-
-    // CommissionsReport message (message type 59) - execution_id at index 2
     let commission_message = ResponseMessage::from("59\0field1\0exec123\0");
-    assert_eq!(commission_message.execution_id(), Some("exec123".to_string()));
+    assert_eq!(commission_message.execution_id(), None);
 }
 
 #[test]
@@ -559,10 +390,11 @@ fn test_order_id_protobuf_execution_data_nested() {
 
 #[test]
 fn test_order_id_protobuf_execution_data_end() {
+    // ExecutionDetailsEnd carries `req_id` at proto tag 1; order_id() returns
+    // the same value to match the historical text-path semantics callers
+    // were depending on.
     let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(55) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
-    // Existing text-path returns peek_int(2) (which is req_id in text layout);
-    // proto path mirrors that semantic.
     assert_eq!(message.order_id(), Some(55));
 }
 
@@ -991,14 +823,6 @@ fn test_response_message_next_methods_edge_cases() {
             },
         },
         TestCase {
-            name: "malformed_long",
-            input: "not_a_long\0",
-            test_fn: |msg| {
-                msg.i = 0;
-                msg.next_long().is_err()
-            },
-        },
-        TestCase {
             name: "malformed_double",
             input: "not_a_double\0",
             test_fn: |msg| {
@@ -1007,30 +831,11 @@ fn test_response_message_next_methods_edge_cases() {
             },
         },
         TestCase {
-            name: "malformed_bool",
-            input: "2\0",
-            test_fn: |msg| {
-                msg.i = 0;
-                // next_bool returns Ok(false) for any non-"1" value
-                let result = msg.next_bool();
-                result.is_ok() && !result.unwrap()
-            },
-        },
-        TestCase {
             name: "overflow_int",
             input: "99999999999999999999\0",
             test_fn: |msg| {
                 msg.i = 0;
                 msg.next_int().is_err()
-            },
-        },
-        TestCase {
-            name: "negative_timestamp",
-            input: "-1000\0",
-            test_fn: |msg| {
-                msg.i = 0;
-                // Negative timestamps are valid (dates before 1970)
-                msg.next_date_time().is_ok()
             },
         },
     ];
@@ -1430,15 +1235,10 @@ fn test_encode_length_edge_cases() {
 fn test_response_message_access_patterns() {
     let message = ResponseMessage::from("5\0123\0field2\0field3\0field4\0");
 
-    // Test order_id for OpenOrder message
-    assert_eq!(message.order_id(), Some(123));
-
     // Test message_type
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
 
     // Test multiple peeks don't change state
-    assert_eq!(message.peek_string(2).unwrap(), "field2");
-    assert_eq!(message.peek_string(2).unwrap(), "field2");
     assert_eq!(message.peek_int(1).unwrap(), 123);
     assert_eq!(message.peek_int(1).unwrap(), 123);
 
@@ -1599,106 +1399,10 @@ fn test_response_message_error_paths() {
     // Test empty message type detection
     let empty_msg = ResponseMessage::default();
     assert_eq!(empty_msg.message_type(), IncomingMessages::NotValid);
-
-    // Test parsing errors for optional types
-    let mut msg = ResponseMessage::from("test\0not_a_number\0");
-    msg.i = 1;
-    assert!(msg.next_optional_int().is_err());
-
-    msg.i = 1;
-    assert!(msg.next_optional_long().is_err());
-
-    msg.i = 1;
-    assert!(msg.next_optional_double().is_err());
-
-    // Test empty timestamp error
-    let mut msg = ResponseMessage::from("test\0\0");
-    msg.i = 1;
-    assert!(msg.next_date_time().is_err());
-
-    // Test invalid timestamp parsing
-    let mut msg = ResponseMessage::from("test\0not_a_timestamp\0");
-    msg.i = 1;
-    assert!(msg.next_date_time().is_err());
-
-    // Test timestamp conversion error (out of range)
-    let mut msg = ResponseMessage::from("test\099999999999999999999\0");
-    msg.i = 1;
-    let result = msg.next_date_time();
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_uses_utc_for_utc_format() {
-    let mut msg = ResponseMessage::from("test\020260328-12:34:56\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(Some(NEW_YORK)).unwrap();
-
-    assert_eq!(result, datetime!(2026-03-28 12:34:56 UTC));
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_parses_embedded_timezone() {
-    let mut msg = ResponseMessage::from("test\020260328 12:34:56 US/Eastern\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(None).unwrap();
-
-    assert_eq!(result, datetime!(2026-03-28 16:34:56 UTC));
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_rejects_unrecognized_timezone() {
-    let mut msg = ResponseMessage::from("test\020260328 12:34:56 Bogus/Zone\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(None);
-
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("unrecognized timezone"));
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_parses_date_only_in_session_timezone() {
-    let mut msg = ResponseMessage::from("test\020260328\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(Some(NEW_YORK)).unwrap();
-
-    assert_eq!(result, datetime!(2026-03-28 00:00:00 -4));
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_rejects_ambiguous_local_time() {
-    let mut msg = ResponseMessage::from("test\020261101  01:30:00\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(Some(NEW_YORK));
-
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("ambiguous IB datetime field"));
-}
-
-#[test]
-fn test_response_message_next_date_time_with_timezone_rejects_nonexistent_local_time() {
-    let mut msg = ResponseMessage::from("test\020260308  02:30:00\0");
-    msg.skip();
-
-    let result = msg.next_date_time_with_timezone(Some(NEW_YORK));
-
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("invalid IB datetime field"));
 }
 
 #[test]
 fn test_response_message_special_double_values() {
-    // Test parsing Infinity
-    let mut msg = ResponseMessage::from("test\0Infinity\0");
-    msg.i = 1;
-    let result = msg.next_optional_double().unwrap();
-    assert_eq!(result, Some(f64::INFINITY));
-
     // Test parsing empty as 0.0
     let mut msg = ResponseMessage::from("test\0\0");
     msg.i = 1;

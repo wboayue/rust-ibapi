@@ -341,7 +341,7 @@ roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
 
-**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 and D3 pending.**
+**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 pushed locally (branch `pr-d2-collapse-accessors`); D3 pending.**
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
@@ -383,15 +383,34 @@ unreachable.
   deleted text branch.
 
 **D2 — collapse proto-aware accessors (depends on D1).** Per rule 17 the
-`peek_*` / `request_id` / `order_id` / `execution_id` accessors have
-`is_protobuf` branches. Once every caller is proto-only:
-- `peek_int` / `peek_long` / `peek_string` simplify to direct
-  `self.fields[i]` (and `fields` shrinks to `[msg_id]` only — or goes away
-  entirely)
-- `request_id` / `order_id` / `execution_id` collapse to proto-envelope
-  decode only (the minimal `ProtoIdEnvelope` / `ExecutionDetailsMinimal`
-  patterns from rule 17 stay; their text-index fallback goes)
-- All `message.skip()` calls in remaining decoders disappear with the field
+`peek_*` / `request_id` / `order_id` / `execution_id` accessors had
+`is_protobuf` branches. Status on each:
+- `order_id` / `execution_id` are proto-only now (every message type they
+  handle — `OpenOrder`, `OrderStatus`, `ExecutionData{,End}`,
+  `CommissionsReport` — is proto-framed past floor 213). Text fallback +
+  `order_id_index` lookup table deleted.
+- `request_id` keeps a dual-format path. `IncomingMessages::TickEFP` is the
+  only inbound message type still text-framed by TWS at floor 213 (no proto
+  encoder server-side); routing TickEFP requires the text branch via
+  `peek_int`. The `proto_or_text_int` / `proto_or_text_string` helpers were
+  removed and the proto/text fork inlined into `request_id`.
+- `peek_int` survives for the TickEFP text fallback; `peek_string` is
+  deleted (no remaining callers). Field iteration (`fields`) cannot shrink to
+  `[msg_id]` until WSH text decoders + `decode_tick_efp` get migrated or
+  retired — separate follow-up.
+- Dead `next_long` / `next_optional_int` / `next_optional_long` /
+  `next_optional_double` / `next_bool` / `next_date_time` /
+  `next_date_time_with_timezone` / `parse_ib_date_time_with_timezone` /
+  `resolve_primitive_date_time` helpers (`#[allow(dead_code)]` test-only)
+  deleted along with their tests. `UNSET_INTEGER` / `UNSET_LONG` /
+  `UNSET_DOUBLE` / `INFINITY_STR` constants removed; `time_tz::*` import
+  dropped from `messages.rs`.
+- `is_protobuf` field marked `#[allow(dead_code)]` (production reads are
+  gone; test fixtures still write/read it via wire-framing helpers); D3
+  removes it.
+- All `message.skip()` callers in production are still alive — they sit in
+  `decode_tick_efp` (text-only forever) and the WSH decoders (text branches
+  pending migration).
 
 **D3 — delete the dual-format helpers + collapse `ResponseMessage` (depends
 on D1+D2).** With no callers left:
