@@ -341,12 +341,12 @@ roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
 
-**Status: D1 open; D2 and D3 pending.**
+**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 and D3 pending.**
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
 
-**D1 — collapse caller branches (independent of D2/D3). 🚧 Open as PR.**
+**D1 — collapse caller branches (independent of D2/D3). ✅ Shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639).**
 Each site reads `is_protobuf` and forks; after C-series, the text arm is
 unreachable.
 - `From<&ResponseMessage> for Notice` proto branch → collapsed: now delegates
