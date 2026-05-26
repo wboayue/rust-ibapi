@@ -1,7 +1,7 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
 use crate::common::test_utils::helpers::*;
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::IncomingMessages;
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
     cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time,
@@ -11,7 +11,7 @@ use crate::testdata::builders::accounts::{
 use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
 };
-use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
+use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{client::blocking::Client, server_versions, stubs::MessageBusStub, Error};
 use std::sync::Arc;
 
@@ -173,21 +173,25 @@ fn test_account_summary() {
 
 #[test]
 fn test_managed_accounts() {
-    // Scenario: Valid response
-    let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ManagedAccounts,
+        managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let accounts = client.managed_accounts().expect("request managed accounts failed for valid response");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
     assert_request(&message_bus, 0, &request_managed_accounts());
 
-    // Scenario: Empty response string
-    let (client_empty, _) = create_blocking_test_client_with_responses(vec![managed_accounts().accounts(Vec::<String>::new()).encode_pipe()]);
+    let message_bus_empty = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ManagedAccounts,
+        managed_accounts().accounts(Vec::<String>::new()).encode_proto(),
+    )]));
+    let client_empty = Client::stubbed(message_bus_empty, server_versions::SIZE_RULES);
     let accounts_empty = client_empty
         .managed_accounts()
         .expect("request managed accounts failed for empty response");
     assert!(accounts_empty.is_empty(), "Empty accounts list should result in empty vec");
 
-    // Scenario: No message (subscription.next() returns None)
     let (client_no_msg, _) = create_blocking_test_client();
     let accounts_no_msg = client_no_msg.managed_accounts().expect("request managed accounts failed for no message");
     assert!(accounts_no_msg.is_empty(), "Accounts list should be empty when no message is received");
@@ -197,8 +201,11 @@ fn test_managed_accounts() {
 fn test_managed_accounts_retry() {
     // Test that managed_accounts retries on connection reset.
     // Since our stub doesn't simulate actual connection resets, we exercise the happy path.
-    let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ManagedAccounts,
+        managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let accounts = client.managed_accounts().expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
@@ -417,26 +424,6 @@ fn test_server_version_errors() {
                 error
             );
         }
-    }
-}
-
-#[test]
-fn test_managed_accounts_additional_scenarios() {
-    use super::common::test_tables::managed_accounts_test_cases;
-
-    for test_case in managed_accounts_test_cases() {
-        let (client, message_bus) = if test_case.responses.is_empty() {
-            create_blocking_test_client()
-        } else {
-            create_blocking_test_client_with_responses(test_case.responses)
-        };
-
-        let accounts = client
-            .managed_accounts()
-            .unwrap_or_else(|_| panic!("managed_accounts failed for {}", test_case.scenario));
-        assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
-        assert_eq!(request_message_count(&message_bus), 1);
-        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
     }
 }
 

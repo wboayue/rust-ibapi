@@ -339,7 +339,7 @@ impl Client {
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
-            decoders::decode_managed_accounts,
+            |msg| decoders::decode_managed_accounts(msg),
             || Ok(Vec::default()),
         )
         .await
