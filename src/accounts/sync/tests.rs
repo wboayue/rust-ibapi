@@ -211,7 +211,6 @@ fn test_managed_accounts_retry() {
 fn test_server_time() {
     use time::macros::datetime;
 
-    // Scenario 1: Success
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::CurrentTime,
@@ -225,7 +224,6 @@ fn test_server_time() {
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &request_current_time());
 
-    // Scenario 2: No response (returns UnexpectedEndOfStream)
     let (client_no_resp, message_bus_no_resp) = create_blocking_test_client();
     let result_no_resp = client_no_resp.server_time();
     assert!(
