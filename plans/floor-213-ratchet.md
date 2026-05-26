@@ -341,7 +341,7 @@ roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
 
-**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 shipped in [#640](https://github.com/wboayue/rust-ibapi/pull/640); D3 (conservative subset) pending. D4 follow-up tracked below.**
+**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 shipped in [#640](https://github.com/wboayue/rust-ibapi/pull/640); D3 (conservative subset) open in [#641](https://github.com/wboayue/rust-ibapi/pull/641). D4 follow-up tracked below.**
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
