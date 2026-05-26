@@ -928,6 +928,7 @@ impl ResponseMessage {
     }
 
     /// Number of fields present in the message.
+    #[allow(dead_code)] // test-only since text decoders are proto-only post-floor-213
     pub fn len(&self) -> usize {
         self.fields.len()
     }
