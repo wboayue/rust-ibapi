@@ -839,8 +839,8 @@ struct ExecutionMinimal {
 /// Crate-internal wire envelope; not part of the public API. All fields,
 /// constructors, and methods are crate-visible only. Framing is discriminated
 /// by `raw_bytes`: `Some(_)` = protobuf payload, `None` = NUL-delimited text
-/// payload pre-parsed into `fields` (still load-bearing for WSH and TickEFP
-/// decoders post-floor-213).
+/// payload pre-parsed into `fields` (carries WSH metadata/event-data and
+/// `TickEFP` payloads).
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.

@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::proto_response;
 use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::subscriptions::DecoderContext;
@@ -39,7 +40,7 @@ mod realtime_bar_tests {
 
     #[test]
     fn test_decode_realtime_bar_through_wrapper() {
-        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::RealTimeBars as i32, fixture());
+        let mut message = proto_response(crate::messages::IncomingMessages::RealTimeBars, fixture());
         let bar = decode_realtime_bar(&mut message).expect("decode failed");
         assert_eq!(bar.open, 4028.75);
     }
@@ -116,7 +117,7 @@ mod trade_tick_tests {
 
     #[test]
     fn test_decode_trade_tick_through_wrapper() {
-        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::TickByTick as i32, fixture(1).encode_proto());
+        let mut message = proto_response(crate::messages::IncomingMessages::TickByTick, fixture(1).encode_proto());
         let trade = decode_trade_tick(&mut message).expect("decode failed");
         assert_eq!(trade.price, 3895.25);
     }
@@ -570,7 +571,7 @@ mod market_data_type_tests {
             req_id: Some(9000),
             market_data_type: Some(3),
         };
-        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::MarketDataType as i32, proto_msg.encode_to_vec());
+        let mut message = proto_response(crate::messages::IncomingMessages::MarketDataType, proto_msg.encode_to_vec());
         let context = DecoderContext::new(server_versions::PROTOBUF, None);
 
         match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
@@ -588,7 +589,7 @@ mod market_data_type_tests {
             snapshot_permissions: Some(2),
             ..Default::default()
         };
-        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::TickReqParams as i32, proto_msg.encode_to_vec());
+        let mut message = proto_response(crate::messages::IncomingMessages::TickReqParams, proto_msg.encode_to_vec());
         let context = DecoderContext::new(server_versions::PROTOBUF, None);
 
         match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
