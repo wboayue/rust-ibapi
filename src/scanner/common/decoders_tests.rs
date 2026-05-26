@@ -1,6 +1,5 @@
 use super::*;
 use crate::messages::ResponseMessage;
-use crate::server_versions;
 
 #[test]
 fn test_decode_scanner_data_proto() {
@@ -78,8 +77,7 @@ fn test_decode_scanner_data_rejects_text_framing() {
     // Servers ≥ the connection floor always emit ScannerData in proto.
     // Text-framed arrival skip-classifies via `UnexpectedResponse` (rule 20)
     // rather than terminating the subscription.
-    let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0")
-        .with_server_version(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0");
     let err = decode_scanner_data(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),
@@ -89,7 +87,7 @@ fn test_decode_scanner_data_rejects_text_framing() {
 
 #[test]
 fn test_decode_scanner_parameters_rejects_text_framing() {
-    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0").with_server_version(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0");
     let err = decode_scanner_parameters(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedResponse(_)),

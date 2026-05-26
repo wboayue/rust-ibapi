@@ -185,7 +185,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     pub(crate) async fn read_message(&self) -> Response {
         let data = self.socket.read_message().await?;
 
-        let (message, trace_str) = parse_raw_message(&data, self.server_version());
+        let (message, trace_str) = parse_raw_message(&data);
 
         if let Some(raw_string) = trace_str {
             if log::log_enabled!(log::Level::Debug) {

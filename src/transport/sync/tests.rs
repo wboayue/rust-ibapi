@@ -6,7 +6,7 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 // Additional imports for connection tests
 use crate::client::sync::Client;
-use crate::common::test_utils::helpers::{binary_proto, error_frame};
+use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
 use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
@@ -159,8 +159,7 @@ impl Io for MockSocket {
         if exchange.is_handshake {
             let expected = encode_length(&encoded);
             read_message(&mut expected.as_slice())
-        } else if response.is_protobuf {
-            let raw = response.raw_bytes().unwrap_or_default();
+        } else if let Some(raw) = response.raw_bytes() {
             let msg_id = response.message_type() as i32;
             Ok(crate::messages::encode_protobuf_message(msg_id, raw))
         } else {
@@ -250,21 +249,13 @@ fn managed_accounts_response(accounts: &str) -> ResponseMessage {
         accounts_list: Some(accounts.to_string()),
     }
     .encode_to_vec();
-    ResponseMessage::from_protobuf(
-        crate::messages::IncomingMessages::ManagedAccounts as i32,
-        bytes,
-        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
-    )
+    proto_response(crate::messages::IncomingMessages::ManagedAccounts, bytes)
 }
 
 fn next_valid_id_response(order_id: i32) -> ResponseMessage {
     use prost::Message;
     let bytes = crate::proto::NextValidId { order_id: Some(order_id) }.encode_to_vec();
-    ResponseMessage::from_protobuf(
-        crate::messages::IncomingMessages::NextValidId as i32,
-        bytes,
-        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
-    )
+    proto_response(crate::messages::IncomingMessages::NextValidId, bytes)
 }
 
 #[test]
@@ -279,8 +270,8 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let request = encode_place_order(5, contract, &order)?;
 
     let open_order_proto = |status: &str| {
-        ResponseMessage::from_protobuf(
-            crate::messages::IncomingMessages::OpenOrder as i32,
+        proto_response(
+            crate::messages::IncomingMessages::OpenOrder,
             crate::proto::OpenOrder {
                 order_id: Some(5),
                 order_state: Some(crate::proto::OrderState {
@@ -290,12 +281,11 @@ fn test_bus_send_order_request() -> Result<(), Error> {
                 ..Default::default()
             }
             .encode_to_vec(),
-            sv,
         )
     };
     let order_status_proto = |status: &str, filled: i64| {
-        ResponseMessage::from_protobuf(
-            crate::messages::IncomingMessages::OrderStatus as i32,
+        proto_response(
+            crate::messages::IncomingMessages::OrderStatus,
             crate::proto::OrderStatus {
                 order_id: Some(5),
                 status: Some(status.into()),
@@ -303,11 +293,10 @@ fn test_bus_send_order_request() -> Result<(), Error> {
                 ..Default::default()
             }
             .encode_to_vec(),
-            sv,
         )
     };
-    let execution_data_proto = ResponseMessage::from_protobuf(
-        crate::messages::IncomingMessages::ExecutionData as i32,
+    let execution_data_proto = proto_response(
+        crate::messages::IncomingMessages::ExecutionData,
         crate::proto::ExecutionDetails {
             req_id: Some(-1),
             contract: None,
@@ -318,7 +307,6 @@ fn test_bus_send_order_request() -> Result<(), Error> {
             }),
         }
         .encode_to_vec(),
-        sv,
     );
 
     let events = vec![

@@ -341,7 +341,7 @@ roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
 
-**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 shipped in [#640](https://github.com/wboayue/rust-ibapi/pull/640); D3 pending.**
+**Status: D1 shipped in [#639](https://github.com/wboayue/rust-ibapi/pull/639); D2 shipped in [#640](https://github.com/wboayue/rust-ibapi/pull/640); D3 (conservative subset) open in [#641](https://github.com/wboayue/rust-ibapi/pull/641). D4 follow-up tracked below.**
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
@@ -412,38 +412,94 @@ unreachable.
   `decode_tick_efp` (text-only forever) and the WSH decoders (text branches
   pending migration).
 
-**D3 — delete the dual-format helpers + collapse `ResponseMessage` (depends
-on D1+D2).** With no callers left:
-- `messages::ResponseMessage::is_protobuf` field
-- `messages::ResponseMessage::from(fields: &str)` inherent constructor
-  (audit `stubs.rs:99` and any remaining test-fixture callers; replace with
-  `from_binary_text` equivalent or proto-builder fixtures)
-- `messages::ResponseMessage::from_binary_text` (after `stubs.rs` migration)
-- `messages::ResponseMessage::with_server_version`
-- `messages::ResponseMessage::decode_proto_or_text{,_owned}`
-- `connection::common::parse_raw_message` text branch (full)
+**D3 — drop the dual-format discriminator on `ResponseMessage` (depends on
+D1+D2). Conservative scope: only the targets that are actually unblocked.**
 
-`ResponseMessage` post-D3 is a thin `(IncomingMessages, Bytes)` carrier — at
-that point consider whether to flatten it onto `RoutedItem` directly (out of
-scope, see end of file).
+Shipped in this PR:
+- `messages::ResponseMessage::is_protobuf` field — production no longer reads
+  it; D2 took the last `peek_*` proto/text fork. Framing is now discriminated
+  by `raw_bytes.is_some()` alone.
+- `messages::ResponseMessage::server_version` field — already
+  `#[allow(dead_code)]` at the end of D2.
+- `messages::ResponseMessage::with_server_version` test helper — only two
+  callers in `scanner/common/decoders_tests.rs`, dropped along with the field.
+- `messages::ResponseMessage::from_binary_text` — only production caller was
+  `parse_raw_message`'s text branch; inlined.
+- `parse_raw_message` signature dropped `server_version: i32` (now unused).
+- Test fixtures: `from_protobuf` calls across `errors_tests.rs`,
+  `messages/tests.rs`, `transport/routing_tests.rs`,
+  `transport/sync/tests.rs`, `connection/common_tests.rs`,
+  `market_data/realtime/common/decoders/tests.rs`, and the
+  `common::test_utils::proto_response` helper all drop their trailing
+  `server_version` argument. Three `Error::unexpected_response` struct-literal
+  call sites in `client/error_handler/tests.rs` collapse to
+  `ResponseMessage::from("45\0")`.
+
+Not shipped in D3 (deferred to D4 below):
+- `messages::ResponseMessage::from(fields: &str)` — still load-bearing for
+  ~80 test-fixture callers across the crate and for WSH/TickEFP decoders.
+- `parse_raw_message`'s text branch — still required for inbound TickEFP and
+  WSH messages.
+- Field iteration (`ResponseMessage::fields`) cannot shrink to `[msg_id]`
+  until WSH + TickEFP migrate or retire (D2 noted the same).
+
+`decode_proto_or_text{,_owned}` were already removed in D1.
 
 All three are crate-internal (`ResponseMessage` is `pub(crate)` since PR #581
 per memory `feedback_narrowing_transparency_audit`). No major-version bump
-needed unless an audit finds a leaked public reference. The grep before D3:
-`grep -rn "pub.*ResponseMessage\|pub.*is_protobuf\|pub.*from_binary_text" src/`
-must return zero non-impl hits.
+needed unless an audit finds a leaked public reference.
 
 D1 and D2 ship as separate PRs (cleanly diff-able, independent test surfaces).
-D3 ships last as a single PR to land the field/helper deletions atomically —
-splitting D3 would leave the crate in a half-collapsed intermediate state.
+D3 lands the discriminator-collapse subset; the residual `from(s)` + text
+branch + ~80 text-fixture callers move to D4 below, paired with the WSH +
+TickEFP migration that genuinely unblocks deletion.
+
+### PR-D4 (follow-up) — retire the residual text path
+
+Triggered by D3's conservative scope. To delete `ResponseMessage::from(fields: &str)`,
+`parse_raw_message`'s text branch, and the field-iteration plumbing, the
+following text-only decoders must first migrate or retire:
+
+- **WSH (`decode_wsh_metadata`, `decode_wsh_event_data`)** — proto envelopes
+  already exist (`decode_wsh_metadata_proto`, `decode_wsh_event_data_proto`)
+  in `src/wsh/common/decoders.rs`. Verify against C# `EDecoder.cs` and
+  `Constants.cs::PROTOBUF_MSG_IDS` that TWS at floor 213 actually emits these
+  proto-framed. If yes: wire through `require_proto()`, delete text decoders,
+  migrate `wsh/{common,sync,async}_tests.rs` fixtures to `proto_response`.
+- **`decode_tick_efp`** in `src/market_data/realtime/common/decoders/mod.rs` —
+  TWS has no protobuf encoder for TickEFP per the comment at
+  `src/messages.rs:395-397`. Two options: (a) retire the decoder + the
+  `TickEFP` enum variant if no consumers exist (out-of-scope public API
+  removal), or (b) keep TickEFP routing as the lone text fallback in
+  `parse_raw_message` (smaller residual surface but `from(s)` still needed).
+
+After (or alongside) those migrations:
+
+- Delete `messages::ResponseMessage::from(fields: &str)` and the matching
+  `from_simple` test helper.
+- Delete `parse_raw_message`'s text branch (or its entire body if all paths
+  proto).
+- Delete `ResponseMessage::fields`, `peek_int`, `next_*`, `skip`, `encode`
+  — every consumer feeding the text path goes away with WSH/TickEFP.
+- Migrate the ~80 `ResponseMessage::from("…")` test fixtures across
+  `accounts/`, `contracts/`, `news/`, `orders/`, `display_groups/`,
+  `connection/`, `subscriptions/`, `client/`, `errors_tests.rs`, etc. to
+  `proto_response(IncomingMessages::X, builder.encode_proto())`. Many of
+  these test proto-only decoders already; the text fixture is dead weight
+  past D3.
+- Drop `MessageBusStub::response_messages: Vec<String>` in favor of the
+  `ordered_responses` flow; rewrite `stubs.rs:99` to no longer call `from(s)`.
+
+At that point `ResponseMessage` becomes a thin `(IncomingMessages, Bytes)`
+carrier — see the "Out of scope (after PR-D)" section for the optional
+flatten-onto-`RoutedItem` refactor.
 
 ## Open questions / risks
 
-1. **`from_binary_text` is used in the PR-A test fixture.** Intentional —
-   constructs a `ResponseMessage` from proto bytes for testing. After D3
-   this helper goes away; the PR-A test (and any other testdata-using
-   fixtures) need rewriting to use a `MessageBusStub` + `proto_response(...)`
-   shape. Tracked in D3's `stubs.rs` migration note.
+1. **`from_binary_text` is used in the PR-A test fixture.** Resolved in D3:
+   the helper went away when `parse_raw_message`'s text branch was inlined.
+   The PR-A test fixture (and the sibling `proto_response` helper) use
+   `from_protobuf(msg_type as i32, bytes)` instead.
 
 ## /simplify follow-ups (deferred from per-PR review)
 

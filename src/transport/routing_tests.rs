@@ -1,6 +1,7 @@
 use prost::Message;
 
 use super::*;
+use crate::common::test_utils::helpers::proto_response;
 use crate::messages::ResponseMessage;
 
 #[test]
@@ -82,7 +83,7 @@ fn test_determine_routing_error_protobuf_malformed() {
     // Garbage bytes that aren't a valid ErrorMessage proto fall back to Default,
     // which sets request_id = UNSPECIFIED_REQUEST_ID (not 0).
     let raw_bytes = vec![0xFFu8; 16];
-    let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::Error, raw_bytes);
 
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => {
@@ -119,7 +120,7 @@ fn test_determine_routing_error_protobuf() {
     let mut raw_bytes = Vec::new();
     prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
 
-    let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::Error, raw_bytes);
 
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => {
@@ -146,7 +147,7 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
     let mut raw_bytes = Vec::new();
     prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
 
-    let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::Error, raw_bytes);
 
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => {
@@ -197,21 +198,19 @@ fn test_is_warning_error() {
 /// (Cases with a real `order_id` are covered by the per-type proto tests below.)
 #[test]
 fn test_order_message_routing_without_order_id_returns_sentinel() {
-    let completed_orders_end =
-        ResponseMessage::from_protobuf(IncomingMessages::CompletedOrdersEnd as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    let completed_orders_end = proto_response(IncomingMessages::CompletedOrdersEnd, Vec::new());
     match determine_routing(&completed_orders_end) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
     }
 
-    let commission_report = ResponseMessage::from_protobuf(
-        IncomingMessages::CommissionsReport as i32,
+    let commission_report = proto_response(
+        IncomingMessages::CommissionsReport,
         crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec123".into()),
             ..Default::default()
         }
         .encode_to_vec(),
-        crate::server_versions::PROTOBUF,
     );
     match determine_routing(&commission_report) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
@@ -229,7 +228,7 @@ fn test_determine_routing_protobuf_open_order() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::OpenOrder, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
         routing => panic!("Expected ByOrderId(58), got {routing:?}"),
@@ -244,7 +243,7 @@ fn test_determine_routing_protobuf_order_status() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::OrderStatus, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
         routing => panic!("Expected ByOrderId(58), got {routing:?}"),
@@ -264,7 +263,7 @@ fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
         }),
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::ExecutionData, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
         routing => panic!("Expected ByOrderId(58), got {routing:?}"),
@@ -274,7 +273,7 @@ fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
 #[test]
 fn test_determine_routing_protobuf_execution_data_end() {
     let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(7) }.encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::ExecutionDataEnd, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 7),
         routing => panic!("Expected ByOrderId(7), got {routing:?}"),
@@ -291,7 +290,7 @@ fn test_determine_routing_protobuf_commissions_report_no_order_id() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::CommissionsReport, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1), got {routing:?}"),
@@ -306,7 +305,7 @@ fn test_determine_routing_protobuf_request_id_message() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::AccountSummary as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = proto_response(IncomingMessages::AccountSummary, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByRequestId(id) => assert_eq!(id, 314),
         routing => panic!("Expected ByRequestId(314), got {routing:?}"),

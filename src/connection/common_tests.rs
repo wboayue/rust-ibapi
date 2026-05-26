@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::proto_error_response;
+use crate::common::test_utils::helpers::{proto_error_response, proto_response};
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
@@ -108,7 +108,6 @@ fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
 
 #[test]
 fn test_dispatch_unsolicited_account_value_typed() {
-    use crate::common::test_utils::helpers::proto_response;
     use crate::messages::IncomingMessages;
     use crate::testdata::builders::accounts::account_value;
     use crate::testdata::builders::ResponseProtoEncoder;
@@ -256,7 +255,7 @@ fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
     // NextValidId is consumed internally — neither callback fires.
     let handler = ConnectionHandler::default();
     let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::NextValidId, bytes);
 
     let fired = Arc::new(Mutex::new(false));
     let fired_clone = fired.clone();
@@ -278,7 +277,7 @@ fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
         accounts_list: Some("DU123".to_string()),
     }
     .encode_to_vec();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, bytes, TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::ManagedAccounts, bytes);
 
     let fired = Arc::new(Mutex::new(false));
     let fired_clone = fired.clone();
@@ -313,7 +312,7 @@ fn test_parse_account_info_multiple_messages_callback() {
 
     // Third message: NextValidId (consumed internally — should NOT trigger callback)
     let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
-    let mut msg3 = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
+    let mut msg3 = proto_response(IncomingMessages::NextValidId, bytes);
     handler.parse_account_info(TEST_SERVER_VERSION, &mut msg3, &cbs).unwrap();
 
     assert_eq!(*count.lock().unwrap(), 2, "callback should be invoked exactly twice");
@@ -518,8 +517,8 @@ fn test_parse_raw_message_protobuf() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(&payload);
 
-    let (message, trace_str) = parse_raw_message(&data, server_versions::PROTOBUF);
-    assert!(message.is_protobuf);
+    let (message, trace_str) = parse_raw_message(&data);
+    assert!(message.raw_bytes().is_some(), "protobuf framing must populate raw_bytes");
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
     assert_eq!(message.raw_bytes(), Some(payload.as_slice()));
     assert!(trace_str.is_none()); // no trace string for protobuf
@@ -533,8 +532,8 @@ fn test_parse_raw_message_binary_id_text_payload() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(text_payload);
 
-    let (message, trace_str) = parse_raw_message(&data, server_versions::PROTOBUF);
-    assert!(!message.is_protobuf);
+    let (message, trace_str) = parse_raw_message(&data);
+    assert!(message.raw_bytes().is_none(), "text framing must leave raw_bytes empty");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert_eq!(message.fields[1], "1"); // version field
     assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
@@ -632,7 +631,7 @@ fn test_parse_account_info_next_valid_id_protobuf() {
     let handler = ConnectionHandler::default();
     let proto = crate::proto::NextValidId { order_id: Some(4242) };
     let bytes = proto.encode_to_vec();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, bytes, TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::NextValidId, bytes);
 
     let info = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
@@ -650,7 +649,7 @@ fn test_parse_account_info_managed_accounts_protobuf() {
         accounts_list: Some("DU111,DU222".to_string()),
     };
     let bytes = proto.encode_to_vec();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, bytes, TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::ManagedAccounts, bytes);
 
     let info = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
@@ -663,7 +662,7 @@ fn test_parse_account_info_managed_accounts_protobuf() {
 fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
     // Garbage bytes for the NextValidId proto envelope.
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::NextValidId as i32, vec![0xff, 0xff, 0xff], TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::NextValidId, vec![0xff, 0xff, 0xff]);
 
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
@@ -674,7 +673,7 @@ fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
 #[test]
 fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, vec![0xff, 0xff, 0xff], TEST_SERVER_VERSION);
+    let mut message = proto_response(IncomingMessages::ManagedAccounts, vec![0xff, 0xff, 0xff]);
 
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
@@ -711,7 +710,6 @@ fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
 
 #[test]
 fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
-    use crate::common::test_utils::helpers::proto_response;
     use crate::messages::IncomingMessages;
     use crate::testdata::builders::accounts::account_value;
     use crate::testdata::builders::ResponseProtoEncoder;
@@ -733,7 +731,6 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
 
 #[test]
 fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
-    use crate::common::test_utils::helpers::proto_response;
     use crate::messages::IncomingMessages;
 
     // Garbage proto bytes for AccountValue: prost::DecodeError surfaces as a synthesized notice.
@@ -758,7 +755,7 @@ fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
 
 /// Build a proto-frame ResponseMessage for the given testdata builder.
 fn proto_frame<B: crate::testdata::builders::ResponseProtoEncoder>(kind: IncomingMessages, builder: &B) -> ResponseMessage {
-    ResponseMessage::from_protobuf(kind as i32, builder.encode_proto(), TEST_SERVER_VERSION)
+    proto_response(kind, builder.encode_proto())
 }
 
 #[test]

@@ -380,24 +380,29 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 
 /// Parse raw message bytes into a `ResponseMessage`, returning an optional debug string for tracing.
 ///
-/// Post-floor-213, every message frame is `[4-byte BE msg_id][payload]`. When the
-/// 4-byte binary message ID exceeds [`PROTOBUF_MSG_ID`], the payload is
-/// protobuf-encoded; otherwise it is NUL-delimited text (binary-text-payload
-/// branch — slated for removal in PR-D3 once all binary-text message types are
-/// proto-only).
-pub fn parse_raw_message(data: &[u8], server_version: i32) -> (ResponseMessage, Option<String>) {
+/// Every message frame is `[4-byte BE msg_id][payload]`. When the 4-byte
+/// binary message ID exceeds [`PROTOBUF_MSG_ID`], the payload is
+/// protobuf-encoded; otherwise it is NUL-delimited text carrying a WSH
+/// metadata/event-data or `TickEFP` payload.
+pub fn parse_raw_message(data: &[u8]) -> (ResponseMessage, Option<String>) {
     let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
 
     if msg_id > PROTOBUF_MSG_ID {
         let real_type = msg_id - PROTOBUF_MSG_ID;
         debug!("<- protobuf msg_id={real_type}");
-        let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version);
+        let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec());
         (message, None)
     } else {
         // Binary message ID, NUL-delimited text payload.
         let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
         debug!("<- {raw_string:?}");
-        let message = ResponseMessage::from_binary_text(msg_id, &raw_string, server_version);
+        let mut fields = vec![msg_id.to_string()];
+        fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
+        let message = ResponseMessage {
+            i: 0,
+            fields,
+            raw_bytes: None,
+        };
         (message, Some(raw_string))
     }
 }

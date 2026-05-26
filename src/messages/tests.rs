@@ -322,7 +322,7 @@ fn test_execution_id_protobuf_commissions_report() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes);
     assert_eq!(message.execution_id(), Some("exec-proto-1".to_string()));
 }
 
@@ -337,13 +337,13 @@ fn test_execution_id_protobuf_execution_data() {
         }),
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes);
     assert_eq!(message.execution_id(), Some("exec-proto-2".to_string()));
 }
 
 #[test]
 fn test_execution_id_protobuf_unknown_message_type_returns_none() {
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new());
     assert_eq!(message.execution_id(), None);
 }
 
@@ -354,7 +354,7 @@ fn test_order_id_protobuf_open_order() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes);
     assert_eq!(message.order_id(), Some(42));
 }
 
@@ -366,7 +366,7 @@ fn test_order_id_protobuf_order_status() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes);
     assert_eq!(message.order_id(), Some(99));
 }
 
@@ -383,7 +383,7 @@ fn test_order_id_protobuf_execution_data_nested() {
         }),
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes);
     assert_eq!(message.order_id(), Some(123));
     assert_eq!(message.request_id(), Some(7));
 }
@@ -394,7 +394,7 @@ fn test_order_id_protobuf_execution_data_end() {
     // that value because routing keys this message family by order_id and the
     // proto schema overloads the field.
     let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(55) }.encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes);
     assert_eq!(message.order_id(), Some(55));
 }
 
@@ -402,33 +402,15 @@ fn test_order_id_protobuf_execution_data_end() {
 fn test_request_id_protobuf_tag1() {
     // HistoricalDataEnd-shaped envelope: just req_id at tag 1.
     let bytes = ProtoIdEnvelope { id: Some(314) }.encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::HistoricalDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::HistoricalDataEnd as i32, bytes);
     assert_eq!(message.request_id(), Some(314));
 }
 
 #[test]
 fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
     // OpenOrder has no entry in request_id_index → None regardless of payload.
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new());
     assert_eq!(message.request_id(), None);
-}
-
-#[test]
-fn test_proto_accessors_with_missing_raw_bytes_return_none() {
-    // Defensive: if `is_protobuf` is set but `raw_bytes` was somehow not
-    // populated (shouldn't happen via `from_protobuf` but a manually-built
-    // ResponseMessage could land in this state), all proto-aware accessors
-    // must short-circuit to None rather than decode garbage.
-    let message = ResponseMessage {
-        i: 0,
-        fields: vec![(IncomingMessages::ExecutionData as i32).to_string()],
-        server_version: crate::server_versions::PROTOBUF,
-        is_protobuf: true,
-        raw_bytes: None,
-    };
-    assert_eq!(message.request_id(), None);
-    assert_eq!(message.order_id(), None);
-    assert_eq!(message.execution_id(), None);
 }
 
 #[test]

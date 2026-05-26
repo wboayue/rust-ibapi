@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::tws_error_notice;
+use crate::common::test_utils::helpers::{proto_response, tws_error_notice};
 use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::builder::ValidationError;
@@ -9,8 +9,6 @@ use std::io;
 use std::sync::{Mutex, PoisonError};
 use time::macros::format_description;
 use time::Time;
-
-const ERROR_MSG_TYPE: i32 = IncomingMessages::Error as i32;
 
 fn parse_time_error() -> time::error::Parse {
     Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err()
@@ -137,7 +135,7 @@ fn from_protobuf_response_message_decodes_envelope() {
         advanced_order_reject_json: None,
     };
     let raw = prost::Message::encode_to_vec(&envelope);
-    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, raw, crate::server_versions::PROTOBUF);
+    let msg = proto_response(IncomingMessages::Error, raw);
     let error: Error = msg.into();
     assert!(matches!(error, Error::Notice(ref n) if n.code == 2104 && n.message == "Market data farm OK"));
 }
@@ -145,7 +143,7 @@ fn from_protobuf_response_message_decodes_envelope() {
 #[test]
 fn from_protobuf_response_message_falls_back_when_decode_fails() {
     // Bad protobuf bytes -> falls back to text accessors (both default to 0 / empty).
-    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, vec![0xff, 0xff, 0xff, 0xff], crate::server_versions::PROTOBUF);
+    let msg = proto_response(IncomingMessages::Error, vec![0xff, 0xff, 0xff, 0xff]);
     let error: Error = msg.into();
     assert!(matches!(error, Error::Notice(ref n) if n.code == 0));
 }
