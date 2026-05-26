@@ -128,13 +128,6 @@ fn from_protobuf_decode_error() {
 }
 
 #[test]
-fn from_text_response_message_extracts_code_and_message() {
-    let msg = ResponseMessage::from("4\02\0-1\0200\0No security found\0");
-    let error: Error = msg.into();
-    assert!(matches!(error, Error::Notice(ref n) if n.code == 200 && n.message == "No security found"));
-}
-
-#[test]
 fn from_protobuf_response_message_decodes_envelope() {
     let envelope = crate::proto::ErrorMessage {
         id: Some(7),

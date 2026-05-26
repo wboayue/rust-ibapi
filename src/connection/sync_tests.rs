@@ -6,7 +6,7 @@ use time_tz::timezones;
 
 use super::*;
 use crate::client::sync::Client;
-use crate::common::test_utils::helpers::{managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::sync::{MemoryStream, TcpMessageBus};
@@ -144,7 +144,7 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
+    stream.push_inbound(error_frame(-1, 2104, "farm OK"));
     stream.push_inbound(next_valid_id_frame(90));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 
@@ -156,7 +156,7 @@ fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     // Second handshake (simulating post-reconnect): same shape.
     stream.push_inbound(handshake_bytes);
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02106\0HMDS farm OK\0"));
+    stream.push_inbound(error_frame(-1, 2106, "HMDS farm OK"));
     stream.push_inbound(next_valid_id_frame(91));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 

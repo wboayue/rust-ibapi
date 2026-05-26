@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use super::*;
-use crate::common::test_utils::helpers::{managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -171,7 +171,7 @@ async fn builder_connect_with_notice_stream_captures_handshake_notice() {
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
     frames.push(next_valid_id_frame(9000));
-    frames.push(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
+    frames.push(error_frame(-1, 2104, "farm OK"));
     frames.push(managed_accounts_frame("DU1234567"));
 
     let (addr, _h) = spawn_handshake_listener(frames).await;

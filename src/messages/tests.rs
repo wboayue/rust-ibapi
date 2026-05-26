@@ -298,7 +298,7 @@ fn test_request_id_index_invalid() {
 
 #[test]
 fn test_notice() {
-    let message = ResponseMessage::from("4\02\0-1\02107\0HMDS data farm connection is inactive.\0");
+    let message = crate::common::test_utils::helpers::proto_error_response(-1, 2107, "HMDS data farm connection is inactive.");
 
     let notice = Notice::from(&message);
 
@@ -1084,42 +1084,34 @@ fn test_channel_mappings_completeness() {
 fn test_notice_edge_cases() {
     struct TestCase {
         name: &'static str,
-        input: &'static str,
-        expected_code: i32,
-        expected_message: &'static str,
+        code: i32,
+        msg: &'static str,
     }
 
     let test_cases = vec![
         TestCase {
             name: "normal_error",
-            input: "4\02\0-1\02107\0HMDS data farm connection is inactive.\0",
-            expected_code: 2107,
-            expected_message: "HMDS data farm connection is inactive.",
+            code: 2107,
+            msg: "HMDS data farm connection is inactive.",
         },
         TestCase {
             name: "empty_message",
-            input: "4\02\0-1\01000\0\0",
-            expected_code: 1000,
-            expected_message: "",
+            code: 1000,
+            msg: "",
         },
         TestCase {
             name: "negative_code",
-            input: "4\02\0-1\0-500\0Negative error code\0",
-            expected_code: -500,
-            expected_message: "Negative error code",
+            code: -500,
+            msg: "Negative error code",
         },
     ];
 
     for test_case in test_cases {
-        let message = ResponseMessage::from(test_case.input);
+        let message = crate::common::test_utils::helpers::proto_error_response(-1, test_case.code, test_case.msg);
         let notice = Notice::from(&message);
 
-        assert_eq!(notice.code, test_case.expected_code, "Test '{}' failed: wrong error code", test_case.name);
-        assert_eq!(
-            notice.message, test_case.expected_message,
-            "Test '{}' failed: wrong error message",
-            test_case.name
-        );
+        assert_eq!(notice.code, test_case.code, "Test '{}' failed: wrong error code", test_case.name);
+        assert_eq!(notice.message, test_case.msg, "Test '{}' failed: wrong error message", test_case.name);
     }
 }
 

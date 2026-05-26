@@ -380,28 +380,24 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 
 /// Parse raw message bytes into a `ResponseMessage`, returning an optional debug string for tracing.
 ///
-/// When `server_version >= PROTOBUF` and the 4-byte binary message ID exceeds 200,
-/// the payload is protobuf-encoded. Otherwise the payload is NUL-delimited text.
+/// Post-floor-213, every message frame is `[4-byte BE msg_id][payload]`. When the
+/// 4-byte binary message ID exceeds [`PROTOBUF_MSG_ID`], the payload is
+/// protobuf-encoded; otherwise it is NUL-delimited text (binary-text-payload
+/// branch — slated for removal in PR-D3 once all binary-text message types are
+/// proto-only).
 pub fn parse_raw_message(data: &[u8], server_version: i32) -> (ResponseMessage, Option<String>) {
-    if server_version >= server_versions::PROTOBUF && data.len() >= 4 {
-        let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+    let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
 
-        if msg_id > PROTOBUF_MSG_ID {
-            let real_type = msg_id - PROTOBUF_MSG_ID;
-            debug!("<- protobuf msg_id={real_type}");
-            let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version);
-            (message, None)
-        } else {
-            // Binary message ID but text payload
-            let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
-            debug!("<- {raw_string:?}");
-            let message = ResponseMessage::from_binary_text(msg_id, &raw_string, server_version);
-            (message, Some(raw_string))
-        }
+    if msg_id > PROTOBUF_MSG_ID {
+        let real_type = msg_id - PROTOBUF_MSG_ID;
+        debug!("<- protobuf msg_id={real_type}");
+        let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version);
+        (message, None)
     } else {
-        let raw_string = String::from_utf8_lossy(data).into_owned();
+        // Binary message ID, NUL-delimited text payload.
+        let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
         debug!("<- {raw_string:?}");
-        let message = ResponseMessage::from(&raw_string).with_server_version(server_version);
+        let message = ResponseMessage::from_binary_text(msg_id, &raw_string, server_version);
         (message, Some(raw_string))
     }
 }

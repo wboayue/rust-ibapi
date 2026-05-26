@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_tws_error_message, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+    assert_request, assert_tws_error_message, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::common::test_tables::*;
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
@@ -500,8 +500,10 @@ async fn test_cancel_contract_details() {
 
 #[tokio::test]
 async fn contract_details_returns_server_error() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
-        "4|2|9000|200|No security definition found|",
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        200,
+        "No security definition found",
     )]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("INVALID").build();

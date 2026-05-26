@@ -194,8 +194,8 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        if let Some(Ok(mut message)) = subscription.next() {
-            let next_order_id = decoders::decode_next_valid_id(&mut message)?;
+        if let Some(Ok(message)) = subscription.next() {
+            let next_order_id = decoders::decode_next_valid_id(&message)?;
 
             self.set_next_order_id(next_order_id);
 

@@ -864,7 +864,11 @@ pub(crate) struct ResponseMessage {
     pub i: usize,
     /// Raw field buffer backing this message.
     pub fields: Vec<String>,
-    /// Server version for version-gated decoding (e.g. error message format).
+    /// Server version stored with the message for version-gated decoding.
+    /// Reads disappeared with the text error accessors in PR-D1; D3 deletes
+    /// the field itself once `from_protobuf` / `from_binary_text` stop
+    /// plumbing it.
+    #[allow(dead_code)]
     pub server_version: i32,
     /// True when the message payload is protobuf-encoded.
     pub is_protobuf: bool,
@@ -909,22 +913,6 @@ impl ResponseMessage {
     /// subscription.
     pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
-    }
-
-    /// Dispatch decoding based on whether the message is protobuf or text.
-    pub fn decode_proto_or_text<T>(
-        &mut self,
-        proto_decoder: impl FnOnce(&[u8]) -> Result<T, crate::Error>,
-        text_decoder: impl FnOnce(&mut Self) -> Result<T, crate::Error>,
-    ) -> Result<T, crate::Error> {
-        if self.is_protobuf {
-            let bytes = self
-                .raw_bytes()
-                .ok_or_else(|| crate::Error::InvalidArgument("missing protobuf bytes".into()))?;
-            proto_decoder(bytes)
-        } else {
-            text_decoder(self)
-        }
     }
 
     /// Number of fields present in the message.
@@ -1024,19 +1012,6 @@ impl ResponseMessage {
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
             return Err(Error::eof_at(i, "int"));
-        }
-
-        let field = &self.fields[i];
-        match field.parse() {
-            Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
-        }
-    }
-
-    /// Peek a long field without advancing the cursor.
-    pub fn peek_long(&self, i: usize) -> Result<i64, Error> {
-        if i >= self.fields.len() {
-            return Err(Error::eof_at(i, "long"));
         }
 
         let field = &self.fields[i];
@@ -1222,72 +1197,6 @@ impl ResponseMessage {
         }
     }
 
-    /// Offset applied to error field indices based on server version.
-    /// New format (>= ERROR_TIME) drops the version field, shifting indices by -1.
-    fn error_field_offset(&self) -> usize {
-        if self.server_version >= crate::server_versions::ERROR_TIME {
-            0
-        } else {
-            1
-        }
-    }
-
-    /// Field index of the request ID in an error message.
-    pub fn error_request_id_index(&self) -> usize {
-        1 + self.error_field_offset()
-    }
-
-    /// Field index of the error code in an error message.
-    pub fn error_code_index(&self) -> usize {
-        2 + self.error_field_offset()
-    }
-
-    /// Field index of the error message text in an error message.
-    pub fn error_message_index(&self) -> usize {
-        3 + self.error_field_offset()
-    }
-
-    /// Extract the request ID from an error message.
-    pub fn error_request_id(&self) -> i32 {
-        self.peek_int(self.error_request_id_index()).unwrap_or(-1)
-    }
-
-    /// Extract the error code from an error message.
-    pub fn error_code(&self) -> i32 {
-        self.peek_int(self.error_code_index()).unwrap_or(0)
-    }
-
-    /// Extract the error message text from an error message.
-    pub fn error_message(&self) -> String {
-        let idx = self.error_message_index();
-        self.peek_string(idx).unwrap_or_else(|_| String::from("Unknown error"))
-    }
-
-    /// Extract the error timestamp from an error message.
-    /// Only present for server versions >= ERROR_TIME.
-    pub fn error_time(&self) -> Option<OffsetDateTime> {
-        if self.server_version >= crate::server_versions::ERROR_TIME {
-            // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
-            let idx = self.error_message_index() + 2;
-            let millis = self.peek_long(idx).ok()?;
-            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok()
-        } else {
-            None
-        }
-    }
-
-    /// Extract the advanced order-reject JSON from an error message. Empty
-    /// for old-format messages (server_version < ERROR_TIME) where the field
-    /// doesn't exist, or when the field is absent in the new format.
-    pub fn advanced_order_reject_json(&self) -> String {
-        if self.server_version < crate::server_versions::ERROR_TIME {
-            return String::new();
-        }
-        // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
-        let idx = self.error_message_index() + 1;
-        self.peek_string(idx).unwrap_or_default()
-    }
-
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
@@ -1311,6 +1220,9 @@ impl ResponseMessage {
     }
 
     /// Set the server version for version-gated decoding (builder style).
+    /// Test-only post-floor-213; `parse_raw_message` always plumbs the version
+    /// at construction time. D3 deletes the helper outright.
+    #[cfg(test)]
     pub fn with_server_version(mut self, server_version: i32) -> Self {
         self.server_version = server_version;
         self
@@ -1489,25 +1401,15 @@ pub enum NoticeCategory {
 }
 
 impl From<&ResponseMessage> for Notice {
-    /// Build a Notice from either wire format. The protobuf branch preserves
-    /// `error_time` (millis → OffsetDateTime) via the dispatcher's envelope
-    /// decoder, which the text accessors can't recover.
+    /// Build a Notice from a protobuf Error frame; at floor 213 every Error
+    /// payload arrives proto-encoded. Returns `Notice::from(DecodedError::default())`
+    /// (empty / code 0) if the proto bytes are absent or undecodable.
     fn from(message: &ResponseMessage) -> Notice {
-        if message.is_protobuf {
-            if let Some(notice) = message
-                .raw_bytes()
-                .and_then(crate::transport::routing::decode_error_envelope)
-                .map(Notice::from)
-            {
-                return notice;
-            }
-        }
-        Notice {
-            code: message.error_code(),
-            message: message.error_message(),
-            error_time: message.error_time(),
-            advanced_order_reject_json: message.advanced_order_reject_json(),
-        }
+        let payload = message
+            .raw_bytes()
+            .and_then(crate::transport::routing::decode_error_envelope)
+            .unwrap_or_default();
+        Notice::from(payload)
     }
 }
 

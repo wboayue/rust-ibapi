@@ -80,8 +80,8 @@ impl Client {
         let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
 
         match internal_subscription.next().await {
-            Some(Ok(mut message)) => {
-                let next_order_id = decoders::decode_next_valid_id(&mut message)?;
+            Some(Ok(message)) => {
+                let next_order_id = decoders::decode_next_valid_id(&message)?;
 
                 self.set_next_order_id(next_order_id);
 

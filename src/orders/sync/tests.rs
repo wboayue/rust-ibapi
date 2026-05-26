@@ -212,7 +212,11 @@ fn global_cancel_cme_tagging() {
 
 #[test]
 fn next_valid_order_id() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["9|1|43||".to_owned()]));
+    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(43) };
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        prost::Message::encode_to_vec(&next_valid_id_proto),
+    )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.next_valid_order_id();

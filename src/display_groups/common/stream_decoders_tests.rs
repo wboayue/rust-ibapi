@@ -44,8 +44,8 @@ fn test_decode_wrong_message_type() {
 fn test_decode_error_message_surfaces_tws_error() {
     // Error on the request_id channel surfaces as Error::Notice, not silently
     // skipped via UnexpectedResponse (#434).
-    use crate::common::test_utils::helpers::assert_tws_error_message;
-    let mut message = ResponseMessage::from("4\02\09000\010089\0Requested market data is not subscribed\0");
+    use crate::common::test_utils::helpers::{assert_tws_error_message, proto_error_response};
+    let mut message = proto_error_response(9000, 10089, "Requested market data is not subscribed");
     let err = DisplayGroupUpdate::decode(&test_context(), &mut message).unwrap_err();
     assert_tws_error_message(err, 10089, "not subscribed");
 }
