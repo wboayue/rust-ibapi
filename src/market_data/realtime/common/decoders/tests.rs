@@ -1,9 +1,11 @@
 use super::*;
 use crate::messages::ResponseMessage;
+use crate::server_versions;
 use crate::subscriptions::DecoderContext;
 use crate::testdata::builders::market_data::{
-    bid_ask_tick, market_depth_response, mid_point_tick, realtime_bar_tick, tick_generic, tick_price, tick_size, tick_string, trade_tick,
-    BidAskTickResponse, MidPointTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
+    bid_ask_tick, depth_market_data_description, market_depth_response, mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick,
+    tick_generic, tick_price, tick_size, tick_string, trade_tick, BidAskTickResponse, MidPointTickResponse, TickGenericResponse, TickPriceResponse,
+    TickSizeResponse, TickStringResponse, TradeTickResponse,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use time::OffsetDateTime;
@@ -296,26 +298,26 @@ mod market_depth_tests {
 
     #[test]
     fn test_decode_market_depth_exchanges_proto() {
-        let proto_msg = crate::proto::MarketDepthExchanges {
-            depth_market_data_descriptions: vec![
-                crate::proto::DepthMarketDataDescription {
-                    exchange: Some("ISLAND".into()),
-                    sec_type: Some("STK".into()),
-                    listing_exch: Some("NASDAQ".into()),
-                    service_data_type: Some("DEEP2".into()),
-                    agg_group: Some(1),
-                },
-                crate::proto::DepthMarketDataDescription {
-                    exchange: Some("NYSE".into()),
-                    sec_type: Some("STK".into()),
-                    listing_exch: Some("NYSE".into()),
-                    service_data_type: Some("DEEP".into()),
-                    agg_group: Some(1),
-                },
-            ],
-        };
+        let bytes = mkt_depth_exchanges_response()
+            .description(
+                depth_market_data_description()
+                    .exchange("ISLAND")
+                    .sec_type("STK")
+                    .listing_exchange("NASDAQ")
+                    .service_data_type("DEEP2")
+                    .aggregated_group(1),
+            )
+            .description(
+                depth_market_data_description()
+                    .exchange("NYSE")
+                    .sec_type("STK")
+                    .listing_exchange("NYSE")
+                    .service_data_type("DEEP")
+                    .aggregated_group(1),
+            )
+            .encode_proto();
 
-        let exchanges = decode_market_depth_exchanges_proto(&proto_msg.encode_to_vec()).expect("decode failed");
+        let exchanges = decode_market_depth_exchanges_proto(&bytes).expect("decode failed");
         assert_eq!(exchanges.len(), 2);
         assert_eq!(exchanges[0].exchange_name, "ISLAND");
         assert_eq!(exchanges[0].listing_exchange, "NASDAQ");
@@ -325,25 +327,10 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_exchanges_text_path() {
-        // Stays dual-format until floor 213; text path still active.
-        let mut message = ResponseMessage::from("71\02\0ISLAND\0STK\0NASDAQ\0DEEP2\01\0NYSE\0STK\0NYSE\0DEEP\01\0");
-        let exchanges = decode_market_depth_exchanges(server_versions::SERVICE_DATA_TYPE, &mut message).expect("decode failed");
-        assert_eq!(exchanges.len(), 2);
-        assert_eq!(exchanges[0].exchange_name, "ISLAND");
-        assert_eq!(exchanges[0].service_data_type, "DEEP2");
-    }
-
-    #[test]
-    fn test_decode_market_depth_exchanges_text_path_old_version() {
-        let mut message = ResponseMessage::from("71\02\0ISLAND\0STK\01\0NYSE\0STK\00\0");
-        let exchanges = decode_market_depth_exchanges(server_versions::SERVICE_DATA_TYPE - 1, &mut message).expect("decode failed");
-        assert_eq!(exchanges.len(), 2);
-        let first = &exchanges[0];
-        assert_eq!(first.exchange_name, "ISLAND");
-        assert_eq!(first.service_data_type, "Deep2");
-        assert_eq!(first.listing_exchange, "");
-        assert_eq!(first.aggregated_group, None);
+    fn test_decode_market_depth_exchanges_rejects_text_framing() {
+        let message = ResponseMessage::from("71\02\0ISLAND\0STK\0NASDAQ\0DEEP2\01\0NYSE\0STK\0NYSE\0DEEP\01\0");
+        let err = decode_market_depth_exchanges(&message).unwrap_err();
+        assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
     }
 }
 

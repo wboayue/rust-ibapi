@@ -8,8 +8,9 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
-    bid_ask_tick, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response, mid_point_tick,
-    realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
+    bid_ask_tick, depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
+    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price,
+    tick_size, tick_string, trade_tick,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -491,20 +492,34 @@ async fn test_market_depth() {
 
 #[tokio::test]
 async fn test_market_depth_exchanges() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["71|2|ISLAND|STK|NASDAQ|DEEP2|1|NYSE|STK|NYSE|DEEP|1|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::MktDepthExchanges,
+        mkt_depth_exchanges_response()
+            .description(
+                depth_market_data_description()
+                    .exchange("ISLAND")
+                    .sec_type("STK")
+                    .listing_exchange("NASDAQ")
+                    .service_data_type("DEEP2")
+                    .aggregated_group(1),
+            )
+            .description(
+                depth_market_data_description()
+                    .exchange("NYSE")
+                    .sec_type("STK")
+                    .listing_exchange("NYSE")
+                    .service_data_type("DEEP")
+                    .aggregated_group(1),
+            )
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SERVICE_DATA_TYPE);
 
-    // Test request execution
     let exchanges = client.market_depth_exchanges().await.expect("Failed to request market depth exchanges");
 
     assert_eq!(exchanges.len(), 2, "Should receive 2 exchange descriptions");
 
-    // Verify first exchange
     let first = &exchanges[0];
     assert_eq!(first.exchange_name, "ISLAND", "Wrong exchange name");
     assert_eq!(first.security_type, "STK", "Wrong security type");
@@ -512,7 +527,6 @@ async fn test_market_depth_exchanges() {
     assert_eq!(first.service_data_type, "DEEP2", "Wrong service data type");
     assert_eq!(first.aggregated_group, Some("1".to_string()), "Wrong aggregated group");
 
-    // Verify second exchange
     let second = &exchanges[1];
     assert_eq!(second.exchange_name, "NYSE", "Wrong exchange name");
     assert_eq!(second.security_type, "STK", "Wrong security type");

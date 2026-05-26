@@ -1089,6 +1089,7 @@ impl ResponseMessage {
     }
 
     /// Consume the next field as a boolean (`"0"` or `"1"`).
+    #[allow(dead_code)] // test-only since text decoder for market_depth_exchanges is proto-only post-floor-213
     pub fn next_bool(&mut self) -> Result<bool, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::eof_at(self.i, "bool"));
