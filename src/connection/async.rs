@@ -100,6 +100,14 @@ impl<S: AsyncStream> AsyncConnection<S> {
         Self::with_socket(socket, client_id, None, notice_sender)
     }
 
+    /// Pin a post-handshake server version on a stubbed connection so
+    /// `parse_raw_message` sees frames in the binary-text-payload / proto
+    /// regime without going through `establish_connection`.
+    #[cfg(test)]
+    pub(crate) fn set_server_version_for_test(&self, server_version: i32) {
+        self.server_version_cache.store(server_version, Ordering::Release);
+    }
+
     fn handshake_context(&self) -> StartupHandshakeContext<'_> {
         StartupHandshakeContext {
             startup: self.startup_callback.as_deref(),

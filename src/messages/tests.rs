@@ -298,15 +298,7 @@ fn test_request_id_index_invalid() {
 
 #[test]
 fn test_notice() {
-    let envelope = crate::proto::ErrorMessage {
-        id: Some(-1),
-        error_time: None,
-        error_code: Some(2107),
-        error_msg: Some("HMDS data farm connection is inactive.".into()),
-        advanced_order_reject_json: None,
-    };
-    let raw_bytes = prost::Message::encode_to_vec(&envelope);
-    let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+    let message = crate::common::test_utils::helpers::proto_error_response(-1, 2107, "HMDS data farm connection is inactive.");
 
     let notice = Notice::from(&message);
 
@@ -1115,15 +1107,7 @@ fn test_notice_edge_cases() {
     ];
 
     for test_case in test_cases {
-        let envelope = crate::proto::ErrorMessage {
-            id: Some(-1),
-            error_time: None,
-            error_code: Some(test_case.code),
-            error_msg: Some(test_case.msg.into()),
-            advanced_order_reject_json: None,
-        };
-        let raw_bytes = prost::Message::encode_to_vec(&envelope);
-        let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+        let message = crate::common::test_utils::helpers::proto_error_response(-1, test_case.code, test_case.msg);
         let notice = Notice::from(&message);
 
         assert_eq!(notice.code, test_case.code, "Test '{}' failed: wrong error code", test_case.name);

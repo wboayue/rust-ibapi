@@ -5,7 +5,7 @@ use time_tz::timezones;
 
 use super::*;
 use crate::client::r#async::Client;
-use crate::common::test_utils::helpers::{managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
@@ -26,19 +26,6 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data.extend_from_slice(&msg_id.to_be_bytes());
     data.extend_from_slice(payload.as_bytes());
     data
-}
-
-fn error_frame(request_id: i32, code: i32, msg: &str) -> Vec<u8> {
-    crate::common::test_utils::helpers::binary_proto(
-        IncomingMessages::Error as i32,
-        &crate::proto::ErrorMessage {
-            id: Some(request_id),
-            error_time: None,
-            error_code: Some(code),
-            error_msg: Some(msg.into()),
-            advanced_order_reject_json: None,
-        },
-    )
 }
 
 #[tokio::test]

@@ -1401,10 +1401,9 @@ pub enum NoticeCategory {
 }
 
 impl From<&ResponseMessage> for Notice {
-    /// Build a Notice from a protobuf Error frame. At floor 213 every Error
-    /// payload arrives proto-encoded; we delegate to the envelope decoder and
-    /// fall back to `DecodedError::default()` if `raw_bytes` is absent or the
-    /// proto bytes fail to decode.
+    /// Build a Notice from a protobuf Error frame; at floor 213 every Error
+    /// payload arrives proto-encoded. Returns `Notice::from(DecodedError::default())`
+    /// (empty / code 0) if the proto bytes are absent or undecodable.
     fn from(message: &ResponseMessage) -> Notice {
         let payload = message
             .raw_bytes()

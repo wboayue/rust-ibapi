@@ -172,19 +172,32 @@ pub mod helpers {
         )
     }
 
-    /// Proto-framed `Error` [`ResponseMessage`](crate::messages::ResponseMessage)
-    /// for stream-decoder tests. Replaces the legacy
-    /// `ResponseMessage::from("4|2|<request_id>|<code>|<msg>|")` text fixtures
-    /// that became unreachable after PR-D1 collapsed Notice::from to proto-only.
-    pub fn proto_error_response(request_id: i32, code: i32, msg: impl Into<String>) -> crate::messages::ResponseMessage {
-        let envelope = crate::proto::ErrorMessage {
+    /// Build a `proto::ErrorMessage` envelope with `error_time` and
+    /// `advanced_order_reject_json` defaulted; sufficient for the warning /
+    /// hard-error fixtures that fueled the v3.0 text-decoder removal.
+    pub fn error_envelope(request_id: i32, code: i32, msg: impl Into<String>) -> crate::proto::ErrorMessage {
+        crate::proto::ErrorMessage {
             id: Some(request_id),
             error_time: None,
             error_code: Some(code),
             error_msg: Some(msg.into()),
             advanced_order_reject_json: None,
-        };
-        proto_response(crate::messages::IncomingMessages::Error, prost::Message::encode_to_vec(&envelope))
+        }
+    }
+
+    /// Proto-framed `Error` [`ResponseMessage`](crate::messages::ResponseMessage)
+    /// for `MessageBusStub::with_ordered_responses` fixtures.
+    pub fn proto_error_response(request_id: i32, code: i32, msg: impl Into<String>) -> crate::messages::ResponseMessage {
+        proto_response(
+            crate::messages::IncomingMessages::Error,
+            prost::Message::encode_to_vec(&error_envelope(request_id, code, msg)),
+        )
+    }
+
+    /// Proto-framed `Error` wire payload (`[4-byte BE msg_id][proto bytes]`)
+    /// for `MemoryStream::push_inbound` / `spawn_handshake_listener` fixtures.
+    pub fn error_frame(request_id: i32, code: i32, msg: impl Into<String>) -> Vec<u8> {
+        binary_proto(crate::messages::IncomingMessages::Error as i32, &error_envelope(request_id, code, msg))
     }
 
     /// Common test constants that can be used across modules

@@ -294,6 +294,14 @@ impl<S: Stream> Connection<S> {
             notice_broadcaster: Arc::new(NoticeBroadcaster::new()),
         }
     }
+
+    /// Pin a post-handshake server version on a stubbed connection so
+    /// `parse_raw_message` sees frames in the binary-text-payload / proto
+    /// regime without going through `establish_connection`.
+    #[cfg(test)]
+    pub(crate) fn set_server_version_for_test(&self, server_version: i32) {
+        self.connection_metadata.lock().unwrap().server_version = server_version;
+    }
 }
 
 #[cfg(test)]
