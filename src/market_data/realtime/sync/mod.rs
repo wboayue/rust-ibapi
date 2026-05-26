@@ -145,7 +145,7 @@ impl Client {
             let response = subscription.next();
 
             match response {
-                Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(self.server_version(), &mut message),
+                Some(Ok(message)) => return decoders::decode_market_depth_exchanges(&message),
                 Some(Err(Error::ConnectionReset)) => {
                     debug!("connection reset. retrying market_depth_exchanges");
                     continue;

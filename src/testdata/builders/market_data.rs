@@ -1961,3 +1961,75 @@ pub fn tick_generic() -> TickGenericResponse {
 pub fn tick_option_computation() -> TickOptionComputationResponse {
     TickOptionComputationResponse::default()
 }
+
+#[derive(Clone, Debug, Default)]
+pub struct MktDepthExchangesResponse {
+    pub descriptions: Vec<DepthMarketDataDescriptionFields>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct DepthMarketDataDescriptionFields {
+    pub exchange: String,
+    pub sec_type: String,
+    pub listing_exchange: String,
+    pub service_data_type: String,
+    pub aggregated_group: Option<i32>,
+}
+
+impl MktDepthExchangesResponse {
+    pub fn description(mut self, d: DepthMarketDataDescriptionFields) -> Self {
+        self.descriptions.push(d);
+        self
+    }
+}
+
+impl DepthMarketDataDescriptionFields {
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+    pub fn sec_type(mut self, v: impl Into<String>) -> Self {
+        self.sec_type = v.into();
+        self
+    }
+    pub fn listing_exchange(mut self, v: impl Into<String>) -> Self {
+        self.listing_exchange = v.into();
+        self
+    }
+    pub fn service_data_type(mut self, v: impl Into<String>) -> Self {
+        self.service_data_type = v.into();
+        self
+    }
+    pub fn aggregated_group(mut self, v: i32) -> Self {
+        self.aggregated_group = Some(v);
+        self
+    }
+}
+
+impl ResponseProtoEncoder for MktDepthExchangesResponse {
+    type Proto = proto::MarketDepthExchanges;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::MarketDepthExchanges {
+            depth_market_data_descriptions: self
+                .descriptions
+                .iter()
+                .map(|d| proto::DepthMarketDataDescription {
+                    exchange: Some(d.exchange.clone()),
+                    sec_type: Some(d.sec_type.clone()),
+                    listing_exch: Some(d.listing_exchange.clone()),
+                    service_data_type: Some(d.service_data_type.clone()),
+                    agg_group: d.aggregated_group,
+                })
+                .collect(),
+        }
+    }
+}
+
+pub fn mkt_depth_exchanges_response() -> MktDepthExchangesResponse {
+    MktDepthExchangesResponse::default()
+}
+
+pub fn depth_market_data_description() -> DepthMarketDataDescriptionFields {
+    DepthMarketDataDescriptionFields::default()
+}

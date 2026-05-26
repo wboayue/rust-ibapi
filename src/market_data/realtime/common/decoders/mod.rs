@@ -3,7 +3,6 @@ use prost::Message;
 use crate::contracts::OptionComputation;
 use crate::messages::ResponseMessage;
 use crate::proto::decoders::{optional_f64, optional_string_f64, parse_f64, ts};
-use crate::server_versions;
 use crate::Error;
 
 use crate::market_data::realtime::{
@@ -36,34 +35,8 @@ pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<Ma
     decode_market_depth_l2_proto(message.require_proto()?)
 }
 
-// Stays dual-format: outgoing gate `PROTOBUF_REST_MESSAGES_3` (213) > floor 210.
-pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    message.decode_proto_or_text(decode_market_depth_exchanges_proto, |msg| {
-        msg.skip(); // message type
-        let count = msg.next_int()?;
-        let mut descriptions = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
-                DepthMarketDataDescription {
-                    exchange_name: msg.next_string()?,
-                    security_type: msg.next_string()?,
-                    listing_exchange: msg.next_string()?,
-                    service_data_type: msg.next_string()?,
-                    aggregated_group: Some(msg.next_string()?),
-                }
-            } else {
-                DepthMarketDataDescription {
-                    exchange_name: msg.next_string()?,
-                    security_type: msg.next_string()?,
-                    listing_exchange: "".into(),
-                    service_data_type: if msg.next_bool()? { "Deep2".into() } else { "Deep".into() },
-                    aggregated_group: None,
-                }
-            };
-            descriptions.push(description);
-        }
-        Ok(descriptions)
-    })
+pub(crate) fn decode_market_depth_exchanges(message: &ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    decode_market_depth_exchanges_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_tick_price(message: &mut ResponseMessage) -> Result<TickTypes, Error> {
