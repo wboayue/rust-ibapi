@@ -20,28 +20,8 @@ pub(crate) fn decode_position_multi(message: &ResponseMessage) -> Result<Positio
     decode_position_multi_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_family_codes(message: &mut ResponseMessage) -> Result<Vec<FamilyCode>, Error> {
-    message.decode_proto_or_text(decode_family_codes_proto, |msg| {
-        msg.skip(); // message type
-
-        let family_codes_count = msg.next_int()?;
-
-        if family_codes_count < 1 {
-            return Ok(Vec::default());
-        }
-
-        let mut family_codes: Vec<FamilyCode> = Vec::with_capacity(family_codes_count as usize);
-
-        for _ in 0..family_codes_count {
-            let family_code = FamilyCode {
-                account_id: msg.next_string()?,
-                family_code: msg.next_string()?,
-            };
-            family_codes.push(family_code);
-        }
-
-        Ok(family_codes)
-    })
+pub(crate) fn decode_family_codes(message: &ResponseMessage) -> Result<Vec<FamilyCode>, Error> {
+    decode_family_codes_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_pnl(message: &ResponseMessage) -> Result<PnL, Error> {

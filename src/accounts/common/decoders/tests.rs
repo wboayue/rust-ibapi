@@ -1,39 +1,11 @@
 #[test]
-fn test_decode_family_codes() {
-    let mut message = super::ResponseMessage::from("78\01\0*\0\0");
-
-    let family_codes = super::decode_family_codes(&mut message).expect("error decoding family codes");
-
-    assert_eq!(family_codes[0].account_id, "*", "family_codes.account_id");
-    assert_eq!(family_codes[0].family_code, "", "family_codes.family_code");
-}
-
-#[test]
-fn test_decode_family_codes_empty_list() {
-    // Assemble: version, 0 codes
-    let mut message = super::ResponseMessage::from("78\x000\x00");
-
-    // Act
-    let result = super::decode_family_codes(&mut message).expect("Failed to decode family codes");
-
-    // Assert
-    assert!(result.is_empty(), "Result should be an empty list");
-}
-
-#[test]
-fn test_decode_family_codes_multiple_codes() {
-    // Assemble: version, 2 codes
-    let mut message = super::ResponseMessage::from("78\x002\x00ACC1\x00FC1\x00ACC2\x00FC2\x00");
-
-    // Act
-    let result = super::decode_family_codes(&mut message).expect("Failed to decode family codes");
-
-    // Assert
-    assert_eq!(result.len(), 2, "Should have 2 family codes");
-    assert_eq!(result[0].account_id, "ACC1", "First account_id");
-    assert_eq!(result[0].family_code, "FC1", "First family_code");
-    assert_eq!(result[1].account_id, "ACC2", "Second account_id");
-    assert_eq!(result[1].family_code, "FC2", "Second family_code");
+fn test_decode_family_codes_rejects_text_framing() {
+    let message = super::ResponseMessage::from("78\02\0ACC1\0FC1\0ACC2\0FC2\0");
+    let err = super::decode_family_codes(&message).unwrap_err();
+    assert!(
+        matches!(err, super::Error::UnexpectedResponse(_)),
+        "expected UnexpectedResponse, got {err:?}"
+    );
 }
 
 #[test]

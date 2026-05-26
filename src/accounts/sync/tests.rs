@@ -282,8 +282,11 @@ fn test_family_codes() {
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
-    let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![family_codes().push("ACC1", "FC1").push("ACC2", "FC2").encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::FamilyCodes,
+        family_codes().push("ACC1", "FC1").push("ACC2", "FC2").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let result = client.family_codes();
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -315,7 +318,11 @@ fn test_family_codes() {
     assert_request(&message_bus_no_msg, 0, &request_family_codes());
 
     // Scenario 3: Empty family codes list
-    let (client_empty, message_bus_empty) = create_blocking_test_client_with_responses(vec![family_codes().encode_pipe()]);
+    let message_bus_empty = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::FamilyCodes,
+        family_codes().encode_proto(),
+    )]));
+    let client_empty = Client::stubbed(message_bus_empty.clone(), server_versions::SIZE_RULES);
     let result_empty = client_empty.family_codes();
     assert!(result_empty.is_ok(), "Expected Ok for empty list");
     assert!(result_empty.unwrap().is_empty(), "Expected empty vector");

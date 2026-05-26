@@ -314,7 +314,7 @@ add `_rejects_text_framing` regression test per decoder.
 
 | PR    | Decoder(s)                                              | Domain                          | New builder(s) needed                  |
 |-------|---------------------------------------------------------|---------------------------------|----------------------------------------|
-| C1    | `decode_family_codes`                                   | `accounts/common/decoders/`     | `FamilyCodesResponse` (proto exists)   |
+| ~~C1~~ | ~~`decode_family_codes`~~ — shipped in this PR        | `accounts/common/decoders/`     | n/a (builder existed)                  |
 | C2    | `decode_server_time`, `decode_server_time_millis`       | `accounts/common/decoders/`     | `CurrentTimeResponse`, `CurrentTimeInMillisResponse` |
 | C3    | `decode_managed_accounts`                               | `accounts/common/decoders/`     | `ManagedAccountsResponse`              |
 | C4    | `decode_market_depth_exchanges`                         | `market_data/realtime/common/decoders/` | `MktDepthExchangesResponse`    |
@@ -404,6 +404,26 @@ splitting D3 would leave the crate in a half-collapsed intermediate state.
    this helper goes away; the PR-A test (and any other testdata-using
    fixtures) need rewriting to use a `MessageBusStub` + `proto_response(...)`
    shape. Tracked in D3's `stubs.rs` migration note.
+
+## /simplify follow-ups (deferred from per-PR review)
+
+- **`create_test_client_with_ordered_proto_responses` helper.** Each C-series
+  PR is adding `Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(...)])) + Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES)`
+  to replace the deleted `create_*_test_client_with_responses(vec![..encode_pipe()])`
+  shape. PR-C1 added 4 such blocks (sync + async × scenarios 1 & 3). PR-C2/C3
+  will add more. By rule-of-three, land a shared
+  `create_test_client_with_ordered_proto_responses(Vec<ResponseMessage>) → (Client, Arc<MessageBusStub>)`
+  helper in `src/common/test_utils.rs` alongside (or just before) PR-C3 and
+  fold the new C-series sites onto it. Don't sweep pre-existing manual
+  setups (`test_positions`, `test_account_updates`, etc.) in the same PR —
+  that's a separate consistency pass.
+- **`one_shot_request` processor signature `Fn(&mut ResponseMessage)` → `Fn(&ResponseMessage)`.**
+  C-series proto-only flips wrap the decoder in `|msg| decoders::decode_X(msg)`
+  at the callsite because the helper's processor sig didn't change. After
+  PR-C3 lands (3rd occurrence: family_codes, server_time, managed_accounts),
+  flip the helper signature in a follow-up PR and drop the closure wrappers.
+  Wsh's `one_shot_request_with_retry` decoders still use `&mut` (`message.clone()`
+  pattern), so leave that helper untouched.
 
 ## Out of scope (after PR-D)
 
