@@ -407,23 +407,19 @@ splitting D3 would leave the crate in a half-collapsed intermediate state.
 
 ## /simplify follow-ups (deferred from per-PR review)
 
-- **`create_test_client_with_ordered_proto_responses` helper.** Each C-series
-  PR is adding `Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(...)])) + Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES)`
-  to replace the deleted `create_*_test_client_with_responses(vec![..encode_pipe()])`
-  shape. PR-C1 added 4 such blocks (sync + async × scenarios 1 & 3). PR-C2/C3
-  will add more. By rule-of-three, land a shared
-  `create_test_client_with_ordered_proto_responses(Vec<ResponseMessage>) → (Client, Arc<MessageBusStub>)`
-  helper in `src/common/test_utils.rs` alongside (or just before) PR-C3 and
-  fold the new C-series sites onto it. Don't sweep pre-existing manual
-  setups (`test_positions`, `test_account_updates`, etc.) in the same PR —
-  that's a separate consistency pass.
+- ~~**`create_test_client_with_ordered_proto_responses` helper.**~~ **Shipped
+  in PR-C3 (#636)** alongside the decoder flip — async + blocking siblings in
+  `src/common/test_utils.rs`; 5 PR-C3 callsites folded onto it. Pre-existing
+  manual setups (`test_positions`, `test_account_updates`, etc.) left for a
+  separate consistency-sweep PR.
 - **`one_shot_request` processor signature `Fn(&mut ResponseMessage)` → `Fn(&ResponseMessage)`.**
   C-series proto-only flips wrap the decoder in `|msg| decoders::decode_X(msg)`
-  at the callsite because the helper's processor sig didn't change. After
-  PR-C3 lands (3rd occurrence: family_codes, server_time, managed_accounts),
-  flip the helper signature in a follow-up PR and drop the closure wrappers.
-  Wsh's `one_shot_request_with_retry` decoders still use `&mut` (`message.clone()`
-  pattern), so leave that helper untouched.
+  at the callsite because the helper's processor sig didn't change. PR-C3
+  (#636) is the 3rd occurrence (family_codes, server_time, managed_accounts)
+  — closure wrappers now exist at `src/accounts/{sync,async}/mod.rs` for all
+  three. Flip the helper signature in a follow-up PR and drop the closure
+  wrappers. Wsh's `one_shot_request_with_retry` decoders still use `&mut`
+  (`message.clone()` pattern), so leave that helper untouched.
 
 ## Out of scope (after PR-D)
 
