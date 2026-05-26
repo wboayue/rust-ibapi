@@ -173,20 +173,18 @@ fn test_account_summary() {
 
 #[test]
 fn test_managed_accounts() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    )]);
     let accounts = client.managed_accounts().expect("request managed accounts failed for valid response");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
     assert_request(&message_bus, 0, &request_managed_accounts());
 
-    let message_bus_empty = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    let (client_empty, _) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts(Vec::<String>::new()).encode_proto(),
-    )]));
-    let client_empty = Client::stubbed(message_bus_empty, server_versions::SIZE_RULES);
+    )]);
     let accounts_empty = client_empty
         .managed_accounts()
         .expect("request managed accounts failed for empty response");
@@ -201,11 +199,10 @@ fn test_managed_accounts() {
 fn test_managed_accounts_retry() {
     // Test that managed_accounts retries on connection reset.
     // Since our stub doesn't simulate actual connection resets, we exercise the happy path.
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    )]);
 
     let accounts = client.managed_accounts().expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");

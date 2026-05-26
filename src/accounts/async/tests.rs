@@ -187,11 +187,10 @@ async fn test_pnl_single() {
 
 #[tokio::test]
 async fn test_managed_accounts() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    )]);
 
     let accounts = client.managed_accounts().await.expect("request managed accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
@@ -202,11 +201,10 @@ async fn test_managed_accounts() {
 
 #[tokio::test]
 async fn test_managed_accounts_retry() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    )]);
 
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
