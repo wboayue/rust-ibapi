@@ -31,7 +31,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
-            decoders::decode_server_time,
+            |msg| decoders::decode_server_time(msg),
             || Err(Error::UnexpectedEndOfStream),
         )
     }
@@ -44,7 +44,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
-            decoders::decode_server_time_millis,
+            |msg| decoders::decode_server_time_millis(msg),
             || Err(Error::UnexpectedEndOfStream),
         )
     }

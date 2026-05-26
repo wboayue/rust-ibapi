@@ -213,7 +213,11 @@ fn test_server_time() {
 
     // Scenario 1: Success
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![current_time().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::CurrentTime,
+        current_time().encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let result = client.server_time();
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -221,7 +225,7 @@ fn test_server_time() {
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &request_current_time());
 
-    // Scenario 2: No response (returns default)
+    // Scenario 2: No response (returns UnexpectedEndOfStream)
     let (client_no_resp, message_bus_no_resp) = create_blocking_test_client();
     let result_no_resp = client_no_resp.server_time();
     assert!(
@@ -230,13 +234,6 @@ fn test_server_time() {
     );
     assert_eq!(request_message_count(&message_bus_no_resp), 1);
     assert_request(&message_bus_no_resp, 0, &request_current_time());
-
-    // Scenario 3: Invalid timestamp format
-    let (client_invalid, message_bus_invalid) = create_blocking_test_client_with_responses(vec!["49|1|not_a_timestamp|".into()]);
-    let result_invalid = client_invalid.server_time();
-    assert!(result_invalid.is_err(), "Expected Err for invalid timestamp");
-    assert_eq!(request_message_count(&message_bus_invalid), 1);
-    assert_request(&message_bus_invalid, 0, &request_current_time());
 }
 
 #[test]
@@ -442,46 +439,6 @@ fn test_managed_accounts_additional_scenarios() {
         assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
         assert_eq!(request_message_count(&message_bus), 1);
         assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
-    }
-}
-
-#[test]
-fn test_server_time_comprehensive() {
-    use super::common::test_tables::server_time_test_cases;
-
-    for test_case in server_time_test_cases() {
-        let (client, message_bus) = if test_case.responses.is_empty() {
-            create_blocking_test_client()
-        } else {
-            create_blocking_test_client_with_responses(test_case.responses)
-        };
-
-        let result = client.server_time();
-
-        match test_case.expected_result {
-            Ok(expected_time) => {
-                assert!(result.is_ok(), "Expected Ok for {}, got: {:?}", test_case.scenario, result.err());
-                assert_eq!(result.unwrap(), expected_time, "Timestamp mismatch for {}", test_case.scenario);
-            }
-            Err("unexpected end of stream") => {
-                assert!(
-                    matches!(result, Err(Error::UnexpectedEndOfStream)),
-                    "Expected UnexpectedEndOfStream for {}, got {result:?}",
-                    test_case.scenario
-                );
-            }
-            Err(_) => {
-                assert!(result.is_err(), "Expected error for {}", test_case.scenario);
-                // Accept Parse, ParseInt, or Simple errors for invalid timestamps
-                match result.unwrap_err() {
-                    Error::Parse(_, _, _) | Error::ParseInt(_) | Error::Simple(_) => {}
-                    other => panic!("Expected Parse, ParseInt, or Simple error for {}, got: {:?}", test_case.scenario, other),
-                }
-            }
-        }
-
-        assert_eq!(request_message_count(&message_bus), 1);
-        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
     }
 }
 
@@ -763,10 +720,11 @@ fn test_error_propagation() {
 fn test_server_time_millis() {
     use time::macros::datetime;
 
-    let (client, message_bus) = create_blocking_test_client_with_responses_and_version(
-        vec![current_time_in_millis().millis(1_678_890_000_123).encode_pipe()],
-        server_versions::CURRENT_TIME_IN_MILLIS,
-    );
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::CurrentTimeInMillis,
+        current_time_in_millis().millis(1_678_890_000_123).encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CURRENT_TIME_IN_MILLIS);
 
     let result = client.server_time_millis().expect("server_time_millis failed");
     assert_eq!(result, datetime!(2023-03-15 14:20:00.123 UTC));

@@ -48,36 +48,24 @@ pub(crate) fn decode_account_update_time(message: &ResponseMessage) -> Result<Ac
     decode_account_update_time_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
-    message.decode_proto_or_text(
-        |bytes| {
-            let proto = proto::CurrentTime::decode(bytes)?;
-            let timestamp = proto.current_time.unwrap_or(0);
-            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_proto("current_time", e.to_string()))
-        },
-        |msg| {
-            msg.skip(); // message type
-            msg.skip(); // message version
-            let timestamp = msg.next_long()?;
-            OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_field(timestamp.to_string(), e.to_string()))
-        },
-    )
+pub(crate) fn decode_server_time(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
+    decode_server_time_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
-    message.decode_proto_or_text(
-        |bytes| {
-            let proto = proto::CurrentTimeInMillis::decode(bytes)?;
-            let millis = proto.current_time_in_millis.unwrap_or(0);
-            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000)
-                .map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
-        },
-        |msg| {
-            msg.skip(); // message type
-            let millis = msg.next_long()?;
-            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))
-        },
-    )
+pub(crate) fn decode_server_time_millis(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
+    decode_server_time_millis_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_server_time_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
+    let proto = proto::CurrentTime::decode(bytes)?;
+    let timestamp = proto.current_time.unwrap_or(0);
+    OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_proto("current_time", e.to_string()))
+}
+
+pub(crate) fn decode_server_time_millis_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
+    let proto = proto::CurrentTimeInMillis::decode(bytes)?;
+    let millis = proto.current_time_in_millis.unwrap_or(0);
+    OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
 }
 
 pub(crate) fn decode_managed_accounts(message: &mut ResponseMessage) -> Result<Vec<String>, Error> {

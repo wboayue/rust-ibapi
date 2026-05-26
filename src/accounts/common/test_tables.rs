@@ -3,8 +3,6 @@
 #[allow(unused_imports)]
 use crate::accounts::types::*;
 use crate::server_versions;
-use time::macros::datetime;
-use time::OffsetDateTime;
 
 /// Test case for server version compatibility checking
 #[derive(Debug, Clone)]
@@ -20,16 +18,6 @@ pub struct ManagedAccountsTestCase {
     pub responses: Vec<String>,
     pub expected: Vec<String>,
     pub description: &'static str,
-}
-
-/// Test case for server time scenarios
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct ServerTimeTestCase {
-    pub scenario: &'static str,
-    pub responses: Vec<String>,
-    pub expected_result: Result<OffsetDateTime, &'static str>,
-    pub expected_request: &'static str,
 }
 
 #[cfg(feature = "sync")]
@@ -182,48 +170,6 @@ pub fn managed_accounts_test_cases() -> Vec<ManagedAccountsTestCase> {
             responses: vec!["17|1|ACC1,ACC2,|".into()],
             expected: vec!["ACC1".to_string(), "ACC2".to_string()],
             description: "Trailing comma is ignored",
-        },
-    ]
-}
-
-/// Server time test cases  
-pub fn server_time_test_cases() -> Vec<ServerTimeTestCase> {
-    vec![
-        ServerTimeTestCase {
-            scenario: "valid timestamp",
-            responses: vec!["49|1|1678890000|".into()], // 2023-03-15 14:20:00 UTC
-            expected_result: Ok(datetime!(2023-03-15 14:20:00 UTC)),
-            expected_request: "49|1|",
-        },
-        ServerTimeTestCase {
-            scenario: "unix epoch",
-            responses: vec!["49|1|0|".into()],
-            expected_result: Ok(datetime!(1970-01-01 0:00 UTC)),
-            expected_request: "49|1|",
-        },
-        ServerTimeTestCase {
-            scenario: "y2k timestamp",
-            responses: vec!["49|1|946684800|".into()],
-            expected_result: Ok(datetime!(2000-01-01 0:00 UTC)),
-            expected_request: "49|1|",
-        },
-        ServerTimeTestCase {
-            scenario: "invalid timestamp string",
-            responses: vec!["49|1|invalid_timestamp|".into()],
-            expected_result: Err("Parse/ParseInt/Simple error expected"),
-            expected_request: "49|1|",
-        },
-        ServerTimeTestCase {
-            scenario: "overflow timestamp",
-            responses: vec!["49|1|99999999999999999999|".into()],
-            expected_result: Err("Parse/ParseInt/Simple error expected"),
-            expected_request: "49|1|",
-        },
-        ServerTimeTestCase {
-            scenario: "no response",
-            responses: vec![],
-            expected_result: Err("unexpected end of stream"),
-            expected_request: "49|1|",
         },
     ]
 }

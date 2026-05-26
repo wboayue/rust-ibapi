@@ -1101,6 +1101,7 @@ impl ResponseMessage {
     }
 
     /// Consume and parse the next i64 field.
+    #[allow(dead_code)] // test-only since text decoders for server_time(_millis) are proto-only post-floor-213
     pub fn next_long(&mut self) -> Result<i64, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::eof_at(self.i, "long"));
