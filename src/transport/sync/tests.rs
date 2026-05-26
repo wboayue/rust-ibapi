@@ -159,8 +159,7 @@ impl Io for MockSocket {
         if exchange.is_handshake {
             let expected = encode_length(&encoded);
             read_message(&mut expected.as_slice())
-        } else if response.is_protobuf {
-            let raw = response.raw_bytes().unwrap_or_default();
+        } else if let Some(raw) = response.raw_bytes() {
             let msg_id = response.message_type() as i32;
             Ok(crate::messages::encode_protobuf_message(msg_id, raw))
         } else {
@@ -250,21 +249,13 @@ fn managed_accounts_response(accounts: &str) -> ResponseMessage {
         accounts_list: Some(accounts.to_string()),
     }
     .encode_to_vec();
-    ResponseMessage::from_protobuf(
-        crate::messages::IncomingMessages::ManagedAccounts as i32,
-        bytes,
-        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
-    )
+    ResponseMessage::from_protobuf(crate::messages::IncomingMessages::ManagedAccounts as i32, bytes)
 }
 
 fn next_valid_id_response(order_id: i32) -> ResponseMessage {
     use prost::Message;
     let bytes = crate::proto::NextValidId { order_id: Some(order_id) }.encode_to_vec();
-    ResponseMessage::from_protobuf(
-        crate::messages::IncomingMessages::NextValidId as i32,
-        bytes,
-        crate::server_versions::PROTOBUF_REST_MESSAGES_3,
-    )
+    ResponseMessage::from_protobuf(crate::messages::IncomingMessages::NextValidId as i32, bytes)
 }
 
 #[test]
@@ -290,7 +281,6 @@ fn test_bus_send_order_request() -> Result<(), Error> {
                 ..Default::default()
             }
             .encode_to_vec(),
-            sv,
         )
     };
     let order_status_proto = |status: &str, filled: i64| {
@@ -303,7 +293,6 @@ fn test_bus_send_order_request() -> Result<(), Error> {
                 ..Default::default()
             }
             .encode_to_vec(),
-            sv,
         )
     };
     let execution_data_proto = ResponseMessage::from_protobuf(
@@ -318,7 +307,6 @@ fn test_bus_send_order_request() -> Result<(), Error> {
             }),
         }
         .encode_to_vec(),
-        sv,
     );
 
     let events = vec![

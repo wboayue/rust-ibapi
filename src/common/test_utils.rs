@@ -143,7 +143,7 @@ pub mod helpers {
     /// [`MessageBusStub::with_ordered_responses`]. Pairs with
     /// `Builder::encode_proto()`.
     pub fn proto_response(msg_type: crate::messages::IncomingMessages, bytes: Vec<u8>) -> crate::messages::ResponseMessage {
-        crate::messages::ResponseMessage::from_protobuf(msg_type as i32, bytes, server_versions::PROTOBUF_REST_MESSAGES_3)
+        crate::messages::ResponseMessage::from_protobuf(msg_type as i32, bytes)
     }
 
     /// Build a proto-framed wire payload (4-byte BE `msg_id + PROTOBUF_MSG_ID`

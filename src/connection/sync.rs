@@ -166,7 +166,7 @@ impl<S: Stream> Connection<S> {
     /// Read a message from the connection
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
-        let (message, trace_str) = parse_raw_message(&data, self.server_version());
+        let (message, trace_str) = parse_raw_message(&data);
 
         if let Some(raw_string) = trace_str {
             if log::log_enabled!(log::Level::Debug) {

@@ -837,51 +837,27 @@ struct ExecutionMinimal {
 /// Parsed inbound message from TWS/Gateway.
 ///
 /// Crate-internal wire envelope; not part of the public API. All fields,
-/// constructors, and methods are crate-visible only.
+/// constructors, and methods are crate-visible only. Framing is discriminated
+/// by `raw_bytes`: `Some(_)` = protobuf payload, `None` = NUL-delimited text
+/// payload pre-parsed into `fields` (still load-bearing for WSH and TickEFP
+/// decoders post-floor-213).
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.
     pub i: usize,
     /// Raw field buffer backing this message.
     pub fields: Vec<String>,
-    /// Server version stored with the message for version-gated decoding.
-    /// Reads disappeared with the text error accessors in PR-D1; D3 deletes
-    /// the field itself once `from_protobuf` / `from_binary_text` stop
-    /// plumbing it.
-    #[allow(dead_code)]
-    pub server_version: i32,
-    /// True when the message payload is protobuf-encoded. Read only by test
-    /// fixtures that mirror the wire framing; production routing uses
-    /// `raw_bytes` directly.
-    #[allow(dead_code)]
-    pub is_protobuf: bool,
     /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
     pub raw_bytes: Option<Vec<u8>>,
 }
 
 impl ResponseMessage {
     /// Build a protobuf response message from a binary message type and raw payload bytes.
-    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>, server_version: i32) -> Self {
+    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
         Self {
             i: 0,
             fields: vec![message_type.to_string()],
-            server_version,
-            is_protobuf: true,
             raw_bytes: Some(raw_bytes),
-        }
-    }
-
-    /// Build a text response message from a binary message ID and NUL-delimited text payload.
-    /// Used when server_version >= PROTOBUF but the message ID <= 200 (text message).
-    pub fn from_binary_text(msg_id: i32, text_payload: &str, server_version: i32) -> Self {
-        let mut fields = vec![msg_id.to_string()];
-        fields.extend(text_payload.split_terminator('\0').map(|s| s.to_string()));
-        Self {
-            i: 0,
-            fields,
-            server_version,
-            is_protobuf: false,
-            raw_bytes: None,
         }
     }
 
@@ -1042,8 +1018,6 @@ impl ResponseMessage {
         ResponseMessage {
             i: 0,
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
-            server_version: 0,
-            is_protobuf: false,
             raw_bytes: None,
         }
     }
@@ -1053,19 +1027,8 @@ impl ResponseMessage {
         ResponseMessage {
             i: 0,
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
-            server_version: 0,
-            is_protobuf: false,
             raw_bytes: None,
         }
-    }
-
-    /// Set the server version for version-gated decoding (builder style).
-    /// Test-only post-floor-213; `parse_raw_message` always plumbs the version
-    /// at construction time. D3 deletes the helper outright.
-    #[cfg(test)]
-    pub fn with_server_version(mut self, server_version: i32) -> Self {
-        self.server_version = server_version;
-        self
     }
 
     /// Advance the cursor past the next field.

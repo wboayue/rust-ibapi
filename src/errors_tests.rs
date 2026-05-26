@@ -137,7 +137,7 @@ fn from_protobuf_response_message_decodes_envelope() {
         advanced_order_reject_json: None,
     };
     let raw = prost::Message::encode_to_vec(&envelope);
-    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, raw, crate::server_versions::PROTOBUF);
+    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, raw);
     let error: Error = msg.into();
     assert!(matches!(error, Error::Notice(ref n) if n.code == 2104 && n.message == "Market data farm OK"));
 }
@@ -145,7 +145,7 @@ fn from_protobuf_response_message_decodes_envelope() {
 #[test]
 fn from_protobuf_response_message_falls_back_when_decode_fails() {
     // Bad protobuf bytes -> falls back to text accessors (both default to 0 / empty).
-    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, vec![0xff, 0xff, 0xff, 0xff], crate::server_versions::PROTOBUF);
+    let msg = ResponseMessage::from_protobuf(ERROR_MSG_TYPE, vec![0xff, 0xff, 0xff, 0xff]);
     let error: Error = msg.into();
     assert!(matches!(error, Error::Notice(ref n) if n.code == 0));
 }
