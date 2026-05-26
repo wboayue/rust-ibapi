@@ -928,6 +928,7 @@ impl ResponseMessage {
     }
 
     /// Number of fields present in the message.
+    #[allow(dead_code)] // last production caller (decode_display_group_updated text branch) removed at floor 213
     pub fn len(&self) -> usize {
         self.fields.len()
     }

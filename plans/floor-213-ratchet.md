@@ -296,7 +296,7 @@ cargo build -p ibapi-integration-async --tests
 
 ### PR-C — per-decoder text-branch deletions
 
-**Status: 🚧 In progress** — PR-B merged 2026-05-25; C1 shipped in [#634](https://github.com/wboayue/rust-ibapi/pull/634); C2 shipped in [#635](https://github.com/wboayue/rust-ibapi/pull/635); C3 shipped in [#636](https://github.com/wboayue/rust-ibapi/pull/636); C4 shipped in [#637](https://github.com/wboayue/rust-ibapi/pull/637); C6 shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633).
+**Status: 🚧 In progress** — PR-B merged 2026-05-25; C1 shipped in [#634](https://github.com/wboayue/rust-ibapi/pull/634); C2 shipped in [#635](https://github.com/wboayue/rust-ibapi/pull/635); C3 shipped in [#636](https://github.com/wboayue/rust-ibapi/pull/636); C4 shipped in [#637](https://github.com/wboayue/rust-ibapi/pull/637); C5 pending; C6 shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633).
 
 Six follow-up PRs after PR-B. Each is a thin proto-only conversion + fixture
 migration following the gate-206 / historical precedent (PRs #626, #629, #630).
