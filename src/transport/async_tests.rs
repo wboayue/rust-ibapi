@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::*;
-use crate::common::test_utils::helpers::error_frame;
+use crate::common::test_utils::helpers::{binary_proto, error_frame};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -33,13 +33,6 @@ fn body(text: &str) -> Vec<u8> {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(payload.as_bytes());
     data
-}
-
-/// Build a protobuf-framed response body: `[4-byte BE (msg_id + 200)][proto bytes]`.
-/// Required for messages whose routing accessors (`order_id` / `execution_id`)
-/// are proto-only at floor 213.
-fn body_proto<T: prost::Message>(msg_id: crate::messages::IncomingMessages, proto: &T) -> Vec<u8> {
-    crate::messages::encode_protobuf_message(msg_id as i32, &proto.encode_to_vec())
 }
 
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
@@ -101,16 +94,16 @@ async fn test_order_id_correlation_with_interleaved_responses() {
     let mut sub_b = bus.send_order_request(22, vec![]).await.unwrap();
 
     // OrderStatus carries `order_id` at proto tag 1.
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::OrderStatus,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
         &crate::proto::OrderStatus {
             order_id: Some(22),
             status: Some("Filled".into()),
             ..Default::default()
         },
     ));
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::OrderStatus,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
         &crate::proto::OrderStatus {
             order_id: Some(11),
             status: Some("Submitted".into()),
@@ -144,8 +137,8 @@ async fn test_shared_channel_fan_out_for_open_orders() {
 
     // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
     // means the OrderOrShared strategy falls back to fan-out across shared subs.
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::OpenOrder,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
         &crate::proto::OpenOrder {
             order_id: Some(42),
             ..Default::default()
@@ -583,8 +576,8 @@ async fn test_notice_stream_late_subscriber_misses_prior() {
 /// dispatcher's `order_id` / `execution_id` accessors read the nested
 /// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
 fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
-    body_proto(
-        crate::messages::IncomingMessages::ExecutionData,
+    binary_proto(
+        crate::messages::IncomingMessages::ExecutionData as i32,
         &crate::proto::ExecutionDetails {
             req_id: Some(request_id),
             contract: None,
@@ -637,8 +630,8 @@ async fn test_execution_data_end_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::ExecutionDataEnd,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
         &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
     ));
     bus.read_and_route_message().await.unwrap();
@@ -654,8 +647,8 @@ async fn test_execution_data_end_falls_back_to_request_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::ExecutionDataEnd,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
         &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
     ));
     bus.read_and_route_message().await.unwrap();
@@ -668,8 +661,8 @@ async fn test_execution_data_end_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(42, vec![]).await.unwrap();
 
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::ExecutionDataEnd,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
         &crate::proto::ExecutionDetailsEnd { req_id: Some(999) },
     ));
     bus.read_and_route_message().await.unwrap();
@@ -685,8 +678,8 @@ async fn test_commission_report_routes_via_execution_id_mapping() {
     let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
 
     stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::CommissionsReport,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-abc".into()),
             ..Default::default()
@@ -707,8 +700,8 @@ async fn test_commission_report_without_mapping_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_order_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::CommissionsReport,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-not-mapped".into()),
             ..Default::default()
@@ -753,8 +746,8 @@ async fn test_order_update_stream_receives_open_order() {
     let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
     let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
 
-    stream.push_inbound(body_proto(
-        crate::messages::IncomingMessages::OpenOrder,
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
         &crate::proto::OpenOrder {
             order_id: Some(42),
             ..Default::default()

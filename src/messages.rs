@@ -392,10 +392,9 @@ impl FromStr for IncomingMessages {
 
 /// Return the message field index containing the request id, if present.
 ///
-/// Post-floor-213, only [`IncomingMessages::TickEFP`] still arrives text-framed
-/// from TWS (no protobuf encoder on the server side); every other entry below
-/// is dead in production and kept defensively for unsolicited message types
-/// that may never be wired.
+/// Only [`IncomingMessages::TickEFP`] currently arrives text-framed (TWS has
+/// no protobuf encoder for it). The rest of the table is kept defensively for
+/// unsolicited message types that may not be routable via the proto envelope.
 pub(crate) fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary => Some(2),
@@ -851,10 +850,9 @@ pub(crate) struct ResponseMessage {
     /// plumbing it.
     #[allow(dead_code)]
     pub server_version: i32,
-    /// True when the message payload is protobuf-encoded.
-    /// Production reads disappeared in PR-D2 when the proto-aware accessors
-    /// collapsed; remaining readers are test fixtures that mirror the wire
-    /// framing. D3 deletes the field outright.
+    /// True when the message payload is protobuf-encoded. Read only by test
+    /// fixtures that mirror the wire framing; production routing uses
+    /// `raw_bytes` directly.
     #[allow(dead_code)]
     pub is_protobuf: bool,
     /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
@@ -924,10 +922,10 @@ impl ResponseMessage {
 
     /// Try to extract the request id from the message.
     ///
-    /// For proto-framed messages (everything past floor 213 except
-    /// [`IncomingMessages::TickEFP`]), the request id lives at proto tag 1
-    /// (int32) in `raw_bytes`. The text-framed branch keeps support for
-    /// TickEFP, which TWS has no protobuf encoder for.
+    /// Proto-framed messages carry it at proto tag 1 in `raw_bytes`. The
+    /// text-framed branch reads the per-message-type field index — currently
+    /// reached only for [`IncomingMessages::TickEFP`], which TWS has no
+    /// protobuf encoder for.
     pub fn request_id(&self) -> Option<i32> {
         let i = request_id_index(self.message_type())?;
         if let Some(raw) = self.raw_bytes() {
@@ -941,11 +939,10 @@ impl ResponseMessage {
     /// Try to extract the order id from the message.
     ///
     /// Every `order_id`-bearing message type (`OpenOrder`, `OrderStatus`,
-    /// `ExecutionData`, `ExecutionDataEnd`) is proto-only at floor 213. Three
-    /// carry `order_id` at proto tag 1 (decoded via the minimal
-    /// [`ProtoIdEnvelope`]); `ExecutionData` nests it under
-    /// `execution.order_id` and uses [`ExecutionDetailsMinimal`] to skip the
-    /// `contract` sub-message.
+    /// `ExecutionData`, `ExecutionDataEnd`) is proto-framed. Three carry
+    /// `order_id` at proto tag 1 (decoded via the minimal [`ProtoIdEnvelope`]);
+    /// `ExecutionData` nests it under `execution.order_id` and uses
+    /// [`ExecutionDetailsMinimal`] to skip the `contract` sub-message.
     pub fn order_id(&self) -> Option<i32> {
         let raw = self.raw_bytes()?;
         match self.message_type() {
@@ -962,10 +959,9 @@ impl ResponseMessage {
 
     /// Try to extract the execution id from the message.
     ///
-    /// `ExecutionData` and `CommissionsReport` are proto-only at floor 213;
-    /// the `exec_id` lives inside the proto payload (nested under
-    /// `execution.exec_id` for `ExecutionData`; at the top level for
-    /// `CommissionsReport`).
+    /// `ExecutionData` nests `exec_id` under `execution.exec_id`;
+    /// `CommissionsReport` carries it at the top level. Both arrive
+    /// proto-framed.
     pub fn execution_id(&self) -> Option<String> {
         let raw = self.raw_bytes()?;
         match self.message_type() {
@@ -981,10 +977,9 @@ impl ResponseMessage {
         }
     }
 
-    /// Peek an integer field without advancing the cursor.
-    ///
-    /// Only callers post-floor-213 are [`Self::request_id`]'s text-fallback
-    /// path for [`IncomingMessages::TickEFP`] and the legacy handshake parser.
+    /// Peek an integer field without advancing the cursor. Called from
+    /// [`Self::request_id`]'s text-fallback path (TickEFP routing) and the
+    /// handshake parser.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
             return Err(Error::eof_at(i, "int"));

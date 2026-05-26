@@ -304,9 +304,9 @@ fn test_response_message_skip() {
 
 #[test]
 fn test_text_framed_message_has_no_order_id_or_execution_id() {
-    // order_id() and execution_id() are proto-only at floor 213. A
-    // text-framed message (raw_bytes = None) returns None even if its text
-    // layout happens to match a historical order_id/exec_id field position.
+    // order_id() and execution_id() require proto-framed payloads; a
+    // text-framed message (raw_bytes = None) returns None regardless of the
+    // historical text-layout field positions.
     let open_order = ResponseMessage::from("5\0123\0field2\0field3\0");
     assert_eq!(open_order.order_id(), None);
     assert_eq!(open_order.execution_id(), None);
@@ -391,8 +391,8 @@ fn test_order_id_protobuf_execution_data_nested() {
 #[test]
 fn test_order_id_protobuf_execution_data_end() {
     // ExecutionDetailsEnd carries `req_id` at proto tag 1; order_id() returns
-    // the same value to match the historical text-path semantics callers
-    // were depending on.
+    // that value because routing keys this message family by order_id and the
+    // proto schema overloads the field.
     let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(55) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.order_id(), Some(55));
