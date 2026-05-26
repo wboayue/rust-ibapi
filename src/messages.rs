@@ -12,10 +12,8 @@ use byteorder::{BigEndian, WriteBytesExt};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
-use time::{macros::format_description, Date, OffsetDateTime, PrimitiveDateTime};
-use time_tz::{OffsetResult, PrimitiveDateTimeExt, TimeZone, Tz};
+use time::OffsetDateTime;
 
-use crate::common::timezone::find_timezone;
 use crate::{Error, ToField};
 
 pub mod parser_registry;
@@ -104,19 +102,6 @@ mod from_str_tests {
 
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
-
-// Wire sentinels used by the legacy text protocol and the `next_optional_*`
-// cursor primitives. `pub(crate) const` is enough since the cursor methods
-// using them are test-only; we keep them as plain `const` + `allow(dead_code)`
-// so they stay private even within the crate.
-#[allow(dead_code)]
-const INFINITY_STR: &str = "Infinity";
-#[allow(dead_code)]
-const UNSET_DOUBLE: &str = "1.7976931348623157E308";
-#[allow(dead_code)]
-const UNSET_INTEGER: &str = "2147483647";
-#[allow(dead_code)]
-const UNSET_LONG: &str = "9223372036854775807";
 
 /// Messages emitted by TWS/Gateway over the market data socket.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -405,16 +390,11 @@ impl FromStr for IncomingMessages {
     }
 }
 
-/// Return the message field index containing the order id, if present.
-pub(crate) fn order_id_index(kind: IncomingMessages) -> Option<usize> {
-    match kind {
-        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
-        IncomingMessages::ExecutionData | IncomingMessages::ExecutionDataEnd => Some(2),
-        _ => None,
-    }
-}
-
 /// Return the message field index containing the request id, if present.
+///
+/// Only [`IncomingMessages::TickEFP`] currently arrives text-framed (TWS has
+/// no protobuf encoder for it). The rest of the table is kept defensively for
+/// unsolicited message types that may not be routable via the proto envelope.
 pub(crate) fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary => Some(2),
@@ -870,7 +850,10 @@ pub(crate) struct ResponseMessage {
     /// plumbing it.
     #[allow(dead_code)]
     pub server_version: i32,
-    /// True when the message payload is protobuf-encoded.
+    /// True when the message payload is protobuf-encoded. Read only by test
+    /// fixtures that mirror the wire framing; production routing uses
+    /// `raw_bytes` directly.
+    #[allow(dead_code)]
     pub is_protobuf: bool,
     /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
     pub raw_bytes: Option<Vec<u8>>,
@@ -939,76 +922,64 @@ impl ResponseMessage {
 
     /// Try to extract the request id from the message.
     ///
-    /// For `server_version >= PROTOBUF`, the request id lives at proto tag 1
-    /// (int32) in `raw_bytes`. The text path reads it from the per-message-type
-    /// field index.
+    /// Proto-framed messages carry it at proto tag 1 in `raw_bytes`. The
+    /// text-framed branch reads the per-message-type field index — currently
+    /// reached only for [`IncomingMessages::TickEFP`], which TWS has no
+    /// protobuf encoder for.
     pub fn request_id(&self) -> Option<i32> {
         let i = request_id_index(self.message_type())?;
-        self.proto_or_text_int(i, |b| {
-            let env: ProtoIdEnvelope = prost::Message::decode(b).ok()?;
+        if let Some(raw) = self.raw_bytes() {
+            let env: ProtoIdEnvelope = prost::Message::decode(raw).ok()?;
             env.id
-        })
+        } else {
+            self.peek_int(i).ok()
+        }
     }
 
     /// Try to extract the order id from the message.
     ///
-    /// For `server_version >= PROTOBUF`, three message types carry `order_id`
-    /// at proto tag 1 (decoded via the minimal `ProtoIdEnvelope`);
-    /// `ExecutionDetails` nests it under `execution.order_id` and uses
-    /// `ExecutionDetailsMinimal` to skip the `contract` sub-message.
+    /// Every `order_id`-bearing message type (`OpenOrder`, `OrderStatus`,
+    /// `ExecutionData`, `ExecutionDataEnd`) is proto-framed. Three carry
+    /// `order_id` at proto tag 1 (decoded via the minimal [`ProtoIdEnvelope`]);
+    /// `ExecutionData` nests it under `execution.order_id` and uses
+    /// [`ExecutionDetailsMinimal`] to skip the `contract` sub-message.
     pub fn order_id(&self) -> Option<i32> {
-        let kind = self.message_type();
-        let i = order_id_index(kind)?;
-        self.proto_or_text_int(i, |b| match kind {
+        let raw = self.raw_bytes()?;
+        match self.message_type() {
             IncomingMessages::OpenOrder | IncomingMessages::OrderStatus | IncomingMessages::ExecutionDataEnd => {
-                prost::Message::decode(b).ok().and_then(|e: ProtoIdEnvelope| e.id)
+                prost::Message::decode(raw).ok().and_then(|e: ProtoIdEnvelope| e.id)
             }
             IncomingMessages::ExecutionData => {
-                let p: ExecutionDetailsMinimal = prost::Message::decode(b).ok()?;
+                let p: ExecutionDetailsMinimal = prost::Message::decode(raw).ok()?;
                 p.execution.and_then(|e| e.order_id)
             }
             _ => None,
-        })
+        }
     }
 
     /// Try to extract the execution id from the message.
     ///
-    /// For `server_version >= PROTOBUF`, `ExecutionData` and `CommissionsReport`
-    /// arrive as protobuf with `fields = [msg_id]`; the exec_id lives inside
-    /// `raw_bytes` instead of at a fixed text-field index.
+    /// `ExecutionData` nests `exec_id` under `execution.exec_id`;
+    /// `CommissionsReport` carries it at the top level. Both arrive
+    /// proto-framed.
     pub fn execution_id(&self) -> Option<String> {
+        let raw = self.raw_bytes()?;
         match self.message_type() {
-            IncomingMessages::ExecutionData => self.proto_or_text_string(14, |b| {
-                let p: ExecutionDetailsMinimal = prost::Message::decode(b).ok()?;
+            IncomingMessages::ExecutionData => {
+                let p: ExecutionDetailsMinimal = prost::Message::decode(raw).ok()?;
                 p.execution.and_then(|e| e.exec_id)
-            }),
-            IncomingMessages::CommissionsReport => self.proto_or_text_string(2, |b| {
-                let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(b).ok()?;
+            }
+            IncomingMessages::CommissionsReport => {
+                let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(raw).ok()?;
                 p.exec_id
-            }),
+            }
             _ => None,
         }
     }
 
-    /// Pull a string out of either the protobuf payload or a text-field index.
-    fn proto_or_text_string(&self, text_idx: usize, proto_extract: impl FnOnce(&[u8]) -> Option<String>) -> Option<String> {
-        if self.is_protobuf {
-            proto_extract(self.raw_bytes()?)
-        } else {
-            self.peek_string(text_idx).ok()
-        }
-    }
-
-    /// Pull an int out of either the protobuf payload or a text-field index.
-    fn proto_or_text_int(&self, text_idx: usize, proto_extract: impl FnOnce(&[u8]) -> Option<i32>) -> Option<i32> {
-        if self.is_protobuf {
-            proto_extract(self.raw_bytes()?)
-        } else {
-            self.peek_int(text_idx).ok()
-        }
-    }
-
-    /// Peek an integer field without advancing the cursor.
+    /// Peek an integer field without advancing the cursor. Called from
+    /// [`Self::request_id`]'s text-fallback path (TickEFP routing) and the
+    /// handshake parser.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
             return Err(Error::eof_at(i, "int"));
@@ -1019,14 +990,6 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
         }
-    }
-
-    /// Peek a string field without advancing the cursor.
-    pub fn peek_string(&self, i: usize) -> Result<String, Error> {
-        if i >= self.fields.len() {
-            return Err(Error::eof_at(i, "string"));
-        }
-        Ok(self.fields[i].to_owned())
     }
 
     /// Consume and parse the next integer field.
@@ -1042,105 +1005,6 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
-    }
-
-    /// Consume the next field returning `None` when unset.
-    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
-    pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "optional int"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        if field.is_empty() || field == UNSET_INTEGER {
-            return Ok(None);
-        }
-
-        match field.parse::<i32>() {
-            Ok(val) => Ok(Some(val)),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
-        }
-    }
-
-    /// Consume the next field as a boolean (`"0"` or `"1"`).
-    #[allow(dead_code)] // test-only since text decoder for market_depth_exchanges is proto-only post-floor-213
-    pub fn next_bool(&mut self) -> Result<bool, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "bool"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        Ok(field == "1")
-    }
-
-    /// Consume and parse the next i64 field.
-    #[allow(dead_code)] // test-only since text decoders for server_time(_millis) are proto-only post-floor-213
-    pub fn next_long(&mut self) -> Result<i64, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "long"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        match field.parse() {
-            Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
-        }
-    }
-
-    /// Consume the next field as an optional i64.
-    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
-    pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "optional long"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        if field.is_empty() || field == UNSET_LONG {
-            return Ok(None);
-        }
-
-        match field.parse::<i64>() {
-            Ok(val) => Ok(Some(val)),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
-        }
-    }
-
-    /// Consume the next field and parse it as an IB timestamp.
-    ///
-    /// Text-protocol helper: no production decoder uses this at floor 210, but
-    /// kept (with tests) until the broader "Helper APIs that go away" cleanup
-    /// per `plans/legacy-text-protocol-cleanup.md`.
-    #[allow(dead_code)]
-    pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
-        self.next_date_time_with_timezone(None)
-    }
-
-    /// Consume the next field and parse it as a timestamp using an optional session timezone.
-    #[allow(dead_code)]
-    pub fn next_date_time_with_timezone(&mut self, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "datetime"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        if field.is_empty() {
-            return Err(Error::parse_field("", "expected timestamp and found empty string"));
-        }
-
-        parse_ib_date_time_with_timezone(field, time_zone).map_err(|err| match err {
-            Error::Parse(_, _, _) => Error::Parse(self.i, field.into(), err.to_string()),
-            other => other,
-        })
     }
 
     /// Consume the next field as a string.
@@ -1169,30 +1033,6 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
-        }
-    }
-
-    /// Consume the next field as an optional floating-point value.
-    #[allow(dead_code)] // test-only since `ResponseMessage` is pub(crate)
-    pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::eof_at(self.i, "optional double"));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        if field.is_empty() || field == UNSET_DOUBLE {
-            return Ok(None);
-        }
-
-        if field == INFINITY_STR {
-            return Ok(Some(f64::INFINITY));
-        }
-
-        match field.parse() {
-            Ok(val) => Ok(Some(val)),
             Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
@@ -1246,61 +1086,6 @@ impl ResponseMessage {
         let mut data = self.fields.join("|");
         data.push('|');
         data
-    }
-}
-
-#[allow(dead_code)] // text-protocol helper — see next_date_time
-pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
-    let utc_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
-    if let Ok(dt) = PrimitiveDateTime::parse(field, utc_format) {
-        return Ok(dt.assume_utc());
-    }
-
-    let tz_format = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    if let Some((datetime_part, tz_name)) = field.rsplit_once(' ') {
-        if let Ok(dt) = PrimitiveDateTime::parse(datetime_part, tz_format) {
-            let zones = find_timezone(tz_name.trim());
-            if let Some(tz) = zones.first().copied() {
-                return resolve_primitive_date_time(field, dt, tz);
-            }
-            return Err(Error::parse_field(field, "unrecognized timezone in IB datetime field"));
-        }
-    }
-
-    if let Some(tz) = time_zone {
-        // IB uses double-space between date and time for session-local timestamps
-        let naive_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
-        if let Ok(dt) = PrimitiveDateTime::parse(field, naive_format) {
-            return resolve_primitive_date_time(field, dt, tz);
-        }
-
-        if field.len() == 8 {
-            let date_format = format_description!("[year][month][day]");
-            if let Ok(date) = Date::parse(field, date_format) {
-                return resolve_primitive_date_time(field, date.midnight(), tz);
-            }
-        }
-    }
-
-    if let Ok(timestamp) = field.parse::<i64>() {
-        return OffsetDateTime::from_unix_timestamp(timestamp).map_err(|err| Error::parse_field(field, err.to_string()));
-    }
-
-    Err(Error::parse_field(field, "failed to parse IB datetime field"))
-}
-
-#[allow(dead_code)] // text-protocol helper — see next_date_time
-fn resolve_primitive_date_time(field: &str, date_time: PrimitiveDateTime, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
-    match date_time.assume_timezone(time_zone) {
-        OffsetResult::Some(value) => Ok(value),
-        OffsetResult::Ambiguous(_, _) => Err(Error::parse_field(
-            field,
-            format!("ambiguous IB datetime field in timezone {}", time_zone.name()),
-        )),
-        OffsetResult::None => Err(Error::parse_field(
-            field,
-            format!("invalid IB datetime field in timezone {}", time_zone.name()),
-        )),
     }
 }
 

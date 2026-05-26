@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::*;
-use crate::common::test_utils::helpers::error_frame;
+use crate::common::test_utils::helpers::{binary_proto, error_frame};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -93,17 +93,31 @@ async fn test_order_id_correlation_with_interleaved_responses() {
     let mut sub_a = bus.send_order_request(11, vec![]).await.unwrap();
     let mut sub_b = bus.send_order_request(22, vec![]).await.unwrap();
 
-    // OrderStatus (msg_id 3): order_id at field index 1.
-    stream.push_inbound(body("3|22|Filled|0|100|0|0|0|0|0||0|"));
-    stream.push_inbound(body("3|11|Submitted|0|0|0|0|0|0|0||0|"));
+    // OrderStatus carries `order_id` at proto tag 1.
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(22),
+            status: Some("Filled".into()),
+            ..Default::default()
+        },
+    ));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(11),
+            status: Some("Submitted".into()),
+            ..Default::default()
+        },
+    ));
 
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
     let msg_a = next_message(&mut sub_a).await;
     let msg_b = next_message(&mut sub_b).await;
-    assert_eq!(msg_a.peek_int(1).unwrap(), 11);
-    assert_eq!(msg_b.peek_int(1).unwrap(), 22);
+    assert_eq!(msg_a.order_id(), Some(11));
+    assert_eq!(msg_b.order_id(), Some(22));
 
     assert!(sub_a.try_next_routed().is_none(), "sub_a received an extra message");
     assert!(sub_b.try_next_routed().is_none(), "sub_b received an extra message");
@@ -121,15 +135,21 @@ async fn test_shared_channel_fan_out_for_open_orders() {
     let mut sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, vec![]).await.unwrap();
     let mut sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, vec![]).await.unwrap();
 
-    // OpenOrder (msg_id 5): order_id at index 1. No matching order subscription,
-    // so the OrderOrShared strategy falls back to fan-out.
-    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
+    // means the OrderOrShared strategy falls back to fan-out across shared subs.
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     for (name, sub) in [("open", &mut sub_open), ("all", &mut sub_all), ("auto", &mut sub_auto)] {
         let msg = next_message(sub).await;
-        assert_eq!(msg.peek_int(0).unwrap(), 5, "sub_{name}");
-        assert_eq!(msg.peek_int(1).unwrap(), 42, "sub_{name}");
+        assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder, "sub_{name}");
+        assert_eq!(msg.order_id(), Some(42), "sub_{name}");
     }
 }
 
@@ -552,16 +572,22 @@ async fn test_notice_stream_late_subscriber_misses_prior() {
 // dispatches by `order_routing_strategy(message_type)`; each strategy has a
 // different fallback order (order_id → request_id, by execution_id, shared-only).
 
-/// Text-format ExecutionData body: `request_id` at field 1, `order_id` at field 2,
-/// `execution_id` at field 14 (the dispatcher's persisted-mapping key).
+/// Proto-framed ExecutionData fixture. `request_id` is at proto tag 1; the
+/// dispatcher's `order_id` / `execution_id` accessors read the nested
+/// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
 fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
-    let mut frame = format!("11|{request_id}|{order_id}|");
-    for _ in 3..14 {
-        frame.push_str("0|");
-    }
-    frame.push_str(execution_id);
-    frame.push('|');
-    body(&frame)
+    binary_proto(
+        crate::messages::IncomingMessages::ExecutionData as i32,
+        &crate::proto::ExecutionDetails {
+            req_id: Some(request_id),
+            contract: None,
+            execution: Some(crate::proto::Execution {
+                order_id: Some(order_id),
+                exec_id: Some(execution_id.to_string()),
+                ..Default::default()
+            }),
+        },
+    )
 }
 
 #[tokio::test]
@@ -573,7 +599,7 @@ async fn test_execution_data_routes_to_order_channel() {
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
-    assert_eq!(msg.peek_int(2).unwrap(), 7);
+    assert_eq!(msg.order_id(), Some(7));
 }
 
 #[tokio::test]
@@ -585,7 +611,7 @@ async fn test_execution_data_falls_back_to_request_channel() {
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
-    assert_eq!(msg.peek_int(1).unwrap(), 99);
+    assert_eq!(msg.request_id(), Some(99));
 }
 
 #[tokio::test]
@@ -604,20 +630,27 @@ async fn test_execution_data_end_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body("55|1|7|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     next_message(&mut sub).await;
 }
 
-/// ExecutionDataEnd uses field 2 for BOTH request_id and order_id, so a request
-/// subscription on the same id catches it via the order-channel-miss fallback.
+/// ExecutionDataEnd's `req_id` doubles as the order_id key for the router; a
+/// request subscription on the same id catches it via the order-channel-miss
+/// fallback to the request channel.
 #[tokio::test]
 async fn test_execution_data_end_falls_back_to_request_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body("55|1|7|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     next_message(&mut sub).await;
@@ -628,7 +661,10 @@ async fn test_execution_data_end_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(42, vec![]).await.unwrap();
 
-    stream.push_inbound(body("55|1|999|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(999) },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an orphan end");
@@ -642,15 +678,21 @@ async fn test_commission_report_routes_via_execution_id_mapping() {
     let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
 
     stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
-    stream.push_inbound(body("59|1|exec-abc|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec-abc".into()),
+            ..Default::default()
+        },
+    ));
 
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
     let exec_msg = next_message(&mut sub).await;
-    assert_eq!(exec_msg.peek_int(0).unwrap(), 11);
+    assert_eq!(exec_msg.message_type(), crate::messages::IncomingMessages::ExecutionData);
     let commission = next_message(&mut sub).await;
-    assert_eq!(commission.peek_int(0).unwrap(), 59);
+    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsReport);
 }
 
 #[tokio::test]
@@ -658,7 +700,13 @@ async fn test_commission_report_without_mapping_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_order_request(7, vec![]).await.unwrap();
 
-    stream.push_inbound(body("59|1|exec-not-mapped|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec-not-mapped".into()),
+            ..Default::default()
+        },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an unmapped commission");
@@ -698,7 +746,13 @@ async fn test_order_update_stream_receives_open_order() {
     let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
     let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
 
-    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
     bus.read_and_route_message().await.unwrap();
 
     next_message(&mut order_sub).await;

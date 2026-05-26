@@ -536,7 +536,7 @@ fn test_parse_raw_message_binary_id_text_payload() {
     let (message, trace_str) = parse_raw_message(&data, server_versions::PROTOBUF);
     assert!(!message.is_protobuf);
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
-    assert_eq!(message.peek_string(1).unwrap(), "1"); // version field
+    assert_eq!(message.fields[1], "1"); // version field
     assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
     assert!(trace_str.is_some());
 }

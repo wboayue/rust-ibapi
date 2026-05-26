@@ -6,7 +6,7 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 // Additional imports for connection tests
 use crate::client::sync::Client;
-use crate::common::test_utils::helpers::error_frame;
+use crate::common::test_utils::helpers::{binary_proto, error_frame};
 use crate::contracts::Contract;
 use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
@@ -269,6 +269,7 @@ fn next_valid_id_response(order_id: i32) -> ResponseMessage {
 
 #[test]
 fn test_bus_send_order_request() -> Result<(), Error> {
+    use prost::Message;
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
@@ -277,20 +278,62 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let contract = &Contract::stock("AAPL").build();
     let request = encode_place_order(5, contract, &order)?;
 
+    let open_order_proto = |status: &str| {
+        ResponseMessage::from_protobuf(
+            crate::messages::IncomingMessages::OpenOrder as i32,
+            crate::proto::OpenOrder {
+                order_id: Some(5),
+                order_state: Some(crate::proto::OrderState {
+                    status: Some(status.into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            sv,
+        )
+    };
+    let order_status_proto = |status: &str, filled: i64| {
+        ResponseMessage::from_protobuf(
+            crate::messages::IncomingMessages::OrderStatus as i32,
+            crate::proto::OrderStatus {
+                order_id: Some(5),
+                status: Some(status.into()),
+                filled: Some(filled.to_string()),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            sv,
+        )
+    };
+    let execution_data_proto = ResponseMessage::from_protobuf(
+        crate::messages::IncomingMessages::ExecutionData as i32,
+        crate::proto::ExecutionDetails {
+            req_id: Some(-1),
+            contract: None,
+            execution: Some(crate::proto::Execution {
+                order_id: Some(5),
+                exec_id: Some("0000e0d5.67fe667b.01.01".into()),
+                ..Default::default()
+            }),
+        }
+        .encode_to_vec(),
+        sv,
+    );
+
     let events = vec![
         Exchange::simple("v213..221", &[&format!("{sv}|20250415 19:38:30 British Summer Time|")]),
-        Exchange::new(start_api_bytes, vec![
-            managed_accounts_response("DU1234567"),
-            next_valid_id_response(5),
-        ]),
-        Exchange::request(request.clone(),
-            &[
-                "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
-                "3|5|PreSubmitted|0|100|0|600745656|0|0|100||0|",
-                "11|-1|5|265598|AAPL|STK||0.0|||IEX|USD|AAPL|NMS|0000e0d5.67fe667b.01.01|20250415  19:38:31|DU1234567|IEX|BOT|100|201.94|600745656|100|0|100|201.94|||||2|",
-                "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
-                "3|5|Filled|100|0|201.94|600745656|0|201.94|100||0|"
-            ]),
+        Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(5)]),
+        Exchange::new(
+            request.clone(),
+            vec![
+                open_order_proto("PreSubmitted"),
+                order_status_proto("PreSubmitted", 0),
+                execution_data_proto,
+                open_order_proto("Filled"),
+                order_status_proto("Filled", 100),
+            ],
+        ),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -720,17 +763,31 @@ fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
     let sub_a = bus.send_order_request(11, &[])?;
     let sub_b = bus.send_order_request(22, &[])?;
 
-    // OrderStatus (msg_id 3): order_id at field index 1.
-    stream.push_inbound(body("3|22|Filled|0|100|0|0|0|0|0||0|"));
-    stream.push_inbound(body("3|11|Submitted|0|0|0|0|0|0|0||0|"));
+    // OrderStatus carries `order_id` at proto tag 1.
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(22),
+            status: Some("Filled".into()),
+            ..Default::default()
+        },
+    ));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(11),
+            status: Some("Submitted".into()),
+            ..Default::default()
+        },
+    ));
 
     bus.dispatch()?;
     bus.dispatch()?;
 
     let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
     let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
-    assert_eq!(msg_a.peek_int(1)?, 11);
-    assert_eq!(msg_b.peek_int(1)?, 22);
+    assert_eq!(msg_a.order_id(), Some(11));
+    assert_eq!(msg_b.order_id(), Some(22));
 
     // No cross-talk.
     assert!(sub_a.try_next().is_none(), "sub_a received an extra message");
@@ -751,15 +808,21 @@ fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     let sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, &[])?;
     let sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, &[])?;
 
-    // OpenOrder (msg_id 5): order_id at index 1. No matching order subscription,
-    // so the OrderOrShared strategy falls back to fan-out.
-    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
+    // means the OrderOrShared strategy falls back to fan-out across shared subs.
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
     bus.dispatch()?;
 
     for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
         let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
-        assert_eq!(msg.peek_int(0)?, 5);
-        assert_eq!(msg.peek_int(1)?, 42);
+        assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder);
+        assert_eq!(msg.order_id(), Some(42));
     }
     Ok(())
 }
@@ -1262,16 +1325,22 @@ fn test_notice_stream_closes_on_shutdown() -> Result<(), Error> {
 // shared-only). For each strategy we cover the positive route, every fallback,
 // and the orphan-fallthrough.
 
-/// Text-format ExecutionData body: `request_id` at field 1, `order_id` at field 2,
-/// `execution_id` at field 14 (the dispatcher's persisted-mapping key).
+/// Proto-framed ExecutionData fixture. `request_id` is at proto tag 1; the
+/// dispatcher's `order_id` / `execution_id` accessors read the nested
+/// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
 fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
-    let mut frame = format!("11|{request_id}|{order_id}|");
-    for _ in 3..14 {
-        frame.push_str("0|");
-    }
-    frame.push_str(execution_id);
-    frame.push('|');
-    body(&frame)
+    binary_proto(
+        crate::messages::IncomingMessages::ExecutionData as i32,
+        &crate::proto::ExecutionDetails {
+            req_id: Some(request_id),
+            contract: None,
+            execution: Some(crate::proto::Execution {
+                order_id: Some(order_id),
+                exec_id: Some(execution_id.to_string()),
+                ..Default::default()
+            }),
+        },
+    )
 }
 
 #[test]
@@ -1283,8 +1352,8 @@ fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
-    assert_eq!(msg.peek_int(0)?, 11);
-    assert_eq!(msg.peek_int(2)?, 7);
+    assert_eq!(msg.message_type(), crate::messages::IncomingMessages::ExecutionData);
+    assert_eq!(msg.order_id(), Some(7));
     Ok(())
 }
 
@@ -1297,7 +1366,7 @@ fn test_execution_data_falls_back_to_request_channel() -> Result<(), Error> {
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
-    assert_eq!(msg.peek_int(1)?, 99);
+    assert_eq!(msg.request_id(), Some(99));
     Ok(())
 }
 
@@ -1306,26 +1375,33 @@ fn test_execution_data_end_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(7, &[])?;
 
-    stream.push_inbound(body("55|1|7|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
+    ));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no end")?;
-    assert_eq!(msg.peek_int(0)?, 55);
+    assert_eq!(msg.message_type(), crate::messages::IncomingMessages::ExecutionDataEnd);
     Ok(())
 }
 
-/// ExecutionDataEnd uses field 2 for BOTH request_id and order_id, so a request
-/// subscription on the same id catches it via the order-channel-miss fallback.
+/// ExecutionDataEnd's `req_id` doubles as the order_id key for the router; a
+/// request subscription on the same id catches it via the order-channel-miss
+/// fallback to the request channel.
 #[test]
 fn test_execution_data_end_falls_back_to_request_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_request(7, &[])?;
 
-    stream.push_inbound(body("55|1|7|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
+    ));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("request sub got no end")?;
-    assert_eq!(msg.peek_int(0)?, 55);
+    assert_eq!(msg.message_type(), crate::messages::IncomingMessages::ExecutionDataEnd);
     Ok(())
 }
 
@@ -1337,16 +1413,22 @@ fn test_commission_report_routes_via_execution_id_mapping() -> Result<(), Error>
     let sub = bus.send_order_request(7, &[])?;
 
     stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
-    stream.push_inbound(body("59|1|exec-abc|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec-abc".into()),
+            ..Default::default()
+        },
+    ));
 
     bus.dispatch()?;
     bus.dispatch()?;
 
     let exec_msg = sub.next_timeout(TICK).expect("exec data missing")?;
-    assert_eq!(exec_msg.peek_int(0)?, 11);
+    assert_eq!(exec_msg.message_type(), crate::messages::IncomingMessages::ExecutionData);
 
     let commission = sub.next_timeout(TICK).expect("commission report missing")?;
-    assert_eq!(commission.peek_int(0)?, 59);
+    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsReport);
     Ok(())
 }
 
@@ -1384,7 +1466,13 @@ fn test_order_update_stream_receives_open_order() -> Result<(), Error> {
     let order_sub = bus.send_order_request(42, &[])?;
     let stream_sub = bus.create_order_update_subscription()?;
 
-    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
     bus.dispatch()?;
 
     assert!(order_sub.next_timeout(TICK).is_some(), "order sub missed open order");
@@ -1480,7 +1568,10 @@ fn test_execution_data_end_orphan_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let unrelated = bus.send_request(42, &[])?;
 
-    stream.push_inbound(body("55|1|999|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd { req_id: Some(999) },
+    ));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan end");
@@ -1492,7 +1583,13 @@ fn test_commission_report_without_mapping_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let unrelated = bus.send_order_request(7, &[])?;
 
-    stream.push_inbound(body("59|1|exec-not-mapped|"));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec-not-mapped".into()),
+            ..Default::default()
+        },
+    ));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got an unmapped commission");

@@ -191,36 +191,29 @@ fn test_is_warning_error() {
     assert!(!is_warning_error(2200));
 }
 
+/// Order-message routing for message types that lack an order_id at the proto
+/// level. `CompletedOrdersEnd` and `CommissionsReport` are order-routed but
+/// have no `order_id` field, so the dispatcher falls back to the sentinel `-1`.
+/// (Cases with a real `order_id` are covered by the per-type proto tests below.)
 #[test]
-fn test_order_message_routing() {
-    // Test OpenOrder with order ID at position 1
-    let message_str = "5\0123\0AAPL\0STK\0"; // OpenOrder with order_id=123
-    let message = ResponseMessage::from(message_str);
-    match determine_routing(&message) {
-        RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-        routing => panic!("Expected ByOrderId routing, got {routing:?}"),
-    }
-
-    // Test CompletedOrdersEnd (no order ID)
-    let message_str = "102\01\0"; // CompletedOrdersEnd
-    let message = ResponseMessage::from(message_str);
-    match determine_routing(&message) {
+fn test_order_message_routing_without_order_id_returns_sentinel() {
+    let completed_orders_end =
+        ResponseMessage::from_protobuf(IncomingMessages::CompletedOrdersEnd as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    match determine_routing(&completed_orders_end) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
     }
 
-    // Test ExecutionData with order ID at position 2
-    let message_str = "11\01\0123\0456\0"; // ExecutionData with request_id=1, order_id=123
-    let message = ResponseMessage::from(message_str);
-    match determine_routing(&message) {
-        RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-        routing => panic!("Expected ByOrderId routing, got {routing:?}"),
-    }
-
-    // Test CommissionsReport (no order ID but still an order message)
-    let message_str = "59\01\0exec123\0100.0\0USD\0"; // CommissionsReport
-    let message = ResponseMessage::from(message_str);
-    match determine_routing(&message) {
+    let commission_report = ResponseMessage::from_protobuf(
+        IncomingMessages::CommissionsReport as i32,
+        crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec123".into()),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+        crate::server_versions::PROTOBUF,
+    );
+    match determine_routing(&commission_report) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
     }
