@@ -296,7 +296,7 @@ cargo build -p ibapi-integration-async --tests
 
 ### PR-C — per-decoder text-branch deletions
 
-**Status: 🚧 In progress** — PR-B merged 2026-05-25; C1 shipped in [#634](https://github.com/wboayue/rust-ibapi/pull/634); C2 shipped in [#635](https://github.com/wboayue/rust-ibapi/pull/635); C3 shipped in [#636](https://github.com/wboayue/rust-ibapi/pull/636); C4 shipped in this PR; C6 shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633).
+**Status: 🚧 In progress** — PR-B merged 2026-05-25; C1 shipped in [#634](https://github.com/wboayue/rust-ibapi/pull/634); C2 shipped in [#635](https://github.com/wboayue/rust-ibapi/pull/635); C3 shipped in [#636](https://github.com/wboayue/rust-ibapi/pull/636); C4 shipped in [#637](https://github.com/wboayue/rust-ibapi/pull/637); C6 shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633).
 
 Six follow-up PRs after PR-B. Each is a thin proto-only conversion + fixture
 migration following the gate-206 / historical precedent (PRs #626, #629, #630).
@@ -316,7 +316,7 @@ add `_rejects_text_framing` regression test per decoder.
 | ~~C1~~ | ~~`decode_family_codes`~~ — shipped in [#634](https://github.com/wboayue/rust-ibapi/pull/634) | `accounts/common/decoders/`     | n/a (builder existed)                  |
 | ~~C2~~ | ~~`decode_server_time`, `decode_server_time_millis`~~ — shipped in [#635](https://github.com/wboayue/rust-ibapi/pull/635) | `accounts/common/decoders/`     | n/a (builders existed)                 |
 | ~~C3~~ | ~~`decode_managed_accounts`~~ — shipped in [#636](https://github.com/wboayue/rust-ibapi/pull/636) | `accounts/common/decoders/`     | n/a (builder existed)                  |
-| ~~C4~~ | ~~`decode_market_depth_exchanges`~~ — shipped in this PR | `market_data/realtime/common/decoders/` | `MktDepthExchangesResponse`    |
+| ~~C4~~ | ~~`decode_market_depth_exchanges`~~ — shipped in [#637](https://github.com/wboayue/rust-ibapi/pull/637) | `market_data/realtime/common/decoders/` | `MktDepthExchangesResponse`    |
 | C5    | `decode_display_group_updated` (collapse PR-A wrapper)  | `display_groups/common/`        | `DisplayGroupUpdatedResponse`          |
 | ~~C6~~ | ~~`NextValidId` / `ManagedAccounts` `is_protobuf` branches in `connection/common.rs`~~ — shipped in [#633](https://github.com/wboayue/rust-ibapi/pull/633) | `connection/` | n/a (delete-only)             |
 
