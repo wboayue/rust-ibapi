@@ -32,7 +32,6 @@ fn test_decode_display_group_update_empty() {
 
 #[test]
 fn test_decode_wrong_message_type() {
-    // Frame the bytes as DisplayGroupList (67) instead of DisplayGroupUpdated (68).
     let bytes = display_group_updated().contract_info("data").encode_proto();
     let mut message = proto_response(IncomingMessages::DisplayGroupList, bytes);
 

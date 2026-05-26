@@ -10,7 +10,7 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 fn display_group_update_response(contract_info: &str) -> crate::messages::ResponseMessage {
-    let bytes = display_group_updated().request_id(9000).contract_info(contract_info).encode_proto();
+    let bytes = display_group_updated().contract_info(contract_info).encode_proto();
     proto_response(IncomingMessages::DisplayGroupUpdated, bytes)
 }
 
@@ -69,8 +69,7 @@ async fn test_update_display_group() {
 
 #[tokio::test]
 async fn test_subscribe_to_group_events_skips_wrong_message_type() {
-    // First message is DisplayGroupList (67) - wrong type, dispatcher should skip-classify.
-    // Second is the real DisplayGroupUpdated (68) — that's what the test sees.
+    // Regression for rule 15: wrong-type frames must skip-classify, not terminate.
     let wrong = proto_response(
         IncomingMessages::DisplayGroupList,
         display_group_updated().contract_info("wrong message").encode_proto(),

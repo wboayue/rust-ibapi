@@ -2,16 +2,13 @@
 
 use prost::Message;
 
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::Error;
 
 use super::stream_decoders::DisplayGroupUpdate;
 
 /// Decodes a DisplayGroupUpdated message.
 pub(crate) fn decode_display_group_updated(message: &ResponseMessage) -> Result<DisplayGroupUpdate, Error> {
-    if message.message_type() != IncomingMessages::DisplayGroupUpdated {
-        return Err(Error::unexpected_response(message));
-    }
     decode_display_group_updated_proto(message.require_proto()?)
 }
 

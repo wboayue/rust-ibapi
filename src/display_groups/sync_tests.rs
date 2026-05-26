@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::{proto_response, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::proto_response;
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -9,10 +9,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 
 fn display_group_update_response(contract_info: &str) -> crate::messages::ResponseMessage {
-    let bytes = display_group_updated()
-        .request_id(TEST_REQ_ID_FIRST)
-        .contract_info(contract_info)
-        .encode_proto();
+    let bytes = display_group_updated().contract_info(contract_info).encode_proto();
     proto_response(IncomingMessages::DisplayGroupUpdated, bytes)
 }
 
@@ -39,9 +36,7 @@ fn test_update_display_group() {
     subscription.update("265598@SMART").expect("update failed");
 
     let requests = message_bus.request_messages.read().unwrap();
-    // First request is subscribe, second is update
     assert_eq!(requests.len(), 2);
-
     assert_proto_msg_id(&requests[0], OutgoingMessages::SubscribeToGroupEvents);
     assert_proto_msg_id(&requests[1], OutgoingMessages::UpdateDisplayGroup);
 }
@@ -49,7 +44,6 @@ fn test_update_display_group() {
 #[test]
 fn test_subscription_derefs_to_inner_for_next() {
     let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
-    // `.next()` is Subscription<T>::next reached via Deref::deref.
     assert_first_data_eq(subscription.next(), "265598@SMART");
 }
 
