@@ -12,7 +12,7 @@ use crate::testdata::builders::accounts::{
 use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
 };
-use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
+use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
 use futures::StreamExt;
 use std::sync::Arc;
@@ -187,7 +187,10 @@ async fn test_pnl_single() {
 
 #[tokio::test]
 async fn test_managed_accounts() {
-    let (client, message_bus) = create_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::ManagedAccounts,
+        managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
+    )]);
 
     let accounts = client.managed_accounts().await.expect("request managed accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
@@ -198,7 +201,10 @@ async fn test_managed_accounts() {
 
 #[tokio::test]
 async fn test_managed_accounts_retry() {
-    let (client, message_bus) = create_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::ManagedAccounts,
+        managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
+    )]);
 
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
@@ -414,27 +420,6 @@ async fn test_server_version_errors() {
                 error
             );
         }
-    }
-}
-
-#[tokio::test]
-async fn test_managed_accounts_scenarios() {
-    use super::common::test_tables::managed_accounts_test_cases;
-
-    for test_case in managed_accounts_test_cases() {
-        let (client, message_bus) = if test_case.responses.is_empty() {
-            create_test_client()
-        } else {
-            create_test_client_with_responses(test_case.responses)
-        };
-
-        let accounts = client
-            .managed_accounts()
-            .await
-            .unwrap_or_else(|_| panic!("managed_accounts failed for {}", test_case.scenario));
-        assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
-        assert_eq!(request_message_count(&message_bus), 1);
-        assert_request(&message_bus, 0, &request_managed_accounts());
     }
 }
 

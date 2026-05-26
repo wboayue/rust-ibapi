@@ -68,13 +68,8 @@ pub(crate) fn decode_server_time_millis_proto(bytes: &[u8]) -> Result<OffsetDate
     OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
 }
 
-pub(crate) fn decode_managed_accounts(message: &mut ResponseMessage) -> Result<Vec<String>, Error> {
-    message.decode_proto_or_text(decode_managed_accounts_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // message version
-        let accounts = msg.next_string()?;
-        Ok(accounts.split(',').filter(|s| !s.is_empty()).map(String::from).collect())
-    })
+pub(crate) fn decode_managed_accounts(message: &ResponseMessage) -> Result<Vec<String>, Error> {
+    decode_managed_accounts_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_managed_accounts_proto(bytes: &[u8]) -> Result<Vec<String>, Error> {

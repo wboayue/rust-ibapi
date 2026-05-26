@@ -9,6 +9,16 @@ fn test_decode_family_codes_rejects_text_framing() {
 }
 
 #[test]
+fn test_decode_managed_accounts_rejects_text_framing() {
+    let message = super::ResponseMessage::from("15\01\0DU1234567,DU7654321\0");
+    let err = super::decode_managed_accounts(&message).unwrap_err();
+    assert!(
+        matches!(err, super::Error::UnexpectedResponse(_)),
+        "expected UnexpectedResponse, got {err:?}"
+    );
+}
+
+#[test]
 fn test_decode_server_time_rejects_text_framing() {
     let message = super::ResponseMessage::from("49\01\01678890000\0");
     let err = super::decode_server_time(&message).unwrap_err();

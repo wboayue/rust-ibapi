@@ -11,15 +11,6 @@ pub struct VersionTestCase {
     pub required_version: i32,
 }
 
-/// Test case for managed accounts scenarios
-#[derive(Debug, Clone)]
-pub struct ManagedAccountsTestCase {
-    pub scenario: &'static str,
-    pub responses: Vec<String>,
-    pub expected: Vec<String>,
-    pub description: &'static str,
-}
-
 #[cfg(feature = "sync")]
 /// Test case for contract ID edge cases
 #[derive(Debug, Clone)]
@@ -137,42 +128,6 @@ pub const VERSION_TEST_CASES: &[VersionTestCase] = &[
 // =============================================================================
 // Dynamic Test Data Functions
 // =============================================================================
-
-/// Managed accounts test cases
-pub fn managed_accounts_test_cases() -> Vec<ManagedAccountsTestCase> {
-    vec![
-        ManagedAccountsTestCase {
-            scenario: "valid multiple accounts",
-            responses: vec!["17|1|DU1234567,DU7654321|".into()],
-            expected: vec!["DU1234567".to_string(), "DU7654321".to_string()],
-            description: "Multiple comma-separated accounts",
-        },
-        ManagedAccountsTestCase {
-            scenario: "single account",
-            responses: vec!["17|1|SINGLE_ACCOUNT|".into()],
-            expected: vec!["SINGLE_ACCOUNT".to_string()],
-            description: "Single account response",
-        },
-        ManagedAccountsTestCase {
-            scenario: "empty response",
-            responses: vec!["17|1||".into()],
-            expected: vec![],
-            description: "Empty account string results in empty vector",
-        },
-        ManagedAccountsTestCase {
-            scenario: "no response",
-            responses: vec![],
-            expected: vec![],
-            description: "No message received returns empty vector",
-        },
-        ManagedAccountsTestCase {
-            scenario: "accounts with trailing comma",
-            responses: vec!["17|1|ACC1,ACC2,|".into()],
-            expected: vec!["ACC1".to_string(), "ACC2".to_string()],
-            description: "Trailing comma is ignored",
-        },
-    ]
-}
 
 #[cfg(feature = "sync")]
 /// Contract ID edge case test cases
