@@ -314,7 +314,7 @@ add `_rejects_text_framing` regression test per decoder.
 
 | PR    | Decoder(s)                                              | Domain                          | New builder(s) needed                  |
 |-------|---------------------------------------------------------|---------------------------------|----------------------------------------|
-| C1    | `decode_family_codes`                                   | `accounts/common/decoders/`     | `FamilyCodesResponse` (proto exists)   |
+| ~~C1~~ | ~~`decode_family_codes`~~ — shipped in this PR        | `accounts/common/decoders/`     | n/a (builder existed)                  |
 | C2    | `decode_server_time`, `decode_server_time_millis`       | `accounts/common/decoders/`     | `CurrentTimeResponse`, `CurrentTimeInMillisResponse` |
 | C3    | `decode_managed_accounts`                               | `accounts/common/decoders/`     | `ManagedAccountsResponse`              |
 | C4    | `decode_market_depth_exchanges`                         | `market_data/realtime/common/decoders/` | `MktDepthExchangesResponse`    |
