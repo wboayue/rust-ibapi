@@ -213,7 +213,11 @@ async fn test_server_time() {
 
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
 
-    let (client, message_bus) = create_test_client_with_responses(vec![current_time().encode_pipe()]);
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::CurrentTime,
+        current_time().encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let result = client.server_time().await;
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -431,45 +435,6 @@ async fn test_managed_accounts_scenarios() {
         assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
         assert_eq!(request_message_count(&message_bus), 1);
         assert_request(&message_bus, 0, &request_managed_accounts());
-    }
-}
-
-#[tokio::test]
-async fn test_server_time_scenarios() {
-    use super::common::test_tables::server_time_test_cases;
-
-    for test_case in server_time_test_cases() {
-        let (client, message_bus) = if test_case.responses.is_empty() {
-            create_test_client()
-        } else {
-            create_test_client_with_responses(test_case.responses)
-        };
-
-        let result = client.server_time().await;
-
-        match test_case.expected_result {
-            Ok(expected_time) => {
-                assert!(result.is_ok(), "Expected Ok for {}, got: {:?}", test_case.scenario, result.err());
-                assert_eq!(result.unwrap(), expected_time, "Timestamp mismatch for {}", test_case.scenario);
-            }
-            Err("unexpected end of stream") => {
-                assert!(
-                    matches!(result, Err(Error::UnexpectedEndOfStream)),
-                    "Expected UnexpectedEndOfStream for {}, got {result:?}",
-                    test_case.scenario
-                );
-            }
-            Err(_) => {
-                assert!(result.is_err(), "Expected error for {}", test_case.scenario);
-                match result.unwrap_err() {
-                    Error::Parse(_, _, _) | Error::ParseInt(_) | Error::Simple(_) => {}
-                    other => panic!("Expected Parse, ParseInt, or Simple error for {}, got: {:?}", test_case.scenario, other),
-                }
-            }
-        }
-
-        assert_eq!(request_message_count(&message_bus), 1);
-        assert_request(&message_bus, 0, &request_current_time());
     }
 }
 

@@ -9,6 +9,48 @@ fn test_decode_family_codes_rejects_text_framing() {
 }
 
 #[test]
+fn test_decode_server_time_rejects_text_framing() {
+    let message = super::ResponseMessage::from("49\01\01678890000\0");
+    let err = super::decode_server_time(&message).unwrap_err();
+    assert!(
+        matches!(err, super::Error::UnexpectedResponse(_)),
+        "expected UnexpectedResponse, got {err:?}"
+    );
+}
+
+#[test]
+fn test_decode_server_time_millis_rejects_text_framing() {
+    let message = super::ResponseMessage::from("109\01678890000123\0");
+    let err = super::decode_server_time_millis(&message).unwrap_err();
+    assert!(
+        matches!(err, super::Error::UnexpectedResponse(_)),
+        "expected UnexpectedResponse, got {err:?}"
+    );
+}
+
+#[test]
+fn test_decode_server_time_proto_via_builder() {
+    use crate::testdata::builders::accounts::current_time;
+    use crate::testdata::builders::ResponseProtoEncoder;
+    use time::macros::datetime;
+
+    let bytes = current_time().timestamp(1678890000).encode_proto();
+    let result = super::decode_server_time_proto(&bytes).unwrap();
+    assert_eq!(result, datetime!(2023-03-15 14:20:00 UTC));
+}
+
+#[test]
+fn test_decode_server_time_millis_proto_via_builder() {
+    use crate::testdata::builders::accounts::current_time_in_millis;
+    use crate::testdata::builders::ResponseProtoEncoder;
+    use time::macros::datetime;
+
+    let bytes = current_time_in_millis().millis(1_678_890_000_123).encode_proto();
+    let result = super::decode_server_time_millis_proto(&bytes).unwrap();
+    assert_eq!(result, datetime!(2023-03-15 14:20:00.123 UTC));
+}
+
+#[test]
 fn test_decode_account_update_time_proto() {
     use prost::Message;
 
