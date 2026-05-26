@@ -28,6 +28,19 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data
 }
 
+fn error_frame(request_id: i32, code: i32, msg: &str) -> Vec<u8> {
+    crate::common::test_utils::helpers::binary_proto(
+        IncomingMessages::Error as i32,
+        &crate::proto::ErrorMessage {
+            id: Some(request_id),
+            error_time: None,
+            error_code: Some(code),
+            error_msg: Some(msg.into()),
+            advanced_order_reject_json: None,
+        },
+    )
+}
+
 #[tokio::test]
 async fn establish_connection_rejects_pre_protobuf_server() {
     let stream = MemoryStream::default();
@@ -136,7 +149,7 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02104\0farm OK\0"));
+    stream.push_inbound(error_frame(-1, 2104, "farm OK"));
     stream.push_inbound(next_valid_id_frame(90));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 
@@ -147,7 +160,7 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
 
     stream.push_inbound(handshake_bytes);
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "-1\02106\0HMDS farm OK\0"));
+    stream.push_inbound(error_frame(-1, 2106, "HMDS farm OK"));
     stream.push_inbound(next_valid_id_frame(91));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 

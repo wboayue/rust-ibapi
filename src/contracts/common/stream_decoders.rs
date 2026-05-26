@@ -57,14 +57,14 @@ impl StreamDecoder<OptionChain> for OptionChain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::test_utils::helpers::assert_tws_error_message;
+    use crate::common::test_utils::helpers::{assert_tws_error_message, proto_error_response};
 
     fn test_context() -> DecoderContext {
         DecoderContext::new(176, None)
     }
 
     fn error_message() -> ResponseMessage {
-        ResponseMessage::from_simple("4|2|9000|10089|Requested market data is not subscribed|")
+        proto_error_response(9000, 10089, "Requested market data is not subscribed")
     }
 
     #[test]

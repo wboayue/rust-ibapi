@@ -57,21 +57,6 @@ pub(crate) fn decode_error_envelope(raw_bytes: &[u8]) -> Option<DecodedError> {
     })
 }
 
-/// Extract Error fields from a text-format `ResponseMessage`. Field layout:
-/// `..., error_message, advanced_order_reject_json?, error_time?`. Missing trailing
-/// fields default to empty/None (old format / pre-`ADVANCED_ORDER_REJECT` servers).
-fn extract_text_error(message: &ResponseMessage) -> DecodedError {
-    let error_msg_idx = message.error_message_index();
-    let error_time = message.peek_long(error_msg_idx + 2).ok();
-    DecodedError {
-        request_id: message.error_request_id(),
-        error_code: message.error_code(),
-        error_message: message.error_message(),
-        error_time,
-        advanced_order_reject_json: message.advanced_order_reject_json(),
-    }
-}
-
 fn is_order_message(message_type: IncomingMessages) -> bool {
     matches!(
         message_type,
@@ -102,11 +87,7 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     }
 
     if message_type == IncomingMessages::Error {
-        let decoded = if message.is_protobuf {
-            message.raw_bytes().and_then(decode_error_envelope).unwrap_or_default()
-        } else {
-            extract_text_error(message)
-        };
+        let decoded = message.raw_bytes().and_then(decode_error_envelope).unwrap_or_default();
         return RoutingDecision::Error(decoded);
     }
 

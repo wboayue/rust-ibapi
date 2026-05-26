@@ -1,7 +1,8 @@
 use super::*;
 use crate::client::blocking::Client;
 use crate::common::test_utils::helpers::{
-    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_error_response, proto_response, request_message_count,
+    TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
 use crate::market_data::historical::BarTimestamp;
@@ -843,14 +844,11 @@ fn test_historical_data_streaming_with_updates() {
 
 #[test]
 fn test_historical_data_streaming_error_response() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Error response
-            "4\02\09000\0162\0Historical Market Data Service error message:No market data permissions.\0".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        162,
+        "Historical Market Data Service error message:No market data permissions.",
+    )]));
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);
@@ -1087,9 +1085,11 @@ fn test_historical_data_connection_reset_after_retries() {
 fn test_historical_data_error_message_response() {
     // Type 4 = IncomingMessages::Error — exercises the explicit Error arm
     // (Err::from(message)), distinct from the UnexpectedResponse arm.
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        "4\02\09000\0162\0Historical Market Data Service error message:No market data permissions.\0".to_owned(),
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        162,
+        "Historical Market Data Service error message:No market data permissions.",
+    )]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let result = client

@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::proto_error_response;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
@@ -202,9 +203,8 @@ fn test_dispatch_unsolicited_unknown_emits_notice() {
 
 #[test]
 fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
-    // Error frame with code 2104 (farm-status warning).
-    // Format: msg_type=4, version=2, request_id=-1, code=2104, message
-    let mut message = ResponseMessage::from("4\02\0-1\02104\0Market data farm OK\0");
+    // Error frame with code 2104 (farm-status warning), proto-framed.
+    let mut message = proto_error_response(-1, 2104, "Market data farm OK");
 
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
@@ -217,7 +217,7 @@ fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
 #[test]
 fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     // Error frame with code 504 — non-warning, non-system message.
-    let mut message = ResponseMessage::from("4\02\0-1\0504\0Not connected\0");
+    let mut message = proto_error_response(-1, 504, "Not connected");
 
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
@@ -228,7 +228,7 @@ fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
 #[test]
 fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
     // Error frame should fire the notice sink, NOT the startup callback.
-    let mut message = ResponseMessage::from("4\02\0-1\02104\0farm OK\0");
+    let mut message = proto_error_response(-1, 2104, "farm OK");
 
     let startup_fired = Arc::new(Mutex::new(false));
     let startup_fired_clone = startup_fired.clone();
@@ -538,16 +538,6 @@ fn test_parse_raw_message_binary_id_text_payload() {
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert_eq!(message.peek_string(1).unwrap(), "1"); // version field
     assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
-    assert!(trace_str.is_some());
-}
-
-#[test]
-fn test_parse_raw_message_legacy_text() {
-    let data = b"9\01\01000\0";
-    let (message, trace_str) = parse_raw_message(data, 173); // server < PROTOBUF
-
-    assert!(!message.is_protobuf);
-    assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert!(trace_str.is_some());
 }
 

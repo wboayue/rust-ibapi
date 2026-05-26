@@ -1,5 +1,7 @@
 //! Table-driven test data for contracts module tests
 
+#[cfg(feature = "sync")]
+use crate::common::test_utils::helpers::proto_error_response;
 use crate::common::test_utils::helpers::{proto_response, text_response};
 use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
@@ -879,7 +881,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
         ContractDetailsErrorTestCase {
             name: "error message from server",
             contract: Contract::stock("INVALID").build(),
-            ordered_responses: vec![text_response("4|2|9000|200|Invalid contract|")],
+            ordered_responses: vec![proto_error_response(9000, 200, "Invalid contract")],
             should_error: true,
             error_contains: Some("Invalid contract"),
             expected_count: 0,

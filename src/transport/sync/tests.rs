@@ -649,17 +649,46 @@ fn test_request_encoding_roundtrip() {
 // `MemoryStream` lets tests push response frames freely and drive
 // `bus.dispatch()` directly.
 
-/// Build a text-format response body: `"msg_id|f1|f2|..."` → `b"msg_id\0f1\0f2\0..."`.
-/// Pipes are stand-ins for NULs so test inputs stay readable.
+/// Build a binary-text-payload response body from a pipe-delimited test input.
+/// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
+/// stand-ins for NULs so test inputs stay readable. For `Error` frames
+/// (msg_id `4`), use [`body_error`] — they ship as protobuf post-floor-213
+/// and the binary-text-payload path defaults to an empty Notice.
 fn body(text: &str) -> Vec<u8> {
-    text.replace('|', "\0").into_bytes()
+    let fields: Vec<&str> = text.split_terminator('|').collect();
+    let msg_id: i32 = fields[0].parse().expect("body() fixture must start with a numeric msg_id");
+    debug_assert_ne!(
+        msg_id,
+        crate::messages::IncomingMessages::Error as i32,
+        "Error frames must use body_error() — protobuf-framed since PR-D1"
+    );
+    let payload: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
+    let mut data = msg_id.to_be_bytes().to_vec();
+    data.extend_from_slice(payload.as_bytes());
+    data
 }
 
-/// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. server_version=0
-/// keeps `parse_raw_message` on the text path.
+/// Build a protobuf-framed `Error` response frame for `MemoryStream::push_inbound`.
+/// Mirrors what TWS sends at floor 213+ and exercises the proto path in
+/// `Notice::from(&ResponseMessage)` / `determine_routing`.
+fn body_error(request_id: i32, code: i32, msg: &str) -> Vec<u8> {
+    let envelope = crate::proto::ErrorMessage {
+        id: Some(request_id),
+        error_time: None,
+        error_code: Some(code),
+        error_msg: Some(msg.into()),
+        advanced_order_reject_json: None,
+    };
+    crate::common::test_utils::helpers::binary_proto(crate::messages::IncomingMessages::Error as i32, &envelope)
+}
+
+/// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. Pins
+/// `server_version` to the current floor so `parse_raw_message` produces
+/// binary-text-payload frames from `body()` inputs.
 fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), 28);
+    connection.connection_metadata.lock().unwrap().server_version = crate::server_versions::PROTOBUF_REST_MESSAGES_3;
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
     (stream, bus)
 }
@@ -908,7 +937,7 @@ fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
     let sub = bus.send_request(42, &[])?;
 
     // Old-format Error: msg_id=4, version=2, request_id=42, code=2104, message=...
-    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body_error(42, 2104, FARM_OK_MSG));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
@@ -936,7 +965,7 @@ fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error
     let (stream, bus) = make_bus();
     let sub = bus.send_request(42, &[])?;
 
-    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    stream.push_inbound(body_error(42, 200, "No security definition found"));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("error not delivered");
@@ -957,7 +986,7 @@ fn test_warning_with_unspecified_id_is_log_only() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_request(42, &[])?;
 
-    stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body_error(-1, 2104, FARM_OK_MSG));
     bus.dispatch()?;
 
     assert!(sub.try_next_routed().is_none(), "unrouted notice must not be delivered to a subscription");
@@ -972,7 +1001,7 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(7, &[])?;
 
-    stream.push_inbound(body("4|2|7|2104|Order warning|"));
+    stream.push_inbound(body_error(7, 2104, "Order warning"));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("order notice not delivered");
@@ -994,8 +1023,14 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
 // `Err(_)` / `None` as expected.
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
-const FARM_OK_FRAME_42: &str = "4|2|42|2104|Market data farm connection is OK:usfarm|";
-const FARM_OK_FRAME_UNROUTED: &str = "4|2|-1|2104|Market data farm connection is OK:usfarm|";
+
+fn farm_ok_frame_42() -> Vec<u8> {
+    body_error(42, 2104, FARM_OK_MSG)
+}
+
+fn farm_ok_frame_unrouted() -> Vec<u8> {
+    body_error(-1, 2104, FARM_OK_MSG)
+}
 
 #[derive(Debug)]
 struct NoticeTestData;
@@ -1041,7 +1076,7 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
 
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
-    stream.push_inbound(body(FARM_OK_FRAME_42));
+    stream.push_inbound(farm_ok_frame_42());
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
@@ -1066,7 +1101,7 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
 fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
-    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    stream.push_inbound(body_error(42, 200, "No security definition found"));
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
@@ -1088,7 +1123,7 @@ fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
 
     let (stream, bus, subscription) = make_order_subscription(7)?;
 
-    stream.push_inbound(body("4|2|7|2109|Outside RTH order warning|"));
+    stream.push_inbound(body_error(7, 2109, "Outside RTH order warning"));
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
@@ -1106,7 +1141,7 @@ fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
 fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
-    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    stream.push_inbound(farm_ok_frame_unrouted());
     bus.dispatch()?;
 
     assert!(
@@ -1122,7 +1157,7 @@ fn test_subscription_iter_data_filters_notices() -> Result<(), Error> {
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
     stream.push_inbound(body("89|42|first|"));
-    stream.push_inbound(body(FARM_OK_FRAME_42));
+    stream.push_inbound(farm_ok_frame_42());
     stream.push_inbound(body("89|42|second|"));
     for _ in 0..3 {
         bus.dispatch()?;
@@ -1148,7 +1183,7 @@ fn test_notice_stream_receives_unrouted_warning() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notice_stream = bus.notice_subscribe();
 
-    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    stream.push_inbound(farm_ok_frame_unrouted());
     bus.dispatch()?;
 
     let notice = notice_stream.next_timeout(TICK).expect("notice not delivered");
@@ -1164,7 +1199,7 @@ fn test_notice_stream_fans_out_to_multiple_subscribers() -> Result<(), Error> {
     let s1 = bus.notice_subscribe();
     let s2 = bus.notice_subscribe();
 
-    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    stream.push_inbound(farm_ok_frame_unrouted());
     bus.dispatch()?;
 
     let n1 = s1.next_timeout(TICK).expect("subscriber 1 missed notice");
@@ -1181,7 +1216,7 @@ fn test_notice_stream_receives_unrouted_hard_error() -> Result<(), Error> {
     let notice_stream = bus.notice_subscribe();
 
     // code 504 — "Not connected" — is non-warning.
-    stream.push_inbound(body("4|2|-1|504|Not connected|"));
+    stream.push_inbound(body_error(-1, 504, "Not connected"));
     bus.dispatch()?;
 
     let notice = notice_stream.next_timeout(TICK).expect("hard-error notice missed");
@@ -1197,7 +1232,7 @@ fn test_notice_stream_skips_routed_notices() -> Result<(), Error> {
     let notice_stream = bus.notice_subscribe();
     let request_sub = bus.send_request(42, &[])?;
 
-    stream.push_inbound(body(FARM_OK_FRAME_42));
+    stream.push_inbound(farm_ok_frame_42());
     bus.dispatch()?;
 
     // Routed to the owner.
@@ -1212,7 +1247,7 @@ fn test_notice_stream_skips_routed_notices() -> Result<(), Error> {
 fn test_notice_stream_late_subscriber_misses_prior() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    stream.push_inbound(farm_ok_frame_unrouted());
     bus.dispatch()?;
 
     // Subscribe AFTER the notice was broadcast.
@@ -1407,7 +1442,7 @@ fn test_warning_with_orphan_request_id_logs() -> Result<(), Error> {
     let unrelated = bus.send_request(42, &[])?;
     let notice_stream = bus.notice_subscribe();
 
-    stream.push_inbound(body("4|2|99|2104|orphan warning|"));
+    stream.push_inbound(body_error(99, 2104, "orphan warning"));
     bus.dispatch()?;
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got the notice");

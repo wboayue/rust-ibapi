@@ -130,17 +130,9 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
     })
 }
 
-pub(crate) fn decode_next_valid_id(message: &mut ResponseMessage) -> Result<i32, Error> {
-    message.decode_proto_or_text(
-        |bytes| {
-            let p: crate::proto::NextValidId = prost::Message::decode(bytes)?;
-            Ok(p.order_id.unwrap_or_default())
-        },
-        |msg| {
-            // text fields: [msg_type, version, order_id]
-            msg.peek_int(2)
-        },
-    )
+pub(crate) fn decode_next_valid_id(message: &ResponseMessage) -> Result<i32, Error> {
+    let p: crate::proto::NextValidId = prost::Message::decode(message.require_proto()?)?;
+    Ok(p.order_id.unwrap_or_default())
 }
 
 #[cfg(test)]

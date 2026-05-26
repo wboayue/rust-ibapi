@@ -172,6 +172,21 @@ pub mod helpers {
         )
     }
 
+    /// Proto-framed `Error` [`ResponseMessage`](crate::messages::ResponseMessage)
+    /// for stream-decoder tests. Replaces the legacy
+    /// `ResponseMessage::from("4|2|<request_id>|<code>|<msg>|")` text fixtures
+    /// that became unreachable after PR-D1 collapsed Notice::from to proto-only.
+    pub fn proto_error_response(request_id: i32, code: i32, msg: impl Into<String>) -> crate::messages::ResponseMessage {
+        let envelope = crate::proto::ErrorMessage {
+            id: Some(request_id),
+            error_time: None,
+            error_code: Some(code),
+            error_msg: Some(msg.into()),
+            advanced_order_reject_json: None,
+        };
+        proto_response(crate::messages::IncomingMessages::Error, prost::Message::encode_to_vec(&envelope))
+    }
+
     /// Common test constants that can be used across modules
     pub mod constants {
         /// Test account identifiers

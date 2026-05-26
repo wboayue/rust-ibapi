@@ -341,24 +341,46 @@ roughly one PR-A's worth of work.
 
 ### PR-D — final cleanup (after all C-series PRs ship)
 
-**Status: 📋 Pending** — unblocks once all PR-C series merge.
+**Status: D1 open; D2 and D3 pending.**
 
 Delete the dual-format machinery and text-only `ResponseMessage` surface.
 Sequenced because some deletions block others.
 
-**D1 — collapse caller branches (independent of D2/D3).** Each site reads
-`is_protobuf` and forks; after C-series, the text arm is unreachable.
-- `From<&ResponseMessage> for Notice` proto branch → collapse
-- `From<ResponseMessage> for Error` proto branch (`src/errors.rs:116`) → collapse
-- `src/transport/routing.rs:104` proto/text error dispatch → collapse to
-  `decode_error_envelope(message.raw_bytes()?)` only
-- `decode_proto_or_text{,_owned}` callsites: by C-series end, every call has
-  the text closure as `|_| unreachable!()`. Inline the proto closure at each
-  callsite.
-- `connection::common::parse_raw_message` text-payload `else` branch
-  (lines 384-389): per the tracker, already unreachable at floor 203; delete
-  while we're in there. The binary-text-payload branch (lines 377-383) goes
-  in D3.
+**D1 — collapse caller branches (independent of D2/D3). 🚧 Open as PR.**
+Each site reads `is_protobuf` and forks; after C-series, the text arm is
+unreachable.
+- `From<&ResponseMessage> for Notice` proto branch → collapsed: now delegates
+  to `decode_error_envelope` with a `DecodedError::default()` fallback.
+- `transport::routing::determine_routing` Error arm → collapsed to
+  `decode_error_envelope(message.raw_bytes()).unwrap_or_default()` only;
+  `extract_text_error` helper deleted.
+- `decode_proto_or_text` callsites: the only remaining one
+  (`orders::common::decoders::decode_next_valid_id`) is now proto-only,
+  taking `&ResponseMessage` (sync + async callers updated to drop `&mut`).
+  The `decode_proto_or_text` method itself was removed since it had no
+  callers (D3 was going to delete it anyway).
+- `parse_raw_message` legacy text branch deleted; transport-routing test
+  fixtures (`body()` helper in `transport/{sync/tests,async_tests}.rs`)
+  switched to emit `[4-byte BE msg_id][NUL-delimited fields]` framing and
+  `make_bus()` now stores `PROTOBUF_REST_MESSAGES_3` on the stubbed
+  connection. Error frames in those tests use a new `body_error()` helper
+  that emits `proto::ErrorMessage` envelopes.
+- Dead text-error accessors in `messages.rs`
+  (`error_field_offset`/`error_request_id_index`/`error_code_index`/
+  `error_message_index`/`error_request_id`/`error_code`/`error_message`/
+  `error_time`/`advanced_order_reject_json`) and `peek_long` deleted; their
+  only callers were `extract_text_error` (deleted) and the now-collapsed
+  Notice::from text fallback. `with_server_version` gated `#[cfg(test)]`.
+  `ResponseMessage::server_version` field annotated `#[allow(dead_code)]`
+  (D3 removes the field outright).
+- Test fixtures across `accounts/contracts/display_groups/news/scanner/wsh/
+  market_data/historical/connection/client` migrated from
+  `ResponseMessage::from("4\02\0…")` / `from_simple("4|2|…")` /
+  `text_response("4|2|…")` to the new `proto_error_response(request_id,
+  code, msg)` helper in `src/common/test_utils.rs`. Three text-format
+  Error routing tests (`test_determine_routing_error_old_format`,
+  `…_new_format`, `…_warning_text_format`) deleted — they exercised the
+  deleted text branch.
 
 **D2 — collapse proto-aware accessors (depends on D1).** Per rule 17 the
 `peek_*` / `request_id` / `order_id` / `execution_id` accessors have

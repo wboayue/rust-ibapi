@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_error_response, proto_response, request_message_count,
+    TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::BarTimestamp;
@@ -270,11 +271,11 @@ async fn test_historical_data_adjusted_last_validation() {
 
 #[tokio::test]
 async fn test_historical_data_error_response() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["4|2|9000|162|Historical Market Data Service error message:No market data permissions.|".to_owned()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        162,
+        "Historical Market Data Service error message:No market data permissions.",
+    )]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = test_contract();
@@ -681,14 +682,11 @@ async fn test_historical_data_streaming_with_updates() {
 
 #[tokio::test]
 async fn test_historical_data_streaming_error_response() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Error response
-            "4|2|9000|162|Historical Market Data Service error message:No market data permissions.|".to_owned(),
-        ],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        162,
+        "Historical Market Data Service error message:No market data permissions.",
+    )]));
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);
