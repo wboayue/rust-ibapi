@@ -1,4 +1,5 @@
-//! Decoders for Wall Street Horizon messages
+//! Decoders for Wall Street Horizon messages. Proto-only; text framing
+//! surfaces as `Error::UnexpectedResponse` via `require_proto()`.
 
 use prost::Message;
 
@@ -6,25 +7,33 @@ use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::wsh::{WshEventData, WshMetadata};
 use crate::Error;
 
-pub(in crate::wsh) fn decode_wsh_metadata(mut message: ResponseMessage) -> Result<WshMetadata, Error> {
-    message.skip(); // skip message type
-    message.skip(); // skip request id
-
-    Ok(WshMetadata {
-        data_json: message.next_string()?,
-    })
+pub(crate) fn decode_wsh_metadata(message: &ResponseMessage) -> Result<WshMetadata, Error> {
+    decode_wsh_metadata_proto(message.require_proto()?)
 }
 
-pub(in crate::wsh) fn decode_wsh_event_data(mut message: ResponseMessage) -> Result<WshEventData, Error> {
-    message.skip(); // skip message type
-    message.skip(); // skip request id
-
-    Ok(WshEventData {
-        data_json: message.next_string()?,
-    })
+pub(crate) fn decode_wsh_event_data(message: &ResponseMessage) -> Result<WshEventData, Error> {
+    decode_wsh_event_data_proto(message.require_proto()?)
 }
 
-#[allow(dead_code)]
+/// Dispatch on incoming message type and forward to the typed decoder. Routes
+/// `Error` frames into `Error::Notice` and any other variant into
+/// `Error::UnexpectedResponse`.
+pub(in crate::wsh) fn decode_metadata_message(message: &ResponseMessage) -> Result<WshMetadata, Error> {
+    match message.message_type() {
+        IncomingMessages::WshMetaData => decode_wsh_metadata(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+pub(in crate::wsh) fn decode_event_data_message(message: &ResponseMessage) -> Result<WshEventData, Error> {
+    match message.message_type() {
+        IncomingMessages::WshEventData => decode_wsh_event_data(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
 pub(crate) fn decode_wsh_metadata_proto(bytes: &[u8]) -> Result<WshMetadata, Error> {
     let p = crate::proto::WshMetaData::decode(bytes)?;
     Ok(WshMetadata {
@@ -32,7 +41,6 @@ pub(crate) fn decode_wsh_metadata_proto(bytes: &[u8]) -> Result<WshMetadata, Err
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_wsh_event_data_proto(bytes: &[u8]) -> Result<WshEventData, Error> {
     let p = crate::proto::WshEventData::decode(bytes)?;
     Ok(WshEventData {
@@ -40,29 +48,17 @@ pub(crate) fn decode_wsh_event_data_proto(bytes: &[u8]) -> Result<WshEventData, 
     })
 }
 
-/// Helper function to decode event data messages with error handling
-pub(in crate::wsh) fn decode_event_data_message(message: ResponseMessage) -> Result<WshEventData, Error> {
-    match message.message_type() {
-        IncomingMessages::WshEventData => decode_wsh_event_data(message),
-        IncomingMessages::Error => Err(Error::from(message)),
-        _ => Err(Error::unexpected_response(&message)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prost::Message;
 
     #[test]
     fn test_decode_wsh_metadata_proto() {
-        let proto_msg = crate::proto::WshMetaData {
+        let bytes = crate::proto::WshMetaData {
             req_id: Some(1),
             data_json: Some(r#"{"key":"value"}"#.into()),
-        };
-
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
+        }
+        .encode_to_vec();
 
         let result = decode_wsh_metadata_proto(&bytes).unwrap();
         assert_eq!(result.data_json, r#"{"key":"value"}"#);
@@ -70,15 +66,33 @@ mod tests {
 
     #[test]
     fn test_decode_wsh_event_data_proto() {
-        let proto_msg = crate::proto::WshEventData {
+        let bytes = crate::proto::WshEventData {
             req_id: Some(1),
             data_json: Some(r#"{"event":"earnings"}"#.into()),
-        };
-
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
+        }
+        .encode_to_vec();
 
         let result = decode_wsh_event_data_proto(&bytes).unwrap();
         assert_eq!(result.data_json, r#"{"event":"earnings"}"#);
+    }
+
+    #[test]
+    fn test_decode_wsh_metadata_rejects_text_framing() {
+        // Text-framed arrival at a proto-only decoder must surface
+        // UnexpectedResponse (rule 20).
+        let message = ResponseMessage::from("104\09000\0{\"hi\":1}\0");
+        match decode_wsh_metadata(&message) {
+            Err(Error::UnexpectedResponse(_)) => {}
+            other => panic!("expected UnexpectedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_wsh_event_data_rejects_text_framing() {
+        let message = ResponseMessage::from("105\09000\0{\"event\":\"e\"}\0");
+        match decode_wsh_event_data(&message) {
+            Err(Error::UnexpectedResponse(_)) => {}
+            other => panic!("expected UnexpectedResponse, got {other:?}"),
+        }
     }
 }

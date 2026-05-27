@@ -15,11 +15,7 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshMetaData, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::WshMetaData => decoders::decode_wsh_metadata(message.clone()),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::unexpected_response(message)),
-        }
+        decoders::decode_metadata_message(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -32,11 +28,7 @@ impl StreamDecoder<WshEventData> for WshEventData {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshEventData, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::WshEventData => decoders::decode_event_data_message(message.clone()),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
-            _ => Err(Error::unexpected_response(message)),
-        }
+        decoders::decode_event_data_message(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
