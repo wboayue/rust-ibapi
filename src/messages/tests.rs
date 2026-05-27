@@ -179,26 +179,45 @@ fn test_incoming_message_from_i32() {
 }
 
 #[test]
-fn test_request_id_index() {
-    assert_eq!(request_id_index(IncomingMessages::ContractData), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::TickByTick), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::SymbolSamples), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::OpenOrder), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::ExecutionData), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::HeadTimestamp), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::HistoricalData), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::HistoricalSchedule), Some(1));
+fn test_routes_by_request_id() {
+    // Sample of the allow-list — full registration check happens via
+    // request_id() round-trips, not exhaustive enumeration here.
+    assert!(routes_by_request_id(IncomingMessages::ContractData));
+    assert!(routes_by_request_id(IncomingMessages::TickByTick));
+    assert!(routes_by_request_id(IncomingMessages::SymbolSamples));
+    assert!(routes_by_request_id(IncomingMessages::ExecutionData));
+    assert!(routes_by_request_id(IncomingMessages::HeadTimestamp));
+    assert!(routes_by_request_id(IncomingMessages::HistoricalData));
+    assert!(routes_by_request_id(IncomingMessages::HistoricalSchedule));
+    assert!(routes_by_request_id(IncomingMessages::ContractDataEnd));
+    assert!(routes_by_request_id(IncomingMessages::RealTimeBars));
+    assert!(routes_by_request_id(IncomingMessages::ExecutionDataEnd));
+    assert!(routes_by_request_id(IncomingMessages::FundamentalData));
 
-    assert_eq!(request_id_index(IncomingMessages::ContractDataEnd), Some(2));
-    assert_eq!(request_id_index(IncomingMessages::RealTimeBars), Some(2));
-    // Error uses version-dependent indices via ResponseMessage::error_request_id()
-    assert_eq!(request_id_index(IncomingMessages::Error), None);
-    assert_eq!(request_id_index(IncomingMessages::ExecutionDataEnd), Some(2));
+    // Error has its own envelope; shared messages route by message type.
+    assert!(!routes_by_request_id(IncomingMessages::Error));
+    assert!(!routes_by_request_id(IncomingMessages::ManagedAccounts));
+    assert!(!routes_by_request_id(IncomingMessages::NextValidId));
+    assert!(!routes_by_request_id(IncomingMessages::CurrentTime));
+    assert!(!routes_by_request_id(IncomingMessages::NotValid));
 }
 
 #[test]
-fn test_request_id_index_invalid() {
-    assert_eq!(request_id_index(IncomingMessages::NotValid), None);
+fn test_text_request_id_field() {
+    // Field-1 messages (request_id immediately after message-type tag).
+    assert_eq!(text_request_id_field(IncomingMessages::ContractData), Some(1));
+    assert_eq!(text_request_id_field(IncomingMessages::FundamentalData), Some(1));
+    assert_eq!(text_request_id_field(IncomingMessages::TickByTick), Some(1));
+
+    // Field-2 messages (request_id after a version field).
+    assert_eq!(text_request_id_field(IncomingMessages::TickEFP), Some(2));
+    assert_eq!(text_request_id_field(IncomingMessages::TickPrice), Some(2));
+    assert_eq!(text_request_id_field(IncomingMessages::ContractDataEnd), Some(2));
+
+    // Shared and unrouted messages get None.
+    assert_eq!(text_request_id_field(IncomingMessages::ManagedAccounts), None);
+    assert_eq!(text_request_id_field(IncomingMessages::Error), None);
+    assert_eq!(text_request_id_field(IncomingMessages::NotValid), None);
 }
 
 #[test]
@@ -408,8 +427,10 @@ fn test_request_id_protobuf_tag1() {
 
 #[test]
 fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
-    // OpenOrder has no entry in request_id_index → None regardless of payload.
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new());
+    // ManagedAccounts is a shared message — not in routes_by_request_id, so
+    // request_id() returns None even if the proto payload carried an int @ tag 1.
+    let bytes = ProtoIdEnvelope { id: Some(42) }.encode_to_vec();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ManagedAccounts as i32, bytes);
     assert_eq!(message.request_id(), None);
 }
 
@@ -1363,17 +1384,17 @@ fn test_outgoing_messages_from_str_comprehensive() {
 }
 
 #[test]
-fn test_request_id_index_comprehensive() {
-    // Test message types with request_id at different indices
-    assert_eq!(request_id_index(IncomingMessages::MarketDepthL2), Some(2));
-    assert_eq!(request_id_index(IncomingMessages::TickEFP), Some(2));
-    assert_eq!(request_id_index(IncomingMessages::TickReqParams), Some(1));
-    assert_eq!(request_id_index(IncomingMessages::TickSnapshotEnd), Some(2));
+fn test_routes_by_request_id_comprehensive() {
+    // Confirm the allow-list covers a representative slice across domains.
+    assert!(routes_by_request_id(IncomingMessages::MarketDepthL2));
+    assert!(routes_by_request_id(IncomingMessages::TickEFP));
+    assert!(routes_by_request_id(IncomingMessages::TickReqParams));
+    assert!(routes_by_request_id(IncomingMessages::TickSnapshotEnd));
 
-    // Test message types without request_id
-    assert_eq!(request_id_index(IncomingMessages::ManagedAccounts), None);
-    assert_eq!(request_id_index(IncomingMessages::NextValidId), None);
-    assert_eq!(request_id_index(IncomingMessages::CurrentTime), None);
+    // Shared/global messages are deliberately omitted.
+    assert!(!routes_by_request_id(IncomingMessages::ManagedAccounts));
+    assert!(!routes_by_request_id(IncomingMessages::NextValidId));
+    assert!(!routes_by_request_id(IncomingMessages::CurrentTime));
 }
 
 #[test]
