@@ -6,8 +6,6 @@ fn report_type_display_round_trip() {
     check_wire_enum_round_trip(&[
         (FundamentalReportType::ReportsFinSummary, "ReportsFinSummary"),
         (FundamentalReportType::ReportSnapshot, "ReportSnapshot"),
-        (FundamentalReportType::ReportRatios, "ReportRatios"),
-        (FundamentalReportType::ReportsFinStatements, "ReportsFinStatements"),
         (FundamentalReportType::RESC, "RESC"),
         (FundamentalReportType::CalendarReport, "CalendarReport"),
     ]);
@@ -15,5 +13,7 @@ fn report_type_display_round_trip() {
 
 #[test]
 fn report_type_from_str_rejects_unknown() {
-    check_wire_enum_rejects_unknown::<FundamentalReportType>(&["", "ReportsFinStmts", "snapshot", "X"]);
+    // ReportRatios and ReportsFinStatements appeared in older IBKR docs but
+    // current TWS rejects them with code 430 — verify they round-trip as unknown.
+    check_wire_enum_rejects_unknown::<FundamentalReportType>(&["", "ReportRatios", "ReportsFinStatements", "snapshot", "X"]);
 }

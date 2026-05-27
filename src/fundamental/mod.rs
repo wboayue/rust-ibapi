@@ -32,9 +32,11 @@ pub struct FundamentalData {
 ///
 /// The wire vocabulary is fixed; unknown strings are rejected by
 /// [`FromStr`](std::str::FromStr) as [`Error::Parse`](crate::Error::Parse).
-/// See the [IBKR fundamental data
-/// guide](https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#fundamentals)
-/// for the schemas behind each variant.
+/// Verified against IB Gateway server v220: each variant produced either
+/// a populated XML response or a documented entitlement error (CalendarReport
+/// — news feed subscription required). `ReportRatios` and
+/// `ReportsFinStatements` from older IBKR docs are not accepted by TWS today
+/// (code 430 "Missing reportType") and are intentionally omitted.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum FundamentalReportType {
@@ -43,13 +45,9 @@ pub enum FundamentalReportType {
     ReportsFinSummary,
     /// Company snapshot — wire value `"ReportSnapshot"`.
     ReportSnapshot,
-    /// Key ratios — wire value `"ReportRatios"`.
-    ReportRatios,
-    /// Financial statements — wire value `"ReportsFinStatements"`.
-    ReportsFinStatements,
-    /// Analyst estimates — wire value `"RESC"`.
+    /// Analyst estimates (Reuters Estimates System Consensus) — wire value `"RESC"`.
     RESC,
-    /// Company calendar — wire value `"CalendarReport"`.
+    /// Company calendar (requires news-feed entitlement) — wire value `"CalendarReport"`.
     CalendarReport,
 }
 
@@ -59,8 +57,6 @@ impl FundamentalReportType {
         match self {
             Self::ReportsFinSummary => "ReportsFinSummary",
             Self::ReportSnapshot => "ReportSnapshot",
-            Self::ReportRatios => "ReportRatios",
-            Self::ReportsFinStatements => "ReportsFinStatements",
             Self::RESC => "RESC",
             Self::CalendarReport => "CalendarReport",
         }
@@ -70,8 +66,6 @@ impl FundamentalReportType {
         match s {
             "ReportsFinSummary" => Some(Self::ReportsFinSummary),
             "ReportSnapshot" => Some(Self::ReportSnapshot),
-            "ReportRatios" => Some(Self::ReportRatios),
-            "ReportsFinStatements" => Some(Self::ReportsFinStatements),
             "RESC" => Some(Self::RESC),
             "CalendarReport" => Some(Self::CalendarReport),
             _ => None,

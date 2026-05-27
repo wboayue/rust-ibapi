@@ -21,7 +21,7 @@ async fn fundamental_data_snapshot() {
 
 #[tokio::test]
 #[ignore]
-async fn fundamental_data_ratios() {
+async fn fundamental_data_financial_summary() {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
@@ -29,7 +29,7 @@ async fn fundamental_data_ratios() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let report = client
-        .fundamental_data(&contract, FundamentalReportType::ReportRatios)
+        .fundamental_data(&contract, FundamentalReportType::ReportsFinSummary)
         .await
         .expect("fundamental_data failed");
     assert!(!report.data.is_empty());
