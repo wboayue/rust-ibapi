@@ -406,6 +406,7 @@ pub(crate) fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         // Error uses version-dependent indices; use ResponseMessage::error_request_id() instead.
         IncomingMessages::ExecutionData => Some(1),
         IncomingMessages::ExecutionDataEnd => Some(2),
+        IncomingMessages::FundamentalData => Some(1),
         IncomingMessages::HeadTimestamp => Some(1),
         IncomingMessages::HistogramData => Some(1),
         IncomingMessages::HistoricalData => Some(1),
