@@ -874,12 +874,6 @@ impl ResponseMessage {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
     }
 
-    /// Number of fields present in the message.
-    #[allow(dead_code)] // test-only since text decoders are proto-only post-floor-213
-    pub fn len(&self) -> usize {
-        self.fields.len()
-    }
-
     /// Returns `true` if the message informs about API shutdown.
     #[cfg_attr(not(feature = "sync"), allow(dead_code))] // sync-transport-only caller
     pub fn is_shutdown(&self) -> bool {

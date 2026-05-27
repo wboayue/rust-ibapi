@@ -1224,7 +1224,7 @@ fn test_response_message_access_patterns() {
     assert_eq!(message.peek_int(1).unwrap(), 123);
     assert_eq!(message.peek_int(1).unwrap(), 123);
 
-    assert_eq!(message.len(), 5);
+    assert_eq!(message.fields.len(), 5);
 }
 
 #[test]
