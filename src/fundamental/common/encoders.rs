@@ -4,7 +4,7 @@ use crate::contracts::Contract;
 use crate::fundamental::FundamentalReportType;
 use crate::messages::{encode_protobuf_message, OutgoingMessages};
 use crate::proto;
-use crate::proto::encoders::encode_contract;
+use crate::proto::encoders::{encode_contract, some_display};
 use crate::Error;
 
 pub(in crate::fundamental) fn encode_request_fundamental_data(
@@ -15,7 +15,7 @@ pub(in crate::fundamental) fn encode_request_fundamental_data(
     let request = proto::FundamentalsDataRequest {
         req_id: Some(request_id),
         contract: Some(encode_contract(contract)),
-        report_type: Some(report_type.to_string()),
+        report_type: some_display(Some(&report_type)),
         fundamentals_data_options: Default::default(),
     };
     Ok(encode_protobuf_message(

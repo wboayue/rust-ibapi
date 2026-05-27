@@ -393,76 +393,26 @@ impl FromStr for IncomingMessages {
 ///
 /// `ResponseMessage::request_id()` decodes the proto envelope only when the
 /// message type appears here; this prevents misrouting messages that happen
-/// to carry an unrelated `int32 @ tag 1` (e.g. `MarketRule.market_rule_id`).
-/// New public APIs on a request-scoped inbound message type must add their
-/// variant to this list — `MessageBusStub` tests bypass the dispatcher and
-/// pass with a missing entry; only a live-gateway smoke test surfaces it
-/// (PR #647).
+/// to carry an unrelated `int32 @ tag 1` (e.g. `MarketRule.market_rule_id`,
+/// `OrderBound.perm_id`). Derived from [`text_request_id_field`] — every
+/// known request-scoped message has a text-frame fallback index, so a single
+/// table is the source of truth.
 pub(crate) fn routes_by_request_id(kind: IncomingMessages) -> bool {
-    matches!(
-        kind,
-        IncomingMessages::AccountSummary
-            | IncomingMessages::AccountSummaryEnd
-            | IncomingMessages::AccountUpdateMulti
-            | IncomingMessages::AccountUpdateMultiEnd
-            | IncomingMessages::ContractData
-            | IncomingMessages::ContractDataEnd
-            // ExecutionData{,End} order-route via order_id first, fall back to request_id.
-            | IncomingMessages::ExecutionData
-            | IncomingMessages::ExecutionDataEnd
-            | IncomingMessages::FundamentalData
-            | IncomingMessages::HeadTimestamp
-            | IncomingMessages::HistogramData
-            | IncomingMessages::HistoricalData
-            | IncomingMessages::HistoricalDataEnd
-            | IncomingMessages::HistoricalDataUpdate
-            | IncomingMessages::HistoricalNews
-            | IncomingMessages::HistoricalNewsEnd
-            | IncomingMessages::HistoricalSchedule
-            | IncomingMessages::HistoricalTick
-            | IncomingMessages::HistoricalTickBidAsk
-            | IncomingMessages::HistoricalTickLast
-            | IncomingMessages::MarketDepth
-            | IncomingMessages::MarketDepthL2
-            | IncomingMessages::NewsArticle
-            // OpenOrder is order-routed (OrderOrShared); kept here defensively because
-            // process_response_with_id checks the request_id channel before falling
-            // through to shared — a stray OpenOrder with a matching id is benign.
-            | IncomingMessages::OpenOrder
-            | IncomingMessages::PnL
-            | IncomingMessages::PnLSingle
-            | IncomingMessages::PositionMulti
-            | IncomingMessages::PositionMultiEnd
-            | IncomingMessages::RealTimeBars
-            | IncomingMessages::ScannerData
-            | IncomingMessages::SecurityDefinitionOptionParameter
-            | IncomingMessages::SecurityDefinitionOptionParameterEnd
-            | IncomingMessages::SymbolSamples
-            | IncomingMessages::TickByTick
-            | IncomingMessages::TickEFP
-            | IncomingMessages::TickGeneric
-            | IncomingMessages::TickNews
-            | IncomingMessages::TickOptionComputation
-            | IncomingMessages::TickPrice
-            | IncomingMessages::TickReqParams
-            | IncomingMessages::TickSize
-            | IncomingMessages::TickSnapshotEnd
-            | IncomingMessages::TickString
-            | IncomingMessages::WshEventData
-            | IncomingMessages::WshMetaData
-            | IncomingMessages::DisplayGroupList
-            | IncomingMessages::DisplayGroupUpdated
-    )
+    text_request_id_field(kind).is_some()
 }
 
 /// Text-format field index carrying the request id, for messages parsed
-/// from pipe-delimited text framing.
+/// from pipe-delimited text framing. Doubles as the routing allow-list (see
+/// [`routes_by_request_id`]).
 ///
 /// On the production wire at floor 213 only [`IncomingMessages::TickEFP`]
 /// arrives text-framed — proto-framed messages decode the request id via
 /// the envelope in `raw_bytes` instead. Tests still construct text-framed
 /// [`ResponseMessage`] fixtures for many proto-only message types, so the
-/// table covers them too.
+/// table covers them too. `ExecutionData{,End}` are present because the
+/// order router falls back to the request_id channel after a missed order_id
+/// lookup; `OpenOrder` is `OrderOrShared` and reaches request_id-routing
+/// only when the channel happens to hold its id, which is harmless.
 pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary

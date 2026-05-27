@@ -6,7 +6,7 @@ use crate::contracts::Contract;
 use crate::fundamental::FundamentalReportType;
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::{encode_contract, some_str};
+use crate::proto::encoders::{encode_contract, some_display, some_str};
 
 #[derive(Clone, Debug)]
 pub struct FundamentalDataRequestBuilder {
@@ -48,7 +48,7 @@ impl RequestEncoder for FundamentalDataRequestBuilder {
         proto::FundamentalsDataRequest {
             req_id: Some(self.request_id),
             contract: Some(encode_contract(&self.contract)),
-            report_type: Some(self.report_type.to_string()),
+            report_type: some_display(Some(&self.report_type)),
             fundamentals_data_options: Default::default(),
         }
     }
