@@ -4,7 +4,6 @@ use ibapi::fundamental::FundamentalReportType;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
 #[test]
-#[ignore] // requires fundamental-data entitlement on the connected paper-trading account
 fn fundamental_data_snapshot() {
     let client_id = ClientId::get();
     rate_limit();
@@ -19,7 +18,6 @@ fn fundamental_data_snapshot() {
 }
 
 #[test]
-#[ignore]
 fn fundamental_data_financial_summary() {
     let client_id = ClientId::get();
     rate_limit();

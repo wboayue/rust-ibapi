@@ -4,7 +4,6 @@ use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
 #[tokio::test]
-#[ignore] // requires fundamental-data entitlement on the connected paper-trading account
 async fn fundamental_data_snapshot() {
     let client_id = ClientId::get();
     rate_limit();
@@ -20,7 +19,6 @@ async fn fundamental_data_snapshot() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn fundamental_data_financial_summary() {
     let client_id = ClientId::get();
     rate_limit();
