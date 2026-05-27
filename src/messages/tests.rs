@@ -195,13 +195,11 @@ fn test_routes_by_request_id() {
     assert!(routes_by_request_id(IncomingMessages::FundamentalData));
 
     // Error has its own envelope; shared messages route by message type.
-    // TickEFP was removed from the allow-list when the EFP API was dropped.
     assert!(!routes_by_request_id(IncomingMessages::Error));
     assert!(!routes_by_request_id(IncomingMessages::ManagedAccounts));
     assert!(!routes_by_request_id(IncomingMessages::NextValidId));
     assert!(!routes_by_request_id(IncomingMessages::CurrentTime));
     assert!(!routes_by_request_id(IncomingMessages::NotValid));
-    assert!(!routes_by_request_id(IncomingMessages::TickEFP));
 }
 
 #[test]
@@ -219,7 +217,6 @@ fn test_text_request_id_field() {
     assert_eq!(text_request_id_field(IncomingMessages::ManagedAccounts), None);
     assert_eq!(text_request_id_field(IncomingMessages::Error), None);
     assert_eq!(text_request_id_field(IncomingMessages::NotValid), None);
-    assert_eq!(text_request_id_field(IncomingMessages::TickEFP), None);
 }
 
 #[test]

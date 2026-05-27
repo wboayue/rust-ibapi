@@ -1013,7 +1013,7 @@ impl ResponseMessage {
     /// Consume and parse the next floating-point field. Test-only symmetry
     /// with [`Self::next_int`] / [`Self::next_string`] — production code no
     /// longer reads doubles from text-framed messages at floor 213.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn next_double(&mut self) -> Result<f64, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::eof_at(self.i, "double"));

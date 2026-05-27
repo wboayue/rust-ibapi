@@ -754,9 +754,7 @@ for tick in subscription.iter_data() {
 }
 ```
 
-**Why**: EFP (Exchange For Physical) ticks are the only response type still framed as text on the wire — TWS ships no `TickEFP.proto`, no `TickEFPEventProtoBuf` handler in the C# reference's `EDecoder.cs`, and no `MIN_SERVER_VER_*TICK_EFP*` version gate. US single-stock-futures stopped trading in 2020, and a live-Gateway probe across five candidate contracts (incl. Eurex SSF stocks) received zero TickEFP frames. Dropping the API removes the residual text-decode helpers from the otherwise proto-only crate.
-
-If TWS ever adds a protobuf encoder for TickEFP (watch for a `TickEFP.proto` and a `MIN_SERVER_VER_*TICK_EFP*` constant in future API releases), the API can be reintroduced as a proto-only decoder.
+EFP (Exchange For Physical) ticks were the only response type still framed as text on the wire. TWS has no `TickEFP.proto` schema, so keeping the API meant carrying a text-decode path through an otherwise proto-only crate. If TWS adds protobuf support for TickEFP later, the API can be reintroduced as a proto-only decoder.
 
 ## Before / after: common subscription patterns
 
