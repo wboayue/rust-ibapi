@@ -6,7 +6,7 @@ use crate::proto::decoders::{optional_f64, optional_string_f64, parse_f64, ts};
 use crate::Error;
 
 use crate::market_data::realtime::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickAttribute, TickEFP, TickGeneric, TickPrice,
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickAttribute, TickGeneric, TickPrice,
     TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 use crate::market_data::MarketDataType;
@@ -49,23 +49,6 @@ pub(crate) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize
 
 pub(crate) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickString, Error> {
     decode_tick_string_proto(message.require_proto()?)
-}
-
-// Stays text-only: TWS has no protobuf encoder for TickEFP.
-pub(crate) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, Error> {
-    message.skip(); // message type
-    message.skip(); // message version
-    message.skip(); // message request id
-    Ok(TickEFP {
-        tick_type: TickType::from(message.next_int()?),
-        basis_points: message.next_double()?,
-        formatted_basis_points: message.next_string()?,
-        implied_futures_price: message.next_double()?,
-        hold_days: message.next_int()?,
-        future_last_trade_date: message.next_string()?,
-        dividend_impact: message.next_double()?,
-        dividends_to_last_trade_date: message.next_double()?,
-    })
 }
 
 pub(crate) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickGeneric, Error> {

@@ -436,42 +436,6 @@ mod tick_generic_tests {
     }
 }
 
-mod tick_efp_tests {
-    use super::*;
-
-    #[test]
-    fn test_decode_tick_efp() {
-        let mut message = ResponseMessage::from("4\0\09000\038\02.5\0+2.50\0100.0\030\020230315\00.5\00.75\0");
-        let tick = decode_tick_efp(&mut message).expect("decode failed");
-        assert_eq!(tick.tick_type, TickType::BidEfpComputation);
-        assert_eq!(tick.basis_points, 2.5);
-        assert_eq!(tick.formatted_basis_points, "+2.50");
-        assert_eq!(tick.implied_futures_price, 100.0);
-        assert_eq!(tick.hold_days, 30);
-        assert_eq!(tick.future_last_trade_date, "20230315");
-        assert_eq!(tick.dividend_impact, 0.5);
-        assert_eq!(tick.dividends_to_last_trade_date, 0.75);
-    }
-
-    #[test]
-    fn test_decode_tick_efp_types() {
-        // TickEFP has no proto encoding on the server side; stays text-only.
-        for (type_id, expected) in [
-            (38, TickType::BidEfpComputation),
-            (39, TickType::AskEfpComputation),
-            (40, TickType::LastEfpComputation),
-            (41, TickType::OpenEfpComputation),
-            (42, TickType::HighEfpComputation),
-            (43, TickType::LowEfpComputation),
-            (44, TickType::CloseEfpComputation),
-        ] {
-            let mut message = ResponseMessage::from(format!("4\0\09000\0{type_id}\02.5\0+2.50\0100.0\030\020230315\00.5\00.75\0").as_str());
-            let tick = decode_tick_efp(&mut message).expect("decode failed");
-            assert_eq!(tick.tick_type, expected, "type_id {type_id}");
-        }
-    }
-}
-
 mod tick_option_computation_tests {
     use super::*;
 

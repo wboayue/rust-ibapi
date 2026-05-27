@@ -405,14 +405,14 @@ pub(crate) fn routes_by_request_id(kind: IncomingMessages) -> bool {
 /// from pipe-delimited text framing. Doubles as the routing allow-list (see
 /// [`routes_by_request_id`]).
 ///
-/// On the production wire at floor 213 only [`IncomingMessages::TickEFP`]
-/// arrives text-framed — proto-framed messages decode the request id via
-/// the envelope in `raw_bytes` instead. Tests still construct text-framed
-/// [`ResponseMessage`] fixtures for many proto-only message types, so the
-/// table covers them too. `ExecutionData{,End}` are present because the
-/// order router falls back to the request_id channel after a missed order_id
-/// lookup; `OpenOrder` is `OrderOrShared` and reaches request_id-routing
-/// only when the channel happens to hold its id, which is harmless.
+/// At floor 213 no production message arrives text-framed — proto-framed
+/// messages decode the request id via the envelope in `raw_bytes` instead.
+/// The table remains because tests still construct text-framed
+/// [`ResponseMessage`] fixtures for many proto-only message types.
+/// `ExecutionData{,End}` are present because the order router falls back to
+/// the request_id channel after a missed order_id lookup; `OpenOrder` is
+/// `OrderOrShared` and reaches request_id-routing only when the channel
+/// happens to hold its id, which is harmless.
 pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary
@@ -429,7 +429,6 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::PositionMultiEnd
         | IncomingMessages::RealTimeBars
         | IncomingMessages::ScannerData
-        | IncomingMessages::TickEFP
         | IncomingMessages::TickGeneric
         | IncomingMessages::TickPrice
         | IncomingMessages::TickSize
@@ -855,8 +854,9 @@ struct ExecutionMinimal {
 /// Crate-internal wire envelope; not part of the public API. All fields,
 /// constructors, and methods are crate-visible only. Framing is discriminated
 /// by `raw_bytes`: `Some(_)` = protobuf payload, `None` = NUL-delimited text
-/// payload pre-parsed into `fields` (carries WSH metadata/event-data and
-/// `TickEFP` payloads).
+/// payload pre-parsed into `fields` (carries WSH metadata/event-data, plus
+/// unhandled text-framed message types that fall through to the dispatcher
+/// catch-all).
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.
@@ -909,11 +909,12 @@ impl ResponseMessage {
     /// Try to extract the request id from the message.
     ///
     /// Proto-framed messages carry it at proto tag 1 in `raw_bytes`. The
-    /// text-framed branch reads the per-message-type field index — currently
-    /// reached only for [`IncomingMessages::TickEFP`], which TWS has no
-    /// protobuf encoder for. Returns `None` for any message type not in the
-    /// [`routes_by_request_id`] allow-list, even if its proto envelope
-    /// happens to carry an `int32 @ tag 1` for some other purpose.
+    /// text-framed branch reads the per-message-type field index — at floor
+    /// 213 no production message arrives text-framed, so this path is
+    /// unreachable through production decoders but exercised by tests.
+    /// Returns `None` for any message type not in the [`routes_by_request_id`]
+    /// allow-list, even if its proto envelope happens to carry an `int32 @
+    /// tag 1` for some other purpose.
     pub fn request_id(&self) -> Option<i32> {
         let kind = self.message_type();
         if !routes_by_request_id(kind) {
@@ -969,8 +970,8 @@ impl ResponseMessage {
     }
 
     /// Peek an integer field without advancing the cursor. Called from
-    /// [`Self::request_id`]'s text-fallback path (TickEFP routing) and the
-    /// handshake parser.
+    /// [`Self::request_id`]'s text-fallback path (tests only at floor 213)
+    /// and the handshake parser.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
             return Err(Error::eof_at(i, "int"));
@@ -1009,7 +1010,10 @@ impl ResponseMessage {
         Ok(String::from(field))
     }
 
-    /// Consume and parse the next floating-point field.
+    /// Consume and parse the next floating-point field. Test-only symmetry
+    /// with [`Self::next_int`] / [`Self::next_string`] — production code no
+    /// longer reads doubles from text-framed messages at floor 213.
+    #[allow(dead_code)]
     pub fn next_double(&mut self) -> Result<f64, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::eof_at(self.i, "double"));
@@ -1036,6 +1040,7 @@ impl ResponseMessage {
             raw_bytes: None,
         }
     }
+
     #[cfg(test)]
     /// Build a response message from a pipe-delimited payload (test helper).
     pub fn from_simple(fields: &str) -> ResponseMessage {
@@ -1044,11 +1049,6 @@ impl ResponseMessage {
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
             raw_bytes: None,
         }
-    }
-
-    /// Advance the cursor past the next field.
-    pub fn skip(&mut self) {
-        self.i += 1;
     }
 
     /// Encode the message back into a NUL-delimited string.
