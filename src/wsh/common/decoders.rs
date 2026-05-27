@@ -1,9 +1,5 @@
-//! Decoders for Wall Street Horizon messages.
-//!
-//! WSH metadata + event-data are proto-only at floor 213; TWS encodes them as
-//! protobuf since `MIN_SERVER_VER_PROTOBUF_NEWS_DATA` (209). Text framing is
-//! rejected via `require_proto()`, which yields `Error::UnexpectedResponse` —
-//! the dispatcher skip-classifies that variant (per CLAUDE.md rule 20).
+//! Decoders for Wall Street Horizon messages. Proto-only; text framing
+//! surfaces as `Error::UnexpectedResponse` via `require_proto()`.
 
 use prost::Message;
 

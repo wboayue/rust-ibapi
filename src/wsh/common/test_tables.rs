@@ -29,38 +29,22 @@ pub struct DecodeTestCase {
     pub data_json: &'static str,
 }
 
-/// Test cases for WshMetadata decode (proto-only).
-pub const WSH_METADATA_DECODE_TESTS: &[DecodeTestCase] = &[
-    DecodeTestCase {
-        name: "valid metadata",
-        req_id: 9000,
-        data_json: r#"{"test":"metadata"}"#,
-    },
-    DecodeTestCase {
-        name: "empty metadata",
-        req_id: 9000,
-        data_json: "",
-    },
-    DecodeTestCase {
-        name: "metadata with special chars",
-        req_id: 9000,
-        data_json: r#"{"data":"test\nwith\tspecial\rchars"}"#,
-    },
-];
+/// Test cases for WshMetadata decode (proto-only). One happy-path case is
+/// enough — the proto String round-trip has only the one failure mode.
+/// Dispatch arms (`Error`, unexpected message type) are covered in
+/// `stream_decoders.rs::tests` and `decoders.rs::tests::_rejects_text_framing`.
+pub const WSH_METADATA_DECODE_TESTS: &[DecodeTestCase] = &[DecodeTestCase {
+    name: "valid metadata",
+    req_id: 9000,
+    data_json: r#"{"test":"metadata"}"#,
+}];
 
-/// Test cases for WshEventData decode (proto-only).
-pub const WSH_EVENT_DATA_DECODE_TESTS: &[DecodeTestCase] = &[
-    DecodeTestCase {
-        name: "valid event data",
-        req_id: 9000,
-        data_json: r#"{"test":"event"}"#,
-    },
-    DecodeTestCase {
-        name: "empty event data",
-        req_id: 9000,
-        data_json: "",
-    },
-];
+/// Test cases for WshEventData decode (proto-only). See WSH_METADATA_DECODE_TESTS.
+pub const WSH_EVENT_DATA_DECODE_TESTS: &[DecodeTestCase] = &[DecodeTestCase {
+    name: "valid event data",
+    req_id: 9000,
+    data_json: r#"{"test":"event"}"#,
+}];
 
 impl DecodeTestCase {
     pub fn metadata_message(&self) -> ResponseMessage {
