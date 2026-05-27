@@ -1,5 +1,16 @@
 # Legacy Text-Protocol Cleanup Tracker
 
+> **Status: 📦 SUPERSEDED by [`plans/floor-213-ratchet.md`](floor-213-ratchet.md).**
+> The arc concluded with floor at 213 and TickEFP retained text-only by
+> design — the "Helper APIs that go away" and "Final-cleanup checklist"
+> sections below are partially blocked by that decision (`ResponseMessage::from(&str)`,
+> `parse_raw_message`'s text branch, field-iteration helpers stay alive
+> for TickEFP). CLAUDE.md rule 19 links here as the canonical
+> proto-only-conversion workflow; the workflow is still accurate, just
+> the open items are now closed-by-design rather than pending. Retained
+> in place because the workflow is referenced from CLAUDE.md and several
+> memory entries.
+
 **End goal:** support protobuf-only on the wire (both directions) and delete every text-protocol code path from the crate.
 
 ## Status today

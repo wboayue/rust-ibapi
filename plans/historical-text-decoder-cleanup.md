@@ -1,5 +1,9 @@
 # Historical-data text-decoder cleanup
 
+> **Status: ✅ SHIPPED — closed.** All 9 historical-data decoders went
+> proto-only in [#626](https://github.com/wboayue/rust-ibapi/pull/626).
+> Retained for historical reference.
+
 Continues the per-family ratchet sweep started in PRs #529 / #531 / #532 / #534 /
 #543 / #623. Floor is at 210 (`PROTOBUF_SCAN_DATA`). This PR deletes the
 now-unreachable text branches in `market_data/historical/common/decoders/mod.rs`.
