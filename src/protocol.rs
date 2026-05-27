@@ -114,6 +114,9 @@ impl Features {
     /// Enables sending custom scanner generic options.
     pub const SCANNER_GENERIC_OPTS: ProtocolFeature = ProtocolFeature::new("scanner generic options", server_versions::SCANNER_GENERIC_OPTS);
 
+    /// Enables fundamental data report requests (Reuters reports: snapshot, financial summary, ratios, etc.).
+    pub const FUNDAMENTAL_DATA: ProtocolFeature = ProtocolFeature::new("fundamental data", server_versions::FUNDAMENTAL_DATA);
+
     /// Adds Wall Street Horizon earnings calendar support.
     pub const WSHE_CALENDAR: ProtocolFeature = ProtocolFeature::new("WSHE Calendar", server_versions::WSHE_CALENDAR);
     /// Enables filtering Wall Street Horizon event data.

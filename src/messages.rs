@@ -10,7 +10,6 @@ use std::str::{self, FromStr};
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use log::debug;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -390,65 +389,82 @@ impl FromStr for IncomingMessages {
     }
 }
 
-/// Return the message field index containing the request id, if present.
+/// Allow-list of incoming message types that route by `request_id`.
 ///
-/// Only [`IncomingMessages::TickEFP`] currently arrives text-framed (TWS has
-/// no protobuf encoder for it). The rest of the table is kept defensively for
-/// unsolicited message types that may not be routable via the proto envelope.
-pub(crate) fn request_id_index(kind: IncomingMessages) -> Option<usize> {
-    match kind {
-        IncomingMessages::AccountSummary => Some(2),
-        IncomingMessages::AccountSummaryEnd => Some(2),
-        IncomingMessages::AccountUpdateMulti => Some(2),
-        IncomingMessages::AccountUpdateMultiEnd => Some(2),
-        IncomingMessages::ContractData => Some(1),
-        IncomingMessages::ContractDataEnd => Some(2),
-        // Error uses version-dependent indices; use ResponseMessage::error_request_id() instead.
-        IncomingMessages::ExecutionData => Some(1),
-        IncomingMessages::ExecutionDataEnd => Some(2),
-        IncomingMessages::HeadTimestamp => Some(1),
-        IncomingMessages::HistogramData => Some(1),
-        IncomingMessages::HistoricalData => Some(1),
-        IncomingMessages::HistoricalDataEnd => Some(1),
-        IncomingMessages::HistoricalDataUpdate => Some(1),
-        IncomingMessages::HistoricalNews => Some(1),
-        IncomingMessages::HistoricalNewsEnd => Some(1),
-        IncomingMessages::HistoricalSchedule => Some(1),
-        IncomingMessages::HistoricalTick => Some(1),
-        IncomingMessages::HistoricalTickBidAsk => Some(1),
-        IncomingMessages::HistoricalTickLast => Some(1),
-        IncomingMessages::MarketDepth => Some(2),
-        IncomingMessages::MarketDepthL2 => Some(2),
-        IncomingMessages::NewsArticle => Some(1),
-        IncomingMessages::OpenOrder => Some(1),
-        IncomingMessages::PnL => Some(1),
-        IncomingMessages::PnLSingle => Some(1),
-        IncomingMessages::PositionMulti => Some(2),
-        IncomingMessages::PositionMultiEnd => Some(2),
-        IncomingMessages::RealTimeBars => Some(2),
-        IncomingMessages::ScannerData => Some(2),
-        IncomingMessages::SecurityDefinitionOptionParameter => Some(1),
-        IncomingMessages::SecurityDefinitionOptionParameterEnd => Some(1),
-        IncomingMessages::SymbolSamples => Some(1),
-        IncomingMessages::TickByTick => Some(1),
-        IncomingMessages::TickEFP => Some(2),
-        IncomingMessages::TickGeneric => Some(2),
-        IncomingMessages::TickNews => Some(1),
-        IncomingMessages::TickOptionComputation => Some(1),
-        IncomingMessages::TickPrice => Some(2),
-        IncomingMessages::TickReqParams => Some(1),
-        IncomingMessages::TickSize => Some(2),
-        IncomingMessages::TickSnapshotEnd => Some(2),
-        IncomingMessages::TickString => Some(2),
-        IncomingMessages::WshEventData => Some(1),
-        IncomingMessages::WshMetaData => Some(1),
-        IncomingMessages::DisplayGroupList => Some(2),
-        IncomingMessages::DisplayGroupUpdated => Some(2),
+/// `ResponseMessage::request_id()` decodes the proto envelope only when the
+/// message type appears here; this prevents misrouting messages that happen
+/// to carry an unrelated `int32 @ tag 1` (e.g. `MarketRule.market_rule_id`,
+/// `OrderBound.perm_id`). Derived from [`text_request_id_field`] — every
+/// known request-scoped message has a text-frame fallback index, so a single
+/// table is the source of truth.
+pub(crate) fn routes_by_request_id(kind: IncomingMessages) -> bool {
+    text_request_id_field(kind).is_some()
+}
 
-        _ => {
-            debug!("could not determine request id index for {kind:?} (this message type may not have a request id).");
-            None
-        }
+/// Text-format field index carrying the request id, for messages parsed
+/// from pipe-delimited text framing. Doubles as the routing allow-list (see
+/// [`routes_by_request_id`]).
+///
+/// On the production wire at floor 213 only [`IncomingMessages::TickEFP`]
+/// arrives text-framed — proto-framed messages decode the request id via
+/// the envelope in `raw_bytes` instead. Tests still construct text-framed
+/// [`ResponseMessage`] fixtures for many proto-only message types, so the
+/// table covers them too. `ExecutionData{,End}` are present because the
+/// order router falls back to the request_id channel after a missed order_id
+/// lookup; `OpenOrder` is `OrderOrShared` and reaches request_id-routing
+/// only when the channel happens to hold its id, which is harmless.
+pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
+    match kind {
+        IncomingMessages::AccountSummary
+        | IncomingMessages::AccountSummaryEnd
+        | IncomingMessages::AccountUpdateMulti
+        | IncomingMessages::AccountUpdateMultiEnd
+        | IncomingMessages::ContractDataEnd
+        | IncomingMessages::DisplayGroupList
+        | IncomingMessages::DisplayGroupUpdated
+        | IncomingMessages::ExecutionDataEnd
+        | IncomingMessages::MarketDepth
+        | IncomingMessages::MarketDepthL2
+        | IncomingMessages::PositionMulti
+        | IncomingMessages::PositionMultiEnd
+        | IncomingMessages::RealTimeBars
+        | IncomingMessages::ScannerData
+        | IncomingMessages::TickEFP
+        | IncomingMessages::TickGeneric
+        | IncomingMessages::TickPrice
+        | IncomingMessages::TickSize
+        | IncomingMessages::TickSnapshotEnd
+        | IncomingMessages::TickString => Some(2),
+
+        IncomingMessages::ContractData
+        | IncomingMessages::ExecutionData
+        | IncomingMessages::FundamentalData
+        | IncomingMessages::HeadTimestamp
+        | IncomingMessages::HistogramData
+        | IncomingMessages::HistoricalData
+        | IncomingMessages::HistoricalDataEnd
+        | IncomingMessages::HistoricalDataUpdate
+        | IncomingMessages::HistoricalNews
+        | IncomingMessages::HistoricalNewsEnd
+        | IncomingMessages::HistoricalSchedule
+        | IncomingMessages::HistoricalTick
+        | IncomingMessages::HistoricalTickBidAsk
+        | IncomingMessages::HistoricalTickLast
+        | IncomingMessages::NewsArticle
+        | IncomingMessages::OpenOrder
+        | IncomingMessages::PnL
+        | IncomingMessages::PnLSingle
+        | IncomingMessages::SecurityDefinitionOptionParameter
+        | IncomingMessages::SecurityDefinitionOptionParameterEnd
+        | IncomingMessages::SymbolSamples
+        | IncomingMessages::TickByTick
+        | IncomingMessages::TickNews
+        | IncomingMessages::TickOptionComputation
+        | IncomingMessages::TickReqParams
+        | IncomingMessages::WshEventData
+        | IncomingMessages::WshMetaData => Some(1),
+
+        _ => None,
     }
 }
 
@@ -895,14 +911,19 @@ impl ResponseMessage {
     /// Proto-framed messages carry it at proto tag 1 in `raw_bytes`. The
     /// text-framed branch reads the per-message-type field index — currently
     /// reached only for [`IncomingMessages::TickEFP`], which TWS has no
-    /// protobuf encoder for.
+    /// protobuf encoder for. Returns `None` for any message type not in the
+    /// [`routes_by_request_id`] allow-list, even if its proto envelope
+    /// happens to carry an `int32 @ tag 1` for some other purpose.
     pub fn request_id(&self) -> Option<i32> {
-        let i = request_id_index(self.message_type())?;
+        let kind = self.message_type();
+        if !routes_by_request_id(kind) {
+            return None;
+        }
         if let Some(raw) = self.raw_bytes() {
             let env: ProtoIdEnvelope = prost::Message::decode(raw).ok()?;
             env.id
         } else {
-            self.peek_int(i).ok()
+            self.peek_int(text_request_id_field(kind)?).ok()
         }
     }
 
