@@ -3,10 +3,12 @@
 //!
 //! Requests the underlying exchanges that contribute to a consolidated (BBO)
 //! feed. Pass a BBO exchange code as the first argument (defaults to
-//! `"ISLAND"`).
+//! `"a6"`). The BBO code is an opaque per-session token typically obtained
+//! from the `LAST_EXCHANGE` market-data tick (tick type 84); `"a6"` is the
+//! canonical sample value used in the IBKR Python testbed.
 //!
 //! ```bash
-//! cargo run --example smart_components -- ISLAND
+//! cargo run --example async_smart_components -- a6
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled.
@@ -17,7 +19,7 @@ use ibapi::prelude::*;
 async fn main() {
     env_logger::init();
 
-    let bbo_exchange = std::env::args().nth(1).unwrap_or_else(|| "ISLAND".to_string());
+    let bbo_exchange = std::env::args().nth(1).unwrap_or_else(|| "a6".to_string());
 
     let client = match Client::connect("127.0.0.1:4002", 100).await {
         Ok(client) => client,
