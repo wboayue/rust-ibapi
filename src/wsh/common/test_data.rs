@@ -61,13 +61,3 @@ pub const TEST_FILTER: &str = "earnings";
 pub mod server_versions {
     pub const OLD_VERSION: i32 = 100;
 }
-
-/// Helper to build test message responses
-pub fn build_response(message_type: &str, request_id: i32, data: &str) -> String {
-    format!("{}|{}|{}|", message_type, request_id, data)
-}
-
-/// Helper to build error response
-pub fn build_error_response(request_id: i32, error_code: i32, error_msg: &str) -> String {
-    format!("4|2|{}|{}|{}|", request_id, error_code, error_msg)
-}

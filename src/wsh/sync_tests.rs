@@ -1,9 +1,13 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, TEST_REQ_ID_FIRST};
-use crate::messages::ResponseMessage;
+use crate::common::test_utils::helpers::{assert_request, proto_response, TEST_REQ_ID_FIRST};
+use crate::messages::IncomingMessages;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::StreamDecoder;
-use crate::testdata::builders::wsh::{cancel_wsh_event_data_request, cancel_wsh_metadata_request, wsh_event_data_request, wsh_metadata_request};
+use crate::testdata::builders::wsh::{
+    cancel_wsh_event_data_request, cancel_wsh_metadata_request, wsh_event_data_request, wsh_event_data_response, wsh_metadata_request,
+    wsh_metadata_response,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 use crate::wsh::common::test_data::{self, json_responses};
 use std::sync::{Arc, RwLock};
 
@@ -14,8 +18,8 @@ fn test_wsh_metadata_table() {
     for test_case in wsh_metadata_test_cases() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages,
-            ordered_responses: vec![],
+            response_messages: vec![],
+            ordered_responses: test_case.response_messages,
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);
@@ -42,8 +46,14 @@ fn test_wsh_metadata_table() {
 fn test_wsh_metadata_request_body() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![test_data::build_response("104", TEST_REQ_ID_FIRST, json_responses::METADATA_SIMPLE)],
-        ordered_responses: vec![],
+        response_messages: vec![],
+        ordered_responses: vec![proto_response(
+            IncomingMessages::WshMetaData,
+            wsh_metadata_response()
+                .request_id(TEST_REQ_ID_FIRST)
+                .data_json(json_responses::METADATA_SIMPLE)
+                .encode_proto(),
+        )],
     });
 
     let client = Client::stubbed(message_bus.clone(), crate::server_versions::WSHE_CALENDAR);
@@ -59,8 +69,8 @@ fn test_wsh_event_data_by_contract_table() {
     for test_case in event_data_by_contract_test_cases() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages,
-            ordered_responses: vec![],
+            response_messages: vec![],
+            ordered_responses: test_case.response_messages,
         });
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
@@ -102,13 +112,22 @@ fn test_wsh_event_data_by_contract_table() {
 
 #[test]
 fn test_wsh_event_data_by_filter_subscription_sync() {
+    let event_response = |data| {
+        proto_response(
+            IncomingMessages::WshEventData,
+            wsh_event_data_response()
+                .request_id(test_data::REQUEST_ID_FILTER)
+                .data_json(data)
+                .encode_proto(),
+        )
+    };
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            test_data::build_response("105", test_data::REQUEST_ID_FILTER, json_responses::EVENT_DATA_EARNINGS),
-            test_data::build_response("105", test_data::REQUEST_ID_FILTER, json_responses::EVENT_DATA_DIVIDEND),
+        response_messages: vec![],
+        ordered_responses: vec![
+            event_response(json_responses::EVENT_DATA_EARNINGS),
+            event_response(json_responses::EVENT_DATA_DIVIDEND),
         ],
-        ordered_responses: vec![],
     });
 
     let client = Client::stubbed(message_bus.clone(), crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
@@ -141,8 +160,8 @@ fn test_wsh_event_data_by_filter_integration_table() {
     for test_case in event_data_by_filter_integration_test_cases() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages,
-            ordered_responses: vec![],
+            response_messages: vec![],
+            ordered_responses: test_case.response_messages,
         });
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
@@ -247,8 +266,8 @@ fn test_subscription_integration_table() {
     for test_case in subscription_integration_test_cases() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: test_case.response_messages,
-            ordered_responses: vec![],
+            response_messages: vec![],
+            ordered_responses: test_case.response_messages,
         });
 
         let client = Client::stubbed(message_bus, test_case.server_version);
@@ -295,24 +314,11 @@ fn test_wsh_metadata_decode_table() {
     use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
     for test_case in WSH_METADATA_DECODE_TESTS {
-        let mut message = ResponseMessage::from(test_case.message);
+        let mut message = test_case.metadata_message();
         let result = WshMetadata::decode(&DecoderContext::default(), &mut message);
 
-        if test_case.should_error {
-            assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-            match test_case.error_type {
-                Some("UnexpectedResponse") => assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_))),
-                _ => panic!("Unknown error type for test '{}'", test_case.name),
-            }
-        } else {
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-            assert_eq!(
-                result.unwrap().data_json,
-                test_case.expected_json,
-                "Test '{}' json mismatch",
-                test_case.name
-            );
-        }
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+        assert_eq!(result.unwrap().data_json, test_case.data_json, "Test '{}' json mismatch", test_case.name);
     }
 }
 
@@ -322,24 +328,10 @@ fn test_wsh_event_data_decode_table() {
     use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 
     for test_case in WSH_EVENT_DATA_DECODE_TESTS {
-        let mut message = ResponseMessage::from(test_case.message);
+        let mut message = test_case.event_data_message();
         let result = WshEventData::decode(&DecoderContext::default(), &mut message);
 
-        if test_case.should_error {
-            assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-            match test_case.error_type {
-                Some("Message") => assert!(matches!(result.unwrap_err(), Error::Notice(_))),
-                Some("UnexpectedResponse") => assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_))),
-                _ => panic!("Unknown error type for test '{}'", test_case.name),
-            }
-        } else {
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-            assert_eq!(
-                result.unwrap().data_json,
-                test_case.expected_json,
-                "Test '{}' json mismatch",
-                test_case.name
-            );
-        }
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+        assert_eq!(result.unwrap().data_json, test_case.data_json, "Test '{}' json mismatch", test_case.name);
     }
 }

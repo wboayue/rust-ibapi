@@ -456,24 +456,31 @@ TickEFP migration that genuinely unblocks deletion.
 
 ### PR-D4 (follow-up) — retire the residual text path
 
-Triggered by D3's conservative scope. To delete `ResponseMessage::from(fields: &str)`,
-`parse_raw_message`'s text branch, and the field-iteration plumbing, the
-following text-only decoders must first migrate or retire:
+Triggered by D3's conservative scope. Split into per-decoder migrations:
 
-- **WSH (`decode_wsh_metadata`, `decode_wsh_event_data`)** — proto envelopes
-  already exist (`decode_wsh_metadata_proto`, `decode_wsh_event_data_proto`)
-  in `src/wsh/common/decoders.rs`. Verify against C# `EDecoder.cs` and
-  `Constants.cs::PROTOBUF_MSG_IDS` that TWS at floor 213 actually emits these
-  proto-framed. If yes: wire through `require_proto()`, delete text decoders,
-  migrate `wsh/{common,sync,async}_tests.rs` fixtures to `proto_response`.
-- **`decode_tick_efp`** in `src/market_data/realtime/common/decoders/mod.rs` —
-  TWS has no protobuf encoder for TickEFP per the comment at
-  `src/messages.rs:395-397`. Two options: (a) retire the decoder + the
-  `TickEFP` enum variant if no consumers exist (out-of-scope public API
-  removal), or (b) keep TickEFP routing as the lone text fallback in
-  `parse_raw_message` (smaller residual surface but `from(s)` still needed).
+**D4a — WSH proto-only (open).** WSH metadata + event-data flipped to
+`require_proto()` + `decode_wsh_*_proto`; text decoders deleted. Per
+C# `Constants.cs::PROTOBUF_MSG_IDS`, `ReqWshMetaData` / `ReqWshEventData`
+have been protobuf since `MIN_SERVER_VER_PROTOBUF_NEWS_DATA` (209) — well
+below our floor of 213, so TWS always responds proto-framed. Tests:
+`WshMetadataResponse` / `WshEventDataResponse` proto builders added in
+`src/testdata/builders/wsh.rs`; decode-table fixtures and integration
+fixtures migrated from text strings to proto bytes; `build_response` /
+`build_error_response` helpers in `wsh/common/test_data.rs` deleted;
+`_rejects_text_framing` regression tests added per CLAUDE.md rule 19.
+Also surfaced one piece of common reuse: `From<&ResponseMessage> for Error`
+added in `errors.rs` (mirrors the existing owned conversion) so the
+stream_decoders dispatch can pass `&*message` without cloning.
 
-After (or alongside) those migrations:
+**D4b — `decode_tick_efp`** in `src/market_data/realtime/common/decoders/mod.rs`
+stays text-only (TWS has no protobuf encoder per `src/messages.rs:395-397`).
+Two options: (a) retire the decoder + the `TickEFP` variant if no consumers
+exist (out-of-scope public API removal), or (b) keep TickEFP routing as the
+lone text fallback in `parse_raw_message` — `from(s)` and the text branch
+remain alive in that case. Default to (b): TickEFP is a small residual
+surface and the cost of keeping `from(s)` is low.
+
+After WSH (and TickEFP retire-or-stay):
 
 - Delete `messages::ResponseMessage::from(fields: &str)` and the matching
   `from_simple` test helper.

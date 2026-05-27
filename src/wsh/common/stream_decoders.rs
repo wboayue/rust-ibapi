@@ -16,8 +16,9 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::WshMetaData => decoders::decode_wsh_metadata(message.clone()),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
+            IncomingMessages::WshMetaData => decoders::decode_wsh_metadata(message),
+            IncomingMessages::Error => Err(Error::from(&*message)),
+
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -33,8 +34,9 @@ impl StreamDecoder<WshEventData> for WshEventData {
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::WshEventData => decoders::decode_event_data_message(message.clone()),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
+            IncomingMessages::WshEventData => decoders::decode_wsh_event_data(message),
+            IncomingMessages::Error => Err(Error::from(&*message)),
+
             _ => Err(Error::unexpected_response(message)),
         }
     }

@@ -1,9 +1,6 @@
-//! Builders for WSH-domain request messages.
-//!
-//! Response builders are absent: WSH responses are JSON payloads on the
-//! existing text wire (see `wsh::common::test_data::build_response`).
+//! Builders for WSH-domain request and response messages.
 
-use super::RequestEncoder;
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
 use crate::messages::OutgoingMessages;
 use crate::proto;
@@ -111,4 +108,92 @@ pub fn wsh_event_data_request() -> WshEventDataRequestBuilder {
 
 pub fn cancel_wsh_event_data_request() -> CancelWshEventDataRequestBuilder {
     CancelWshEventDataRequestBuilder::default()
+}
+
+// =============================================================================
+// Response builders (proto-framed)
+// =============================================================================
+
+/// `WshMetaData` proto-response builder.
+#[derive(Clone, Debug)]
+pub struct WshMetadataResponse {
+    pub request_id: i32,
+    pub data_json: String,
+}
+
+impl Default for WshMetadataResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            data_json: String::new(),
+        }
+    }
+}
+
+impl WshMetadataResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn data_json(mut self, v: impl Into<String>) -> Self {
+        self.data_json = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for WshMetadataResponse {
+    type Proto = proto::WshMetaData;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::WshMetaData {
+            req_id: Some(self.request_id),
+            data_json: Some(self.data_json.clone()),
+        }
+    }
+}
+
+pub fn wsh_metadata_response() -> WshMetadataResponse {
+    WshMetadataResponse::default()
+}
+
+/// `WshEventData` proto-response builder.
+#[derive(Clone, Debug)]
+pub struct WshEventDataResponse {
+    pub request_id: i32,
+    pub data_json: String,
+}
+
+impl Default for WshEventDataResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            data_json: String::new(),
+        }
+    }
+}
+
+impl WshEventDataResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn data_json(mut self, v: impl Into<String>) -> Self {
+        self.data_json = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for WshEventDataResponse {
+    type Proto = proto::WshEventData;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::WshEventData {
+            req_id: Some(self.request_id),
+            data_json: Some(self.data_json.clone()),
+        }
+    }
+}
+
+pub fn wsh_event_data_response() -> WshEventDataResponse {
+    WshEventDataResponse::default()
 }

@@ -31,7 +31,7 @@ impl Client {
         request_helpers::blocking::one_shot_request_with_retry(
             self,
             encoders::encode_request_wsh_metadata,
-            |message| decoders::decode_wsh_metadata(message.clone()),
+            |message| decoders::decode_metadata_message(message),
             || Err(Error::UnexpectedEndOfStream),
         )
     }
@@ -78,7 +78,7 @@ impl Client {
         request_helpers::blocking::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
-            |message| decoders::decode_event_data_message(message.clone()),
+            |message| decoders::decode_event_data_message(message),
             || Err(Error::UnexpectedEndOfStream),
         )
     }
