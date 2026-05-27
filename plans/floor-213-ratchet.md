@@ -516,7 +516,7 @@ flatten-onto-`RoutedItem` refactor.
   manual setups (`test_positions`, `test_account_updates`, etc.) left for a
   separate consistency-sweep PR.
 - ~~**`one_shot_request` processor signature `Fn(&mut ResponseMessage)` → `Fn(&ResponseMessage)`.**~~
-  **Shipped after D4a.** All 6 helpers in `src/common/request_helpers.rs`
+  **Shipped in [#643](https://github.com/wboayue/rust-ibapi/pull/643)** (after D4a). All 6 helpers in `src/common/request_helpers.rs`
   (sync + async `one_shot_request` / `one_shot_with_retry` /
   `one_shot_request_with_retry`) flipped to `Fn(&ResponseMessage)` /
   `FnOnce(&ResponseMessage)`. 12 closure wrappers dropped across
