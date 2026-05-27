@@ -1,6 +1,6 @@
 # Legacy Text-Protocol Cleanup Tracker
 
-> **Status: 📦 SUPERSEDED by [`plans/floor-213-ratchet.md`](floor-213-ratchet.md).**
+> **Status: 📦 SUPERSEDED — arc shipped, see [#645](https://github.com/wboayue/rust-ibapi/issues/645) for the PR map.**
 > The arc concluded with floor at 213 and TickEFP retained text-only by
 > design — the "Helper APIs that go away" and "Final-cleanup checklist"
 > sections below are partially blocked by that decision (`ResponseMessage::from(&str)`,
@@ -17,7 +17,7 @@
 
 - **Outgoing:** all requests are protobuf. The text encoders are gone (PRs #449–#452, summarized in [protobuf-migration.md](protobuf-migration.md)).
 - **Incoming:** decoders are still mostly text-only with a small number of dual-format (`decode_proto_or_text`) call sites. The wire flips a message family from text to protobuf at a per-family server-version gate, so text-decode code stays load-bearing until the minimum server version we accept covers every gate.
-- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_REST_MESSAGES_3` (213) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted 201 → 203 in [#527](https://github.com/wboayue/rust-ibapi/pull/527), 203 → 210 in [#530](https://github.com/wboayue/rust-ibapi/pull/530), then 210 → 213 in this PR (skipping 211 + 212 — every family in that range already has a proto decoder + `decode_proto_or_text` wrapper, prep work in #631 wired the orphan `decode_display_group_updated_proto`). With the floor now at the final gate, per-decoder text-branch deletions become straightforward follow-ups; see `plans/floor-213-ratchet.md` §PR-C.
+- **Connection gate:** `connection::common::require_protobuf_support` rejects servers below `server_versions::PROTOBUF_REST_MESSAGES_3` (213) — gate added in [#492](https://github.com/wboayue/rust-ibapi/pull/492); floor ratcheted 201 → 203 in [#527](https://github.com/wboayue/rust-ibapi/pull/527), 203 → 210 in [#530](https://github.com/wboayue/rust-ibapi/pull/530), then 210 → 213 in [#632](https://github.com/wboayue/rust-ibapi/pull/632) (skipping 211 + 212 — every family in that range already had a proto decoder + `decode_proto_or_text` wrapper, prep work in [#631](https://github.com/wboayue/rust-ibapi/pull/631) wired the orphan `decode_display_group_updated_proto`). Full PR map in archive issue [#645](https://github.com/wboayue/rust-ibapi/issues/645).
 
 ## Per-family protobuf-incoming gates
 
@@ -109,6 +109,11 @@ dual-format machinery (`decode_proto_or_text`, `is_protobuf` field, etc.).
 ### Helper APIs that go away when all decoders are proto-only
 
 These exist solely to support text-format messages. Each can be deleted once no decoder reads from a text-format `ResponseMessage`.
+
+> Recent mop-up: PR-D2 ([#640](https://github.com/wboayue/rust-ibapi/pull/640)) dropped the now-unreferenced text-cursor helpers
+> (`next_long`, `next_bool`, `next_date_time*`, `parse_ib_date_time_with_timezone`,
+> `resolve_primitive_date_time`); the `is_protobuf` field went with PR-D3 ([#641](https://github.com/wboayue/rust-ibapi/pull/641));
+> `ResponseMessage::len()` dropped in a follow-up. The remaining items below are TickEFP-blocked.
 
 - `messages::ResponseMessage::is_protobuf` field (`src/messages.rs:879`)
 - `messages::ResponseMessage::from(fields: &str)` inherent constructor (`src/messages.rs:1298`) — note: not a `From<&str>` impl, despite the name
