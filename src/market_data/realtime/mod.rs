@@ -334,8 +334,6 @@ pub enum TickTypes {
     Size(TickSize),
     /// Textual market data message.
     String(TickString),
-    /// Exchange for Physical (EFP) tick.
-    EFP(TickEFP),
     /// Generic numeric tick (e.g., index values).
     Generic(TickGeneric),
     /// Option computation tick.
@@ -355,7 +353,6 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::TickPrice,
         IncomingMessages::TickSize,
         IncomingMessages::TickString,
-        IncomingMessages::TickEFP,
         IncomingMessages::TickGeneric,
         IncomingMessages::TickOptionComputation,
         IncomingMessages::TickSnapshotEnd,
@@ -372,7 +369,6 @@ impl StreamDecoder<TickTypes> for TickTypes {
             IncomingMessages::TickOptionComputation => common::decoders::decode_tick_option_computation(message).map(TickTypes::OptionComputation),
             IncomingMessages::TickReqParams => common::decoders::decode_tick_request_parameters(message).map(TickTypes::RequestParameters),
             IncomingMessages::MarketDataType => common::decoders::decode_market_data_type(message).map(TickTypes::MarketDataType),
-            IncomingMessages::TickEFP => Ok(TickTypes::EFP(common::decoders::decode_tick_efp(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
             _ => Err(Error::unexpected_response(message)),
         }
@@ -446,28 +442,6 @@ pub struct TickString {
     pub tick_type: TickType,
     /// The string value.
     pub value: String,
-}
-
-/// Exchange for Physical (EFP) tick data.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default)]
-pub struct TickEFP {
-    /// Type of EFP tick.
-    pub tick_type: TickType,
-    /// EFP basis points.
-    pub basis_points: f64,
-    /// Formatted basis points string.
-    pub formatted_basis_points: String,
-    /// Implied futures price.
-    pub implied_futures_price: f64,
-    /// Number of hold days.
-    pub hold_days: i32,
-    /// Future's last trade date.
-    pub future_last_trade_date: String,
-    /// Dividend impact on the EFP.
-    pub dividend_impact: f64,
-    /// Dividends to last trade date.
-    pub dividends_to_last_trade_date: f64,
 }
 
 /// Generic tick data.

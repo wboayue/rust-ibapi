@@ -731,6 +731,31 @@ match &bar.date {
 
 **Serde**: the serialized format of `Bar.date` changed from a flat `OffsetDateTime` value to an externally-tagged enum (`{"Date": ...}` / `{"DateTime": ...}`). Persisted `Bar` data serialized under v2.x must be migrated or re-ingested.
 
+### 31. `TickTypes::EFP` / `TickEFP` removed
+
+`TickTypes::EFP(TickEFP)` and the `TickEFP` struct are gone from the realtime market-data API. Match arms on `TickTypes::EFP(_)` no longer compile and must be removed.
+
+```rust,ignore
+// v2.x / v3 pre-removal
+for tick in subscription.iter_data() {
+    match tick? {
+        TickTypes::Price(p) => /* … */,
+        TickTypes::EFP(efp) => println!("efp: {}", efp.basis_points),
+        _ => {}
+    }
+}
+
+// v3 post-removal — drop the EFP arm
+for tick in subscription.iter_data() {
+    match tick? {
+        TickTypes::Price(p) => /* … */,
+        _ => {}
+    }
+}
+```
+
+EFP (Exchange For Physical) ticks were the only response type still framed as text on the wire. TWS has no `TickEFP.proto` schema, so keeping the API meant carrying a text-decode path through an otherwise proto-only crate. If TWS adds protobuf support for TickEFP later, the API can be reintroduced as a proto-only decoder.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

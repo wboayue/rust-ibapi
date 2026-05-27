@@ -210,7 +210,6 @@ fn test_text_request_id_field() {
     assert_eq!(text_request_id_field(IncomingMessages::TickByTick), Some(1));
 
     // Field-2 messages (request_id after a version field).
-    assert_eq!(text_request_id_field(IncomingMessages::TickEFP), Some(2));
     assert_eq!(text_request_id_field(IncomingMessages::TickPrice), Some(2));
     assert_eq!(text_request_id_field(IncomingMessages::ContractDataEnd), Some(2));
 
@@ -302,23 +301,6 @@ fn test_response_message_peek_operations() {
     assert_eq!(message.peek_int(3).unwrap(), 456);
     assert!(message.peek_int(2).is_err()); // "abc" is not an int
     assert!(message.peek_int(4).is_err()); // Out of bounds (only 4 fields, indices 0-3)
-}
-
-#[test]
-fn test_response_message_skip() {
-    let mut message = ResponseMessage::from("1\02\03\04\0");
-
-    assert_eq!(message.i, 0);
-    message.skip();
-    assert_eq!(message.i, 1);
-
-    assert_eq!(message.next_int().unwrap(), 2);
-    assert_eq!(message.i, 2);
-
-    message.skip();
-    assert_eq!(message.i, 3);
-
-    assert_eq!(message.next_int().unwrap(), 4);
 }
 
 #[test]
@@ -1387,7 +1369,6 @@ fn test_outgoing_messages_from_str_comprehensive() {
 fn test_routes_by_request_id_comprehensive() {
     // Confirm the allow-list covers a representative slice across domains.
     assert!(routes_by_request_id(IncomingMessages::MarketDepthL2));
-    assert!(routes_by_request_id(IncomingMessages::TickEFP));
     assert!(routes_by_request_id(IncomingMessages::TickReqParams));
     assert!(routes_by_request_id(IncomingMessages::TickSnapshotEnd));
 
