@@ -101,6 +101,11 @@ path = "examples/async/managed_accounts.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_fundamental_data"
+path = "examples/async/fundamental_data.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_wsh_metadata"
 path = "examples/async/wsh_metadata.rs"
 required-features = ["async"]
@@ -570,6 +575,11 @@ required-features = ["sync"]
 [[example]]
 name = "wsh_event_data_by_filter"
 path = "examples/sync/wsh_event_data_by_filter.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "fundamental_data"
+path = "examples/sync/fundamental_data.rs"
 required-features = ["sync"]
 
 [[example]]
