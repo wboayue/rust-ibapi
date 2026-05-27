@@ -102,6 +102,10 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 - [x] `UpdateDisplayGroup` — `Client::update_display_group`
 - [x] `UnsubscribeFromGroupEvents` — subscription drop
 
+### Fundamental
+- [x] `RequestFundamentalData` — `Client::fundamental_data`
+- [n/a] `CancelFundamentalData` — one-shot helper drops `InternalSubscription` naturally; no public path
+
 ### WSH (Wall Street Horizon)
 - [x] `ReqWshMetaData` — `Client::wsh_metadata`
 - [x] `CancelWshMetaData` — subscription drop
@@ -115,7 +119,6 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 
 These appear in `PROTOBUF_MSG_IDS` but are not exposed by `Client`. They need an encoder + decoder (where applicable) + `pub fn` on `Client` for both sync and async.
 
-- [ ] `RequestFundamentalData` / `CancelFundamentalData` (SCAN_DATA, server 210)
 - [ ] `RequestSmartComponents` (REST_MESSAGES_2, server 212)
 - [ ] `RequestSoftDollarTiers` (REST_MESSAGES_2, server 212)
 - [ ] `ReqUserInfo` (REST_MESSAGES_2, server 212)
