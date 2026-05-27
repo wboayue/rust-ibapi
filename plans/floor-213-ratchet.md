@@ -515,14 +515,15 @@ flatten-onto-`RoutedItem` refactor.
   `src/common/test_utils.rs`; 5 PR-C3 callsites folded onto it. Pre-existing
   manual setups (`test_positions`, `test_account_updates`, etc.) left for a
   separate consistency-sweep PR.
-- **`one_shot_request` processor signature `Fn(&mut ResponseMessage)` → `Fn(&ResponseMessage)`.**
-  C-series proto-only flips wrap the decoder in `|msg| decoders::decode_X(msg)`
-  at the callsite because the helper's processor sig didn't change. PR-C3
-  (#636) is the 3rd occurrence (family_codes, server_time, managed_accounts)
-  — closure wrappers now exist at `src/accounts/{sync,async}/mod.rs` for all
-  three. Flip the helper signature in a follow-up PR and drop the closure
-  wrappers. Wsh's `one_shot_request_with_retry` decoders still use `&mut`
-  (`message.clone()` pattern), so leave that helper untouched.
+- ~~**`one_shot_request` processor signature `Fn(&mut ResponseMessage)` → `Fn(&ResponseMessage)`.**~~
+  **Shipped after D4a.** All 6 helpers in `src/common/request_helpers.rs`
+  (sync + async `one_shot_request` / `one_shot_with_retry` /
+  `one_shot_request_with_retry`) flipped to `Fn(&ResponseMessage)` /
+  `FnOnce(&ResponseMessage)`. 12 closure wrappers dropped across
+  `accounts/{sync,async}/mod.rs` (8 sites: family_codes, managed_accounts,
+  server_time, server_time_millis) and `wsh/{sync,async}.rs` (4 sites:
+  decode_metadata_message / decode_event_data_message). Unblocked once
+  D4a removed `.clone()` from WSH decoders.
 
 ## Out of scope (after PR-D)
 
