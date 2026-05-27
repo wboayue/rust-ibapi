@@ -1,5 +1,18 @@
 # Floor ratchet: 210 → 213 (final)
 
+> **Status: ✅ SHIPPED — closed.** The full arc landed across 15 PRs:
+> [#631](https://github.com/wboayue/rust-ibapi/pull/631) (PR-A) →
+> [#632](https://github.com/wboayue/rust-ibapi/pull/632) (PR-B floor bump) →
+> [#633–#638](https://github.com/wboayue/rust-ibapi/pull/638) (C1–C6 per-decoder cleanups) →
+> [#639](https://github.com/wboayue/rust-ibapi/pull/639) /
+> [#640](https://github.com/wboayue/rust-ibapi/pull/640) /
+> [#641](https://github.com/wboayue/rust-ibapi/pull/641) (D1 / D2 / D3 final cleanup) →
+> [#642](https://github.com/wboayue/rust-ibapi/pull/642) (D4a WSH proto-only) →
+> [#643](https://github.com/wboayue/rust-ibapi/pull/643) (one_shot_request sig flip).
+> TickEFP stays text-only (D4b option b) — `parse_raw_message`'s text branch
+> and `ResponseMessage::from(s)` remain alive solely for it. Retained for
+> historical reference; sections below describe the per-PR scope as shipped.
+
 End-state of `plans/legacy-text-protocol-cleanup.md`. Raises the minimum
 accepted server version from `PROTOBUF_SCAN_DATA` (210) to
 `PROTOBUF_REST_MESSAGES_3` (213) in one bump, skipping 211 + 212.

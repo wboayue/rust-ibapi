@@ -1,5 +1,11 @@
 # Gate-206 text-decoder cleanup (`decode_tick_news` + `decode_option_computation`)
 
+> **Status: ✅ SHIPPED — closed.** `decode_tick_news` proto-only in
+> [#629](https://github.com/wboayue/rust-ibapi/pull/629);
+> `decode_option_computation` proto-only in
+> [#630](https://github.com/wboayue/rust-ibapi/pull/630). Retained for
+> historical reference.
+
 Closes the last two leftovers from the floor-210 sweep listed in
 `plans/legacy-text-protocol-cleanup.md` (§"Decoders whose text branch is now
 unreachable at floor 210"). Both message types gate at `PROTOBUF_MARKET_DATA`
