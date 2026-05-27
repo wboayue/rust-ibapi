@@ -455,6 +455,7 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::PnLSingle
         | IncomingMessages::SecurityDefinitionOptionParameter
         | IncomingMessages::SecurityDefinitionOptionParameterEnd
+        | IncomingMessages::SmartComponents
         | IncomingMessages::SymbolSamples
         | IncomingMessages::TickByTick
         | IncomingMessages::TickNews

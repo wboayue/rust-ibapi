@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{proto_response, text_response};
 use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::server_versions;
-use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, symbol_samples, symbol_samples_entry};
+use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, smart_components, symbol_samples, symbol_samples_entry};
 use crate::testdata::builders::market_data::tick_option_computation;
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -39,6 +39,16 @@ pub struct MarketRuleTestCase {
     pub ordered_responses: Vec<ResponseMessage>,
     pub expected_request: &'static str,
     pub expected_price_increments: usize,
+}
+
+/// Test case for smart components tests
+#[allow(dead_code)]
+pub struct SmartComponentsTestCase {
+    pub name: &'static str,
+    pub bbo_exchange: &'static str,
+    pub ordered_responses: Vec<ResponseMessage>,
+    pub expected_count: usize,
+    pub expected_first: Option<(i32, &'static str, &'static str)>,
 }
 
 /// Test case for option calculation tests
@@ -491,6 +501,47 @@ pub fn market_rule_test_cases() -> Vec<MarketRuleTestCase> {
             )],
             expected_request: "91|239|",
             expected_price_increments: 6,
+        },
+    ]
+}
+
+/// Test cases for smart components
+pub fn smart_components_test_cases() -> Vec<SmartComponentsTestCase> {
+    use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+    vec![
+        SmartComponentsTestCase {
+            name: "empty",
+            bbo_exchange: "EMPTY",
+            ordered_responses: vec![proto_response(
+                IncomingMessages::SmartComponents,
+                smart_components(TEST_REQ_ID_FIRST).encode_proto(),
+            )],
+            expected_count: 0,
+            expected_first: None,
+        },
+        SmartComponentsTestCase {
+            name: "single component",
+            bbo_exchange: "ISLAND",
+            ordered_responses: vec![proto_response(
+                IncomingMessages::SmartComponents,
+                smart_components(TEST_REQ_ID_FIRST).component(1, "NASDAQ", "Q").encode_proto(),
+            )],
+            expected_count: 1,
+            expected_first: Some((1, "NASDAQ", "Q")),
+        },
+        SmartComponentsTestCase {
+            name: "multi component",
+            bbo_exchange: "BYX",
+            ordered_responses: vec![proto_response(
+                IncomingMessages::SmartComponents,
+                smart_components(TEST_REQ_ID_FIRST)
+                    .component(1, "NYSE", "N")
+                    .component(2, "NASDAQ", "Q")
+                    .component(3, "ARCA", "P")
+                    .encode_proto(),
+            )],
+            expected_count: 3,
+            expected_first: Some((1, "NYSE", "N")),
         },
     ]
 }

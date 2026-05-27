@@ -1,7 +1,7 @@
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
-use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain};
+use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain, SmartComponent};
 
 // `TickOptionComputation` (msg 21, gate 206 PROTOBUF_MARKET_DATA) is decoded
 // in `market_data/realtime/common/decoders` and routed here via the narrow
@@ -93,6 +93,30 @@ pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Err
         expirations: p.expirations,
         strikes: p.strikes,
     })
+}
+
+pub(crate) fn decode_smart_components(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
+    decode_smart_components_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartComponent>, Error> {
+    let p: crate::proto::SmartComponents = Message::decode(bytes)?;
+    Ok(p.smart_components
+        .into_iter()
+        .map(|c| SmartComponent {
+            bit_number: c.bit_number.unwrap_or_default(),
+            exchange: c.exchange.unwrap_or_default(),
+            exchange_letter: c.exchange_letter.unwrap_or_default(),
+        })
+        .collect())
+}
+
+pub(in crate::contracts) fn decode_smart_components_message(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
+    match message.message_type() {
+        IncomingMessages::SmartComponents => decode_smart_components(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
 }
 
 #[cfg(test)]

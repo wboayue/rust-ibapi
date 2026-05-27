@@ -88,6 +88,40 @@ impl Client {
         }
     }
 
+    /// Requests the underlying exchanges that contribute to a consolidated (BBO) feed.
+    ///
+    /// Given a BBO exchange code such as `"ISLAND"`, returns the list of
+    /// underlying exchanges with each entry's bit position, full exchange
+    /// name, and single-letter abbreviation. Useful for decoding the
+    /// `mdSize` / `mdMask` bitmaps that appear on tick-by-tick and
+    /// market-depth streams.
+    ///
+    /// # Arguments
+    /// * `bbo_exchange` - The consolidated exchange code (e.g. `"ISLAND"`, `"BYX"`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let components = client.smart_components("ISLAND").expect("request failed");
+    /// for component in &components {
+    ///     println!("bit {}: {} ({})", component.bit_number, component.exchange, component.exchange_letter);
+    /// }
+    /// ```
+    pub fn smart_components(&self, bbo_exchange: &str) -> Result<Vec<SmartComponent>, Error> {
+        check_version(self.server_version, Features::SMART_COMPONENTS)?;
+
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
+            decoders::decode_smart_components_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
     /// Requests matching stock symbols.
     ///
     /// # Arguments

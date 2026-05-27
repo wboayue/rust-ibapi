@@ -10,7 +10,7 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::testdata::builders::contracts::{
     calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_request,
-    market_rule_request, matching_symbols_request, option_chain_request,
+    market_rule_request, matching_symbols_request, option_chain_request, smart_components_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -79,6 +79,36 @@ async fn test_market_rule() {
             "Test '{}' price increments mismatch",
             test_case.name
         );
+    }
+}
+
+#[tokio::test]
+async fn test_smart_components() {
+    for test_case in smart_components_test_cases() {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
+
+        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
+        let result = client.smart_components(test_case.bbo_exchange).await;
+
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request(
+            &message_bus,
+            0,
+            &smart_components_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .bbo_exchange(test_case.bbo_exchange),
+        );
+
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+        let components = result.unwrap();
+        assert_eq!(components.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
+
+        if let Some((bit, exch, letter)) = test_case.expected_first {
+            let first = &components[0];
+            assert_eq!(first.bit_number, bit, "Test '{}' bit_number", test_case.name);
+            assert_eq!(first.exchange, exch, "Test '{}' exchange", test_case.name);
+            assert_eq!(first.exchange_letter, letter, "Test '{}' exchange_letter", test_case.name);
+        }
     }
 }
 
