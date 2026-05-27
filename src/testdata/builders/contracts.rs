@@ -620,26 +620,12 @@ impl ResponseProtoEncoder for MarketRuleResponse {
 }
 
 /// Builder for `SmartComponents` (msg 82) responses.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SmartComponentsResponse {
-    pub request_id: i32,
     pub components: Vec<(i32, String, String)>,
 }
 
-impl Default for SmartComponentsResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-            components: Vec::new(),
-        }
-    }
-}
-
 impl SmartComponentsResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn component(mut self, bit_number: i32, exchange: impl Into<String>, exchange_letter: impl Into<String>) -> Self {
         self.components.push((bit_number, exchange.into(), exchange_letter.into()));
         self
@@ -651,7 +637,7 @@ impl ResponseProtoEncoder for SmartComponentsResponse {
 
     fn to_proto(&self) -> Self::Proto {
         proto::SmartComponents {
-            req_id: Some(self.request_id),
+            req_id: None,
             smart_components: self
                 .components
                 .iter()
@@ -801,11 +787,8 @@ pub fn market_rule(market_rule_id: i32) -> MarketRuleResponse {
     }
 }
 
-pub fn smart_components(request_id: i32) -> SmartComponentsResponse {
-    SmartComponentsResponse {
-        request_id,
-        components: Vec::new(),
-    }
+pub fn smart_components() -> SmartComponentsResponse {
+    SmartComponentsResponse::default()
 }
 
 pub fn option_chain() -> OptionChainResponse {

@@ -90,14 +90,15 @@ impl Client {
 
     /// Requests the underlying exchanges that contribute to a consolidated (BBO) feed.
     ///
-    /// Given a BBO exchange code such as `"ISLAND"`, returns the list of
-    /// underlying exchanges with each entry's bit position, full exchange
-    /// name, and single-letter abbreviation. Useful for decoding the
-    /// `mdSize` / `mdMask` bitmaps that appear on tick-by-tick and
-    /// market-depth streams.
+    /// Given a BBO exchange code (an opaque per-session token, e.g. `"a6"`),
+    /// returns the list of underlying exchanges with each entry's bit
+    /// position, full exchange name, and single-letter abbreviation. Useful
+    /// for decoding the `mdSize` / `mdMask` bitmaps on tick-by-tick and
+    /// market-depth streams. The token is typically obtained from the
+    /// `LAST_EXCHANGE` market-data tick (tick type 84).
     ///
     /// # Arguments
-    /// * `bbo_exchange` - The consolidated exchange code (e.g. `"ISLAND"`, `"BYX"`).
+    /// * `bbo_exchange` - The BBO exchange token (e.g. `"a6"`).
     ///
     /// # Examples
     ///
@@ -106,7 +107,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let components = client.smart_components("ISLAND").expect("request failed");
+    /// let components = client.smart_components("a6").expect("request failed");
     /// for component in &components {
     ///     println!("bit {}: {} ({})", component.bit_number, component.exchange, component.exchange_letter);
     /// }

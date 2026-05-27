@@ -507,34 +507,30 @@ pub fn market_rule_test_cases() -> Vec<MarketRuleTestCase> {
 
 /// Test cases for smart components
 pub fn smart_components_test_cases() -> Vec<SmartComponentsTestCase> {
-    use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
     vec![
         SmartComponentsTestCase {
             name: "empty",
-            bbo_exchange: "EMPTY",
-            ordered_responses: vec![proto_response(
-                IncomingMessages::SmartComponents,
-                smart_components(TEST_REQ_ID_FIRST).encode_proto(),
-            )],
+            bbo_exchange: "a0",
+            ordered_responses: vec![proto_response(IncomingMessages::SmartComponents, smart_components().encode_proto())],
             expected_count: 0,
             expected_first: None,
         },
         SmartComponentsTestCase {
             name: "single component",
-            bbo_exchange: "ISLAND",
+            bbo_exchange: "a6",
             ordered_responses: vec![proto_response(
                 IncomingMessages::SmartComponents,
-                smart_components(TEST_REQ_ID_FIRST).component(1, "NASDAQ", "Q").encode_proto(),
+                smart_components().component(1, "NASDAQ", "Q").encode_proto(),
             )],
             expected_count: 1,
             expected_first: Some((1, "NASDAQ", "Q")),
         },
         SmartComponentsTestCase {
             name: "multi component",
-            bbo_exchange: "BYX",
+            bbo_exchange: "a9",
             ordered_responses: vec![proto_response(
                 IncomingMessages::SmartComponents,
-                smart_components(TEST_REQ_ID_FIRST)
+                smart_components()
                     .component(1, "NYSE", "N")
                     .component(2, "NASDAQ", "Q")
                     .component(3, "ARCA", "P")

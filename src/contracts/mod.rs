@@ -939,8 +939,8 @@ pub struct PriceIncrement {
 
 /// One contributing exchange behind a consolidated BBO feed.
 ///
-/// Returned by `Client::smart_components` for a given BBO exchange code
-/// (e.g. `"ISLAND"`). Each entry maps a bit position in the consolidated
+/// Returned by `Client::smart_components` for a given BBO exchange token
+/// (e.g. `"a6"`). Each entry maps a bit position in the consolidated
 /// quote to the underlying exchange and its single-letter abbreviation.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
