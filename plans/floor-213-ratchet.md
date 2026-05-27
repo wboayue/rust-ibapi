@@ -458,7 +458,7 @@ TickEFP migration that genuinely unblocks deletion.
 
 Triggered by D3's conservative scope. Split into per-decoder migrations:
 
-**D4a — WSH proto-only (open).** WSH metadata + event-data flipped to
+**D4a — WSH proto-only (shipped in [#642](https://github.com/wboayue/rust-ibapi/pull/642)).** WSH metadata + event-data flipped to
 `require_proto()` + `decode_wsh_*_proto`; text decoders deleted. Per
 C# `Constants.cs::PROTOBUF_MSG_IDS`, `ReqWshMetaData` / `ReqWshEventData`
 have been protobuf since `MIN_SERVER_VER_PROTOBUF_NEWS_DATA` (209) — well
