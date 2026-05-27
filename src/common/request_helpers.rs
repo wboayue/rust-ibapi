@@ -60,15 +60,15 @@ mod sync_helpers {
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
         encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
         default: impl FnOnce() -> R,
     ) -> Result<R, Error> {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;
         let subscription = client.shared_request(message_type).send_raw(request)?;
 
-        if let Some(Ok(mut message)) = subscription.next() {
-            processor(&mut message)
+        if let Some(Ok(message)) = subscription.next() {
+            processor(&message)
         } else {
             Ok(default())
         }
@@ -79,7 +79,7 @@ mod sync_helpers {
         client: &Client,
         message_type: OutgoingMessages,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
-        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::blocking::retry_on_connection_reset(|| {
@@ -87,7 +87,7 @@ mod sync_helpers {
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
             match subscription.next() {
-                Some(Ok(mut message)) => processor(&mut message),
+                Some(Ok(message)) => processor(&message),
                 Some(Err(e)) => Err(e),
                 None => on_none(),
             }
@@ -98,7 +98,7 @@ mod sync_helpers {
     pub fn one_shot_request_with_retry<R>(
         client: &Client,
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
-        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::blocking::retry_on_connection_reset(|| {
@@ -107,7 +107,7 @@ mod sync_helpers {
             let subscription = client.send_request(request_id, request)?;
 
             match subscription.next() {
-                Some(Ok(mut message)) => processor(&mut message),
+                Some(Ok(message)) => processor(&message),
                 Some(Err(e)) => Err(e),
                 None => on_none(),
             }
@@ -175,7 +175,7 @@ mod async_helpers {
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
         encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
         default: impl FnOnce() -> R,
     ) -> Result<R, Error> {
         check_version(client.server_version(), feature)?;
@@ -183,7 +183,7 @@ mod async_helpers {
         let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
         match subscription.next().await {
-            Some(Ok(mut message)) => processor(&mut message),
+            Some(Ok(message)) => processor(&message),
             Some(Err(e)) => Err(e),
             None => Ok(default()),
         }
@@ -194,7 +194,7 @@ mod async_helpers {
         client: &Client,
         message_type: OutgoingMessages,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
-        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::retry_on_connection_reset(|| async {
@@ -202,7 +202,7 @@ mod async_helpers {
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
             match subscription.next().await {
-                Some(Ok(mut message)) => processor(&mut message),
+                Some(Ok(message)) => processor(&message),
                 Some(Err(e)) => Err(e),
                 None => on_none(),
             }
@@ -214,7 +214,7 @@ mod async_helpers {
     pub async fn one_shot_request_with_retry<R>(
         client: &Client,
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
-        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::retry_on_connection_reset(|| async {
@@ -223,7 +223,7 @@ mod async_helpers {
             let mut subscription = client.send_request(request_id, request).await?;
 
             match subscription.next().await {
-                Some(Ok(mut message)) => processor(&mut message),
+                Some(Ok(message)) => processor(&message),
                 Some(Err(e)) => Err(e),
                 None => on_none(),
             }

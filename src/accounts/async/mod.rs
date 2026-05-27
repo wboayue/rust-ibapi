@@ -112,7 +112,7 @@ impl Client {
             Features::FAMILY_CODES,
             OutgoingMessages::RequestFamilyCodes,
             encoders::encode_request_family_codes,
-            |msg| decoders::decode_family_codes(msg),
+            decoders::decode_family_codes,
             Vec::default,
         )
         .await
@@ -339,7 +339,7 @@ impl Client {
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
-            |msg| decoders::decode_managed_accounts(msg),
+            decoders::decode_managed_accounts,
             || Ok(Vec::default()),
         )
         .await
@@ -364,7 +364,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
-            |msg| decoders::decode_server_time(msg),
+            decoders::decode_server_time,
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -378,7 +378,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
-            |msg| decoders::decode_server_time_millis(msg),
+            decoders::decode_server_time_millis,
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
