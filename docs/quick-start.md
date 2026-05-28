@@ -38,16 +38,18 @@ When both features are enabled, the async client remains on `client::Client` and
 
 Add to your `Cargo.toml`:
 
+v3.0 is not yet on crates.io. Install from git while it's in development; v2.x users should pin a `2.0` version from crates.io instead.
+
 ```toml
 [dependencies]
-# Default async client
-ibapi = "2.0"
+# Default async client (v3.0 from git)
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main" }
 
 # Sync-only (disable defaults)
-ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync"] }
 
-# Async + blocking
-ibapi = { version = "2.0", features = ["sync"] }
+# Async + blocking together
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync", "async"] }
 ```
 
 ### For Development
@@ -81,60 +83,77 @@ Ensure your IB Gateway or TWS is running with API connections enabled:
 Create `src/main.rs`:
 
 ```rust
-use ibapi::Client;
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to IB Gateway Paper Trading
     let client = Client::connect("127.0.0.1:4002", 100)?;
-    
+
     // Request current time
     let server_time = client.server_time()?;
-    println!("Server time: {}", server_time);
-    
-    // Get account summary
-    let account_summary = client.account_summary()?;
-    for item in account_summary {
-        println!("{}: {} {}", item.tag, item.value, item.currency);
+    println!("Server time: {server_time}");
+
+    // Request the account summary for every linked account. `AccountSummaryTags::ALL`
+    // is a slice of every supported tag. The subscription terminates after IBKR
+    // sends `AccountSummaryResult::End`.
+    let summary = client.account_summary(&AccountGroup::from("All"), AccountSummaryTags::ALL)?;
+    for item in summary.iter_data() {
+        match item? {
+            AccountSummaryResult::Summary(row) => {
+                println!("{}: {} {}", row.tag, row.value, row.currency);
+            }
+            AccountSummaryResult::End => break,
+        }
     }
-    
+
     Ok(())
 }
 ```
 
 Run with:
 ```bash
-cargo run --features sync
+cargo run
 ```
+
+(The `default-features = false, features = ["sync"]` you set in `Cargo.toml`
+above already selects the blocking client; no extra flags needed.)
 
 #### Async Version
 
 Create `src/main.rs`:
 
 ```rust
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to IB Gateway Paper Trading
     let client = Client::connect("127.0.0.1:4002", 100).await?;
-    
+
     // Request current time
     let server_time = client.server_time().await?;
-    println!("Server time: {}", server_time);
-    
-    // Get account summary
-    let account_summary = client.account_summary().await?;
-    for item in account_summary {
-        println!("{}: {} {}", item.tag, item.value, item.currency);
+    println!("Server time: {server_time}");
+
+    // Request the account summary for every linked account.
+    let summary = client.account_summary(&AccountGroup::from("All"), AccountSummaryTags::ALL).await?;
+    let mut summary = summary.filter_data();
+    while let Some(item) = summary.next().await {
+        match item? {
+            AccountSummaryResult::Summary(row) => {
+                println!("{}: {} {}", row.tag, row.value, row.currency);
+            }
+            AccountSummaryResult::End => break,
+        }
     }
-    
+
     Ok(())
 }
 ```
 
 Run with:
 ```bash
-cargo run --features async
+cargo run
 ```
 
 ## Common Operations
@@ -162,15 +181,19 @@ For detailed documentation on creating all contract types, see the [Contract Bui
 // Define a stock contract
 let contract = Contract::stock("AAPL").build();
 
-// Request real-time bars (sync) — defaults to Trades + Regular trading hours
+// Request real-time bars (sync) — defaults to Trades + Regular trading hours.
+// `iter_data()` strips notice items so the loop body sees `Result<Bar, Error>`.
 let subscription = client.realtime_bars(&contract).subscribe()?;
-for bar in subscription {
+for bar in subscription.iter_data() {
+    let bar = bar?;
     println!("Price: {}, Volume: {}", bar.close, bar.volume);
 }
 
-// Request real-time bars (async)
-let mut subscription = client.realtime_bars(&contract).subscribe().await?;
-while let Some(bar) = subscription.next().await {
+// Request real-time bars (async). `filter_data()` is the async equivalent.
+let subscription = client.realtime_bars(&contract).subscribe().await?;
+let mut bars = subscription.filter_data();
+while let Some(bar) = bars.next().await {
+    let bar = bar?;
     println!("Price: {}, Volume: {}", bar.close, bar.volume);
 }
 ```
@@ -191,17 +214,20 @@ let order_id = client.order(&contract)
 ### Getting Account Information
 
 ```rust
-// Get positions
+// Stream position updates. Each item is `PositionUpdate::Position(_)` until
+// IBKR sends `PositionUpdate::PositionEnd`. `iter_data()` strips notices.
 let positions = client.positions()?;
-for position in positions {
-    println!("{}: {} shares", position.contract.symbol, position.size);
+for update in positions.iter_data() {
+    match update? {
+        PositionUpdate::Position(p) => {
+            println!("{}: {} shares", p.contract.symbol, p.position);
+        }
+        PositionUpdate::PositionEnd => break,
+    }
 }
 
-// Get account values
-let account_values = client.account_values()?;
-for value in account_values {
-    println!("{}: {}", value.key, value.value);
-}
+// For a snapshot of account values (NetLiquidation, BuyingPower, etc.), use
+// `account_summary` with the tags you care about (see `AccountSummaryTags`).
 ```
 
 ## Running Examples

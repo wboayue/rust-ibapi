@@ -35,16 +35,18 @@ The crate enforces that at least one of the two features is enabled; both may be
 
 ## Usage in Cargo.toml
 
+v3.0 is unreleased; install from git. v2.x users continue to pin a `2.0` version from crates.io.
+
 ```toml
 [dependencies]
-# Default async client
-ibapi = "2.0"
+# Default async client (v3.0 from git)
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main" }
 
 # Sync-only (disable defaults)
-ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync"] }
 
-# Async + blocking
-ibapi = { version = "2.0", features = ["sync"] }
+# Async + blocking together
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync", "async"] }
 ```
 
 ## Testing with Features
