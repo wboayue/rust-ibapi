@@ -84,6 +84,13 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 - [x] `RequestFamilyCodes` — `Client::family_codes`
 - [x] `RequestCurrentTime` — `Client::server_time`
 - [x] `RequestCurrentTimeInMillis` — `Client::server_time_millis`
+- [x] `RequestSoftDollarTiers` — `Client::soft_dollar_tiers`
+- [x] `ReqUserInfo` — `Client::user_info`
+- [x] `RequestFA` — `Client::request_fa`
+- [x] `ReplaceFA` — `Client::replace_fa`
+- [x] `ChangeServerLog` — `Client::set_server_log_level`
+- [x] `VerifyRequest` — `Client::verify_request`
+- [x] `VerifyMessage` — `Client::verify_message`
 
 ### News
 - [x] `RequestNewsProviders` — `Client::news_providers`
@@ -116,15 +123,15 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 ### Connection
 - [x] `StartApi` — encoded by `connection/common.rs`
 
-## Outgoing messages with no public Rust API yet
+## Newly migrated (this PR)
 
-These appear in `PROTOBUF_MSG_IDS` but are not exposed by `Client`. They need an encoder + decoder (where applicable) + `pub fn` on `Client` for both sync and async.
-
-- [ ] `RequestSoftDollarTiers` (REST_MESSAGES_2, server 212)
-- [ ] `ReqUserInfo` (REST_MESSAGES_2, server 212)
-- [ ] `RequestFA` / `ReplaceFA` (REST_MESSAGES_1, server 211) — Financial Advisor account/group config
-- [ ] `ChangeServerLog` (REST_MESSAGES_3, server 213) — server-side log level
-- [ ] `VerifyRequest` / `VerifyMessage` (REST_MESSAGES_3, server 213) — extension auth handshake
+- [x] `RequestSoftDollarTiers` — `Client::soft_dollar_tiers`
+- [x] `ReqUserInfo` — `Client::user_info`
+- [x] `RequestFA` — `Client::request_fa`
+- [x] `ReplaceFA` — `Client::replace_fa`
+- [x] `ChangeServerLog` — `Client::set_server_log_level`
+- [x] `VerifyRequest` — `Client::verify_request`
+- [x] `VerifyMessage` — `Client::verify_message`
 
 ## Intentionally skipped
 

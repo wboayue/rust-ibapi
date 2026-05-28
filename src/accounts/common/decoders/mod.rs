@@ -7,10 +7,11 @@ use crate::proto::decoders::parse_f64 as parse_str_f64;
 use crate::{proto, Error};
 
 use super::super::{
-    AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdate, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position,
-    PositionMulti,
+    AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdate, AccountUpdateTime, AccountValue, FaConfig, FaDataType, FamilyCode, PnL,
+    PnLSingle, Position, PositionMulti, ReplaceFaResult, UserInfo, VerificationChallenge, VerificationResult,
 };
 use crate::messages::IncomingMessages;
+use crate::orders::SoftDollarTier;
 
 pub(crate) fn decode_position(message: &ResponseMessage) -> Result<Position, Error> {
     decode_position_proto(message.require_proto()?)
@@ -194,6 +195,100 @@ pub(crate) fn decode_family_codes_proto(bytes: &[u8]) -> Result<Vec<FamilyCode>,
             family_code: c.family_code.unwrap_or_default(),
         })
         .collect())
+}
+
+pub(crate) fn decode_soft_dollar_tiers(message: &ResponseMessage) -> Result<Vec<SoftDollarTier>, Error> {
+    decode_soft_dollar_tiers_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_soft_dollar_tiers_proto(bytes: &[u8]) -> Result<Vec<SoftDollarTier>, Error> {
+    let p = proto::SoftDollarTiers::decode(bytes)?;
+    Ok(p.soft_dollar_tiers.iter().map(proto::decoders::decode_soft_dollar_tier).collect())
+}
+
+pub(in crate::accounts) fn decode_soft_dollar_tiers_message(message: &ResponseMessage) -> Result<Vec<SoftDollarTier>, Error> {
+    match message.message_type() {
+        IncomingMessages::SoftDollarTier => decode_soft_dollar_tiers(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+pub(crate) fn decode_user_info(message: &ResponseMessage) -> Result<UserInfo, Error> {
+    decode_user_info_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_user_info_proto(bytes: &[u8]) -> Result<UserInfo, Error> {
+    let p = proto::UserInfo::decode(bytes)?;
+    Ok(UserInfo {
+        white_branding_id: p.white_branding_id.unwrap_or_default(),
+    })
+}
+
+pub(in crate::accounts) fn decode_user_info_message(message: &ResponseMessage) -> Result<UserInfo, Error> {
+    match message.message_type() {
+        IncomingMessages::UserInfo => decode_user_info(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+pub(crate) fn decode_receive_fa(message: &ResponseMessage) -> Result<FaConfig, Error> {
+    decode_receive_fa_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
+    let p = proto::ReceiveFa::decode(bytes)?;
+    let fa_data_type = p
+        .fa_data_type
+        .ok_or_else(|| Error::Parse(0, String::new(), "missing fa_data_type in ReceiveFa".into()))
+        .and_then(FaDataType::from_i32)?;
+    Ok(FaConfig {
+        fa_data_type,
+        xml: p.xml.unwrap_or_default(),
+    })
+}
+
+pub(crate) fn decode_replace_fa_end(message: &ResponseMessage) -> Result<ReplaceFaResult, Error> {
+    decode_replace_fa_end_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_replace_fa_end_proto(bytes: &[u8]) -> Result<ReplaceFaResult, Error> {
+    let p = proto::ReplaceFaEnd::decode(bytes)?;
+    Ok(ReplaceFaResult {
+        text: p.text.unwrap_or_default(),
+    })
+}
+
+pub(in crate::accounts) fn decode_replace_fa_end_message(message: &ResponseMessage) -> Result<ReplaceFaResult, Error> {
+    match message.message_type() {
+        IncomingMessages::ReplaceFAEnd => decode_replace_fa_end(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+pub(crate) fn decode_verify_message_api(message: &ResponseMessage) -> Result<VerificationChallenge, Error> {
+    decode_verify_message_api_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_verify_message_api_proto(bytes: &[u8]) -> Result<VerificationChallenge, Error> {
+    let p = proto::VerifyMessageApi::decode(bytes)?;
+    Ok(VerificationChallenge {
+        api_data: p.api_data.unwrap_or_default(),
+    })
+}
+
+pub(crate) fn decode_verify_completed(message: &ResponseMessage) -> Result<VerificationResult, Error> {
+    decode_verify_completed_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_verify_completed_proto(bytes: &[u8]) -> Result<VerificationResult, Error> {
+    let p = proto::VerifyCompleted::decode(bytes)?;
+    Ok(VerificationResult {
+        is_successful: p.is_successful.unwrap_or_default(),
+        error_text: p.error_text.unwrap_or_default(),
+    })
 }
 
 /// Dispatch an account-update frame to the right [`AccountUpdate`] variant by

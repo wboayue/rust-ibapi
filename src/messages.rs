@@ -453,14 +453,17 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::OpenOrder
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
+        | IncomingMessages::ReplaceFAEnd
         | IncomingMessages::SecurityDefinitionOptionParameter
         | IncomingMessages::SecurityDefinitionOptionParameterEnd
         | IncomingMessages::SmartComponents
+        | IncomingMessages::SoftDollarTier
         | IncomingMessages::SymbolSamples
         | IncomingMessages::TickByTick
         | IncomingMessages::TickNews
         | IncomingMessages::TickOptionComputation
         | IncomingMessages::TickReqParams
+        | IncomingMessages::UserInfo
         | IncomingMessages::WshEventData
         | IncomingMessages::WshMetaData => Some(1),
 

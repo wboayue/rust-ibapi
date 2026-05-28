@@ -383,6 +383,201 @@ impl Client {
         )
         .await
     }
+
+    /// Request the configured soft dollar tiers available to the account.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let tiers = client.soft_dollar_tiers().await.expect("request failed");
+    ///     for tier in &tiers {
+    ///         println!("{}: {}", tier.name, tier.display_name);
+    ///     }
+    /// }
+    /// ```
+    pub async fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
+        check_version(self.server_version(), Features::SOFT_DOLLAR_TIER)?;
+
+        crate::common::request_helpers::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_soft_dollar_tiers,
+            decoders::decode_soft_dollar_tiers_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
+    /// Request white-branding identity information for the logged-in user.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let info = client.user_info().await.expect("request failed");
+    ///     println!("white branding id: {}", info.white_branding_id);
+    /// }
+    /// ```
+    pub async fn user_info(&self) -> Result<UserInfo, Error> {
+        check_version(self.server_version(), Features::USER_INFO)?;
+
+        crate::common::request_helpers::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_user_info,
+            decoders::decode_user_info_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
+    /// Request the current Financial Advisor configuration as an XML string.
+    ///
+    /// # Arguments
+    /// * `fa_data_type` - which FA dataset to fetch.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::FaDataType;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let cfg = client.request_fa(FaDataType::Groups).await.expect("request failed");
+    ///     println!("{}", cfg.xml);
+    /// }
+    /// ```
+    pub async fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
+        crate::common::request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestFA,
+            move || encoders::encode_request_fa(fa_data_type as i32),
+            decoders::decode_receive_fa,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
+    /// Replace the Financial Advisor configuration on the server.
+    ///
+    /// # Arguments
+    /// * `fa_data_type` - which FA dataset to replace.
+    /// * `xml`          - the replacement configuration as an XML string.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::FaDataType;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let result = client.replace_fa(FaDataType::Groups, "<xml/>").await.expect("request failed");
+    ///     println!("{}", result.text);
+    /// }
+    /// ```
+    pub async fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
+        check_version(self.server_version(), Features::REPLACE_FA_END)?;
+
+        crate::common::request_helpers::one_shot_request_with_retry(
+            self,
+            move |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
+            decoders::decode_replace_fa_end_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
+    /// Set the verbosity level for server-side TWS API diagnostics.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::ServerLogLevel;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     client.set_server_log_level(ServerLogLevel::Detail).await.expect("request failed");
+    /// }
+    /// ```
+    pub async fn set_server_log_level(&self, log_level: ServerLogLevel) -> Result<(), Error> {
+        let message = encoders::encode_set_server_log_level(log_level as i32)?;
+        self.send_message(message).await?;
+        Ok(())
+    }
+
+    /// Initiate a TWS extension verification handshake.
+    ///
+    /// Most users will not call this directly; it is part of the IB Linking flow.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let challenge = client.verify_request("MyApp", "1.0").await.expect("request failed");
+    ///     println!("{}", challenge.api_data);
+    /// }
+    /// ```
+    pub async fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
+        check_version(self.server_version(), Features::LINKING)?;
+
+        crate::common::request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::VerifyRequest,
+            move || encoders::encode_verify_request(api_name, api_version),
+            decoders::decode_verify_message_api,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
+    /// Continue a TWS extension verification handshake by sending the API response data.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let result = client.verify_message("signed-challenge").await.expect("request failed");
+    ///     if result.is_successful {
+    ///         println!("verified");
+    ///     } else {
+    ///         eprintln!("{}", result.error_text);
+    ///     }
+    /// }
+    /// ```
+    pub async fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
+        check_version(self.server_version(), Features::LINKING)?;
+
+        crate::common::request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::VerifyMessage,
+            move || encoders::encode_verify_message(api_data),
+            decoders::decode_verify_completed,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
 }
 
 #[cfg(test)]

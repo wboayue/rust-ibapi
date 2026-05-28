@@ -101,6 +101,8 @@ impl Features {
     pub const SMART_COMPONENTS: ProtocolFeature = ProtocolFeature::new("smart components", server_versions::REQ_SMART_COMPONENTS);
     /// Enables linking functionality for shared orders across accounts.
     pub const LINKING: ProtocolFeature = ProtocolFeature::new("linking", server_versions::LINKING);
+    /// Required for soft dollar tier queries.
+    pub const SOFT_DOLLAR_TIER: ProtocolFeature = ProtocolFeature::new("soft dollar tier", server_versions::SOFT_DOLLAR_TIER);
 
     /// Allows fetching available news providers.
     pub const NEWS_PROVIDERS: ProtocolFeature = ProtocolFeature::new("news providers", server_versions::REQ_NEWS_PROVIDERS);
@@ -127,6 +129,8 @@ impl Features {
 
     /// Signals that FA profile configuration is deprecated on the server.
     pub const FA_PROFILE_DESUPPORT: ProtocolFeature = ProtocolFeature::new("FA profile desupport", server_versions::FA_PROFILE_DESUPPORT);
+    /// Enables the replace FA end acknowledgement with request id.
+    pub const REPLACE_FA_END: ProtocolFeature = ProtocolFeature::new("replace FA end", server_versions::REPLACE_FA_END);
     /// Required to request market rule metadata.
     pub const MARKET_RULES: ProtocolFeature = ProtocolFeature::new("market rules", server_versions::MARKET_RULES);
     /// Enables the matching symbols endpoint.
@@ -141,6 +145,8 @@ impl Features {
 
     /// Enables requesting current time in milliseconds.
     pub const CURRENT_TIME_IN_MILLIS: ProtocolFeature = ProtocolFeature::new("current time in millis", server_versions::CURRENT_TIME_IN_MILLIS);
+    /// Required for user info queries.
+    pub const USER_INFO: ProtocolFeature = ProtocolFeature::new("user info", server_versions::USER_INFO);
     /// Enables cancelling in-flight contract data and historical ticks requests.
     pub const CANCEL_CONTRACT_DATA: ProtocolFeature = ProtocolFeature::new("cancel contract data", server_versions::CANCEL_CONTRACT_DATA);
 }

@@ -506,3 +506,132 @@ fn test_decode_family_codes_proto_empty() {
     let result = super::decode_family_codes_proto(&bytes).unwrap();
     assert!(result.is_empty());
 }
+
+#[test]
+fn test_decode_soft_dollar_tiers_rejects_text_framing() {
+    let message = super::ResponseMessage::from("77\01\0Tier1\0val\0Display\0");
+    let err = super::decode_soft_dollar_tiers(&message).unwrap_err();
+    assert!(matches!(err, super::Error::UnexpectedResponse(_)), "got {err:?}");
+}
+
+#[test]
+fn test_decode_soft_dollar_tiers_proto_round_trip() {
+    use prost::Message;
+    let p = crate::proto::SoftDollarTiers {
+        req_id: Some(1),
+        soft_dollar_tiers: vec![
+            crate::proto::SoftDollarTier {
+                name: Some("Tier1".into()),
+                value: Some("v1".into()),
+                display_name: Some("Tier 1".into()),
+            },
+            crate::proto::SoftDollarTier {
+                name: Some("Tier2".into()),
+                value: Some("v2".into()),
+                display_name: Some("Tier 2".into()),
+            },
+        ],
+    };
+    let tiers = super::decode_soft_dollar_tiers_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(tiers.len(), 2);
+    assert_eq!(tiers[0].name, "Tier1");
+    assert_eq!(tiers[1].display_name, "Tier 2");
+}
+
+#[test]
+fn test_decode_user_info_rejects_text_framing() {
+    let message = super::ResponseMessage::from("107\01\0brand\0");
+    let err = super::decode_user_info(&message).unwrap_err();
+    assert!(matches!(err, super::Error::UnexpectedResponse(_)), "got {err:?}");
+}
+
+#[test]
+fn test_decode_user_info_proto_round_trip() {
+    use prost::Message;
+    let p = crate::proto::UserInfo {
+        req_id: Some(1),
+        white_branding_id: Some("brand-xyz".into()),
+    };
+    let info = super::decode_user_info_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(info.white_branding_id, "brand-xyz");
+}
+
+#[test]
+fn test_decode_receive_fa_proto_round_trip() {
+    use crate::accounts::FaDataType;
+    use prost::Message;
+    let p = crate::proto::ReceiveFa {
+        fa_data_type: Some(FaDataType::Groups as i32),
+        xml: Some("<groups/>".into()),
+    };
+    let cfg = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(cfg.fa_data_type, FaDataType::Groups);
+    assert_eq!(cfg.xml, "<groups/>");
+}
+
+#[test]
+fn test_decode_receive_fa_rejects_invalid_fa_data_type() {
+    use prost::Message;
+    let p = crate::proto::ReceiveFa {
+        fa_data_type: Some(2),
+        xml: Some("<bad/>".into()),
+    };
+    let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
+    assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
+}
+
+#[test]
+fn test_decode_receive_fa_rejects_missing_fa_data_type() {
+    use prost::Message;
+    let p = crate::proto::ReceiveFa {
+        fa_data_type: None,
+        xml: Some("<groups/>".into()),
+    };
+    let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
+    assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
+}
+
+#[test]
+fn test_decode_replace_fa_end_proto_round_trip() {
+    use prost::Message;
+    let p = crate::proto::ReplaceFaEnd {
+        req_id: Some(7),
+        text: Some("done".into()),
+    };
+    let result = super::decode_replace_fa_end_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(result.text, "done");
+}
+
+#[test]
+fn test_decode_verify_message_api_proto_round_trip() {
+    use prost::Message;
+    let p = crate::proto::VerifyMessageApi {
+        api_data: Some("payload".into()),
+    };
+    let challenge = super::decode_verify_message_api_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(challenge.api_data, "payload");
+}
+
+#[test]
+fn test_decode_verify_completed_proto_round_trip() {
+    use prost::Message;
+    let p = crate::proto::VerifyCompleted {
+        is_successful: Some(true),
+        error_text: Some(String::new()),
+    };
+    let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
+    assert!(result.is_successful);
+    assert_eq!(result.error_text, "");
+}
+
+#[test]
+fn test_decode_verify_completed_proto_failure_path() {
+    use prost::Message;
+    let p = crate::proto::VerifyCompleted {
+        is_successful: Some(false),
+        error_text: Some("signature mismatch".into()),
+    };
+    let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
+    assert!(!result.is_successful);
+    assert_eq!(result.error_text, "signature mismatch");
+}
