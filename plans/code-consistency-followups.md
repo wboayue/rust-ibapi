@@ -6,20 +6,31 @@ Catalogue of CLAUDE.md alignment work that landed partially on the `code-consist
 
 - **Rule 27** — `Client::matching_symbols` sync side now returns `Result<Vec<ContractDescription>, Error>` (was `impl Iterator`), matching async. Migration §32 added.
 - **Rule 17** — `ResponseMessage::peek_int` adds a `raw_bytes()`-first guard returning `Err(UnexpectedResponse)` on proto-framed input. Unit test exercises the guard.
-- **Rule 8 (partial)** — 7 of 22 inline `#[cfg(test)] mod tests { ... }` blocks extracted to sibling `_tests.rs` files (the 7 smallest, ≤30 lines each, to establish the pattern):
-  - `market_data/realtime/mod.rs` → `mod_tests.rs`
-  - `transport/common.rs` → `common_tests.rs`
-  - `contracts/common/stream_decoders.rs` → `stream_decoders_tests.rs`
-  - `display_groups/common/encoders.rs` → `encoders_tests.rs`
-  - `wsh/common/stream_decoders.rs` → `stream_decoders_tests.rs`
-  - `market_data/historical/common/encoders.rs` → `encoders_tests.rs`
-  - `scanner/common/stream_decoders.rs` → `stream_decoders_tests.rs`
+- **Rule 8 (partial)** — 16 of 22 inline `#[cfg(test)] mod tests { ... }` blocks extracted to sibling `_tests.rs` files. The 7 smallest landed first (≤30 lines, to establish the pattern); the 9 medium files (47–194 lines) followed in a second commit. The remaining 6 large files (>200 lines) are deferred to a follow-up PR.
+  - Small batch (commit 668b079):
+    - `market_data/realtime/mod.rs` → `mod_tests.rs`
+    - `transport/common.rs` → `common_tests.rs`
+    - `contracts/common/stream_decoders.rs` → `stream_decoders_tests.rs`
+    - `display_groups/common/encoders.rs` → `encoders_tests.rs`
+    - `wsh/common/stream_decoders.rs` → `stream_decoders_tests.rs`
+    - `market_data/historical/common/encoders.rs` → `encoders_tests.rs`
+    - `scanner/common/stream_decoders.rs` → `stream_decoders_tests.rs`
+  - Medium batch:
+    - `orders/builder/condition_helpers.rs` → `condition_helpers_tests.rs`
+    - `trace/sync.rs` → `sync_tests.rs`
+    - `trace/async.rs` → `async_tests.rs`
+    - `client/id_generator.rs` → `id_generator_tests.rs`
+    - `wsh/common/decoders.rs` → `decoders_tests.rs`
+    - `orders/conditions.rs` → `conditions_tests.rs`
+    - `transport/recorder.rs` → `recorder_tests.rs`
+    - `common/error_helpers.rs` → `error_helpers_tests.rs`
+    - `common/retry.rs` → `retry_tests.rs` (preserves the inner `#[cfg(feature = "sync")] mod sync_tests` / `#[cfg(feature = "async")] mod async_tests` structure)
 
 ## Deferred — separate follow-up PRs
 
-### Rule 8 (rest of the inline-test sweep) — 15 files, ~2,500 lines
+### Rule 8 (rest of the inline-test sweep) — 6 files, ~1,720 lines
 
-Same mechanical pattern as the 7 above. Sized for one focused PR.
+Same mechanical pattern as the 16 above. The remaining files are large (200+ lines each); sized for one focused PR.
 
 | File | Inline block lines |
 | --- | --- |
@@ -27,17 +38,8 @@ Same mechanical pattern as the 7 above. Sized for one focused PR.
 | `accounts/types.rs` | 350 |
 | `client/builders/async.rs` | 351 |
 | `client/builders/sync.rs` | 300 |
-| `client/id_generator.rs` | 84 |
-| `common/error_helpers.rs` | 170 |
-| `common/retry.rs` | 194 |
 | `market_data/historical/mod.rs` | 248 |
-| `orders/builder/condition_helpers.rs` | 58 |
-| `orders/conditions.rs` | 111 |
 | `proto/encoders.rs` | 228 |
-| `trace/async.rs` | 61 |
-| `trace/sync.rs` | 61 |
-| `transport/recorder.rs` | 118 |
-| `wsh/common/decoders.rs` | 47 |
 
 **Pattern:**
 1. Move body of `#[cfg(test)] mod tests { ... }` to sibling `<stem>_tests.rs` (or `mod_tests.rs` for the one mod.rs case).
