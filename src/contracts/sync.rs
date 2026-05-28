@@ -278,4 +278,5 @@ impl Client {
 }
 
 #[cfg(test)]
+#[path = "sync_tests.rs"]
 mod tests;

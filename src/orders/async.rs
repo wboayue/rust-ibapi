@@ -25,10 +25,11 @@ impl Client {
     ///     let mut updates = stream.filter_data();
     ///     while let Some(update) = updates.next().await {
     ///         match update {
-    ///             Ok(OrderUpdate::OrderStatus(s)) => println!("status: {s:?}"),
-    ///             Ok(OrderUpdate::OpenOrder(o))   => println!("open: {o:?}"),
-    ///             Ok(_)                            => {}
-    ///             Err(e)                           => { eprintln!("err: {e:?}"); break; }
+    ///             Ok(OrderUpdate::OrderStatus(s))      => println!("status: {s:?}"),
+    ///             Ok(OrderUpdate::OpenOrder(o))        => println!("open: {o:?}"),
+    ///             Ok(OrderUpdate::ExecutionData(e))    => println!("exec: {e:?}"),
+    ///             Ok(OrderUpdate::CommissionReport(r)) => println!("commission: {r:?}"),
+    ///             Err(e)                                => { eprintln!("err: {e:?}"); break; }
     ///         }
     ///     }
     /// }
@@ -124,7 +125,14 @@ impl Client {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     // `""` selects immediate cancel (no manual order time).
     ///     let subscription = client.cancel_order(42, "").await.expect("cancel failed");
-    ///     drop(subscription); // optional — drop releases the request
+    ///     // Consume the subscription so cancel confirmations and errors surface.
+    ///     let mut updates = subscription.filter_data();
+    ///     while let Some(update) = updates.next().await {
+    ///         match update {
+    ///             Ok(event) => println!("cancel event: {event:?}"),
+    ///             Err(e)    => { eprintln!("cancel err: {e:?}"); break; }
+    ///         }
+    ///     }
     /// }
     /// ```
     pub async fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
@@ -365,7 +373,14 @@ impl Client {
     ///         .exercise_options(&contract, ExerciseAction::Exercise, 1, "DU000001", false, None)
     ///         .await
     ///         .expect("exercise_options failed");
-    ///     drop(subscription);
+    ///     // Consume the subscription so execution updates and commission reports surface.
+    ///     let mut events = subscription.filter_data();
+    ///     while let Some(event) = events.next().await {
+    ///         match event {
+    ///             Ok(item) => println!("exercise event: {item:?}"),
+    ///             Err(e)   => { eprintln!("exercise err: {e:?}"); break; }
+    ///         }
+    ///     }
     /// }
     /// ```
     pub async fn exercise_options(
@@ -389,4 +404,5 @@ impl Client {
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;

@@ -92,10 +92,15 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
     ///
-    ///     let subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
     ///
     ///     // Update the displayed contract
     ///     subscription.update("265598@SMART").await.expect("update failed");
+    ///
+    ///     // Consume the subscription so display-group events surface.
+    ///     while let Some(event) = subscription.next().await {
+    ///         println!("group event: {event:?}");
+    ///     }
     /// }
     /// ```
     pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<DisplayGroupSubscription, Error> {

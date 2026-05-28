@@ -243,4 +243,5 @@ pub(crate) fn tick_by_tick<T: StreamDecoder<T>>(
 }
 
 #[cfg(test)]
+#[path = "sync_tests.rs"]
 mod tests;
