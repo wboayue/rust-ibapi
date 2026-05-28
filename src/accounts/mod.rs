@@ -16,6 +16,7 @@ pub(crate) mod common;
 pub mod types;
 
 use crate::contracts::Contract;
+use crate::Error;
 use serde::{Deserialize, Serialize};
 
 // Public types - always available regardless of feature flags
@@ -326,6 +327,126 @@ pub struct AccountMultiValue {
     pub value: String,
     /// Currency of the value
     pub currency: String,
+}
+
+/// User identity information returned by `Client::user_info`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserInfo {
+    /// White branding identifier, if applicable.
+    pub white_branding_id: String,
+}
+
+/// Financial Advisor configuration data type.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaDataType {
+    /// Account groups configuration.
+    Groups = 1,
+    /// Account aliases configuration.
+    AccountAliases = 3,
+}
+
+impl FaDataType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Groups => "1",
+            Self::AccountAliases => "3",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "1" => Some(Self::Groups),
+            "3" => Some(Self::AccountAliases),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn from_i32(v: i32) -> Result<Self, Error> {
+        match v {
+            1 => Ok(Self::Groups),
+            3 => Ok(Self::AccountAliases),
+            _ => Err(Error::Parse(0, v.to_string(), "unknown FaDataType".into())),
+        }
+    }
+}
+
+impl_wire_enum!(FaDataType);
+
+/// Financial Advisor configuration data returned by `Client::request_fa`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FaConfig {
+    /// The XML configuration data.
+    pub xml: String,
+}
+
+/// Confirmation returned by `Client::replace_fa`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplaceFaResult {
+    /// Confirmation text from the server.
+    pub text: String,
+}
+
+/// Server-side log verbosity level for TWS API diagnostics.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServerLogLevel {
+    /// System-level messages.
+    System = 1,
+    /// Error messages.
+    Error = 2,
+    /// Warning messages.
+    Warning = 3,
+    /// Informational messages.
+    Info = 4,
+    /// Detailed debugging output.
+    Detail = 5,
+}
+
+impl ServerLogLevel {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::System => "1",
+            Self::Error => "2",
+            Self::Warning => "3",
+            Self::Info => "4",
+            Self::Detail => "5",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "1" => Some(Self::System),
+            "2" => Some(Self::Error),
+            "3" => Some(Self::Warning),
+            "4" => Some(Self::Info),
+            "5" => Some(Self::Detail),
+            _ => None,
+        }
+    }
+}
+
+impl_wire_enum!(ServerLogLevel);
+
+/// API verification data returned by `Client::verify_request`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationChallenge {
+    /// The API data string from the verification response.
+    pub api_data: String,
+}
+
+/// Result of a `Client::verify_message` call.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationResult {
+    /// Whether the verification was successful.
+    pub is_successful: bool,
+    /// Error text if verification failed.
+    pub error_text: String,
 }
 
 // Feature-specific implementations

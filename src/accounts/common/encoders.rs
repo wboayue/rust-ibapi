@@ -156,6 +156,63 @@ pub(in crate::accounts) fn encode_request_server_time_millis() -> Result<Vec<u8>
     crate::proto::encoders::encode_empty_proto!(CurrentTimeInMillisRequest, OutgoingMessages::RequestCurrentTimeInMillis)
 }
 
+pub(in crate::accounts) fn encode_request_soft_dollar_tiers(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, SoftDollarTiersRequest, OutgoingMessages::RequestSoftDollarTiers)
+}
+
+pub(in crate::accounts) fn encode_request_user_info(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, UserInfoRequest, OutgoingMessages::RequestUserInfo)
+}
+
+pub(in crate::accounts) fn encode_request_fa(fa_data_type: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::FaRequest {
+        fa_data_type: Some(fa_data_type),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::RequestFA as i32, &request.encode_to_vec()))
+}
+
+pub(in crate::accounts) fn encode_replace_fa(request_id: i32, fa_data_type: i32, xml: &str) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::FaReplace {
+        req_id: Some(request_id),
+        fa_data_type: Some(fa_data_type),
+        xml: Some(xml.to_string()),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::ReplaceFA as i32, &request.encode_to_vec()))
+}
+
+pub(in crate::accounts) fn encode_set_server_log_level(log_level: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::SetServerLogLevelRequest { log_level: Some(log_level) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::ChangeServerLog as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+pub(in crate::accounts) fn encode_verify_request(api_name: &str, api_version: &str) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::VerifyRequest {
+        api_name: Some(api_name.to_string()),
+        api_version: Some(api_version.to_string()),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::VerifyRequest as i32, &request.encode_to_vec()))
+}
+
+pub(in crate::accounts) fn encode_verify_message(api_data: &str) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::VerifyMessageRequest {
+        api_data: Some(api_data.to_string()),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::VerifyMessage as i32, &request.encode_to_vec()))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::accounts::types::{AccountGroup, AccountId, ContractId};
@@ -326,5 +383,78 @@ mod tests {
     fn test_encode_request_server_time_millis() {
         let bytes = super::encode_request_server_time_millis().unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::RequestCurrentTimeInMillis);
+    }
+
+    #[test]
+    fn test_encode_request_soft_dollar_tiers() {
+        let bytes = super::encode_request_soft_dollar_tiers(3000).unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestSoftDollarTiers);
+
+        use prost::Message;
+        let req = crate::proto::SoftDollarTiersRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.req_id, Some(3000));
+    }
+
+    #[test]
+    fn test_encode_request_user_info() {
+        let bytes = super::encode_request_user_info(4000).unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestUserInfo);
+
+        use prost::Message;
+        let req = crate::proto::UserInfoRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.req_id, Some(4000));
+    }
+
+    #[test]
+    fn test_encode_request_fa() {
+        let bytes = super::encode_request_fa(1).unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestFA);
+
+        use prost::Message;
+        let req = crate::proto::FaRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.fa_data_type, Some(1));
+    }
+
+    #[test]
+    fn test_encode_replace_fa() {
+        let bytes = super::encode_replace_fa(5000, 3, "<xml/>").unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::ReplaceFA);
+
+        use prost::Message;
+        let req = crate::proto::FaReplace::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.req_id, Some(5000));
+        assert_eq!(req.fa_data_type, Some(3));
+        assert_eq!(req.xml.as_deref(), Some("<xml/>"));
+    }
+
+    #[test]
+    fn test_encode_set_server_log_level() {
+        let bytes = super::encode_set_server_log_level(4).unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::ChangeServerLog);
+
+        use prost::Message;
+        let req = crate::proto::SetServerLogLevelRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.log_level, Some(4));
+    }
+
+    #[test]
+    fn test_encode_verify_request() {
+        let bytes = super::encode_verify_request("TestApi", "1.0").unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::VerifyRequest);
+
+        use prost::Message;
+        let req = crate::proto::VerifyRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.api_name.as_deref(), Some("TestApi"));
+        assert_eq!(req.api_version.as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn test_encode_verify_message() {
+        let bytes = super::encode_verify_message("challenge-data").unwrap();
+        assert_proto_msg_id(&bytes, OutgoingMessages::VerifyMessage);
+
+        use prost::Message;
+        let req = crate::proto::VerifyMessageRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(req.api_data.as_deref(), Some("challenge-data"));
     }
 }

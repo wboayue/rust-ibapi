@@ -305,6 +305,180 @@ impl Client {
             Vec::default,
         )
     }
+
+    /// Request the configured soft dollar tiers available to the account.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let tiers = client.soft_dollar_tiers().expect("request failed");
+    /// for tier in &tiers {
+    ///     println!("{}: {}", tier.name, tier.display_name);
+    /// }
+    /// ```
+    pub fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
+        check_version(self.server_version, Features::SOFT_DOLLAR_TIER)?;
+
+        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_soft_dollar_tiers,
+            decoders::decode_soft_dollar_tiers_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
+    /// Request white-branding identity information for the logged-in user.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let info = client.user_info().expect("request failed");
+    /// println!("white branding id: {}", info.white_branding_id);
+    /// ```
+    pub fn user_info(&self) -> Result<UserInfo, Error> {
+        check_version(self.server_version, Features::USER_INFO)?;
+
+        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_user_info,
+            decoders::decode_user_info_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
+    /// Request the current Financial Advisor configuration as an XML string.
+    ///
+    /// # Arguments
+    /// * `fa_data_type` - which FA dataset to fetch.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::FaDataType;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let cfg = client.request_fa(FaDataType::Groups).expect("request failed");
+    /// println!("{}", cfg.xml);
+    /// ```
+    pub fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
+        crate::common::request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestFA,
+            || encoders::encode_request_fa(fa_data_type as i32),
+            decoders::decode_receive_fa,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
+    /// Replace the Financial Advisor configuration on the server.
+    ///
+    /// # Arguments
+    /// * `fa_data_type` - which FA dataset to replace.
+    /// * `xml`          - the replacement configuration as an XML string.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::FaDataType;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let result = client.replace_fa(FaDataType::Groups, "<xml/>").expect("request failed");
+    /// println!("{}", result.text);
+    /// ```
+    pub fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
+        check_version(self.server_version, Features::REPLACE_FA_END)?;
+
+        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
+            decoders::decode_replace_fa_end_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
+    /// Set the verbosity level for server-side TWS API diagnostics.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::ServerLogLevel;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// client.set_server_log_level(ServerLogLevel::Detail).expect("request failed");
+    /// ```
+    pub fn set_server_log_level(&self, log_level: ServerLogLevel) -> Result<(), Error> {
+        let message = encoders::encode_set_server_log_level(log_level as i32)?;
+        self.send_message(message)?;
+        Ok(())
+    }
+
+    /// Initiate a TWS extension verification handshake.
+    ///
+    /// Most users will not call this directly; it is part of the IB Linking flow.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let challenge = client.verify_request("MyApp", "1.0").expect("request failed");
+    /// println!("{}", challenge.api_data);
+    /// ```
+    pub fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
+        check_version(self.server_version, Features::LINKING)?;
+
+        crate::common::request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::VerifyRequest,
+            || encoders::encode_verify_request(api_name, api_version),
+            decoders::decode_verify_message_api,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
+
+    /// Continue a TWS extension verification handshake by sending the API response data.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let result = client.verify_message("signed-challenge").expect("request failed");
+    /// if result.is_successful {
+    ///     println!("verified");
+    /// } else {
+    ///     eprintln!("{}", result.error_text);
+    /// }
+    /// ```
+    pub fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
+        check_version(self.server_version, Features::LINKING)?;
+
+        crate::common::request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::VerifyMessage,
+            || encoders::encode_verify_message(api_data),
+            decoders::decode_verify_completed,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
 }
 
 #[cfg(test)]

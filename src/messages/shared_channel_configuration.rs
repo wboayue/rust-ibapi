@@ -93,4 +93,16 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestWshEventData,
         responses: &[IncomingMessages::WshEventData],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestFA,
+        responses: &[IncomingMessages::ReceiveFA],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::VerifyRequest,
+        responses: &[IncomingMessages::VerifyMessageApi],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::VerifyMessage,
+        responses: &[IncomingMessages::VerifyCompleted],
+    },
 ];

@@ -1018,6 +1018,353 @@ empty_request_builder!(
     OutgoingMessages::RequestCurrentTimeInMillis
 );
 
+// --- SoftDollarTiers (msg 77 / out 79) ---
+
+single_req_id_request_builder!(
+    SoftDollarTiersRequestBuilder,
+    SoftDollarTiersRequest,
+    OutgoingMessages::RequestSoftDollarTiers
+);
+
+#[derive(Clone, Debug, Default)]
+pub struct SoftDollarTiersResponse {
+    pub request_id: i32,
+    pub tiers: Vec<(String, String, String)>,
+}
+
+impl SoftDollarTiersResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn tier(mut self, name: impl Into<String>, value: impl Into<String>, display_name: impl Into<String>) -> Self {
+        self.tiers.push((name.into(), value.into(), display_name.into()));
+        self
+    }
+}
+
+impl ResponseProtoEncoder for SoftDollarTiersResponse {
+    type Proto = proto::SoftDollarTiers;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::SoftDollarTiers {
+            req_id: Some(self.request_id),
+            soft_dollar_tiers: self
+                .tiers
+                .iter()
+                .map(|(name, value, display)| proto::SoftDollarTier {
+                    name: Some(name.clone()),
+                    value: Some(value.clone()),
+                    display_name: Some(display.clone()),
+                })
+                .collect(),
+        }
+    }
+}
+
+// --- UserInfo (msg 107 / out 104) ---
+
+single_req_id_request_builder!(UserInfoRequestBuilder, UserInfoRequest, OutgoingMessages::RequestUserInfo);
+
+#[derive(Clone, Debug, Default)]
+pub struct UserInfoResponse {
+    pub request_id: i32,
+    pub white_branding_id: String,
+}
+
+impl UserInfoResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn white_branding_id(mut self, v: impl Into<String>) -> Self {
+        self.white_branding_id = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for UserInfoResponse {
+    type Proto = proto::UserInfo;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::UserInfo {
+            req_id: Some(self.request_id),
+            white_branding_id: Some(self.white_branding_id.clone()),
+        }
+    }
+}
+
+// --- RequestFA / ReceiveFA (msg 16 / out 18) ---
+
+#[derive(Clone, Copy, Debug)]
+pub struct FaRequestBuilder {
+    pub fa_data_type: i32,
+}
+
+impl Default for FaRequestBuilder {
+    fn default() -> Self {
+        Self { fa_data_type: 1 }
+    }
+}
+
+impl FaRequestBuilder {
+    pub fn fa_data_type(mut self, v: i32) -> Self {
+        self.fa_data_type = v;
+        self
+    }
+}
+
+impl RequestEncoder for FaRequestBuilder {
+    type Proto = proto::FaRequest;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::RequestFA;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::FaRequest {
+            fa_data_type: Some(self.fa_data_type),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ReceiveFaResponse {
+    pub fa_data_type: i32,
+    pub xml: String,
+}
+
+impl ReceiveFaResponse {
+    pub fn fa_data_type(mut self, v: i32) -> Self {
+        self.fa_data_type = v;
+        self
+    }
+    pub fn xml(mut self, v: impl Into<String>) -> Self {
+        self.xml = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for ReceiveFaResponse {
+    type Proto = proto::ReceiveFa;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::ReceiveFa {
+            fa_data_type: Some(self.fa_data_type),
+            xml: Some(self.xml.clone()),
+        }
+    }
+}
+
+// --- ReplaceFA / ReplaceFAEnd (msg 103 / out 19) ---
+
+#[derive(Clone, Debug)]
+pub struct FaReplaceRequestBuilder {
+    pub request_id: i32,
+    pub fa_data_type: i32,
+    pub xml: String,
+}
+
+impl Default for FaReplaceRequestBuilder {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_TICKER_ID,
+            fa_data_type: 1,
+            xml: String::new(),
+        }
+    }
+}
+
+impl FaReplaceRequestBuilder {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn fa_data_type(mut self, v: i32) -> Self {
+        self.fa_data_type = v;
+        self
+    }
+    pub fn xml(mut self, v: impl Into<String>) -> Self {
+        self.xml = v.into();
+        self
+    }
+}
+
+impl RequestEncoder for FaReplaceRequestBuilder {
+    type Proto = proto::FaReplace;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::ReplaceFA;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::FaReplace {
+            req_id: Some(self.request_id),
+            fa_data_type: Some(self.fa_data_type),
+            xml: Some(self.xml.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ReplaceFaEndResponse {
+    pub request_id: i32,
+    pub text: String,
+}
+
+impl ReplaceFaEndResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn text(mut self, v: impl Into<String>) -> Self {
+        self.text = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for ReplaceFaEndResponse {
+    type Proto = proto::ReplaceFaEnd;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::ReplaceFaEnd {
+            req_id: Some(self.request_id),
+            text: Some(self.text.clone()),
+        }
+    }
+}
+
+// --- SetServerLogLevel (out 14) ---
+
+#[derive(Clone, Copy, Debug)]
+pub struct SetServerLogLevelRequestBuilder {
+    pub log_level: i32,
+}
+
+impl Default for SetServerLogLevelRequestBuilder {
+    fn default() -> Self {
+        Self { log_level: 4 }
+    }
+}
+
+impl SetServerLogLevelRequestBuilder {
+    pub fn log_level(mut self, v: i32) -> Self {
+        self.log_level = v;
+        self
+    }
+}
+
+impl RequestEncoder for SetServerLogLevelRequestBuilder {
+    type Proto = proto::SetServerLogLevelRequest;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::ChangeServerLog;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::SetServerLogLevelRequest {
+            log_level: Some(self.log_level),
+        }
+    }
+}
+
+// --- VerifyRequest / VerifyMessageApi (msg 65 / out 65) ---
+
+#[derive(Clone, Debug, Default)]
+pub struct VerifyRequestBuilder {
+    pub api_name: String,
+    pub api_version: String,
+}
+
+impl VerifyRequestBuilder {
+    pub fn api_name(mut self, v: impl Into<String>) -> Self {
+        self.api_name = v.into();
+        self
+    }
+    pub fn api_version(mut self, v: impl Into<String>) -> Self {
+        self.api_version = v.into();
+        self
+    }
+}
+
+impl RequestEncoder for VerifyRequestBuilder {
+    type Proto = proto::VerifyRequest;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::VerifyRequest;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::VerifyRequest {
+            api_name: Some(self.api_name.clone()),
+            api_version: Some(self.api_version.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct VerifyMessageApiResponse {
+    pub api_data: String,
+}
+
+impl VerifyMessageApiResponse {
+    pub fn api_data(mut self, v: impl Into<String>) -> Self {
+        self.api_data = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for VerifyMessageApiResponse {
+    type Proto = proto::VerifyMessageApi;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::VerifyMessageApi {
+            api_data: Some(self.api_data.clone()),
+        }
+    }
+}
+
+// --- VerifyMessage / VerifyCompleted (msg 66 / out 66) ---
+
+#[derive(Clone, Debug, Default)]
+pub struct VerifyMessageRequestBuilder {
+    pub api_data: String,
+}
+
+impl VerifyMessageRequestBuilder {
+    pub fn api_data(mut self, v: impl Into<String>) -> Self {
+        self.api_data = v.into();
+        self
+    }
+}
+
+impl RequestEncoder for VerifyMessageRequestBuilder {
+    type Proto = proto::VerifyMessageRequest;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::VerifyMessage;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::VerifyMessageRequest {
+            api_data: Some(self.api_data.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct VerifyCompletedResponse {
+    pub is_successful: bool,
+    pub error_text: String,
+}
+
+impl VerifyCompletedResponse {
+    pub fn successful(mut self, v: bool) -> Self {
+        self.is_successful = v;
+        self
+    }
+    pub fn error_text(mut self, v: impl Into<String>) -> Self {
+        self.error_text = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for VerifyCompletedResponse {
+    type Proto = proto::VerifyCompleted;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::VerifyCompleted {
+            is_successful: Some(self.is_successful),
+            error_text: Some(self.error_text.clone()),
+        }
+    }
+}
+
 // =============================================================================
 // Entry-point functions
 // =============================================================================
@@ -1135,6 +1482,58 @@ pub fn request_current_time() -> CurrentTimeRequestBuilder {
 
 pub fn request_current_time_in_millis() -> CurrentTimeInMillisRequestBuilder {
     CurrentTimeInMillisRequestBuilder
+}
+
+pub fn soft_dollar_tiers_request() -> SoftDollarTiersRequestBuilder {
+    SoftDollarTiersRequestBuilder::default()
+}
+
+pub fn soft_dollar_tiers() -> SoftDollarTiersResponse {
+    SoftDollarTiersResponse::default()
+}
+
+pub fn user_info_request() -> UserInfoRequestBuilder {
+    UserInfoRequestBuilder::default()
+}
+
+pub fn user_info() -> UserInfoResponse {
+    UserInfoResponse::default()
+}
+
+pub fn fa_request() -> FaRequestBuilder {
+    FaRequestBuilder::default()
+}
+
+pub fn receive_fa() -> ReceiveFaResponse {
+    ReceiveFaResponse::default()
+}
+
+pub fn fa_replace_request() -> FaReplaceRequestBuilder {
+    FaReplaceRequestBuilder::default()
+}
+
+pub fn replace_fa_end() -> ReplaceFaEndResponse {
+    ReplaceFaEndResponse::default()
+}
+
+pub fn set_server_log_level_request() -> SetServerLogLevelRequestBuilder {
+    SetServerLogLevelRequestBuilder::default()
+}
+
+pub fn verify_request() -> VerifyRequestBuilder {
+    VerifyRequestBuilder::default()
+}
+
+pub fn verify_message_api() -> VerifyMessageApiResponse {
+    VerifyMessageApiResponse::default()
+}
+
+pub fn verify_message_request() -> VerifyMessageRequestBuilder {
+    VerifyMessageRequestBuilder::default()
+}
+
+pub fn verify_completed() -> VerifyCompletedResponse {
+    VerifyCompletedResponse::default()
 }
 
 #[cfg(test)]

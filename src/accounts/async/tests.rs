@@ -5,9 +5,11 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
-    cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, family_codes, managed_accounts,
-    request_account_summary, request_account_updates, request_account_updates_multi, request_current_time, request_family_codes,
-    request_managed_accounts, request_pnl, request_pnl_single,
+    cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, fa_replace_request, fa_request, family_codes,
+    managed_accounts, receive_fa, replace_fa_end, request_account_summary, request_account_updates, request_account_updates_multi,
+    request_current_time, request_family_codes, request_managed_accounts, request_pnl, request_pnl_single, set_server_log_level_request,
+    soft_dollar_tiers, soft_dollar_tiers_request, user_info, user_info_request, verify_completed, verify_message_api, verify_message_request,
+    verify_request,
 };
 use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
@@ -512,4 +514,156 @@ async fn test_account_summary_multiple_tags() {
             assert!(result.is_ok(), "account_summary should succeed for {}", test_case.description);
         }
     }
+}
+
+#[tokio::test]
+async fn test_soft_dollar_tiers() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::SoftDollarTier,
+        soft_dollar_tiers()
+            .request_id(TEST_REQ_ID_FIRST)
+            .tier("Tier1", "value1", "Tier 1")
+            .tier("Tier2", "value2", "Tier 2")
+            .encode_proto(),
+    )]);
+
+    let tiers = client.soft_dollar_tiers().await.expect("soft_dollar_tiers failed");
+    assert_eq!(tiers.len(), 2);
+    assert_eq!(tiers[0].name, "Tier1");
+    assert_eq!(tiers[0].display_name, "Tier 1");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &soft_dollar_tiers_request().request_id(TEST_REQ_ID_FIRST));
+}
+
+#[tokio::test]
+async fn test_soft_dollar_tiers_version_error() {
+    let (client, message_bus) = create_test_client_with_version(server_versions::SOFT_DOLLAR_TIER - 1);
+    let result = client.soft_dollar_tiers().await;
+    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn test_user_info() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::UserInfo,
+        user_info().request_id(TEST_REQ_ID_FIRST).white_branding_id("brand-xyz").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::USER_INFO);
+
+    let info = client.user_info().await.expect("user_info failed");
+    assert_eq!(info.white_branding_id, "brand-xyz");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &user_info_request().request_id(TEST_REQ_ID_FIRST));
+}
+
+#[tokio::test]
+async fn test_user_info_version_error() {
+    let (client, message_bus) = create_test_client_with_version(server_versions::USER_INFO - 1);
+    let result = client.user_info().await;
+    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn test_request_fa() {
+    use crate::accounts::FaDataType;
+
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::ReceiveFA,
+        receive_fa().fa_data_type(1).xml("<groups/>").encode_proto(),
+    )]);
+
+    let cfg = client.request_fa(FaDataType::Groups).await.expect("request_fa failed");
+    assert_eq!(cfg.xml, "<groups/>");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &fa_request().fa_data_type(1));
+}
+
+#[tokio::test]
+async fn test_replace_fa() {
+    use crate::accounts::FaDataType;
+
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::ReplaceFAEnd,
+        replace_fa_end().request_id(TEST_REQ_ID_FIRST).text("ok").encode_proto(),
+    )]);
+
+    let result = client
+        .replace_fa(FaDataType::AccountAliases, "<aliases/>")
+        .await
+        .expect("replace_fa failed");
+    assert_eq!(result.text, "ok");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &fa_replace_request().request_id(TEST_REQ_ID_FIRST).fa_data_type(3).xml("<aliases/>"),
+    );
+}
+
+#[tokio::test]
+async fn test_replace_fa_version_error() {
+    use crate::accounts::FaDataType;
+
+    let (client, message_bus) = create_test_client_with_version(server_versions::REPLACE_FA_END - 1);
+    let result = client.replace_fa(FaDataType::Groups, "<x/>").await;
+    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn test_set_server_log_level() {
+    use crate::accounts::ServerLogLevel;
+
+    let (client, message_bus) = create_test_client();
+    client
+        .set_server_log_level(ServerLogLevel::Detail)
+        .await
+        .expect("set_server_log_level failed");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &set_server_log_level_request().log_level(5));
+}
+
+#[tokio::test]
+async fn test_verify_request() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::VerifyMessageApi,
+        verify_message_api().api_data("challenge-payload").encode_proto(),
+    )]);
+
+    let challenge = client.verify_request("MyApp", "1.0").await.expect("verify_request failed");
+    assert_eq!(challenge.api_data, "challenge-payload");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &verify_request().api_name("MyApp").api_version("1.0"));
+}
+
+#[tokio::test]
+async fn test_verify_request_version_error() {
+    let (client, message_bus) = create_test_client_with_version(server_versions::LINKING - 1);
+    let result = client.verify_request("MyApp", "1.0").await;
+    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn test_verify_message() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::VerifyCompleted,
+        verify_completed().successful(true).error_text("").encode_proto(),
+    )]);
+
+    let result = client.verify_message("signed").await.expect("verify_message failed");
+    assert!(result.is_successful);
+    assert_eq!(result.error_text, "");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &verify_message_request().api_data("signed"));
+}
+
+#[tokio::test]
+async fn test_verify_message_version_error() {
+    let (client, message_bus) = create_test_client_with_version(server_versions::LINKING - 1);
+    let result = client.verify_message("data").await;
+    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0);
 }
