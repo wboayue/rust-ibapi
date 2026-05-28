@@ -26,6 +26,10 @@ async fn main() {
     let challenge = client.verify_request(&api_name, &api_version).await.expect("verify_request failed");
     println!("challenge: {}", challenge.api_data);
 
+    // Real IB Linking signs the challenge with the extension's private key:
+    //   let signed_response = rsa_sign(&challenge.api_data, &private_key);
+    // The CLI-arg `signed_response` here is a stub for demonstration only and
+    // will always be rejected by TWS (verification fails with is_successful=false).
     let result = client.verify_message(&signed_response).await.expect("verify_message failed");
     if result.is_successful {
         println!("verification succeeded");

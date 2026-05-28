@@ -3,6 +3,9 @@
 //! Replaces the FA groups or aliases XML on the server. Reads the
 //! replacement XML from stdin.
 //!
+//! This is a **destructive** operation — it overwrites the FA
+//! configuration on the connected account.
+//!
 //! # Usage
 //!
 //! ```bash
@@ -16,7 +19,10 @@ use std::io::Read;
 fn main() {
     env_logger::init();
 
-    let arg = std::env::args().nth(1).unwrap_or_else(|| "groups".to_string());
+    let Some(arg) = std::env::args().nth(1) else {
+        eprintln!("usage: replace_fa <groups|aliases>  (XML on stdin)");
+        std::process::exit(2);
+    };
     let fa_data_type = match arg.as_str() {
         "groups" => FaDataType::Groups,
         "aliases" => FaDataType::AccountAliases,
@@ -26,8 +32,13 @@ fn main() {
         }
     };
 
+    eprintln!("reading replacement XML from stdin (^D to finish)...");
     let mut xml = String::new();
     std::io::stdin().read_to_string(&mut xml).expect("read stdin failed");
+    if xml.trim().is_empty() {
+        eprintln!("refusing to send empty XML — this would clear FA {fa_data_type:?} configuration");
+        std::process::exit(2);
+    }
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 

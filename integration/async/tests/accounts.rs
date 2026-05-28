@@ -273,6 +273,10 @@ async fn replace_fa_round_trip() {
 
 /// Requires IB Linking extension authentication to be configured on the
 /// account. Without it, TWS rejects verify_request.
+///
+/// `verify_message` is called with the raw challenge bytes (no RSA signing
+/// step) — the call exercises the second-half wire path but will not produce
+/// a successful verification on a real IB Linking setup.
 #[tokio::test]
 #[ignore]
 async fn verify_handshake() {
@@ -281,5 +285,8 @@ async fn verify_handshake() {
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
 
     rate_limit();
-    let _challenge = client.verify_request("rust-ibapi-test", "1.0").await.expect("verify_request failed");
+    let challenge = client.verify_request("rust-ibapi-test", "1.0").await.expect("verify_request failed");
+
+    rate_limit();
+    let _result = client.verify_message(&challenge.api_data).await.expect("verify_message failed");
 }
