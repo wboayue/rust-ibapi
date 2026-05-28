@@ -749,6 +749,12 @@ pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
     order
 }
 
+// FIXME(rule 4 / rule 19): pegged_to_benchmark is the project's worst rule-4
+// offender (11 params). Free function in the "advanced / client-less" order
+// builder layer (see docs/migration-3.0.md). Migrating to a typed builder
+// (`PeggedToBenchmark::new().starting_price(...).pegged_change_amount(...)...`)
+// is tracked in plans/code-consistency-followups.md; the `#[allow]` is the
+// rule-19 canary marking the open work.
 #[allow(clippy::too_many_arguments)]
 /// Construct a pegged-to-benchmark order referencing another contract.
 pub fn pegged_to_benchmark(

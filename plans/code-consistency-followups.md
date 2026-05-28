@@ -47,18 +47,50 @@ Same mechanical pattern as the 16 above. The remaining files are large (200+ lin
 3. Replace the inline block with `#[cfg(test)] #[path = "<stem>_tests.rs"] mod tests;`.
 4. Run `cargo build --tests --all-features` and `cargo test --features sync` to catch any unresolved imports.
 
-### Rule 19 / Rule 4 — `#[allow(clippy::too_many_arguments)]` on production code (4 sites)
+### Rule 19 / Rule 4 — `#[allow(clippy::too_many_arguments)]` on production code
 
-Each is a 4–6-param function that needs a builder per rule 4. Rule 19 cites these as the canary for "the canary is not the fix."
+**On `code-consistency`:** justification comments added to all 4 pub(crate)
+helper sites + the public `pegged_to_benchmark`, marking the helpers as
+builder-fed and `pegged_to_benchmark` as a tracked open issue.
 
-- `src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark` (≥7 params)
-- `src/market_data/historical/async.rs:345` — `historical_ticks` (pub(crate))
 - `src/market_data/historical/sync.rs:325` — `historical_ticks` (pub(crate))
-- `src/market_data/historical/common/encoders.rs:47` — `encode_request_historical_data` (pub(crate) encoder)
+- `src/market_data/historical/async.rs:345` — `historical_ticks` (pub(crate))
+- `src/market_data/historical/common/encoders.rs:47` —
+  `encode_request_historical_data` (pub(crate) encoder)
+- `src/market_data/historical/common/encoders.rs:82` —
+  `encode_request_historical_ticks` (pub(crate) encoder)
+- `src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark`
+  (public, 11 params; needs builder)
 
-`historical_ticks` and `encode_request_historical_data` are pub(crate) plumbing called from the `HistoricalTicksBuilder` / `HistoricalDataBuilder`; the builders already exist and these helpers are not on the public API surface. The `#[allow]` is *defensible* here (helper-function exception), but per rule 19 the project still prefers a struct-of-args or named-tuple seam. Lower urgency.
+The 4 `pub(crate)` helpers are internal plumbing called from the
+`HistoricalDataBuilder` / `HistoricalTicksBuilder` finalisers; the public
+API is already a builder, so flat args at the wire seam are the documented
+exception (rule 19 canary acceptable for builder-fed helpers).
 
-`pegged_to_benchmark` is genuinely public and needs a builder migration similar to `BracketOrderBuilder`.
+**Deferred follow-up PR — `pegged_to_benchmark` builder migration:**
+genuine public-API surface, 11 params. Pattern to follow:
+`BracketOrderBuilder`. Sketch:
+
+```rust
+pub struct PeggedToBenchmark {
+    action: Action,
+    quantity: f64,
+    starting_price: f64,
+    // ... named setters for the other 8 fields
+}
+
+impl PeggedToBenchmark {
+    pub fn new(action: Action, quantity: f64, starting_price: f64) -> Self { ... }
+    pub fn pegged_change_amount(mut self, amount: f64) -> Self { ... }
+    pub fn reference_contract(mut self, id: i32, exchange: impl Into<String>) -> Self { ... }
+    pub fn reference_range(mut self, lower: f64, upper: f64) -> Self { ... }
+    pub fn build(self) -> Order { ... }
+}
+```
+
+The existing `pegged_to_benchmark(...)` free function can be marked
+`#[deprecated(since = "3.x", note = "use PeggedToBenchmark builder")]`
+in the same PR.
 
 ### Rule 4 — public functions with 4+ params (6 sites)
 
@@ -85,17 +117,28 @@ The async siblings of well-documented sync methods systematically lack `# Exampl
 
 Pattern: copy the sync method's `# Examples` block, switch to `#[tokio::main]` + `.await`, switch `use ibapi::client::blocking::Client;` to `use ibapi::prelude::*;` (per `feedback_per_method_sync_async_doc_pairing.md`). One PR per domain is the most reviewable shape.
 
-### Rule 2 — 5 domains still use `<domain>/{sync,async}/mod.rs`
+### Rule 2 — flat `<domain>/{sync,async}.rs` layout
 
-The project minimises `mod.rs` files; these five domains haven't been migrated:
+**Complete on `code-consistency`.** All 5 nested-domain layouts migrated:
 
-- `accounts/{sync,async}/mod.rs`
-- `contracts/{sync,async}/mod.rs`
-- `market_data/realtime/{sync,async}/mod.rs`
-- `orders/{sync,async}/mod.rs`
-- `transport/{sync,async}/mod.rs`
+- `accounts/{sync,async}/{mod,tests}.rs` → `accounts/{sync,async}{,_tests}.rs`
+- `contracts/{sync,async}/{mod,tests}.rs` → `contracts/{sync,async}{,_tests}.rs`
+- `orders/{sync,async}/{mod,tests}.rs` → `orders/{sync,async}{,_tests}.rs`
+- `market_data/realtime/{sync,async}/{mod,tests}.rs` →
+  `market_data/realtime/{sync,async}{,_tests}.rs`
+- `transport/{sync/mod.rs,sync/tests.rs}` → `transport/{sync.rs,sync_tests.rs}`
+  (helpers `memory.rs`, `memory_tests.rs`, `test_listener.rs` stay nested in
+  `transport/sync/`, resolved via Rust's normal lookup from `sync.rs`)
+- `transport/{async_io.rs,async_memory.rs,async_memory_tests.rs,async_test_listener.rs}`
+  → `transport/async/{io,memory,memory_tests,test_listener}.rs` (symmetric
+  with sync; helpers nested, main `async.rs` and `async_tests.rs` flat)
 
-Each migration is a `git mv` plus updating the parent `mod.rs` from `mod sync;` (resolves to `sync/mod.rs`) to `#[path = "sync.rs"] mod sync;` (or just `mod sync;` if the directory is removed entirely). One PR per domain to keep the diff focused; do not try to flatten all 5 in one PR.
+The pattern across all 5 domains:
+- Main entry-point file flat: `<domain>/sync.rs`, `<domain>/async.rs`
+- Main tests flat sibling per rule 8: `<domain>/sync_tests.rs`,
+  `<domain>/async_tests.rs`
+- Helper submodules allowed to stay nested in `<domain>/<side>/` for
+  multi-file domains (only `transport` applies)
 
 ### Rule 12 sub-rule — `Subscription` doesn't use the `sync_impl`/`async_impl` naming
 
