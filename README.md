@@ -425,28 +425,32 @@ fn main() {
     let _monitor_handle = thread::spawn(move || {
         let stream = monitor_client.order_update_stream().expect("failed to create stream");
 
-        // `iter_data()` strips notice items; the inner `update?` yields the
-        // `OrderUpdate` directly. Use `stream.iter()` with `Ok(SubscriptionItem::Data(_))`
-        // if you also want to observe non-fatal notices.
+        // `iter_data()` strips notice items; the inner item is `Result<OrderUpdate, Error>`.
+        // Use `stream.iter()` with `Ok(SubscriptionItem::Data(_))` if you also want to
+        // observe non-fatal notices.
         for update in stream.iter_data() {
-            match update.expect("order update stream error") {
-                OrderUpdate::OrderStatus(status) => {
+            match update {
+                Ok(OrderUpdate::OrderStatus(status)) => {
                     println!("Order {} Status: {}", status.order_id, status.status);
                     println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
                     if status.status.is_terminal() {
                         break;
                     }
                 }
-                OrderUpdate::OpenOrder(data) => {
+                Ok(OrderUpdate::OpenOrder(data)) => {
                     println!("Open Order {}: {} {}",
                              data.order_id, data.order.action, data.contract.symbol);
                 }
-                OrderUpdate::ExecutionData(exec) => {
+                Ok(OrderUpdate::ExecutionData(exec)) => {
                     println!("Execution: {} shares @ {}",
                              exec.execution.shares, exec.execution.price);
                 }
-                OrderUpdate::CommissionReport(report) => {
+                Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission: ${}", report.commission);
+                }
+                Err(e) => {
+                    eprintln!("order update stream error: {e:?}");
+                    break;
                 }
             }
         }
@@ -779,7 +783,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 ## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a `Subscription`, the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
 
 ```rust
 use ibapi::client::blocking::Client;

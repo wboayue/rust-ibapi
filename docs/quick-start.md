@@ -113,8 +113,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Run with:
 ```bash
-cargo run --no-default-features --features sync
+cargo run
 ```
+
+(The `default-features = false, features = ["sync"]` you set in `Cargo.toml`
+above already selects the blocking client; no extra flags needed.)
 
 #### Async Version
 
