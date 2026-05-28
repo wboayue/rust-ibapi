@@ -56,25 +56,25 @@ For client methods with request IDs:
 ```rust
 // Sync mode (in domain/sync.rs as impl Client block)
 impl Client {
-    pub fn pnl(&self, account: &str) -> Result<Subscription<PnL>, Error> {
+    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
         let builder = self
             .request()
             .check_version(server_versions::PNL, "PnL not supported")?;
-        
-        let request = encode_request_pnl(builder.request_id(), account)?;
+
+        let request = encode_request_pnl(builder.request_id(), account, model_code)?;
         builder.send(request)
     }
 }
 
 // Async mode (in domain/async.rs as impl Client block)
 impl Client {
-    pub async fn pnl(&self, account: &str) -> Result<Subscription<PnL>, Error> {
+    pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
         let builder = self
             .request()
             .check_version(server_versions::PNL, "PnL not supported")
             .await?;
-        
-        let request = encode_request_pnl(builder.request_id(), account)?;
+
+        let request = encode_request_pnl(builder.request_id(), account, model_code)?;
         builder.send(request).await
     }
 }
@@ -394,11 +394,13 @@ pub fn encode_order(order: &Order, server_version: i32) -> RequestMessage {
 ```rust
 let positions = client.positions()?;
 
-// Iterate until completion
-for position in positions {
-    match position? {
-        PositionUpdate::Position(p) => println!("Position: {:?}", p),
-        PositionUpdate::End => break,
+// `iter_data()` strips notice items; `update?` yields the `PositionUpdate`
+// directly. Pattern-match on `iter()` instead if you also want to observe
+// non-fatal notices via `SubscriptionItem::Notice`.
+for update in positions.iter_data() {
+    match update? {
+        PositionUpdate::Position(p) => println!("Position: {p:?}"),
+        PositionUpdate::PositionEnd => break,
     }
 }
 ```
@@ -407,13 +409,14 @@ for position in positions {
 ```rust
 use futures::StreamExt;
 
-let mut positions = client.positions().await?;
+let positions = client.positions().await?;
+let mut positions = positions.filter_data();   // strips notice items
 
 // Stream until completion
-while let Some(position) = positions.next().await {
-    match position? {
-        PositionUpdate::Position(p) => println!("Position: {:?}", p),
-        PositionUpdate::End => break,
+while let Some(update) = positions.next().await {
+    match update? {
+        PositionUpdate::Position(p) => println!("Position: {p:?}"),
+        PositionUpdate::PositionEnd => break,
     }
 }
 ```

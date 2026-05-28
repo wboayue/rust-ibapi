@@ -472,38 +472,52 @@ let condition = percent_change(756733, "SMART")
 
 #### Ignoring Regular Trading Hours
 
-By default, conditions are only evaluated during regular trading hours. To monitor conditions outside RTH:
+By default, conditions are only evaluated during regular trading hours. To monitor conditions outside RTH, build the `Order` offline, flip `conditions_ignore_rth`, and submit:
 
 ```rust
-let order_id = client.order(&contract)
+let mut order = client.order(&contract)
     .buy(100)
     .market()
     .condition(price(265598, "SMART").greater_than(150.0))
-    .conditions_ignore_rth()  // Monitor during extended hours
-    .submit()?;
+    .build()?;
+order.conditions_ignore_rth = true;  // Monitor during extended hours
+
+let order_id = client.next_valid_order_id()?;
+client.submit_order(order_id, &contract, &order)?;
 ```
 
 #### Cancel vs Activate on Condition
 
-By default, orders activate when conditions are met. You can reverse this to cancel orders:
+By default, orders activate when conditions are met. Set `conditions_cancel_order = true` to reverse this so the condition cancels an unfilled order:
 
 ```rust
 // Cancel order if not filled by 3:30 PM
-let order_id = client.order(&contract)
+let mut order = client.order(&contract)
     .buy(100)
     .limit(149.0)
     .condition(time().greater_than("20251230 15:30:00 US/Eastern"))
-    .conditions_cancel_order()  // Cancel instead of activate
-    .submit()?;
+    .build()?;
+order.conditions_cancel_order = true;  // Cancel instead of activate
+
+let order_id = client.next_valid_order_id()?;
+client.submit_order(order_id, &contract, &order)?;
 ```
+
+> The fluent builder doesn't expose these two `bool`s as named setters yet;
+> `OrderBuilder::build()` is the canonical escape hatch for fields without a
+> dedicated builder method.
 
 ### Getting Contract IDs
 
 Most conditions require contract IDs. Get them via `contract_details()`:
 
 ```rust
-// Get contract details to find contract ID
-let details = client.contract_details(&Contract::stock("AAPL")).next()?;
+// `contract_details` returns Vec<ContractDetails>; for a single underlying,
+// take the first row.
+let details = client.contract_details(&Contract::stock("AAPL").build())?
+    .into_iter()
+    .next()
+    .expect("no contract details returned");
 let contract_id = details.contract.contract_id;
 
 // Now use in conditions

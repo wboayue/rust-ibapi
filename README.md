@@ -8,7 +8,7 @@
 
 ## What's new in 3.0
 
-- **Protobuf-only wire format.** v3.0 drops the legacy text protocol and speaks only TWS protobuf. Requires TWS / IB Gateway server version **201 or newer**. Smaller, faster, and version-gated by IB itself — see [`docs/migration-3.0.md`](docs/migration-3.0.md) for the cutover.
+- **Protobuf-only wire format.** v3.0 drops the legacy text protocol and speaks only TWS protobuf. Requires TWS / IB Gateway server version **213 or newer**. Smaller, faster, and version-gated by IB itself — see [`docs/migration-3.0.md`](docs/migration-3.0.md) for the cutover.
 - **API ergonomics overhaul.** Builders for multi-arg subscriptions (`market_data(&contract).subscribe()`, `realtime_bars(&contract).subscribe()`), unified `Subscription<T>` shape with `SubscriptionItem::{Data, Notice}`, typed `OrderStatusKind` (was magic-string `String`), globally-routed `Client::notice_stream()` for unsolicited notices, and consistent sync/async surfaces. See the [migration guide](docs/migration-3.0.md) for the before/after on every breaking change.
 
 ## Introduction
@@ -163,14 +163,12 @@ fn main() {
     let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
-        .historical_data(
-            &contract,
-            Some(datetime!(2023-04-11 20:00 UTC)),
-            1.days(),
-            HistoricalBarSize::Hour,
-            HistoricalWhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, HistoricalBarSize::Hour)
+        .ending(datetime!(2023-04-11 20:00 UTC))
+        .duration(1.days())
+        .what_to_show(HistoricalWhatToShow::Trades)
+        .trading_hours(TradingHours::Regular)
+        .fetch()
         .expect("historical data request failed");
 
     println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
@@ -195,14 +193,12 @@ async fn main() {
     let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
-        .historical_data(
-            &contract,
-            Some(datetime!(2023-04-11 20:00 UTC)),
-            1.days(),
-            HistoricalBarSize::Hour,
-            HistoricalWhatToShow::Trades,
-            TradingHours::Regular,
-        )
+        .historical_data(&contract, HistoricalBarSize::Hour)
+        .ending(datetime!(2023-04-11 20:00 UTC))
+        .duration(1.days())
+        .what_to_show(HistoricalWhatToShow::Trades)
+        .trading_hours(TradingHours::Regular)
+        .fetch()
         .await
         .expect("historical data request failed");
 
@@ -429,8 +425,11 @@ fn main() {
     let _monitor_handle = thread::spawn(move || {
         let stream = monitor_client.order_update_stream().expect("failed to create stream");
 
-        for update in stream {
-            match update {
+        // `iter_data()` strips notice items; the inner `update?` yields the
+        // `OrderUpdate` directly. Use `stream.iter()` with `Ok(SubscriptionItem::Data(_))`
+        // if you also want to observe non-fatal notices.
+        for update in stream.iter_data() {
+            match update.expect("order update stream error") {
                 OrderUpdate::OrderStatus(status) => {
                     println!("Order {} Status: {}", status.order_id, status.status);
                     println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
@@ -483,10 +482,13 @@ async fn main() {
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
     // Create order update stream before submitting orders
-    let mut order_stream = client.order_update_stream().await.expect("failed to create stream");
+    let order_stream = client.order_update_stream().await.expect("failed to create stream");
 
-    // Spawn task to monitor updates
+    // Spawn task to monitor updates. `filter_data()` strips non-fatal notices so
+    // the loop body only sees data items; switch to `order_stream.next()` and a
+    // `Ok(SubscriptionItem::Data(_))` arm if you want to observe notices too.
     let monitor_handle = tokio::spawn(async move {
+        let mut order_stream = order_stream.filter_data();
         while let Some(update) = order_stream.next().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
@@ -777,7 +779,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 ## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
 
 ```rust
 use ibapi::client::blocking::Client;
