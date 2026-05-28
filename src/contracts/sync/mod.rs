@@ -140,7 +140,7 @@ impl Client {
     ///     println!("contract: {contract:?}");
     /// }
     /// ```
-    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = ContractDescription>, Error> {
+    pub fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
         check_version(self.server_version, Features::REQ_MATCHING_SYMBOLS)?;
 
         let builder = self.request();
@@ -151,7 +151,7 @@ impl Client {
         if let Some(Ok(mut message)) = subscription.next() {
             match message.message_type() {
                 IncomingMessages::SymbolSamples => {
-                    return Ok(decoders::decode_contract_descriptions(self.server_version, &mut message)?.into_iter());
+                    return decoders::decode_contract_descriptions(self.server_version, &mut message);
                 }
                 IncomingMessages::Error => {
                     error!("unexpected error: {message:?}");
@@ -164,7 +164,7 @@ impl Client {
             }
         }
 
-        Ok(Vec::default().into_iter())
+        Ok(Vec::new())
     }
 
     /// Calculates an option's price based on the provided volatility and its underlying's price.

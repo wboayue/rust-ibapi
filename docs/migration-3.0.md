@@ -756,6 +756,22 @@ for tick in subscription.iter_data() {
 
 EFP (Exchange For Physical) ticks were the only response type still framed as text on the wire. TWS has no `TickEFP.proto` schema, so keeping the API meant carrying a text-decode path through an otherwise proto-only crate. If TWS adds protobuf support for TickEFP later, the API can be reintroduced as a proto-only decoder.
 
+### 32. `matching_symbols` returns `Vec` on both sync and async
+
+The sync `Client::matching_symbols` previously returned `Result<impl Iterator<Item = ContractDescription>, Error>`; the async sibling already returned `Result<Vec<ContractDescription>, Error>`. v3.0 unifies the sync version to also return `Vec` — the implementation already collected into a `Vec` internally before wrapping with `.into_iter()`, so the abstraction was pure surface drift.
+
+```rust,ignore
+// v2.x / v3 pre-unification
+let iter = client.matching_symbols("AAPL")?;
+let symbols: Vec<_> = iter.collect();   // had to collect to keep the result around
+
+// v3 post-unification
+let symbols = client.matching_symbols("AAPL")?;
+// `symbols` is already a Vec — iterate it, index it, .iter() it.
+```
+
+Callers using `for x in symbols { ... }` keep working unchanged. Callers that explicitly typed the return as `impl Iterator<...>` need to drop the bound; callers that called `.collect()` on the result need to drop that call.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

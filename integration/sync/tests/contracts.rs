@@ -67,7 +67,7 @@ fn matching_symbols_exact() {
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
     rate_limit();
-    let symbols: Vec<_> = client.matching_symbols("AAPL").expect("matching_symbols failed").collect();
+    let symbols = client.matching_symbols("AAPL").expect("matching_symbols failed");
 
     assert!(!symbols.is_empty());
     assert!(symbols.iter().any(|s| s.contract.symbol.0 == "AAPL"));
@@ -81,7 +81,7 @@ fn matching_symbols_partial() {
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
     rate_limit();
-    let symbols: Vec<_> = client.matching_symbols("Micro").expect("matching_symbols failed").collect();
+    let symbols = client.matching_symbols("Micro").expect("matching_symbols failed");
 
     assert!(!symbols.is_empty());
 }
