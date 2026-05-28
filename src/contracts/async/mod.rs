@@ -153,6 +153,45 @@ impl Client {
         }
     }
 
+    /// Requests the underlying exchanges that contribute to a consolidated (BBO) feed.
+    ///
+    /// Given a BBO exchange code (an opaque per-session token, e.g. `"a6"`),
+    /// returns the list of underlying exchanges with each entry's bit
+    /// position, full exchange name, and single-letter abbreviation. Useful
+    /// for decoding the `mdSize` / `mdMask` bitmaps on tick-by-tick and
+    /// market-depth streams. The token is typically obtained from the
+    /// `LAST_EXCHANGE` market-data tick (tick type 84).
+    ///
+    /// # Arguments
+    /// * `bbo_exchange` - The BBO exchange token (e.g. `"a6"`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let components = client.smart_components("a6").await.expect("request failed");
+    ///     for component in &components {
+    ///         println!("bit {}: {} ({})", component.bit_number, component.exchange, component.exchange_letter);
+    ///     }
+    /// }
+    /// ```
+    pub async fn smart_components(&self, bbo_exchange: &str) -> Result<Vec<SmartComponent>, Error> {
+        check_version(self.server_version(), Features::SMART_COMPONENTS)?;
+
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
+            decoders::decode_smart_components_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
+    }
+
     /// Calculates an option's price based on the provided volatility and its underlying's price.
     ///
     /// # Arguments

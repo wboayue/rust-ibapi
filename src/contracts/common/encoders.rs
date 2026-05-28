@@ -40,6 +40,19 @@ pub(crate) fn encode_request_market_rule(market_rule_id: i32) -> Result<Vec<u8>,
     ))
 }
 
+pub(crate) fn encode_request_smart_components(request_id: i32, bbo_exchange: &str) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::SmartComponentsRequest {
+        req_id: Some(request_id),
+        bbo_exchange: Some(bbo_exchange.to_string()),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestSmartComponents as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
 pub(crate) fn encode_calculate_option_price(request_id: i32, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;

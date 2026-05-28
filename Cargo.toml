@@ -106,6 +106,11 @@ path = "examples/async/fundamental_data.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_smart_components"
+path = "examples/async/smart_components.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_wsh_metadata"
 path = "examples/async/wsh_metadata.rs"
 required-features = ["async"]
@@ -580,6 +585,11 @@ required-features = ["sync"]
 [[example]]
 name = "fundamental_data"
 path = "examples/sync/fundamental_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "smart_components"
+path = "examples/sync/smart_components.rs"
 required-features = ["sync"]
 
 [[example]]

@@ -36,6 +36,7 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 - [x] `RequestContractData` — `Client::contract_details`
 - [x] `RequestMatchingSymbols` — `Client::matching_symbols`
 - [x] `RequestMarketRule` — `Client::market_rule`
+- [x] `RequestSmartComponents` — `Client::smart_components`
 - [x] `RequestSecurityDefinitionOptionalParameters` — `Client::option_chain`
 - [x] `ReqCalcOptionPrice` — `Client::calculate_option_price`
 - [x] `ReqCalcImpliedVolat` — `Client::calculate_implied_volatility`
@@ -119,7 +120,6 @@ Server version constants in `src/server_versions.rs`: `PROTOBUF`=201 through `PR
 
 These appear in `PROTOBUF_MSG_IDS` but are not exposed by `Client`. They need an encoder + decoder (where applicable) + `pub fn` on `Client` for both sync and async.
 
-- [ ] `RequestSmartComponents` (REST_MESSAGES_2, server 212)
 - [ ] `RequestSoftDollarTiers` (REST_MESSAGES_2, server 212)
 - [ ] `ReqUserInfo` (REST_MESSAGES_2, server 212)
 - [ ] `RequestFA` / `ReplaceFA` (REST_MESSAGES_1, server 211) — Financial Advisor account/group config

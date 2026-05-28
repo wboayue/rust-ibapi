@@ -111,6 +111,44 @@ impl RequestEncoder for MarketRuleRequestBuilder {
 }
 
 #[derive(Clone, Debug)]
+pub struct SmartComponentsRequestBuilder {
+    pub request_id: i32,
+    pub bbo_exchange: String,
+}
+
+impl Default for SmartComponentsRequestBuilder {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            bbo_exchange: String::new(),
+        }
+    }
+}
+
+impl SmartComponentsRequestBuilder {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn bbo_exchange(mut self, v: impl Into<String>) -> Self {
+        self.bbo_exchange = v.into();
+        self
+    }
+}
+
+impl RequestEncoder for SmartComponentsRequestBuilder {
+    type Proto = proto::SmartComponentsRequest;
+    const MSG_ID: OutgoingMessages = OutgoingMessages::RequestSmartComponents;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::SmartComponentsRequest {
+            req_id: Some(self.request_id),
+            bbo_exchange: some_str(&self.bbo_exchange),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CalculateOptionPriceRequestBuilder {
     pub request_id: i32,
     pub contract: Contract,
@@ -581,6 +619,38 @@ impl ResponseProtoEncoder for MarketRuleResponse {
     }
 }
 
+/// Builder for `SmartComponents` (msg 82) responses.
+#[derive(Clone, Debug, Default)]
+pub struct SmartComponentsResponse {
+    pub components: Vec<(i32, String, String)>,
+}
+
+impl SmartComponentsResponse {
+    pub fn component(mut self, bit_number: i32, exchange: impl Into<String>, exchange_letter: impl Into<String>) -> Self {
+        self.components.push((bit_number, exchange.into(), exchange_letter.into()));
+        self
+    }
+}
+
+impl ResponseProtoEncoder for SmartComponentsResponse {
+    type Proto = proto::SmartComponents;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::SmartComponents {
+            req_id: None,
+            smart_components: self
+                .components
+                .iter()
+                .map(|(bit_number, exchange, exchange_letter)| proto::SmartComponent {
+                    bit_number: Some(*bit_number),
+                    exchange: some_str(exchange),
+                    exchange_letter: some_str(exchange_letter),
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Builder for `SecurityDefinitionOptionParameter` (msg 75) responses.
 #[derive(Clone, Debug)]
 pub struct OptionChainResponse {
@@ -670,6 +740,10 @@ pub fn market_rule_request() -> MarketRuleRequestBuilder {
     MarketRuleRequestBuilder::default()
 }
 
+pub fn smart_components_request() -> SmartComponentsRequestBuilder {
+    SmartComponentsRequestBuilder::default()
+}
+
 pub fn calculate_option_price_request() -> CalculateOptionPriceRequestBuilder {
     CalculateOptionPriceRequestBuilder::default()
 }
@@ -711,6 +785,10 @@ pub fn market_rule(market_rule_id: i32) -> MarketRuleResponse {
         market_rule_id,
         price_increments: Vec::new(),
     }
+}
+
+pub fn smart_components() -> SmartComponentsResponse {
+    SmartComponentsResponse::default()
 }
 
 pub fn option_chain() -> OptionChainResponse {

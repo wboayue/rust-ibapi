@@ -937,6 +937,22 @@ pub struct PriceIncrement {
     pub increment: f64,
 }
 
+/// One contributing exchange behind a consolidated BBO feed.
+///
+/// Returned by `Client::smart_components` for a given BBO exchange token
+/// (e.g. `"a6"`). Each entry maps a bit position in the consolidated
+/// quote to the underlying exchange and its single-letter abbreviation.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SmartComponent {
+    /// Bit position in the consolidated quote.
+    pub bit_number: i32,
+    /// Full exchange name (e.g. `"NASDAQ"`).
+    pub exchange: String,
+    /// Single-letter exchange abbreviation (e.g. `"P"` for Pacific).
+    pub exchange_letter: String,
+}
+
 // Async API methods are now on Client directly via contracts/async.rs
 
 // ContractBuilder is deprecated - use the new builder methods on Contract instead
