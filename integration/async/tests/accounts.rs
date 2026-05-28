@@ -200,3 +200,86 @@ async fn pnl_single_receives_updates() {
     let sell_id = client.next_order_id();
     let _ = client.place_order(sell_id, &contract, &sell).await;
 }
+
+#[tokio::test]
+async fn soft_dollar_tiers_succeeds() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let _tiers = client.soft_dollar_tiers().await.expect("soft_dollar_tiers failed");
+}
+
+#[tokio::test]
+async fn user_info_succeeds() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let _info = client.user_info().await.expect("user_info failed");
+}
+
+#[tokio::test]
+async fn set_server_log_level_succeeds() {
+    use ibapi::accounts::ServerLogLevel;
+
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    client
+        .set_server_log_level(ServerLogLevel::Detail)
+        .await
+        .expect("set_server_log_level failed");
+}
+
+/// Requires an FA (Financial Advisor) account; paper trading accounts return
+/// an error code 321 "Server error when validating an API client request".
+#[tokio::test]
+#[ignore]
+async fn request_fa_groups() {
+    use ibapi::accounts::FaDataType;
+
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let cfg = client.request_fa(FaDataType::Groups).await.expect("request_fa failed");
+    assert_eq!(cfg.fa_data_type, FaDataType::Groups);
+}
+
+/// Requires an FA account AND mutates server-side state — only run against a
+/// dedicated FA test account where the existing groups XML has been backed up.
+#[tokio::test]
+#[ignore]
+async fn replace_fa_round_trip() {
+    use ibapi::accounts::FaDataType;
+
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let original = client.request_fa(FaDataType::Groups).await.expect("request_fa failed");
+
+    rate_limit();
+    let result = client.replace_fa(FaDataType::Groups, &original.xml).await.expect("replace_fa failed");
+    assert!(!result.text.is_empty());
+}
+
+/// Requires IB Linking extension authentication to be configured on the
+/// account. Without it, TWS rejects verify_request.
+#[tokio::test]
+#[ignore]
+async fn verify_handshake() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let _challenge = client.verify_request("rust-ibapi-test", "1.0").await.expect("verify_request failed");
+}

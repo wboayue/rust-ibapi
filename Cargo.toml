@@ -111,6 +111,36 @@ path = "examples/async/smart_components.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_soft_dollar_tiers"
+path = "examples/async/soft_dollar_tiers.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_user_info"
+path = "examples/async/user_info.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_request_fa"
+path = "examples/async/request_fa.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_replace_fa"
+path = "examples/async/replace_fa.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_set_server_log_level"
+path = "examples/async/set_server_log_level.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_verify_handshake"
+path = "examples/async/verify_handshake.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_wsh_metadata"
 path = "examples/async/wsh_metadata.rs"
 required-features = ["async"]
@@ -590,6 +620,36 @@ required-features = ["sync"]
 [[example]]
 name = "smart_components"
 path = "examples/sync/smart_components.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "soft_dollar_tiers"
+path = "examples/sync/soft_dollar_tiers.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "user_info"
+path = "examples/sync/user_info.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "request_fa"
+path = "examples/sync/request_fa.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "replace_fa"
+path = "examples/sync/replace_fa.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "set_server_log_level"
+path = "examples/sync/set_server_log_level.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "verify_handshake"
+path = "examples/sync/verify_handshake.rs"
 required-features = ["sync"]
 
 [[example]]
