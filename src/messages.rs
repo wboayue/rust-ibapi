@@ -463,9 +463,9 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickNews
         | IncomingMessages::TickOptionComputation
         | IncomingMessages::TickReqParams
+        | IncomingMessages::UserInfo
         | IncomingMessages::WshEventData
-        | IncomingMessages::WshMetaData
-        | IncomingMessages::UserInfo => Some(1),
+        | IncomingMessages::WshMetaData => Some(1),
 
         _ => None,
     }

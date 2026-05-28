@@ -339,7 +339,7 @@ pub struct UserInfo {
 
 /// Financial Advisor configuration data type.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FaDataType {
     /// Account groups configuration.
     Groups = 1,
@@ -376,8 +376,10 @@ impl_wire_enum!(FaDataType);
 
 /// Financial Advisor configuration data returned by `Client::request_fa`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FaConfig {
+    /// Which FA dataset this configuration represents (echoed from the request).
+    pub fa_data_type: FaDataType,
     /// The XML configuration data.
     pub xml: String,
 }
@@ -392,7 +394,7 @@ pub struct ReplaceFaResult {
 
 /// Server-side log verbosity level for TWS API diagnostics.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerLogLevel {
     /// System-level messages.
     System = 1,

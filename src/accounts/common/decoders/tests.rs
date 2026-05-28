@@ -558,12 +558,14 @@ fn test_decode_user_info_proto_round_trip() {
 
 #[test]
 fn test_decode_receive_fa_proto_round_trip() {
+    use crate::accounts::FaDataType;
     use prost::Message;
     let p = crate::proto::ReceiveFa {
-        fa_data_type: Some(1),
+        fa_data_type: Some(FaDataType::Groups as i32),
         xml: Some("<groups/>".into()),
     };
     let cfg = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap();
+    assert_eq!(cfg.fa_data_type, FaDataType::Groups);
     assert_eq!(cfg.xml, "<groups/>");
 }
 
@@ -573,6 +575,17 @@ fn test_decode_receive_fa_rejects_invalid_fa_data_type() {
     let p = crate::proto::ReceiveFa {
         fa_data_type: Some(2),
         xml: Some("<bad/>".into()),
+    };
+    let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
+    assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
+}
+
+#[test]
+fn test_decode_receive_fa_rejects_missing_fa_data_type() {
+    use prost::Message;
+    let p = crate::proto::ReceiveFa {
+        fa_data_type: None,
+        xml: Some("<groups/>".into()),
     };
     let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
     assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
@@ -609,4 +622,16 @@ fn test_decode_verify_completed_proto_round_trip() {
     let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
     assert!(result.is_successful);
     assert_eq!(result.error_text, "");
+}
+
+#[test]
+fn test_decode_verify_completed_proto_failure_path() {
+    use prost::Message;
+    let p = crate::proto::VerifyCompleted {
+        is_successful: Some(false),
+        error_text: Some("signature mismatch".into()),
+    };
+    let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
+    assert!(!result.is_successful);
+    assert_eq!(result.error_text, "signature mismatch");
 }

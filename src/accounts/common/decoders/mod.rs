@@ -239,8 +239,12 @@ pub(crate) fn decode_receive_fa(message: &ResponseMessage) -> Result<FaConfig, E
 
 pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
     let p = proto::ReceiveFa::decode(bytes)?;
-    let _ = p.fa_data_type.map(FaDataType::from_i32).transpose()?;
+    let fa_data_type = p
+        .fa_data_type
+        .ok_or_else(|| Error::Parse(0, String::new(), "missing fa_data_type in ReceiveFa".into()))
+        .and_then(FaDataType::from_i32)?;
     Ok(FaConfig {
+        fa_data_type,
         xml: p.xml.unwrap_or_default(),
     })
 }

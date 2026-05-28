@@ -1165,7 +1165,7 @@ pub struct FaReplaceRequestBuilder {
 impl Default for FaReplaceRequestBuilder {
     fn default() -> Self {
         Self {
-            request_id: TEST_TICKER_ID,
+            request_id: crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST,
             fa_data_type: 1,
             xml: String::new(),
         }

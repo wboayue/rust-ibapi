@@ -801,9 +801,10 @@ fn test_request_fa() {
     )]);
 
     let cfg = client.request_fa(FaDataType::Groups).expect("request_fa failed");
+    assert_eq!(cfg.fa_data_type, FaDataType::Groups);
     assert_eq!(cfg.xml, "<groups/>");
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(&message_bus, 0, &fa_request().fa_data_type(1));
+    assert_request(&message_bus, 0, &fa_request().fa_data_type(FaDataType::Groups as i32));
 }
 
 #[test]
@@ -821,7 +822,10 @@ fn test_replace_fa() {
     assert_request(
         &message_bus,
         0,
-        &fa_replace_request().request_id(TEST_REQ_ID_FIRST).fa_data_type(3).xml("<aliases/>"),
+        &fa_replace_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .fa_data_type(FaDataType::AccountAliases as i32)
+            .xml("<aliases/>"),
     );
 }
 
@@ -842,7 +846,7 @@ fn test_set_server_log_level() {
     let (client, message_bus) = create_blocking_test_client();
     client.set_server_log_level(ServerLogLevel::Detail).expect("set_server_log_level failed");
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(&message_bus, 0, &set_server_log_level_request().log_level(5));
+    assert_request(&message_bus, 0, &set_server_log_level_request().log_level(ServerLogLevel::Detail as i32));
 }
 
 #[test]
