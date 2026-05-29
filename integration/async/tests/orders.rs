@@ -1,10 +1,12 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind};
+use ibapi::orders::order_builder::PeggedToBenchmark;
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi::Client;
+use ibapi::{Client, Error};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
+use tokio::time::{timeout, Duration};
 
 async fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
@@ -255,4 +257,57 @@ async fn executions_returns_subscription() {
     rate_limit();
     let mut subscription = client.executions(ExecutionFilter::default()).await.expect("executions failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
+}
+
+#[tokio::test]
+#[serial(orders)]
+async fn place_pegged_to_benchmark() {
+    let (client, _client_id) = connect().await;
+
+    let contract = Contract::stock("AAPL").build();
+
+    rate_limit();
+    let details = client.contract_details(&contract).await.expect("contract_details failed");
+    let reference_id = details[0].contract.contract_id;
+
+    let order = PeggedToBenchmark::new(Action::Buy, 1.0, 1.0)
+        .reference_contract(reference_id, "ISLAND")
+        .pegged_change_amount(0.01)
+        .reference_change_amount(0.01)
+        .stock_reference_price(1.0)
+        .reference_range(0.5, 9999.0)
+        .build()
+        .expect("PeggedToBenchmark build failed");
+
+    rate_limit();
+    let order_id = client.next_order_id();
+    let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
+
+    let mut acknowledged = false;
+    while let Ok(Some(result)) = timeout(Duration::from_secs(5), subscription.next()).await {
+        match result {
+            Ok(SubscriptionItem::Data(PlaceOrder::OrderStatus(_) | PlaceOrder::OpenOrder(_))) => {
+                acknowledged = true;
+                break;
+            }
+            Ok(SubscriptionItem::Notice(notice)) => {
+                if notice.message.contains("rejected") {
+                    panic!("TWS rejected pegged-to-benchmark order: {}", notice.message);
+                }
+                acknowledged = true;
+                break;
+            }
+            Ok(SubscriptionItem::Data(_)) => continue,
+            Err(Error::Notice(n)) if n.code == 201 => panic!("TWS rejected pegged-to-benchmark order [201]: {}", n.message),
+            Err(Error::Notice(_)) => {
+                acknowledged = true;
+                break;
+            }
+            Err(e) => panic!("subscription error: {e}"),
+        }
+    }
+    assert!(acknowledged, "no acknowledgement from TWS within timeout");
+
+    rate_limit();
+    let _ = client.cancel_order(order_id, "").await;
 }

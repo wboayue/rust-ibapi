@@ -52,30 +52,12 @@ The 4 `pub(crate)` helpers are internal plumbing called from the
 API is already a builder, so flat args at the wire seam are the documented
 exception (rule 19 canary acceptable for builder-fed helpers).
 
-**Deferred follow-up PR — `pegged_to_benchmark` builder migration:**
-genuine public-API surface, 11 params. Pattern to follow:
-`BracketOrderBuilder`. Sketch:
-
-```rust
-pub struct PeggedToBenchmark {
-    action: Action,
-    quantity: f64,
-    starting_price: f64,
-    // ... named setters for the other 8 fields
-}
-
-impl PeggedToBenchmark {
-    pub fn new(action: Action, quantity: f64, starting_price: f64) -> Self { ... }
-    pub fn pegged_change_amount(mut self, amount: f64) -> Self { ... }
-    pub fn reference_contract(mut self, id: i32, exchange: impl Into<String>) -> Self { ... }
-    pub fn reference_range(mut self, lower: f64, upper: f64) -> Self { ... }
-    pub fn build(self) -> Order { ... }
-}
-```
-
-The existing `pegged_to_benchmark(...)` free function can be marked
-`#[deprecated(since = "3.x", note = "use PeggedToBenchmark builder")]`
-in the same PR.
+**`pegged_to_benchmark` builder migration — DONE** in `pegged-to-benchmark-builder`
+branch: 11-param free function removed and replaced by `PeggedToBenchmark`
+fluent builder (5 setters, `reference_contract` required and validated via
+`ValidationError::MissingRequiredField`). Migration §33 added; unit tests
+migrated + missing-required-field assertion added; sync + async integration
+tests added (place + cancel against AAPL reference contract).
 
 ### Rule 4 — public functions with 4+ params (6 sites)
 
@@ -84,7 +66,7 @@ in the same PR.
 - `src/orders/builder/validation.rs:5` — `validate_bracket_prices(action, entry, take_profit, stop_loss)` — internal validation helper.
 - `src/contracts/builders.rs:497` — `iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)` — 4 leg ids; consider a struct of 4 contract ids.
 - `src/orders/common/order_builder/mod.rs:181` — `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` — 5 params; builder.
-- `src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark(...)` — see Rule 19 entry above.
+- ~~`src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark(...)`~~ — DONE; see Rule 19 entry above.
 
 Best opened as one PR per function so each migration can be reviewed for the right signature shape.
 

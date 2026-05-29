@@ -772,6 +772,46 @@ let symbols = client.matching_symbols("AAPL")?;
 
 Callers using `for x in symbols { ... }` keep working unchanged. Callers that explicitly typed the return as `impl Iterator<...>` need to drop the bound; callers that called `.collect()` on the result need to drop that call.
 
+### 33. `pegged_to_benchmark` free function replaced by `PeggedToBenchmark` builder
+
+The 11-parameter `order_builder::pegged_to_benchmark(...)` free function is removed in v3.0 and replaced by a fluent [`PeggedToBenchmark`](https://docs.rs/ibapi/latest/ibapi/orders/order_builder/struct.PeggedToBenchmark.html) builder. The old positional API forced callers to remember the order of five `Option`-like fields plus a `bool` flag; the builder lets you set only the fields you care about, and surfaces the required `reference_contract` via `ValidationError` instead of compiler-silent zeros.
+
+```rust,ignore
+use ibapi::orders::builder::ValidationError;
+use ibapi::orders::order_builder::{self, PeggedToBenchmark};
+use ibapi::orders::Action;
+
+fn build_order() -> Result<(), ValidationError> {
+    // v2.x
+    let _v2 = order_builder::pegged_to_benchmark(
+        Action::Buy,
+        100.0,
+        50.0,     // starting_price
+        false,    // pegged_change_amount_decrease
+        0.02,     // pegged_change_amount
+        0.01,     // reference_change_amount
+        12345,    // reference_contract_id
+        "ISLAND", // reference_exchange
+        49.0,     // stock_reference_price
+        48.0,     // reference_contract_lower_range
+        52.0,     // reference_contract_upper_range
+    );
+
+    // v3.0
+    let _v3 = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
+        .reference_contract(12345, "ISLAND")
+        .pegged_change_amount(0.02)
+        .reference_change_amount(0.01)
+        .stock_reference_price(49.0)
+        .reference_range(48.0, 52.0)
+        .build()?;
+
+    Ok(())
+}
+```
+
+`reference_contract(id, exchange)` is required; omitting it returns `Err(ValidationError::MissingRequiredField("reference_contract"))`. All other setters are optional — skipping a setter leaves the field unset on the wire (`None`), distinct from v2 callers who had to pass an explicit `0.0` / `false` (which encoded as `Some(0.0)` / `false`). If you need to preserve the v2 wire shape exactly, call every setter.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

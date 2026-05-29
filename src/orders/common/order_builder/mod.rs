@@ -39,6 +39,7 @@
 //! [`Action::Sell`](crate::orders::Action::Sell)); the fluent builder implies side from
 //! `.buy()` / `.sell()` instead.
 
+use crate::orders::builder::ValidationError;
 use crate::orders::{
     Action, AuctionStrategy, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
 };
@@ -749,42 +750,142 @@ pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
     order
 }
 
-// FIXME(rule 4 / rule 19): pegged_to_benchmark is the project's worst rule-4
-// offender (11 params). Free function in the "advanced / client-less" order
-// builder layer (see docs/migration-3.0.md). Migrating to a typed builder
-// (`PeggedToBenchmark::new().starting_price(...).pegged_change_amount(...)...`)
-// is tracked in plans/code-consistency-followups.md; the `#[allow]` is the
-// rule-19 canary marking the open work.
-#[allow(clippy::too_many_arguments)]
-/// Construct a pegged-to-benchmark order referencing another contract.
-pub fn pegged_to_benchmark(
+/// Builder for a pegged-to-benchmark order referencing another contract.
+///
+/// Pegged-to-benchmark orders track the price of a *different* contract
+/// (the reference contract) and adjust automatically as that contract moves.
+/// The order is active while the reference price stays inside an optional
+/// range and is cancelled if it leaves the range.
+///
+/// `action`, `quantity`, and `starting_price` are required and supplied to
+/// [`PeggedToBenchmark::new`]. The reference contract (id + exchange) is
+/// also required and supplied via [`reference_contract`]; [`build`] returns
+/// `Err(ValidationError::MissingRequiredField("reference_contract"))` if it
+/// was not set. All other fields are optional.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder::PeggedToBenchmark, Action};
+///
+/// let order = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
+///     .reference_contract(12345, "ISLAND")
+///     .pegged_change_amount(0.02)
+///     .reference_change_amount(0.01)
+///     .stock_reference_price(49.0)
+///     .reference_range(48.0, 52.0)
+///     .build()
+///     .expect("reference_contract is set");
+///
+/// assert_eq!(order.order_type, "PEG BENCH");
+/// ```
+///
+/// [`reference_contract`]: PeggedToBenchmark::reference_contract
+/// [`build`]: PeggedToBenchmark::build
+#[must_use = "PeggedToBenchmark does nothing until you call .build()"]
+#[derive(Clone, Debug)]
+pub struct PeggedToBenchmark {
     action: Action,
     quantity: f64,
     starting_price: f64,
+    pegged_change_amount: Option<f64>,
     pegged_change_amount_decrease: bool,
-    pegged_change_amount: f64,
-    reference_change_amount: f64,
-    reference_contract_id: i32,
-    reference_exchange: &str,
-    stock_reference_price: f64,
-    reference_contract_lower_range: f64,
-    reference_contract_upper_range: f64,
-) -> Order {
-    Order {
-        action,
-        order_type: "PEG BENCH".to_owned(),
-        total_quantity: quantity,
-        starting_price: Some(starting_price),
-        is_pegged_change_amount_decrease: pegged_change_amount_decrease,
-        pegged_change_amount: Some(pegged_change_amount), // by ... (and likewise for price moving in opposite direction)
-        reference_change_amount: Some(reference_change_amount), // whenever there is a price change of ...
-        reference_contract_id,                            // in the reference contract ...
-        reference_exchange: reference_exchange.to_owned(), // being traded at ...
-        stock_ref_price: Some(stock_reference_price),     // starting reference price is ...
-        //Keep order active as long as reference contract trades between ...
-        stock_range_lower: Some(reference_contract_lower_range),
-        stock_range_upper: Some(reference_contract_upper_range),
-        ..Order::default()
+    reference_change_amount: Option<f64>,
+    reference_contract_id: Option<i32>,
+    reference_exchange: Option<String>,
+    stock_reference_price: Option<f64>,
+    reference_range: Option<(f64, f64)>,
+}
+
+impl PeggedToBenchmark {
+    /// Start a new pegged-to-benchmark order with the required core fields.
+    pub fn new(action: Action, quantity: f64, starting_price: f64) -> Self {
+        Self {
+            action,
+            quantity,
+            starting_price,
+            pegged_change_amount: None,
+            pegged_change_amount_decrease: false,
+            reference_change_amount: None,
+            reference_contract_id: None,
+            reference_exchange: None,
+            stock_reference_price: None,
+            reference_range: None,
+        }
+    }
+
+    /// Set the reference contract by id and exchange. Required.
+    pub fn reference_contract(mut self, id: i32, exchange: impl Into<String>) -> Self {
+        self.reference_contract_id = Some(id);
+        self.reference_exchange = Some(exchange.into());
+        self
+    }
+
+    /// Set how much this order's price moves per `reference_change_amount`
+    /// of movement in the reference contract.
+    pub fn pegged_change_amount(mut self, amount: f64) -> Self {
+        self.pegged_change_amount = Some(amount);
+        self
+    }
+
+    /// If `true`, the order price moves opposite the reference price.
+    /// Defaults to `false`.
+    pub fn pegged_change_amount_decrease(mut self, decrease: bool) -> Self {
+        self.pegged_change_amount_decrease = decrease;
+        self
+    }
+
+    /// Set the reference contract price change that triggers a
+    /// `pegged_change_amount` adjustment in this order.
+    pub fn reference_change_amount(mut self, amount: f64) -> Self {
+        self.reference_change_amount = Some(amount);
+        self
+    }
+
+    /// Set the starting reference price used to compute the pegged offset.
+    pub fn stock_reference_price(mut self, price: f64) -> Self {
+        self.stock_reference_price = Some(price);
+        self
+    }
+
+    /// Keep the order active only while the reference contract trades between
+    /// `lower` and `upper`.
+    pub fn reference_range(mut self, lower: f64, upper: f64) -> Self {
+        self.reference_range = Some((lower, upper));
+        self
+    }
+
+    /// Build the [`Order`], validating that [`reference_contract`] was set.
+    ///
+    /// [`reference_contract`]: PeggedToBenchmark::reference_contract
+    pub fn build(self) -> Result<Order, ValidationError> {
+        let reference_contract_id = self
+            .reference_contract_id
+            .ok_or(ValidationError::MissingRequiredField("reference_contract"))?;
+        let reference_exchange = self
+            .reference_exchange
+            .ok_or(ValidationError::MissingRequiredField("reference_contract"))?;
+
+        let (stock_range_lower, stock_range_upper) = match self.reference_range {
+            Some((lower, upper)) => (Some(lower), Some(upper)),
+            None => (None, None),
+        };
+
+        Ok(Order {
+            action: self.action,
+            order_type: "PEG BENCH".to_owned(),
+            total_quantity: self.quantity,
+            starting_price: Some(self.starting_price),
+            is_pegged_change_amount_decrease: self.pegged_change_amount_decrease,
+            pegged_change_amount: self.pegged_change_amount,
+            reference_change_amount: self.reference_change_amount,
+            reference_contract_id,
+            reference_exchange,
+            stock_ref_price: self.stock_reference_price,
+            stock_range_lower,
+            stock_range_upper,
+            ..Order::default()
+        })
     }
 }
 

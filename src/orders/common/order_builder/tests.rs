@@ -1,3 +1,4 @@
+use crate::orders::builder::ValidationError;
 use crate::orders::common::order_builder::*;
 use crate::orders::{Action, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
@@ -396,19 +397,14 @@ mod specialized_order_tests {
 
     #[test]
     fn test_pegged_to_benchmark() {
-        let order = pegged_to_benchmark(
-            Action::Buy,
-            100.0,
-            50.0,     // starting_price
-            false,    // pegged_change_amount_decrease
-            0.02,     // pegged_change_amount
-            0.01,     // reference_change_amount
-            12345,    // reference_contract_id
-            "ISLAND", // reference_exchange
-            49.0,     // stock_reference_price
-            48.0,     // reference_contract_lower_range
-            52.0,     // reference_contract_upper_range
-        );
+        let order = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
+            .reference_contract(12345, "ISLAND")
+            .pegged_change_amount(0.02)
+            .reference_change_amount(0.01)
+            .stock_reference_price(49.0)
+            .reference_range(48.0, 52.0)
+            .build()
+            .expect("reference_contract is set");
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "PEG BENCH");
@@ -422,6 +418,31 @@ mod specialized_order_tests {
         assert_eq!(order.stock_ref_price, Some(49.0));
         assert_eq!(order.stock_range_lower, Some(48.0));
         assert_eq!(order.stock_range_upper, Some(52.0));
+    }
+
+    #[test]
+    fn test_pegged_to_benchmark_decrease_flag() {
+        let order = PeggedToBenchmark::new(Action::Sell, 50.0, 60.0)
+            .reference_contract(7, "SMART")
+            .pegged_change_amount_decrease(true)
+            .build()
+            .expect("reference_contract is set");
+
+        assert!(order.is_pegged_change_amount_decrease);
+        assert_eq!(order.pegged_change_amount, None);
+        assert_eq!(order.reference_change_amount, None);
+        assert_eq!(order.stock_ref_price, None);
+        assert_eq!(order.stock_range_lower, None);
+        assert_eq!(order.stock_range_upper, None);
+    }
+
+    #[test]
+    fn test_pegged_to_benchmark_missing_reference_contract() {
+        let err = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
+            .build()
+            .expect_err("reference_contract is required");
+
+        assert!(matches!(err, ValidationError::MissingRequiredField("reference_contract")));
     }
 }
 
