@@ -13,7 +13,25 @@ use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
 
 impl Client {
-    /// Switches market data type returned from market data request.
+    /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
+    ///
+    /// # Arguments
+    /// * `market_data_type` - Type of market data to retrieve.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let market_data_type = MarketDataType::Realtime;
+    ///     client.switch_market_data_type(market_data_type).await.expect("request failed");
+    ///     println!("market data switched: {market_data_type:?}");
+    /// }
+    /// ```
     pub async fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
         self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
@@ -25,6 +43,34 @@ impl Client {
     ///
     /// Defaults to `WhatToShow::Trades` and `TradingHours::Regular`. See
     /// [`RealtimeBarsBuilder`] for the chained methods.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("TSLA").build();
+    ///
+    ///     let mut subscription = client
+    ///         .realtime_bars(&contract)
+    ///         .what_to_show(RealtimeWhatToShow::Trades)
+    ///         .trading_hours(TradingHours::Extended)
+    ///         .subscribe()
+    ///         .await
+    ///         .expect("realtime bars request failed");
+    ///
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(bar)) => println!("{bar:?}"),
+    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
+    ///             Err(e) => { eprintln!("error: {e}"); break; }
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn realtime_bars<'a>(&'a self, contract: &'a Contract) -> RealtimeBarsBuilder<'a, Self> {
         RealtimeBarsBuilder::new(self, contract)
     }
@@ -112,6 +158,21 @@ impl Client {
     }
 
     /// Requests venues for which market data is returned to market_depth (those with market makers)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let exchanges = client.market_depth_exchanges().await.expect("error requesting market depth exchanges");
+    ///     for exchange in &exchanges {
+    ///         println!("{exchange:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 

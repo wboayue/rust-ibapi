@@ -28,24 +28,9 @@ Catalogue of CLAUDE.md alignment work that landed partially on the `code-consist
 
 ## Deferred — separate follow-up PRs
 
-### Rule 8 (rest of the inline-test sweep) — 6 files, ~1,720 lines
+### Rule 8 (rest of the inline-test sweep) — **DONE in PR #657**
 
-Same mechanical pattern as the 16 above. The remaining files are large (200+ lines each); sized for one focused PR.
-
-| File | Inline block lines |
-| --- | --- |
-| `accounts/common/encoders.rs` | 244 |
-| `accounts/types.rs` | 350 |
-| `client/builders/async.rs` | 351 |
-| `client/builders/sync.rs` | 300 |
-| `market_data/historical/mod.rs` | 248 |
-| `proto/encoders.rs` | 228 |
-
-**Pattern:**
-1. Move body of `#[cfg(test)] mod tests { ... }` to sibling `<stem>_tests.rs` (or `mod_tests.rs` for the one mod.rs case).
-2. Lift `use super::*;` to the top of the new file (already there in every block).
-3. Replace the inline block with `#[cfg(test)] #[path = "<stem>_tests.rs"] mod tests;`.
-4. Run `cargo build --tests --all-features` and `cargo test --features sync` to catch any unresolved imports.
+All 6 remaining large files were swept in PR #657 via the sed recipe (see `feedback_sed_inline_test_extraction.md`). Total: 22/22 files migrated.
 
 ### Rule 19 / Rule 4 — `#[allow(clippy::too_many_arguments)]` on production code
 
@@ -103,19 +88,16 @@ in the same PR.
 
 Best opened as one PR per function so each migration can be reviewed for the right signature shape.
 
-### Rule 18 — async public methods missing `# Examples` (≈30 sites)
+### Rule 18 — async public methods missing `# Examples` — **DONE**
 
-The async siblings of well-documented sync methods systematically lack `# Examples` blocks. Found in:
+Closed across two PRs:
 
-- `orders/async.rs` — 11 of 12 `pub async fn` (sync counterparts all documented)
-- `news/async.rs` — 0 of 6
-- `scanner/async.rs` — 0 of 2
-- `display_groups/async.rs` — 0 of 2
-- `wsh/async.rs` — 0 of 3
-- `market_data/realtime/async/mod.rs` — 3 methods (`switch_market_data_type`, `market_depth_exchanges`, `realtime_bars`)
-- `contracts/async/mod.rs` — `calculate_option_price`, `calculate_implied_volatility`, `cancel_contract_details`, `option_chain`
+- PR #657 — `orders/async.rs` (11/12 → 12/12), `news/async.rs` (0/6 → 6/6), `scanner/async.rs` (0/2 → 2/2), `wsh/async.rs` (0/3 → 3/3), `contracts/async.rs` (4 methods).
+- PR #659 — `display_groups::{sync,async}::update` (sync gap was pre-existing; mirrored alongside), `market_data::realtime::async::{switch_market_data_type, realtime_bars, market_depth_exchanges}`.
 
-Pattern: copy the sync method's `# Examples` block, switch to `#[tokio::main]` + `.await`, switch `use ibapi::client::blocking::Client;` to `use ibapi::prelude::*;` (per `feedback_per_method_sync_async_doc_pairing.md`). One PR per domain is the most reviewable shape.
+Pattern established by `feedback_per_method_sync_async_doc_pairing.md`: async examples mirror their sync sibling, switch to `#[tokio::main]` + `.await`, and use `ibapi::prelude::*` (noting that `WhatToShow` is renamed to `RealtimeWhatToShow` / `HistoricalWhatToShow` in the prelude).
+
+Broader Rule 18 sweep across infrastructure (`subscriptions/`, `transport/`, `connection/`, `client/builders/`, `client/{sync,async}.rs`) is out of scope for this audit thread — those files are dominated by `pub(crate)` items.
 
 ### Rule 2 — flat `<domain>/{sync,async}.rs` layout
 

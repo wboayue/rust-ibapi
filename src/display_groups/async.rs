@@ -52,6 +52,20 @@ impl DisplayGroupSubscription {
     ///   - `"contractID@exchange"` for individual contracts (e.g., "265598@SMART")
     ///   - `"none"` for empty selection
     ///   - `"combo"` for combination contracts
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
+    ///     let subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
+    ///
+    ///     subscription.update("265598@SMART").await.expect("update failed");
+    /// }
+    /// ```
     pub async fn update(&self, contract_info: &str) -> Result<(), Error> {
         let request_id = self.inner.request_id().expect("subscription has no request ID");
         let request = encoders::encode_update_display_group(request_id, contract_info)?;
