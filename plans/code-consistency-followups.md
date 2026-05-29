@@ -28,24 +28,9 @@ Catalogue of CLAUDE.md alignment work that landed partially on the `code-consist
 
 ## Deferred — separate follow-up PRs
 
-### Rule 8 (rest of the inline-test sweep) — 6 files, ~1,720 lines
+### Rule 8 (rest of the inline-test sweep) — **DONE in PR #657**
 
-Same mechanical pattern as the 16 above. The remaining files are large (200+ lines each); sized for one focused PR.
-
-| File | Inline block lines |
-| --- | --- |
-| `accounts/common/encoders.rs` | 244 |
-| `accounts/types.rs` | 350 |
-| `client/builders/async.rs` | 351 |
-| `client/builders/sync.rs` | 300 |
-| `market_data/historical/mod.rs` | 248 |
-| `proto/encoders.rs` | 228 |
-
-**Pattern:**
-1. Move body of `#[cfg(test)] mod tests { ... }` to sibling `<stem>_tests.rs` (or `mod_tests.rs` for the one mod.rs case).
-2. Lift `use super::*;` to the top of the new file (already there in every block).
-3. Replace the inline block with `#[cfg(test)] #[path = "<stem>_tests.rs"] mod tests;`.
-4. Run `cargo build --tests --all-features` and `cargo test --features sync` to catch any unresolved imports.
+All 6 remaining large files were swept in PR #657 via the sed recipe (see `feedback_sed_inline_test_extraction.md`). Total: 22/22 files migrated.
 
 ### Rule 19 / Rule 4 — `#[allow(clippy::too_many_arguments)]` on production code
 
