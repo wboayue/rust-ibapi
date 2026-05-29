@@ -117,5 +117,5 @@ impl AsyncReconnect for MemoryStream {
 impl AsyncStream for MemoryStream {}
 
 #[cfg(test)]
-#[path = "async_memory_tests.rs"]
+#[path = "memory_tests.rs"]
 mod tests;

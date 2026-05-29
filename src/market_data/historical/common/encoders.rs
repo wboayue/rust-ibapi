@@ -44,6 +44,10 @@ pub(crate) fn encode_request_head_timestamp(request_id: i32, contract: &Contract
     ))
 }
 
+// pub(crate) wire encoder for `HistoricalDataRequest`. Called from the
+// `HistoricalDataBuilder` finalisers, which present the typed surface to
+// users; the flat-arg encoder is the deliberate seam to prost (rule 19
+// canary acceptable for builder-fed helpers).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_request_historical_data(
     request_id: i32,
@@ -79,6 +83,10 @@ pub(crate) fn encode_request_historical_data(
     ))
 }
 
+// pub(crate) wire encoder for `HistoricalTicksRequest`. Called from the
+// `HistoricalTicksBuilder` finalisers, which present the typed surface to
+// users; the flat-arg encoder is the deliberate seam to prost (rule 19
+// canary acceptable for builder-fed helpers).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_request_historical_ticks(
     request_id: i32,
@@ -153,21 +161,5 @@ pub(crate) fn encode_cancel_head_timestamp(request_id: i32) -> Result<Vec<u8>, E
 // `assert_request<B>(builder)`; cancel encoders are exercised through their
 // production paths (e.g. subscription drop handlers).
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use time::macros::datetime;
-    use time_tz::{self, PrimitiveDateTimeExt};
-
-    #[test]
-    fn test_encode_interval() {
-        let ny = time_tz::timezones::db::america::NEW_YORK;
-
-        let empty_end: Option<OffsetDateTime> = None;
-        let valid_end_utc: Option<OffsetDateTime> = Some(datetime!(2023-04-15 10:00 UTC));
-        let valid_end_ny: Option<OffsetDateTime> = Some(datetime!(2023-04-15 10:00).assume_timezone(ny).unwrap());
-
-        assert_eq!(empty_end.to_field(), "", "encode empty end");
-        assert_eq!(valid_end_utc.to_field(), "20230415 10:00:00 UTC", "encode end utc");
-        assert_eq!(valid_end_ny.to_field(), "20230415 14:00:00 UTC", "encode end from America/NewYork");
-    }
-}
+#[path = "encoders_tests.rs"]
+mod tests;

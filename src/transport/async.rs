@@ -1,6 +1,5 @@
 //! Asynchronous transport implementation
 
-#[path = "async_io.rs"]
 mod io;
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
 
@@ -816,13 +815,11 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 }
 
 #[cfg(test)]
-#[path = "async_memory.rs"]
 mod memory;
 #[cfg(test)]
 pub(crate) use memory::MemoryStream;
 
 #[cfg(test)]
-#[path = "async_test_listener.rs"]
 pub(crate) mod test_listener;
 
 #[cfg(test)]

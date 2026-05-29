@@ -193,4 +193,5 @@ pub(crate) async fn tick_by_tick<T: StreamDecoder<T> + Send + 'static>(
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;

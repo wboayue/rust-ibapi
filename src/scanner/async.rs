@@ -9,6 +9,19 @@ use crate::{server_versions, Client, Error};
 
 impl Client {
     /// Requests an XML list of scanner parameters valid in TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let xml = client.scanner_parameters().await.expect("scanner_parameters failed");
+    ///     println!("scanner parameters: {} chars", xml.len());
+    /// }
+    /// ```
     pub async fn scanner_parameters(&self) -> Result<String, Error> {
         let request = encoders::encode_scanner_parameters()?;
         let mut subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
@@ -21,6 +34,46 @@ impl Client {
     }
 
     /// Starts a subscription to market scan results based on the provided parameters.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use ibapi::scanner::ScannerSubscription;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let mut sub = ScannerSubscription::default();
+    ///     sub.instrument = Some("STK".to_string());
+    ///     sub.location_code = Some("STK.US.MAJOR".to_string());
+    ///     sub.scan_code = Some("TOP_PERC_GAIN".to_string());
+    ///
+    ///     let filter: Vec<ibapi::contracts::TagValue> = Vec::new();
+    ///
+    ///     let subscription = client
+    ///         .scanner_subscription(&sub, &filter)
+    ///         .await
+    ///         .expect("scanner_subscription failed");
+    ///
+    ///     // Take the first batch of results, if any.
+    ///     let mut data = subscription.filter_data();
+    ///     if let Some(batch) = data.next().await {
+    ///         match batch {
+    ///             Ok(rows) => {
+    ///                 for row in rows {
+    ///                     println!(
+    ///                         "rank: {}, symbol: {}",
+    ///                         row.rank, row.contract_details.contract.symbol
+    ///                     );
+    ///                 }
+    ///             }
+    ///             Err(e) => eprintln!("scanner error: {e:?}"),
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub async fn scanner_subscription(
         &self,
         subscription: &ScannerSubscription,

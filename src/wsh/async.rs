@@ -13,6 +13,19 @@ use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
 impl Client {
     /// Fetch Wall Street Horizon metadata table with retry semantics.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let metadata = client.wsh_metadata().await.expect("request wsh metadata failed");
+    ///     println!("{metadata:?}");
+    /// }
+    /// ```
     pub async fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
         check_version(self.server_version(), Features::WSHE_CALENDAR)?;
 
@@ -23,6 +36,32 @@ impl Client {
     }
 
     /// Fetch WSH event data filtered by contract identifier.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id` - Contract identifier for the event request.
+    /// * `start_date`  - Start date of the event request.
+    /// * `end_date`    - End date of the event request.
+    /// * `limit`       - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill`   - Fields to automatically fill in. See [`AutoFill`] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract_id = 76792991; // TSLA
+    ///     let event_data = client
+    ///         .wsh_event_data_by_contract(contract_id, None, None, None, None)
+    ///         .await
+    ///         .expect("request wsh event data failed");
+    ///     println!("{event_data:?}");
+    /// }
+    /// ```
     pub async fn wsh_event_data_by_contract(
         &self,
         contract_id: i32,
@@ -51,6 +90,33 @@ impl Client {
     }
 
     /// Subscribe to WSH event data using a filter expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter`    - JSON-formatted string containing all filter values.
+    /// * `limit`     - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill` - Fields to automatically fill in. See [`AutoFill`] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
+    ///     let subscription = client
+    ///         .wsh_event_data_by_filter(filter, None, None)
+    ///         .await
+    ///         .expect("request wsh event data failed");
+    ///     let mut data = subscription.filter_data();
+    ///     while let Some(result) = data.next().await {
+    ///         println!("{result:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn wsh_event_data_by_filter(
         &self,
         filter: &str,

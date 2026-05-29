@@ -581,4 +581,5 @@ impl Client {
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;

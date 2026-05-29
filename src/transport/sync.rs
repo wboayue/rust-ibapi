@@ -855,4 +855,5 @@ pub(crate) use memory::MemoryStream;
 pub(crate) mod test_listener;
 
 #[cfg(test)]
+#[path = "sync_tests.rs"]
 mod tests;

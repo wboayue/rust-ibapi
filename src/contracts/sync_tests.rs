@@ -49,7 +49,7 @@ fn test_matching_symbols() {
         );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-        let symbols: Vec<_> = result.unwrap().collect();
+        let symbols = result.unwrap();
         assert_eq!(symbols.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
     }
 }
@@ -449,7 +449,7 @@ fn test_matching_symbols_returns_empty_on_closed_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
-    let symbols: Vec<_> = client.matching_symbols("AAPL").expect("ok on empty stream").collect();
+    let symbols = client.matching_symbols("AAPL").expect("ok on empty stream");
     assert!(symbols.is_empty());
 }
 

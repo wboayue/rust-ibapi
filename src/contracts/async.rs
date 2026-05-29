@@ -198,6 +198,23 @@ impl Client {
     /// * `contract`   - The [Contract] object for which the depth is being requested.
     /// * `volatility` - Hypothetical volatility.
     /// * `underlying_price` - Hypothetical option's underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
+    ///     let calculation = client
+    ///         .calculate_option_price(&contract, 100.0, 235.0)
+    ///         .await
+    ///         .expect("request failed");
+    ///     println!("calculation: {calculation:?}");
+    /// }
+    /// ```
     pub async fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         check_version(self.server_version(), Features::REQ_CALC_OPTION_PRICE)?;
 
@@ -219,6 +236,23 @@ impl Client {
     /// * `contract`   - The [Contract] object for which the depth is being requested.
     /// * `option_price` - Hypothetical option price.
     /// * `underlying_price` - Hypothetical option's underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::option("AAPL", "20230519", 150.0, OptionRight::Call);
+    ///     let calculation = client
+    ///         .calculate_implied_volatility(&contract, 25.0, 235.0)
+    ///         .await
+    ///         .expect("request failed");
+    ///     println!("calculation: {calculation:?}");
+    /// }
+    /// ```
     pub async fn calculate_implied_volatility(
         &self,
         contract: &Contract,
@@ -240,6 +274,19 @@ impl Client {
     }
 
     /// Cancels an in-flight contract details request.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     // `request_id` is the id used to launch the original contract_details request.
+    ///     client.cancel_contract_details(42).await.expect("cancel failed");
+    /// }
+    /// ```
     pub async fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
         check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 
@@ -255,6 +302,27 @@ impl Client {
     /// * `exchange` - The exchange
     /// * `security_type` - The underlying security type
     /// * `contract_id` - The underlying contract ID
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let subscription = client
+    ///         .option_chain("AAPL", "", SecurityType::Stock, 265598)
+    ///         .await
+    ///         .expect("option_chain failed");
+    ///
+    ///     let mut chains = subscription.filter_data();
+    ///     while let Some(chain) = chains.next().await {
+    ///         println!("{chain:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn option_chain(
         &self,
         symbol: &str,
@@ -270,4 +338,5 @@ impl Client {
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;

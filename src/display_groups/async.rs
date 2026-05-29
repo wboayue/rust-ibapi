@@ -76,9 +76,33 @@ impl Client {
     /// Subscribes to display group events for the specified group.
     ///
     /// Display Groups are a TWS-only feature (not available in IB Gateway).
+    /// They allow organizing contracts into color-coded groups in the TWS UI.
+    /// When subscribed, you receive updates whenever the user changes the contract
+    /// displayed in that group within TWS.
     ///
     /// # Arguments
     /// * `group_id` - The ID of the group to subscribe to (1-9)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
+    ///
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
+    ///
+    ///     // Update the displayed contract
+    ///     subscription.update("265598@SMART").await.expect("update failed");
+    ///
+    ///     // Consume the subscription so display-group events surface.
+    ///     while let Some(event) = subscription.next().await {
+    ///         println!("group event: {event:?}");
+    ///     }
+    /// }
+    /// ```
     pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<DisplayGroupSubscription, Error> {
         let builder = self.request();
         let request = encoders::encode_subscribe_to_group_events(builder.request_id(), group_id)?;

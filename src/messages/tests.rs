@@ -304,6 +304,18 @@ fn test_response_message_peek_operations() {
 }
 
 #[test]
+fn peek_int_rejects_proto_framed_message() {
+    // CLAUDE.md rule 17: text-index accessors must be proto-aware. peek_int
+    // defensively returns Err(UnexpectedResponse) on a proto-framed message
+    // even if the caller passes a valid text-field index — production callers
+    // already gate on raw_bytes().is_none() before invoking, so the guard is
+    // unreachable in correct paths but catches misuse.
+    let proto_msg = ResponseMessage::from_protobuf(5, vec![0x08, 0x7B]);
+    assert!(matches!(proto_msg.peek_int(0), Err(crate::Error::UnexpectedResponse(_))));
+    assert!(matches!(proto_msg.peek_int(1), Err(crate::Error::UnexpectedResponse(_))));
+}
+
+#[test]
 fn test_text_framed_message_has_no_order_id_or_execution_id() {
     // order_id() and execution_id() require proto-framed payloads; a
     // text-framed message (raw_bytes = None) returns None regardless of the
