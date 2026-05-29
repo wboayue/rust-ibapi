@@ -88,19 +88,16 @@ in the same PR.
 
 Best opened as one PR per function so each migration can be reviewed for the right signature shape.
 
-### Rule 18 — async public methods missing `# Examples` (≈30 sites)
+### Rule 18 — async public methods missing `# Examples` — **DONE**
 
-The async siblings of well-documented sync methods systematically lack `# Examples` blocks. Found in:
+Closed across two PRs:
 
-- `orders/async.rs` — 11 of 12 `pub async fn` (sync counterparts all documented)
-- `news/async.rs` — 0 of 6
-- `scanner/async.rs` — 0 of 2
-- `display_groups/async.rs` — 0 of 2
-- `wsh/async.rs` — 0 of 3
-- `market_data/realtime/async/mod.rs` — 3 methods (`switch_market_data_type`, `market_depth_exchanges`, `realtime_bars`)
-- `contracts/async/mod.rs` — `calculate_option_price`, `calculate_implied_volatility`, `cancel_contract_details`, `option_chain`
+- PR #657 — `orders/async.rs` (11/12 → 12/12), `news/async.rs` (0/6 → 6/6), `scanner/async.rs` (0/2 → 2/2), `wsh/async.rs` (0/3 → 3/3), `contracts/async.rs` (4 methods).
+- PR #659 — `display_groups::{sync,async}::update` (sync gap was pre-existing; mirrored alongside), `market_data::realtime::async::{switch_market_data_type, realtime_bars, market_depth_exchanges}`.
 
-Pattern: copy the sync method's `# Examples` block, switch to `#[tokio::main]` + `.await`, switch `use ibapi::client::blocking::Client;` to `use ibapi::prelude::*;` (per `feedback_per_method_sync_async_doc_pairing.md`). One PR per domain is the most reviewable shape.
+Pattern established by `feedback_per_method_sync_async_doc_pairing.md`: async examples mirror their sync sibling, switch to `#[tokio::main]` + `.await`, and use `ibapi::prelude::*` (noting that `WhatToShow` is renamed to `RealtimeWhatToShow` / `HistoricalWhatToShow` in the prelude).
+
+Broader Rule 18 sweep across infrastructure (`subscriptions/`, `transport/`, `connection/`, `client/builders/`, `client/{sync,async}.rs`) is out of scope for this audit thread — those files are dominated by `pub(crate)` items.
 
 ### Rule 2 — flat `<domain>/{sync,async}.rs` layout
 
