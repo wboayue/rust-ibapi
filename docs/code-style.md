@@ -14,7 +14,8 @@
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max 50 lines per function; extract if larger
-- Functions with 4+ parameters should use a builder pattern
+- Functions with 4+ parameters should use a builder pattern. The receiver (`self` / `&self` / `&mut self`) does not count toward this budget — `pub fn foo(&self, a, b, c)` is compliant; `pub fn foo(&self, a, b, c, d)` is not.
+- **Builder rationale matters.** The rule exists to spare callers from positional-argument noise when there are optional / defaultable fields. A 4+ param function where *every* arg is required with no reasonable default gains little from a builder — `client.foo(a, b, c, d, e)` is no worse than `client.foo(a).b(b).c(c).d(d).e(e).run()`. For all-required signatures, prefer grouping related args into a struct (e.g. `DateRange { start, end }`) or accept the violation with a comment, rather than mechanical builder conversion.
 
 ### Composition
 - Combine small, focused components to build complex behavior

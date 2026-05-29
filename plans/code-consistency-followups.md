@@ -59,16 +59,25 @@ fluent builder (5 setters, `reference_contract` required and validated via
 migrated + missing-required-field assertion added; sync + async integration
 tests added (place + cancel against AAPL reference contract).
 
-### Rule 4 — public functions with 4+ params (6 sites)
+### Rule 4 — public functions with 4+ params
 
-- `src/accounts/sync/mod.rs:159` — `pnl_single(&self, account, contract_id, model_code)` — 3 args after `&self`, technically right at the limit. (Re-audit: rule says "max 3 params"; `&self` counts. If `&self` is excluded by convention here, this is compliant. Clarify in CLAUDE.md.)
+**Receiver exclusion clarified** in CLAUDE.md rule 4 + `docs/code-style.md` — `&self` does not count toward the 3-param budget. `pnl_single` (3 args after `&self`) is compliant under the clarified rule and dropped from this list. The clarification surfaced 3 new violations (each sync + async); they replace `pnl_single` below.
+
+Internal / free-function violations:
+
 - `src/common/error_helpers.rs:31` — `require_range<T>(value, min, max, name)` — internal helper; consider `Range<T>` newtype or a builder.
 - `src/orders/builder/validation.rs:5` — `validate_bracket_prices(action, entry, take_profit, stop_loss)` — internal validation helper.
 - `src/contracts/builders.rs:497` — `iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)` — 4 leg ids; consider a struct of 4 contract ids.
 - `src/orders/common/order_builder/mod.rs:181` — `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` — 5 params; builder.
-- ~~`src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark(...)`~~ — DONE; see Rule 19 entry above.
+- ~~`src/orders/common/order_builder/mod.rs:752` — `pegged_to_benchmark(...)`~~ — DONE in PR #660; see Rule 19 entry above.
 
-Best opened as one PR per function so each migration can be reviewed for the right signature shape.
+Client-method violations exposed by the receiver clarification (each appears in `<domain>/sync.rs` + `<domain>/async.rs`). Treat the rule as "4+ args with at least one optional / defaultable field needs a builder"; pure-required signatures don't benefit:
+
+- **`wsh::Client::wsh_event_data_by_contract(&self, contract_id, start_date, end_date, limit, auto_fill)`** — 1 required + 4 `Option`. Doc example currently calls `(id, None, None, None, None)` — the canonical happy-path is "I just want events for this contract id." **Strong builder candidate** (the only one of the three that's clearly worth refactoring): `WshEventDataBuilder` on `Client::wsh_event_data_by_contract(id) -> WshEventDataBuilder` with `.date_range(start, end)`, `.limit(n)`, `.auto_fill(spec)` setters.
+- **`contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)`** — 4 args all required, but `exchange` documents `""` as a meaningful default ("all exchanges"). Marginal — the builder would only let callers skip `exchange`, saving one `""` literal per callsite. **Defer / decide case-by-case;** if revisiting, consider also typing `exchange` as `Option<Exchange>` and dropping the magic empty string.
+- **`news::Client::historical_news(&self, contract_id, provider_codes, start_time, end_time, total_results)`** — 5 args all required, no defaults. Builder would only add ceremony. **Skip the builder.** Better remedy if any: group `start_time` + `end_time` into a `DateRange` type (drops to 4 args, still required, but the type carries intent). Leaving as-is is also defensible.
+
+The first is a clean PR; the other two are documentation work (note the rule exception for all-required signatures). Best opened as one PR per function (sync + async migrated together).
 
 ### Rule 18 — async public methods missing `# Examples` — **DONE**
 
