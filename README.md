@@ -24,17 +24,17 @@ rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The 
 - **async** *(default)*: Non-blocking client using Tokio tasks and broadcast channels. Available as `ibapi::Client`.
 - **sync**: Blocking client using crossbeam channels. Available as `ibapi::client::blocking::Client` (or `ibapi::Client` when `async` is disabled).
 
-v3.0 is not yet on crates.io — install from git while it's in development:
+Add to your `Cargo.toml`:
 
 ```toml
 # Async only (default features)
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main" }
+ibapi = "3.0"
 
 # Blocking only
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
@@ -66,9 +66,9 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Install
 
-**v3.0 (this branch):** unreleased — install from git as shown in the [Sync/Async Architecture](#syncasync-architecture) section above.
+**v3.0 (this branch):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
 
-**v2.x (stable):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi). Maintenance lives on the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
+**v2.x (stable):** earlier `2.x` releases are still on [crates.io/crates/ibapi](https://crates.io/crates/ibapi). Maintenance lives on the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
 ## Examples
 

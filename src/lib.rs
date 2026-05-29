@@ -17,7 +17,34 @@
 //! market scanning, and access to news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes,
 //! maintaining parity with the official API, and enhancing usability.
 //!
-//! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
+//! # Example
+//!
+//! Connect to TWS / IB Gateway and place a market order:
+//!
+//! ```no_run
+//! use ibapi::prelude::*;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let client = Client::connect("127.0.0.1:4002", 100)
+//!         .await
+//!         .expect("connection failed");
+//!
+//!     let contract = Contract::stock("AAPL").build();
+//!     let order_id = client
+//!         .order(&contract)
+//!         .buy(100)
+//!         .market()
+//!         .submit()
+//!         .await
+//!         .expect("order submission failed");
+//!     println!("submitted order id: {order_id}");
+//! }
+//! ```
+//!
+//! For broader usage — quick start, examples, migration from v2, full API tour — see the
+//! [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md) and the
+//! [`docs/`](https://github.com/wboayue/rust-ibapi/tree/main/docs) directory.
 
 #![warn(missing_docs)]
 // Allow octal-looking escapes in string literals (used in test data)
@@ -33,8 +60,8 @@ compile_error!(
     "You must enable at least one of the 'sync' or 'async' features to use this crate.\n\
      The 'async' feature is enabled by default; if you disabled default features, be sure to\n\
      opt back into either API:\n\
-         ibapi = { version = \"2.0\", default-features = false, features = [\"sync\"] }\n\
-         ibapi = { version = \"2.0\", default-features = false, features = [\"async\"] }\n\
+         ibapi = { version = \"3.0\", default-features = false, features = [\"sync\"] }\n\
+         ibapi = { version = \"3.0\", default-features = false, features = [\"async\"] }\n\
      You may also enable both to access the synchronous API under `client::blocking`."
 );
 
@@ -63,7 +90,7 @@ pub(crate) mod connection;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
 /// use ibapi::{Client, StartupMessage};
 /// use std::sync::{Arc, Mutex};
 ///

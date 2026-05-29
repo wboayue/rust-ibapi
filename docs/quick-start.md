@@ -38,18 +38,16 @@ When both features are enabled, the async client remains on `client::Client` and
 
 Add to your `Cargo.toml`:
 
-v3.0 is not yet on crates.io. Install from git while it's in development; v2.x users should pin a `2.0` version from crates.io instead.
-
 ```toml
 [dependencies]
-# Default async client (v3.0 from git)
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main" }
+# Default async client
+ibapi = "3.0"
 
 # Sync-only (disable defaults)
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", branch = "main", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync", "async"] }
 ```
 
 ### For Development
