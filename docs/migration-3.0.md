@@ -11,7 +11,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
 - `OrderStatus.status` and `OrderState.status` are now typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (a strict 9-variant enum) instead of `String`. New `is_active()` / `is_terminal()` helpers replace magic-string compares.
 - The text wire protocol is gone; v3.0 is protobuf-only and requires a TWS/IB Gateway with server version **213 (`PROTOBUF_REST_MESSAGES_3`) or later**. Older servers are rejected with `Error::ServerVersion` immediately after the handshake.
-- `Contract` is `#[non_exhaustive]`. Build via the typed entry points (`Contract::stock`/`call`/`put`/`futures`/`forex`/`crypto`/`index`/`bond_*`/`spread`) or `ContractBuilder::new()` for the field-minimal escape hatch. Bare `Contract { … ..Default::default() }` no longer compiles outside the crate.
+- `Contract`'s strongly-typed fields (`Symbol`, `Option<OptionRight>`, `Option<SecurityIdType>`, …) mean 2.x string-literal construction no longer compiles. Build via the typed entry points (`Contract::stock`/`call`/`put`/`futures`/`forex`/`crypto`/`index`/`bond_*`/`spread`) or `ContractBuilder::new()`; a bare struct literal with `..Default::default()` still works when you need full control.
 
 ## Notification handling: the new shape
 
@@ -202,12 +202,12 @@ let sub = client.realtime_bars(&contract).trading_hours(TradingHours::Extended).
 
 Defaults: `WhatToShow::Trades`, `TradingHours::Regular`, no extra options. Chain `.what_to_show(_)`, `.trading_hours(_)`, `.options(_)` to override. The reserved `options: Vec<TagValue>` parameter — previously async-only — is now reachable from the sync side too, fixing the asymmetry called out in #486. The `BarSize` parameter is gone: TWS only accepts 5-second bars on the wire, so it never had per-call meaning. A `.bar_size(...)` method can be added non-breakingly if IB ever expands support.
 
-### 8. `Contract` is `#[non_exhaustive]`
+### 8. Build `Contract` via typed constructors
 
-`Contract` has gained `#[non_exhaustive]`, so external crates can no longer build it via struct literal syntax. The typed entry points on `Contract` are the canonical path; the field-minimal `ContractBuilder::new()` is the escape hatch when no typed builder fits.
+`Contract`'s fields are now strongly typed (`Symbol`, `Option<OptionRight>`, `Option<SecurityIdType>`, `Exchange`, `Currency`, …), so 2.x struct literals that assigned raw `String`s no longer compile. The typed entry points on `Contract` are the canonical path; the field-minimal `ContractBuilder::new()` is the escape hatch when no typed builder fits. `Contract` is still an ordinary struct — a bare `Contract { … ..Default::default() }` literal continues to work when you need full control, you just spell the fields with their new types.
 
 ```rust,ignore
-// v2.x — no longer compiles outside the crate
+// v2.x — raw String fields no longer compile
 let c = Contract {
     symbol: Symbol::from("AAPL"),
     security_type: SecurityType::Stock,
