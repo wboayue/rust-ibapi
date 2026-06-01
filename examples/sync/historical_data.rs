@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_data
+//! cargo run --features sync --example historical_data -- <STOCK_SYMBOL> [--connection_string <HOST:PORT>]
 //! ```
 
 use clap::{arg, Command};
@@ -17,7 +17,7 @@ fn main() {
     env_logger::init();
 
     let matches = Command::new("historical_data")
-        .about("Get last 30 days of daily data for given stock")
+        .about("Get one day of hourly trade bars for the given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .get_matches();
