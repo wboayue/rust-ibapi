@@ -147,29 +147,20 @@ impl SecurityType {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Contract describes an instrument's definition.
 ///
-/// This struct is `#[non_exhaustive]` — external callers must build it through one
-/// of the typed entry points (`Contract::stock`, `Contract::call`, `Contract::put`,
+/// Prefer the typed entry points (`Contract::stock`, `Contract::call`, `Contract::put`,
 /// `Contract::futures`, `Contract::forex`, `Contract::crypto`, `Contract::index`,
 /// `Contract::bond_cusip`, `Contract::bond_isin`, `Contract::spread`) or the
-/// field-minimal [`ContractBuilder::new`] when the typed builders don't fit.
-/// Bare `Contract { … ..Default::default() }` literal syntax is rejected at the
-/// crate boundary.
+/// field-minimal [`ContractBuilder::new`] — they set the correct field types and
+/// sensible defaults for you. A bare struct literal with `..Default::default()` also
+/// works when you need full control over individual fields.
 ///
 /// # Example
 ///
-/// ```compile_fail,E0639
-/// use ibapi::contracts::{Contract, SecurityType, Symbol};
-/// // Fails with E0639: cannot create non-exhaustive struct from outside its
-/// // defining crate. Pinning the error code here means a future rustc change
-/// // (or accidental removal of `#[non_exhaustive]`) surfaces as a doc-test
-/// // failure rather than silently "passing for the wrong reason."
-/// let c = Contract {
-///     symbol: Symbol::from("AAPL"),
-///     security_type: SecurityType::Stock,
-///     ..Default::default()
-/// };
 /// ```
-#[non_exhaustive]
+/// use ibapi::contracts::Contract;
+///
+/// let contract = Contract::stock("AAPL").build();
+/// ```
 pub struct Contract {
     /// The unique IB contract identifier.
     pub contract_id: i32,
