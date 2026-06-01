@@ -1,11 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::order_builder::PeggedToBenchmark;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi::Error;
+use ibapi::{Error, NoticeCategory};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -201,16 +201,37 @@ fn cancel_bracket_order() {
     rate_limit();
     let cancel_sub = client.cancel_order(ids.parent.0, "").expect("cancel_order failed");
 
-    let item = cancel_sub
-        .next_timeout(Duration::from_secs(10))
-        .expect("cancel order status timed out")
-        .expect("cancel subscription error");
-    match item {
-        SubscriptionItem::Data(CancelOrder::OrderStatus(s)) => {
-            assert_eq!(s.status, OrderStatusKind::Cancelled, "parent order should be cancelled")
+    // TWS may push the parent's current working status (Submitted / PendingCancel)
+    // before the terminal Cancelled confirmation, so drain status updates until
+    // cancellation is observed rather than asserting on the first item.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut cancelled = false;
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        let Some(item) = cancel_sub.next_timeout(remaining) else {
+            break; // timed out
+        };
+        match item.expect("cancel subscription error") {
+            SubscriptionItem::Data(CancelOrder::OrderStatus(s)) => {
+                if matches!(
+                    s.status,
+                    OrderStatusKind::Cancelled | OrderStatusKind::ApiCancelled | OrderStatusKind::Inactive
+                ) {
+                    cancelled = true;
+                    break;
+                }
+                // ignore transitional statuses (Submitted, PreSubmitted, PendingCancel, ...)
+            }
+            SubscriptionItem::Notice(n) => {
+                // Only a cancellation confirmation (code 202) counts; an unrelated
+                // warning could otherwise mask a failed cancel.
+                if n.category() == NoticeCategory::Cancellation {
+                    cancelled = true;
+                    break;
+                }
+            }
         }
-        SubscriptionItem::Notice(_) => {} // cancellation notice is also acceptable
     }
+    assert!(cancelled, "parent order should be cancelled");
 }
 
 // Regression test for https://github.com/wboayue/rust-ibapi/issues/426
