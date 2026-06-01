@@ -4,7 +4,7 @@
 [![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
 [![Coverage Status](https://coveralls.io/repos/github/wboayue/rust-ibapi/badge.png?branch=main)](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
 
-> **Branch notice:** The `main` branch is now tracking **v3.0** development. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
+> **Branch notice:** The `main` branch is the **v3.0** release line. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
 ## What's new in 3.0
 
