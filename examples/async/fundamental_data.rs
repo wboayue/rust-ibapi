@@ -5,7 +5,7 @@
 //! ratios, etc.) for a contract. The response is an XML payload.
 //!
 //! ```bash
-//! cargo run --example fundamental_data
+//! cargo run --example async_fundamental_data
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled.

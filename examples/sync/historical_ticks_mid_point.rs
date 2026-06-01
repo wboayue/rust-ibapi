@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_ticks_mid_point
+//! cargo run --features sync --example historical_ticks_mid_point -- <INTERVAL_START> <STOCK_SYMBOL> [--number_of_ticks <N>] [--connection_string <HOST:PORT>]
 //! ```
 
 use clap::{arg, Command};
@@ -22,17 +22,21 @@ fn main() {
         .arg(
             arg!(<INTERVAL_START>)
                 .required(true)
-                .help("time at start of interval for tick. e.g. 20240415T12:00:00"),
+                .help("time at start of interval for tick. e.g. 20240415T12:00:00Z"),
         )
         .arg(arg!(<STOCK_SYMBOL>).required(true).help("stock symbol to retrieve data for"))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
-        .arg(arg!(--number_of_ticks <VALUE>).default_value("100"))
+        .arg(
+            arg!(--number_of_ticks <VALUE>)
+                .default_value("100")
+                .value_parser(clap::value_parser!(i32)),
+        )
         .get_matches();
 
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let interval_raw = matches.get_one::<String>("INTERVAL_START").expect("interval start is required");
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
-    let number_of_ticks = 10;
+    let number_of_ticks = matches.get_one::<i32>("number_of_ticks").expect("number of ticks required");
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
@@ -40,7 +44,7 @@ fn main() {
     let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let ticks = client
-        .historical_ticks(&contract, number_of_ticks)
+        .historical_ticks(&contract, *number_of_ticks)
         .starting(interval_start)
         .mid_point()
         .expect("historical data request failed");
