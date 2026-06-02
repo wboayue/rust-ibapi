@@ -95,16 +95,23 @@ fn test_futures_builder_with_manual_expiry() {
 #[test]
 fn test_futures_builder_any_month() {
     // Open query: month-less futures for an enumerate-all contract_details lookup.
-    let query = Contract::futures("ES").on_exchange("CME").in_currency("USD").any_month().build();
+    // Setters applied *before* .any_month() (on the Missing state).
+    let query = Contract::futures("ES").on_exchange("NYMEX").in_currency("EUR").any_month().build();
 
     assert_eq!(query.symbol, Symbol::from("ES"));
     assert_eq!(query.security_type, SecurityType::Future);
     assert!(query.last_trade_date_or_contract_month.is_empty());
-    assert_eq!(query.exchange, Exchange::from("CME"));
-    assert_eq!(query.currency, Currency::from("USD"));
+    assert_eq!(query.exchange, Exchange::from("NYMEX"));
+    assert_eq!(query.currency, Currency::from("EUR"));
     assert_eq!(query.multiplier, "");
 
-    // Optional setters compose with the month-less state.
+    // Defaults are copied through .any_month() when no setters are applied.
+    let defaults = Contract::futures("ES").any_month().build();
+    assert!(defaults.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(defaults.exchange, Exchange::from("CME"));
+    assert_eq!(defaults.currency, Currency::from("USD"));
+
+    // Setters also compose *after* .any_month() (on the AnyMonth state).
     let with_multiplier = Contract::futures("ES").any_month().multiplier(50).build();
     assert!(with_multiplier.last_trade_date_or_contract_month.is_empty());
     assert_eq!(with_multiplier.multiplier, "50");
