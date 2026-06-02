@@ -31,7 +31,7 @@ If you don't care about notices, two convenience accessors ship per side:
 | Side  | Data only                         | Data + notices               |
 |-------|-----------------------------------|------------------------------|
 | Sync  | `iter_data()` / `next_data()`     | `iter()` / `next()`          |
-| Async | `data_stream()` / `next_data()`   | `stream()` / `next()`        |
+| Async | `filter_data().next()`            | `next()` (via `StreamExt`)   |
 
 Filtered notices are logged at `warn!`, so dropping to `iter_data()` does not silently swallow problems.
 
@@ -110,12 +110,17 @@ while let Some(bar) = subscription.next().await {
 ```
 
 ```rust,ignore
+// `use ibapi::prelude::*;` brings `StreamExt` (for `next()`) and
+// `SubscriptionItemStreamExt` (for `filter_data()`) into scope.
+use ibapi::prelude::*;
+
 // v3.0 — data only
-while let Some(Ok(bar)) = subscription.next_data().await {
+let mut data = subscription.filter_data();
+while let Some(Ok(bar)) = data.next().await {
     println!("bar: {bar:?}");
 }
 
-// v3.0 — full envelope
+// v3.0 — full envelope (next() comes from StreamExt, not an inherent method)
 while let Some(item) = subscription.next().await {
     match item {
         Ok(SubscriptionItem::Data(bar))    => println!("bar: {bar:?}"),
@@ -125,7 +130,7 @@ while let Some(item) = subscription.next().await {
 }
 ```
 
-`subscription.stream()` and `subscription.data_stream()` provide `futures::Stream` adapters with the same data/full split.
+The async `Subscription<T>` *is* a `futures::Stream`: `subscription.next()` (via `StreamExt`) yields the full envelope, and `subscription.filter_data()` returns a data-only `Stream` you drive with `.next().await`.
 
 ### 4. Per-T `Notice`/`Message` variants removed
 
@@ -1156,7 +1161,7 @@ Distinct from `Error::ConnectionRejected` (handshake-time refusal, above) and th
 
 ## Quick migration checklist
 
-1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
+1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.filter_data()` + `.next().await` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
 2. Use `for item in &subscription { match item { Ok(SubscriptionItem::Data(_))..., Ok(SubscriptionItem::Notice(_))..., Err(_)... } }` when you want full visibility.
 3. Replace `subscription.error()` / `subscription.clear_error()` with pattern-matching on the `Err` arm of `next()`.
 4. Drop any `match` arms for `PlaceOrder::Message` / `OrderUpdate::Message` / similar per-T notice variants — those arms are unreachable and the variants are gone. Route per-order notices via `SubscriptionItem::Notice` and global notices via `Client::notice_stream()`.
