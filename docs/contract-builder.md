@@ -162,6 +162,14 @@ let zc_futures = Contract::futures("ZC")
     .expires_in(ContractMonth::new(2024, 12))
     .on_exchange("ECBOT")
     .build();
+
+// Month-less open query — enumerate every listing via contract_details(..)
+// and resolve/roll the front month yourself from each real_expiration_date.
+let es_query = Contract::futures("ES")
+    .on_exchange("CME")
+    .in_currency("USD")
+    .any_month()
+    .build();
 ```
 
 **Note:** The futures builder leaves the multiplier field empty by default, allowing TWS to determine the correct value. Use `.multiplier()` only when needed for non-standard contracts.

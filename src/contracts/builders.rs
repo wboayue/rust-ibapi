@@ -263,6 +263,33 @@ impl FuturesBuilder<Symbol, Missing> {
     pub fn next_quarter(self) -> FuturesBuilder<Symbol, ContractMonth> {
         self.expires_in(ContractMonth::next_quarter())
     }
+
+    /// Leave the contract month unspecified for an open `contract_details` query.
+    ///
+    /// Use this when the month is what you are discovering: pass the resulting contract to
+    /// `contract_details(..)` to enumerate every listing, then pick or roll the front month
+    /// yourself from each `real_expiration_date`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let query = Contract::futures("ES")
+    ///     .on_exchange("CME")
+    ///     .in_currency("USD")
+    ///     .any_month()
+    ///     .build();
+    /// ```
+    pub fn any_month(self) -> FuturesBuilder<Symbol, AnyMonth> {
+        FuturesBuilder {
+            symbol: self.symbol,
+            contract_month: AnyMonth,
+            exchange: self.exchange,
+            currency: self.currency,
+            multiplier: self.multiplier,
+        }
+    }
 }
 
 impl<M> FuturesBuilder<Symbol, M> {
@@ -292,6 +319,32 @@ impl FuturesBuilder<Symbol, ContractMonth> {
             symbol: self.symbol,
             security_type: SecurityType::Future,
             last_trade_date_or_contract_month: self.contract_month.to_string(),
+            exchange: self.exchange,
+            currency: self.currency,
+            multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+}
+
+impl FuturesBuilder<Symbol, AnyMonth> {
+    /// Finalize a month-less futures contract for an open `contract_details` query.
+    ///
+    /// The contract month is left empty so the contract enumerates every listing rather than
+    /// targeting one expiration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let query = Contract::futures("ES").in_currency("USD").any_month().build();
+    /// ```
+    pub fn build(self) -> Contract {
+        Contract {
+            symbol: self.symbol,
+            security_type: SecurityType::Future,
+            // last_trade_date_or_contract_month left empty (open query)
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
