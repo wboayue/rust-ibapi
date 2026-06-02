@@ -212,7 +212,7 @@ async fn main() {
 
 ### Requesting Realtime Market Data
 
-These examples use `iter_data()` / `data_stream()` to focus on bars; per-subscription notices are filtered (and logged at `warn!`). See [Handling notifications](#handling-notifications) for the pattern when you also want to observe `Notice` items.
+These examples use `iter_data()` (sync) / `filter_data()` (async) to focus on bars; per-subscription notices are filtered (and logged at `warn!`). See [Handling notifications](#handling-notifications) for the pattern when you also want to observe `Notice` items.
 
 #### Sync Example
 
