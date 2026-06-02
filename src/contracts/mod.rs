@@ -304,6 +304,16 @@ impl Contract {
     ///     .expires_in(ContractMonth::new(2024, 3))
     ///     .build();
     /// ```
+    ///
+    /// For an open `contract_details` query, end with [`any_month`](FuturesBuilder::any_month)
+    /// instead of a specific month. A month *terminal* is still required — calling `build()`
+    /// straight after `futures(..)` does not compile:
+    ///
+    /// ```compile_fail,E0599
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let es = Contract::futures("ES").build(); // no `build` without a month terminal
+    /// ```
     pub fn futures(symbol: impl Into<Symbol>) -> FuturesBuilder<Symbol, Missing> {
         FuturesBuilder::new(symbol)
     }

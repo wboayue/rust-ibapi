@@ -242,6 +242,8 @@ let warrant = ContractBuilder::new()
 
 **Escape-hatch invariant.** Every `pub` field on `Contract` is settable on `ContractBuilder` (including `last_trade_date`, which servers overwrite on contract-details round-trips). A regression test at `src/contracts/common/contract_builder/tests.rs::setter_parity_with_contract_fields` enforces this — when a new `Contract` field lands without a corresponding setter, the test fails to compile.
 
+**Month-less futures (open `contract_details` query).** In 2.x you built a month-less futures contract with a struct literal (empty `last_trade_date_or_contract_month`) to enumerate every listing and resolve the front month yourself. In 3.0 the typed builder expresses this with `.any_month()` — `Contract::futures("ES").on_exchange("CME").any_month().build()`. The terminal is explicit on purpose: the type-state still rejects a *forgotten* month (`Contract::futures("ES").build()` does not compile).
+
 The wrapper types `Symbol`, `Exchange`, `Currency` now implement `PartialEq<str>` / `PartialEq<&str>` (both directions), so `contract.symbol == "AAPL"` works without `.as_str()`.
 
 ### 9. `ComboLeg.action` typed as `LegAction`
