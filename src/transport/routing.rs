@@ -135,9 +135,21 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
     }
 }
 
-/// Check if an error code is a warning
+/// Error codes that are advisory notices about *market data*, not subscription
+/// terminators. IB delivers these on the same error channel as hard errors, but
+/// they precede — rather than replace — the data: `10167` ("Requested market
+/// data is not subscribed. Displaying delayed market data.") is followed ~a few
+/// hundred ms later by the delayed ticks. Classifying it as a terminating error
+/// ends the subscription before those ticks arrive, so a `snapshot=true` or a
+/// short streaming request for an unsubscribed symbol resolves empty. Treating
+/// it as a (non-terminating) warning keeps the stream open to receive them.
+/// Genuine "no data" / subscription-rejection codes (200, 354, 10089, 10168,
+/// 10197, …) are intentionally NOT listed here — they remain terminal.
+pub(crate) const ADVISORY_MARKET_DATA_CODES: &[i32] = &[10167];
+
+/// Check if an error code is a warning (a non-terminating notice).
 pub(crate) fn is_warning_error(error_code: i32) -> bool {
-    WARNING_CODE_RANGE.contains(&error_code)
+    WARNING_CODE_RANGE.contains(&error_code) || ADVISORY_MARKET_DATA_CODES.contains(&error_code)
 }
 
 /// Request ID for unspecified errors

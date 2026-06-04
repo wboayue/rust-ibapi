@@ -190,6 +190,17 @@ fn test_is_warning_error() {
     assert!(!is_warning_error(2170));
     assert!(!is_warning_error(200));
     assert!(!is_warning_error(2200));
+
+    // Advisory market-data notices are non-terminating: 10167 ("displaying
+    // delayed market data") precedes the delayed ticks, so it must not end the
+    // subscription.
+    assert!(is_warning_error(10167));
+
+    // Genuine no-data / subscription-rejection codes stay terminal.
+    assert!(!is_warning_error(354));
+    assert!(!is_warning_error(10089));
+    assert!(!is_warning_error(10168));
+    assert!(!is_warning_error(10197));
 }
 
 /// Order-message routing for message types that lack an order_id at the proto
