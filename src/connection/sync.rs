@@ -1,12 +1,13 @@
 //! Synchronous connection implementation
 
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use log::{debug, info};
 
 use super::common::{
-    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
-    StartupMessage,
+    parse_connection_time, parse_raw_message, reconnect_client_id, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol,
+    StartupHandshakeContext, StartupMessage,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -21,6 +22,7 @@ type Response = Result<ResponseMessage, Error>;
 /// Synchronous connection to TWS
 pub struct Connection<S: Stream> {
     pub(crate) client_id: i32,
+    pub(crate) active_client_id: AtomicI32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
     pub(crate) max_retries: i32,
@@ -39,6 +41,7 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Connection")
             .field("client_id", &self.client_id)
+            .field("active_client_id", &self.active_client_id.load(Ordering::Acquire))
             .field("connection_metadata", &self.connection_metadata)
             .field("max_retries", &self.max_retries)
             .field("startup_callback", &self.startup_callback.is_some())
@@ -78,6 +81,7 @@ impl<S: Stream> Connection<S> {
     ) -> Self {
         Self {
             client_id,
+            active_client_id: AtomicI32::new(client_id),
             socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,
@@ -125,6 +129,7 @@ impl<S: Stream> Connection<S> {
                 Ok(_) => {
                     info!("reconnected !!!");
                     self.reset_connection_metadata();
+                    self.refresh_active_client_id();
                     self.establish_connection()?;
 
                     return Ok(());
@@ -144,6 +149,13 @@ impl<S: Stream> Connection<S> {
             client_id: self.client_id,
             ..Default::default()
         };
+    }
+
+    fn refresh_active_client_id(&self) {
+        let current_client_id = self.active_client_id.load(Ordering::Acquire);
+        let client_id = reconnect_client_id(self.client_id, current_client_id);
+        self.active_client_id.store(client_id, Ordering::Release);
+        info!("using client id {client_id} for reconnect handshake");
     }
 
     /// Establish connection to TWS
@@ -235,7 +247,8 @@ impl<S: Stream> Connection<S> {
     // asks server to start processing messages
     pub(crate) fn start_api(&self) -> Result<(), Error> {
         let server_version = self.server_version();
-        let data = self.connection_handler.format_start_api(self.client_id, server_version);
+        let client_id = self.active_client_id.load(Ordering::Acquire);
+        let data = self.connection_handler.format_start_api(client_id, server_version);
         self.write_raw(&data)?;
         Ok(())
     }
@@ -282,6 +295,7 @@ impl<S: Stream> Connection<S> {
     pub(crate) fn stubbed(socket: S, client_id: i32) -> Connection<S> {
         Connection {
             client_id,
+            active_client_id: AtomicI32::new(client_id),
             socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,

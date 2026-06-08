@@ -215,6 +215,28 @@ fn reconnect_clears_metadata_while_waiting_for_handshake() {
     assert_eq!(metadata.time_zone, Some(timezones::db::EST));
 }
 
+#[test]
+fn reconnect_uses_fresh_active_client_id() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+
+    let initial_active_client_id = connection.active_client_id.load(std::sync::atomic::Ordering::Acquire);
+    assert_eq!(initial_active_client_id, CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.reconnect().expect("reconnect failed");
+
+    let reconnect_active_client_id = connection.active_client_id.load(std::sync::atomic::Ordering::Acquire);
+    assert_ne!(reconnect_active_client_id, initial_active_client_id);
+    assert!((1000..=9999).contains(&reconnect_active_client_id));
+
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.client_id, CLIENT_ID);
+}
+
 /// A closed stream surfaces `Io(UnexpectedEof)` from `read_message`, which
 /// `handshake` must translate to `Error::ConnectionRejected` — the
 /// user-visible signal for a host allow-list mismatch.

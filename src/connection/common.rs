@@ -1,5 +1,8 @@
 //! Common connection logic shared between sync and async implementations
 
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use log::{debug, error, info, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -14,6 +17,27 @@ use crate::messages::{
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
+
+const RECONNECT_CLIENT_ID_MIN: i32 = 1000;
+const RECONNECT_CLIENT_ID_RANGE: i32 = 9000;
+
+static RECONNECT_CLIENT_ID_COUNTER: AtomicI32 = AtomicI32::new(0);
+
+pub(crate) fn reconnect_client_id(configured_client_id: i32, active_client_id: i32) -> i32 {
+    let elapsed_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let counter = RECONNECT_CLIENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
+    let offset = ((elapsed_nanos + counter) % RECONNECT_CLIENT_ID_RANGE as u128) as i32;
+    let mut client_id = RECONNECT_CLIENT_ID_MIN + offset;
+
+    while client_id == configured_client_id || client_id == active_client_id {
+        client_id = RECONNECT_CLIENT_ID_MIN + ((client_id - RECONNECT_CLIENT_ID_MIN + 1) % RECONNECT_CLIENT_ID_RANGE);
+    }
+
+    client_id
+}
 
 /// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).

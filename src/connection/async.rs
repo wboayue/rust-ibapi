@@ -7,8 +7,8 @@ use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
-    StartupMessage,
+    parse_connection_time, parse_raw_message, reconnect_client_id, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol,
+    StartupHandshakeContext, StartupMessage,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -25,6 +25,7 @@ type Response = Result<ResponseMessage, Error>;
 /// an in-memory stream to drive the bus deterministically.
 pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) client_id: i32,
+    pub(crate) active_client_id: AtomicI32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
     pub(crate) server_version_cache: AtomicI32,
@@ -43,6 +44,7 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AsyncConnection")
             .field("client_id", &self.client_id)
+            .field("active_client_id", &self.active_client_id.load(Ordering::Acquire))
             .field("server_version_cache", &self.server_version_cache.load(Ordering::Acquire))
             .field("startup_callback", &self.startup_callback.is_some())
             .finish()
@@ -78,6 +80,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     ) -> Self {
         Self {
             client_id,
+            active_client_id: AtomicI32::new(client_id),
             socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,
@@ -142,6 +145,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
                 Ok(_) => {
                     info!("reconnected !!!");
                     self.reset_connection_metadata().await;
+                    self.refresh_active_client_id();
                     self.establish_connection().await?;
                     return Ok(());
                 }
@@ -162,6 +166,13 @@ impl<S: AsyncStream> AsyncConnection<S> {
             client_id: self.client_id,
             ..Default::default()
         };
+    }
+
+    fn refresh_active_client_id(&self) {
+        let current_client_id = self.active_client_id.load(Ordering::Acquire);
+        let client_id = reconnect_client_id(self.client_id, current_client_id);
+        self.active_client_id.store(client_id, Ordering::Release);
+        info!("using client id {client_id} for reconnect handshake");
     }
 
     /// Establish connection to TWS
@@ -248,7 +259,8 @@ impl<S: AsyncStream> AsyncConnection<S> {
     // asks server to start processing messages
     pub(crate) async fn start_api(&self) -> Result<(), Error> {
         let server_version = self.server_version();
-        let data = self.connection_handler.format_start_api(self.client_id, server_version);
+        let client_id = self.active_client_id.load(Ordering::Acquire);
+        let data = self.connection_handler.format_start_api(client_id, server_version);
         self.write_raw(&data).await?;
         Ok(())
     }

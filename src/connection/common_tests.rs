@@ -7,6 +7,17 @@ use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
 
 const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
+#[test]
+fn test_reconnect_client_id_excludes_configured_and_active_ids() {
+    for _ in 0..100 {
+        let client_id = reconnect_client_id(1000, 1001);
+
+        assert!((1000..=9999).contains(&client_id));
+        assert_ne!(client_id, 1000);
+        assert_ne!(client_id, 1001);
+    }
+}
+
 /// Test sink that drops every notice. Used when the test cares about the
 /// startup callback, not the notice fan-out.
 #[derive(Default)]

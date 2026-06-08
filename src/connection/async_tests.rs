@@ -285,3 +285,25 @@ async fn reconnect_clears_metadata_while_waiting_for_handshake() {
     assert_eq!(metadata.managed_accounts, "DU1234567");
     assert_eq!(metadata.time_zone, Some(timezones::db::EST));
 }
+
+#[tokio::test]
+async fn reconnect_uses_fresh_active_client_id() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("initial establish_connection failed");
+
+    let initial_active_client_id = connection.active_client_id.load(std::sync::atomic::Ordering::Acquire);
+    assert_eq!(initial_active_client_id, CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.reconnect().await.expect("reconnect failed");
+
+    let reconnect_active_client_id = connection.active_client_id.load(std::sync::atomic::Ordering::Acquire);
+    assert_ne!(reconnect_active_client_id, initial_active_client_id);
+    assert!((1000..=9999).contains(&reconnect_active_client_id));
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.client_id, CLIENT_ID);
+}
