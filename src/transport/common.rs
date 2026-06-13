@@ -7,9 +7,25 @@ use log::{error, info, warn};
 use crate::messages::Notice;
 use crate::subscriptions::common::RoutedItem;
 
+/// Codes within `WARNING_CODE_RANGE` that report healthy data-farm
+/// connectivity (e.g. "Market data farm connection is OK") rather than a
+/// problem. IB's message-codes reference classifies these as System
+/// Notifications, not warnings, so they're logged at info instead of warn.
+const BENIGN_CONNECTIVITY_CODES: [i32; 3] = [
+    2104, // Market data farm connection is OK
+    2106, // HMDS data farm connection is OK
+    2158, // Sec-def data farm connection is OK
+];
+
+fn is_benign_connectivity_notice(code: i32) -> bool {
+    BENIGN_CONNECTIVITY_CODES.contains(&code)
+}
+
 /// Log an unrouted notice (no subscription owner) at the appropriate severity.
 pub(crate) fn log_unrouted_notice(notice: &Notice) {
-    if notice.is_warning() {
+    if is_benign_connectivity_notice(notice.code) {
+        info!("{notice}");
+    } else if notice.is_warning() {
         warn!("warning: {notice}");
     } else {
         error!("error: {notice}");
