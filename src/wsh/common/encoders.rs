@@ -25,7 +25,7 @@ pub(in crate::wsh) fn encode_request_wsh_event_data(
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
-    let format = time::format_description::parse("[year][month][day]").unwrap();
+    let format = time::format_description::parse_borrowed::<2>("[year][month][day]").unwrap();
     let request = crate::proto::WshEventDataRequest {
         req_id: Some(request_id),
         con_id: contract_id,
