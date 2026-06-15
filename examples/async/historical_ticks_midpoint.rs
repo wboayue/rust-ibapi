@@ -41,13 +41,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let number_of_ticks = 1000; // Max 1000 ticks per request
     let trading_hours = TradingHours::Extended; // Include all hours for forex
 
+    // `filter_data()` drops notices and yields `Result<_, Error>`; `?` propagates
+    // a mid-stream error instead of letting it masquerade as end-of-data.
     let mut tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .starting(start)
         .ending(end)
         .trading_hours(trading_hours)
         .mid_point()
-        .await?;
+        .await?
+        .filter_data();
 
     println!("Time range: {} to {}", start, end);
     println!("\nTime                     | Midpoint Price");
@@ -58,6 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process all historical ticks
     while let Some(tick) = tick_subscription.next().await {
+        let tick = tick?;
         tick_count += 1;
         prices.push(tick.price);
 
@@ -101,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n\nExample 2: Recent midpoint ticks (last hour)");
     let contract2 = Contract::stock("AAPL").build();
 
-    let mut tick_subscription2 = client.historical_ticks(&contract2, 100).mid_point().await?;
+    let mut tick_subscription2 = client.historical_ticks(&contract2, 100).mid_point().await?.filter_data();
 
     println!("\nLast 10 midpoint ticks for AAPL:");
     println!("Time                     | Midpoint Price");
@@ -109,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut recent_ticks = Vec::new();
     while let Some(tick) = tick_subscription2.next().await {
-        recent_ticks.push(tick);
+        recent_ticks.push(tick?);
     }
 
     // Show last 10 ticks

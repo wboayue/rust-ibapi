@@ -6,6 +6,7 @@ Version 3.0 is a breaking release. This guide walks through the changes required
 
 - `Subscription<T>::next()` now returns `Option<Result<SubscriptionItem<T>, Error>>`. The new `SubscriptionItem<T>` enum has two arms: `Data(T)` for decoded payloads and `Notice(Notice)` for non-fatal IB notices that share the subscription's `request_id`.
 - `Subscription::error()` and `Subscription::clear_error()` are removed. Terminal errors surface as `Some(Err(_))` on the next call to `next()`; subsequent calls return `None`.
+- The historical-tick `TickSubscription<T>` now shares the same `SubscriptionItem<T>` shape: sync `next()` returns `Option<Result<SubscriptionItem<T>, Error>>` and async `TickSubscription<T>` is a `futures::Stream`. Its internal `error` accessor is gone — a mid-stream error now surfaces via the `Err` arm instead of being swallowed as a short read (see [§25](#25-historical_ticks_-trio-collapses-to-a-builder)).
 - New `Client::notice_stream()` exposes globally routed IB notices (connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc.) that are not tied to any subscription.
 - `Client::builder()` is the canonical entry point, replacing `connect_with_callback` / `connect_with_options`. Two terminals: `.connect()` and `.connect_with_notice_stream()`. `ConnectionOptions`, `StartupMessageCallback`, and `StartupNoticeCallback` are removed.
 - Per-T `Notice`/`Message` variants on `PlaceOrder`, `OrderUpdate`, etc. are gone — notices route through `SubscriptionItem::Notice` and `Client::notice_stream()`.
@@ -600,6 +601,32 @@ let quotes = client.historical_ticks(&contract, 100).starting(start).bid_ask(Ign
 ```
 
 The `ignore_size: bool` parameter (previously only valid for the bid/ask variant) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it. Other setters: `.ending(end)` to anchor at an end date, `.trading_hours(TradingHours)` to override the default `Regular`.
+
+**Consuming the result changed too.** In 2.x the returned `TickSubscription<T>` yielded bare `T` and stashed any error in a private field with no accessor, so a short batch from a decode/transport error was indistinguishable from a normal end-of-data. In 3.0 it carries the same [`SubscriptionItem<T>`](#notification-handling-the-new-shape) envelope as `Subscription<T>`, so errors surface explicitly:
+
+```rust,ignore
+// v2.x — bare T; a mid-stream error silently truncated the batch
+for tick in client.historical_ticks(&contract, 1000).trade()? {
+    println!("{tick:?}");
+}
+
+// v3.0 (sync) — iter_data() filters notices, yields Result<T, Error>
+for tick in client.historical_ticks(&contract, 1000).trade()?.iter_data() {
+    match tick {
+        Ok(tick) => println!("{tick:?}"),
+        Err(e)   => { eprintln!("error: {e}"); break; }   // no longer a silent short read
+    }
+}
+
+// v3.0 (async) — TickSubscription<T> is a Stream; filter_data() + `?` surfaces errors
+let mut ticks = client.historical_ticks(&contract, 1000).trade().await?.filter_data();
+while let Some(tick) = ticks.next().await {
+    let tick = tick?;
+    println!("{tick:?}");
+}
+```
+
+Use `next()` / `iter()` (sync) or match the stream item directly (async) when you want to observe `SubscriptionItem::Notice` arms instead of filtering them.
 
 ### 26. `historical_data` + `historical_data_streaming` collapse to a builder
 
