@@ -135,9 +135,17 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
     }
 }
 
+/// Informational 10xxx codes that TWS sends on a request which then proceeds
+/// normally. They are advisories, not failures — classifying them as errors
+/// terminates the subscription before its data arrives.
+const INFORMATIONAL_ERROR_CODES: [i32; 2] = [
+    10089, // "...requires additional subscription for API... delayed data is available"
+    10167, // "Requested market data is not subscribed. Displaying delayed market data."
+];
+
 /// Check if an error code is a warning
 pub(crate) fn is_warning_error(error_code: i32) -> bool {
-    WARNING_CODE_RANGE.contains(&error_code)
+    WARNING_CODE_RANGE.contains(&error_code) || INFORMATIONAL_ERROR_CODES.contains(&error_code)
 }
 
 /// Request ID for unspecified errors

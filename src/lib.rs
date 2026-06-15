@@ -318,7 +318,7 @@ impl ToField for Option<f64> {
 }
 
 fn date_format() -> Vec<BorrowedFormatItem<'static>> {
-    format_description::parse("[year][month][day]").unwrap()
+    format_description::parse_borrowed::<2>("[year][month][day]").unwrap()
 }
 
 static DATE_FORMAT: LazyLock<Vec<BorrowedFormatItem<'static>>> = LazyLock::new(date_format);
