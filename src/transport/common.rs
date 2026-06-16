@@ -24,7 +24,7 @@ fn is_benign_connectivity_notice(code: i32) -> bool {
 /// Log an unrouted notice (no subscription owner) at the appropriate severity.
 pub(crate) fn log_unrouted_notice(notice: &Notice) {
     if is_benign_connectivity_notice(notice.code) {
-        info!("{notice}");
+        info!("connectivity: {notice}");
     } else if notice.is_warning() {
         warn!("warning: {notice}");
     } else {
