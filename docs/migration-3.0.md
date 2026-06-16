@@ -446,7 +446,7 @@ use ibapi::contracts::Contract;
 
 ### 17. `ibapi::messages` is now opaque
 
-The user-facing types from `ibapi::messages` — `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`, and the notice-code-range constants (`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `ORDER_REJECTION_CODE_RANGE`, `ORDER_CANCELLED_CODE`, `HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`) — are now re-exported from the crate root. `Notice` and `NoticeCategory` are also in the prelude. The wire-level types (`RequestMessage`, `ResponseMessage`, length-framing helpers, message-id index helpers) are crate-private in 3.0; downstream code never had a reason to reach them.
+The user-facing types from `ibapi::messages` — `Notice`, `NoticeCategory`, `IncomingMessages`, `OutgoingMessages`, and the notice-code-range constants (`WARNING_CODE_RANGE`, `SYSTEM_MESSAGE_CODES`, `DATA_ADVISORY_CODES`, `ORDER_REJECTION_CODE_RANGE`, `ORDER_CANCELLED_CODE`, `HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`) — are now re-exported from the crate root. `Notice` and `NoticeCategory` are also in the prelude. The wire-level types (`RequestMessage`, `ResponseMessage`, length-framing helpers, message-id index helpers) are crate-private in 3.0; downstream code never had a reason to reach them.
 
 ```rust,ignore
 // v2.x

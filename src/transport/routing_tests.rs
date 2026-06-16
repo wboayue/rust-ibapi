@@ -193,16 +193,15 @@ fn test_is_warning_error() {
 }
 
 #[test]
-fn test_is_warning_error_informational_codes() {
+fn test_is_warning_error_data_advisory_codes() {
     // Delayed-data advisories: the request proceeds and data follows.
-    assert!(is_warning_error(10089));
-    assert!(is_warning_error(10167));
+    for code in DATA_ADVISORY_CODES {
+        assert!(is_warning_error(code), "advisory code {code} should route as a warning");
 
-    // Neighboring codes are real errors, not advisories.
-    assert!(!is_warning_error(10088));
-    assert!(!is_warning_error(10090));
-    assert!(!is_warning_error(10166));
-    assert!(!is_warning_error(10168));
+        // Neighboring codes are real errors, not advisories.
+        assert!(!is_warning_error(code - 1), "code {} should not route as a warning", code - 1);
+        assert!(!is_warning_error(code + 1), "code {} should not route as a warning", code + 1);
+    }
 }
 
 /// Order-message routing for message types that lack an order_id at the proto
