@@ -78,8 +78,8 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     ///     .trade()
     ///     .expect("historical ticks request failed");
     ///
-    /// for tick in ticks {
-    ///     println!("{tick:?}");
+    /// for tick in ticks.iter_data() {
+    ///     println!("{:?}", tick.expect("decode error"));
     /// }
     /// ```
     pub fn trade(self) -> Result<crate::market_data::historical::sync::TickSubscription<TickLast>, Error> {
@@ -113,8 +113,8 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     ///     .mid_point()
     ///     .expect("historical ticks request failed");
     ///
-    /// for tick in ticks {
-    ///     println!("{tick:?}");
+    /// for tick in ticks.iter_data() {
+    ///     println!("{:?}", tick.expect("decode error"));
     /// }
     /// ```
     pub fn mid_point(self) -> Result<crate::market_data::historical::sync::TickSubscription<TickMidpoint>, Error> {
@@ -150,8 +150,8 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     ///     .bid_ask(IgnoreSize::No)
     ///     .expect("historical ticks request failed");
     ///
-    /// for tick in ticks {
-    ///     println!("{tick:?}");
+    /// for tick in ticks.iter_data() {
+    ///     println!("{:?}", tick.expect("decode error"));
     /// }
     /// ```
     pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::market_data::historical::sync::TickSubscription<TickBidAsk>, Error> {
@@ -188,10 +188,11 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///         .starting(datetime!(2023-04-15 0:00 UTC))
     ///         .trade()
     ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .expect("historical ticks request failed")
+    ///         .filter_data();
     ///
     ///     while let Some(tick) = ticks.next().await {
-    ///         println!("{tick:?}");
+    ///         println!("{:?}", tick.expect("decode error"));
     ///     }
     /// }
     /// ```
@@ -227,10 +228,11 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///         .ending(datetime!(2023-04-15 0:00 UTC))
     ///         .mid_point()
     ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .expect("historical ticks request failed")
+    ///         .filter_data();
     ///
     ///     while let Some(tick) = ticks.next().await {
-    ///         println!("{tick:?}");
+    ///         println!("{:?}", tick.expect("decode error"));
     ///     }
     /// }
     /// ```
@@ -268,10 +270,11 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///         .starting(datetime!(2023-04-15 0:00 UTC))
     ///         .bid_ask(IgnoreSize::No)
     ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .expect("historical ticks request failed")
+    ///         .filter_data();
     ///
     ///     while let Some(tick) = ticks.next().await {
-    ///         println!("{tick:?}");
+    ///         println!("{:?}", tick.expect("decode error"));
     ///     }
     /// }
     /// ```

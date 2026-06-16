@@ -8,7 +8,7 @@ use crate::contracts::Contract;
 use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::{IgnoreSize, TradingHours};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -19,10 +19,37 @@ use crate::testdata::builders::market_data::{
     historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::{Signal, SubscriptionBuilder};
+use crossbeam::channel;
 use std::sync::{Arc, RwLock};
 use time::macros::{date, datetime};
 use time::OffsetDateTime;
 use time_tz::{self, PrimitiveDateTimeExt, Tz};
+
+// A request-scoped IB notice for tests (no error_time / advanced-reject payload).
+fn test_notice(code: i32, message: &str) -> Notice {
+    Notice {
+        code,
+        message: message.into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+// Build a `TickSubscription<T>` fed by `items`, with the inbound channel closed
+// after the last item. Returns the signal-channel receiver too; keep it bound
+// for the test's lifetime to silence the drop-time signal warning.
+fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubscription<T>, channel::Receiver<Signal>) {
+    let (sender, receiver) = channel::unbounded();
+    let (signaler, signal_rx) = channel::unbounded();
+    for item in items {
+        sender.send(item).unwrap();
+    }
+    drop(sender);
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9300).build();
+    let subscription = TickSubscription::new(internal, 9300, Arc::new(MessageBusStub::default()));
+    (subscription, signal_rx)
+}
 
 // Pins server_version one below `feature.min_version` and asserts the call fails
 // with the feature name in the error. Custom helper (vs. `.expect_err`) because
@@ -590,10 +617,10 @@ fn test_tick_subscription_buffer_and_iteration() {
         .trade()
         .expect("historical ticks trade request failed");
 
-    // Test standard iterator
+    // Test standard data iterator (notices filtered, errors surface via Result)
     let mut ticks = Vec::new();
-    for tick in tick_subscription.iter() {
-        ticks.push(tick);
+    for tick in tick_subscription.iter_data() {
+        ticks.push(tick.expect("decode error"));
     }
 
     // Should have received all 5 ticks from both messages
@@ -626,8 +653,11 @@ fn test_tick_subscription_owned_iterator() {
         .trade()
         .expect("historical ticks trade request failed");
 
-    // Convert to owned iterator
-    let ticks: Vec<TickLast> = tick_subscription.into_iter().collect();
+    // Convert to owned iterator — yields the SubscriptionItem envelope.
+    let ticks: Vec<TickLast> = tick_subscription
+        .into_iter()
+        .map(|item| item.expect("decode error").into_data().expect("unexpected notice"))
+        .collect();
 
     assert_eq!(ticks.len(), 2, "Expected 2 ticks from owned iterator");
     assert_eq!(ticks[0].price, 11.70, "First tick price");
@@ -655,7 +685,7 @@ fn test_tick_subscription_bid_ask() {
         .expect("historical ticks bid_ask request failed");
 
     // Collect ticks
-    let ticks: Vec<TickBidAsk> = tick_subscription.iter().collect();
+    let ticks: Vec<TickBidAsk> = tick_subscription.iter_data().map(|t| t.expect("decode error")).collect();
 
     assert_eq!(ticks.len(), 3, "Expected 3 bid/ask ticks");
 
@@ -691,7 +721,7 @@ fn test_tick_subscription_midpoint() {
         .expect("historical ticks mid_point request failed");
 
     // Collect ticks
-    let ticks: Vec<TickMidpoint> = tick_subscription.iter().collect();
+    let ticks: Vec<TickMidpoint> = tick_subscription.iter_data().map(|t| t.expect("decode error")).collect();
 
     assert_eq!(ticks.len(), 3, "Expected 3 midpoint ticks");
 
@@ -1254,8 +1284,8 @@ fn test_tick_subscription_try_next_drains_buffer() {
         .trade()
         .expect("subscription should be created");
 
-    // Drain via try_iter — each .next() goes through try_next() → next_helper(try_next).
-    let ticks: Vec<TickLast> = subscription.try_iter().collect();
+    // Drain via try_iter_data — each .next() goes through try_next() → next_helper(try_next_routed).
+    let ticks: Vec<TickLast> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
     assert_eq!(ticks.len(), 2, "should drain both ticks via try_next");
     assert_eq!(ticks[0].price, 12.00);
     assert_eq!(ticks[1].price, 12.01);
@@ -1280,8 +1310,11 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
         .trade()
         .expect("subscription should be created");
 
-    // Drive timeout_iter — each .next() goes through next_timeout() → next_helper.
-    let ticks: Vec<TickLast> = subscription.timeout_iter(std::time::Duration::from_millis(50)).collect();
+    // Drive timeout_iter_data — each .next() goes through next_timeout() → next_helper.
+    let ticks: Vec<TickLast> = subscription
+        .timeout_iter_data(std::time::Duration::from_millis(50))
+        .map(|t| t.expect("decode error"))
+        .collect();
     assert_eq!(ticks.len(), 1, "should drain the single tick");
     assert_eq!(ticks[0].price, 13.00);
 
@@ -1293,44 +1326,70 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
 }
 
 #[test]
-fn test_tick_subscription_fill_buffer_error_response_via_channel() {
-    // Inject a RoutedItem::Error directly to exercise fill_buffer's Err arm and
-    // set_error() — paths the MessageBusStub mock_request path can't reach.
-    use crate::subscriptions::common::RoutedItem;
-    use crate::transport::SubscriptionBuilder;
-    use crossbeam::channel;
+fn test_tick_subscription_error_surfaces_via_err_arm() {
+    // #675 regression guard: a mid-stream RoutedItem::Error must surface through
+    // the `Err` arm — NOT be swallowed as a silent `None` indistinguishable from
+    // end-of-data. Subsequent calls return None (stream terminated).
+    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![RoutedItem::Error(Error::Simple("injected".into()))]);
 
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let (sender, receiver) = channel::unbounded();
-    let (signaler, _signal_rx) = channel::unbounded();
-    sender.send(RoutedItem::Error(Error::Simple("injected".into()))).unwrap();
-    drop(sender);
-
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9300).build();
-
-    let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9300, message_bus);
-    assert!(subscription.next().is_none(), "Err response → set_error → next returns None");
+    match subscription.next() {
+        Some(Err(Error::Simple(msg))) => assert_eq!(msg, "injected", "error payload preserved"),
+        other => panic!("expected Some(Err(Simple)), got {other:?}"),
+    }
+    assert!(subscription.next().is_none(), "stream terminates after a terminal error");
     subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
 }
 
 #[test]
-fn test_tick_subscription_fill_buffer_none_when_channel_closes() {
-    // Channel closes with no done=true → fill_buffer(None) returns Err(()) → next returns None.
-    use crate::subscriptions::common::RoutedItem;
-    use crate::transport::SubscriptionBuilder;
-    use crossbeam::channel;
+fn test_tick_subscription_notice_passes_through_then_data() {
+    // A RoutedItem::Notice surfaces as SubscriptionItem::Notice (stream stays
+    // open); a following tick batch is delivered after it.
+    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
+        RoutedItem::Notice(test_notice(2100, "API client has been unsubscribed from account data")),
+        RoutedItem::Response(proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                .tick(historical_tick_last(1_681_133_400, 15.00, 100, "NYSE"))
+                .done(true)
+                .encode_proto(),
+        )),
+    ]);
 
-    let message_bus = Arc::new(MessageBusStub::default());
+    match subscription.next() {
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n.code, 2100),
+        other => panic!("expected a Notice, got {other:?}"),
+    }
+    match subscription.next() {
+        Some(Ok(SubscriptionItem::Data(tick))) => assert_eq!(tick.price, 15.00),
+        other => panic!("expected tick data after notice, got {other:?}"),
+    }
 
-    let (sender, receiver) = channel::unbounded::<RoutedItem>();
-    let (signaler, _signal_rx) = channel::unbounded();
-    drop(sender); // empty + closed immediately
+    // iter_data() filters the notice and yields only the tick.
+    subscription.done.store(true, Ordering::Relaxed); // already drained; avoid cancel noise
+}
 
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9301).build();
+#[test]
+fn test_tick_subscription_iter_data_filters_notice_keeps_error() {
+    // iter_data() drops the Notice but still surfaces the terminal Error.
+    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
+        RoutedItem::Notice(test_notice(2100, "warning")),
+        RoutedItem::Error(Error::Simple("boom".into())),
+    ]);
 
-    let subscription: TickSubscription<TickBidAsk> = TickSubscription::new(internal, 9301, message_bus);
-    assert!(subscription.next().is_none(), "closed channel → fill_buffer None → next returns None");
+    let mut data = subscription.iter_data();
+    match data.next() {
+        Some(Err(Error::Simple(msg))) => assert_eq!(msg, "boom", "error survives the notice filter"),
+        other => panic!("expected the error after the filtered notice, got {other:?}"),
+    }
+    assert!(data.next().is_none(), "stream ended after the error");
+    subscription.done.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn test_tick_subscription_none_when_channel_closes() {
+    // Channel closes with no done=true → next_routed() yields None → next returns None.
+    let (subscription, _signal_rx) = tick_sub_from_routed::<TickBidAsk>(vec![]); // empty + closed immediately
+    assert!(subscription.next().is_none(), "closed channel → next_routed None → next returns None");
     subscription.done.store(true, Ordering::Relaxed);
 }
 
@@ -1352,7 +1411,7 @@ fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
         .mid_point()
         .expect("subscription should be created");
 
-    let ticks_try: Vec<TickMidpoint> = subscription.try_iter().collect();
+    let ticks_try: Vec<TickMidpoint> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
     assert_eq!(ticks_try.len(), 1);
 
     // Timeout iterator after exhaustion — exercises next_timeout None path.
@@ -1375,7 +1434,7 @@ fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
         .bid_ask(IgnoreSize::No)
         .expect("subscription should be created");
 
-    let ticks_try: Vec<TickBidAsk> = subscription.try_iter().collect();
+    let ticks_try: Vec<TickBidAsk> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
     assert_eq!(ticks_try.len(), 1);
     assert!(subscription.timeout_iter(std::time::Duration::from_millis(10)).next().is_none());
 }
@@ -1401,7 +1460,10 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
         .trade()
         .expect("subscription should be created");
 
-    let tick = subscription.next().expect("should receive tick after skipping unexpected");
+    let tick = subscription
+        .next_data()
+        .expect("should receive tick after skipping unexpected")
+        .expect("decode error");
     assert_eq!(tick.price, 14.00, "wrong price");
     assert!(subscription.next().is_none(), "should be done");
 }

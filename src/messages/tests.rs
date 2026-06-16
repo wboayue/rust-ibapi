@@ -1115,6 +1115,8 @@ fn test_notice_category_partition() {
         (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200
         (*ORDER_REJECTION_CODE_RANGE.start() + 1, NoticeCategory::OrderRejection), // 201 — hard rejection
         (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
+        (DATA_ADVISORY_CODES[0], NoticeCategory::DataAdvisory),
+        (DATA_ADVISORY_CODES[1], NoticeCategory::DataAdvisory),
         (100, NoticeCategory::Error),
         (502, NoticeCategory::Error),
         (10000, NoticeCategory::Error),
@@ -1122,6 +1124,26 @@ fn test_notice_category_partition() {
 
     for &(code, expected) in cases {
         assert_eq!(notice_with_code(code).category(), expected, "code {code} miscategorised");
+    }
+}
+
+#[test]
+fn test_notice_data_advisory() {
+    // Delayed-data advisories are informational: TWS proceeds with the request
+    // and data follows, so they must not be classified as errors.
+    for code in DATA_ADVISORY_CODES {
+        let notice = notice_with_code(code);
+        assert!(notice.is_data_advisory(), "code {code} should be a data advisory");
+        assert!(notice.is_informational(), "code {code} should be informational");
+        assert!(!notice.is_error(), "code {code} should not be an error");
+        assert_eq!(notice.category(), NoticeCategory::DataAdvisory, "code {code} miscategorised");
+
+        // Neighboring codes are real errors, not advisories.
+        for neighbor in [code - 1, code + 1] {
+            let notice = notice_with_code(neighbor);
+            assert!(!notice.is_data_advisory(), "code {neighbor} should not be a data advisory");
+            assert!(notice.is_error(), "code {neighbor} should be an error");
+        }
     }
 }
 

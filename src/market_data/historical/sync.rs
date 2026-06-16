@@ -2,17 +2,19 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, warn};
+use log::{error, warn};
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::sync::Subscription;
-use crate::transport::{InternalSubscription, MessageBus, Response};
+use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
+use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
+use crate::transport::{InternalSubscription, MessageBus};
 use crate::{client::sync::Client, Error, MAX_RETRIES};
 
+use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
@@ -395,12 +397,28 @@ pub(crate) fn historical_schedule(
 // TickSubscription and related types
 
 /// Shared subscription handle that decodes historical tick batches as they arrive.
-#[must_use = "TickSubscription must be polled (.next() or .iter()) to receive ticks; dropping it cancels the request"]
+///
+/// Each [`next`](Self::next), [`try_next`](Self::try_next), or
+/// [`next_timeout`](Self::next_timeout) returns
+/// `Option<Result<SubscriptionItem<T>, Error>>`, the same shape as
+/// [`Subscription`](crate::subscriptions::Subscription):
+///
+/// * `None` — the stream has ended.
+/// * `Some(Ok(SubscriptionItem::Data(tick)))` — a decoded tick.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice bound to
+///   this request; the stream stays open.
+/// * `Some(Err(e))` — terminal error (decode or transport); subsequent calls
+///   return `None`.
+///
+/// When you only care about ticks, use [`iter_data`](Self::iter_data) (or
+/// [`next_data`](Self::next_data)), which filter notices and yield
+/// `Result<T, Error>`.
+#[must_use = "TickSubscription must be polled (.next() or .iter_data()) to receive ticks; dropping it cancels the request"]
 pub struct TickSubscription<T: TickDecoder<T>> {
     done: AtomicBool,
+    stream_ended: AtomicBool,
     messages: InternalSubscription,
     buffer: Mutex<VecDeque<T>>,
-    error: Mutex<Option<Error>>,
     request_id: i32,
     message_bus: Arc<dyn MessageBus>,
     cancelled: AtomicBool,
@@ -410,9 +428,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     fn new(messages: InternalSubscription, request_id: i32, message_bus: Arc<dyn MessageBus>) -> Self {
         Self {
             done: false.into(),
+            stream_ended: AtomicBool::new(false),
             messages,
             buffer: Mutex::new(VecDeque::new()),
-            error: Mutex::new(None),
             request_id,
             message_bus,
             cancelled: AtomicBool::new(false),
@@ -421,6 +439,18 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
     /// Cancel the historical-ticks request. Safe to call after completion (no-op).
     /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// subscription.cancel();
+    /// ```
     pub fn cancel(&self) {
         if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
@@ -437,17 +467,70 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
-    /// Return an iterator that blocks until each tick batch becomes available.
+    /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>` — both
+    /// `Data` and `Notice` arms surface to the caller. Use
+    /// [`iter_data`](Self::iter_data) when you only want ticks.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::subscriptions::SubscriptionItem;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// for item in subscription.iter() {
+    ///     match item {
+    ///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
+    ///         Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
+    ///         Err(e)                             => { eprintln!("error: {e}"); break; }
+    ///     }
+    /// }
+    /// ```
     pub fn iter(&self) -> TickSubscriptionIter<'_, T> {
         TickSubscriptionIter { subscription: self }
     }
 
-    /// Return a non-blocking iterator that yields immediately with cached ticks.
+    /// Non-blocking iterator. Same `SubscriptionItem<T>` shape as [`iter`](Self::iter);
+    /// see [`try_iter_data`](Self::try_iter_data) for the data-only variant.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// for tick in subscription.try_iter_data() {
+    ///     println!("tick: {:?}", tick.expect("decode error"));
+    /// }
+    /// ```
     pub fn try_iter(&self) -> TickSubscriptionTryIter<'_, T> {
         TickSubscriptionTryIter { subscription: self }
     }
 
-    /// Return an iterator that waits up to `duration` for each tick batch.
+    /// Iterator that waits up to `duration` for each item. Same `SubscriptionItem<T>`
+    /// shape as [`iter`](Self::iter); see [`timeout_iter_data`](Self::timeout_iter_data)
+    /// for the data-only variant.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// for tick in subscription.timeout_iter_data(Duration::from_secs(5)) {
+    ///     println!("tick: {:?}", tick.expect("decode error"));
+    /// }
+    /// ```
     pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<'_, T> {
         TickSubscriptionTimeoutIter {
             subscription: self,
@@ -455,80 +538,169 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
-    /// Block until the next tick batch is available.
-    pub fn next(&self) -> Option<T> {
-        self.next_helper(|| self.messages.next())
+    /// Blocking data iterator that filters notices and yields `Result<T, Error>`.
+    /// Notices are logged at `warn!` level.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// for tick in subscription.iter_data() {
+    ///     println!("tick: {:?}", tick.expect("decode error"));
+    /// }
+    /// ```
+    pub fn iter_data(&self) -> FilterData<TickSubscriptionIter<'_, T>> {
+        self.iter().filter_data()
     }
 
-    /// Attempt to fetch the next tick batch without blocking.
-    pub fn try_next(&self) -> Option<T> {
-        self.next_helper(|| self.messages.try_next())
+    /// Non-blocking data iterator (notices filtered).
+    pub fn try_iter_data(&self) -> FilterData<TickSubscriptionTryIter<'_, T>> {
+        self.try_iter().filter_data()
     }
 
-    /// Wait up to `duration` for the next tick batch to arrive.
-    pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
-        self.next_helper(|| self.messages.next_timeout(duration))
+    /// Timeout-bounded data iterator (notices filtered).
+    pub fn timeout_iter_data(&self, duration: std::time::Duration) -> FilterData<TickSubscriptionTimeoutIter<'_, T>> {
+        self.timeout_iter(duration).filter_data()
     }
 
-    fn next_helper<F>(&self, next_response: F) -> Option<T>
+    /// Block until the next item is available.
+    ///
+    /// Returns the `SubscriptionItem<T>` envelope; use [`next_data`](Self::next_data)
+    /// when you only want ticks.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::subscriptions::SubscriptionItem;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// while let Some(item) = subscription.next() {
+    ///     match item {
+    ///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
+    ///         Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
+    ///         Err(e)                             => { eprintln!("error: {e}"); break; }
+    ///     }
+    /// }
+    /// ```
+    pub fn next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
+        self.next_helper(|| self.messages.next_routed())
+    }
+
+    /// Attempt to fetch the next item without blocking.
+    ///
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next); returns `None`
+    /// if nothing is queued right now.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// if let Some(Ok(item)) = subscription.try_next() {
+    ///     println!("item: {item:?}");
+    /// }
+    /// ```
+    pub fn try_next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
+        self.next_helper(|| self.messages.try_next_routed())
+    }
+
+    /// Wait up to `duration` for the next item to arrive.
+    ///
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// if let Some(Ok(item)) = subscription.next_timeout(Duration::from_secs(5)) {
+    ///     println!("item: {item:?}");
+    /// }
+    /// ```
+    pub fn next_timeout(&self, duration: std::time::Duration) -> Option<Result<SubscriptionItem<T>, Error>> {
+        self.next_helper(|| self.messages.next_timeout_routed(duration))
+    }
+
+    /// Convenience: blocking `next` that filters out notices and yields just a tick.
+    /// Equivalent to `iter_data().next()`. Filtered notices are logged at `warn!`.
+    /// Use [`next`](Self::next) instead if you want to observe `Notice` items.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// while let Some(tick) = subscription.next_data() {
+    ///     println!("tick: {:?}", tick.expect("decode error"));
+    /// }
+    /// ```
+    pub fn next_data(&self) -> Option<Result<T, Error>> {
+        self.iter_data().next()
+    }
+
+    fn next_helper<F>(&self, next_routed: F) -> Option<Result<SubscriptionItem<T>, Error>>
     where
-        F: Fn() -> Option<Response>,
+        F: Fn() -> Option<RoutedItem>,
     {
-        self.clear_error();
-
         loop {
-            if let Some(message) = self.next_buffered() {
-                return Some(message);
+            if let Some(tick) = self.next_buffered() {
+                return Some(Ok(SubscriptionItem::Data(tick)));
             }
 
-            if self.done.load(Ordering::Relaxed) {
+            // `done` (decoder said this was the last batch) and `stream_ended`
+            // (terminal error/EndOfStream) are distinct: the former is graceful
+            // completion, the latter is termination. Either ends the stream once
+            // the buffer is drained.
+            if self.done.load(Ordering::Relaxed) || self.stream_ended.load(Ordering::Relaxed) {
                 return None;
             }
 
-            match self.fill_buffer(next_response()) {
-                Ok(()) => {}
-                Err(()) => return None,
-            }
-        }
-    }
+            let item = next_routed()?;
 
-    fn fill_buffer(&self, response: Option<Response>) -> Result<(), ()> {
-        match response {
-            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
-                let mut buffer = self.buffer.lock().unwrap();
-
-                let (ticks, done) = T::decode(&message).unwrap();
-
-                buffer.append(&mut ticks.into());
-                self.done.store(done, Ordering::Relaxed);
-
-                Ok(())
+            match classify::<T>(item) {
+                TickAction::Batch(ticks, done) => {
+                    self.buffer.lock().unwrap().extend(ticks);
+                    self.done.store(done, Ordering::Relaxed);
+                }
+                TickAction::Skip => {}
+                TickAction::Notice(notice) => return Some(Ok(SubscriptionItem::Notice(notice))),
+                TickAction::EndOfStream => {
+                    self.stream_ended.store(true, Ordering::Relaxed);
+                    return None;
+                }
+                TickAction::Error(e) => {
+                    self.stream_ended.store(true, Ordering::Relaxed);
+                    return Some(Err(e));
+                }
             }
-            Some(Ok(message)) => {
-                debug!("unexpected message: {message:?}");
-                Ok(())
-            }
-            Some(Err(e)) => {
-                self.set_error(e);
-                Err(())
-            }
-            None => Err(()),
         }
     }
 
     fn next_buffered(&self) -> Option<T> {
         let mut buffer = self.buffer.lock().unwrap();
         buffer.pop_front()
-    }
-
-    fn set_error(&self, e: Error) {
-        let mut error = self.error.lock().unwrap();
-        *error = Some(e);
-    }
-
-    fn clear_error(&self) {
-        let mut error = self.error.lock().unwrap();
-        *error = None;
     }
 }
 
@@ -540,13 +712,13 @@ impl<T: TickDecoder<T>> Drop for TickSubscription<T> {
     }
 }
 
-/// An iterator that yields items as they become available, blocking if necessary.
+/// A blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next()
@@ -554,7 +726,7 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionIter<'_, T> {
 }
 
 impl<'a, T: TickDecoder<T>> IntoIterator for &'a TickSubscription<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
     type IntoIter = TickSubscriptionIter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -562,13 +734,13 @@ impl<'a, T: TickDecoder<T>> IntoIterator for &'a TickSubscription<T> {
     }
 }
 
-/// An iterator that yields items as they become available, blocking if necessary.
+/// An owned blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 pub struct TickSubscriptionOwnedIter<T: TickDecoder<T>> {
     subscription: TickSubscription<T>,
 }
 
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionOwnedIter<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next()
@@ -576,7 +748,7 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionOwnedIter<T> {
 }
 
 impl<T: TickDecoder<T>> IntoIterator for TickSubscription<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
     type IntoIter = TickSubscriptionOwnedIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -584,27 +756,27 @@ impl<T: TickDecoder<T>> IntoIterator for TickSubscription<T> {
     }
 }
 
-/// An iterator that yields items if they are available, without waiting.
+/// A non-blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 pub struct TickSubscriptionTryIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.try_next()
     }
 }
 
-/// An iterator that waits for the specified timeout duration for available data.
+/// An iterator that waits for the specified timeout duration for each item.
 pub struct TickSubscriptionTimeoutIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
     timeout: std::time::Duration,
 }
 
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next_timeout(self.timeout)
