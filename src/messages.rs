@@ -1110,6 +1110,15 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 /// - 1300: Socket port reset during active connection
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
+/// Data-advisory codes that TWS sends on a request which then proceeds
+/// normally. The request is *not* rejected — the advisory announces a
+/// fallback (delayed market data) and the requested data follows, so these
+/// are informational notices, not errors. Classifying them as errors would
+/// terminate the subscription before its data arrives.
+/// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
+/// - 10167: Requested market data is not subscribed. Displaying delayed market data.
+pub const DATA_ADVISORY_CODES: [i32; 2] = [10089, 10167];
+
 /// Range of error codes that represent order rejections from TWS (200-399).
 ///
 /// Includes parameter validation, contract-not-found, margin and risk-check
@@ -1144,7 +1153,8 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// 2. [`Warning`](Self::Warning) — 2100..=2169.
 /// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding 202 by precedence.
-/// 5. [`Error`](Self::Error) — everything else.
+/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (10089, 10167).
+/// 6. [`Error`](Self::Error) — everything else.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
 /// breaking release.
@@ -1172,6 +1182,9 @@ pub enum NoticeCategory {
     SystemMessage,
     /// Order rejection (codes 200..=399).
     OrderRejection,
+    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request proceeded with a
+    /// fallback (delayed market data) rather than failing. Informational.
+    DataAdvisory,
     /// Any other error code.
     Error,
 }
@@ -1236,12 +1249,22 @@ impl Notice {
         SYSTEM_MESSAGE_CODES.contains(&self.code)
     }
 
+    /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
+    ///
+    /// Data advisories (codes 10089, 10167) announce that a request proceeded
+    /// with a fallback — delayed market data instead of real-time — rather
+    /// than failing. The requested data still follows, so the subscription
+    /// stays open and the notice is informational, not an error.
+    pub fn is_data_advisory(&self) -> bool {
+        DATA_ADVISORY_CODES.contains(&self.code)
+    }
+
     /// Returns `true` if this is an informational notice (not an error).
     ///
     /// Informational notices include cancellation confirmations, warnings,
-    /// and system/connectivity messages.
+    /// system/connectivity messages, and data advisories.
     pub fn is_informational(&self) -> bool {
-        self.is_cancellation() || self.is_warning() || self.is_system_message()
+        self.is_cancellation() || self.is_warning() || self.is_system_message() || self.is_data_advisory()
     }
 
     /// Returns `true` if this is an error requiring attention.
@@ -1321,6 +1344,8 @@ impl Notice {
             NoticeCategory::SystemMessage
         } else if self.is_order_rejection() {
             NoticeCategory::OrderRejection
+        } else if self.is_data_advisory() {
+            NoticeCategory::DataAdvisory
         } else {
             NoticeCategory::Error
         }

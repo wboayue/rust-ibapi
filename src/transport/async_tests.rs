@@ -285,6 +285,35 @@ async fn test_warning_with_request_id_delivers_notice() {
     assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
 }
 
+/// Data advisory (code 10167) bound to a real request_id is informational:
+/// TWS proceeds with delayed data, so it is delivered as a `RoutedItem::Notice`
+/// and the stream stays open for the follow-up data — not routed as an error
+/// that would terminate the subscription.
+#[tokio::test]
+async fn test_data_advisory_with_request_id_keeps_stream_open() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(42, vec![]).await.unwrap();
+
+    let code = crate::messages::DATA_ADVISORY_CODES[1]; // 10167
+    stream.push_inbound(error_frame(42, code, "Displaying delayed market data."));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = next_routed(&mut sub).await;
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, code);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+
+    // Stream stays open: the delayed data the advisory promised arrives.
+    stream.push_inbound(body("89|42|payload|"));
+    bus.read_and_route_message().await.unwrap();
+    let item = next_routed(&mut sub).await;
+    assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
+}
+
 /// Hard error (code 200) bound to a real request_id is delivered as a
 /// `RoutedItem::Error` to the owning subscription.
 #[tokio::test]

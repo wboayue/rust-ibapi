@@ -996,6 +996,36 @@ fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
     Ok(())
 }
 
+/// Data advisory (code 10167) bound to a real request_id is informational:
+/// TWS proceeds with delayed data, so it is delivered as a `RoutedItem::Notice`
+/// and the stream stays open for the follow-up data — not routed as an error
+/// that would terminate the subscription.
+#[test]
+fn test_data_advisory_with_request_id_keeps_stream_open() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(42, &[])?;
+
+    let code = crate::messages::DATA_ADVISORY_CODES[1]; // 10167
+    stream.push_inbound(error_frame(42, code, "Displaying delayed market data."));
+    bus.dispatch()?;
+
+    let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, code);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+
+    // Stream stays open: the delayed data the advisory promised arrives.
+    stream.push_inbound(body("89|42|payload|"));
+    bus.dispatch()?;
+    let item = sub.next_timeout_routed(TICK).expect("delayed data lost");
+    assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
+    Ok(())
+}
+
 /// Hard error (code 200) bound to a real request_id is delivered as a
 /// `RoutedItem::Error` to the owning subscription. The subscription
 /// terminates: subsequent reads return `None`.
