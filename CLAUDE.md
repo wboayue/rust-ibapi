@@ -138,6 +138,16 @@ Use this format for GitHub release notes:
 - A code sample showing typical usage in a fenced ```rust block
 - Order items by significance (most impactful first)
 
+## Changelog
+
+Maintain a root `CHANGELOG.md` in [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format, versioned per [SemVer](https://semver.org/spec/v2.0.0.html).
+
+- **Every PR with a user-facing change adds an entry under `## [Unreleased]`** in the same PR, grouped by change type — `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security` (omit empty groups, keep them in that order). A stale changelog is a blocker, same as a stale README/migration guide.
+- Internal-only work (refactors, tests, CI, doc-only edits, dependency bumps with no behavior change) needs **no** entry. If unsure, ask "would a downstream user notice?" — if no, skip it.
+- One bullet per change: imperative, concise, ending with the PR number — e.g. `- Classify TWS codes 10089/10167 as informational so delayed-data subscriptions stay open (#677).` Breaking changes go under `Changed`/`Removed` and must also be reflected in `docs/migration-3.0.md`.
+- **On release**: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (ISO 8601 date), then add a fresh empty `## [Unreleased]` at the top. Keep version sections newest-first. Update the link-reference definitions at the bottom (`[Unreleased]` → `compare/vX.Y.Z...HEAD`, `[X.Y.Z]` → the tag/compare URL).
+- The changelog is the curated, append-as-you-go history; GitHub release notes (above) are the same entries expanded with code samples at release time. Keep the two consistent.
+
 ## Maintaining Documentation
 
 Keep `CLAUDE.md`, `README.md`, and documentation up to date as the codebase evolves. When patterns change, conventions are established, or new modules are added, update the relevant files.
