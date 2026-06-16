@@ -7,12 +7,12 @@ use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::TickLast;
 use crate::market_data::IgnoreSize;
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
-use crate::subscriptions::SubscriptionItem;
+use crate::subscriptions::{SubscriptionItem, SubscriptionItemStreamExt};
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
@@ -34,6 +34,37 @@ fn test_contract() -> Contract {
         last_trade_date_or_contract_month: "202303".to_owned(),
         ..Contract::default()
     }
+}
+
+/// Unwrap a tick-subscription poll to its data payload, panicking on notice,
+/// error, or end-of-stream. Keeps the data-path assertions terse now that
+/// `TickSubscription` yields the `SubscriptionItem` envelope.
+fn expect_data<T: std::fmt::Debug>(item: Option<Result<SubscriptionItem<T>, Error>>) -> T {
+    match item {
+        Some(Ok(SubscriptionItem::Data(t))) => t,
+        other => panic!("expected tick data, got {other:?}"),
+    }
+}
+
+/// A request-scoped IB notice for tests (no error_time / advanced-reject payload).
+fn test_notice(code: i32, message: &str) -> Notice {
+    Notice {
+        code,
+        message: message.into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+/// Build a `TickSubscription<T>` fed by `items`, with the broadcast channel
+/// closed after the last item.
+fn tick_sub_from_routed<T: TickDecoder<T> + Send>(items: Vec<RoutedItem>) -> TickSubscription<T> {
+    let (tx, rx) = tokio::sync::broadcast::channel(16);
+    for item in items {
+        tx.send(item).unwrap();
+    }
+    drop(tx);
+    TickSubscription::new(AsyncInternalSubscription::new(rx), 9300, Arc::new(MessageBusStub::default()))
 }
 
 // Pins server_version one below `feature.min_version` and asserts the call fails
@@ -380,9 +411,7 @@ async fn test_tick_subscription_methods() {
         .expect("Failed to create tick subscription");
 
     // Get first tick
-    let tick1 = subscription.next().await;
-    assert!(tick1.is_some(), "Should receive first tick");
-    let tick1 = tick1.unwrap();
+    let tick1 = expect_data(subscription.next().await);
     assert_eq!(tick1.price_bid, 185.50, "Wrong bid price for first tick");
     assert_eq!(tick1.price_ask, 186.00, "Wrong ask price for first tick");
     assert_eq!(tick1.size_bid, 100, "Wrong bid size for first tick");
@@ -391,16 +420,12 @@ async fn test_tick_subscription_methods() {
     assert!(!tick1.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high for first tick");
 
     // Get second tick
-    let tick2 = subscription.next().await;
-    assert!(tick2.is_some(), "Should receive second tick");
-    let tick2 = tick2.unwrap();
+    let tick2 = expect_data(subscription.next().await);
     assert_eq!(tick2.price_bid, 185.55, "Wrong bid price for second tick");
     assert_eq!(tick2.price_ask, 186.05, "Wrong ask price for second tick");
 
     // Get third tick
-    let tick3 = subscription.next().await;
-    assert!(tick3.is_some(), "Should receive third tick");
-    let tick3 = tick3.unwrap();
+    let tick3 = expect_data(subscription.next().await);
     assert_eq!(tick3.price_bid, 185.75, "Wrong bid price for third tick");
 
     // Should be done now
@@ -423,17 +448,14 @@ async fn test_tick_subscription_buffer_and_iteration() {
     let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
     let contract = test_contract();
 
-    let mut subscription = client
+    let subscription = client
         .historical_ticks(&contract, 3)
         .bid_ask(IgnoreSize::No)
         .await
         .expect("Failed to create tick subscription");
 
-    // Should receive all 3 ticks from buffer
-    let mut ticks = Vec::new();
-    while let Some(tick) = subscription.next().await {
-        ticks.push(tick);
-    }
+    // Should receive all 3 ticks from buffer (filter_data drops notices, surfaces errors)
+    let ticks: Vec<_> = subscription.filter_data().map(|r| r.expect("decode error")).collect().await;
 
     assert_eq!(ticks.len(), 3, "Should receive exactly 3 ticks");
     assert_eq!(ticks[0].price_bid, 185.50, "Wrong bid price for first tick");
@@ -468,7 +490,7 @@ async fn test_tick_subscription_bid_ask() {
         .await
         .expect("Failed to create bid/ask tick subscription");
 
-    let tick = subscription.next().await.expect("Should receive a tick");
+    let tick = expect_data(subscription.next().await);
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price_bid, 185.50, "Wrong bid price");
     assert_eq!(tick.price_ask, 186.00, "Wrong ask price");
@@ -512,7 +534,7 @@ async fn test_tick_subscription_midpoint() {
         .await
         .expect("Failed to create midpoint tick subscription");
 
-    let tick = subscription.next().await.expect("Should receive a tick");
+    let tick = expect_data(subscription.next().await);
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
     assert_eq!(tick.size, 100, "Wrong size");
@@ -549,7 +571,7 @@ async fn test_historical_ticks_trade() {
         .await
         .expect("Failed to create trade tick subscription");
 
-    let tick = subscription.next().await.expect("Should receive a tick");
+    let tick = expect_data(subscription.next().await);
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price, 185.50, "Wrong trade price");
     assert_eq!(tick.size, 100, "Wrong trade size");
@@ -1044,29 +1066,68 @@ async fn test_tick_subscription_skips_unexpected_message_then_yields() {
         .await
         .expect("subscription should be created");
 
-    let tick = subscription.next().await.expect("should receive tick after skipping unexpected");
+    let tick = expect_data(subscription.next().await);
     assert_eq!(tick.price, 185.50, "wrong price");
     assert!(subscription.next().await.is_none(), "should be done");
 }
 
 #[tokio::test]
-async fn test_tick_subscription_errors_terminate_stream() {
-    let message_bus = Arc::new(MessageBusStub::default());
+async fn test_tick_subscription_error_surfaces_via_err_arm() {
+    // #675 regression guard (async): a RoutedItem::Error must surface through the
+    // `Err` arm, not be silently dropped (the pre-fix async path discarded it
+    // entirely). Subsequent polls return None.
+    let mut subscription: TickSubscription<TickLast> = tick_sub_from_routed(vec![RoutedItem::Error(Error::ConnectionReset)]);
 
-    let (tx, rx) = tokio::sync::broadcast::channel(16);
-    tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
-    drop(tx);
+    match subscription.next().await {
+        Some(Err(Error::ConnectionReset)) => {}
+        other => panic!("expected Some(Err(ConnectionReset)), got {other:?}"),
+    }
+    assert!(subscription.next().await.is_none(), "stream terminates after a terminal error");
+}
 
-    let internal = AsyncInternalSubscription::new(rx);
-    let mut subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9300, message_bus);
+#[tokio::test]
+async fn test_tick_subscription_notice_passes_through_then_data() {
+    // A Notice surfaces as SubscriptionItem::Notice (stream stays open); a
+    // following tick batch is delivered after it. filter_data() drops the notice.
+    let mut subscription: TickSubscription<TickLast> = tick_sub_from_routed(vec![
+        RoutedItem::Notice(test_notice(2100, "warning")),
+        RoutedItem::Response(proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                .tick(historical_tick_last(1_678_838_400, 15.00, 100, "NYSE"))
+                .done(true)
+                .encode_proto(),
+        )),
+    ]);
 
-    assert!(subscription.next().await.is_none(), "error on channel terminates next()");
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n.code, 2100),
+        other => panic!("expected a Notice, got {other:?}"),
+    }
+    let tick = expect_data(subscription.next().await);
+    assert_eq!(tick.price, 15.00, "tick delivered after the notice");
+}
+
+#[tokio::test]
+async fn test_tick_subscription_filter_data_drops_notice_keeps_error() {
+    // filter_data() drops the Notice but still surfaces the terminal Error.
+    let subscription: TickSubscription<TickLast> = tick_sub_from_routed(vec![
+        RoutedItem::Notice(test_notice(2100, "warning")),
+        RoutedItem::Error(Error::ConnectionReset),
+    ]);
+
+    let mut data = subscription.filter_data();
+    match data.next().await {
+        Some(Err(Error::ConnectionReset)) => {}
+        other => panic!("expected the error after the filtered notice, got {other:?}"),
+    }
+    assert!(data.next().await.is_none(), "stream ended after the error");
 }
 
 #[tokio::test]
 async fn test_tick_subscription_returns_none_on_closed_channel() {
     // Empty response_messages closes the broadcast channel immediately; the first
-    // fill_buffer sees None and next() returns None.
+    // poll sees the stream end and next() returns None.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 

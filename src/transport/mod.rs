@@ -84,11 +84,19 @@ impl InternalSubscription {
     }
 
     /// Returns message if available or immediately returns None.
+    ///
+    /// Test-only since the `SubscriptionItem` migration retired the last
+    /// production caller; transport tests still drive the bus through the
+    /// legacy projection. Mirrors the `#[cfg(test)]` gating on
+    /// [`try_next_routed`](Self::try_next_routed).
+    #[cfg(test)]
     pub(crate) fn try_next(&self) -> Option<Response> {
         Self::try_receive(self.pick_receiver()?)
     }
 
-    /// Waits for next message until specified timeout.
+    /// Waits for next message until specified timeout. Test-only — see
+    /// [`try_next`](Self::try_next).
+    #[cfg(test)]
     pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Response> {
         Self::timeout_receive(self.pick_receiver()?, timeout)
     }
@@ -129,6 +137,7 @@ impl InternalSubscription {
         }
     }
 
+    #[cfg(test)]
     fn try_receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
         loop {
             if let Some(legacy) = receiver.try_recv().ok()?.into_legacy() {
@@ -137,6 +146,7 @@ impl InternalSubscription {
         }
     }
 
+    #[cfg(test)]
     fn timeout_receive(receiver: &Receiver<RoutedItem>, timeout: Duration) -> Option<Response> {
         let deadline = std::time::Instant::now() + timeout;
         loop {

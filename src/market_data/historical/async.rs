@@ -1,18 +1,23 @@
 use std::collections::VecDeque;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use log::{debug, error, warn};
+use futures::Stream;
+use log::{error, warn};
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
+use crate::subscriptions::common::SubscriptionItem;
 use crate::subscriptions::r#async::Subscription;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error, MAX_RETRIES};
 
+use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
@@ -414,12 +419,26 @@ pub(crate) async fn historical_schedule(
 // === TickSubscription and related types ===
 
 /// Async subscription handle that decodes historical tick batches as they arrive.
-#[must_use = "TickSubscription must be polled (.next().await) to receive ticks; dropping it cancels the request"]
+///
+/// `TickSubscription<T>` is a [`Stream`] of `Result<SubscriptionItem<T>, Error>`,
+/// the same shape as the async [`Subscription`](crate::subscriptions::Subscription):
+///
+/// * `Some(Ok(SubscriptionItem::Data(tick)))` — a decoded tick.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice bound to
+///   this request; the stream stays open.
+/// * `Some(Err(e))` — terminal error (decode or transport); the stream is over.
+/// * `None` — the stream has ended.
+///
+/// Bring [`StreamExt`](futures::StreamExt) into scope for `.next().await`, and
+/// [`SubscriptionItemStreamExt`](crate::subscriptions::SubscriptionItemStreamExt)
+/// for `.filter_data()` when you only want ticks. Both are in
+/// [`ibapi::prelude`](crate::prelude).
+#[must_use = "TickSubscription must be polled (.next().await or .filter_data()) to receive ticks; dropping it cancels the request"]
 pub struct TickSubscription<T: TickDecoder<T> + Send> {
     done: bool,
+    stream_ended: bool,
     messages: AsyncInternalSubscription,
     buffer: VecDeque<T>,
-    error: Option<Error>,
     request_id: i32,
     message_bus: Arc<dyn AsyncMessageBus>,
     cancelled: AtomicBool,
@@ -429,9 +448,9 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
     fn new(messages: AsyncInternalSubscription, request_id: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
         Self {
             done: false,
+            stream_ended: false,
             messages,
             buffer: VecDeque::new(),
-            error: None,
             request_id,
             message_bus,
             cancelled: AtomicBool::new(false),
@@ -440,6 +459,20 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     /// Cancel the historical-ticks request. Safe to call after completion (no-op).
     /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// let contract = Contract::stock("MSFT").build();
+    /// let subscription = client.historical_ticks(&contract, 100).trade().await?;
+    /// subscription.cancel().await;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn cancel(&self) {
         if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
@@ -454,55 +487,53 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
             Err(e) => error!("error encoding cancel historical ticks: {e}"),
         }
     }
+}
 
-    /// Block until the next tick batch is available.
-    pub async fn next(&mut self) -> Option<T> {
-        self.clear_error();
+impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
+    type Item = Result<SubscriptionItem<T>, Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // `T: Unpin` (all tick types are plain data) makes `TickSubscription<T>`
+        // Unpin — the only `T`-bearing field is `VecDeque<T>` — so we can project
+        // to `&mut Self`. Every other field (BroadcastStream, bool, Arc) is Unpin.
+        let this = self.get_mut();
 
         loop {
-            if let Some(tick) = self.next_buffered() {
-                return Some(tick);
+            if let Some(tick) = this.buffer.pop_front() {
+                return Poll::Ready(Some(Ok(SubscriptionItem::Data(tick))));
             }
 
-            if self.done {
-                return None;
+            // `done` (decoder's last-batch flag) and `stream_ended` (terminal
+            // error / EndOfStream) are distinct reasons the stream is over;
+            // either ends it once the buffer is drained.
+            if this.done || this.stream_ended {
+                return Poll::Ready(None);
             }
 
-            match self.fill_buffer().await {
-                Ok(()) => continue,
-                Err(()) => return None,
+            let routed = match Pin::new(&mut this.messages.stream).poll_next(cx) {
+                Poll::Ready(Some(Ok(item))) => item,
+                Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            };
+
+            match classify::<T>(routed) {
+                TickAction::Batch(ticks, done) => {
+                    this.buffer.extend(ticks);
+                    this.done = done;
+                }
+                TickAction::Skip => {}
+                TickAction::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
+                TickAction::EndOfStream => {
+                    this.stream_ended = true;
+                    return Poll::Ready(None);
+                }
+                TickAction::Error(e) => {
+                    this.stream_ended = true;
+                    return Poll::Ready(Some(Err(e)));
+                }
             }
         }
-    }
-
-    async fn fill_buffer(&mut self) -> Result<(), ()> {
-        match self.messages.next().await {
-            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
-                let (ticks, done) = T::decode(&message).unwrap();
-                self.buffer.extend(ticks);
-                self.done = done;
-                Ok(())
-            }
-            Some(Ok(message)) => {
-                debug!("unexpected message: {message:?}");
-                Ok(())
-            }
-            Some(Err(_)) => Err(()),
-            None => Err(()),
-        }
-    }
-
-    fn next_buffered(&mut self) -> Option<T> {
-        self.buffer.pop_front()
-    }
-
-    #[allow(dead_code)]
-    fn set_error(&mut self, e: Error) {
-        self.error = Some(e);
-    }
-
-    fn clear_error(&mut self) {
-        self.error = None;
     }
 }
 
