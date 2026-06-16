@@ -1131,24 +1131,19 @@ fn test_notice_category_partition() {
 fn test_notice_data_advisory() {
     // Delayed-data advisories are informational: TWS proceeds with the request
     // and data follows, so they must not be classified as errors.
-    for &code in DATA_ADVISORY_CODES.iter() {
+    for code in DATA_ADVISORY_CODES {
         let notice = notice_with_code(code);
         assert!(notice.is_data_advisory(), "code {code} should be a data advisory");
         assert!(notice.is_informational(), "code {code} should be informational");
         assert!(!notice.is_error(), "code {code} should not be an error");
         assert_eq!(notice.category(), NoticeCategory::DataAdvisory, "code {code} miscategorised");
-    }
 
-    // Neighboring codes are real errors, not advisories.
-    for code in [
-        DATA_ADVISORY_CODES[0] - 1,
-        DATA_ADVISORY_CODES[0] + 1,
-        DATA_ADVISORY_CODES[1] - 1,
-        DATA_ADVISORY_CODES[1] + 1,
-    ] {
-        let notice = notice_with_code(code);
-        assert!(!notice.is_data_advisory(), "code {code} should not be a data advisory");
-        assert!(notice.is_error(), "code {code} should be an error");
+        // Neighboring codes are real errors, not advisories.
+        for neighbor in [code - 1, code + 1] {
+            let notice = notice_with_code(neighbor);
+            assert!(!notice.is_data_advisory(), "code {neighbor} should not be a data advisory");
+            assert!(notice.is_error(), "code {neighbor} should be an error");
+        }
     }
 }
 
