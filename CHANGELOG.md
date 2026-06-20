@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-19
+
 ### Added
 
 - `DATA_ADVISORY_CODES`, `Notice::is_data_advisory()`, and the `NoticeCategory::DataAdvisory` variant for delayed-market-data advisory codes (#680).
@@ -25,5 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/wboayue/rust-ibapi/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/wboayue/rust-ibapi/releases/tag/v3.0.1
