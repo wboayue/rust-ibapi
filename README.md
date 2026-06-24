@@ -670,6 +670,7 @@ connection-state UIs and startup telemetry — use the builder's
 
 ```rust
 use ibapi::client::blocking::Client;
+use ibapi::ConnectivityStatus;
 
 fn main() {
     let (client, notices) = Client::builder()
@@ -679,10 +680,14 @@ fn main() {
         .expect("connection failed");
 
     for n in notices.iter() {
-        if n.is_system_message() {
-            println!("connectivity: {n}");
-        } else {
-            println!("notice: {n}");
+        match n.connectivity_status() {
+            // Data-farm sub-state, refined from the 2100..=2169 warning band.
+            Some(ConnectivityStatus::Ok) => println!("farm online: {n}"),
+            Some(ConnectivityStatus::Broken) => println!("farm down: {n}"),
+            Some(ConnectivityStatus::Inactive | ConnectivityStatus::Connecting) => println!("farm idle: {n}"),
+            // Connectivity codes 1100/1101/1102 and everything else.
+            None if n.is_system_message() => println!("connectivity: {n}"),
+            None => println!("notice: {n}"),
         }
     }
     drop(client);
