@@ -118,6 +118,8 @@ impl Client {
     ///
     /// Only the current day's executions can be retrieved.
     /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionReport`] will also be returned.
+    /// Join a commission to its execution deterministically by `execution_id` (see the
+    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the two may arrive in either order.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -410,6 +412,11 @@ impl Client {
     ///
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
+    ///
+    /// To pair a [`CommissionReport`](crate::orders::CommissionReport) with the
+    /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
+    /// `execution_id` — the two arrive in either order but share that key. See
+    /// the [`CommissionReport`](crate::orders::CommissionReport) docs for the idiom.
     pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         let subscription = self.create_order_update_subscription()?;
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))

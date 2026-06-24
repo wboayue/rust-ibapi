@@ -13,6 +13,11 @@ use super::*;
 impl Client {
     /// Subscribes to order update events. Only one subscription can be active at a time.
     ///
+    /// To pair a [`CommissionReport`] with the
+    /// [`ExecutionData`] it belongs to, join on
+    /// `execution_id` — the two arrive in either order but share that key. See
+    /// the [`CommissionReport`] docs for the idiom.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -319,6 +324,12 @@ impl Client {
     }
 
     /// Requests current day's executions matching the filter.
+    ///
+    /// Both [`ExecutionData`] and
+    /// [`CommissionReport`] are delivered on this
+    /// stream. Join a commission to its execution deterministically by `execution_id`
+    /// (see the [`CommissionReport`] docs) — the two
+    /// may arrive in either order.
     ///
     /// # Examples
     ///
