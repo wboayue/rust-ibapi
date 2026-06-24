@@ -218,7 +218,7 @@ pub use client::Client;
 pub use client::ClientBuilder;
 
 #[doc(inline)]
-pub use messages::{IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
+pub use messages::{ConnectivityStatus, IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
 
 #[doc(inline)]
 pub use messages::{

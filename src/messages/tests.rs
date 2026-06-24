@@ -1128,6 +1128,59 @@ fn test_notice_category_partition() {
 }
 
 #[test]
+fn test_connectivity_status_from_code_table() {
+    // Derive expectations from the code constants (rule 21): each farm-code set
+    // maps to its status; everything else maps to None.
+    let cases: &[(&[i32], ConnectivityStatus)] = &[
+        (&FARM_OK_CODES, ConnectivityStatus::Ok),
+        (&FARM_BROKEN_CODES, ConnectivityStatus::Broken),
+        (&FARM_INACTIVE_CODES, ConnectivityStatus::Inactive),
+        (&FARM_CONNECTING_CODES, ConnectivityStatus::Connecting),
+    ];
+    for &(codes, expected) in cases {
+        for &code in codes {
+            assert_eq!(ConnectivityStatus::from_code(code), Some(expected), "code {code} misclassified");
+        }
+    }
+
+    // Non-farm codes — including warning-band neighbors and the range boundaries —
+    // carry no connectivity status.
+    for code in [2100, 2120, 2169, 500, 202, 1100] {
+        assert_eq!(ConnectivityStatus::from_code(code), None, "code {code} should have no status");
+    }
+}
+
+#[test]
+fn test_connectivity_status_delegates() {
+    // The accessor is a thin wrapper over from_code; assert delegation without
+    // re-asserting the whole table.
+    let code = FARM_BROKEN_CODES[0];
+    assert_eq!(notice_with_code(code).connectivity_status(), ConnectivityStatus::from_code(code));
+    assert_eq!(notice_with_code(500).connectivity_status(), None);
+}
+
+#[test]
+fn test_connectivity_status_subset_of_warning() {
+    // Additive contract: every farm code is still a Warning under the existing
+    // partition — connectivity_status refines, it doesn't repartition.
+    let all_farm = FARM_OK_CODES
+        .iter()
+        .chain(&FARM_BROKEN_CODES)
+        .chain(&FARM_INACTIVE_CODES)
+        .chain(&FARM_CONNECTING_CODES);
+    for &code in all_farm {
+        let notice = notice_with_code(code);
+        assert!(notice.is_warning(), "farm code {code} should be a warning");
+        assert_eq!(
+            notice.category(),
+            NoticeCategory::Warning,
+            "farm code {code} should categorise as Warning"
+        );
+        assert!(WARNING_CODE_RANGE.contains(&code), "farm code {code} should be inside WARNING_CODE_RANGE");
+    }
+}
+
+#[test]
 fn test_notice_data_advisory() {
     // Delayed-data advisories are informational: TWS proceeds with the request
     // and data follows, so they must not be classified as errors.
