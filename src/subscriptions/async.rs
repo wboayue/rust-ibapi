@@ -4,8 +4,10 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use futures::stream::Stream;
+use futures::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
@@ -210,6 +212,104 @@ impl<T> Subscription<T> {
     /// Get the request ID associated with this subscription
     pub fn request_id(&self) -> Option<i32> {
         self.request_id
+    }
+}
+
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
+    /// Collects data items into a `Vec`, bounded by a total wall-clock `timeout`.
+    ///
+    /// Drives the subscription until the first of: the `timeout` elapses, the
+    /// stream ends, a snapshot-end sentinel arrives (e.g.
+    /// [`TickTypes::SnapshotEnd`](crate::market_data::realtime::TickTypes::SnapshotEnd)),
+    /// or a terminal error occurs. Notices are filtered (logged at `warn!`); the
+    /// snapshot-end sentinel is not included in the returned `Vec`. On a terminal
+    /// error the items collected so far are returned (the error is logged at
+    /// `warn!`).
+    ///
+    /// This is the one-shot snapshot terminal: combined with
+    /// [`MarketDataBuilder::snapshot`](crate::market_data::builder::MarketDataBuilder::snapshot),
+    /// the request returns one round of data ending in a snapshot sentinel, so
+    /// `timeout` acts only as a safety bound. Equivalent to
+    /// [`collect_until`](Self::collect_until) with a predicate that never fires.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let mut subscription = client.market_data(&contract).snapshot().subscribe().await.expect("request failed");
+    ///
+    ///     let ticks = subscription.collect_for(Duration::from_secs(5)).await;
+    ///     println!("collected {} ticks", ticks.len());
+    /// }
+    /// ```
+    pub async fn collect_for(&mut self, timeout: Duration) -> Vec<T> {
+        self.collect_until(timeout, |_| false).await
+    }
+
+    /// Collects data items into a `Vec`, stopping early once `stop` is satisfied.
+    ///
+    /// Like [`collect_for`](Self::collect_for), but after each item is appended
+    /// the `stop` predicate is called with the full accumulated slice; returning
+    /// `true` ends collection (the triggering item is included). Use it to stop
+    /// as soon as the fields of interest are populated, rather than waiting out
+    /// the whole `timeout`. The same timeout / stream-end / snapshot-end /
+    /// terminal-error bounds as `collect_for` still apply.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::market_data::realtime::TickTypes;
+    /// use ibapi::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let mut subscription = client.market_data(&contract).snapshot().subscribe().await.expect("request failed");
+    ///
+    ///     // Stop as soon as a price tick has arrived.
+    ///     let ticks = subscription
+    ///         .collect_until(Duration::from_secs(5), |ticks| {
+    ///             ticks.iter().any(|t| matches!(t, TickTypes::Price(_) | TickTypes::PriceSize(_)))
+    ///         })
+    ///         .await;
+    ///     println!("collected {} ticks", ticks.len());
+    /// }
+    /// ```
+    pub async fn collect_until(&mut self, timeout: Duration, mut stop: impl FnMut(&[T]) -> bool) -> Vec<T> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut collected = Vec::new();
+        loop {
+            match tokio::time::timeout_at(deadline, self.next()).await {
+                // Total deadline reached.
+                Err(_elapsed) => break,
+                // End of stream.
+                Ok(None) => break,
+                Ok(Some(Ok(SubscriptionItem::Data(value)))) => {
+                    if value.is_snapshot_end() {
+                        break;
+                    }
+                    collected.push(value);
+                    if stop(&collected) {
+                        break;
+                    }
+                }
+                Ok(Some(Ok(SubscriptionItem::Notice(notice)))) => warn!("ib notice on subscription: {notice}"),
+                Ok(Some(Err(e))) => {
+                    warn!("subscription error during collect: {e}");
+                    break;
+                }
+            }
+        }
+        collected
     }
 }
 
