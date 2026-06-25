@@ -37,9 +37,11 @@ fn test_is_connection_error() {
             expected: true,
         },
         TestCase {
-            name: "connection_failed",
+            // ConnectionFailed is returned only after reconnection is exhausted —
+            // terminal, not a recoverable mid-stream loss — so it is not a reconnect trigger.
+            name: "connection_failed_is_terminal",
             error: Error::ConnectionFailed,
-            expected: true,
+            expected: false,
         },
         TestCase {
             name: "cancelled_not_connection",
