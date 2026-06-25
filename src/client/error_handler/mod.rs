@@ -14,16 +14,12 @@ use crate::errors::Error;
 /// Maximum number of retries for transient errors
 pub(crate) const MAX_RETRIES: u32 = 3;
 
-/// Checks if the error is a connection-related IO error that should trigger reconnection
+/// Checks if the error is a connection-related error that should trigger reconnection.
+///
+/// Delegates to the public [`Error::is_connection_lost`] predicate so transport
+/// reconnect logic and downstream consumers share one definition.
 pub(crate) fn is_connection_error(error: &Error) -> bool {
-    match error {
-        Error::Io(io_err) => matches!(
-            io_err.kind(),
-            ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
-        ),
-        Error::ConnectionReset | Error::ConnectionFailed => true,
-        _ => false,
-    }
+    error.is_connection_lost()
 }
 
 /// Checks if the error is a timeout that can be safely ignored

@@ -511,7 +511,7 @@ match client.market_data(contract).subscribe() {
 for result in subscription {
     match result {
         Ok(data) => process(data),
-        Err(Error::ConnectionReset) => {
+        Err(e) if e.is_connection_lost() => {
             // Resubscribe after reconnection
             break;
         },

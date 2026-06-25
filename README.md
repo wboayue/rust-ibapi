@@ -809,8 +809,8 @@ fn main() {
             match item {
                 Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
                 Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
-                Err(Error::ConnectionReset) => {
-                    eprintln!("Connection reset. Retrying stream...");
+                Err(e) if e.is_connection_lost() => {
+                    eprintln!("Connection lost. Retrying stream...");
                     continue 'outer;
                 }
                 Err(e) => {
