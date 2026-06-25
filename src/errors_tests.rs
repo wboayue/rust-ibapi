@@ -261,3 +261,55 @@ fn error_is_non_exhaustive() {
     fn assert_non_exhaustive<T: StdError>() {}
     assert_non_exhaustive::<Error>();
 }
+
+#[test]
+fn is_connection_lost_true_for_connection_variants() {
+    assert!(Error::ConnectionReset.is_connection_lost());
+
+    for kind in [
+        io::ErrorKind::ConnectionReset,
+        io::ErrorKind::ConnectionAborted,
+        io::ErrorKind::UnexpectedEof,
+        io::ErrorKind::BrokenPipe,
+    ] {
+        let error = Error::Io(io::Error::new(kind, "disconnected"));
+        assert!(error.is_connection_lost(), "{kind:?} should count as connection-lost");
+    }
+}
+
+#[test]
+fn is_connection_lost_false_for_non_connection() {
+    let cases = [
+        Error::Shutdown,
+        // Reconnection exhausted — terminal, not a recoverable mid-stream loss.
+        Error::ConnectionFailed,
+        Error::ConnectionRejected("allow-list mismatch".to_string()),
+        Error::Cancelled,
+        tws_error_notice(200, "No security found"),
+        Error::Io(io::Error::new(io::ErrorKind::NotFound, "missing")),
+        Error::Simple("boom".to_string()),
+        Error::Parse(1, "v".to_string(), "m".to_string()),
+    ];
+
+    for error in cases {
+        assert!(!error.is_connection_lost(), "{error:?} should not count as connection-lost");
+    }
+}
+
+#[test]
+fn is_connection_error_delegates_to_is_connection_lost() {
+    use crate::client::error_handler::is_connection_error;
+
+    let cases = [
+        Error::ConnectionReset,
+        Error::ConnectionFailed,
+        Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, "x")),
+        Error::Shutdown,
+        Error::Cancelled,
+        Error::Io(io::Error::new(io::ErrorKind::NotFound, "x")),
+    ];
+
+    for error in cases {
+        assert_eq!(is_connection_error(&error), error.is_connection_lost(), "diverged for {error:?}");
+    }
+}

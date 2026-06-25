@@ -183,6 +183,54 @@ impl Error {
     pub(crate) fn eof_at(i: usize, label: &str) -> Error {
         Error::Parse(i, String::new(), format!("expected {label} and found end of message"))
     }
+
+    /// Returns `true` if this error means the TWS/Gateway connection was lost
+    /// mid-stream and the client should reconnect, rather than retry the in-flight
+    /// request.
+    ///
+    /// Matches [`Error::ConnectionReset`] and connection-kind [`Error::Io`] errors
+    /// (broken pipe, unexpected EOF, connection reset/abort) — recoverable losses
+    /// where re-establishing the connection is the right response.
+    ///
+    /// Returns `false` for failures reconnecting cannot recover, so a read loop can
+    /// branch on them separately to stop retrying: intentional teardown
+    /// ([`Error::Shutdown`]), handshake refusal ([`Error::ConnectionRejected`]), and
+    /// exhausted reconnection ([`Error::ConnectionFailed`], returned only after the
+    /// transport already gave up).
+    ///
+    /// # Examples
+    ///
+    /// In a subscription read loop, branch on this predicate to decide whether to
+    /// re-establish the connection or surface a request-level failure:
+    ///
+    /// ```
+    /// use ibapi::Error;
+    ///
+    /// fn on_stream_error(err: Error) -> Result<(), Error> {
+    ///     if err.is_connection_lost() {
+    ///         // tear down and resubscribe, then keep going
+    ///         Ok(())
+    ///     } else {
+    ///         // a request-level failure (or terminal disconnect) — surface it
+    ///         Err(err)
+    ///     }
+    /// }
+    ///
+    /// assert!(on_stream_error(Error::ConnectionReset).is_ok());
+    /// assert!(on_stream_error(Error::ConnectionFailed).is_err()); // reconnect exhausted
+    /// assert!(on_stream_error(Error::Shutdown).is_err());
+    /// ```
+    pub fn is_connection_lost(&self) -> bool {
+        use std::io::ErrorKind;
+        match self {
+            Error::Io(io_err) => matches!(
+                io_err.kind(),
+                ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
+            ),
+            Error::ConnectionReset => true,
+            _ => false,
+        }
+    }
 }
 
 // Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.
