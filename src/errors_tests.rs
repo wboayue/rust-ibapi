@@ -265,7 +265,6 @@ fn error_is_non_exhaustive() {
 #[test]
 fn is_connection_lost_true_for_connection_variants() {
     assert!(Error::ConnectionReset.is_connection_lost());
-    assert!(Error::ConnectionFailed.is_connection_lost());
 
     for kind in [
         io::ErrorKind::ConnectionReset,
@@ -282,6 +281,8 @@ fn is_connection_lost_true_for_connection_variants() {
 fn is_connection_lost_false_for_non_connection() {
     let cases = [
         Error::Shutdown,
+        // Reconnection exhausted — terminal, not a recoverable mid-stream loss.
+        Error::ConnectionFailed,
         Error::ConnectionRejected("allow-list mismatch".to_string()),
         Error::Cancelled,
         tws_error_notice(200, "No security found"),

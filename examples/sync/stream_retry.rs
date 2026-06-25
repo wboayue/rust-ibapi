@@ -8,7 +8,7 @@
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::{market_data::TradingHours, Error};
+use ibapi::market_data::TradingHours;
 
 fn main() {
     env_logger::init();
@@ -29,16 +29,12 @@ fn main() {
         for bar in subscription.iter_data() {
             match bar {
                 Ok(bar) => println!("bar: {bar:?}"),
-                // Reconnection permanently failed (all attempts exhausted, client shut down).
-                // Retrying here would loop on a dead client, so give up.
-                Err(Error::ConnectionFailed) => {
-                    eprintln!("Reconnection failed. Giving up.");
-                    break 'retry;
-                }
                 Err(e) if e.is_connection_lost() => {
                     eprintln!("Connection lost. Retrying stream...");
                     continue 'retry;
                 }
+                // Everything else — including terminal ConnectionFailed (reconnect
+                // exhausted, client shut down) — is not recoverable here, so give up.
                 Err(e) => {
                     eprintln!("error: {e}");
                     break 'retry;

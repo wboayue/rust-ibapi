@@ -809,15 +809,12 @@ fn main() {
             match item {
                 Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
                 Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
-                // Reconnection permanently failed (all attempts exhausted) — give up.
-                Err(Error::ConnectionFailed) => {
-                    eprintln!("Reconnection failed. Giving up.");
-                    break 'outer;
-                }
                 Err(e) if e.is_connection_lost() => {
                     eprintln!("Connection lost. Retrying stream...");
                     continue 'outer;
                 }
+                // Everything else — including terminal ConnectionFailed (reconnect
+                // exhausted) — is not recoverable here, so stop.
                 Err(e) => {
                     eprintln!("error: {e}");
                     break 'outer;
