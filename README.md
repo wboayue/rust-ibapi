@@ -293,6 +293,30 @@ loop {
 
 Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
 
+#### One-Shot Snapshot
+
+For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. The same `collect_for` / `collect_until` terminals are available on any `Subscription<T>`.
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
+use std::time::Duration;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
+    let contract = Contract::stock("AAPL").build();
+
+    let ticks = client
+        .market_data(&contract)
+        .snapshot_once(Duration::from_secs(5))
+        .expect("snapshot request failed!");
+
+    for tick in ticks {
+        println!("tick: {tick:?}");
+    }
+}
+```
+
 Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust

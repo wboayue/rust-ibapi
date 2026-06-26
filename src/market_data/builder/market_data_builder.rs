@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::contracts::Contract;
 use crate::market_data::realtime::TickTypes;
 use crate::Error;
@@ -141,6 +143,34 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
 
         crate::market_data::realtime::sync::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
     }
+
+    /// Request a one-shot snapshot and collect the resulting ticks.
+    ///
+    /// Forces [`snapshot`](Self::snapshot) mode, subscribes, and collects every
+    /// tick until the snapshot completes (or `timeout` elapses), returning the
+    /// accumulated [`TickTypes`] for the caller to map into a domain struct.
+    /// This replaces the hand-written collect-with-timeout loop. See
+    /// [`Subscription::collect_for`](crate::subscriptions::sync::Subscription::collect_for)
+    /// for the underlying terminal and its stop conditions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let ticks = client.market_data(&contract).snapshot_once(Duration::from_secs(5)).expect("snapshot failed");
+    /// println!("collected {} ticks", ticks.len());
+    /// ```
+    pub fn snapshot_once(mut self, timeout: Duration) -> Result<Vec<TickTypes>, Error> {
+        self.snapshot = true;
+        let subscription = self.subscribe()?;
+        Ok(subscription.collect_for(timeout))
+    }
 }
 
 // Async implementation
@@ -179,5 +209,35 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
         self.client
             .subscribe_market_data(self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
             .await
+    }
+
+    /// Request a one-shot snapshot and collect the resulting ticks.
+    ///
+    /// Forces [`snapshot`](Self::snapshot) mode, subscribes, and collects every
+    /// tick until the snapshot completes (or `timeout` elapses), returning the
+    /// accumulated [`TickTypes`] for the caller to map into a domain struct.
+    /// This replaces the hand-written collect-with-timeout loop. See
+    /// [`Subscription::collect_for`](crate::subscriptions::Subscription::collect_for)
+    /// for the underlying terminal and its stop conditions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     let ticks = client.market_data(&contract).snapshot_once(Duration::from_secs(5)).await.expect("snapshot failed");
+    ///     println!("collected {} ticks", ticks.len());
+    /// }
+    /// ```
+    pub async fn snapshot_once(mut self, timeout: Duration) -> Result<Vec<TickTypes>, Error> {
+        self.snapshot = true;
+        let mut subscription = self.subscribe().await?;
+        Ok(subscription.collect_for(timeout).await)
     }
 }

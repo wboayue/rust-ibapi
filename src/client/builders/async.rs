@@ -224,6 +224,7 @@ where
     pub async fn send_with_request_id<D>(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_request(request_id, message).await?;
 
@@ -240,6 +241,7 @@ where
     pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
@@ -256,6 +258,7 @@ where
     pub async fn send_order<D>(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_order_request(order_id, message).await?;
 

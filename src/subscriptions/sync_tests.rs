@@ -151,3 +151,125 @@ fn test_no_retries_after_end_of_stream() {
     assert!(sub.next().is_none());
     assert!(sub.stream_ended.load(Ordering::Relaxed));
 }
+
+// --- collect_for / collect_until ----------------------------------------
+
+use crate::subscriptions::common::RoutedItem;
+use crate::transport::SubscriptionBuilder;
+use crossbeam::channel;
+use std::time::Duration;
+
+/// Test decoder for the collect tests: payload is text field 0; the value `-1`
+/// marks a snapshot-end sentinel (mirrors `TickTypes::SnapshotEnd`).
+#[derive(Debug, PartialEq)]
+struct CollectItem(i32);
+
+impl StreamDecoder<CollectItem> for CollectItem {
+    fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
+        Ok(CollectItem(msg.peek_int(0)?))
+    }
+
+    fn is_snapshot_end(&self) -> bool {
+        self.0 == -1
+    }
+}
+
+/// Build a `Subscription<CollectItem>` pre-loaded with `items`. When `keep_open`
+/// the channel sender is returned so the channel stays open (lets the timeout
+/// branch fire); otherwise it is dropped so the stream ends after draining.
+fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscription<CollectItem>, Option<channel::Sender<RoutedItem>>) {
+    let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _signaler_rx) = channel::unbounded();
+    for item in items {
+        sender.send(item).unwrap();
+    }
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let stub = Arc::new(MessageBusStub::default());
+    let sub = Subscription::new(stub, internal, DecoderContext::default());
+    let keep = if keep_open { Some(sender) } else { None };
+    (sub, keep)
+}
+
+fn data(value: i32) -> RoutedItem {
+    RoutedItem::Response(ResponseMessage::from(&format!("{value}\0")))
+}
+
+#[test]
+fn test_collect_for_stops_at_snapshot_end() {
+    // 10, 20, snapshot-end, 30 — collection stops at the sentinel (excluded);
+    // 30 is never consumed.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), data(-1), data(30)], true);
+
+    let collected = sub.collect_for(Duration::from_secs(30));
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[test]
+fn test_collect_until_stops_on_predicate() {
+    // No sentinel; the predicate halts collection once two items arrive.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), data(30), data(40)], true);
+
+    let collected = sub.collect_until(Duration::from_secs(30), |items| items.len() >= 2);
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[test]
+fn test_collect_for_returns_prefix_on_terminal_error() {
+    // One datum, then a terminal error — the prefix collected so far is returned.
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset), data(20)], true);
+
+    let collected = sub.collect_for(Duration::from_secs(30));
+
+    assert_eq!(collected, vec![CollectItem(10)]);
+}
+
+#[test]
+fn test_collect_for_returns_empty_on_timeout() {
+    // Channel stays open with no data; the total timeout bounds the wait.
+    let (sub, _keep) = collect_subscription(vec![], true);
+
+    let collected = sub.collect_for(Duration::from_millis(50));
+
+    assert!(collected.is_empty());
+}
+
+#[test]
+fn test_collect_for_zero_timeout_returns_immediately() {
+    // A zero deadline trips the top-of-loop guard before any item is read,
+    // even though data is queued.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20)], true);
+
+    let collected = sub.collect_for(Duration::ZERO);
+
+    assert!(collected.is_empty());
+}
+
+#[test]
+fn test_collect_for_drains_to_stream_end() {
+    // No sentinel and the sender is dropped, so collection ends at stream end.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), data(30)], false);
+
+    let collected = sub.collect_for(Duration::from_secs(30));
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20), CollectItem(30)]);
+}
+
+#[test]
+fn test_collect_for_filters_notices() {
+    use crate::messages::Notice;
+
+    let notice = RoutedItem::Notice(Notice {
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    });
+    let (sub, _keep) = collect_subscription(vec![data(10), notice, data(20)], false);
+
+    let collected = sub.collect_for(Duration::from_secs(30));
+
+    // Notice is dropped (logged); only data is collected.
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}

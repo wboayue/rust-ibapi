@@ -4,8 +4,10 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use futures::stream::Stream;
+use futures::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
@@ -18,6 +20,9 @@ use crate::Error;
 // Type aliases to reduce complexity
 type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
 type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
+// Non-capturing detector — a plain fn pointer (the decoder's `is_snapshot_end`),
+// so it needs no allocation, no vtable, and is `Copy`.
+type SnapshotEndFn<T> = fn(&T) -> bool;
 
 /// Asynchronous subscription for streaming data.
 ///
@@ -78,12 +83,17 @@ pub struct Subscription<T> {
     context: DecoderContext,
     /// Shared across clones — one `cancel()` call disables future cancel sends from any clone.
     cancelled: Arc<AtomicBool>,
+    /// Shared across clones — set once a snapshot-end sentinel is observed, so drop/cancel
+    /// skips the redundant cancel for an already-completed snapshot (mirrors the sync side).
+    snapshot_ended: Arc<AtomicBool>,
     /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
     /// on one clone must not short-circuit other clones' polls.
     stream_ended: AtomicBool,
     message_bus: Option<Arc<dyn AsyncMessageBus>>,
     /// Cancel message generator
     cancel_fn: Option<Arc<CancelFn>>,
+    /// Snapshot-end detector captured from the decoder (`None` for pre-decoded subscriptions).
+    snapshot_end_fn: Option<SnapshotEndFn<T>>,
 }
 
 enum SubscriptionInner<T> {
@@ -120,10 +130,12 @@ impl<T> Clone for Subscription<T> {
             order_id: self.order_id,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
+            snapshot_ended: self.snapshot_ended.clone(),
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
             stream_ended: AtomicBool::new(false),
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
+            snapshot_end_fn: self.snapshot_end_fn,
         }
     }
 }
@@ -154,9 +166,11 @@ impl<T> Subscription<T> {
             order_id,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
+            snapshot_ended: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
             message_bus: Some(message_bus),
             cancel_fn: None,
+            snapshot_end_fn: None,
         }
     }
 
@@ -170,10 +184,14 @@ impl<T> Subscription<T> {
     ) -> Self
     where
         D: StreamDecoder<T> + 'static,
-        T: 'static,
+        T: StreamDecoder<T> + 'static,
     {
         let mut sub = Self::with_decoder(internal, message_bus, D::decode, request_id, order_id, context);
         sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
+        // Capture the decoder's snapshot-end detector so `poll_next` (which lacks the
+        // `StreamDecoder` bound) can flag a completed snapshot and skip the cancel on
+        // drop — the async mirror of the sync side's intrinsic `snapshot_ended` tracking.
+        sub.snapshot_end_fn = Some(<T as StreamDecoder<T>>::is_snapshot_end);
         sub
     }
 
@@ -186,7 +204,7 @@ impl<T> Subscription<T> {
     ) -> Self
     where
         D: StreamDecoder<T> + 'static,
-        T: 'static,
+        T: StreamDecoder<T> + 'static,
     {
         Self::new_from_internal::<D>(internal, message_bus, None, None, context)
     }
@@ -201,15 +219,115 @@ impl<T> Subscription<T> {
             order_id: None,
             context: DecoderContext::default(),
             cancelled: Arc::new(AtomicBool::new(false)),
+            snapshot_ended: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
             message_bus: None,
             cancel_fn: None,
+            snapshot_end_fn: None,
         }
     }
 
     /// Get the request ID associated with this subscription
     pub fn request_id(&self) -> Option<i32> {
         self.request_id
+    }
+}
+
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
+    /// Collects data items into a `Vec`, bounded by a total wall-clock `timeout`.
+    ///
+    /// Drives the subscription until the first of: the `timeout` elapses, the
+    /// stream ends, a snapshot-end sentinel arrives (e.g.
+    /// [`TickTypes::SnapshotEnd`](crate::market_data::realtime::TickTypes::SnapshotEnd)),
+    /// or a terminal error occurs. Notices are filtered (logged at `warn!`); the
+    /// snapshot-end sentinel is not included in the returned `Vec`. On a terminal
+    /// error the items collected so far are returned (the error is logged at
+    /// `warn!`).
+    ///
+    /// This is the one-shot snapshot terminal: combined with
+    /// [`MarketDataBuilder::snapshot`](crate::market_data::builder::MarketDataBuilder::snapshot),
+    /// the request returns one round of data ending in a snapshot sentinel, so
+    /// `timeout` acts only as a safety bound. Equivalent to
+    /// [`collect_until`](Self::collect_until) with a predicate that never fires.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let mut subscription = client.market_data(&contract).snapshot().subscribe().await.expect("request failed");
+    ///
+    ///     let ticks = subscription.collect_for(Duration::from_secs(5)).await;
+    ///     println!("collected {} ticks", ticks.len());
+    /// }
+    /// ```
+    pub async fn collect_for(&mut self, timeout: Duration) -> Vec<T> {
+        self.collect_until(timeout, |_| false).await
+    }
+
+    /// Collects data items into a `Vec`, stopping early once `stop` is satisfied.
+    ///
+    /// Like [`collect_for`](Self::collect_for), but after each item is appended
+    /// the `stop` predicate is called with the full accumulated slice; returning
+    /// `true` ends collection (the triggering item is included). Use it to stop
+    /// as soon as the fields of interest are populated, rather than waiting out
+    /// the whole `timeout`. The same timeout / stream-end / snapshot-end /
+    /// terminal-error bounds as `collect_for` still apply.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::market_data::realtime::TickTypes;
+    /// use ibapi::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let mut subscription = client.market_data(&contract).snapshot().subscribe().await.expect("request failed");
+    ///
+    ///     // Stop as soon as a price tick has arrived.
+    ///     let ticks = subscription
+    ///         .collect_until(Duration::from_secs(5), |ticks| {
+    ///             ticks.iter().any(|t| matches!(t, TickTypes::Price(_) | TickTypes::PriceSize(_)))
+    ///         })
+    ///         .await;
+    ///     println!("collected {} ticks", ticks.len());
+    /// }
+    /// ```
+    pub async fn collect_until(&mut self, timeout: Duration, mut stop: impl FnMut(&[T]) -> bool) -> Vec<T> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut collected = Vec::new();
+        loop {
+            match tokio::time::timeout_at(deadline, self.next()).await {
+                // Total deadline reached.
+                Err(_elapsed) => break,
+                // End of stream.
+                Ok(None) => break,
+                Ok(Some(Ok(SubscriptionItem::Data(value)))) => {
+                    if value.is_snapshot_end() {
+                        break;
+                    }
+                    collected.push(value);
+                    if stop(&collected) {
+                        break;
+                    }
+                }
+                Ok(Some(Ok(SubscriptionItem::Notice(notice)))) => warn!("ib notice on subscription: {notice}"),
+                Ok(Some(Err(e))) => {
+                    warn!("subscription error during collect: {e}");
+                    break;
+                }
+            }
+        }
+        collected
     }
 }
 
@@ -230,6 +348,8 @@ impl<T: Send + 'static> Stream for Subscription<T> {
             inner,
             context,
             stream_ended,
+            snapshot_ended,
+            snapshot_end_fn,
             ..
         } = this;
         loop {
@@ -249,7 +369,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                         RoutedItem::Response(mut message) => {
                             let result = decoder(context, &mut message);
                             match process_decode_result(result) {
-                                ProcessingResult::Success(val) => return Poll::Ready(Some(Ok(SubscriptionItem::Data(val)))),
+                                ProcessingResult::Success(val) => {
+                                    if snapshot_end_fn.is_some_and(|is_end| is_end(&val)) {
+                                        snapshot_ended.store(true, Ordering::Relaxed);
+                                    }
+                                    return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
+                                }
                                 ProcessingResult::EndOfStream => {
                                     stream_ended.store(true, Ordering::Relaxed);
                                     return Poll::Ready(None);
@@ -294,6 +419,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
 impl<T> Subscription<T> {
     /// Cancel the subscription
     pub async fn cancel(&self) {
+        // Snapshot subscriptions self-terminate after the snapshot-end sentinel;
+        // their request is already complete, so skip the redundant cancel.
+        if self.snapshot_ended.load(Ordering::Relaxed) {
+            return;
+        }
+
         if self.cancelled.load(Ordering::Relaxed) {
             return;
         }
@@ -314,6 +445,11 @@ impl<T> Subscription<T> {
 impl<T> Drop for Subscription<T> {
     fn drop(&mut self) {
         debug!("dropping async subscription");
+
+        // A completed snapshot needs no cancel — mirror the sync drop behavior.
+        if self.snapshot_ended.load(Ordering::Relaxed) {
+            return;
+        }
 
         // Check if already cancelled
         if self.cancelled.load(Ordering::Relaxed) {
