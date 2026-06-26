@@ -20,6 +20,7 @@ use crate::Error;
 // Type aliases to reduce complexity
 type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
 type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
+type SnapshotEndFn<T> = Arc<dyn Fn(&T) -> bool + Send + Sync>;
 
 /// Asynchronous subscription for streaming data.
 ///
@@ -80,12 +81,17 @@ pub struct Subscription<T> {
     context: DecoderContext,
     /// Shared across clones — one `cancel()` call disables future cancel sends from any clone.
     cancelled: Arc<AtomicBool>,
+    /// Shared across clones — set once a snapshot-end sentinel is observed, so drop/cancel
+    /// skips the redundant cancel for an already-completed snapshot (mirrors the sync side).
+    snapshot_ended: Arc<AtomicBool>,
     /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
     /// on one clone must not short-circuit other clones' polls.
     stream_ended: AtomicBool,
     message_bus: Option<Arc<dyn AsyncMessageBus>>,
     /// Cancel message generator
     cancel_fn: Option<Arc<CancelFn>>,
+    /// Snapshot-end detector captured from the decoder (`None` for pre-decoded subscriptions).
+    snapshot_end_fn: Option<SnapshotEndFn<T>>,
 }
 
 enum SubscriptionInner<T> {
@@ -122,10 +128,12 @@ impl<T> Clone for Subscription<T> {
             order_id: self.order_id,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
+            snapshot_ended: self.snapshot_ended.clone(),
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
             stream_ended: AtomicBool::new(false),
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
+            snapshot_end_fn: self.snapshot_end_fn.clone(),
         }
     }
 }
@@ -156,9 +164,11 @@ impl<T> Subscription<T> {
             order_id,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
+            snapshot_ended: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
             message_bus: Some(message_bus),
             cancel_fn: None,
+            snapshot_end_fn: None,
         }
     }
 
@@ -203,9 +213,11 @@ impl<T> Subscription<T> {
             order_id: None,
             context: DecoderContext::default(),
             cancelled: Arc::new(AtomicBool::new(false)),
+            snapshot_ended: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
             message_bus: None,
             cancel_fn: None,
+            snapshot_end_fn: None,
         }
     }
 
@@ -217,6 +229,16 @@ impl<T> Subscription<T> {
 
 #[allow(private_bounds)]
 impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
+    /// Capture the decoder's snapshot-end detector so `poll_next` (which lacks the
+    /// `StreamDecoder` bound) can flag a completed snapshot and skip the cancel on drop.
+    ///
+    /// Set at subscription-build time for the self-decoding `T: StreamDecoder<T>`
+    /// case (every production subscription). The detector is a no-op for decoders
+    /// that don't override `is_snapshot_end` (currently all but market data).
+    pub(crate) fn detect_snapshot_end(&mut self) {
+        self.snapshot_end_fn = Some(Arc::new(|value: &T| value.is_snapshot_end()));
+    }
+
     /// Collects data items into a `Vec`, bounded by a total wall-clock `timeout`.
     ///
     /// Drives the subscription until the first of: the `timeout` elapses, the
@@ -330,6 +352,8 @@ impl<T: Send + 'static> Stream for Subscription<T> {
             inner,
             context,
             stream_ended,
+            snapshot_ended,
+            snapshot_end_fn,
             ..
         } = this;
         loop {
@@ -349,7 +373,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                         RoutedItem::Response(mut message) => {
                             let result = decoder(context, &mut message);
                             match process_decode_result(result) {
-                                ProcessingResult::Success(val) => return Poll::Ready(Some(Ok(SubscriptionItem::Data(val)))),
+                                ProcessingResult::Success(val) => {
+                                    if snapshot_end_fn.as_ref().is_some_and(|is_end| is_end(&val)) {
+                                        snapshot_ended.store(true, Ordering::Relaxed);
+                                    }
+                                    return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
+                                }
                                 ProcessingResult::EndOfStream => {
                                     stream_ended.store(true, Ordering::Relaxed);
                                     return Poll::Ready(None);
@@ -394,6 +423,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
 impl<T> Subscription<T> {
     /// Cancel the subscription
     pub async fn cancel(&self) {
+        // Snapshot subscriptions self-terminate after the snapshot-end sentinel;
+        // their request is already complete, so skip the redundant cancel.
+        if self.snapshot_ended.load(Ordering::Relaxed) {
+            return;
+        }
+
         if self.cancelled.load(Ordering::Relaxed) {
             return;
         }
@@ -414,6 +449,11 @@ impl<T> Subscription<T> {
 impl<T> Drop for Subscription<T> {
     fn drop(&mut self) {
         debug!("dropping async subscription");
+
+        // A completed snapshot needs no cancel — mirror the sync drop behavior.
+        if self.snapshot_ended.load(Ordering::Relaxed) {
+            return;
+        }
 
         // Check if already cancelled
         if self.cancelled.load(Ordering::Relaxed) {

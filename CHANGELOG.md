@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Error::is_connection_lost()` predicate so reconnect loops can branch on connection loss without matching internal error variants (#690).
 - `Subscription::collect_for(timeout)` / `collect_until(timeout, predicate)` terminals and `MarketDataBuilder::snapshot_once(timeout)` to collect a one-shot snapshot into a `Vec` without hand-writing a collect-with-timeout loop (#686).
 
+### Fixed
+
+- Async snapshot market-data subscriptions no longer send a redundant cancel after the snapshot completes, matching the sync side (#686).
+
 ## [3.1.0] - 2026-06-19
 
 ### Added

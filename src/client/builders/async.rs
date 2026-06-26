@@ -224,48 +224,39 @@ where
     pub async fn send_with_request_id<D>(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_request(request_id, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
-            subscription,
-            self.message_bus.clone(),
-            Some(request_id),
-            None,
-            self.context,
-        ))
+        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), Some(request_id), None, self.context);
+        subscription.detect_snapshot_end();
+        Ok(subscription)
     }
 
     /// Sends a shared request (no ID) and builds the subscription
     pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
-            subscription,
-            self.message_bus.clone(),
-            None,
-            None,
-            self.context,
-        ))
+        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), None, None, self.context);
+        subscription.detect_snapshot_end();
+        Ok(subscription)
     }
 
     /// Sends an order request and builds the subscription
     pub async fn send_order<D>(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_order_request(order_id, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
-            subscription,
-            self.message_bus.clone(),
-            None,
-            Some(order_id),
-            self.context,
-        ))
+        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), None, Some(order_id), self.context);
+        subscription.detect_snapshot_end();
+        Ok(subscription)
     }
 }
 
