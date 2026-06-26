@@ -228,9 +228,13 @@ where
     {
         let subscription = self.message_bus.send_request(request_id, message).await?;
 
-        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), Some(request_id), None, self.context);
-        subscription.detect_snapshot_end();
-        Ok(subscription)
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            self.context,
+        ))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
@@ -241,9 +245,13 @@ where
     {
         let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
-        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), None, None, self.context);
-        subscription.detect_snapshot_end();
-        Ok(subscription)
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            self.message_bus.clone(),
+            None,
+            None,
+            self.context,
+        ))
     }
 
     /// Sends an order request and builds the subscription
@@ -254,9 +262,13 @@ where
     {
         let subscription = self.message_bus.send_order_request(order_id, message).await?;
 
-        let mut subscription = Subscription::new_from_internal::<D>(subscription, self.message_bus.clone(), None, Some(order_id), self.context);
-        subscription.detect_snapshot_end();
-        Ok(subscription)
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            self.message_bus.clone(),
+            None,
+            Some(order_id),
+            self.context,
+        ))
     }
 }
 

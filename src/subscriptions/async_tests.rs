@@ -392,12 +392,14 @@ async fn test_subscription_with_context() {
 
 #[tokio::test]
 async fn test_subscription_new_from_internal_simple() {
-    // Define a simple decoder type
-    struct TestDecoder;
+    // A self-decoding item type (decoder type == item type), like every
+    // production decoder.
+    #[derive(Debug)]
+    struct TestItem;
 
-    impl StreamDecoder<String> for TestDecoder {
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<String, Error> {
-            Ok("decoded".to_string())
+    impl StreamDecoder<TestItem> for TestItem {
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<TestItem, Error> {
+            Ok(TestItem)
         }
 
         fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -409,7 +411,7 @@ async fn test_subscription_new_from_internal_simple() {
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, message_bus, DecoderContext::default());
+    let subscription: Subscription<TestItem> = Subscription::new_from_internal_simple::<TestItem>(internal, message_bus, DecoderContext::default());
 
     assert!(subscription.cancel_fn.is_some());
 }

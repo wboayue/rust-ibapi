@@ -1962,35 +1962,8 @@ pub fn tick_option_computation() -> TickOptionComputationResponse {
     TickOptionComputationResponse::default()
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct TickSnapshotEndResponse {
-    pub request_id: i32,
-}
-
-impl Default for TickSnapshotEndResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-        }
-    }
-}
-
-impl TickSnapshotEndResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-}
-
-impl ResponseProtoEncoder for TickSnapshotEndResponse {
-    type Proto = proto::TickSnapshotEnd;
-
-    fn to_proto(&self) -> Self::Proto {
-        proto::TickSnapshotEnd {
-            req_id: Some(self.request_id),
-        }
-    }
-}
+// Sentinel `*End` response (msg id 57) — same shape as AccountSummaryEnd etc.
+request_id_response_builder!(TickSnapshotEndResponse, "57", TickSnapshotEnd);
 
 pub fn tick_snapshot_end() -> TickSnapshotEndResponse {
     TickSnapshotEndResponse::default()
