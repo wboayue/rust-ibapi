@@ -232,6 +232,12 @@ pub enum WhatToShow {
     Bid,
     /// Ask prices.
     Ask,
+    /// Aggregated trade data (wire value `AGGTRADES`).
+    ///
+    /// Required for crypto contracts: TWS rejects `TRADES` for crypto with
+    /// error 10299 on `reqRealTimeBars`, so crypto trade-price bars must be
+    /// requested as `AGGTRADES`.
+    AggTrades,
 }
 
 impl std::fmt::Display for WhatToShow {
@@ -241,6 +247,7 @@ impl std::fmt::Display for WhatToShow {
             Self::MidPoint => write!(f, "MIDPOINT"),
             Self::Bid => write!(f, "BID"),
             Self::Ask => write!(f, "ASK"),
+            Self::AggTrades => write!(f, "AGGTRADES"),
         }
     }
 }
