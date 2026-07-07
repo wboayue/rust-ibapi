@@ -67,10 +67,10 @@ mod sync_helpers {
         let request = encoder()?;
         let subscription = client.shared_request(message_type).send_raw(request)?;
 
-        if let Some(Ok(message)) = subscription.next() {
-            processor(&message)
-        } else {
-            Ok(default())
+        match subscription.next() {
+            Some(Ok(message)) => processor(&message),
+            Some(Err(e)) => Err(e),
+            None => Ok(default()),
         }
     }
 

@@ -883,6 +883,38 @@ fn test_channel_mappings_completeness() {
 }
 
 #[test]
+fn test_one_shot_error_response_types() {
+    use super::shared_channel_configuration::one_shot_error_response_types;
+
+    let one_shot = one_shot_error_response_types();
+
+    // Genuine one-shots (single terminating response) are eligible for fail-fast.
+    for included in [
+        IncomingMessages::NextValidId,
+        IncomingMessages::MarketRule,
+        IncomingMessages::ManagedAccounts,
+        IncomingMessages::FamilyCodes,
+    ] {
+        assert!(one_shot.contains(&included), "{included:?} should be a one-shot error response type");
+    }
+
+    // Streaming channels are excluded so an unrelated error never terminates a
+    // live subscription — including NewsBulletins / WshEventData, which stream
+    // without an `*End` marker.
+    for excluded in [
+        IncomingMessages::OpenOrder,
+        IncomingMessages::OrderStatus,
+        IncomingMessages::Position,
+        IncomingMessages::PositionMulti,
+        IncomingMessages::AccountValue,
+        IncomingMessages::NewsBulletins,
+        IncomingMessages::WshEventData,
+    ] {
+        assert!(!one_shot.contains(&excluded), "{excluded:?} is streaming and must not be fail-fast");
+    }
+}
+
+#[test]
 fn test_notice_edge_cases() {
     struct TestCase {
         name: &'static str,

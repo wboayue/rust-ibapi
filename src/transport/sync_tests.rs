@@ -1062,6 +1062,56 @@ fn test_warning_with_unspecified_id_is_log_only() -> Result<(), Error> {
     Ok(())
 }
 
+/// Request-less hard error (id = -1) is uncorrelatable, so it fails every
+/// in-flight *one-shot* shared request fast (`RequestIds` here) while leaving
+/// *streaming* shared requests (`RequestPositions`) untouched — and still fans
+/// out to the global notice stream. Regression for #694 (callers hung forever).
+#[test]
+fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+    let streaming = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+
+    // 321 "read-only mode" is the live-reproduced case; non-warning, id = -1.
+    stream.push_inbound(error_frame(-1, 321, "The API interface is currently in Read-Only mode."));
+    bus.dispatch()?;
+
+    // One-shot caller fails fast with the real error instead of hanging. Read via
+    // the legacy `next()` projection — the same path `next_valid_order_id` and the
+    // `one_shot_request` helper consume — so a `Some(Err(..))` surfaces to callers.
+    match one_shot.next_timeout(TICK).expect("one-shot got no error") {
+        Err(Error::Notice(notice)) => {
+            assert_eq!(notice.code, 321);
+            assert_eq!(notice.message, "The API interface is currently in Read-Only mode.");
+        }
+        other => panic!("expected Err(Notice), got {other:?}"),
+    }
+    // Streaming shared subscription is not terminated by the unrelated error.
+    assert!(
+        streaming.try_next_routed().is_none(),
+        "streaming shared sub must not receive the request-less error"
+    );
+    // Global notice stream still observes it.
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed hard error");
+    assert_eq!(notice.code, 321);
+    Ok(())
+}
+
+/// A request-less *warning* stays notice-only: it must not fail an in-flight
+/// one-shot shared request (only non-warning hard errors trip fail-fast).
+#[test]
+fn test_unrouted_warning_does_not_fail_one_shot() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+
+    stream.push_inbound(error_frame(-1, 2104, "Market data farm connection is OK:usfarm"));
+    bus.dispatch()?;
+
+    assert!(one_shot.try_next_routed().is_none(), "warning must not fail a one-shot shared request");
+    Ok(())
+}
+
 /// Order-channel fallback: a notice arrives bound to an `order_id` that
 /// matches an order subscription (not a request subscription). The
 /// `deliver_to_request_id` helper should fall back to the order channel.

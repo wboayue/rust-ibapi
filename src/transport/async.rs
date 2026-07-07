@@ -470,9 +470,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let is_warning = is_warning_error(payload.error_code);
 
         if request_id == UNSPECIFIED_REQUEST_ID {
-            let notice = Notice::from(payload);
+            let notice = Notice::from(payload.clone());
             super::common::log_unrouted_notice(&notice);
             let _ = self.connection.notice_sender.send(notice);
+            // A request-less hard error carries no id to correlate, so fail any
+            // in-flight one-shot shared request fast instead of leaving it to hang.
+            if !is_warning {
+                self.fail_one_shot_shared_channels(&payload).await;
+            }
         } else {
             let item = if is_warning {
                 RoutedItem::Notice(Notice::from(payload))
@@ -483,6 +488,20 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
 
         Ok(())
+    }
+
+    /// Deliver a request-less hard error to every in-flight one-shot shared
+    /// request so it fails fast rather than hanging. Streaming shared channels
+    /// are excluded (see [`shared_channel_configuration::one_shot_error_response_types`]).
+    async fn fail_one_shot_shared_channels(&self, payload: &DecodedError) {
+        let channels = self.shared_channel_senders.read().await;
+        for message_type in shared_channel_configuration::one_shot_error_response_types() {
+            if let Some(senders) = channels.get(message_type) {
+                for sender in senders {
+                    let _ = sender.send(RoutedItem::Error(Error::from(payload.clone())));
+                }
+            }
+        }
     }
 
     /// Deliver a pre-classified Notice or Error to its owning subscription.

@@ -196,14 +196,14 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        if let Some(Ok(message)) = subscription.next() {
-            let next_order_id = decoders::decode_next_valid_id(&message)?;
-
-            self.set_next_order_id(next_order_id);
-
-            Ok(next_order_id)
-        } else {
-            Err(Error::UnexpectedEndOfStream)
+        match subscription.next() {
+            Some(Ok(message)) => {
+                let next_order_id = decoders::decode_next_valid_id(&message)?;
+                self.set_next_order_id(next_order_id);
+                Ok(next_order_id)
+            }
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 

@@ -107,6 +107,24 @@ impl SharedChannels {
             }
         }
     }
+
+    // Notify only the one-shot senders. Used to fail in-flight one-shot requests
+    // fast on a request-less error, which carries no id to correlate. Streaming
+    // channels are excluded so an unrelated error can't terminate a live stream.
+    fn notify_one_shot<F>(&self, message_fn: F)
+    where
+        F: Fn() -> RoutedItem,
+    {
+        for message_type in shared_channel_configuration::one_shot_error_response_types() {
+            if let Some(senders) = self.senders.get(message_type) {
+                for sender in senders {
+                    if let Err(e) = sender.send(message_fn()) {
+                        warn!("error sending one-shot error notification: {e}");
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Fan-out for unrouted notices. Each subscriber gets its own crossbeam
@@ -320,9 +338,14 @@ impl<S: Stream> TcpMessageBus<S> {
                 let is_warning = is_warning_error(payload.error_code);
 
                 if request_id == UNSPECIFIED_REQUEST_ID {
-                    let notice = Notice::from(payload);
+                    let notice = Notice::from(payload.clone());
                     super::common::log_unrouted_notice(&notice);
                     self.connection.notice_broadcaster.broadcast(notice);
+                    // A request-less hard error carries no id to correlate, so fail any
+                    // in-flight one-shot shared request fast instead of leaving it to hang.
+                    if !is_warning {
+                        self.shared_channels.notify_one_shot(|| RoutedItem::Error(Error::from(payload.clone())));
+                    }
                 } else {
                     let item = if is_warning {
                         RoutedItem::Notice(Notice::from(payload))
@@ -635,9 +658,15 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.connection.write_message(message)?;
-
         let shared_receiver = self.shared_channels.get_receiver(message_type);
+
+        // Shared channels are one crossbeam queue per request type (unlike the async
+        // broadcast, whose `resubscribe` starts fresh). Discard anything buffered while
+        // no request was in flight — e.g. a request-less error fanned out to one-shot
+        // channels — so this request reads only its own responses.
+        while shared_receiver.try_recv().is_ok() {}
+
+        self.connection.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .shared_receiver(shared_receiver)
