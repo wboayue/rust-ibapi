@@ -36,10 +36,10 @@ Version 3.0 is a breaking release. Fix API inconsistencies even when it means br
 
 ## Branches
 
-- **`main`** — 3.x development and releases
-- **`v2-stable`** — 2.x maintenance
+- **`main`** — 3.x development and releases. **This is the only actively maintained branch.**
+- **`v2-stable`** — 2.x maintenance, frozen. Only touch it when a **specific bug** must be backported there, and only when explicitly asked.
 
-Changes to both branches should be made via pull requests.
+Default all work — features and fixes — to `main` alone. Do **not** open v2-stable PRs by default; only backport a specific named bug on explicit request. Changes to either branch go through pull requests.
 
 ## Key Points to Remember
 
