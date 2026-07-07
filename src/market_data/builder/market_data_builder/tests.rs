@@ -1,13 +1,16 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
     use crate::client::sync::Client;
-    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, proto_response, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::messages::OutgoingMessages;
+    use crate::market_data::realtime::TickTypes;
+    use crate::messages::{IncomingMessages, OutgoingMessages};
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::testdata::builders::market_data::market_data_request;
+    use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
+    use crate::testdata::builders::ResponseProtoEncoder;
     use std::sync::{Arc, RwLock};
+    use std::time::Duration;
 
     #[test]
     fn test_market_data_builder_default() {
@@ -187,18 +190,47 @@ mod sync_tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
         assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
+
+    #[test]
+    fn test_snapshot_once_collects_until_snapshot_end() {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+            proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
+            proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
+            proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
+        ]));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let ticks = client
+            .market_data(&contract)
+            .snapshot_once(Duration::from_secs(30))
+            .expect("snapshot_once failed");
+
+        // Two data ticks collected; the SnapshotEnd sentinel is excluded.
+        assert_eq!(ticks.len(), 2, "Should collect both ticks before the snapshot end");
+        assert!(matches!(ticks[0], TickTypes::Price(_)));
+        assert!(matches!(ticks[1], TickTypes::Size(_)));
+
+        // snapshot_once forces snapshot mode regardless of prior builder state.
+        let request_messages = message_bus.request_messages();
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    }
 }
 
 #[cfg(feature = "async")]
 mod async_tests {
     use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, proto_response, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::messages::OutgoingMessages;
+    use crate::market_data::realtime::TickTypes;
+    use crate::messages::{IncomingMessages, OutgoingMessages};
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::testdata::builders::market_data::market_data_request;
+    use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
+    use crate::testdata::builders::ResponseProtoEncoder;
     use std::sync::{Arc, RwLock};
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_market_data_builder_async() {
@@ -270,6 +302,59 @@ mod async_tests {
 
         let request_messages = message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_once_collects_until_snapshot_end() {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+            proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
+            proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
+            proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
+        ]));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let ticks = client
+            .market_data(&contract)
+            .snapshot_once(Duration::from_secs(30))
+            .await
+            .expect("snapshot_once failed");
+
+        // Two data ticks collected; the SnapshotEnd sentinel is excluded.
+        assert_eq!(ticks.len(), 2, "Should collect both ticks before the snapshot end");
+        assert!(matches!(ticks[0], TickTypes::Price(_)));
+        assert!(matches!(ticks[1], TickTypes::Size(_)));
+
+        let request_messages = message_bus.request_messages();
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_once_skips_cancel_after_completion() {
+        // A completed snapshot must not emit a cancel on drop. The async drop
+        // spawns the cancel send, so yield long enough for any spawned task to
+        // run before asserting only the original request was sent.
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+            proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
+            proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
+        ]));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+
+        let ticks = client
+            .market_data(&contract)
+            .snapshot_once(Duration::from_secs(30))
+            .await
+            .expect("snapshot_once failed");
+        assert_eq!(ticks.len(), 1);
+
+        // Give a spawned cancel (if any) time to land.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let request_messages = message_bus.request_messages();
+        assert_eq!(request_messages.len(), 1, "Completed snapshot must not send a cancel message");
         assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 }

@@ -511,7 +511,7 @@ match client.market_data(contract).subscribe() {
 for result in subscription {
     match result {
         Ok(data) => process(data),
-        Err(Error::ConnectionReset) => {
+        Err(e) if e.is_connection_lost() => {
             // Resubscribe after reconnection
             break;
         },
@@ -521,6 +521,37 @@ for result in subscription {
 ```
 
 ## Common Patterns
+
+### Correlating Commissions with Executions
+
+`CommissionReport` joins to its `ExecutionData` deterministically by `execution_id` —
+the same value carried on `Execution::execution_id`. Both arrive on the same streams
+(`executions`, `place_order`, `order_update_stream`), and IBKR may deliver them in
+either order, so index commissions by `execution_id` rather than guessing at arrival
+order. There is no temporal pairing to reason about.
+
+```rust
+use ibapi::orders::{CommissionReport, OrderUpdate};
+use std::collections::HashMap;
+
+let mut commissions: HashMap<String, CommissionReport> = HashMap::new();
+
+let updates = client.order_update_stream()?;
+for update in updates.iter_data() {
+    match update? {
+        OrderUpdate::CommissionReport(report) => {
+            // Index each commission by its execution_id.
+            commissions.insert(report.execution_id.clone(), report);
+        }
+        OrderUpdate::ExecutionData(exec) => {
+            // Look up the matching commission deterministically.
+            let commission = commissions.get(&exec.execution.execution_id);
+            println!("execution {} commission: {commission:?}", exec.execution.execution_id);
+        }
+        _ => {}
+    }
+}
+```
 
 ### Concurrent Subscriptions
 ```rust

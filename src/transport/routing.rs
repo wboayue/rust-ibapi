@@ -1,6 +1,6 @@
 //! Common message routing logic for sync and async implementations
 
-use crate::messages::{IncomingMessages, ResponseMessage, WARNING_CODE_RANGE};
+use crate::messages::{IncomingMessages, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
@@ -135,9 +135,14 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
     }
 }
 
-/// Check if an error code is a warning
+/// Check if an error code is a warning.
+///
+/// Warnings ([`WARNING_CODE_RANGE`]) and data advisories
+/// ([`DATA_ADVISORY_CODES`]) are informational — TWS proceeds with the
+/// request — so they are routed as a `Notice` rather than terminating the
+/// subscription as an `Error`.
 pub(crate) fn is_warning_error(error_code: i32) -> bool {
-    WARNING_CODE_RANGE.contains(&error_code)
+    WARNING_CODE_RANGE.contains(&error_code) || DATA_ADVISORY_CODES.contains(&error_code)
 }
 
 /// Request ID for unspecified errors

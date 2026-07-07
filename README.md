@@ -293,6 +293,30 @@ loop {
 
 Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
 
+#### One-Shot Snapshot
+
+For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. The same `collect_for` / `collect_until` terminals are available on any `Subscription<T>`.
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
+use std::time::Duration;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
+    let contract = Contract::stock("AAPL").build();
+
+    let ticks = client
+        .market_data(&contract)
+        .snapshot_once(Duration::from_secs(5))
+        .expect("snapshot request failed!");
+
+    for tick in ticks {
+        println!("tick: {tick:?}");
+    }
+}
+```
+
 Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust
@@ -670,6 +694,7 @@ connection-state UIs and startup telemetry — use the builder's
 
 ```rust
 use ibapi::client::blocking::Client;
+use ibapi::ConnectivityStatus;
 
 fn main() {
     let (client, notices) = Client::builder()
@@ -679,10 +704,14 @@ fn main() {
         .expect("connection failed");
 
     for n in notices.iter() {
-        if n.is_system_message() {
-            println!("connectivity: {n}");
-        } else {
-            println!("notice: {n}");
+        match n.connectivity_status() {
+            // Data-farm sub-state, refined from the 2100..=2169 warning band.
+            Some(ConnectivityStatus::Ok) => println!("farm online: {n}"),
+            Some(ConnectivityStatus::Broken) => println!("farm down: {n}"),
+            Some(ConnectivityStatus::Inactive | ConnectivityStatus::Connecting) => println!("farm idle: {n}"),
+            // Connectivity codes 1100/1101/1102 and everything else.
+            None if n.is_system_message() => println!("connectivity: {n}"),
+            None => println!("notice: {n}"),
         }
     }
     drop(client);
@@ -804,10 +833,12 @@ fn main() {
             match item {
                 Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
                 Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
-                Err(Error::ConnectionReset) => {
-                    eprintln!("Connection reset. Retrying stream...");
+                Err(e) if e.is_connection_lost() => {
+                    eprintln!("Connection lost. Retrying stream...");
                     continue 'outer;
                 }
+                // Everything else — including terminal ConnectionFailed (reconnect
+                // exhausted) — is not recoverable here, so stop.
                 Err(e) => {
                     eprintln!("error: {e}");
                     break 'outer;

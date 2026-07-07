@@ -192,6 +192,18 @@ fn test_is_warning_error() {
     assert!(!is_warning_error(2200));
 }
 
+#[test]
+fn test_is_warning_error_data_advisory_codes() {
+    // Delayed-data advisories: the request proceeds and data follows.
+    for code in DATA_ADVISORY_CODES {
+        assert!(is_warning_error(code), "advisory code {code} should route as a warning");
+
+        // Neighboring codes are real errors, not advisories.
+        assert!(!is_warning_error(code - 1), "code {} should not route as a warning", code - 1);
+        assert!(!is_warning_error(code + 1), "code {} should not route as a warning", code + 1);
+    }
+}
+
 /// Order-message routing for message types that lack an order_id at the proto
 /// level. `CompletedOrdersEnd` and `CommissionsReport` are order-routed but
 /// have no `order_id` field, so the dispatcher falls back to the sentinel `-1`.

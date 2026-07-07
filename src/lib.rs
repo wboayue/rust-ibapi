@@ -21,26 +21,48 @@
 //!
 //! Connect to TWS / IB Gateway and place a market order:
 //!
-//! ```no_run
-//! use ibapi::prelude::*;
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let client = Client::connect("127.0.0.1:4002", 100)
-//!         .await
-//!         .expect("connection failed");
-//!
-//!     let contract = Contract::stock("AAPL").build();
-//!     let order_id = client
-//!         .order(&contract)
-//!         .buy(100)
-//!         .market()
-//!         .submit()
-//!         .await
-//!         .expect("order submission failed");
-//!     println!("submitted order id: {order_id}");
-//! }
-//! ```
+#![cfg_attr(
+    feature = "async",
+    doc = r#"```no_run
+use ibapi::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100)
+        .await
+        .expect("connection failed");
+
+    let contract = Contract::stock("AAPL").build();
+    let order_id = client
+        .order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .await
+        .expect("order submission failed");
+    println!("submitted order id: {order_id}");
+}
+```"#
+)]
+#![cfg_attr(
+    not(feature = "async"),
+    doc = r#"```no_run
+use ibapi::prelude::*;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+
+    let contract = Contract::stock("AAPL").build();
+    let order_id = client
+        .order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .expect("order submission failed");
+    println!("submitted order id: {order_id}");
+}
+```"#
+)]
 //!
 //! For broader usage — quick start, examples, migration from v2, full API tour — see the
 //! [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md) and the
@@ -90,29 +112,56 @@ pub(crate) mod connection;
 ///
 /// # Example
 ///
-/// ```no_run
-/// use ibapi::{Client, StartupMessage};
-/// use std::sync::{Arc, Mutex};
-///
-/// #[tokio::main]
-/// async fn main() {
-///     let order_ids = Arc::new(Mutex::new(Vec::new()));
-///     let order_ids_clone = order_ids.clone();
-///
-///     let client = Client::builder()
-///         .address("127.0.0.1:4002")
-///         .client_id(100)
-///         .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
-///             order_ids_clone.lock().unwrap().push(o.order_id);
-///         })
-///         .connect()
-///         .await
-///         .expect("connection failed");
-///
-///     println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
-///     drop(client);
-/// }
-/// ```
+#[cfg_attr(
+    feature = "async",
+    doc = r#"```no_run
+use ibapi::{Client, StartupMessage};
+use std::sync::{Arc, Mutex};
+
+#[tokio::main]
+async fn main() {
+    let order_ids = Arc::new(Mutex::new(Vec::new()));
+    let order_ids_clone = order_ids.clone();
+
+    let client = Client::builder()
+        .address("127.0.0.1:4002")
+        .client_id(100)
+        .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
+            order_ids_clone.lock().unwrap().push(o.order_id);
+        })
+        .connect()
+        .await
+        .expect("connection failed");
+
+    println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
+    drop(client);
+}
+```"#
+)]
+#[cfg_attr(
+    not(feature = "async"),
+    doc = r#"```no_run
+use ibapi::{Client, StartupMessage};
+use std::sync::{Arc, Mutex};
+
+fn main() {
+    let order_ids = Arc::new(Mutex::new(Vec::new()));
+    let order_ids_clone = order_ids.clone();
+
+    let client = Client::builder()
+        .address("127.0.0.1:4002")
+        .client_id(100)
+        .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
+            order_ids_clone.lock().unwrap().push(o.order_id);
+        })
+        .connect()
+        .expect("connection failed");
+
+    println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
+    drop(client);
+}
+```"#
+)]
 pub use connection::StartupMessage;
 
 /// Common utilities shared across modules
@@ -169,12 +218,12 @@ pub use client::Client;
 pub use client::ClientBuilder;
 
 #[doc(inline)]
-pub use messages::{IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
+pub use messages::{ConnectivityStatus, IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
 
 #[doc(inline)]
 pub use messages::{
-    HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, ORDER_CANCELLED_CODE, ORDER_REJECTION_CODE_RANGE, SYSTEM_MESSAGE_CODES,
-    WARNING_CODE_RANGE,
+    DATA_ADVISORY_CODES, HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, ORDER_CANCELLED_CODE, ORDER_REJECTION_CODE_RANGE,
+    SYSTEM_MESSAGE_CODES, WARNING_CODE_RANGE,
 };
 
 #[doc(hidden)]
@@ -269,7 +318,7 @@ impl ToField for Option<f64> {
 }
 
 fn date_format() -> Vec<BorrowedFormatItem<'static>> {
-    format_description::parse("[year][month][day]").unwrap()
+    format_description::parse_borrowed::<2>("[year][month][day]").unwrap()
 }
 
 static DATE_FORMAT: LazyLock<Vec<BorrowedFormatItem<'static>>> = LazyLock::new(date_format);

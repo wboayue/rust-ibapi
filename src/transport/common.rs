@@ -4,12 +4,23 @@ use std::time::Duration;
 
 use log::{error, info, warn};
 
-use crate::messages::Notice;
+use crate::messages::{ConnectivityStatus, Notice};
 use crate::subscriptions::common::RoutedItem;
+
+/// A notice reports *healthy* data-farm connectivity ("…connection is OK")
+/// rather than a problem. IB's message-codes reference classifies these as
+/// System Notifications, not warnings, so they're logged at info instead of
+/// warn. Only [`ConnectivityStatus::Ok`] is benign — `Broken`/`Inactive`/
+/// `Connecting` stay at warn via [`Notice::is_warning`].
+fn is_benign_connectivity_notice(notice: &Notice) -> bool {
+    notice.connectivity_status() == Some(ConnectivityStatus::Ok)
+}
 
 /// Log an unrouted notice (no subscription owner) at the appropriate severity.
 pub(crate) fn log_unrouted_notice(notice: &Notice) {
-    if notice.is_warning() {
+    if is_benign_connectivity_notice(notice) {
+        info!("connectivity: {notice}");
+    } else if notice.is_warning() {
         warn!("warning: {notice}");
     } else {
         error!("error: {notice}");

@@ -39,12 +39,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let end_time = datetime!(2024-01-05 16:00 UTC);
     let number_of_ticks = 1000; // Max 1000 ticks per request
 
+    // `filter_data()` drops notices and yields `Result<_, Error>`; `?` propagates
+    // a mid-stream error instead of letting it masquerade as end-of-data.
     let mut tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .starting(start_time)
         .ending(end_time)
         .trade()
-        .await?;
+        .await?
+        .filter_data();
 
     println!("Time range: {} to {}", start_time, end_time);
     println!("\nTime                     | Price    | Size   | Exchange | Conditions");
@@ -57,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process all historical ticks
     while let Some(tick) = tick_subscription.next().await {
+        let tick = tick?;
         tick_count += 1;
         total_volume += tick.size as f64;
         total_value += tick.price * tick.size as f64;
@@ -109,13 +113,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Get most recent trades (no start time)
     println!("\n\nExample 2: Most recent {} trades", 20);
-    let mut recent_trades = client.historical_ticks(&contract, 20).trade().await?;
+    let mut recent_trades = client.historical_ticks(&contract, 20).trade().await?.filter_data();
 
     println!("\nTime                     | Price    | Size");
     println!("-------------------------|----------|------");
 
     let mut recent_count = 0;
     while let Some(tick) = recent_trades.next().await {
+        let tick = tick?;
         recent_count += 1;
         let time_str = format!("{}", tick.timestamp);
         println!("{} | ${:7.2} | {:5.0}", time_str, tick.price, tick.size);

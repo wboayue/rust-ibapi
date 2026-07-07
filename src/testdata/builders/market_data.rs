@@ -1962,6 +1962,13 @@ pub fn tick_option_computation() -> TickOptionComputationResponse {
     TickOptionComputationResponse::default()
 }
 
+// Sentinel `*End` response (msg id 57) — same shape as AccountSummaryEnd etc.
+request_id_response_builder!(TickSnapshotEndResponse, "57", TickSnapshotEnd);
+
+pub fn tick_snapshot_end() -> TickSnapshotEndResponse {
+    TickSnapshotEndResponse::default()
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MktDepthExchangesResponse {
     pub descriptions: Vec<DepthMarketDataDescriptionFields>,

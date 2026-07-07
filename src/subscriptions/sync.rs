@@ -279,6 +279,97 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     pub fn timeout_iter_data(&self, timeout: Duration) -> FilterData<SubscriptionTimeoutIter<'_, T>> {
         self.timeout_iter(timeout).filter_data()
     }
+
+    /// Collects data items into a `Vec`, bounded by a total wall-clock `timeout`.
+    ///
+    /// Drives the subscription until the first of: the `timeout` elapses, the
+    /// stream ends, a snapshot-end sentinel arrives (e.g.
+    /// [`TickTypes::SnapshotEnd`](crate::market_data::realtime::TickTypes::SnapshotEnd)),
+    /// or a terminal error occurs. Notices are filtered (logged at `warn!`); the
+    /// snapshot-end sentinel is not included in the returned `Vec`. On a terminal
+    /// error the items collected so far are returned (the error is logged at
+    /// `warn!`).
+    ///
+    /// This is the one-shot snapshot terminal: combined with
+    /// [`MarketDataBuilder::snapshot`](crate::market_data::builder::MarketDataBuilder::snapshot),
+    /// the request returns one round of data ending in a snapshot sentinel, so
+    /// `timeout` acts only as a safety bound. Equivalent to
+    /// [`collect_until`](Self::collect_until) with a predicate that never fires.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client.market_data(&contract).snapshot().subscribe().expect("request failed");
+    ///
+    /// let ticks = subscription.collect_for(Duration::from_secs(5));
+    /// println!("collected {} ticks", ticks.len());
+    /// ```
+    pub fn collect_for(&self, timeout: Duration) -> Vec<T> {
+        self.collect_until(timeout, |_| false)
+    }
+
+    /// Collects data items into a `Vec`, stopping early once `stop` is satisfied.
+    ///
+    /// Like [`collect_for`](Self::collect_for), but after each item is appended
+    /// the `stop` predicate is called with the full accumulated slice; returning
+    /// `true` ends collection (the triggering item is included). Use it to stop
+    /// as soon as the fields of interest are populated, rather than waiting out
+    /// the whole `timeout`. The same timeout / stream-end / snapshot-end /
+    /// terminal-error bounds as `collect_for` still apply.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::TickTypes;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client.market_data(&contract).snapshot().subscribe().expect("request failed");
+    ///
+    /// // Stop as soon as a price tick has arrived.
+    /// let ticks = subscription.collect_until(Duration::from_secs(5), |ticks| {
+    ///     ticks.iter().any(|t| matches!(t, TickTypes::Price(_) | TickTypes::PriceSize(_)))
+    /// });
+    /// println!("collected {} ticks", ticks.len());
+    /// ```
+    pub fn collect_until(&self, timeout: Duration, mut stop: impl FnMut(&[T]) -> bool) -> Vec<T> {
+        let deadline = Instant::now() + timeout;
+        let mut collected = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match self.next_timeout(remaining) {
+                Some(Ok(SubscriptionItem::Data(value))) => {
+                    if value.is_snapshot_end() {
+                        break;
+                    }
+                    collected.push(value);
+                    if stop(&collected) {
+                        break;
+                    }
+                }
+                Some(Ok(SubscriptionItem::Notice(notice))) => warn!("ib notice on subscription: {notice}"),
+                Some(Err(e)) => {
+                    warn!("subscription error during collect: {e}");
+                    break;
+                }
+                // Per-item timeout (total deadline reached) or end of stream.
+                None => break,
+            }
+        }
+        collected
+    }
 }
 
 impl<T: StreamDecoder<T>> Drop for Subscription<T> {

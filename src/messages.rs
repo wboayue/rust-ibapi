@@ -1110,6 +1110,32 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 /// - 1300: Socket port reset during active connection
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
+/// Data-advisory codes that TWS sends on a request which then proceeds
+/// normally. The request is *not* rejected — the advisory announces a
+/// fallback (delayed market data) and the requested data follows, so these
+/// are informational notices, not errors. Classifying them as errors would
+/// terminate the subscription before its data arrives.
+/// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
+/// - 10167: Requested market data is not subscribed. Displaying delayed market data.
+pub const DATA_ADVISORY_CODES: [i32; 2] = [10089, 10167];
+
+/// Data-farm codes reporting a healthy connection ("…connection is OK").
+/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
+pub(crate) const FARM_OK_CODES: [i32; 3] = [2104, 2106, 2158];
+
+/// Data-farm codes reporting a broken connection ("…connection is broken").
+/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Broken`].
+pub(crate) const FARM_BROKEN_CODES: [i32; 3] = [2103, 2105, 2157];
+
+/// Data-farm codes reporting a dormant-but-available connection
+/// ("…inactive but should be available upon demand").
+/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Inactive`].
+pub(crate) const FARM_INACTIVE_CODES: [i32; 2] = [2107, 2108];
+
+/// Data-farm codes reporting a connection in progress ("…farm is connecting").
+/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Connecting`].
+pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
+
 /// Range of error codes that represent order rejections from TWS (200-399).
 ///
 /// Includes parameter validation, contract-not-found, margin and risk-check
@@ -1144,7 +1170,8 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// 2. [`Warning`](Self::Warning) — 2100..=2169.
 /// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding 202 by precedence.
-/// 5. [`Error`](Self::Error) — everything else.
+/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (10089, 10167).
+/// 6. [`Error`](Self::Error) — everything else.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
 /// breaking release.
@@ -1172,8 +1199,88 @@ pub enum NoticeCategory {
     SystemMessage,
     /// Order rejection (codes 200..=399).
     OrderRejection,
+    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request proceeded with a
+    /// fallback (delayed market data) rather than failing. Informational.
+    DataAdvisory,
     /// Any other error code.
     Error,
+}
+
+/// Connectivity sub-state of a data-farm notice within [`WARNING_CODE_RANGE`].
+///
+/// Returned by [`Notice::connectivity_status`] (and [`ConnectivityStatus::from_code`]
+/// for a raw code) for the data-farm status codes; `None` for every other notice.
+/// Lets reconnect/health logic tell "farm came back online" from "farm went
+/// inactive" without re-parsing codes. Additive to [`NoticeCategory`], which still
+/// classifies all of 2100..=2169 as [`NoticeCategory::Warning`].
+///
+/// The code→state vocabulary follows IB's published Message Codes table:
+///
+/// | State | Codes | Wire meaning |
+/// |---|---|---|
+/// | [`Ok`](Self::Ok) | 2104, 2106, 2158 | …data farm connection is OK |
+/// | [`Broken`](Self::Broken) | 2103, 2105, 2157 | …data farm connection is broken |
+/// | [`Inactive`](Self::Inactive) | 2107, 2108 | …connection is inactive but should be available upon demand |
+/// | [`Connecting`](Self::Connecting) | 2119 | …data farm is connecting |
+///
+/// The variant set is closed: an unrecognized code classifies as `None`
+/// (via [`ConnectivityStatus::from_code`]), not a new variant — so callers can
+/// match exhaustively and handle unknowns through the `Option`.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::{Notice, ConnectivityStatus};
+/// # let notice: Notice = unimplemented!();
+/// match notice.connectivity_status() {
+///     Some(ConnectivityStatus::Ok)         => {/* farm healthy */}
+///     Some(ConnectivityStatus::Broken)     => {/* link down */}
+///     Some(ConnectivityStatus::Inactive)   => {/* dormant, available on demand */}
+///     Some(ConnectivityStatus::Connecting) => {/* reconnecting */}
+///     None => {/* not a data-farm notice */}
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectivityStatus {
+    /// Data-farm connection is OK.
+    Ok,
+    /// Data-farm connection is broken.
+    Broken,
+    /// Connection inactive but available upon demand.
+    Inactive,
+    /// Connection is in the process of connecting.
+    Connecting,
+}
+
+impl ConnectivityStatus {
+    /// Classify a raw TWS error code into a data-farm connectivity sub-state.
+    ///
+    /// Returns `Some(..)` for the data-farm status codes inside
+    /// [`WARNING_CODE_RANGE`]; `None` for every other code. Use this when you
+    /// hold a raw code; use [`Notice::connectivity_status`] when you hold a
+    /// [`Notice`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::ConnectivityStatus;
+    /// assert_eq!(ConnectivityStatus::from_code(2104), Some(ConnectivityStatus::Ok));
+    /// assert_eq!(ConnectivityStatus::from_code(2105), Some(ConnectivityStatus::Broken));
+    /// assert_eq!(ConnectivityStatus::from_code(500), None);
+    /// ```
+    pub fn from_code(code: i32) -> Option<ConnectivityStatus> {
+        if FARM_OK_CODES.contains(&code) {
+            Some(ConnectivityStatus::Ok)
+        } else if FARM_BROKEN_CODES.contains(&code) {
+            Some(ConnectivityStatus::Broken)
+        } else if FARM_INACTIVE_CODES.contains(&code) {
+            Some(ConnectivityStatus::Inactive)
+        } else if FARM_CONNECTING_CODES.contains(&code) {
+            Some(ConnectivityStatus::Connecting)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<&ResponseMessage> for Notice {
@@ -1236,12 +1343,22 @@ impl Notice {
         SYSTEM_MESSAGE_CODES.contains(&self.code)
     }
 
+    /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
+    ///
+    /// Data advisories (codes 10089, 10167) announce that a request proceeded
+    /// with a fallback — delayed market data instead of real-time — rather
+    /// than failing. The requested data still follows, so the subscription
+    /// stays open and the notice is informational, not an error.
+    pub fn is_data_advisory(&self) -> bool {
+        DATA_ADVISORY_CODES.contains(&self.code)
+    }
+
     /// Returns `true` if this is an informational notice (not an error).
     ///
     /// Informational notices include cancellation confirmations, warnings,
-    /// and system/connectivity messages.
+    /// system/connectivity messages, and data advisories.
     pub fn is_informational(&self) -> bool {
-        self.is_cancellation() || self.is_warning() || self.is_system_message()
+        self.is_cancellation() || self.is_warning() || self.is_system_message() || self.is_data_advisory()
     }
 
     /// Returns `true` if this is an error requiring attention.
@@ -1321,9 +1438,32 @@ impl Notice {
             NoticeCategory::SystemMessage
         } else if self.is_order_rejection() {
             NoticeCategory::OrderRejection
+        } else if self.is_data_advisory() {
+            NoticeCategory::DataAdvisory
         } else {
             NoticeCategory::Error
         }
+    }
+
+    /// Classify the data-farm connectivity sub-state of this notice.
+    ///
+    /// Returns `Some(..)` for the data-farm status codes inside
+    /// [`WARNING_CODE_RANGE`]; `None` for every other notice. Additive to
+    /// [`Notice::category`], which still classifies all of 2100..=2169 as
+    /// [`NoticeCategory::Warning`]. Thin wrapper over
+    /// [`ConnectivityStatus::from_code`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Notice, ConnectivityStatus};
+    /// # let notice: Notice = unimplemented!();
+    /// if notice.connectivity_status() == Some(ConnectivityStatus::Broken) {
+    ///     eprintln!("data farm down: {notice}");
+    /// }
+    /// ```
+    pub fn connectivity_status(&self) -> Option<ConnectivityStatus> {
+        ConnectivityStatus::from_code(self.code)
     }
 }
 

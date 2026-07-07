@@ -392,12 +392,14 @@ async fn test_subscription_with_context() {
 
 #[tokio::test]
 async fn test_subscription_new_from_internal_simple() {
-    // Define a simple decoder type
-    struct TestDecoder;
+    // A self-decoding item type (decoder type == item type), like every
+    // production decoder.
+    #[derive(Debug)]
+    struct TestItem;
 
-    impl StreamDecoder<String> for TestDecoder {
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<String, Error> {
-            Ok("decoded".to_string())
+    impl StreamDecoder<TestItem> for TestItem {
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<TestItem, Error> {
+            Ok(TestItem)
         }
 
         fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -409,7 +411,7 @@ async fn test_subscription_new_from_internal_simple() {
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, message_bus, DecoderContext::default());
+    let subscription: Subscription<TestItem> = Subscription::new_from_internal_simple::<TestItem>(internal, message_bus, DecoderContext::default());
 
     assert!(subscription.cancel_fn.is_some());
 }
@@ -625,4 +627,103 @@ async fn pre_decoded_subscription_polls() {
     assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(2)))));
     // After the sender drops, the stream is exhausted.
     assert!(subscription.next().await.is_none());
+}
+
+// --- collect_for / collect_until ----------------------------------------
+
+use std::time::Duration;
+
+/// Test decoder for the collect tests: payload is text field 0; the value `-1`
+/// marks a snapshot-end sentinel (mirrors `TickTypes::SnapshotEnd`).
+#[derive(Debug, PartialEq)]
+struct CollectItem(i32);
+
+impl StreamDecoder<CollectItem> for CollectItem {
+    fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
+        Ok(CollectItem(msg.peek_int(0)?))
+    }
+
+    fn is_snapshot_end(&self) -> bool {
+        self.0 == -1
+    }
+}
+
+fn collect_data(value: i32) -> RoutedItem {
+    RoutedItem::Response(ResponseMessage::from(&format!("{value}\0")))
+}
+
+/// Build a `Subscription<CollectItem>` pre-loaded with `items`. When `keep_open`
+/// the broadcast sender is returned so the channel stays open (lets the timeout
+/// branch fire); otherwise it is dropped so the stream ends after draining.
+fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscription<CollectItem>, Option<broadcast::Sender<RoutedItem>>) {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let (tx, rx) = broadcast::channel(100);
+    let internal = AsyncInternalSubscription::new(rx);
+    for item in items {
+        tx.send(item).unwrap();
+    }
+    let sub = Subscription::<CollectItem>::with_decoder(internal, message_bus, CollectItem::decode, None, None, DecoderContext::default());
+    let keep = if keep_open { Some(tx) } else { None };
+    (sub, keep)
+}
+
+#[tokio::test]
+async fn test_collect_for_stops_at_snapshot_end() {
+    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(-1), collect_data(30)], true);
+
+    let collected = sub.collect_for(Duration::from_secs(30)).await;
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[tokio::test]
+async fn test_collect_until_stops_on_predicate() {
+    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(30), collect_data(40)], true);
+
+    let collected = sub.collect_until(Duration::from_secs(30), |items| items.len() >= 2).await;
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[tokio::test]
+async fn test_collect_for_returns_prefix_on_terminal_error() {
+    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), RoutedItem::Error(Error::ConnectionReset), collect_data(20)], true);
+
+    let collected = sub.collect_for(Duration::from_secs(30)).await;
+
+    assert_eq!(collected, vec![CollectItem(10)]);
+}
+
+#[tokio::test]
+async fn test_collect_for_returns_empty_on_timeout() {
+    // Channel stays open with no data; the total timeout bounds the wait.
+    let (mut sub, _keep) = collect_subscription(vec![], true);
+
+    let collected = sub.collect_for(Duration::from_millis(50)).await;
+
+    assert!(collected.is_empty());
+}
+
+#[tokio::test]
+async fn test_collect_for_drains_to_stream_end() {
+    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(30)], false);
+
+    let collected = sub.collect_for(Duration::from_secs(30)).await;
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20), CollectItem(30)]);
+}
+
+#[tokio::test]
+async fn test_collect_for_filters_notices() {
+    let notice = RoutedItem::Notice(Notice {
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    });
+    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), notice, collect_data(20)], false);
+
+    let collected = sub.collect_for(Duration::from_secs(30)).await;
+
+    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
 }
