@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use log::{error, info, warn};
 
-use crate::messages::{ConnectivityStatus, Notice};
+use crate::messages::{ConnectivityStatus, Notice, CONNECTIVITY_RESTORED_DATA_LOST_CODE, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE};
 use crate::subscriptions::common::RoutedItem;
 
 /// A notice reports *healthy* data-farm connectivity ("…connection is OK")
@@ -12,15 +12,24 @@ use crate::subscriptions::common::RoutedItem;
 /// System Notifications, not warnings, so they're logged at info instead of
 /// warn. Only [`ConnectivityStatus::Ok`] is benign — `Broken`/`Inactive`/
 /// `Connecting` stay at warn via [`Notice::is_warning`].
+///
+/// Code 1102 ("connectivity restored — data maintained") is a system message,
+/// not a data-farm notice, so it has no [`ConnectivityStatus`]; it is treated
+/// as benign here because nothing was lost on the reconnect.
 fn is_benign_connectivity_notice(notice: &Notice) -> bool {
-    notice.connectivity_status() == Some(ConnectivityStatus::Ok)
+    notice.connectivity_status() == Some(ConnectivityStatus::Ok) || notice.code == CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE
 }
 
 /// Log an unrouted notice (no subscription owner) at the appropriate severity.
+///
+/// System connectivity codes are graded by how much they matter: 1102
+/// (restored, data maintained) is benign → info; 1101 (restored, data lost —
+/// resubscribe required) is a warning; 1100 (connectivity lost) and everything
+/// else fall through to error.
 pub(crate) fn log_unrouted_notice(notice: &Notice) {
     if is_benign_connectivity_notice(notice) {
         info!("connectivity: {notice}");
-    } else if notice.is_warning() {
+    } else if notice.code == CONNECTIVITY_RESTORED_DATA_LOST_CODE || notice.is_warning() {
         warn!("warning: {notice}");
     } else {
         error!("error: {notice}");

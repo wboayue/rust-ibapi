@@ -1103,12 +1103,26 @@ pub const ORDER_CANCELLED_CODE: i32 = 202;
 /// Range of error codes that are considered warnings (2100-2169).
 pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 
+/// Connectivity between IB and TWS has been lost.
+pub(crate) const CONNECTIVITY_LOST_CODE: i32 = 1100;
+/// Connectivity restored, but market data was lost; resubscription is required.
+pub(crate) const CONNECTIVITY_RESTORED_DATA_LOST_CODE: i32 = 1101;
+/// Connectivity restored with market data maintained (nothing lost).
+pub(crate) const CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE: i32 = 1102;
+/// Socket port was reset during an active connection; the connection is dropped.
+pub(crate) const SOCKET_PORT_RESET_CODE: i32 = 1300;
+
 /// System message codes indicating connectivity status.
 /// - 1100: Connectivity lost
 /// - 1101: Connectivity restored, market data lost (resubscribe needed)
 /// - 1102: Connectivity restored, market data maintained
 /// - 1300: Socket port reset during active connection
-pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
+pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
+    CONNECTIVITY_LOST_CODE,
+    CONNECTIVITY_RESTORED_DATA_LOST_CODE,
+    CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
+    SOCKET_PORT_RESET_CODE,
+];
 
 /// Data-advisory codes that TWS sends on a request which then proceeds
 /// normally. The request is *not* rejected — the advisory announces a

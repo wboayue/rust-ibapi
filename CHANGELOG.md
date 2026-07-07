@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Connectivity restored notices no longer log at `error`: code 1102 ("data maintained") now logs at `info` and code 1101 ("data lost — resubscribe") at `warn`, so routine overnight reconnects stop tripping error-level alerting (#695).
 - Async snapshot market-data subscriptions no longer send a redundant cancel after the snapshot completes, matching the sync side (#686).
 
 ## [3.1.0] - 2026-06-19
