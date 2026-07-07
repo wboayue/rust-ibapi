@@ -616,6 +616,11 @@ pub enum WhatToShow {
     Ask,
     /// Bid/ask quote pairs.
     BidAsk,
+    /// Aggregated trade data (wire value `AGGTRADES`).
+    ///
+    /// Required for crypto contracts: TWS rejects `TRADES` for crypto with
+    /// error 10299, so crypto trade-price series must be requested as `AGGTRADES`.
+    AggTrades,
     /// Historical volatility computed by IB.
     HistoricalVolatility,
     /// Option implied volatility.
@@ -636,6 +641,7 @@ impl std::fmt::Display for WhatToShow {
             Self::Bid => write!(f, "BID"),
             Self::Ask => write!(f, "ASK"),
             Self::BidAsk => write!(f, "BID_ASK"),
+            Self::AggTrades => write!(f, "AGGTRADES"),
             Self::HistoricalVolatility => write!(f, "HISTORICAL_VOLATILITY"),
             Self::OptionImpliedVolatility => write!(f, "OPTION_IMPLIED_VOLATILITY"),
             Self::FeeRate => write!(f, "FEE_RATE"),
@@ -665,6 +671,7 @@ impl FromStr for WhatToShow {
             "BID" => Ok(Self::Bid),
             "ASK" => Ok(Self::Ask),
             "BID_ASK" => Ok(Self::BidAsk),
+            "AGGTRADES" => Ok(Self::AggTrades),
             "HISTORICAL_VOLATILITY" => Ok(Self::HistoricalVolatility),
             "OPTION_IMPLIED_VOLATILITY" => Ok(Self::OptionImpliedVolatility),
             "FEE_RATE" => Ok(Self::FeeRate),

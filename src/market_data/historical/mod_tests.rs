@@ -57,6 +57,7 @@ fn test_what_to_show_to_string() {
     assert_eq!("BID", WhatToShow::Bid.to_string());
     assert_eq!("ASK", WhatToShow::Ask.to_string());
     assert_eq!("BID_ASK", WhatToShow::BidAsk.to_string());
+    assert_eq!("AGGTRADES", WhatToShow::AggTrades.to_string());
     assert_eq!("HISTORICAL_VOLATILITY", WhatToShow::HistoricalVolatility.to_string());
     assert_eq!("OPTION_IMPLIED_VOLATILITY", WhatToShow::OptionImpliedVolatility.to_string());
     assert_eq!("FEE_RATE", WhatToShow::FeeRate.to_string());
@@ -71,6 +72,7 @@ fn test_what_to_show_from_string() {
     assert_eq!(WhatToShow::Bid, WhatToShow::from("BID"));
     assert_eq!(WhatToShow::Ask, WhatToShow::from("ASK"));
     assert_eq!(WhatToShow::BidAsk, WhatToShow::from("BID_ASK"));
+    assert_eq!(WhatToShow::AggTrades, WhatToShow::from("AGGTRADES"));
     assert_eq!(WhatToShow::HistoricalVolatility, WhatToShow::from("HISTORICAL_VOLATILITY"));
     assert_eq!(WhatToShow::OptionImpliedVolatility, WhatToShow::from("OPTION_IMPLIED_VOLATILITY"));
     assert_eq!(WhatToShow::FeeRate, WhatToShow::from("FEE_RATE"));
