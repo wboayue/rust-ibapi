@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-06
+
 ### Added
 
 - `AggTrades` variant (wire value `AGGTRADES`) on the historical and realtime `WhatToShow` enums, required to request trade bars for crypto contracts (TWS rejects `TRADES` with error 10299) (#693).
@@ -39,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/wboayue/rust-ibapi/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/wboayue/rust-ibapi/releases/tag/v3.0.1
