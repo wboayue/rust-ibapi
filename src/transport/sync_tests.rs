@@ -1112,6 +1112,55 @@ fn test_unrouted_warning_does_not_fail_one_shot() -> Result<(), Error> {
     Ok(())
 }
 
+/// A one-shot `send_shared_request` drains the shared queue before writing:
+/// a request-less error buffered while no request was in flight must not
+/// poison the next call, which reads only its own response.
+#[test]
+fn test_one_shot_shared_request_drains_stale_buffered_error() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    // Hard error arrives with no request in flight; fanned to the persistent
+    // one-shot senders, it buffers in the RequestIds shared queue.
+    stream.push_inbound(error_frame(-1, 321, "The API interface is currently in Read-Only mode."));
+    bus.dispatch()?;
+
+    // The next one-shot request drains the stale error and reads only its own response.
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+    assert!(one_shot.try_next_routed().is_none(), "stale buffered error must be drained");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::NextValidId as i32,
+        &crate::proto::NextValidId { order_id: Some(90) },
+    ));
+    bus.dispatch()?;
+
+    let message = one_shot.next_timeout(TICK).expect("one-shot response missing")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::NextValidId);
+    Ok(())
+}
+
+/// Streaming `send_shared_request` must NOT drain the shared queue: sync
+/// shares one crossbeam queue per request type, so draining could discard
+/// messages buffered for a concurrent live subscription of the same type.
+#[test]
+fn test_streaming_shared_request_does_not_drain_buffered_items() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    // A message buffers in the RequestPositions shared queue (e.g. delivered for a
+    // concurrent subscription of the same type that hasn't consumed it yet).
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+
+    // A new streaming request of the same type must leave the buffered item intact.
+    let streaming = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    let message = streaming.next_timeout(TICK).expect("buffered streaming message was drained")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::PositionEnd);
+    Ok(())
+}
+
 /// Order-channel fallback: a notice arrives bound to an `order_id` that
 /// matches an order subscription (not a request subscription). The
 /// `deliver_to_request_id` helper should fall back to the order channel.

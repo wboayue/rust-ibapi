@@ -661,10 +661,15 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         let shared_receiver = self.shared_channels.get_receiver(message_type);
 
         // Shared channels are one crossbeam queue per request type (unlike the async
-        // broadcast, whose `resubscribe` starts fresh). Discard anything buffered while
-        // no request was in flight — e.g. a request-less error fanned out to one-shot
-        // channels — so this request reads only its own responses.
-        while shared_receiver.try_recv().is_ok() {}
+        // broadcast, whose `resubscribe` starts fresh). For one-shot requests, discard
+        // anything buffered while no request was in flight — e.g. a request-less error
+        // fanned out to one-shot channels — so this request reads only its own
+        // responses. Streaming channels are not drained: they never receive fanned
+        // errors, and draining could discard messages buffered for a concurrent live
+        // subscription of the same type.
+        if shared_channel_configuration::is_one_shot_request(message_type) {
+            while shared_receiver.try_recv().is_ok() {}
+        }
 
         self.connection.write_message(message)?;
 

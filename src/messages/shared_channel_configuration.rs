@@ -170,3 +170,15 @@ static ONE_SHOT_ERROR_RESPONSE_TYPES: LazyLock<HashSet<IncomingMessages>> = Lazy
 pub(crate) fn one_shot_error_response_types() -> &'static HashSet<IncomingMessages> {
     &ONE_SHOT_ERROR_RESPONSE_TYPES
 }
+
+/// `true` when `request` maps to a one-shot shared channel (single terminating
+/// response). Requests without a shared-channel mapping return `false`.
+///
+/// Used by the sync transport to decide whether `send_shared_request` should
+/// drain the shared queue before writing: only one-shot channels receive
+/// fanned request-less errors, and draining a streaming channel could discard
+/// messages buffered for a concurrent live subscription of the same type.
+#[cfg(any(feature = "sync", test))]
+pub(crate) fn is_one_shot_request(request: OutgoingMessages) -> bool {
+    CHANNEL_MAPPINGS.iter().any(|m| m.request == request && m.one_shot)
+}

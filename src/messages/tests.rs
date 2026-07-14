@@ -915,6 +915,24 @@ fn test_one_shot_error_response_types() {
 }
 
 #[test]
+fn test_is_one_shot_request() {
+    use super::shared_channel_configuration::{is_one_shot_request, CHANNEL_MAPPINGS};
+
+    // Every mapping's flag round-trips through the request-side lookup.
+    for mapping in CHANNEL_MAPPINGS {
+        assert_eq!(
+            is_one_shot_request(mapping.request),
+            mapping.one_shot,
+            "{:?} lookup should match its mapping's one_shot flag",
+            mapping.request
+        );
+    }
+
+    // A request without a shared-channel mapping is not one-shot.
+    assert!(!is_one_shot_request(OutgoingMessages::RequestMarketData));
+}
+
+#[test]
 fn test_notice_edge_cases() {
     struct TestCase {
         name: &'static str,
