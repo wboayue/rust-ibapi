@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-07-13
+
+### Fixed
+
+- Request-less TWS errors on shared one-shot requests (e.g. read-only-mode 321, unknown market rule 322) now fail the awaiting call fast with the real error instead of hanging; streaming shared subscriptions are unaffected (#698).
+
 ## [3.2.0] - 2026-07-06
 
 ### Added
@@ -18,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Request-less TWS errors on shared one-shot requests (e.g. read-only-mode 321, unknown market rule 322) now fail the awaiting call fast with the real error instead of hanging; streaming shared subscriptions are unaffected (#694).
 - Connectivity restored notices no longer log at `error`: code 1102 ("data maintained") now logs at `info` and code 1101 ("data lost — resubscribe") at `warn`, so routine overnight reconnects stop tripping error-level alerting (#695).
 - Async snapshot market-data subscriptions no longer send a redundant cancel after the snapshot completes, matching the sync side (#686).
 
@@ -42,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.2.1...HEAD
+[3.2.1]: https://github.com/wboayue/rust-ibapi/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/wboayue/rust-ibapi/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/wboayue/rust-ibapi/releases/tag/v3.0.1
