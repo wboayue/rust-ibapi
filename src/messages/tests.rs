@@ -883,6 +883,58 @@ fn test_channel_mappings_completeness() {
 }
 
 #[test]
+fn test_exclusive_one_shot_response_types() {
+    use super::shared_channel_configuration::exclusive_one_shot_response_types;
+
+    let one_shot = exclusive_one_shot_response_types();
+
+    // Genuine one-shots (single terminating response) are eligible for fail-fast.
+    for included in [
+        IncomingMessages::NextValidId,
+        IncomingMessages::MarketRule,
+        IncomingMessages::ManagedAccounts,
+        IncomingMessages::FamilyCodes,
+    ] {
+        assert!(one_shot.contains(&included), "{included:?} should be a one-shot error response type");
+    }
+
+    // Streaming channels are excluded so an unrelated error never terminates a
+    // live subscription — including NewsBulletins, which streams without an
+    // `*End` marker. MarketDataType and WshEventData are not in the table at all
+    // (their callers use request-id-keyed channels).
+    for excluded in [
+        IncomingMessages::OpenOrder,
+        IncomingMessages::OrderStatus,
+        IncomingMessages::Position,
+        IncomingMessages::PositionMulti,
+        IncomingMessages::AccountValue,
+        IncomingMessages::NewsBulletins,
+        IncomingMessages::MarketDataType,
+        IncomingMessages::WshEventData,
+    ] {
+        assert!(!one_shot.contains(&excluded), "{excluded:?} is streaming and must not be fail-fast");
+    }
+}
+
+#[test]
+fn test_is_one_shot_request() {
+    use super::shared_channel_configuration::{is_one_shot_request, CHANNEL_MAPPINGS};
+
+    // Every mapping's flag round-trips through the request-side lookup.
+    for mapping in CHANNEL_MAPPINGS {
+        assert_eq!(
+            is_one_shot_request(mapping.request),
+            mapping.one_shot,
+            "{:?} lookup should match its mapping's one_shot flag",
+            mapping.request
+        );
+    }
+
+    // A request without a shared-channel mapping is not one-shot.
+    assert!(!is_one_shot_request(OutgoingMessages::RequestMarketData));
+}
+
+#[test]
 fn test_notice_edge_cases() {
     struct TestCase {
         name: &'static str,

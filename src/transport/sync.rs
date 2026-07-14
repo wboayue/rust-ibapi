@@ -17,7 +17,9 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::common::log_orphan;
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{
+    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
@@ -103,6 +105,25 @@ impl SharedChannels {
             for sender in senders {
                 if let Err(e) = sender.send(message_fn()) {
                     warn!("error sending notification: {e}");
+                }
+            }
+        }
+    }
+
+    // Fail in-flight one-shot requests fast by delivering an error to the
+    // one-shot senders only. Used for request-less errors, which carry no id
+    // to correlate. Streaming channels are excluded so an unrelated error
+    // can't terminate a live stream.
+    fn fail_one_shot_channels<F>(&self, error_fn: F)
+    where
+        F: Fn() -> RoutedItem,
+    {
+        for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
+            if let Some(senders) = self.senders.get(message_type) {
+                for sender in senders {
+                    if let Err(e) = sender.send(error_fn()) {
+                        warn!("error failing one-shot channel: {e}");
+                    }
                 }
             }
         }
@@ -314,24 +335,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
-            RoutingDecision::Error(payload) => {
-                let sent_to_update_stream = self.send_order_update(&message);
-                let request_id = payload.request_id;
-                let is_warning = is_warning_error(payload.error_code);
-
-                if request_id == UNSPECIFIED_REQUEST_ID {
-                    let notice = Notice::from(payload);
-                    super::common::log_unrouted_notice(&notice);
-                    self.connection.notice_broadcaster.broadcast(notice);
-                } else {
-                    let item = if is_warning {
-                        RoutedItem::Notice(Notice::from(payload))
-                    } else {
-                        RoutedItem::Error(Error::from(payload))
-                    };
-                    self.deliver_to_request_id(request_id, item, sent_to_update_stream);
-                }
-            }
+            RoutingDecision::Error(payload) => self.route_error_message(&message, payload),
             RoutingDecision::ByOrderId(_) => {
                 // Order-related messages
                 self.process_orders(message);
@@ -343,6 +347,33 @@ impl<S: Stream> TcpMessageBus<S> {
                 // All other messages
                 self.process_response(message, false);
             }
+        }
+    }
+
+    /// Route an error frame by severity and request id. Mirrors the async
+    /// transport's `route_error_message`.
+    fn route_error_message(&self, message: &ResponseMessage, payload: DecodedError) {
+        let sent_to_update_stream = self.send_order_update(message);
+        let request_id = payload.request_id;
+        let is_warning = is_warning_error(payload.error_code);
+
+        if request_id == UNSPECIFIED_REQUEST_ID {
+            let notice = Notice::from(payload.clone());
+            super::common::log_unrouted_notice(&notice);
+            self.connection.notice_broadcaster.broadcast(notice);
+            // A request-less hard error carries no id to correlate, so fail any
+            // in-flight one-shot shared request fast instead of leaving it to hang.
+            if !is_warning {
+                self.shared_channels
+                    .fail_one_shot_channels(|| RoutedItem::Error(Error::from(payload.clone())));
+            }
+        } else {
+            let item = if is_warning {
+                RoutedItem::Notice(Notice::from(payload))
+            } else {
+                RoutedItem::Error(Error::from(payload))
+            };
+            self.deliver_to_request_id(request_id, item, sent_to_update_stream);
         }
     }
 
@@ -635,9 +666,20 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.connection.write_message(message)?;
-
         let shared_receiver = self.shared_channels.get_receiver(message_type);
+
+        // Shared channels are one crossbeam queue per request type (unlike the async
+        // broadcast, whose `resubscribe` starts fresh). For one-shot requests, discard
+        // anything buffered while no request was in flight — e.g. a request-less error
+        // fanned out to one-shot channels — so this request reads only its own
+        // responses. Streaming channels are not drained: they never receive fanned
+        // errors, and draining could discard messages buffered for a concurrent live
+        // subscription of the same type.
+        if shared_channel_configuration::is_one_shot_request(message_type) {
+            while shared_receiver.try_recv().is_ok() {}
+        }
+
+        self.connection.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .shared_receiver(shared_receiver)

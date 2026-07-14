@@ -196,15 +196,11 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        if let Some(Ok(message)) = subscription.next() {
-            let next_order_id = decoders::decode_next_valid_id(&message)?;
+        let next_order_id =
+            crate::common::request_helpers::fold_one_shot(subscription.next(), decoders::decode_next_valid_id, || Err(Error::UnexpectedEndOfStream))?;
 
-            self.set_next_order_id(next_order_id);
-
-            Ok(next_order_id)
-        } else {
-            Err(Error::UnexpectedEndOfStream)
-        }
+        self.set_next_order_id(next_order_id);
+        Ok(next_order_id)
     }
 
     /// Requests all open orders places by this specific API client (identified by the API client id).
