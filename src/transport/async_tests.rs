@@ -352,7 +352,7 @@ async fn test_warning_with_unspecified_id_is_log_only() {
 /// *streaming* shared requests (`RequestPositions`) untouched — and still fans
 /// out to the global notice stream. Regression for #694 (callers hung forever).
 #[tokio::test]
-async fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() {
+async fn test_request_less_hard_error_fails_one_shot_and_spares_stream() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
     let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
@@ -389,7 +389,7 @@ async fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() {
 /// A request-less *warning* stays notice-only: it must not fail an in-flight
 /// one-shot shared request (only non-warning hard errors trip fail-fast).
 #[tokio::test]
-async fn test_unrouted_warning_does_not_fail_one_shot() {
+async fn test_request_less_warning_does_not_fail_one_shot() {
     let (stream, bus) = make_bus();
     let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
 

@@ -883,10 +883,10 @@ fn test_channel_mappings_completeness() {
 }
 
 #[test]
-fn test_one_shot_error_response_types() {
-    use super::shared_channel_configuration::one_shot_error_response_types;
+fn test_exclusive_one_shot_response_types() {
+    use super::shared_channel_configuration::exclusive_one_shot_response_types;
 
-    let one_shot = one_shot_error_response_types();
+    let one_shot = exclusive_one_shot_response_types();
 
     // Genuine one-shots (single terminating response) are eligible for fail-fast.
     for included in [

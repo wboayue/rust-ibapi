@@ -1067,7 +1067,7 @@ fn test_warning_with_unspecified_id_is_log_only() -> Result<(), Error> {
 /// *streaming* shared requests (`RequestPositions`) untouched — and still fans
 /// out to the global notice stream. Regression for #694 (callers hung forever).
 #[test]
-fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Error> {
+fn test_request_less_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notice_stream = bus.notice_subscribe();
     let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
@@ -1101,7 +1101,7 @@ fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Err
 /// A request-less *warning* stays notice-only: it must not fail an in-flight
 /// one-shot shared request (only non-warning hard errors trip fail-fast).
 #[test]
-fn test_unrouted_warning_does_not_fail_one_shot() -> Result<(), Error> {
+fn test_request_less_warning_does_not_fail_one_shot() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
 

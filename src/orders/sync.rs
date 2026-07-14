@@ -196,9 +196,8 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        let next_order_id = crate::common::request_helpers::consume_one_shot(subscription.next(), decoders::decode_next_valid_id, || {
-            Err(Error::UnexpectedEndOfStream)
-        })?;
+        let next_order_id =
+            crate::common::request_helpers::fold_one_shot(subscription.next(), decoders::decode_next_valid_id, || Err(Error::UnexpectedEndOfStream))?;
 
         self.set_next_order_id(next_order_id);
         Ok(next_order_id)

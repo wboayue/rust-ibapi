@@ -110,18 +110,19 @@ impl SharedChannels {
         }
     }
 
-    // Notify only the one-shot senders. Used to fail in-flight one-shot requests
-    // fast on a request-less error, which carries no id to correlate. Streaming
-    // channels are excluded so an unrelated error can't terminate a live stream.
-    fn notify_one_shot<F>(&self, message_fn: F)
+    // Fail in-flight one-shot requests fast by delivering an error to the
+    // one-shot senders only. Used for request-less errors, which carry no id
+    // to correlate. Streaming channels are excluded so an unrelated error
+    // can't terminate a live stream.
+    fn fail_one_shot_channels<F>(&self, error_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
-        for message_type in shared_channel_configuration::one_shot_error_response_types() {
+        for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
             if let Some(senders) = self.senders.get(message_type) {
                 for sender in senders {
-                    if let Err(e) = sender.send(message_fn()) {
-                        warn!("error sending one-shot error notification: {e}");
+                    if let Err(e) = sender.send(error_fn()) {
+                        warn!("error failing one-shot channel: {e}");
                     }
                 }
             }
@@ -363,7 +364,8 @@ impl<S: Stream> TcpMessageBus<S> {
             // A request-less hard error carries no id to correlate, so fail any
             // in-flight one-shot shared request fast instead of leaving it to hang.
             if !is_warning {
-                self.shared_channels.notify_one_shot(|| RoutedItem::Error(Error::from(payload.clone())));
+                self.shared_channels
+                    .fail_one_shot_channels(|| RoutedItem::Error(Error::from(payload.clone())));
             }
         } else {
             let item = if is_warning {

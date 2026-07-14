@@ -15,7 +15,7 @@ pub struct ChannelMapping {
     /// request id (`id == -1`) cannot be correlated to a specific shared request,
     /// so it is delivered to in-flight *one-shot* channels only. Streaming
     /// channels are excluded because an unrelated error would otherwise terminate
-    /// a live subscription. See [`one_shot_error_response_types`].
+    /// a live subscription. See [`exclusive_one_shot_response_types`].
     ///
     /// Note this is explicit data, not derived from the presence of an `*End`
     /// response: `NewsBulletins` and `WshEventData` stream without an End marker.
@@ -151,7 +151,7 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
 /// registered for these types so an awaiting one-shot call fails fast instead of
 /// hanging. The set-difference excludes any type also used by a streaming mapping,
 /// so a live stream is never terminated by an unrelated error.
-static ONE_SHOT_ERROR_RESPONSE_TYPES: LazyLock<HashSet<IncomingMessages>> = LazyLock::new(|| {
+static EXCLUSIVE_ONE_SHOT_RESPONSE_TYPES: LazyLock<HashSet<IncomingMessages>> = LazyLock::new(|| {
     let streaming: HashSet<IncomingMessages> = CHANNEL_MAPPINGS
         .iter()
         .filter(|m| !m.one_shot)
@@ -166,9 +166,9 @@ static ONE_SHOT_ERROR_RESPONSE_TYPES: LazyLock<HashSet<IncomingMessages>> = Lazy
 });
 
 /// The one-shot response types eligible for fail-fast delivery of request-less
-/// errors. See [`ONE_SHOT_ERROR_RESPONSE_TYPES`].
-pub(crate) fn one_shot_error_response_types() -> &'static HashSet<IncomingMessages> {
-    &ONE_SHOT_ERROR_RESPONSE_TYPES
+/// errors. See [`EXCLUSIVE_ONE_SHOT_RESPONSE_TYPES`].
+pub(crate) fn exclusive_one_shot_response_types() -> &'static HashSet<IncomingMessages> {
+    &EXCLUSIVE_ONE_SHOT_RESPONSE_TYPES
 }
 
 /// `true` when `request` maps to a one-shot shared channel (single terminating

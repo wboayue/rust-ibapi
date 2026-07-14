@@ -476,7 +476,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             // A request-less hard error carries no id to correlate, so fail any
             // in-flight one-shot shared request fast instead of leaving it to hang.
             if !is_warning {
-                self.fail_one_shot_shared_channels(&payload).await;
+                self.fail_one_shot_channels(&payload).await;
             }
         } else {
             let item = if is_warning {
@@ -492,10 +492,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Deliver a request-less hard error to every in-flight one-shot shared
     /// request so it fails fast rather than hanging. Streaming shared channels
-    /// are excluded (see [`shared_channel_configuration::one_shot_error_response_types`]).
-    async fn fail_one_shot_shared_channels(&self, payload: &DecodedError) {
+    /// are excluded (see [`shared_channel_configuration::exclusive_one_shot_response_types`]).
+    async fn fail_one_shot_channels(&self, payload: &DecodedError) {
         let channels = self.shared_channel_senders.read().await;
-        for message_type in shared_channel_configuration::one_shot_error_response_types() {
+        for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
             if let Some(senders) = channels.get(message_type) {
                 for sender in senders {
                     let _ = sender.send(RoutedItem::Error(Error::from(payload.clone())));

@@ -6,7 +6,7 @@
 /// fanned out to one-shot shared channels — instead of masking it as a
 /// default value (#694). `on_none` decides what a closed stream means for
 /// the caller (a default value, or `Error::UnexpectedEndOfStream`).
-pub(crate) fn consume_one_shot<R>(
+pub(crate) fn fold_one_shot<R>(
     response: Option<Result<crate::messages::ResponseMessage, crate::Error>>,
     processor: impl FnOnce(&crate::messages::ResponseMessage) -> Result<R, crate::Error>,
     on_none: impl FnOnce() -> Result<R, crate::Error>,
@@ -89,7 +89,7 @@ mod sync_helpers {
         let request = encoder()?;
         let subscription = client.shared_request(message_type).send_raw(request)?;
 
-        super::consume_one_shot(subscription.next(), processor, on_none)
+        super::fold_one_shot(subscription.next(), processor, on_none)
     }
 
     /// Helper for one-shot requests with retry logic
@@ -104,7 +104,7 @@ mod sync_helpers {
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
-            super::consume_one_shot(subscription.next(), &processor, &on_none)
+            super::fold_one_shot(subscription.next(), &processor, &on_none)
         })
     }
 
@@ -120,7 +120,7 @@ mod sync_helpers {
             let request = encoder(request_id)?;
             let subscription = client.send_request(request_id, request)?;
 
-            super::consume_one_shot(subscription.next(), &processor, &on_none)
+            super::fold_one_shot(subscription.next(), &processor, &on_none)
         })
     }
 }
@@ -192,7 +192,7 @@ mod async_helpers {
         let request = encoder()?;
         let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
-        super::consume_one_shot(subscription.next().await, processor, on_none)
+        super::fold_one_shot(subscription.next().await, processor, on_none)
     }
 
     /// Async helper for one-shot requests with retry logic
@@ -207,7 +207,7 @@ mod async_helpers {
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
-            super::consume_one_shot(subscription.next().await, &processor, &on_none)
+            super::fold_one_shot(subscription.next().await, &processor, &on_none)
         })
         .await
     }
@@ -224,7 +224,7 @@ mod async_helpers {
             let request = encoder(request_id)?;
             let mut subscription = client.send_request(request_id, request).await?;
 
-            super::consume_one_shot(subscription.next().await, &processor, &on_none)
+            super::fold_one_shot(subscription.next().await, &processor, &on_none)
         })
         .await
     }
