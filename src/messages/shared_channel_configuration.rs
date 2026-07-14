@@ -18,7 +18,7 @@ pub struct ChannelMapping {
     /// a live subscription. See [`exclusive_one_shot_response_types`].
     ///
     /// Note this is explicit data, not derived from the presence of an `*End`
-    /// response: `NewsBulletins` and `WshEventData` stream without an End marker.
+    /// response: `NewsBulletins` streams without an End marker.
     pub one_shot: bool,
 }
 
@@ -85,11 +85,6 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         one_shot: false,
     },
     ChannelMapping {
-        request: OutgoingMessages::RequestMarketDataType,
-        responses: &[IncomingMessages::MarketDataType],
-        one_shot: true,
-    },
-    ChannelMapping {
         request: OutgoingMessages::RequestMktDepthExchanges,
         responses: &[IncomingMessages::MktDepthExchanges],
         one_shot: true,
@@ -123,11 +118,6 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestWshMetaData,
         responses: &[IncomingMessages::WshMetaData],
         one_shot: true,
-    },
-    ChannelMapping {
-        request: OutgoingMessages::RequestWshEventData,
-        responses: &[IncomingMessages::WshEventData],
-        one_shot: false,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestFA,

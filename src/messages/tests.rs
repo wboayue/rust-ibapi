@@ -899,8 +899,9 @@ fn test_exclusive_one_shot_response_types() {
     }
 
     // Streaming channels are excluded so an unrelated error never terminates a
-    // live subscription — including NewsBulletins / WshEventData, which stream
-    // without an `*End` marker.
+    // live subscription — including NewsBulletins, which streams without an
+    // `*End` marker. MarketDataType and WshEventData are not in the table at all
+    // (their callers use request-id-keyed channels).
     for excluded in [
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
@@ -908,6 +909,7 @@ fn test_exclusive_one_shot_response_types() {
         IncomingMessages::PositionMulti,
         IncomingMessages::AccountValue,
         IncomingMessages::NewsBulletins,
+        IncomingMessages::MarketDataType,
         IncomingMessages::WshEventData,
     ] {
         assert!(!one_shot.contains(&excluded), "{excluded:?} is streaming and must not be fail-fast");

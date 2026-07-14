@@ -177,8 +177,7 @@ impl Client {
         self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
         let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
-        let _ = self.send_shared_request(OutgoingMessages::RequestMarketDataType, message)?;
-        Ok(())
+        self.send_message(message)
     }
 }
 
