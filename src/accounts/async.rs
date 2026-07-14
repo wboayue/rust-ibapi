@@ -113,7 +113,7 @@ impl Client {
             OutgoingMessages::RequestFamilyCodes,
             encoders::encode_request_family_codes,
             decoders::decode_family_codes,
-            Vec::default,
+            || Ok(Vec::default()),
         )
         .await
     }

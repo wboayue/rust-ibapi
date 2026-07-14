@@ -1074,7 +1074,7 @@ fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Err
     let streaming = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
 
     // 321 "read-only mode" is the live-reproduced case; non-warning, id = -1.
-    stream.push_inbound(error_frame(-1, 321, "The API interface is currently in Read-Only mode."));
+    stream.push_inbound(error_frame(-1, 321, READ_ONLY_MSG));
     bus.dispatch()?;
 
     // One-shot caller fails fast with the real error instead of hanging. Read via
@@ -1083,7 +1083,7 @@ fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() -> Result<(), Err
     match one_shot.next_timeout(TICK).expect("one-shot got no error") {
         Err(Error::Notice(notice)) => {
             assert_eq!(notice.code, 321);
-            assert_eq!(notice.message, "The API interface is currently in Read-Only mode.");
+            assert_eq!(notice.message, READ_ONLY_MSG);
         }
         other => panic!("expected Err(Notice), got {other:?}"),
     }
@@ -1121,7 +1121,7 @@ fn test_one_shot_shared_request_drains_stale_buffered_error() -> Result<(), Erro
 
     // Hard error arrives with no request in flight; fanned to the persistent
     // one-shot senders, it buffers in the RequestIds shared queue.
-    stream.push_inbound(error_frame(-1, 321, "The API interface is currently in Read-Only mode."));
+    stream.push_inbound(error_frame(-1, 321, READ_ONLY_MSG));
     bus.dispatch()?;
 
     // The next one-shot request drains the stale error and reads only its own response.
@@ -1191,6 +1191,7 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
 // `Err(_)` / `None` as expected.
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
     error_frame(42, 2104, FARM_OK_MSG)

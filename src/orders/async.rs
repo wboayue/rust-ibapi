@@ -196,17 +196,13 @@ impl Client {
 
         let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
 
-        match internal_subscription.next().await {
-            Some(Ok(message)) => {
-                let next_order_id = decoders::decode_next_valid_id(&message)?;
+        let next_order_id =
+            crate::common::request_helpers::consume_one_shot(internal_subscription.next().await, decoders::decode_next_valid_id, || {
+                Err(Error::UnexpectedEndOfStream)
+            })?;
 
-                self.set_next_order_id(next_order_id);
-
-                Ok(next_order_id)
-            }
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        self.set_next_order_id(next_order_id);
+        Ok(next_order_id)
     }
 
     /// Requests completed [Order]s.

@@ -17,7 +17,9 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::common::log_orphan;
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{
+    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
@@ -332,29 +334,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
-            RoutingDecision::Error(payload) => {
-                let sent_to_update_stream = self.send_order_update(&message);
-                let request_id = payload.request_id;
-                let is_warning = is_warning_error(payload.error_code);
-
-                if request_id == UNSPECIFIED_REQUEST_ID {
-                    let notice = Notice::from(payload.clone());
-                    super::common::log_unrouted_notice(&notice);
-                    self.connection.notice_broadcaster.broadcast(notice);
-                    // A request-less hard error carries no id to correlate, so fail any
-                    // in-flight one-shot shared request fast instead of leaving it to hang.
-                    if !is_warning {
-                        self.shared_channels.notify_one_shot(|| RoutedItem::Error(Error::from(payload.clone())));
-                    }
-                } else {
-                    let item = if is_warning {
-                        RoutedItem::Notice(Notice::from(payload))
-                    } else {
-                        RoutedItem::Error(Error::from(payload))
-                    };
-                    self.deliver_to_request_id(request_id, item, sent_to_update_stream);
-                }
-            }
+            RoutingDecision::Error(payload) => self.route_error_message(&message, payload),
             RoutingDecision::ByOrderId(_) => {
                 // Order-related messages
                 self.process_orders(message);
@@ -366,6 +346,32 @@ impl<S: Stream> TcpMessageBus<S> {
                 // All other messages
                 self.process_response(message, false);
             }
+        }
+    }
+
+    /// Route an error frame by severity and request id. Mirrors the async
+    /// transport's `route_error_message`.
+    fn route_error_message(&self, message: &ResponseMessage, payload: DecodedError) {
+        let sent_to_update_stream = self.send_order_update(message);
+        let request_id = payload.request_id;
+        let is_warning = is_warning_error(payload.error_code);
+
+        if request_id == UNSPECIFIED_REQUEST_ID {
+            let notice = Notice::from(payload.clone());
+            super::common::log_unrouted_notice(&notice);
+            self.connection.notice_broadcaster.broadcast(notice);
+            // A request-less hard error carries no id to correlate, so fail any
+            // in-flight one-shot shared request fast instead of leaving it to hang.
+            if !is_warning {
+                self.shared_channels.notify_one_shot(|| RoutedItem::Error(Error::from(payload.clone())));
+            }
+        } else {
+            let item = if is_warning {
+                RoutedItem::Notice(Notice::from(payload))
+            } else {
+                RoutedItem::Error(Error::from(payload))
+            };
+            self.deliver_to_request_id(request_id, item, sent_to_update_stream);
         }
     }
 

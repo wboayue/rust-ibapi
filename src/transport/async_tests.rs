@@ -359,7 +359,7 @@ async fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() {
     let mut streaming = bus.send_shared_request(OutgoingMessages::RequestPositions, vec![]).await.unwrap();
 
     // 321 "read-only mode" is the live-reproduced case; non-warning, id = -1.
-    stream.push_inbound(error_frame(-1, 321, "The API interface is currently in Read-Only mode."));
+    stream.push_inbound(error_frame(-1, 321, READ_ONLY_MSG));
     bus.read_and_route_message().await.unwrap();
 
     // One-shot caller fails fast with the real error instead of hanging. Read via
@@ -372,7 +372,7 @@ async fn test_unrouted_hard_error_fails_one_shot_and_spares_stream() {
     match item {
         Err(Error::Notice(notice)) => {
             assert_eq!(notice.code, 321);
-            assert_eq!(notice.message, "The API interface is currently in Read-Only mode.");
+            assert_eq!(notice.message, READ_ONLY_MSG);
         }
         other => panic!("expected Err(Notice), got {other:?}"),
     }
@@ -432,6 +432,7 @@ use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, Subs
 use futures::StreamExt;
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
     error_frame(42, 2104, FARM_OK_MSG)
