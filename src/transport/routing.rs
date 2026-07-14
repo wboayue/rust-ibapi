@@ -1,6 +1,9 @@
 //! Common message routing logic for sync and async implementations
 
-use crate::messages::{IncomingMessages, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
+use crate::errors::Error;
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
+
+use super::RoutedItem;
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
@@ -147,6 +150,46 @@ pub(crate) fn is_warning_error(error_code: i32) -> bool {
 
 /// Request ID for unspecified errors
 pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
+
+/// The outcome of classifying an inbound error frame.
+///
+/// The *policy* (which arm applies) is centralised here; each transport
+/// provides only the runtime-specific delivery in its `route_error_message`.
+#[derive(Debug)]
+pub(crate) enum ErrorDisposition {
+    /// Log + `NoticeStream` only (request-less warning).
+    NoticeOnly(Notice),
+    /// `NoticeStream` + fail-fast fan-out to in-flight one-shot shared
+    /// requests (request-less hard error).
+    NoticeAndFailOneShots(Notice, Error),
+    /// Deliver `RoutedItem` to the subscription that owns `request_id`.
+    Route(i32, RoutedItem),
+}
+
+/// Classify an inbound error frame into the action each transport must take.
+///
+/// Extracts the common four-arm policy so that `sync::route_error_message` and
+/// `async::route_error_message` are thin runtime-specific delivery shells.
+pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
+    let request_id = payload.request_id;
+    let is_warning = is_warning_error(payload.error_code);
+
+    if request_id == UNSPECIFIED_REQUEST_ID {
+        let notice = Notice::from(payload.clone());
+        if is_warning {
+            ErrorDisposition::NoticeOnly(notice)
+        } else {
+            ErrorDisposition::NoticeAndFailOneShots(notice, Error::from(payload))
+        }
+    } else {
+        let item = if is_warning {
+            RoutedItem::Notice(Notice::from(payload))
+        } else {
+            RoutedItem::Error(Error::from(payload))
+        };
+        ErrorDisposition::Route(request_id, item)
+    }
+}
 
 #[cfg(test)]
 #[path = "routing_tests.rs"]

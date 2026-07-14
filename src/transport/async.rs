@@ -16,12 +16,12 @@ use tokio::time::Duration;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::common::log_orphan;
 use super::routing::{
-    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+    classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
 };
 use super::RoutedItem;
 
@@ -466,39 +466,32 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Route error message using routing decision
     async fn route_error_message(&self, message: ResponseMessage, payload: DecodedError) -> Result<(), Error> {
         let sent_to_update_stream = self.send_order_update(&message).await;
-        let request_id = payload.request_id;
-        let is_warning = is_warning_error(payload.error_code);
-
-        if request_id == UNSPECIFIED_REQUEST_ID {
-            let notice = Notice::from(payload.clone());
-            super::common::log_unrouted_notice(&notice);
-            let _ = self.connection.notice_sender.send(notice);
-            // A request-less hard error carries no id to correlate, so fail any
-            // in-flight one-shot shared request fast instead of leaving it to hang.
-            if !is_warning {
-                self.fail_one_shot_channels(&payload).await;
+        match classify_error(payload) {
+            ErrorDisposition::NoticeOnly(notice) => {
+                super::common::log_unrouted_notice(&notice);
+                let _ = self.connection.notice_sender.send(notice);
             }
-        } else {
-            let item = if is_warning {
-                RoutedItem::Notice(Notice::from(payload))
-            } else {
-                RoutedItem::Error(Error::from(payload))
-            };
-            self.deliver_to_request_id(request_id, item, sent_to_update_stream).await;
+            ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
+                super::common::log_unrouted_notice(&notice);
+                let _ = self.connection.notice_sender.send(notice);
+                self.fail_one_shot_channels(error).await;
+            }
+            ErrorDisposition::Route(request_id, item) => {
+                self.deliver_to_request_id(request_id, item, sent_to_update_stream).await;
+            }
         }
-
         Ok(())
     }
 
     /// Deliver a request-less hard error to every in-flight one-shot shared
     /// request so it fails fast rather than hanging. Streaming shared channels
     /// are excluded (see [`shared_channel_configuration::exclusive_one_shot_response_types`]).
-    async fn fail_one_shot_channels(&self, payload: &DecodedError) {
+    async fn fail_one_shot_channels(&self, error: Error) {
         let channels = self.shared_channel_senders.read().await;
         for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
             if let Some(senders) = channels.get(message_type) {
                 for sender in senders {
-                    let _ = sender.send(RoutedItem::Error(Error::from(payload.clone())));
+                    let _ = sender.send(RoutedItem::Error(error.clone()));
                 }
             }
         }

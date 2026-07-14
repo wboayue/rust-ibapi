@@ -204,6 +204,80 @@ fn test_is_warning_error_data_advisory_codes() {
     }
 }
 
+#[test]
+fn test_classify_error_unrouted_warning_is_notice_only() {
+    let payload = DecodedError {
+        error_code: 2104,
+        error_message: "Market data farm OK".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::NoticeOnly(notice) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Market data farm OK");
+        }
+        other => panic!("expected NoticeOnly, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_unrouted_hard_error_fails_one_shots() {
+    let payload = DecodedError {
+        error_code: 321,
+        error_message: "Server error".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
+            assert_eq!(notice.code, 321);
+            assert_eq!(notice.message, "Server error");
+            match error {
+                crate::Error::Notice(error_notice) => assert_eq!(error_notice, notice),
+                other => panic!("expected Error::Notice, got {other:?}"),
+            }
+        }
+        other => panic!("expected NoticeAndFailOneShots, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_routed_warning_is_notice() {
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: 2104,
+        error_message: "Farm OK".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Farm OK");
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_routed_hard_error_is_error() {
+    let payload = DecodedError {
+        request_id: 7,
+        error_code: 200,
+        error_message: "No security".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(7, RoutedItem::Error(crate::Error::Notice(notice))) => {
+            assert_eq!(notice.code, 200);
+            assert_eq!(notice.message, "No security");
+        }
+        other => panic!("expected routed Error, got {other:?}"),
+    }
+}
+
 /// Order-message routing for message types that lack an order_id at the proto
 /// level. `CompletedOrdersEnd` and `CommissionsReport` are order-routed but
 /// have no `order_id` field, so the dispatcher falls back to the sentinel `-1`.
