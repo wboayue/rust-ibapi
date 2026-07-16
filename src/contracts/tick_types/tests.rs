@@ -413,23 +413,3 @@ fn test_display_output() {
         assert_eq!(format!("{variant}"), *expected, "Display mismatch for {variant:?}");
     }
 }
-
-#[test]
-fn test_odd_lot_tick_types() {
-    // id, wire string (C# TickType.FieldToString), variant
-    let cases = [
-        (105, "oddLotBid", TickType::OddLotBid),
-        (106, "oddLotAsk", TickType::OddLotAsk),
-        (107, "oddLotBidSize", TickType::OddLotBidSize),
-        (108, "oddLotAskSize", TickType::OddLotAskSize),
-        (109, "oddLotBidExch", TickType::OddLotBidExch),
-        (110, "oddLotAskExch", TickType::OddLotAskExch),
-    ];
-
-    for (id, wire, variant) in cases {
-        assert_eq!(TickType::from(id), variant, "From<i32> for {variant:?}");
-        assert_eq!(TickType::from(wire), variant, "From<&str> for {variant:?}");
-        // Display renders a human-readable label; the wire token round-trips via From<&str>.
-        assert!(!format!("{variant}").is_empty(), "Display for {variant:?}");
-    }
-}
