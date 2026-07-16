@@ -202,6 +202,7 @@ pub fn encode_order(order: &Order) -> proto::Order {
         scale_table: some_str(&order.scale_table),
         hedge_type: some_str(&order.hedge_type),
         hedge_param: some_str(&order.hedge_param),
+        hedge_max_size: order.hedge_max_size,
         algo_strategy: some_str(&order.algo_strategy),
         algo_params: tag_values_to_map(&order.algo_params),
         algo_id: some_str(&order.algo_id),

@@ -767,13 +767,6 @@ pub struct Position {
     #[prost(double, optional, tag = "4")]
     pub avg_cost: ::core::option::Option<f64>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FundamentalsData {
-    #[prost(int32, optional, tag = "1")]
-    pub req_id: ::core::option::Option<i32>,
-    #[prost(string, optional, tag = "2")]
-    pub data: ::core::option::Option<::prost::alloc::string::String>,
-}
 /// empty
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PositionsRequest {}
@@ -929,11 +922,6 @@ pub struct OrderCondition {
     pub time: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(int32, optional, tag = "13")]
     pub volume: ::core::option::Option<i32>,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CancelFundamentalsData {
-    #[prost(int32, optional, tag = "1")]
-    pub req_id: ::core::option::Option<i32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HistoricalTicksLast {
@@ -1332,6 +1320,9 @@ pub struct Order {
     pub seek_price_improvement: ::core::option::Option<i32>,
     #[prost(int32, optional, tag = "143")]
     pub what_if_type: ::core::option::Option<i32>,
+    /// hedge orders
+    #[prost(int32, optional, tag = "144")]
+    pub hedge_max_size: ::core::option::Option<i32>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OrderAllocation {
@@ -1475,20 +1466,6 @@ pub struct CancelNewsBulletins {}
 pub struct CancelHistogramData {
     #[prost(int32, optional, tag = "1")]
     pub req_id: ::core::option::Option<i32>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FundamentalsDataRequest {
-    #[prost(int32, optional, tag = "1")]
-    pub req_id: ::core::option::Option<i32>,
-    #[prost(message, optional, tag = "2")]
-    pub contract: ::core::option::Option<Contract>,
-    #[prost(string, optional, tag = "3")]
-    pub report_type: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(map = "string, string", tag = "4")]
-    pub fundamentals_data_options: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelPnL {
@@ -1943,6 +1920,8 @@ pub struct ContractDetails {
     pub last_price_precision: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "64")]
     pub last_size_precision: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "65")]
+    pub settlement_method: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PositionMulti {

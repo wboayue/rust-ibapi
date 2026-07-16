@@ -169,7 +169,7 @@ impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
             min_version: server_versions::PROTOBUF_REST_MESSAGES_3,
-            max_version: server_versions::UPDATE_CONFIG,
+            max_version: server_versions::ODD_LOT_BID_ASK_QUOTES,
         }
     }
 }

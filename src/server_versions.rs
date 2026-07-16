@@ -331,3 +331,11 @@ pub const CONFIG: i32 = 219;
 pub const MARKET_DATA_VOLUMES_IN_SHARES: i32 = 220;
 /// Minimum server version for update configuration.
 pub const UPDATE_CONFIG: i32 = 221;
+/// Minimum server version for fractional last size.
+pub const FRACTIONAL_LAST_SIZE: i32 = 222;
+/// Minimum server version for hedge max size.
+pub const HEDGE_MAX_SIZE: i32 = 223;
+/// Minimum server version for using precision from security definition.
+pub const USE_PRECISION_FROM_SEC_DEF: i32 = 224;
+/// Minimum server version for odd-lot bid/ask quotes.
+pub const ODD_LOT_BID_ASK_QUOTES: i32 = 225;

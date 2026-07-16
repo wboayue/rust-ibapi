@@ -214,6 +214,7 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     // hedge orders
     order.hedge_type = s(&proto.hedge_type);
     order.hedge_param = s(&proto.hedge_param);
+    order.hedge_max_size = proto.hedge_max_size;
 
     // algo orders
     order.algo_strategy = s(&proto.algo_strategy);

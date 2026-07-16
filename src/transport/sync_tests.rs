@@ -310,7 +310,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     );
 
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250415 19:38:30 British Summer Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250415 19:38:30 British Summer Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(5)]),
         Exchange::new(
             request.clone(),
@@ -349,7 +349,7 @@ fn test_connection_establish_connection() -> Result<(), Error> {
 
     let start_api_bytes = handler.format_start_api(28, sv);
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes,
             vec![
@@ -373,7 +373,7 @@ fn test_reconnect_failed() -> Result<(), Error> {
 
     let start_api_bytes = handler.format_start_api(28, sv);
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes,
             vec![
@@ -403,7 +403,7 @@ fn test_reconnect_success() -> Result<(), Error> {
 
     let start_api_bytes = handler.format_start_api(28, sv);
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![
@@ -412,7 +412,7 @@ fn test_reconnect_success() -> Result<(), Error> {
                 ResponseMessage::from_simple("\0"),
             ],
         ),
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
     let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
@@ -433,13 +433,13 @@ fn test_client_reconnect() -> Result<(), Error> {
     let start_api_bytes = handler.format_start_api(28, sv);
     let managed_req = crate::accounts::common::encoders::encode_request_managed_accounts().unwrap();
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::new(managed_req.clone(), vec![ResponseMessage::from_simple("\0")]),
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
         Exchange::new(managed_req, vec![managed_accounts_response("DU1234567")]),
     ];
@@ -466,7 +466,7 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
 
     let start_api_bytes = handler.format_start_api(28, sv);
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![
@@ -475,7 +475,7 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
     let stream = MockSocket::new(events, 0);
@@ -505,7 +505,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
 
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![
@@ -514,7 +514,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
         Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
     ];
@@ -549,13 +549,13 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
 
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::request(packet.clone(), &["\0"]), // RESTART
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
 
@@ -587,7 +587,7 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
 
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![
@@ -596,7 +596,7 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::request(packet.clone(), &[]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
@@ -630,13 +630,13 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(sv, 9000, contract)?;
 
     let events = vec![
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
             start_api_bytes.clone(),
             vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)],
         ),
         Exchange::request(packet.clone(), &["\0"]),
-        Exchange::simple("v213..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple("v213..225", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
     ];
 
