@@ -192,10 +192,12 @@ fn test_routes_by_request_id() {
     assert!(routes_by_request_id(IncomingMessages::ContractDataEnd));
     assert!(routes_by_request_id(IncomingMessages::RealTimeBars));
     assert!(routes_by_request_id(IncomingMessages::ExecutionDataEnd));
-    assert!(routes_by_request_id(IncomingMessages::FundamentalData));
 
     // Error has its own envelope; shared messages route by message type.
     assert!(!routes_by_request_id(IncomingMessages::Error));
+    // FundamentalData is retained as a known variant but no longer routes:
+    // the fundamental-data feature was removed in TWS 10.47.
+    assert!(!routes_by_request_id(IncomingMessages::FundamentalData));
     assert!(!routes_by_request_id(IncomingMessages::ManagedAccounts));
     assert!(!routes_by_request_id(IncomingMessages::NextValidId));
     assert!(!routes_by_request_id(IncomingMessages::CurrentTime));
@@ -206,7 +208,6 @@ fn test_routes_by_request_id() {
 fn test_text_request_id_field() {
     // Field-1 messages (request_id immediately after message-type tag).
     assert_eq!(text_request_id_field(IncomingMessages::ContractData), Some(1));
-    assert_eq!(text_request_id_field(IncomingMessages::FundamentalData), Some(1));
     assert_eq!(text_request_id_field(IncomingMessages::TickByTick), Some(1));
 
     // Field-2 messages (request_id after a version field).
@@ -217,6 +218,8 @@ fn test_text_request_id_field() {
     assert_eq!(text_request_id_field(IncomingMessages::ManagedAccounts), None);
     assert_eq!(text_request_id_field(IncomingMessages::Error), None);
     assert_eq!(text_request_id_field(IncomingMessages::NotValid), None);
+    // FundamentalData no longer routes (feature removed in TWS 10.47).
+    assert_eq!(text_request_id_field(IncomingMessages::FundamentalData), None);
 }
 
 #[test]

@@ -209,9 +209,6 @@ pub(crate) mod contracts;
 pub(crate) mod display_groups;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
-pub(crate) mod fundamental;
-
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod market_data;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations

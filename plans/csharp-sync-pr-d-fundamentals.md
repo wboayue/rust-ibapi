@@ -34,5 +34,19 @@ Keep the feature working; signal upstream direction.
 - `CHANGELOG.md` `Removed` + `docs/migration-3.0.md` entry (breaking).
 
 ## Decision
-_Pending user._ Recommendation: Option 1. Whichever is chosen, this PR (or its proto-retention
-mechanism) must land before PR-B so the regenerated `protobuf.rs` compiles.
+**Option 2 (Remove) — implemented.** User chose removal to match upstream.
+
+Done:
+- Deleted `src/fundamental/`, `src/testdata/builders/fundamental.rs`, the sync/async client
+  methods, both examples (`examples/{sync,async}/fundamental_data.rs` + their `Cargo.toml`
+  `[[example]]` entries), and the integration tests (`integration/{sync,async}/tests/fundamental_data.rs`).
+- Removed `Features::FUNDAMENTAL_DATA`. Kept `server_versions::FUNDAMENTAL_DATA = 40` as protocol history.
+- Dropped `TickType::FundamentalRatios` (id 47); id 47 now decodes to `TickType::Unknown`.
+- Kept `IncomingMessages::FundamentalData = 51` / `OutgoingMessages::{Request,Cancel}FundamentalData`
+  as known-but-unclaimed protocol variants (TickEFP precedent, rule 19), but removed `FundamentalData`
+  from the `text_request_id_field` routing allow-list — no decoder awaits it.
+- `CHANGELOG.md` `Removed` + `docs/migration-3.0.md` §34.
+- Did **not** touch `src/proto/protobuf.rs`: the 3 fundamentals structs are now unreferenced, so
+  PR-B's regen drops them with no dangling refs (the handoff contract).
+
+PR-B is now unblocked.
