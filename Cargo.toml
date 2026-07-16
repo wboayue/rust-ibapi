@@ -111,6 +111,11 @@ path = "examples/async/soft_dollar_tiers.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_config"
+path = "examples/async/config.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_user_info"
 path = "examples/async/user_info.rs"
 required-features = ["async"]
@@ -615,6 +620,11 @@ required-features = ["sync"]
 [[example]]
 name = "soft_dollar_tiers"
 path = "examples/sync/soft_dollar_tiers.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "config"
+path = "examples/sync/config.rs"
 required-features = ["sync"]
 
 [[example]]
