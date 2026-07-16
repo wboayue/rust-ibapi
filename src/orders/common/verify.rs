@@ -187,6 +187,10 @@ pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order, _order_
         )?
     }
 
+    if order.hedge_max_size.is_some() {
+        client.check_version(server_versions::HEDGE_MAX_SIZE, "It does not support hedge_max_size parameter")?
+    }
+
     Ok(())
 }
 

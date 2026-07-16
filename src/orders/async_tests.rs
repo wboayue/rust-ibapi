@@ -119,6 +119,46 @@ async fn test_place_order() {
     assert_request(&message_bus, 0, &place_order_request().order_id(1).contract(&contract).order(&order));
 }
 
+// Drives the real async place_order path and decodes the captured wire bytes to confirm
+// hedge_max_size rides the outbound PlaceOrderRequest proto (CLAUDE.md rule 10).
+#[tokio::test]
+async fn place_order_encodes_hedge_max_size() {
+    use crate::common::test_utils::helpers::decode_request_proto;
+
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE);
+
+    let contract = Contract::stock("TSLA").build();
+    let mut order = order_builder::market_order(Action::Buy, 100.0);
+    order.hedge_max_size = Some(500);
+
+    let _subscription = client.place_order(20, &contract, &order).await.expect("place_order should succeed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&message_bus, 0);
+    let proto_order = request.order.expect("request carries an order");
+    assert_eq!(proto_order.hedge_max_size, Some(500));
+}
+
+// Placing an order with hedge_max_size against a server below the gate is rejected
+// before anything is sent (CLAUDE.md rule 10 — real verify path).
+#[tokio::test]
+async fn place_order_rejects_hedge_max_size_below_gate() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE - 1);
+
+    let contract = Contract::stock("TSLA").build();
+    let mut order = order_builder::market_order(Action::Buy, 100.0);
+    order.hedge_max_size = Some(500);
+
+    match client.place_order(20, &contract, &order).await {
+        Err(crate::Error::ServerVersion(required, _, _)) => assert_eq!(required, server_versions::HEDGE_MAX_SIZE),
+        Err(other) => panic!("expected ServerVersion error, got {other:?}"),
+        Ok(_) => panic!("expected place_order to be rejected below the hedge_max_size gate"),
+    }
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
 #[tokio::test]
 async fn test_cancel_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(

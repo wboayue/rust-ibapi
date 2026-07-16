@@ -289,7 +289,11 @@ pub struct Order {
     /// For hedge orders.
     /// Beta = x for Beta hedge orders, ratio = y for Pair hedge order
     pub hedge_param: String,
-    /// The account the trade will be allocated to.    
+    /// For hedge orders. The maximum size of the hedge order.
+    ///
+    /// Requires TWS/Gateway server version 223 (`HEDGE_MAX_SIZE`) or later.
+    pub hedge_max_size: Option<i32>,
+    /// The account the trade will be allocated to.
     pub account: String,
     /// Indicates the firm which will settle the trade. Institutions only.
     pub settling_firm: String,
@@ -553,6 +557,7 @@ impl Default for Order {
             scale_random_percent: false,
             hedge_type: "".to_owned(),
             hedge_param: "".to_owned(),
+            hedge_max_size: None,
             account: "".to_owned(),
             settling_firm: "".to_owned(),
             clearing_account: "".to_owned(),

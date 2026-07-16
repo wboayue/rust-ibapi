@@ -194,6 +194,15 @@ pub const ETF_NAV_HIGH_LOW: &str = "614";
 /// Delivers received tick `CREDITMAN_SLOW_MARK_PRICE` (79).
 pub const CREDITMAN_SLOW_MARK_PRICE: &str = "619";
 
+/// `787` — Odd-lot bid/ask quotes.
+///
+/// Delivers received ticks `ODD_LOT_BID` (105), `ODD_LOT_ASK` (106),
+/// `ODD_LOT_BID_SIZE` (107), `ODD_LOT_ASK_SIZE` (108), `ODD_LOT_BID_EXCH` (109),
+/// and `ODD_LOT_ASK_EXCH` (110).
+///
+/// Requires TWS/Gateway server version 225 (`ODD_LOT_BID_ASK_QUOTES`) or later.
+pub const ODD_LOT: &str = "787";
+
 #[cfg(test)]
 #[path = "generic_tick_tests.rs"]
 mod tests;

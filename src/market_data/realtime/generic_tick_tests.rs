@@ -37,6 +37,7 @@ fn constants_match_documented_numeric_ids() {
         (SHORT_TERM_VOLUME, "595"),
         (ETF_NAV_HIGH_LOW, "614"),
         (CREDITMAN_SLOW_MARK_PRICE, "619"),
+        (ODD_LOT, "787"),
     ];
 
     for (constant, expected) in cases {

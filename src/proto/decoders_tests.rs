@@ -116,3 +116,21 @@ fn decode_contract_propagates_bad_combo_leg() {
     };
     assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse(_, _, _))));
 }
+
+// === decode_order hedge_max_size ===
+
+#[test]
+fn decode_order_maps_hedge_max_size() {
+    let proto_order = proto::Order {
+        hedge_max_size: Some(500),
+        ..Default::default()
+    };
+    let order = decode_order(&proto_order);
+    assert_eq!(order.hedge_max_size, Some(500));
+}
+
+#[test]
+fn decode_order_hedge_max_size_absent_is_none() {
+    let order = decode_order(&proto::Order::default());
+    assert!(order.hedge_max_size.is_none());
+}
