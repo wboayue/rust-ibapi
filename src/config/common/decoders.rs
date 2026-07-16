@@ -13,17 +13,13 @@ use crate::Error;
 /// `Error::UnexpectedResponse`.
 pub(in crate::config) fn decode_config_message(message: &ResponseMessage) -> Result<Config, Error> {
     match message.message_type() {
-        IncomingMessages::ConfigResponse => decode_config(message),
+        IncomingMessages::ConfigResponse => decode_config_proto(message.require_proto()?),
         IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }
 
-pub(crate) fn decode_config(message: &ResponseMessage) -> Result<Config, Error> {
-    decode_config_proto(message.require_proto()?)
-}
-
-pub(crate) fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
+fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
     let p = proto::ConfigResponse::decode(bytes)?;
     Ok(Config {
         lock_and_exit: p.lock_and_exit.map(convert_lock_and_exit),

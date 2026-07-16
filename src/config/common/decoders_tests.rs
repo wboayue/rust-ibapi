@@ -78,10 +78,10 @@ fn test_decode_config_message_rejects_unexpected_type() {
 
 #[test]
 fn test_decode_config_rejects_text_framing() {
-    // Text-framed arrival at a proto-only decoder must surface
-    // UnexpectedResponse.
+    // A ConfigResponse that arrives text-framed (no proto payload) must surface
+    // UnexpectedResponse via require_proto().
     let message = ResponseMessage::from("110\09000\0\0");
-    match decode_config(&message) {
+    match decode_config_message(&message) {
         Err(Error::UnexpectedResponse(_)) => {}
         other => panic!("expected UnexpectedResponse, got {other:?}"),
     }
