@@ -201,6 +201,8 @@ pub enum BarSize {
     Min2,
     /// Three-minute bars.
     Min3,
+    /// Four-minute bars.
+    Min4,
     /// Five-minute bars.
     Min5,
     /// Ten-minute bars.
@@ -240,6 +242,7 @@ impl Display for BarSize {
             Self::Min => write!(f, "1 min"),
             Self::Min2 => write!(f, "2 mins"),
             Self::Min3 => write!(f, "3 mins"),
+            Self::Min4 => write!(f, "4 mins"),
             Self::Min5 => write!(f, "5 mins"),
             Self::Min10 => write!(f, "10 mins"),
             Self::Min15 => write!(f, "15 mins"),
@@ -270,6 +273,7 @@ impl FromStr for BarSize {
             "MIN" => Ok(Self::Min),
             "MIN2" => Ok(Self::Min2),
             "MIN3" => Ok(Self::Min3),
+            "MIN4" => Ok(Self::Min4),
             "MIN5" => Ok(Self::Min5),
             "MIN10" => Ok(Self::Min10),
             "MIN15" => Ok(Self::Min15),
