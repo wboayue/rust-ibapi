@@ -221,6 +221,18 @@ pub enum TickType {
     DelayedYieldBid = 103,
     /// Delayed ask yield.
     DelayedYieldAsk = 104,
+    /// Odd-lot bid price.
+    OddLotBid = 105,
+    /// Odd-lot ask price.
+    OddLotAsk = 106,
+    /// Odd-lot bid size.
+    OddLotBidSize = 107,
+    /// Odd-lot ask size.
+    OddLotAskSize = 108,
+    /// Exchange code supplying the odd-lot bid.
+    OddLotBidExch = 109,
+    /// Exchange code supplying the odd-lot ask.
+    OddLotAskExch = 110,
 }
 
 impl From<i32> for TickType {
@@ -332,6 +344,12 @@ impl From<i32> for TickType {
             102 => Self::FinalIpoLast,
             103 => Self::DelayedYieldBid,
             104 => Self::DelayedYieldAsk,
+            105 => Self::OddLotBid,
+            106 => Self::OddLotAsk,
+            107 => Self::OddLotBidSize,
+            108 => Self::OddLotAskSize,
+            109 => Self::OddLotBidExch,
+            110 => Self::OddLotAskExch,
             _ => Self::Unknown,
         }
     }
@@ -445,6 +463,12 @@ impl From<&str> for TickType {
             "finalIPOLast" => Self::FinalIpoLast,
             "delayedYieldBid" => Self::DelayedYieldBid,
             "delayedYieldAsk" => Self::DelayedYieldAsk,
+            "oddLotBid" => Self::OddLotBid,
+            "oddLotAsk" => Self::OddLotAsk,
+            "oddLotBidSize" => Self::OddLotBidSize,
+            "oddLotAskSize" => Self::OddLotAskSize,
+            "oddLotBidExch" => Self::OddLotBidExch,
+            "oddLotAskExch" => Self::OddLotAskExch,
             _ => Self::Unknown,
         }
     }
@@ -559,6 +583,12 @@ impl fmt::Display for TickType {
             Self::FinalIpoLast => write!(f, "Final IPO Last"),
             Self::DelayedYieldBid => write!(f, "Delayed Yield Bid"),
             Self::DelayedYieldAsk => write!(f, "Delayed Yield Ask"),
+            Self::OddLotBid => write!(f, "Odd Lot Bid"),
+            Self::OddLotAsk => write!(f, "Odd Lot Ask"),
+            Self::OddLotBidSize => write!(f, "Odd Lot Bid Size"),
+            Self::OddLotAskSize => write!(f, "Odd Lot Ask Size"),
+            Self::OddLotBidExch => write!(f, "Odd Lot Bid Exchange"),
+            Self::OddLotAskExch => write!(f, "Odd Lot Ask Exchange"),
         }
     }
 }
