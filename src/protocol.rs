@@ -146,6 +146,8 @@ impl Features {
     pub const USER_INFO: ProtocolFeature = ProtocolFeature::new("user info", server_versions::USER_INFO);
     /// Enables cancelling in-flight contract data and historical ticks requests.
     pub const CANCEL_CONTRACT_DATA: ProtocolFeature = ProtocolFeature::new("cancel contract data", server_versions::CANCEL_CONTRACT_DATA);
+    /// Required to read TWS/Gateway configuration via reqConfig.
+    pub const CONFIG: ProtocolFeature = ProtocolFeature::new("configuration", server_versions::CONFIG);
 }
 
 /// Checks if the server version supports a given feature.
