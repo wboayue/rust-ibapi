@@ -110,7 +110,13 @@ fn test_from_i32_all_values() {
         (102, TickType::FinalIpoLast),
         (103, TickType::DelayedYieldBid),
         (104, TickType::DelayedYieldAsk),
-        (105, TickType::Unknown),
+        (105, TickType::OddLotBid),
+        (106, TickType::OddLotAsk),
+        (107, TickType::OddLotBidSize),
+        (108, TickType::OddLotAskSize),
+        (109, TickType::OddLotBidExch),
+        (110, TickType::OddLotAskExch),
+        (111, TickType::Unknown),
         (-2, TickType::Unknown),
         (1000, TickType::Unknown),
     ];
@@ -228,6 +234,12 @@ fn test_from_str_all_values() {
         ("finalIPOLast", TickType::FinalIpoLast),
         ("delayedYieldBid", TickType::DelayedYieldBid),
         ("delayedYieldAsk", TickType::DelayedYieldAsk),
+        ("oddLotBid", TickType::OddLotBid),
+        ("oddLotAsk", TickType::OddLotAsk),
+        ("oddLotBidSize", TickType::OddLotBidSize),
+        ("oddLotAskSize", TickType::OddLotAskSize),
+        ("oddLotBidExch", TickType::OddLotBidExch),
+        ("oddLotAskExch", TickType::OddLotAskExch),
         ("nonexistent", TickType::Unknown),
         ("", TickType::Unknown),
         ("  ", TickType::Unknown),
@@ -262,11 +274,11 @@ fn test_partial_eq() {
 fn test_edge_cases() {
     // Test the lowest and highest defined values
     assert_eq!(TickType::from(0), TickType::BidSize);
-    assert_eq!(TickType::from(104), TickType::DelayedYieldAsk);
+    assert_eq!(TickType::from(110), TickType::OddLotAskExch);
 
     // Test values just outside the defined range
     assert_eq!(TickType::from(-2), TickType::Unknown);
-    assert_eq!(TickType::from(105), TickType::Unknown);
+    assert_eq!(TickType::from(111), TickType::Unknown);
 
     // Test with empty string and whitespace
     assert_eq!(TickType::from(""), TickType::Unknown);
@@ -389,9 +401,35 @@ fn test_display_output() {
         (TickType::FinalIpoLast, "Final IPO Last"),
         (TickType::DelayedYieldBid, "Delayed Yield Bid"),
         (TickType::DelayedYieldAsk, "Delayed Yield Ask"),
+        (TickType::OddLotBid, "Odd Lot Bid"),
+        (TickType::OddLotAsk, "Odd Lot Ask"),
+        (TickType::OddLotBidSize, "Odd Lot Bid Size"),
+        (TickType::OddLotAskSize, "Odd Lot Ask Size"),
+        (TickType::OddLotBidExch, "Odd Lot Bid Exchange"),
+        (TickType::OddLotAskExch, "Odd Lot Ask Exchange"),
     ];
 
     for (variant, expected) in &test_cases {
         assert_eq!(format!("{variant}"), *expected, "Display mismatch for {variant:?}");
+    }
+}
+
+#[test]
+fn test_odd_lot_tick_types() {
+    // id, wire string (C# TickType.FieldToString), variant
+    let cases = [
+        (105, "oddLotBid", TickType::OddLotBid),
+        (106, "oddLotAsk", TickType::OddLotAsk),
+        (107, "oddLotBidSize", TickType::OddLotBidSize),
+        (108, "oddLotAskSize", TickType::OddLotAskSize),
+        (109, "oddLotBidExch", TickType::OddLotBidExch),
+        (110, "oddLotAskExch", TickType::OddLotAskExch),
+    ];
+
+    for (id, wire, variant) in cases {
+        assert_eq!(TickType::from(id), variant, "From<i32> for {variant:?}");
+        assert_eq!(TickType::from(wire), variant, "From<&str> for {variant:?}");
+        // Display renders a human-readable label; the wire token round-trips via From<&str>.
+        assert!(!format!("{variant}").is_empty(), "Display for {variant:?}");
     }
 }
