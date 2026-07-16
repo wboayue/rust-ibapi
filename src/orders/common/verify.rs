@@ -2,10 +2,6 @@ use crate::contracts::Contract;
 use crate::orders::Order;
 use crate::{server_versions, Error};
 
-#[cfg(test)]
-#[path = "verify_tests.rs"]
-mod tests;
-
 pub(crate) trait VersionedClient {
     fn check_version(&self, version: i32, message: &str) -> Result<(), Error>;
 }

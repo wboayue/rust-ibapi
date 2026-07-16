@@ -89,24 +89,13 @@ fn test_encode_order_basic() {
 #[test]
 fn test_encode_order_hedge_max_size() {
     let order = Order {
-        hedge_type: "B".to_string(),
-        hedge_param: "60".to_string(),
         hedge_max_size: Some(500),
         ..Default::default()
     };
 
     let proto = encode_order(&order);
 
-    assert_eq!(proto.hedge_type.as_deref(), Some("B"));
-    assert_eq!(proto.hedge_param.as_deref(), Some("60"));
     assert_eq!(proto.hedge_max_size, Some(500));
-}
-
-#[test]
-fn test_encode_order_hedge_max_size_none_omitted() {
-    let order = Order::default();
-    let proto = encode_order(&order);
-    assert!(proto.hedge_max_size.is_none());
 }
 
 #[test]
@@ -119,6 +108,7 @@ fn test_encode_order_default_fields_omitted() {
     assert!(proto.block_order.is_none());
     assert!(proto.hidden.is_none());
     assert!(proto.all_or_none.is_none());
+    assert!(proto.hedge_max_size.is_none());
 }
 
 #[test]

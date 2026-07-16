@@ -130,8 +130,6 @@ async fn place_order_encodes_hedge_max_size() {
 
     let contract = Contract::stock("TSLA").build();
     let mut order = order_builder::market_order(Action::Buy, 100.0);
-    order.hedge_type = "B".to_string();
-    order.hedge_param = "60".to_string();
     order.hedge_max_size = Some(500);
 
     let _subscription = client.place_order(20, &contract, &order).await.expect("place_order should succeed");

@@ -122,8 +122,6 @@ fn decode_contract_propagates_bad_combo_leg() {
 #[test]
 fn decode_order_maps_hedge_max_size() {
     let proto_order = proto::Order {
-        hedge_type: Some("B".to_string()),
-        hedge_param: Some("60".to_string()),
         hedge_max_size: Some(500),
         ..Default::default()
     };
