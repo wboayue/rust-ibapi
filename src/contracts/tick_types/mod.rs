@@ -105,8 +105,8 @@ pub enum TickType {
     LastTimestamp = 45,
     /// Number of shares available for shorting.
     Shortable = 46,
-    /// Fundamental ratios snapshot (PE, EPS, etc.).
-    FundamentalRatios = 47,
+    // id 47 (FundamentalRatios) removed: IBKR removed the fundamental-data
+    // feature in TWS 10.47; id 47 now decodes to `Unknown`.
     /// Real-time consolidated volume message.
     RtVolume = 48,
     /// Indicates if trading is halted (0 = not halted, 1 = halted).
@@ -286,7 +286,6 @@ impl From<i32> for TickType {
             44 => Self::CloseEfpComputation,
             45 => Self::LastTimestamp,
             46 => Self::Shortable,
-            47 => Self::FundamentalRatios,
             48 => Self::RtVolume,
             49 => Self::Halted,
             50 => Self::BidYield,
@@ -405,7 +404,6 @@ impl From<&str> for TickType {
             "closeEFP" => Self::CloseEfpComputation,
             "lastTimestamp" => Self::LastTimestamp,
             "shortable" => Self::Shortable,
-            "fundamentals" => Self::FundamentalRatios,
             "RTVolume" => Self::RtVolume,
             "halted" => Self::Halted,
             "bidYield" => Self::BidYield,
@@ -525,7 +523,6 @@ impl fmt::Display for TickType {
             Self::CloseEfpComputation => write!(f, "Close EFP Computation"),
             Self::LastTimestamp => write!(f, "Last Timestamp"),
             Self::Shortable => write!(f, "Shortable"),
-            Self::FundamentalRatios => write!(f, "Fundamental Ratios"),
             Self::RtVolume => write!(f, "RT Volume"),
             Self::Halted => write!(f, "Halted"),
             Self::BidYield => write!(f, "Bid Yield"),

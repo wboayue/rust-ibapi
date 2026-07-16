@@ -161,7 +161,9 @@ pub enum IncomingMessages {
     CurrentTime = 49,
     /// Real-time bars update.
     RealTimeBars = 50,
-    /// Fundamental data response.
+    /// Fundamental data response. IBKR removed the fundamental-data feature in
+    /// TWS 10.47; no decoder claims this id, but the variant is retained so
+    /// `From<i32>` maps id 51 to a known-but-unclaimed message type (see `TickEFP`).
     FundamentalData = 51,
     /// End marker for contract details batches.
     ContractDataEnd = 52,
@@ -437,7 +439,6 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
 
         IncomingMessages::ContractData
         | IncomingMessages::ExecutionData
-        | IncomingMessages::FundamentalData
         | IncomingMessages::HeadTimestamp
         | IncomingMessages::HistogramData
         | IncomingMessages::HistoricalData

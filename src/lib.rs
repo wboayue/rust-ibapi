@@ -181,8 +181,6 @@ pub mod subscriptions;
 pub mod contracts;
 // Describes primary data structures used by the model.
 pub mod errors;
-/// APIs for retrieving fundamental data reports (Reuters: snapshot, financial summary, ratios, etc.).
-pub mod fundamental;
 /// APIs for retrieving market data
 pub mod market_data;
 pub(crate) mod messages;

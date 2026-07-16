@@ -846,6 +846,25 @@ fn build_order() -> Result<(), ValidationError> {
 
 `reference_contract(id, exchange)` is required; omitting it returns `Err(ValidationError::MissingRequiredField("reference_contract"))`. All other setters are optional — skipping a setter leaves the field unset on the wire (`None`), distinct from v2 callers who had to pass an explicit `0.0` / `false` (which encoded as `Some(0.0)` / `false`). If you need to preserve the v2 wire shape exactly, call every setter.
 
+### 34. Fundamental data removed
+
+The `fundamental` module (`FundamentalData`, `FundamentalReportType`) and `Client::fundamental_data` are gone. IBKR removed the fundamental-data feature (`reqFundamentalData` / `cancelFundamentalData`, plus the `FundamentalRatios` tick) from the TWS API in 10.47 with no replacement — the endpoint may stop responding on newer gateways, and the `fundamentals.html` docs now redirect to Wall Street Horizon. Code that requested Reuters reports no longer compiles.
+
+```rust,ignore
+// v2.x / v3 pre-removal
+use ibapi::fundamental::FundamentalReportType;
+
+let contract = Contract::stock("AAPL").build();
+let report = client.fundamental_data(&contract, FundamentalReportType::ReportSnapshot)?;
+println!("{}", report.data);
+
+// v3 post-removal — no direct replacement.
+// Wall Street Horizon event data (`Client::wsh_metadata` / `wsh_event_data_*`)
+// covers earnings-calendar and corporate-event data.
+```
+
+`TickType::FundamentalRatios` (tick id 47) is also removed. Match arms on it no longer compile; incoming tick id 47 now decodes to `TickType::Unknown`.
+
 ## Before / after: common subscription patterns
 
 ### Order construction
