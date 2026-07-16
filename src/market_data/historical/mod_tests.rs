@@ -10,6 +10,7 @@ fn test_bar_size_to_string() {
     assert_eq!("1 min", BarSize::Min.to_string());
     assert_eq!("2 mins", BarSize::Min2.to_string());
     assert_eq!("3 mins", BarSize::Min3.to_string());
+    assert_eq!("4 mins", BarSize::Min4.to_string());
     assert_eq!("5 mins", BarSize::Min5.to_string());
     assert_eq!("10 mins", BarSize::Min10.to_string());
     assert_eq!("15 mins", BarSize::Min15.to_string());
@@ -35,6 +36,7 @@ fn test_bar_size_from_string() {
     assert_eq!(BarSize::Min, BarSize::from("MIN"));
     assert_eq!(BarSize::Min2, BarSize::from("MIN2"));
     assert_eq!(BarSize::Min3, BarSize::from("MIN3"));
+    assert_eq!(BarSize::Min4, BarSize::from("MIN4"));
     assert_eq!(BarSize::Min5, BarSize::from("MIN5"));
     assert_eq!(BarSize::Min10, BarSize::from("MIN10"));
     assert_eq!(BarSize::Min15, BarSize::from("MIN15"));
