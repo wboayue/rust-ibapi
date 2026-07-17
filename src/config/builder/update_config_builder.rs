@@ -57,10 +57,25 @@ impl<'a, C> UpdateConfigBuilder<'a, C> {
         self
     }
 
+    /// Add several message-prompt edits at once (appends). Convenient for
+    /// replaying a [`Config::messages`](crate::config::Config::messages) snapshot.
+    pub fn messages(mut self, messages: impl IntoIterator<Item = MessageSetting>) -> Self {
+        self.messages.extend(messages);
+        self
+    }
+
     /// Acknowledge a warning from a prior [`UpdateConfigResponse`](crate::config::UpdateConfigResponse)
     /// so the gateway applies the edit on re-submission. Call once per warning.
     pub fn accept_warning(mut self, warning: ConfigWarning) -> Self {
         self.accepted_warnings.push(warning);
+        self
+    }
+
+    /// Acknowledge several warnings at once (appends). Convenient for echoing a
+    /// prior [`UpdateConfigResponse::warnings`](crate::config::UpdateConfigResponse)
+    /// in one call before re-submitting.
+    pub fn accept_warnings(mut self, warnings: impl IntoIterator<Item = ConfigWarning>) -> Self {
+        self.accepted_warnings.extend(warnings);
         self
     }
 

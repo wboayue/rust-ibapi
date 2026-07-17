@@ -66,6 +66,47 @@ fn test_update_config_request_body() {
 }
 
 #[test]
+fn test_update_config_bulk_setters() {
+    let message_bus = stub(vec![proto_response(
+        IncomingMessages::UpdateConfigResponse,
+        update_config_response().request_id(TEST_REQ_ID_FIRST).status("ok").encode_proto(),
+    )]);
+
+    let client = Client::stubbed(message_bus.clone(), crate::server_versions::UPDATE_CONFIG);
+    client
+        .update_config()
+        .messages([
+            MessageSetting {
+                id: Some(131),
+                ..Default::default()
+            },
+            MessageSetting {
+                id: Some(132),
+                ..Default::default()
+            },
+        ])
+        .accept_warnings([
+            ConfigWarning {
+                message_id: Some(131),
+                ..Default::default()
+            },
+            ConfigWarning {
+                message_id: Some(132),
+                ..Default::default()
+            },
+        ])
+        .submit()
+        .expect("update config failed");
+
+    let sent: proto::UpdateConfigRequest = decode_request_proto(&message_bus, 0);
+    assert_eq!(sent.messages.iter().filter_map(|m| m.id).collect::<Vec<_>>(), vec![131, 132]);
+    assert_eq!(
+        sent.accepted_warnings.iter().filter_map(|w| w.message_id).collect::<Vec<_>>(),
+        vec![131, 132]
+    );
+}
+
+#[test]
 fn test_update_config_response_decoded() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
