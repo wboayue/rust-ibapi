@@ -1,19 +1,26 @@
-//! TWS/Gateway configuration snapshot.
+//! TWS/Gateway configuration read and write.
 //!
 //! [`Client::config`](crate::Client::config) reads the API, precautions,
 //! orders, and lock-and-exit settings the running gateway is configured with.
-//! This is a read-only view; the write path (`updateConfig`) is not yet
-//! implemented.
+//! [`Client::update_config`](crate::Client::update_config) pushes partial edits
+//! back through a fluent [`UpdateConfigBuilder`](crate::config::UpdateConfigBuilder),
+//! returning an [`UpdateConfigResponse`](crate::config::UpdateConfigResponse) that
+//! reports the changed fields, errors, and any warnings the gateway raised.
 //!
-//! Every field mirrors the wire message and is optional — a `None` means the
-//! gateway did not report that setting, not that it is disabled.
+//! Read fields mirror the wire message and are optional — a `None` means the
+//! gateway did not report that setting, not that it is disabled. The same
+//! domain types are reused as the write-side input: construct a partial edit
+//! with `..Default::default()` and set only the fields you want to change.
 
 use serde::{Deserialize, Serialize};
 
+mod builder;
 mod common;
 
 // Re-export common functionality
 use common::encoders;
+
+pub use builder::UpdateConfigBuilder;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
@@ -199,4 +206,39 @@ pub struct OrdersSmartRouting {
     pub do_not_route_to_dark_pools: Option<bool>,
     /// Default algorithm.
     pub default_algorithm: Option<String>,
+}
+
+/// The gateway's response to an [`update_config`](crate::Client::update_config)
+/// request.
+///
+/// If `warnings` is non-empty, the edit was not applied — re-submit the same
+/// edit with each warning echoed via
+/// [`UpdateConfigBuilder::accept_warning`] to proceed.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateConfigResponse {
+    /// Outcome status reported by the gateway.
+    pub status: Option<String>,
+    /// Human-readable status message.
+    pub message: Option<String>,
+    /// Names of the settings that were changed.
+    pub changed_fields: Vec<String>,
+    /// Errors that prevented the edit from applying.
+    pub errors: Vec<String>,
+    /// Warnings the caller must acknowledge (echo back via
+    /// [`UpdateConfigBuilder::accept_warning`]) before the edit is applied.
+    pub warnings: Vec<ConfigWarning>,
+}
+
+/// A warning raised by the gateway while validating an
+/// [`update_config`](crate::Client::update_config) edit.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigWarning {
+    /// Identifier of the message prompt this warning corresponds to.
+    pub message_id: Option<i32>,
+    /// Warning title.
+    pub title: Option<String>,
+    /// Warning body.
+    pub message: Option<String>,
 }

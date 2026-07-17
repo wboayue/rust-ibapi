@@ -7,6 +7,7 @@ use crate::{
     Error,
 };
 
+use super::builder::UpdateConfigBuilder;
 use super::{common::decoders, encoders, Config};
 
 impl Client {
@@ -32,6 +33,34 @@ impl Client {
         request_helpers::blocking::one_shot_request_with_retry(self, encoders::encode_request_config, decoders::decode_config_message, || {
             Err(Error::UnexpectedEndOfStream)
         })
+    }
+
+    /// Begins a fluent [`UpdateConfigBuilder`] to edit the TWS/Gateway
+    /// configuration. Set only the groups you want to change and terminate with
+    /// [`submit`](UpdateConfigBuilder::submit).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::config::{OrdersConfig, OrdersSmartRouting};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let response = client
+    ///     .update_config()
+    ///     .orders(OrdersConfig {
+    ///         smart_routing: Some(OrdersSmartRouting {
+    ///             seek_price_improvement: Some(true),
+    ///             ..Default::default()
+    ///         }),
+    ///     })
+    ///     .submit()
+    ///     .expect("update config failed");
+    /// println!("{response:?}");
+    /// ```
+    pub fn update_config(&self) -> UpdateConfigBuilder<'_, Client> {
+        UpdateConfigBuilder::new(self)
     }
 }
 
