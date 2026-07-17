@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-07-16
+
 ### Added
 
 - `Client::config()` (sync + async) to read the TWS/Gateway configuration (API settings, order precautions, smart-routing, lock-and-exit) added upstream for server version 219 (TWS 10.43); returns the new `config::Config` snapshot type and is gated behind `server_versions::CONFIG`.
@@ -62,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.2.1...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/wboayue/rust-ibapi/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/wboayue/rust-ibapi/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/wboayue/rust-ibapi/compare/v3.0.1...v3.1.0

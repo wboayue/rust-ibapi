@@ -4,7 +4,7 @@
 [![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
 [![Coverage Status](https://coveralls.io/repos/github/wboayue/rust-ibapi/badge.png?branch=main)](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
 
-> **Branch notice:** The `main` branch is the **v3.0** release line. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
+> **Branch notice:** The `main` branch is the **v3.x** release line. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
 ## What's new in 3.0
 
@@ -28,13 +28,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 # Async only (default features)
-ibapi = "3.0"
+ibapi = "3.3"
 
 # Blocking only
-ibapi = { version = "3.0", default-features = false, features = ["sync"] }
+ibapi = { version = "3.3", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "3.0", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "3.3", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
@@ -66,7 +66,7 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Install
 
-**v3.0 (this branch):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
+**v3.x (this branch):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
 
 **v2.x (stable):** earlier `2.x` releases are still on [crates.io/crates/ibapi](https://crates.io/crates/ibapi). Maintenance lives on the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
 
@@ -812,7 +812,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 ## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a `Subscription`, the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a `Subscription`, the application may need to handle retries manually. In v3.x, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
 
 ```rust
 use ibapi::client::blocking::Client;
