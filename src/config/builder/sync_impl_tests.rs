@@ -108,14 +108,13 @@ fn test_update_config_bulk_setters() {
 
 #[test]
 fn test_update_config_response_decoded() {
+    // Proves the decoded response flows back through submit(); exhaustive
+    // field-mapping is owned by decoders_tests::test_decode_update_config_message_populated.
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response()
             .request_id(TEST_REQ_ID_FIRST)
             .status("warning")
-            .message("please confirm")
-            .changed_field("socketPort")
-            .error("some error")
             .warning(131, "Confirm Mandatory Cap Price")
             .encode_proto(),
     )]);
@@ -124,12 +123,8 @@ fn test_update_config_response_decoded() {
     let response = client.update_config().reset_api_order_sequence().submit().expect("update config failed");
 
     assert_eq!(response.status.as_deref(), Some("warning"));
-    assert_eq!(response.message.as_deref(), Some("please confirm"));
-    assert_eq!(response.changed_fields, vec!["socketPort".to_string()]);
-    assert_eq!(response.errors, vec!["some error".to_string()]);
     assert_eq!(response.warnings.len(), 1);
     assert_eq!(response.warnings[0].message_id, Some(131));
-    assert_eq!(response.warnings[0].title.as_deref(), Some("Confirm Mandatory Cap Price"));
 }
 
 #[test]

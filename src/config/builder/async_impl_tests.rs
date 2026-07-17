@@ -1,6 +1,6 @@
 use crate::client::r#async::Client;
 use crate::common::test_utils::helpers::{decode_request_proto, proto_response, TEST_REQ_ID_FIRST};
-use crate::config::{ApiConfig, ApiSettings, ConfigWarning, MessageSetting, OrdersConfig, OrdersSmartRouting};
+use crate::config::{ApiConfig, ApiSettings, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting};
 use crate::messages::IncomingMessages;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::config::update_config_response;
@@ -35,6 +35,10 @@ async fn test_update_config_request_body() {
                 ..Default::default()
             }),
         })
+        .lock_and_exit(LockAndExit {
+            auto_logoff_time: Some("23:59".to_string()),
+            ..Default::default()
+        })
         .message(MessageSetting {
             id: Some(131),
             enabled: Some(false),
@@ -49,12 +53,16 @@ async fn test_update_config_request_body() {
         .await
         .expect("update config failed");
 
+    // Mirror of the sync test: verify the captured wire request round-trips through the production encoder.
     let sent: proto::UpdateConfigRequest = decode_request_proto(&message_bus, 0);
     assert_eq!(sent.req_id, Some(TEST_REQ_ID_FIRST));
     assert_eq!(sent.api.unwrap().settings.unwrap().socket_port, Some(7497));
     assert_eq!(sent.orders.unwrap().smart_routing.unwrap().seek_price_improvement, Some(true));
+    assert_eq!(sent.lock_and_exit.unwrap().auto_logoff_time.as_deref(), Some("23:59"));
     assert_eq!(sent.messages.len(), 1);
+    assert_eq!(sent.messages[0].id, Some(131));
     assert_eq!(sent.accepted_warnings.len(), 1);
+    assert_eq!(sent.accepted_warnings[0].message_id, Some(131));
     assert_eq!(sent.reset_api_order_sequence, Some(true));
 }
 
