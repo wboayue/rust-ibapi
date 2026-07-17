@@ -109,3 +109,58 @@ impl ResponseProtoEncoder for ConfigResponseBuilder {
 pub fn config_response() -> ConfigResponseBuilder {
     ConfigResponseBuilder::default()
 }
+
+/// Field-minimal builder for `proto::UpdateConfigResponse`.
+#[derive(Clone, Debug, Default)]
+pub struct UpdateConfigResponseBuilder {
+    inner: proto::UpdateConfigResponse,
+}
+
+impl UpdateConfigResponseBuilder {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.inner.req_id = Some(v);
+        self
+    }
+
+    pub fn status(mut self, v: impl Into<String>) -> Self {
+        self.inner.status = Some(v.into());
+        self
+    }
+
+    pub fn message(mut self, v: impl Into<String>) -> Self {
+        self.inner.message = Some(v.into());
+        self
+    }
+
+    pub fn changed_field(mut self, v: impl Into<String>) -> Self {
+        self.inner.changed_fields.push(v.into());
+        self
+    }
+
+    pub fn error(mut self, v: impl Into<String>) -> Self {
+        self.inner.errors.push(v.into());
+        self
+    }
+
+    pub fn warning(mut self, message_id: i32, title: impl Into<String>) -> Self {
+        self.inner.warnings.push(proto::UpdateConfigWarning {
+            message_id: Some(message_id),
+            title: Some(title.into()),
+            ..Default::default()
+        });
+        self
+    }
+}
+
+impl ResponseProtoEncoder for UpdateConfigResponseBuilder {
+    type Proto = proto::UpdateConfigResponse;
+
+    fn to_proto(&self) -> Self::Proto {
+        self.inner.clone()
+    }
+}
+
+/// Convenience constructor for the update-config response builder.
+pub fn update_config_response() -> UpdateConfigResponseBuilder {
+    UpdateConfigResponseBuilder::default()
+}

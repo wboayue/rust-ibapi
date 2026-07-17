@@ -3,7 +3,10 @@
 
 use prost::Message;
 
-use crate::config::{ApiConfig, ApiPrecautions, ApiSettings, Config, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting};
+use crate::config::{
+    ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,
+    UpdateConfigResponse,
+};
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::proto;
 use crate::Error;
@@ -122,6 +125,35 @@ fn convert_smart_routing(p: proto::OrdersSmartRoutingConfig) -> OrdersSmartRouti
         pre_open_reroute: p.pre_open_reroute,
         do_not_route_to_dark_pools: p.do_not_route_to_dark_pools,
         default_algorithm: p.default_algorithm,
+    }
+}
+
+/// Dispatch on the incoming message type and forward to the update-config
+/// decoder. Mirrors [`decode_config_message`].
+pub(in crate::config) fn decode_update_config_message(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
+    match message.message_type() {
+        IncomingMessages::UpdateConfigResponse => decode_update_config_proto(message.require_proto()?),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {
+    let p = proto::UpdateConfigResponse::decode(bytes)?;
+    Ok(UpdateConfigResponse {
+        status: p.status,
+        message: p.message,
+        changed_fields: p.changed_fields,
+        errors: p.errors,
+        warnings: p.warnings.into_iter().map(convert_warning).collect(),
+    })
+}
+
+fn convert_warning(p: proto::UpdateConfigWarning) -> ConfigWarning {
+    ConfigWarning {
+        message_id: p.message_id,
+        title: p.title,
+        message: p.message,
     }
 }
 

@@ -148,6 +148,8 @@ impl Features {
     pub const CANCEL_CONTRACT_DATA: ProtocolFeature = ProtocolFeature::new("cancel contract data", server_versions::CANCEL_CONTRACT_DATA);
     /// Required to read TWS/Gateway configuration via reqConfig.
     pub const CONFIG: ProtocolFeature = ProtocolFeature::new("configuration", server_versions::CONFIG);
+    /// Required to write TWS/Gateway configuration via updateConfig.
+    pub const UPDATE_CONFIG: ProtocolFeature = ProtocolFeature::new("update configuration", server_versions::UPDATE_CONFIG);
 }
 
 /// Checks if the server version supports a given feature.

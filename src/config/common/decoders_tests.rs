@@ -86,3 +86,48 @@ fn test_decode_config_rejects_text_framing() {
         other => panic!("expected UnexpectedResponse, got {other:?}"),
     }
 }
+
+#[test]
+fn test_decode_update_config_message_populated() {
+    let bytes = crate::testdata::builders::config::update_config_response()
+        .status("warning")
+        .message("please confirm")
+        .changed_field("socketPort")
+        .error("bad value")
+        .warning(131, "Confirm Mandatory Cap Price")
+        .encode_proto();
+    let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::UpdateConfigResponse, bytes);
+
+    let response = decode_update_config_message(&message).unwrap();
+    assert_eq!(response.status.as_deref(), Some("warning"));
+    assert_eq!(response.message.as_deref(), Some("please confirm"));
+    assert_eq!(response.changed_fields, vec!["socketPort".to_string()]);
+    assert_eq!(response.errors, vec!["bad value".to_string()]);
+    assert_eq!(response.warnings.len(), 1);
+    assert_eq!(response.warnings[0].message_id, Some(131));
+    assert_eq!(response.warnings[0].title.as_deref(), Some("Confirm Mandatory Cap Price"));
+}
+
+#[test]
+fn test_decode_update_config_message_routes_error() {
+    let message = ResponseMessage::from("4\09000\0322\0error text\0");
+    assert!(decode_update_config_message(&message).is_err());
+}
+
+#[test]
+fn test_decode_update_config_message_rejects_unexpected_type() {
+    let message = ResponseMessage::from("104\09000\0{}\0");
+    match decode_update_config_message(&message) {
+        Err(Error::UnexpectedResponse(_)) => {}
+        other => panic!("expected UnexpectedResponse, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_decode_update_config_rejects_text_framing() {
+    let message = ResponseMessage::from("111\09000\0\0");
+    match decode_update_config_message(&message) {
+        Err(Error::UnexpectedResponse(_)) => {}
+        other => panic!("expected UnexpectedResponse, got {other:?}"),
+    }
+}

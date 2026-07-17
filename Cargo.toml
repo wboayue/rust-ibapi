@@ -116,6 +116,11 @@ path = "examples/async/config.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_update_config"
+path = "examples/async/update_config.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_user_info"
 path = "examples/async/user_info.rs"
 required-features = ["async"]
@@ -625,6 +630,11 @@ required-features = ["sync"]
 [[example]]
 name = "config"
 path = "examples/sync/config.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "update_config"
+path = "examples/sync/update_config.rs"
 required-features = ["sync"]
 
 [[example]]

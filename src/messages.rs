@@ -438,6 +438,7 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickString => Some(2),
 
         IncomingMessages::ConfigResponse
+        | IncomingMessages::UpdateConfigResponse
         | IncomingMessages::ContractData
         | IncomingMessages::ExecutionData
         | IncomingMessages::HeadTimestamp
