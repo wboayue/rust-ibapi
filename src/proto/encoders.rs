@@ -286,7 +286,7 @@ pub fn encode_order(order: &Order) -> proto::Order {
         shareholder: some_str(&order.shareholder),
         route_marketable_to_bbo: if order.route_marketable_to_bbo { Some(1) } else { None },
         parent_perm_id: order.parent_perm_id,
-        deactivate: None,
+        deactivate: some_bool(order.deactivate),
         post_only: None,
         allow_pre_open: None,
         ignore_open_auction: None,

@@ -99,6 +99,18 @@ fn test_encode_order_hedge_max_size() {
 }
 
 #[test]
+fn test_encode_order_deactivate() {
+    let order = Order {
+        deactivate: true,
+        ..Default::default()
+    };
+
+    let proto = encode_order(&order);
+
+    assert_eq!(proto.deactivate, Some(true));
+}
+
+#[test]
 fn test_encode_order_default_fields_omitted() {
     let order = Order::default();
     let proto = encode_order(&order);
@@ -109,6 +121,7 @@ fn test_encode_order_default_fields_omitted() {
     assert!(proto.hidden.is_none());
     assert!(proto.all_or_none.is_none());
     assert!(proto.hedge_max_size.is_none());
+    assert!(proto.deactivate.is_none());
 }
 
 #[test]

@@ -134,3 +134,21 @@ fn decode_order_hedge_max_size_absent_is_none() {
     let order = decode_order(&proto::Order::default());
     assert!(order.hedge_max_size.is_none());
 }
+
+// === decode_order deactivate ===
+
+#[test]
+fn decode_order_maps_deactivate() {
+    let proto_order = proto::Order {
+        deactivate: Some(true),
+        ..Default::default()
+    };
+    let order = decode_order(&proto_order);
+    assert!(order.deactivate);
+}
+
+#[test]
+fn decode_order_deactivate_absent_is_false() {
+    let order = decode_order(&proto::Order::default());
+    assert!(!order.deactivate);
+}
