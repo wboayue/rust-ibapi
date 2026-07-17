@@ -227,6 +227,7 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     // processing control
     order.what_if = proto.what_if.unwrap_or_default();
     order.transmit = proto.transmit.unwrap_or(true);
+    order.deactivate = proto.deactivate.unwrap_or_default();
     order.override_percentage_constraints = proto.override_percentage_constraints.unwrap_or_default();
 
     // institutional orders

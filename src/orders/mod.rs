@@ -111,6 +111,9 @@ pub struct Order {
     pub order_ref: String,
     /// Specifies whether the order will be transmitted by TWS. If set to false, the order will be created at TWS but will not be sent.
     pub transmit: bool,
+    /// If set to true, the order is de-activated (inactive). Since TWS 10.48, `reqOpenOrders`
+    /// returns de-activated orders; this flag distinguishes them from active orders.
+    pub deactivate: bool,
     /// The order ID of the parent order, used for bracket and auto trailing stop orders.
     pub parent_id: i32,
     /// If set to true, specifies that the order is an ISE Block order.
@@ -496,6 +499,7 @@ impl Default for Order {
             oca_type: OcaType::None,
             order_ref: "".to_owned(),
             transmit: true,
+            deactivate: false,
             parent_id: 0,
             block_order: false,
             sweep_to_fill: false,
