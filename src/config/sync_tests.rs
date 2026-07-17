@@ -4,14 +4,10 @@ use crate::messages::IncomingMessages;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::config::{config_request, config_response};
 use crate::testdata::builders::ResponseProtoEncoder;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 fn stub(responses: Vec<crate::messages::ResponseMessage>) -> Arc<MessageBusStub> {
-    Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: responses,
-    })
+    Arc::new(MessageBusStub::with_ordered_responses(responses))
 }
 
 #[test]
