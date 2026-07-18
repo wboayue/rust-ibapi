@@ -465,7 +465,6 @@ pub struct Order {
     /// Specifies wether to use Price Management Algo. CTCI users only.
     pub use_price_mgmt_algo: bool,
     /// Indicates the duration of the order in seconds.
-    /// (Note: This is distinct from `good_till_date`, which takes a formatted UTC string.)
     pub duration: Option<i32>
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
     pub post_to_ats: Option<i32>,
