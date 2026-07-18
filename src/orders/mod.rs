@@ -392,7 +392,7 @@ pub struct Order {
     pub mifid2_execution_algo: String,
     /// Don't use auto price for hedge.
     pub dont_use_auto_price_for_hedge: bool,
-    /// Date when the order will be automatically cancelled. Format: yyyyMMdd.
+    /// Specifies the date to auto cancel the order.
     pub auto_cancel_date: String,
     /// Specifies the initial order quantity to be filled.
     pub filled_quantity: f64,
@@ -410,7 +410,7 @@ pub struct Order {
     pub parent_perm_id: Option<i64>,
     /// Accepts a list with parameters obtained from advancedOrderRejectJson.
     pub advanced_error_override: String,
-    /// The date and time when the order was entered manually (yyyyMMdd hh:mm:ss optional).
+    /// Used by brokers and advisors when manually entering an order request. Format should be “YYYYMMDD-HH:mm:ss” using UTC as the timezone value.
     pub manual_order_time: String,
     /// Defines the minimum trade quantity to fill. For IBKRATS orders.
     pub min_trade_qty: Option<i32>,
