@@ -464,8 +464,9 @@ pub struct Order {
     pub discretionary_up_to_limit_price: bool,
     /// Specifies wether to use Price Management Algo. CTCI users only.
     pub use_price_mgmt_algo: bool,
-    /// Specifies the duration of the order. Format: yyyymmdd hh:mm:ss TZ. For GTD orders.
-    pub duration: Option<i32>, // TODO date object?
+    /// Indicates the duration of the order in seconds.
+    /// (Note: This is distinct from `good_till_date`, which takes a formatted UTC string.)
+    pub duration: Option<i32>
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
     pub post_to_ats: Option<i32>,
     /// Customer account information for completed orders.
