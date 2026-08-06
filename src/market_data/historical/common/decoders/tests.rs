@@ -5,6 +5,11 @@ use prost::Message;
 use time::macros::{date, datetime};
 
 use crate::market_data::historical::BarTimestamp;
+use crate::testdata::builders::market_data::{
+    histogram_data_response, histogram_entry, historical_data_daily_bar, historical_data_response, historical_tick_bid_ask, historical_tick_last,
+    historical_tick_mid, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_response,
+};
+use crate::testdata::builders::ResponseProtoEncoder;
 
 // ---------------------------------------------------------------------------
 // Happy-path proto decoders. Each test drives bytes through the `*_proto`
@@ -368,8 +373,8 @@ fn test_decode_histogram_data_rejects_text_framing() {
 
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
 //
-// Bar volume/wap are the only historical decimal fields PR-A touches; the tick
-// and histogram sizes move in the follow-up PR that retypes them to Option<f64>.
+// Bar volume and wap are still plain f64; the tick and histogram sizes below
+// are Option<f64>.
 
 /// The builder stringifies an f64, so a malformed wire value needs raw proto.
 fn historical_data_bytes(volume: &str) -> Vec<u8> {
@@ -396,9 +401,6 @@ fn test_decode_historical_data_proto_rejects_malformed_volume() {
 
 #[test]
 fn test_decode_historical_data_proto_preserves_fractional_volume() {
-    use crate::testdata::builders::market_data::{historical_data_daily_bar, historical_data_response};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = historical_data_response()
         .bar(
             historical_data_daily_bar("20230101")
@@ -435,9 +437,6 @@ fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
 
 #[test]
 fn test_decode_historical_ticks_proto_preserves_fractional_size() {
-    use crate::testdata::builders::market_data::{historical_tick_mid, historical_ticks_response};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = historical_ticks_response()
         .tick(historical_tick_mid(1_681_133_400, 150.0, 0.5))
         .encode_proto();
@@ -448,9 +447,6 @@ fn test_decode_historical_ticks_proto_preserves_fractional_size() {
 
 #[test]
 fn test_decode_historical_ticks_last_proto_preserves_fractional_size() {
-    use crate::testdata::builders::market_data::{historical_tick_last, historical_ticks_last_response};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = historical_ticks_last_response()
         .tick(historical_tick_last(1_681_133_400, 150.0, 0.25, "NYSE"))
         .encode_proto();
@@ -461,9 +457,6 @@ fn test_decode_historical_ticks_last_proto_preserves_fractional_size() {
 
 #[test]
 fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
-    use crate::testdata::builders::market_data::{historical_tick_bid_ask, historical_ticks_bid_ask_response};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = historical_ticks_bid_ask_response()
         .tick(historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.5, 0.75))
         .encode_proto();
@@ -475,45 +468,18 @@ fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
 
 #[test]
 fn test_decode_histogram_data_proto_preserves_fractional_size() {
-    use crate::testdata::builders::market_data::{histogram_data_response, histogram_entry};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = histogram_data_response().entry(histogram_entry(125.5, 0.5)).encode_proto();
 
     let entries = super::decode_histogram_data_proto(&bytes).unwrap();
     assert_eq!(entries[0].size, Some(0.5));
 }
 
-// --- unset and malformed sizes ---
-
-#[test]
-fn test_decode_histogram_data_proto_sentinel_size_is_none() {
-    use crate::testdata::builders::market_data::{histogram_data_response, histogram_entry, HistogramDataEntryFields};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
-    for wire in [Some("2147483647".to_string()), Some(String::new()), None] {
-        let bytes = histogram_data_response()
-            .entry(HistogramDataEntryFields {
-                size: wire.clone(),
-                ..histogram_entry(125.5, 1000.0)
-            })
-            .encode_proto();
-
-        let entries = super::decode_histogram_data_proto(&bytes).unwrap();
-        assert_eq!(entries[0].size, None, "wire {wire:?}");
-    }
-}
+// --- malformed sizes ---
 
 #[test]
 fn test_decode_histogram_data_proto_rejects_malformed_size() {
-    use crate::testdata::builders::market_data::{histogram_data_response, histogram_entry, HistogramDataEntryFields};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = histogram_data_response()
-        .entry(HistogramDataEntryFields {
-            size: Some("abc".into()),
-            ..histogram_entry(125.5, 1000.0)
-        })
+        .entry(histogram_entry(125.5, 0.0).size_wire(Some("abc")))
         .encode_proto();
 
     assert_decimal_parse_error(super::decode_histogram_data_proto(&bytes), "abc");
@@ -521,14 +487,8 @@ fn test_decode_histogram_data_proto_rejects_malformed_size() {
 
 #[test]
 fn test_decode_historical_ticks_proto_rejects_malformed_size() {
-    use crate::testdata::builders::market_data::{historical_tick_mid, historical_ticks_response, HistoricalTickMidFields};
-    use crate::testdata::builders::ResponseProtoEncoder;
-
     let bytes = historical_ticks_response()
-        .tick(HistoricalTickMidFields {
-            size: Some("abc".into()),
-            ..historical_tick_mid(1_681_133_400, 150.0, 100.0)
-        })
+        .tick(historical_tick_mid(1_681_133_400, 150.0, 0.0).size_wire(Some("abc")))
         .encode_proto();
 
     assert_decimal_parse_error(super::decode_historical_ticks_proto(&bytes), "abc");

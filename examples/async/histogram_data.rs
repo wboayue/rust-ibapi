@@ -78,9 +78,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Price     | Count    | Percentage | Bar");
                 println!("----------|----------|------------|{}", "-".repeat(50));
 
-                // Find max count for bar chart scaling
-                // `max_by_key` needs `Ord`, which f64 doesn't implement — fold instead.
-                let max_count = histogram.iter().filter_map(|e| e.size).fold(1.0_f64, f64::max);
+                // Find max count for bar chart scaling. `max_by_key` needs `Ord`, which
+                // f64 doesn't implement, so reduce with `f64::max` — and fall back to 1.0
+                // only when there is nothing to scale against. Seeding the fold with 1.0
+                // would floor the scale and squash bars for sub-1.0 (fractional) sizes.
+                let max_count = histogram
+                    .iter()
+                    .filter_map(|e| e.size)
+                    .reduce(f64::max)
+                    .filter(|m| *m > 0.0)
+                    .unwrap_or(1.0);
 
                 // Sort by price for better display
                 let mut sorted_histogram = histogram.clone();
@@ -139,11 +146,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn print_histogram_entry(entry: &ibapi::market_data::historical::HistogramEntry, total_count: f64, max_count: f64) {
-    // `None` means TWS reported no size for this bucket; it contributes nothing.
+    // A bucket with no reported size contributes nothing to the arithmetic, but
+    // print it as "n/a" rather than as a zero it didn't report.
     let size = entry.size.unwrap_or(0.0);
     let percentage = (size / total_count) * 100.0;
     let bar_length = ((size / max_count) * 50.0) as usize;
     let bar = "█".repeat(bar_length);
 
-    println!("${:8.2} | {size:8.0} | {percentage:9.2}% | {bar}", entry.price);
+    println!("${:8.2} | {:>8} | {percentage:9.2}% | {bar}", entry.price, fmt_size(entry.size));
+}
+
+/// `None` means TWS reported no size for the bucket — show that rather than
+/// silently printing a zero.
+fn fmt_size(size: Option<f64>) -> String {
+    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
 }

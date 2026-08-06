@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_error_response, proto_response, request_message_count,
-    TEST_REQ_ID_FIRST,
+    assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_error_response, proto_response,
+    request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::BarTimestamp;
@@ -17,7 +17,7 @@ use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
     historical_schedule_response, historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid,
-    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response, HistogramDataEntryFields,
+    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -130,25 +130,19 @@ async fn test_head_timestamp() {
 
 #[tokio::test]
 async fn test_histogram_data_malformed_size_fails_the_request() {
-    // `Error::Parse` is terminal — `process_decode_result` skip-classifies only
-    // `UnexpectedResponse` — so a malformed size must surface to the caller
+    // End-to-end through the public API: a malformed size must fail the request
     // rather than silently decoding as 0 (issue #716).
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistogramData,
         histogram_data_response()
-            .entry(HistogramDataEntryFields {
-                size: Some("abc".into()),
-                ..histogram_entry(185.50, 100.0)
-            })
+            .entry(histogram_entry(185.50, 0.0).size_wire(Some("abc")))
             .encode_proto(),
     )]));
 
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
-    match client.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await {
-        Err(Error::Parse(_, value, _)) => assert_eq!(value, "abc"),
-        other => panic!("expected Error::Parse, got {other:?}"),
-    }
+    let result = client.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await;
+    assert_decimal_parse_error(result, "abc");
 }
 
 #[tokio::test]

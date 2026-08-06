@@ -892,7 +892,7 @@ let mode = histogram
     .max_by(|a, b| a.1.total_cmp(&b.1));
 ```
 
-**Accumulating.** Treat "unset" as contributing nothing:
+**Accumulating.** Treat "unset" as contributing nothing. Use `unwrap_or(0.0)` when you are folding one value at a time into a running total, and `filter_map` when you are reducing a collection — the latter also matters for `min`/`max`, where a substituted `0.0` would skew the result:
 
 ```rust,ignore
 // Before
@@ -919,6 +919,8 @@ fn fmt_size(size: Option<f64>) -> String {
 }
 println!("Size: {}", fmt_size(tick.size));
 ```
+
+**Serialized shape changes too.** These types derive `Serialize`/`Deserialize` (and `utoipa::ToSchema` under the `utoipa` feature), so the JSON changes in two ways beyond the compile errors: a present size now serializes as `100.0` rather than `100`, and an absent one as `null` rather than `0`. Under `utoipa` the generated schema goes from `integer` to a nullable `number`. If you publish an OpenAPI contract or have strict JSON consumers downstream, that is a breaking change with no compile-time signal.
 
 `Option<f64>` is an intermediate step. A dedicated decimal quantity type is planned, so sizes will eventually round-trip the wire's decimal representation exactly rather than through binary floating point.
 

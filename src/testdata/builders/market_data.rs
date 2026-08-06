@@ -935,6 +935,16 @@ pub fn historical_tick_mid(time: i64, price: f64, size: f64) -> HistoricalTickMi
     }
 }
 
+impl HistoricalTickMidFields {
+    /// Override the raw wire value — for sentinel, empty, malformed, or (with
+    /// `None`) absent-field fixtures. Takes the wire string verbatim, unlike the
+    /// entry-point fn which stringifies an `f64`.
+    pub fn size_wire(mut self, v: Option<&str>) -> Self {
+        self.size = v.map(str::to_string);
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HistoricalTicksResponse {
     pub request_id: i32,
@@ -1198,6 +1208,16 @@ pub fn histogram_entry(price: f64, size: f64) -> HistogramDataEntryFields {
     HistogramDataEntryFields {
         price,
         size: Some(size.to_string()),
+    }
+}
+
+impl HistogramDataEntryFields {
+    /// Override the raw wire value — for sentinel, empty, malformed, or (with
+    /// `None`) absent-field fixtures. Takes the wire string verbatim, unlike the
+    /// entry-point fn which stringifies an `f64`.
+    pub fn size_wire(mut self, v: Option<&str>) -> Self {
+        self.size = v.map(str::to_string);
+        self
     }
 }
 

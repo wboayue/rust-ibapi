@@ -575,8 +575,7 @@ pub struct TickBidAsk {
     pub size_bid: Option<f64>,
     /// Ask size of the historical tick.
     ///
-    /// `None` means TWS sent no value (field absent, empty, or an "unset"
-    /// sentinel); `Some(0.0)` is a real zero.
+    /// `None` carries the same meaning as [`Self::size_bid`].
     pub size_ask: Option<f64>,
 }
 

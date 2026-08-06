@@ -94,7 +94,7 @@ fn parse_optional_decimal_unset_inputs_are_none() {
 #[test]
 fn parse_optional_decimal_preserves_fractional_values() {
     // The regression this whole change exists for: these all decoded to 0
-    // through the old `parse_i32` path (issue #716).
+    // through the old integer parse (issue #716).
     for (input, expected) in [("0.5", 0.5), ("0.001", 0.001), ("-0.25", -0.25), ("1.5", 1.5)] {
         assert_eq!(parse_optional_decimal(Some(input)).unwrap(), Some(expected), "input {input}");
     }
@@ -350,19 +350,6 @@ fn decode_contract_details_absent_size_rules_are_none() {
     assert_eq!(details.min_size, None);
     assert_eq!(details.size_increment, None);
     assert_eq!(details.suggested_size_increment, None);
-}
-
-#[test]
-fn decode_contract_details_sentinel_size_rules_are_none() {
-    let details = proto::ContractDetails {
-        min_size: Some("2147483647".into()),
-        size_increment: Some(String::new()),
-        ..Default::default()
-    };
-    let decoded = decode_contract_details(&proto::Contract::default(), &details).unwrap();
-
-    assert_eq!(decoded.min_size, None);
-    assert_eq!(decoded.size_increment, None);
 }
 
 #[test]

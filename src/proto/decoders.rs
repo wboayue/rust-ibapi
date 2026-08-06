@@ -87,12 +87,17 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 /// [`parse_optional_decimal`] existed, so this preserves that behaviour while
 /// still erroring on malformed input.
 ///
-/// Every remaining call site is deliberate: the field is always populated on real
-/// wire, so the `0.0` fallback is unreachable in practice. The fields where an
-/// absent value was both reachable and meaningful — the historical tick and
-/// histogram sizes, and `ContractDetails::{min_size, size_increment,
-/// suggested_size_increment}` — are `Option<f64>` and use
-/// [`parse_optional_decimal`] instead.
+/// **Transitional.** The fields whose absent value was most clearly reachable and
+/// meaningful — the historical tick and histogram sizes, and
+/// `ContractDetails::{min_size, size_increment, suggested_size_increment}` — are
+/// already `Option<f64>` and use [`parse_optional_decimal`]. The remaining call
+/// sites are not all provably safe: the C# reference client guards several of them
+/// with `HasX ? Util.StringToDecimal(..) : decimal.MaxValue`, so upstream models
+/// them as "absent means unset" too. `Bar::volume` / `Bar::wap` are the clearest
+/// case — MIDPOINT, BID and ASK bars carry no volume, and `EDecoderUtils.cs`
+/// defaults them to `decimal.MaxValue` while defaulting open/high/low/close to `0`
+/// in the same function. Those are candidates for `Option<f64>` in the follow-up
+/// decimal-quantity work; grep this name for the worklist.
 pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }
