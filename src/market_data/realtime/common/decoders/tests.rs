@@ -578,3 +578,153 @@ mod market_data_type_tests {
         }
     }
 }
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+//
+// The helper's own semantics are covered in `src/proto/decoders_tests.rs`; these
+// assert only that each decoder feeds its decimal field through it. Builders
+// stringify an `f64`, so malformed-wire fixtures build the proto directly.
+mod decimal_wire_tests {
+    use super::*;
+    use crate::common::test_utils::helpers::assert_decimal_parse_error;
+    use prost::Message;
+
+    fn tick_size_bytes(size: &str) -> Vec<u8> {
+        crate::proto::TickSize {
+            req_id: Some(9000),
+            tick_type: Some(0),
+            size: Some(size.into()),
+        }
+        .encode_to_vec()
+    }
+
+    fn market_depth_bytes(size: &str) -> Vec<u8> {
+        crate::proto::MarketDepth {
+            req_id: Some(9000),
+            market_depth_data: Some(crate::proto::MarketDepthData {
+                position: Some(0),
+                operation: Some(0),
+                side: Some(1),
+                price: Some(100.0),
+                size: Some(size.into()),
+                ..Default::default()
+            }),
+        }
+        .encode_to_vec()
+    }
+
+    fn realtime_bar_bytes(volume: &str) -> Vec<u8> {
+        crate::proto::RealTimeBarTick {
+            req_id: Some(9000),
+            time: Some(1_678_890_000),
+            volume: Some(volume.into()),
+            ..Default::default()
+        }
+        .encode_to_vec()
+    }
+
+    fn trade_tick_bytes(size: &str) -> Vec<u8> {
+        crate::proto::TickByTickData {
+            req_id: Some(9000),
+            tick_type: Some(1),
+            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(
+                crate::proto::HistoricalTickLast {
+                    time: Some(1_678_890_000),
+                    price: Some(100.0),
+                    size: Some(size.into()),
+                    ..Default::default()
+                },
+            )),
+        }
+        .encode_to_vec()
+    }
+
+    fn bid_ask_tick_bytes(size_bid: &str) -> Vec<u8> {
+        crate::proto::TickByTickData {
+            req_id: Some(9000),
+            tick_type: Some(3),
+            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(
+                crate::proto::HistoricalTickBidAsk {
+                    time: Some(1_678_890_000),
+                    price_bid: Some(100.0),
+                    price_ask: Some(101.0),
+                    size_bid: Some(size_bid.into()),
+                    size_ask: Some("200".into()),
+                    ..Default::default()
+                },
+            )),
+        }
+        .encode_to_vec()
+    }
+
+    #[test]
+    fn tick_size_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_tick_size_proto(&tick_size_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn market_depth_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_market_depth_proto(&market_depth_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn market_depth_l2_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_market_depth_l2_proto(&market_depth_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn realtime_bar_rejects_malformed_volume() {
+        assert_decimal_parse_error(decode_realtime_bar_proto(&realtime_bar_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn trade_tick_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_trade_tick_proto(&trade_tick_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn bid_ask_tick_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_bid_ask_tick_proto(&bid_ask_tick_bytes("abc")), "abc");
+    }
+
+    // --- behaviour change worth naming ---
+
+    /// The builder stringifies an f64, so a malformed wire value needs raw proto.
+    fn tick_price_bytes(size: &str) -> Vec<u8> {
+        crate::proto::TickPrice {
+            req_id: Some(9000),
+            tick_type: Some(1), // Bid -> pairs with BidSize
+            price: Some(100.0),
+            size: Some(size.into()),
+            attr_mask: Some(0),
+        }
+        .encode_to_vec()
+    }
+
+    #[test]
+    fn tick_price_malformed_size_now_errors_instead_of_dropping_the_size() {
+        // Before #716 a malformed size parsed to `None` and the tick silently
+        // degraded to `TickTypes::Price`, losing the size with no signal.
+        assert_decimal_parse_error(decode_tick_price_proto(&tick_price_bytes("abc")), "abc");
+    }
+
+    #[test]
+    fn tick_price_sentinel_size_still_degrades_to_price() {
+        // The `Ok(None)` path is unchanged: an unset size is a real wire state
+        // and must keep producing a size-less `TickTypes::Price`.
+        let bytes = tick_price().tick_type(1).price(100.0).size(2147483647.0).encode_proto();
+        match decode_tick_price_proto(&bytes).unwrap() {
+            TickTypes::Price(tick) => assert_eq!(tick.price, 100.0),
+            other => panic!("expected TickTypes::Price for an unset size, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tick_price_fractional_size_produces_price_size() {
+        let bytes = tick_price().tick_type(1).price(100.0).size(0.5).encode_proto();
+        match decode_tick_price_proto(&bytes).unwrap() {
+            TickTypes::PriceSize(tick) => assert_eq!(tick.size, 0.5),
+            other => panic!("expected TickTypes::PriceSize, got {other:?}"),
+        }
+    }
+}

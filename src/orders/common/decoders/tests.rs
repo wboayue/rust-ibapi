@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 use super::*;
 use crate::contracts::Symbol;
 use crate::messages::ResponseMessage;
@@ -425,4 +427,38 @@ fn test_decode_order_status_rejects_text_framing() {
         matches!(err, Error::UnexpectedResponse(_)),
         "expected Error::UnexpectedResponse, got {err:?}"
     );
+}
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+
+#[test]
+fn test_decode_order_status_proto_rejects_malformed_filled() {
+    use prost::Message;
+
+    let bytes = crate::proto::OrderStatus {
+        order_id: Some(1),
+        status: Some("Submitted".into()),
+        filled: Some("abc".into()),
+        remaining: Some("0".into()),
+        ..Default::default()
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
+}
+
+#[test]
+fn test_decode_order_status_proto_rejects_malformed_remaining() {
+    use prost::Message;
+
+    let bytes = crate::proto::OrderStatus {
+        order_id: Some(1),
+        status: Some("Submitted".into()),
+        filled: Some("0".into()),
+        remaining: Some("abc".into()),
+        ..Default::default()
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
 }

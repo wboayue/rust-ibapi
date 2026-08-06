@@ -2,7 +2,7 @@ use prost::Message;
 
 use crate::contracts::OptionComputation;
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::{optional_f64, optional_string_f64, parse_f64, ts};
+use crate::proto::decoders::{optional_f64, parse_decimal_or_zero, parse_optional_decimal, ts};
 use crate::Error;
 
 use crate::market_data::realtime::{
@@ -77,8 +77,8 @@ pub(crate) fn decode_realtime_bar_proto(bytes: &[u8]) -> Result<Bar, Error> {
         high: msg.high.unwrap_or_default(),
         low: msg.low.unwrap_or_default(),
         close: msg.close.unwrap_or_default(),
-        volume: parse_f64(&msg.volume),
-        wap: parse_f64(&msg.wap),
+        volume: parse_decimal_or_zero(msg.volume.as_deref())?,
+        wap: parse_decimal_or_zero(msg.wap.as_deref())?,
         count: msg.count.unwrap_or_default(),
     })
 }
@@ -97,7 +97,7 @@ pub(crate) fn decode_trade_tick_proto(bytes: &[u8]) -> Result<Trade, Error> {
         tick_type: tick_type.to_string(),
         time: ts(t.time.unwrap_or_default()),
         price: t.price.unwrap_or_default(),
-        size: parse_f64(&t.size),
+        size: parse_decimal_or_zero(t.size.as_deref())?,
         trade_attribute: TradeAttribute {
             past_limit: attr.and_then(|a| a.past_limit).unwrap_or_default(),
             unreported: attr.and_then(|a| a.unreported).unwrap_or_default(),
@@ -121,8 +121,8 @@ pub(crate) fn decode_bid_ask_tick_proto(bytes: &[u8]) -> Result<BidAsk, Error> {
         time: ts(t.time.unwrap_or_default()),
         bid_price: t.price_bid.unwrap_or_default(),
         ask_price: t.price_ask.unwrap_or_default(),
-        bid_size: parse_f64(&t.size_bid),
-        ask_size: parse_f64(&t.size_ask),
+        bid_size: parse_decimal_or_zero(t.size_bid.as_deref())?,
+        ask_size: parse_decimal_or_zero(t.size_ask.as_deref())?,
         bid_ask_attribute: BidAskAttribute {
             bid_past_low: attr.and_then(|a| a.bid_past_low).unwrap_or_default(),
             ask_past_high: attr.and_then(|a| a.ask_past_high).unwrap_or_default(),
@@ -167,7 +167,9 @@ pub(crate) fn decode_market_data_type_proto(bytes: &[u8]) -> Result<MarketDataTy
 pub(crate) fn decode_tick_request_parameters_proto(bytes: &[u8]) -> Result<TickRequestParameters, Error> {
     let msg = crate::proto::TickReqParams::decode(bytes)?;
     Ok(TickRequestParameters {
-        min_tick: parse_f64(&msg.min_tick),
+        // min_tick is StringToDoubleMax upstream, not StringToDecimal; the extra
+        // integer sentinels are unreachable here (no price tick is 2147483647).
+        min_tick: parse_decimal_or_zero(msg.min_tick.as_deref())?,
         bbo_exchange: msg.bbo_exchange.unwrap_or_default(),
         snapshot_permissions: msg.snapshot_permissions.unwrap_or_default(),
     })
@@ -178,7 +180,7 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
 
     let tick_type = TickType::from(msg.tick_type.unwrap_or_default());
     let price = msg.price.unwrap_or_default();
-    let size = optional_string_f64(&msg.size);
+    let size = parse_optional_decimal(msg.size.as_deref())?;
     let attr_mask = msg.attr_mask.unwrap_or_default();
 
     let attributes = TickAttribute {
@@ -218,7 +220,7 @@ pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
 
     Ok(TickSize {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
-        size: parse_f64(&msg.size),
+        size: parse_decimal_or_zero(msg.size.as_deref())?,
     })
 }
 
@@ -269,7 +271,7 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
         operation: data.operation.unwrap_or_default(),
         side: data.side.unwrap_or_default(),
         price: data.price.unwrap_or_default(),
-        size: parse_f64(&data.size),
+        size: parse_decimal_or_zero(data.size.as_deref())?,
     })
 }
 
@@ -286,7 +288,7 @@ pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2
         operation: data.operation.unwrap_or_default(),
         side: data.side.unwrap_or_default(),
         price: data.price.unwrap_or_default(),
-        size: parse_f64(&data.size),
+        size: parse_decimal_or_zero(data.size.as_deref())?,
         smart_depth: data.is_smart_depth.unwrap_or_default(),
     })
 }

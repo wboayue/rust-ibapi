@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 #[test]
 fn test_decode_family_codes_rejects_text_framing() {
     let message = super::ResponseMessage::from("78\02\0ACC1\0FC1\0ACC2\0FC2\0");
@@ -634,4 +636,88 @@ fn test_decode_verify_completed_proto_failure_path() {
     let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
     assert!(!result.is_successful);
     assert_eq!(result.error_text, "signature mismatch");
+}
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+
+#[test]
+fn test_decode_position_proto_preserves_fractional_position() {
+    // Crypto and fractional-share accounts really do report these; the old
+    // `parse_f64` path happened to handle them, but nothing pinned it.
+    use crate::testdata::builders::positions::position;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = position().account("DU1234").contract_id(265598).position(0.5).encode_proto();
+
+    assert_eq!(super::decode_position_proto(&bytes).unwrap().position, 0.5);
+}
+
+#[test]
+fn test_decode_position_proto_rejects_malformed_position() {
+    use prost::Message;
+
+    // The builder stringifies an f64, so a malformed wire value needs raw proto.
+    let bytes = crate::proto::Position {
+        account: Some("DU1234".into()),
+        contract: Some(crate::proto::Contract {
+            con_id: Some(265598),
+            ..Default::default()
+        }),
+        position: Some("abc".into()),
+        avg_cost: Some(150.25),
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_position_proto(&bytes), "abc");
+}
+
+#[test]
+fn test_decode_position_multi_proto_rejects_malformed_position() {
+    use prost::Message;
+
+    let bytes = crate::proto::PositionMulti {
+        req_id: Some(9000),
+        account: Some("DU1234".into()),
+        model_code: Some("".into()),
+        contract: Some(crate::proto::Contract {
+            con_id: Some(265598),
+            ..Default::default()
+        }),
+        position: Some("abc".into()),
+        avg_cost: Some(150.25),
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_position_multi_proto(&bytes), "abc");
+}
+
+#[test]
+fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
+    use prost::Message;
+
+    let bytes = crate::proto::PortfolioValue {
+        contract: Some(crate::proto::Contract {
+            con_id: Some(265598),
+            ..Default::default()
+        }),
+        position: Some("abc".into()),
+        ..Default::default()
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_account_portfolio_value_proto(&bytes), "abc");
+}
+
+#[test]
+fn test_decode_pnl_single_proto_rejects_malformed_position() {
+    use prost::Message;
+
+    let bytes = crate::proto::PnLSingle {
+        req_id: Some(9000),
+        position: Some("abc".into()),
+        ..Default::default()
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_pnl_single_proto(&bytes), "abc");
 }

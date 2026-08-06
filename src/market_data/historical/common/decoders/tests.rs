@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 use super::*;
 use prost::Message;
 use time::macros::{date, datetime};
@@ -362,4 +364,66 @@ fn test_decode_histogram_data_rejects_text_framing() {
     let message = text_message("89\09000\01\0125.50\01000\0");
     let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
+}
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+//
+// Bar volume/wap are the only historical decimal fields PR-A touches; the tick
+// and histogram sizes move in the follow-up PR that retypes them to Option<f64>.
+
+/// The builder stringifies an f64, so a malformed wire value needs raw proto.
+fn historical_data_bytes(volume: &str) -> Vec<u8> {
+    crate::proto::HistoricalData {
+        req_id: Some(9000),
+        historical_data_bars: vec![crate::proto::HistoricalDataBar {
+            date: Some("20230101".into()),
+            open: Some(100.0),
+            high: Some(101.0),
+            low: Some(99.0),
+            close: Some(100.5),
+            volume: Some(volume.into()),
+            wap: Some("100.25".into()),
+            bar_count: Some(10),
+        }],
+    }
+    .encode_to_vec()
+}
+
+#[test]
+fn test_decode_historical_data_proto_rejects_malformed_volume() {
+    assert_decimal_parse_error(super::decode_historical_data_proto(&historical_data_bytes("abc")), "abc");
+}
+
+#[test]
+fn test_decode_historical_data_proto_preserves_fractional_volume() {
+    use crate::testdata::builders::market_data::{historical_data_daily_bar, historical_data_response};
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = historical_data_response()
+        .bar(
+            historical_data_daily_bar("20230101")
+                .ohlc(100.0, 101.0, 99.0, 100.5)
+                .volume(0.5)
+                .wap(100.25)
+                .count(10),
+        )
+        .encode_proto();
+
+    let bars = super::decode_historical_data_proto(&bytes).unwrap();
+    assert_eq!(bars[0].volume, 0.5);
+}
+
+#[test]
+fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
+    let bytes = crate::proto::HistoricalDataUpdate {
+        req_id: Some(9000),
+        historical_data_bar: Some(crate::proto::HistoricalDataBar {
+            date: Some("20230101".into()),
+            volume: Some("abc".into()),
+            ..Default::default()
+        }),
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_historical_data_update_proto(&bytes), "abc");
 }

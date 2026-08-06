@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
 use crate::orders::OrderStatusKind;
 
 // === parse_required ===
@@ -58,6 +59,106 @@ fn parse_optional_valid_round_trips() {
 #[test]
 fn parse_optional_unknown_propagates_fromstr_err() {
     assert!(matches!(parse_optional::<OrderStatusKind>(Some("Garbage")), Err(Error::Parse(_, _, _))));
+}
+
+// === parse_optional_decimal ===
+//
+// Tier 1: the helper's semantics, exhaustively, in one place. Decoder tests
+// elsewhere assert only that each decoder is *wired* to this helper.
+
+/// Every input class that must decode to "no value". The literal-sentinel rows are
+/// derived from the constant under test rather than re-typed (CLAUDE.md rule 21).
+fn unset_inputs() -> impl Iterator<Item = Option<&'static str>> {
+    [
+        None,     // field absent
+        Some(""), // present but empty
+        Some("inf"),
+        Some("-inf"),
+        Some("NaN"),
+        Some("1e309"),                   // overflows to inf
+        Some("1.7976931348623157E308"),  // f64::MAX, C# "R" spelling
+        Some("1.7976931348623157e308"),  // ...lowercase
+        Some("1.7976931348623157E+308"), // ...explicit sign
+    ]
+    .into_iter()
+    .chain(UNSET_DECIMAL_WIRE.map(Some))
+}
+
+#[test]
+fn parse_optional_decimal_unset_inputs_are_none() {
+    for input in unset_inputs() {
+        assert_eq!(parse_optional_decimal(input).unwrap(), None, "expected None for {input:?}");
+    }
+}
+
+#[test]
+fn parse_optional_decimal_preserves_fractional_values() {
+    // The regression this whole change exists for: these all decoded to 0
+    // through the old `parse_i32` path (issue #716).
+    for (input, expected) in [("0.5", 0.5), ("0.001", 0.001), ("-0.25", -0.25), ("1.5", 1.5)] {
+        assert_eq!(parse_optional_decimal(Some(input)).unwrap(), Some(expected), "input {input}");
+    }
+}
+
+#[test]
+fn parse_optional_decimal_zero_is_a_value_not_unset() {
+    assert_eq!(parse_optional_decimal(Some("0")).unwrap(), Some(0.0));
+    assert_eq!(parse_optional_decimal(Some("100")).unwrap(), Some(100.0));
+}
+
+#[test]
+fn parse_optional_decimal_sentinel_near_misses_survive() {
+    // Proves the literal/numeric split: sentinels are matched as strings, so a
+    // real size that merely resembles one must not be swallowed.
+    for (input, expected) in [
+        ("2147483647.0", 2147483647.0),
+        ("9223372036854775806", 9223372036854775806.0),
+        ("21474836470", 21474836470.0),
+        ("214748364", 214748364.0),
+    ] {
+        assert_eq!(parse_optional_decimal(Some(input)).unwrap(), Some(expected), "input {input}");
+    }
+}
+
+#[test]
+fn parse_optional_decimal_accepts_more_digits_than_f64_round_trips() {
+    // f64 cannot hold these exactly. Accepted for now — this precision loss is
+    // the motivation for the follow-up decimal quantity type; the contract here
+    // is only that the value is not rejected and lands on the nearest f64.
+    assert_eq!(parse_optional_decimal(Some("0.1234567890123456789")).unwrap(), Some(0.12345678901234568));
+    assert_eq!(
+        parse_optional_decimal(Some("123456789012345678901234567890")).unwrap(),
+        Some(1.2345678901234568e29)
+    );
+}
+
+#[test]
+fn parse_optional_decimal_malformed_errors_with_offending_value() {
+    for input in ["abc", " ", "1,000", "1.2.3", "--1", "0x10"] {
+        assert_decimal_parse_error(parse_optional_decimal(Some(input)), input);
+    }
+}
+
+// === parse_decimal_or_zero ===
+//
+// A composition of `parse_optional_decimal`, so it only needs to prove the
+// delegation — re-running the full class table here would just test `unwrap_or`.
+
+#[test]
+fn parse_decimal_or_zero_collapses_unset_to_zero() {
+    for input in unset_inputs() {
+        assert_eq!(parse_decimal_or_zero(input).unwrap(), 0.0, "expected 0.0 for {input:?}");
+    }
+}
+
+#[test]
+fn parse_decimal_or_zero_passes_values_through() {
+    assert_eq!(parse_decimal_or_zero(Some("0.5")).unwrap(), 0.5);
+}
+
+#[test]
+fn parse_decimal_or_zero_propagates_parse_error() {
+    assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse(_, _, _))));
 }
 
 // === decode_combo_leg end-to-end (CLAUDE.md rule 10) ===
@@ -125,13 +226,13 @@ fn decode_order_maps_hedge_max_size() {
         hedge_max_size: Some(500),
         ..Default::default()
     };
-    let order = decode_order(&proto_order);
+    let order = decode_order(&proto_order).unwrap();
     assert_eq!(order.hedge_max_size, Some(500));
 }
 
 #[test]
 fn decode_order_hedge_max_size_absent_is_none() {
-    let order = decode_order(&proto::Order::default());
+    let order = decode_order(&proto::Order::default()).unwrap();
     assert!(order.hedge_max_size.is_none());
 }
 
@@ -143,12 +244,97 @@ fn decode_order_maps_deactivate() {
         deactivate: Some(true),
         ..Default::default()
     };
-    let order = decode_order(&proto_order);
+    let order = decode_order(&proto_order).unwrap();
     assert!(order.deactivate);
 }
 
 #[test]
 fn decode_order_deactivate_absent_is_false() {
-    let order = decode_order(&proto::Order::default());
+    let order = decode_order(&proto::Order::default()).unwrap();
     assert!(!order.deactivate);
+}
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+
+#[test]
+fn decode_order_rejects_malformed_total_quantity() {
+    let proto_order = proto::Order {
+        total_quantity: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_order(&proto_order), "abc");
+}
+
+#[test]
+fn decode_order_preserves_fractional_total_quantity() {
+    let proto_order = proto::Order {
+        total_quantity: Some("0.5".into()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().total_quantity, 0.5);
+}
+
+#[test]
+fn decode_execution_rejects_malformed_shares() {
+    let proto_exec = proto::Execution {
+        side: Some("BOT".into()),
+        shares: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_execution(&proto_exec), "abc");
+}
+
+#[test]
+fn decode_execution_rejects_malformed_cumulative_quantity() {
+    let proto_exec = proto::Execution {
+        side: Some("BOT".into()),
+        shares: Some("10".into()),
+        cum_qty: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_execution(&proto_exec), "abc");
+}
+
+#[test]
+fn decode_contract_details_rejects_malformed_min_size() {
+    let details = proto::ContractDetails {
+        min_size: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_contract_details(&proto::Contract::default(), &details), "abc");
+}
+
+#[test]
+fn decode_contract_details_rejects_malformed_min_tick() {
+    let details = proto::ContractDetails {
+        min_tick: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_contract_details(&proto::Contract::default(), &details), "abc");
+}
+
+#[test]
+fn decode_order_state_sentinel_suggested_size_is_none() {
+    // Regression guard: `optional_string_f64`'s unset semantics had to survive
+    // the swap to `parse_optional_decimal`.
+    let state = proto::OrderState {
+        status: Some("Submitted".into()),
+        suggested_size: Some("2147483647".into()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order_state(&state).unwrap().suggested_size, None);
+}
+
+#[test]
+fn decode_order_state_rejects_malformed_allocation_position() {
+    let state = proto::OrderState {
+        status: Some("Submitted".into()),
+        order_allocations: vec![proto::OrderAllocation {
+            account: Some("DU1234".into()),
+            position: Some("abc".into()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_order_state(&state), "abc");
 }
