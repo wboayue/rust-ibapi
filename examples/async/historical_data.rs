@@ -47,6 +47,12 @@ enum AssetType {
     Futures,
 }
 
+/// `None` means TWS reported no size for the bucket — show that rather than
+/// silently printing a zero.
+fn fmt_size(size: Option<f64>) -> String {
+    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
+}
+
 fn format_time(ts: &BarTimestamp) -> String {
     match ts {
         BarTimestamp::Date(d) => format!("{:04}-{:02}-{:02}", d.year(), d.month() as u8, d.day()),
@@ -197,7 +203,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("Histogram entries: {}", histogram.len());
         for entry in histogram.iter().take(5) {
-            println!("  Price: ${:.2}, Size: {}", entry.price, entry.size);
+            println!("  Price: ${:.2}, Size: {}", entry.price, fmt_size(entry.size));
         }
     }
 

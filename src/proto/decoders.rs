@@ -16,14 +16,6 @@ pub(crate) fn s(opt: &Option<String>) -> String {
     opt.clone().unwrap_or_default()
 }
 
-/// **Transitional — do not wire new fields to this.** It silently defaults, which
-/// is the bug class [`parse_optional_decimal`] exists to fix. Its five remaining
-/// call sites are the historical tick and histogram sizes, which move to
-/// `Option<f64>` in the #716 follow-up; this goes away with them.
-pub(crate) fn parse_i32(opt: &Option<String>) -> i32 {
-    opt.as_deref().and_then(|s| s.parse::<i32>().ok()).unwrap_or_default()
-}
-
 pub(crate) fn optional_f64(val: Option<f64>) -> Option<f64> {
     val.filter(|&v| v != f64::MAX)
 }
@@ -90,16 +82,17 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 
 /// [`parse_optional_decimal`], collapsing "no value" to `0.0`.
 ///
-/// For fields whose public type is still plain `f64` and so cannot represent
-/// "unset". `0.0` is what those fields already produced for an absent or empty
-/// wire value, so this preserves today's behaviour while still erroring on
-/// malformed input.
+/// For fields whose public type is plain `f64` and so cannot represent "unset".
+/// `0.0` is what those fields produced for an absent or empty wire value before
+/// [`parse_optional_decimal`] existed, so this preserves that behaviour while
+/// still erroring on malformed input.
 ///
-/// Most call sites are permanent: the field is always populated on real wire, so
-/// `0.0` is unreachable in practice. Only `ContractDetails::{min_size,
-/// size_increment, suggested_size_increment}` are queued to become `Option<f64>`
-/// in the #716 follow-up, where an absent value is both reachable and meaningful
-/// (a `size_increment` of `0.0` is nonsense). See `plans/decimal-wire-parsing.md`.
+/// Every remaining call site is deliberate: the field is always populated on real
+/// wire, so the `0.0` fallback is unreachable in practice. The fields where an
+/// absent value was both reachable and meaningful — the historical tick and
+/// histogram sizes, and `ContractDetails::{min_size, size_increment,
+/// suggested_size_increment}` — are `Option<f64>` and use
+/// [`parse_optional_decimal`] instead.
 pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }
@@ -578,11 +571,11 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
             .unwrap_or_default(),
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
-        // Absent means unset upstream (ContractDetails.cs ctor sets decimal.MaxValue).
-        // These three become Option<f64> in the follow-up PR.
-        min_size: parse_decimal_or_zero(proto_details.min_size.as_deref())?,
-        size_increment: parse_decimal_or_zero(proto_details.size_increment.as_deref())?,
-        suggested_size_increment: parse_decimal_or_zero(proto_details.suggested_size_increment.as_deref())?,
+        // Absent means unset upstream (ContractDetails.cs ctor sets decimal.MaxValue),
+        // and contracts without size rules really do omit these.
+        min_size: parse_optional_decimal(proto_details.min_size.as_deref())?,
+        size_increment: parse_optional_decimal(proto_details.size_increment.as_deref())?,
+        suggested_size_increment: parse_optional_decimal(proto_details.suggested_size_increment.as_deref())?,
         // fund fields
         fund_name: s(&proto_details.fund_name),
         fund_family: s(&proto_details.fund_family),

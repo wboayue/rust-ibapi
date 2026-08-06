@@ -446,7 +446,10 @@ pub struct HistogramEntry {
     /// Price level represented by the bucket.
     pub price: f64,
     /// Total size accumulated at this price level.
-    pub size: i32,
+    ///
+    /// `None` means TWS sent no value (field absent, empty, or an "unset"
+    /// sentinel); `Some(0.0)` is a real zero.
+    pub size: Option<f64>,
 }
 
 /// Container for historical bar responses.
@@ -546,8 +549,11 @@ pub struct TickMidpoint {
     pub timestamp: OffsetDateTime,
     /// historical tick price.
     pub price: f64,
-    /// historical tick size
-    pub size: i32,
+    /// Historical tick size.
+    ///
+    /// `None` means TWS sent no value (field absent, empty, or an "unset"
+    /// sentinel); `Some(0.0)` is a real zero.
+    pub size: Option<f64>,
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
@@ -562,10 +568,16 @@ pub struct TickBidAsk {
     pub price_bid: f64,
     /// Ask price of the historical tick.
     pub price_ask: f64,
-    /// Bid size of the historical tick
-    pub size_bid: i32,
-    /// ask size of the historical tick
-    pub size_ask: i32,
+    /// Bid size of the historical tick.
+    ///
+    /// `None` means TWS sent no value (field absent, empty, or an "unset"
+    /// sentinel); `Some(0.0)` is a real zero.
+    pub size_bid: Option<f64>,
+    /// Ask size of the historical tick.
+    ///
+    /// `None` means TWS sent no value (field absent, empty, or an "unset"
+    /// sentinel); `Some(0.0)` is a real zero.
+    pub size_ask: Option<f64>,
 }
 
 /// Tick attributes accompanying bid/ask historical ticks.
@@ -589,7 +601,10 @@ pub struct TickLast {
     /// Last price of the historical tick.
     pub price: f64,
     /// Last size of the historical tick.
-    pub size: i32,
+    ///
+    /// `None` means TWS sent no value (field absent, empty, or an "unset"
+    /// sentinel); `Some(0.0)` is a real zero.
+    pub size: Option<f64>,
     /// Source exchange of the historical tick.
     pub exchange: String,
     /// Conditions of the historical tick. Refer to Trade Conditions page for more details: <https://www.interactivebrokers.com/en/index.php?f=7235>.

@@ -338,3 +338,40 @@ fn decode_order_state_rejects_malformed_allocation_position() {
     };
     assert_decimal_parse_error(decode_order_state(&state), "abc");
 }
+
+// === ContractDetails size rules are optional (issue #716) ===
+
+#[test]
+fn decode_contract_details_absent_size_rules_are_none() {
+    // Contracts without size rules omit these entirely; `0.0` would have been a
+    // nonsense size increment.
+    let details = decode_contract_details(&proto::Contract::default(), &proto::ContractDetails::default()).unwrap();
+
+    assert_eq!(details.min_size, None);
+    assert_eq!(details.size_increment, None);
+    assert_eq!(details.suggested_size_increment, None);
+}
+
+#[test]
+fn decode_contract_details_sentinel_size_rules_are_none() {
+    let details = proto::ContractDetails {
+        min_size: Some("2147483647".into()),
+        size_increment: Some(String::new()),
+        ..Default::default()
+    };
+    let decoded = decode_contract_details(&proto::Contract::default(), &details).unwrap();
+
+    assert_eq!(decoded.min_size, None);
+    assert_eq!(decoded.size_increment, None);
+}
+
+#[test]
+fn decode_contract_details_preserves_fractional_size_increment() {
+    let details = proto::ContractDetails {
+        size_increment: Some("0.0001".into()),
+        ..Default::default()
+    };
+    let decoded = decode_contract_details(&proto::Contract::default(), &details).unwrap();
+
+    assert_eq!(decoded.size_increment, Some(0.0001));
+}

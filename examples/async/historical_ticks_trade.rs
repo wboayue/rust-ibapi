@@ -62,8 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(tick) = tick_subscription.next().await {
         let tick = tick?;
         tick_count += 1;
-        total_volume += tick.size as f64;
-        total_value += tick.price * tick.size as f64;
+        let size = tick.size.unwrap_or(0.0);
+        total_volume += size;
+        total_value += tick.price * size;
 
         // Count trades by exchange
         *trades_by_exchange.entry(tick.exchange.clone()).or_insert(0) += 1;
@@ -79,8 +80,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         println!(
-            "{} | ${:7.2} | {:6.0} | {:8} | {}",
-            time_str, tick.price, tick.size, tick.exchange, conditions
+            "{} | ${:7.2} | {:>6} | {:8} | {}",
+            time_str,
+            tick.price,
+            fmt_size(tick.size),
+            tick.exchange,
+            conditions
         );
 
         // Show running statistics every 50 ticks
@@ -123,10 +128,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let tick = tick?;
         recent_count += 1;
         let time_str = format!("{}", tick.timestamp);
-        println!("{} | ${:7.2} | {:5.0}", time_str, tick.price, tick.size);
+        println!("{} | ${:7.2} | {:>5}", time_str, tick.price, fmt_size(tick.size));
     }
 
     println!("\nRetrieved {} recent trades", recent_count);
     println!("\nExample completed!");
     Ok(())
+}
+
+/// `None` means TWS reported no size for the tick — show that rather than
+/// silently printing a zero.
+fn fmt_size(size: Option<f64>) -> String {
+    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
 }

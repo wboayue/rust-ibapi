@@ -16,7 +16,7 @@ use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
     historical_schedule_response, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
-    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_ticks_last_response, historical_ticks_request, historical_ticks_response, HistogramDataEntryFields,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::{Signal, SubscriptionBuilder};
@@ -112,13 +112,37 @@ fn test_head_timestamp() {
 }
 
 #[test]
+fn test_histogram_data_malformed_size_fails_the_request() {
+    // `Error::Parse` is terminal — `process_decode_result` skip-classifies only
+    // `UnexpectedResponse` — so a malformed size must surface to the caller
+    // rather than silently decoding as 0 (issue #716).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistogramData,
+        histogram_data_response()
+            .entry(HistogramDataEntryFields {
+                size: Some("abc".into()),
+                ..histogram_entry(125.50, 1000.0)
+            })
+            .encode_proto(),
+    )]));
+
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let contract = Contract::stock("MSFT").build();
+
+    match client.histogram_data(&contract, TradingHours::Regular, BarSize::Day) {
+        Err(Error::Parse(_, value, _)) => assert_eq!(value, "abc"),
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_histogram_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistogramData,
         histogram_data_response()
-            .entry(histogram_entry(125.50, 1000))
-            .entry(histogram_entry(126.00, 2000))
-            .entry(histogram_entry(126.50, 3000))
+            .entry(histogram_entry(125.50, 1000.0))
+            .entry(histogram_entry(126.00, 2000.0))
+            .entry(histogram_entry(126.50, 3000.0))
             .encode_proto(),
     )]));
 
@@ -136,13 +160,13 @@ fn test_histogram_data() {
     assert_eq!(histogram_data.len(), 3, "histogram_data.len()");
 
     assert_eq!(histogram_data[0].price, 125.50, "histogram_data[0].price");
-    assert_eq!(histogram_data[0].size, 1000, "histogram_data[0].size");
+    assert_eq!(histogram_data[0].size, Some(1000.0), "histogram_data[0].size");
 
     assert_eq!(histogram_data[1].price, 126.00, "histogram_data[1].price");
-    assert_eq!(histogram_data[1].size, 2000, "histogram_data[1].size");
+    assert_eq!(histogram_data[1].size, Some(2000.0), "histogram_data[1].size");
 
     assert_eq!(histogram_data[2].price, 126.50, "histogram_data[2].price");
-    assert_eq!(histogram_data[2].size, 3000, "histogram_data[2].size");
+    assert_eq!(histogram_data[2].size, Some(3000.0), "histogram_data[2].size");
 
     // Assert Request
     assert_eq!(request_message_count(&message_bus), 1);
@@ -589,17 +613,17 @@ fn test_tick_subscription_buffer_and_iteration() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 11.63, 24_547, "ISLAND").special_conditions(" O X"))
-                .tick(historical_tick_last(1_681_133_401, 11.64, 179, "FINRA"))
-                .tick(historical_tick_last(1_681_133_402, 11.65, 200, "NYSE"))
+                .tick(historical_tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
+                .tick(historical_tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
+                .tick(historical_tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
                 .done(false)
                 .encode_proto(),
         ),
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_403, 11.66, 100, "ARCA"))
-                .tick(historical_tick_last(1_681_133_404, 11.67, 300, "BATS"))
+                .tick(historical_tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
+                .tick(historical_tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -639,8 +663,8 @@ fn test_tick_subscription_owned_iterator() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 11.70, 24_547, "ISLAND").special_conditions(" O X"))
-            .tick(historical_tick_last(1_681_133_401, 11.71, 179, "FINRA"))
+            .tick(historical_tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
+            .tick(historical_tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
             .done(true)
             .encode_proto(),
     )]));
@@ -669,9 +693,9 @@ fn test_tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800, 100))
-            .tick(historical_tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900, 200))
-            .tick(historical_tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000, 300))
+            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
+            .tick(historical_tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
+            .tick(historical_tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -692,8 +716,8 @@ fn test_tick_subscription_bid_ask() {
     // Check first tick
     assert_eq!(ticks[0].price_bid, 11.63, "First tick bid price");
     assert_eq!(ticks[0].price_ask, 11.83, "First tick ask price");
-    assert_eq!(ticks[0].size_bid, 2800, "First tick bid size");
-    assert_eq!(ticks[0].size_ask, 100, "First tick ask size");
+    assert_eq!(ticks[0].size_bid, Some(2800.0), "First tick bid size");
+    assert_eq!(ticks[0].size_ask, Some(100.0), "First tick ask size");
 
     // Check last tick
     assert_eq!(ticks[2].price_bid, 11.65, "Last tick bid price");
@@ -705,9 +729,9 @@ fn test_tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_398, 91.36, 0))
-            .tick(historical_tick_mid(1_681_133_399, 91.37, 0))
-            .tick(historical_tick_mid(1_681_133_400, 91.38, 0))
+            .tick(historical_tick_mid(1_681_133_398, 91.36, 0.0))
+            .tick(historical_tick_mid(1_681_133_399, 91.37, 0.0))
+            .tick(historical_tick_mid(1_681_133_400, 91.38, 0.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -1272,8 +1296,8 @@ fn test_tick_subscription_try_next_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 12.00, 100, "NYSE"))
-            .tick(historical_tick_last(1_681_133_401, 12.01, 200, "NYSE"))
+            .tick(historical_tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
+            .tick(historical_tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1299,7 +1323,7 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 13.00, 100, "NYSE"))
+            .tick(historical_tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1349,7 +1373,7 @@ fn test_tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 15.00, 100, "NYSE"))
+                .tick(historical_tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),
@@ -1400,7 +1424,7 @@ fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_400, 91.50, 0))
+            .tick(historical_tick_mid(1_681_133_400, 91.50, 0.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -1423,7 +1447,7 @@ fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800, 100))
+            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -1448,7 +1472,7 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 14.00, 100, "NYSE"))
+                .tick(historical_tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         ),

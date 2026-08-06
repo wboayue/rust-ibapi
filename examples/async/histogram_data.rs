@@ -66,20 +66,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // Calculate statistics
-                let total_count: i64 = histogram.iter().map(|e| e.size as i64).sum();
+                let total_count: f64 = histogram.iter().filter_map(|e| e.size).sum();
                 let min_price = histogram.iter().map(|e| e.price).fold(f64::INFINITY, f64::min);
                 let max_price = histogram.iter().map(|e| e.price).fold(f64::NEG_INFINITY, f64::max);
 
                 // Calculate weighted average price
-                let weighted_sum: f64 = histogram.iter().map(|e| e.price * e.size as f64).sum();
-                let weighted_avg = weighted_sum / total_count as f64;
+                let weighted_sum: f64 = histogram.iter().filter_map(|e| e.size.map(|s| e.price * s)).sum();
+                let weighted_avg = weighted_sum / total_count;
 
                 println!("\nPrice Distribution:");
                 println!("Price     | Count    | Percentage | Bar");
                 println!("----------|----------|------------|{}", "-".repeat(50));
 
                 // Find max count for bar chart scaling
-                let max_count = histogram.iter().map(|e| e.size as i64).max().unwrap_or(1);
+                // `max_by_key` needs `Ord`, which f64 doesn't implement — fold instead.
+                let max_count = histogram.iter().filter_map(|e| e.size).fold(1.0_f64, f64::max);
 
                 // Sort by price for better display
                 let mut sorted_histogram = histogram.clone();
@@ -111,15 +112,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Display statistics
                 println!("\nStatistics:");
-                println!("  Total observations: {total_count}");
+                println!("  Total observations: {total_count:.0}");
                 println!("  Price range: ${min_price:.2} - ${max_price:.2}");
                 println!("  Price levels: {}", histogram.len());
                 println!("  Weighted average: ${weighted_avg:.2}");
 
                 // Find mode (most frequent price)
-                if let Some(mode_entry) = histogram.iter().max_by_key(|e| e.size) {
-                    let mode_pct = (mode_entry.size as f64 / total_count as f64) * 100.0;
-                    println!("  Mode: ${:.2} ({} occurrences, {:.1}%)", mode_entry.price, mode_entry.size, mode_pct);
+                // Entries with no size reported are skipped rather than counted as zero.
+                let mode = histogram.iter().filter_map(|e| e.size.map(|s| (e, s))).max_by(|a, b| a.1.total_cmp(&b.1));
+                if let Some((mode_entry, mode_size)) = mode {
+                    let mode_pct = (mode_size / total_count) * 100.0;
+                    println!("  Mode: ${:.2} ({mode_size:.0} occurrences, {mode_pct:.1}%)", mode_entry.price);
                 }
             }
             Err(e) => {
@@ -135,10 +138,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn print_histogram_entry(entry: &ibapi::market_data::historical::HistogramEntry, total_count: i64, max_count: i64) {
-    let percentage = (entry.size as f64 / total_count as f64) * 100.0;
-    let bar_length = ((entry.size as f64 / max_count as f64) * 50.0) as usize;
+fn print_histogram_entry(entry: &ibapi::market_data::historical::HistogramEntry, total_count: f64, max_count: f64) {
+    // `None` means TWS reported no size for this bucket; it contributes nothing.
+    let size = entry.size.unwrap_or(0.0);
+    let percentage = (size / total_count) * 100.0;
+    let bar_length = ((size / max_count) * 50.0) as usize;
     let bar = "█".repeat(bar_length);
 
-    println!("${:8.2} | {:8} | {:9.2}% | {}", entry.price, entry.size, percentage, bar);
+    println!("${:8.2} | {size:8.0} | {percentage:9.2}% | {bar}", entry.price);
 }

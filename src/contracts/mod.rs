@@ -721,11 +721,18 @@ pub struct ContractDetails {
     /// If populated for the bond in IB's database. For Bonds only.
     pub notes: String,
     /// Order's minimal size.
-    pub min_size: f64,
+    ///
+    /// `None` when TWS reports no size rules for the contract (field absent,
+    /// empty, or an "unset" sentinel); `Some(0.0)` is a real zero.
+    pub min_size: Option<f64>,
     /// Order's size increment.
-    pub size_increment: f64,
+    ///
+    /// `None` when TWS reports no size rules for the contract; see [`Self::min_size`].
+    pub size_increment: Option<f64>,
     /// Order's suggested size increment.
-    pub suggested_size_increment: f64,
+    ///
+    /// `None` when TWS reports no size rules for the contract; see [`Self::min_size`].
+    pub suggested_size_increment: Option<f64>,
 
     // Fund fields (populated only for FUND security type)
     /// Fund name.

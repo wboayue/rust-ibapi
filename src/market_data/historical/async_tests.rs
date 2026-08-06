@@ -17,7 +17,7 @@ use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
     historical_schedule_response, historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid,
-    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response, HistogramDataEntryFields,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -129,13 +129,36 @@ async fn test_head_timestamp() {
 }
 
 #[tokio::test]
+async fn test_histogram_data_malformed_size_fails_the_request() {
+    // `Error::Parse` is terminal — `process_decode_result` skip-classifies only
+    // `UnexpectedResponse` — so a malformed size must surface to the caller
+    // rather than silently decoding as 0 (issue #716).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistogramData,
+        histogram_data_response()
+            .entry(HistogramDataEntryFields {
+                size: Some("abc".into()),
+                ..histogram_entry(185.50, 100.0)
+            })
+            .encode_proto(),
+    )]));
+
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    match client.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await {
+        Err(Error::Parse(_, value, _)) => assert_eq!(value, "abc"),
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_histogram_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistogramData,
         histogram_data_response()
-            .entry(histogram_entry(185.50, 100))
-            .entry(histogram_entry(185.75, 150))
-            .entry(histogram_entry(186.00, 200))
+            .entry(histogram_entry(185.50, 100.0))
+            .entry(histogram_entry(185.75, 150.0))
+            .entry(histogram_entry(186.00, 200.0))
             .encode_proto(),
     )]));
 
@@ -152,15 +175,15 @@ async fn test_histogram_data() {
 
     // Verify first entry
     assert_eq!(entries[0].price, 185.50, "Wrong price for first entry");
-    assert_eq!(entries[0].size, 100, "Wrong size for first entry");
+    assert_eq!(entries[0].size, Some(100.0), "Wrong size for first entry");
 
     // Verify second entry
     assert_eq!(entries[1].price, 185.75, "Wrong price for second entry");
-    assert_eq!(entries[1].size, 150, "Wrong size for second entry");
+    assert_eq!(entries[1].size, Some(150.0), "Wrong size for second entry");
 
     // Verify third entry
     assert_eq!(entries[2].price, 186.00, "Wrong price for third entry");
-    assert_eq!(entries[2].size, 200, "Wrong size for third entry");
+    assert_eq!(entries[2].size, Some(200.0), "Wrong size for third entry");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -383,9 +406,9 @@ async fn test_tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200).bid_past_low(true))
+                .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
                 .tick(
-                    historical_tick_bid_ask(1_678_838_401, 185.55, 186.05, 105, 205)
+                    historical_tick_bid_ask(1_678_838_401, 185.55, 186.05, 105.0, 205.0)
                         .bid_past_low(true)
                         .ask_past_high(true),
                 )
@@ -395,7 +418,7 @@ async fn test_tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_500, 185.75, 186.25, 150, 250).bid_past_low(true))
+                .tick(historical_tick_bid_ask(1_678_838_500, 185.75, 186.25, 150.0, 250.0).bid_past_low(true))
                 .done(true)
                 .encode_proto(),
         ),
@@ -414,8 +437,8 @@ async fn test_tick_subscription_methods() {
     let tick1 = expect_data(subscription.next().await);
     assert_eq!(tick1.price_bid, 185.50, "Wrong bid price for first tick");
     assert_eq!(tick1.price_ask, 186.00, "Wrong ask price for first tick");
-    assert_eq!(tick1.size_bid, 100, "Wrong bid size for first tick");
-    assert_eq!(tick1.size_ask, 200, "Wrong ask size for first tick");
+    assert_eq!(tick1.size_bid, Some(100.0), "Wrong bid size for first tick");
+    assert_eq!(tick1.size_ask, Some(200.0), "Wrong ask size for first tick");
     assert!(tick1.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low for first tick");
     assert!(!tick1.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high for first tick");
 
@@ -438,9 +461,9 @@ async fn test_tick_subscription_buffer_and_iteration() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200))
-            .tick(historical_tick_bid_ask(1_678_838_401, 185.60, 186.10, 110, 210))
-            .tick(historical_tick_bid_ask(1_678_838_402, 185.70, 186.20, 120, 220))
+            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0))
+            .tick(historical_tick_bid_ask(1_678_838_401, 185.60, 186.10, 110.0, 210.0))
+            .tick(historical_tick_bid_ask(1_678_838_402, 185.70, 186.20, 120.0, 220.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -469,7 +492,7 @@ async fn test_tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100, 200).bid_past_low(true))
+            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
             .done(true)
             .encode_proto(),
     )]));
@@ -494,8 +517,8 @@ async fn test_tick_subscription_bid_ask() {
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price_bid, 185.50, "Wrong bid price");
     assert_eq!(tick.price_ask, 186.00, "Wrong ask price");
-    assert_eq!(tick.size_bid, 100, "Wrong bid size");
-    assert_eq!(tick.size_ask, 200, "Wrong ask size");
+    assert_eq!(tick.size_bid, Some(100.0), "Wrong bid size");
+    assert_eq!(tick.size_ask, Some(200.0), "Wrong ask size");
     assert!(tick.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low");
     assert!(!tick.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high");
 
@@ -520,7 +543,7 @@ async fn test_tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_678_838_400, 185.75, 100))
+            .tick(historical_tick_mid(1_678_838_400, 185.75, 100.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -537,7 +560,7 @@ async fn test_tick_subscription_midpoint() {
     let tick = expect_data(subscription.next().await);
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
-    assert_eq!(tick.size, 100, "Wrong size");
+    assert_eq!(tick.size, Some(100.0), "Wrong size");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -557,7 +580,7 @@ async fn test_historical_ticks_trade() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_678_838_400, 185.50, 100, "ISLAND").special_conditions("APR"))
+            .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
             .done(true)
             .encode_proto(),
     )]));
@@ -574,7 +597,7 @@ async fn test_historical_ticks_trade() {
     let tick = expect_data(subscription.next().await);
     assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
     assert_eq!(tick.price, 185.50, "Wrong trade price");
-    assert_eq!(tick.size, 100, "Wrong trade size");
+    assert_eq!(tick.size, Some(100.0), "Wrong trade size");
     assert_eq!(tick.exchange, "ISLAND", "Wrong exchange");
     assert_eq!(tick.special_conditions, "APR", "Wrong special conditions");
     assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
@@ -1052,7 +1075,7 @@ async fn test_tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 185.50, 100, "ISLAND").special_conditions("APR"))
+                .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -1094,7 +1117,7 @@ async fn test_tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 15.00, 100, "NYSE"))
+                .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),

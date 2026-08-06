@@ -923,11 +923,16 @@ impl ResponseProtoEncoder for HistoricalScheduleResponse {
 pub struct HistoricalTickMidFields {
     pub time: i64,
     pub price: f64,
-    pub size: i32,
+    /// Raw `optional string` size wire value. `None` omits the field entirely.
+    pub size: Option<String>,
 }
 
-pub fn historical_tick_mid(time: i64, price: f64, size: i32) -> HistoricalTickMidFields {
-    HistoricalTickMidFields { time, price, size }
+pub fn historical_tick_mid(time: i64, price: f64, size: f64) -> HistoricalTickMidFields {
+    HistoricalTickMidFields {
+        time,
+        price,
+        size: Some(size.to_string()),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -977,7 +982,7 @@ impl ResponseProtoEncoder for HistoricalTicksResponse {
                 .map(|t| proto::HistoricalTick {
                     time: Some(t.time),
                     price: Some(t.price),
-                    size: Some(t.size.to_string()),
+                    size: t.size.clone(),
                 })
                 .collect(),
             is_done: Some(self.done),
@@ -991,18 +996,19 @@ pub struct HistoricalTickLastFields {
     pub past_limit: bool,
     pub unreported: bool,
     pub price: f64,
-    pub size: i32,
+    /// Raw `optional string` size wire value. `None` omits the field entirely.
+    pub size: Option<String>,
     pub exchange: String,
     pub special_conditions: String,
 }
 
-pub fn historical_tick_last(time: i64, price: f64, size: i32, exchange: impl Into<String>) -> HistoricalTickLastFields {
+pub fn historical_tick_last(time: i64, price: f64, size: f64, exchange: impl Into<String>) -> HistoricalTickLastFields {
     HistoricalTickLastFields {
         time,
         past_limit: false,
         unreported: false,
         price,
-        size,
+        size: Some(size.to_string()),
         exchange: exchange.into(),
         special_conditions: String::new(),
     }
@@ -1074,7 +1080,7 @@ impl ResponseProtoEncoder for HistoricalTicksLastResponse {
                         unreported: Some(t.unreported),
                     }),
                     price: Some(t.price),
-                    size: Some(t.size.to_string()),
+                    size: t.size.clone(),
                     exchange: Some(t.exchange.clone()),
                     special_conditions: Some(t.special_conditions.clone()),
                 })
@@ -1091,19 +1097,21 @@ pub struct HistoricalTickBidAskFields {
     pub ask_past_high: bool,
     pub price_bid: f64,
     pub price_ask: f64,
-    pub size_bid: i32,
-    pub size_ask: i32,
+    /// Raw `optional string` size wire value. `None` omits the field entirely.
+    pub size_bid: Option<String>,
+    /// Raw `optional string` size wire value. `None` omits the field entirely.
+    pub size_ask: Option<String>,
 }
 
-pub fn historical_tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_bid: i32, size_ask: i32) -> HistoricalTickBidAskFields {
+pub fn historical_tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_bid: f64, size_ask: f64) -> HistoricalTickBidAskFields {
     HistoricalTickBidAskFields {
         time,
         bid_past_low: false,
         ask_past_high: false,
         price_bid,
         price_ask,
-        size_bid,
-        size_ask,
+        size_bid: Some(size_bid.to_string()),
+        size_ask: Some(size_ask.to_string()),
     }
 }
 
@@ -1170,8 +1178,8 @@ impl ResponseProtoEncoder for HistoricalTicksBidAskResponse {
                     }),
                     price_bid: Some(t.price_bid),
                     price_ask: Some(t.price_ask),
-                    size_bid: Some(t.size_bid.to_string()),
-                    size_ask: Some(t.size_ask.to_string()),
+                    size_bid: t.size_bid.clone(),
+                    size_ask: t.size_ask.clone(),
                 })
                 .collect(),
             is_done: Some(self.done),
@@ -1182,11 +1190,15 @@ impl ResponseProtoEncoder for HistoricalTicksBidAskResponse {
 #[derive(Clone, Debug)]
 pub struct HistogramDataEntryFields {
     pub price: f64,
-    pub size: i32,
+    /// Raw `optional string` size wire value. `None` omits the field entirely.
+    pub size: Option<String>,
 }
 
-pub fn histogram_entry(price: f64, size: i32) -> HistogramDataEntryFields {
-    HistogramDataEntryFields { price, size }
+pub fn histogram_entry(price: f64, size: f64) -> HistogramDataEntryFields {
+    HistogramDataEntryFields {
+        price,
+        size: Some(size.to_string()),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1229,7 +1241,7 @@ impl ResponseProtoEncoder for HistogramDataResponse {
                 .iter()
                 .map(|e| proto::HistogramDataEntry {
                     price: Some(e.price),
-                    size: Some(e.size.to_string()),
+                    size: e.size.clone(),
                 })
                 .collect(),
         }

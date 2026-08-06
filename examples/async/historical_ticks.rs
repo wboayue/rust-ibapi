@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 trade_count,
                 tick.timestamp.format(&Rfc3339).unwrap(),
                 tick.price,
-                tick.size,
+                fmt_size(tick.size),
                 tick.exchange,
                 tick.special_conditions
             );
@@ -75,14 +75,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_data();
 
     let mut period_trades = 0;
-    let mut total_volume = 0;
+    let mut total_volume = 0.0;
     let mut min_price = f64::MAX;
     let mut max_price = f64::MIN;
 
     while let Some(tick) = ticks.next().await {
         let tick = tick?;
         period_trades += 1;
-        total_volume += tick.size;
+        total_volume += tick.size.unwrap_or(0.0);
         min_price = min_price.min(tick.price);
         max_price = max_price.max(tick.price);
     }
@@ -117,9 +117,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 quote_count,
                 tick.timestamp.format(&Rfc3339).unwrap(),
                 tick.price_bid,
-                tick.size_bid,
+                fmt_size(tick.size_bid),
                 tick.price_ask,
-                tick.size_ask,
+                fmt_size(tick.size_ask),
                 spread
             );
         }
@@ -151,4 +151,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nHistorical ticks example completed!");
     Ok(())
+}
+
+/// `None` means TWS reported no size for the tick — show that rather than
+/// silently printing a zero.
+fn fmt_size(size: Option<f64>) -> String {
+    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
 }

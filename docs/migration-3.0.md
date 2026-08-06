@@ -865,6 +865,63 @@ println!("{}", report.data);
 
 `TickType::FundamentalRatios` (tick id 47) is also removed. Match arms on it no longer compile; incoming tick id 47 now decodes to `TickType::Unknown`.
 
+### 35. Market-data sizes are `Option<f64>`
+
+IBKR models market-data sizes as decimals and ships them as strings on the wire. Historical tick and histogram sizes were typed `i32`, so a fractional wire value such as `"0.5"` failed integer parsing and silently decoded as `0` — real data loss on crypto and fractional-share feeds. Those fields, plus the `ContractDetails` size rules, are now `Option<f64>`.
+
+| Type | Field | v3 pre-change | v3 now |
+|---|---|---|---|
+| `TickMidpoint` | `size` | `i32` | `Option<f64>` |
+| `TickLast` | `size` | `i32` | `Option<f64>` |
+| `TickBidAsk` | `size_bid`, `size_ask` | `i32` | `Option<f64>` |
+| `HistogramEntry` | `size` | `i32` | `Option<f64>` |
+| `ContractDetails` | `min_size`, `size_increment`, `suggested_size_increment` | `f64` | `Option<f64>` |
+
+`None` means TWS sent no value — the field was absent, empty, or carried one of TWS's "unset" sentinels (`2147483647`, `9223372036854775807`, `-9223372036854775808`, `1.7976931348623157E308`). `Some(0.0)` is a real zero. A malformed size is no longer swallowed: it surfaces as `Error::Parse` and fails the request or subscription.
+
+**The `Ord` gotcha.** `f64` does not implement `Ord`, so `max_by_key` / `min_by_key` on a size no longer compiles. This is the most likely break in existing code:
+
+```rust,ignore
+// Before — compiled against i32
+let mode = histogram.iter().max_by_key(|e| e.size);
+
+// After — pick out the present sizes, then compare with total_cmp
+let mode = histogram
+    .iter()
+    .filter_map(|e| e.size.map(|s| (e, s)))
+    .max_by(|a, b| a.1.total_cmp(&b.1));
+```
+
+**Accumulating.** Treat "unset" as contributing nothing:
+
+```rust,ignore
+// Before
+let mut total_volume = 0;
+total_volume += tick.size;
+
+// After
+let mut total_volume = 0.0;
+total_volume += tick.size.unwrap_or(0.0);
+
+// Or, over a collection:
+let total: f64 = histogram.iter().filter_map(|e| e.size).sum();
+```
+
+**Displaying.** `Option<f64>` is not `Display`, so `{}` no longer works. Prefer surfacing the missing case over hiding it behind a zero:
+
+```rust,ignore
+// Before
+println!("Size: {}", tick.size);
+
+// After
+fn fmt_size(size: Option<f64>) -> String {
+    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
+}
+println!("Size: {}", fmt_size(tick.size));
+```
+
+`Option<f64>` is an intermediate step. A dedicated decimal quantity type is planned, so sizes will eventually round-trip the wire's decimal representation exactly rather than through binary floating point.
+
 ## Before / after: common subscription patterns
 
 ### Order construction
@@ -1214,7 +1271,8 @@ Distinct from `Error::ConnectionRejected` (handshake-time refusal, above) and th
 5. Replace string compares against `OrderStatus.status` / `OrderState.status` (`== "Filled"`, `.as_str() == "Cancelled"`, etc.) with `OrderStatusKind` variants or the `is_active()` / `is_terminal()` helpers.
 6. Replace `Client::connect_with_callback` / `Client::connect_with_options` / any `ConnectionOptions::default()...` with the corresponding `Client::builder()` chain. Use `connect_with_notice_stream()` if you previously installed `startup_notice_callback`.
 7. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
-8. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+8. Unwrap market-data sizes: historical tick / histogram sizes and the `ContractDetails` size rules are `Option<f64>`. Watch for `max_by_key` on a size (`f64` isn't `Ord`), `+=` into an integer accumulator, and `{}` formatting — see [§35](#35-market-data-sizes-are-optionf64).
+9. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
