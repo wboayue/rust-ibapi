@@ -363,3 +363,58 @@ fn test_decode_histogram_data_rejects_text_framing() {
     let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got: {err:?}");
 }
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+//
+// Bar volume/wap are the only historical decimal fields PR-A touches; the tick
+// and histogram sizes move in the follow-up PR that retypes them to Option<f64>.
+
+fn historical_data_bytes(volume: &str) -> Vec<u8> {
+    use prost::Message;
+
+    crate::proto::HistoricalData {
+        req_id: Some(9000),
+        historical_data_bars: vec![crate::proto::HistoricalDataBar {
+            date: Some("20230101".into()),
+            open: Some(100.0),
+            high: Some(101.0),
+            low: Some(99.0),
+            close: Some(100.5),
+            volume: Some(volume.into()),
+            wap: Some("100.25".into()),
+            bar_count: Some(10),
+        }],
+    }
+    .encode_to_vec()
+}
+
+#[test]
+fn test_decode_historical_data_proto_rejects_malformed_volume() {
+    use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
+    assert_decimal_parse_error(super::decode_historical_data_proto(&historical_data_bytes("abc")), "abc");
+}
+
+#[test]
+fn test_decode_historical_data_proto_preserves_fractional_volume() {
+    let bars = super::decode_historical_data_proto(&historical_data_bytes("0.5")).unwrap();
+    assert_eq!(bars[0].volume, 0.5);
+}
+
+#[test]
+fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
+    use crate::common::test_utils::helpers::assert_decimal_parse_error;
+    use prost::Message;
+
+    let bytes = crate::proto::HistoricalDataUpdate {
+        req_id: Some(9000),
+        historical_data_bar: Some(crate::proto::HistoricalDataBar {
+            date: Some("20230101".into()),
+            volume: Some("abc".into()),
+            ..Default::default()
+        }),
+    }
+    .encode_to_vec();
+
+    assert_decimal_parse_error(super::decode_historical_data_update_proto(&bytes), "abc");
+}

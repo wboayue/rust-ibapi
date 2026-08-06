@@ -271,6 +271,23 @@ pub mod helpers {
             other => panic!("expected Error::Notice(code={expected_code}), got {other:?}"),
         }
     }
+
+    /// Asserts that a decoder rejected a malformed decimal wire field, naming the
+    /// offending value in the error.
+    ///
+    /// Used by the per-decoder "is this field wired to `parse_optional_decimal`"
+    /// tests. The helper's own semantics are covered exhaustively in
+    /// `src/proto/decoders_tests.rs`; these call sites only prove the wiring, so
+    /// they all want this one assertion rather than their own `matches!`.
+    pub fn assert_decimal_parse_error<T: std::fmt::Debug>(result: Result<T, crate::Error>, offending_value: &str) {
+        match result {
+            Err(crate::Error::Parse(_, value, msg)) => {
+                assert_eq!(value, offending_value, "error should carry the offending wire value");
+                assert!(msg.contains("invalid decimal wire value"), "unexpected message: {msg}");
+            }
+            other => panic!("expected Error::Parse for {offending_value:?}, got {other:?}"),
+        }
+    }
 }
 
 /// Generic round-trip / reject-unknown helpers for typed wire enums built with `impl_wire_enum!`.

@@ -99,29 +99,32 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
 use prost::Message;
 
 use crate::proto;
-use crate::proto::decoders::{parse_f64 as parse_str_f64, parse_i32 as parse_str_i32, ts};
+use crate::proto::decoders::{parse_decimal_or_zero, parse_i32 as parse_str_i32, ts};
 
 pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
     let msg = proto::HistoricalData::decode(bytes)?;
-    Ok(msg.historical_data_bars.iter().map(|b| decode_historical_data_bar(b, -1)).collect())
+    msg.historical_data_bars
+        .iter()
+        .map(|b| decode_historical_data_bar(b, -1))
+        .collect::<Result<Vec<_>, Error>>()
 }
 
-fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) -> Bar {
+fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) -> Result<Bar, Error> {
     let date = b
         .date
         .as_deref()
         .and_then(|s| s.parse::<BarTimestamp>().ok())
         .unwrap_or(BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
-    Bar {
+    Ok(Bar {
         date,
         open: b.open.unwrap_or_default(),
         high: b.high.unwrap_or_default(),
         low: b.low.unwrap_or_default(),
         close: b.close.unwrap_or_default(),
-        volume: parse_str_f64(&b.volume),
-        wap: parse_str_f64(&b.wap),
+        volume: parse_decimal_or_zero(b.volume.as_deref())?,
+        wap: parse_decimal_or_zero(b.wap.as_deref())?,
         count: b.bar_count.unwrap_or(default_count),
-    }
+    })
 }
 
 pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error> {
@@ -240,7 +243,7 @@ pub(crate) fn decode_historical_schedule_proto(bytes: &[u8]) -> Result<Schedule,
 
 pub(crate) fn decode_historical_data_update_proto(bytes: &[u8]) -> Result<Bar, Error> {
     let p = proto::HistoricalDataUpdate::decode(bytes)?;
-    Ok(decode_historical_data_bar(&p.historical_data_bar.unwrap_or_default(), 0))
+    decode_historical_data_bar(&p.historical_data_bar.unwrap_or_default(), 0)
 }
 
 #[cfg(test)]

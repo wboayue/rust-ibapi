@@ -16,10 +16,6 @@ pub(crate) fn s(opt: &Option<String>) -> String {
     opt.clone().unwrap_or_default()
 }
 
-pub(crate) fn parse_f64(opt: &Option<String>) -> f64 {
-    opt.as_deref().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default()
-}
-
 pub(crate) fn parse_i32(opt: &Option<String>) -> i32 {
     opt.as_deref().and_then(|s| s.parse::<i32>().ok()).unwrap_or_default()
 }
@@ -28,10 +24,77 @@ pub(crate) fn optional_f64(val: Option<f64>) -> Option<f64> {
     val.filter(|&v| v != f64::MAX)
 }
 
-pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
-    opt.as_deref()
-        .and_then(|s| s.parse::<f64>().ok())
-        .and_then(|v| if v == f64::MAX { None } else { Some(v) })
+// === Decimal wire fields (protobuf `optional string`) ===
+//
+// IBKR ships sizes, quantities and volumes as decimal strings. The helpers below
+// are the only sanctioned way to read one; they are the numeric counterpart to
+// the `parse_required` / `parse_optional` pair, which handle enumerated fields.
+
+/// Integer sentinels TWS uses to mean "no value" on a decimal-typed field.
+///
+/// These are the ones that must be matched *literally*, because they parse to
+/// perfectly ordinary finite numbers — `"2147483647"` is a sentinel but
+/// `"2147483647.0"` is a real size and must survive. The float sentinel
+/// (`f64::MAX`) is deliberately not here; [`parse_optional_decimal`] catches it
+/// numerically after the parse, which covers every spelling at once.
+///
+/// Mirrors `Util.StringToDecimal` in the C# reference client
+/// (tws-api `source/csharpclient/client/Util.cs`), which maps each of these to
+/// `decimal.MaxValue` — upstream's "unset" marker.
+const UNSET_DECIMAL_WIRE: [&str; 3] = [
+    "9223372036854775807",  // i64::MAX
+    "2147483647",           // i32::MAX
+    "-9223372036854775808", // i64::MIN
+];
+
+/// Parse an optional decimal-typed wire field.
+///
+/// - `Ok(None)` — field absent, present-but-empty, or an "unset" marker: either a
+///   literal [`UNSET_DECIMAL_WIRE`] entry or a value that parses to `f64::MAX`,
+///   infinity, or NaN. All mean "TWS carries no value here".
+/// - `Ok(Some(v))` — a parsed value. Fractional sizes survive: `"0.5"` → `0.5`.
+/// - `Err(Error::Parse)` — non-empty, non-sentinel, and not a number.
+///
+/// The error arm is the point of the helper. Its predecessors ended in
+/// `unwrap_or_default()`, so a wire value of `"0.5"` failed `parse::<i32>()` and
+/// silently became `0` — data loss on fractional (crypto) sizes, issue #716. Per
+/// CLAUDE.md rule 16, a decoder rejects malformed input rather than defaulting.
+///
+/// Whitespace is not trimmed: `Some(" ")` is an error, matching C#'s
+/// `decimal.Parse(" ")`, which throws.
+///
+/// Takes `Option<&str>` to match [`parse_required`] / [`parse_optional`]; proto
+/// callers pass `proto.field.as_deref()`.
+pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, Error> {
+    let Some(text) = opt.filter(|t| !t.is_empty()) else {
+        return Ok(None);
+    };
+    if UNSET_DECIMAL_WIRE.contains(&text) {
+        return Ok(None);
+    }
+    let value = text
+        .parse::<f64>()
+        .map_err(|e| Error::parse_field(text, format!("invalid decimal wire value: {e}")))?;
+    // Spelling-independent half of the unset check: catches every rendering of
+    // the f64::MAX sentinel ("1.7976931348623157E308", "…e308", "…E+308") and
+    // rejects inf/NaN, which f64::from_str accepts but no size can be.
+    if !value.is_finite() || value == f64::MAX {
+        return Ok(None);
+    }
+    Ok(Some(value))
+}
+
+/// [`parse_optional_decimal`], collapsing "no value" to `0.0`.
+///
+/// **Transitional.** It exists only for fields whose public type is still plain
+/// `f64` and so cannot represent "unset". `0.0` is what those fields already
+/// produced for an absent or empty wire value, so this preserves today's
+/// behaviour while still erroring on malformed input.
+///
+/// Every call site is a candidate for `Option<f64>` in the follow-up
+/// decimal-quantity work — grep this name for the worklist.
+pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
+    Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }
 
 /// Parse a required enumerated wire field. Both `None` and empty strings
@@ -136,7 +199,7 @@ pub fn decode_soft_dollar_tier(proto: &proto::SoftDollarTier) -> SoftDollarTier 
     }
 }
 
-pub fn decode_order(proto: &proto::Order) -> Order {
+pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     let mut order = Order::default();
 
     order.client_id = proto.client_id.unwrap_or_default();
@@ -145,7 +208,8 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     order.parent_id = proto.parent_id.unwrap_or_default();
 
     order.action = Action::from(proto.action.as_deref().unwrap_or("BUY"));
-    order.total_quantity = parse_f64(&proto.total_quantity);
+    // pattern D: absent means 0 upstream (Order.cs leaves TotalQuantity at decimal's default)
+    order.total_quantity = parse_decimal_or_zero(proto.total_quantity.as_deref())?;
     order.display_size = proto.display_size.map(Some).unwrap_or(Some(0));
     order.order_type = s(&proto.order_type);
     order.limit_price = optional_f64(proto.lmt_price);
@@ -302,7 +366,8 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     order.is_oms_container = proto.is_oms_container.unwrap_or_default();
     order.discretionary_up_to_limit_price = proto.discretionary_up_to_limit_price.unwrap_or_default();
     order.auto_cancel_date = s(&proto.auto_cancel_date);
-    order.filled_quantity = parse_f64(&proto.filled_quantity);
+    // pattern U: absent means unset upstream (Order.cs ctor sets decimal.MaxValue)
+    order.filled_quantity = parse_decimal_or_zero(proto.filled_quantity.as_deref())?;
     order.ref_futures_con_id = proto.ref_futures_con_id.map(Some).unwrap_or(Some(0));
     order.auto_cancel_parent = proto.auto_cancel_parent.unwrap_or_default();
     order.shareholder = s(&proto.shareholder);
@@ -326,7 +391,7 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     order.manual_order_indicator = proto.manual_order_indicator;
     order.submitter = s(&proto.submitter);
 
-    order
+    Ok(order)
 }
 
 fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
@@ -405,25 +470,29 @@ pub fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error
         initial_margin_after_outside_rth: optional_f64(proto.init_margin_after_outside_rth),
         maintenance_margin_after_outside_rth: optional_f64(proto.maint_margin_after_outside_rth),
         equity_with_loan_after_outside_rth: optional_f64(proto.equity_with_loan_after_outside_rth),
-        suggested_size: optional_string_f64(&proto.suggested_size),
+        suggested_size: parse_optional_decimal(proto.suggested_size.as_deref())?,
         reject_reason: s(&proto.reject_reason),
-        order_allocations: proto.order_allocations.iter().map(decode_order_allocation).collect(),
+        order_allocations: proto
+            .order_allocations
+            .iter()
+            .map(decode_order_allocation)
+            .collect::<Result<Vec<_>, Error>>()?,
         warning_text: s(&proto.warning_text),
         completed_time: s(&proto.completed_time),
         completed_status: s(&proto.completed_status),
     })
 }
 
-fn decode_order_allocation(proto: &proto::OrderAllocation) -> OrderAllocation {
-    OrderAllocation {
+fn decode_order_allocation(proto: &proto::OrderAllocation) -> Result<OrderAllocation, Error> {
+    Ok(OrderAllocation {
         account: s(&proto.account),
-        position: optional_string_f64(&proto.position),
-        position_desired: optional_string_f64(&proto.position_desired),
-        position_after: optional_string_f64(&proto.position_after),
-        desired_alloc_qty: optional_string_f64(&proto.desired_alloc_qty),
-        allowed_alloc_qty: optional_string_f64(&proto.allowed_alloc_qty),
+        position: parse_optional_decimal(proto.position.as_deref())?,
+        position_desired: parse_optional_decimal(proto.position_desired.as_deref())?,
+        position_after: parse_optional_decimal(proto.position_after.as_deref())?,
+        desired_alloc_qty: parse_optional_decimal(proto.desired_alloc_qty.as_deref())?,
+        allowed_alloc_qty: parse_optional_decimal(proto.allowed_alloc_qty.as_deref())?,
         is_monetary: proto.is_monetary.unwrap_or_default(),
-    }
+    })
 }
 
 pub fn decode_execution(proto: &proto::Execution) -> Result<Execution, Error> {
@@ -435,11 +504,13 @@ pub fn decode_execution(proto: &proto::Execution) -> Result<Execution, Error> {
         account_number: s(&proto.acct_number),
         exchange: s(&proto.exchange),
         side: parse_required::<ExecutionSide>(proto.side.as_deref(), "Execution.side")?,
-        shares: parse_f64(&proto.shares),
+        // pattern D: absent means 0 upstream (Execution.cs ctor sets Shares/CumQty to 0)
+        shares: parse_decimal_or_zero(proto.shares.as_deref())?,
         price: proto.price.unwrap_or_default(),
         perm_id: proto.perm_id.unwrap_or_default(),
         liquidation: if proto.is_liquidation.unwrap_or_default() { 1 } else { 0 },
-        cumulative_quantity: parse_f64(&proto.cum_qty),
+        // pattern D, as above
+        cumulative_quantity: parse_decimal_or_zero(proto.cum_qty.as_deref())?,
         average_price: proto.avg_price.unwrap_or_default(),
         order_reference: s(&proto.order_ref),
         ev_rule: s(&proto.ev_rule),
@@ -457,7 +528,9 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
     Ok(ContractDetails {
         contract,
         market_name: s(&proto_details.market_name),
-        min_tick: proto_details.min_tick.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        // min_tick is StringToDoubleMax upstream, not StringToDecimal; the extra
+        // integer sentinels are unreachable here (no price tick is 2147483647).
+        min_tick: parse_decimal_or_zero(proto_details.min_tick.as_deref())?,
         order_types: proto_details
             .order_types
             .as_deref()
@@ -499,9 +572,11 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
             .unwrap_or_default(),
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
-        min_size: parse_f64(&proto_details.min_size),
-        size_increment: parse_f64(&proto_details.size_increment),
-        suggested_size_increment: parse_f64(&proto_details.suggested_size_increment),
+        // pattern U: absent means unset upstream (ContractDetails.cs ctor sets
+        // decimal.MaxValue). These three become Option<f64> in the follow-up PR.
+        min_size: parse_decimal_or_zero(proto_details.min_size.as_deref())?,
+        size_increment: parse_decimal_or_zero(proto_details.size_increment.as_deref())?,
+        suggested_size_increment: parse_decimal_or_zero(proto_details.suggested_size_increment.as_deref())?,
         // fund fields
         fund_name: s(&proto_details.fund_name),
         fund_family: s(&proto_details.fund_family),

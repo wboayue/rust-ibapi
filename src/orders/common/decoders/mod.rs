@@ -37,7 +37,12 @@ pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> 
         .map(crate::proto::decoders::decode_contract)
         .transpose()?
         .unwrap_or_default();
-    let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
+    let order = p
+        .order
+        .as_ref()
+        .map(crate::proto::decoders::decode_order)
+        .transpose()?
+        .unwrap_or_default();
     let order_state = p
         .order_state
         .as_ref()
@@ -59,8 +64,8 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
         status: crate::proto::decoders::parse_required(p.status.as_deref(), "OrderStatus")?,
-        filled: crate::proto::decoders::parse_f64(&p.filled),
-        remaining: crate::proto::decoders::parse_f64(&p.remaining),
+        filled: crate::proto::decoders::parse_decimal_or_zero(p.filled.as_deref())?,
+        remaining: crate::proto::decoders::parse_decimal_or_zero(p.remaining.as_deref())?,
         average_fill_price: p.avg_fill_price,
         perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),
@@ -99,7 +104,12 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
         .map(crate::proto::decoders::decode_contract)
         .transpose()?
         .unwrap_or_default();
-    let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
+    let order = p
+        .order
+        .as_ref()
+        .map(crate::proto::decoders::decode_order)
+        .transpose()?
+        .unwrap_or_default();
     let order_state = p
         .order_state
         .as_ref()
