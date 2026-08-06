@@ -167,6 +167,8 @@ pub(crate) fn decode_market_data_type_proto(bytes: &[u8]) -> Result<MarketDataTy
 pub(crate) fn decode_tick_request_parameters_proto(bytes: &[u8]) -> Result<TickRequestParameters, Error> {
     let msg = crate::proto::TickReqParams::decode(bytes)?;
     Ok(TickRequestParameters {
+        // min_tick is StringToDoubleMax upstream, not StringToDecimal; the extra
+        // integer sentinels are unreachable here (no price tick is 2147483647).
         min_tick: parse_decimal_or_zero(msg.min_tick.as_deref())?,
         bbo_exchange: msg.bbo_exchange.unwrap_or_default(),
         snapshot_permissions: msg.snapshot_permissions.unwrap_or_default(),

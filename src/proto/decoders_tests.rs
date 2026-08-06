@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
 use crate::orders::OrderStatusKind;
 
 // === parse_required ===
@@ -65,9 +66,10 @@ fn parse_optional_unknown_propagates_fromstr_err() {
 // Tier 1: the helper's semantics, exhaustively, in one place. Decoder tests
 // elsewhere assert only that each decoder is *wired* to this helper.
 
-/// Every input class that must decode to "no value".
-fn unset_inputs() -> Vec<Option<&'static str>> {
-    let mut inputs = vec![
+/// Every input class that must decode to "no value". The literal-sentinel rows are
+/// derived from the constant under test rather than re-typed (CLAUDE.md rule 21).
+fn unset_inputs() -> impl Iterator<Item = Option<&'static str>> {
+    [
         None,     // field absent
         Some(""), // present but empty
         Some("inf"),
@@ -77,11 +79,9 @@ fn unset_inputs() -> Vec<Option<&'static str>> {
         Some("1.7976931348623157E308"),  // f64::MAX, C# "R" spelling
         Some("1.7976931348623157e308"),  // ...lowercase
         Some("1.7976931348623157E+308"), // ...explicit sign
-    ];
-    // Derive the literal-sentinel rows from the constant under test rather than
-    // re-typing them (CLAUDE.md rule 21).
-    inputs.extend(UNSET_DECIMAL_WIRE.iter().map(|s| Some(*s)));
-    inputs
+    ]
+    .into_iter()
+    .chain(UNSET_DECIMAL_WIRE.map(Some))
 }
 
 #[test]
@@ -135,13 +135,7 @@ fn parse_optional_decimal_accepts_more_digits_than_f64_round_trips() {
 #[test]
 fn parse_optional_decimal_malformed_errors_with_offending_value() {
     for input in ["abc", " ", "1,000", "1.2.3", "--1", "0x10"] {
-        match parse_optional_decimal(Some(input)) {
-            Err(Error::Parse(_, value, msg)) => {
-                assert_eq!(value, input, "error should carry the offending value");
-                assert!(msg.contains("invalid decimal wire value"), "unexpected message: {msg}");
-            }
-            other => panic!("expected Error::Parse for {input:?}, got {other:?}"),
-        }
+        assert_decimal_parse_error(parse_optional_decimal(Some(input)), input);
     }
 }
 
@@ -264,8 +258,6 @@ fn decode_order_deactivate_absent_is_false() {
 
 #[test]
 fn decode_order_rejects_malformed_total_quantity() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let proto_order = proto::Order {
         total_quantity: Some("abc".into()),
         ..Default::default()
@@ -284,8 +276,6 @@ fn decode_order_preserves_fractional_total_quantity() {
 
 #[test]
 fn decode_execution_rejects_malformed_shares() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let proto_exec = proto::Execution {
         side: Some("BOT".into()),
         shares: Some("abc".into()),
@@ -296,8 +286,6 @@ fn decode_execution_rejects_malformed_shares() {
 
 #[test]
 fn decode_execution_rejects_malformed_cumulative_quantity() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let proto_exec = proto::Execution {
         side: Some("BOT".into()),
         shares: Some("10".into()),
@@ -309,8 +297,6 @@ fn decode_execution_rejects_malformed_cumulative_quantity() {
 
 #[test]
 fn decode_contract_details_rejects_malformed_min_size() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let details = proto::ContractDetails {
         min_size: Some("abc".into()),
         ..Default::default()
@@ -320,8 +306,6 @@ fn decode_contract_details_rejects_malformed_min_size() {
 
 #[test]
 fn decode_contract_details_rejects_malformed_min_tick() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let details = proto::ContractDetails {
         min_tick: Some("abc".into()),
         ..Default::default()
@@ -343,8 +327,6 @@ fn decode_order_state_sentinel_suggested_size_is_none() {
 
 #[test]
 fn decode_order_state_rejects_malformed_allocation_position() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     let state = proto::OrderState {
         status: Some("Submitted".into()),
         order_allocations: vec![proto::OrderAllocation {

@@ -16,6 +16,10 @@ pub(crate) fn s(opt: &Option<String>) -> String {
     opt.clone().unwrap_or_default()
 }
 
+/// **Transitional — do not wire new fields to this.** It silently defaults, which
+/// is the bug class [`parse_optional_decimal`] exists to fix. Its five remaining
+/// call sites are the historical tick and histogram sizes, which move to
+/// `Option<f64>` in the #716 follow-up; this goes away with them.
 pub(crate) fn parse_i32(opt: &Option<String>) -> i32 {
     opt.as_deref().and_then(|s| s.parse::<i32>().ok()).unwrap_or_default()
 }
@@ -77,7 +81,7 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
         .map_err(|e| Error::parse_field(text, format!("invalid decimal wire value: {e}")))?;
     // Spelling-independent half of the unset check: catches every rendering of
     // the f64::MAX sentinel ("1.7976931348623157E308", "…e308", "…E+308") and
-    // rejects inf/NaN, which f64::from_str accepts but no size can be.
+    // absorbs inf/NaN, which f64::from_str accepts but no size can be.
     if !value.is_finite() || value == f64::MAX {
         return Ok(None);
     }
@@ -86,13 +90,16 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 
 /// [`parse_optional_decimal`], collapsing "no value" to `0.0`.
 ///
-/// **Transitional.** It exists only for fields whose public type is still plain
-/// `f64` and so cannot represent "unset". `0.0` is what those fields already
-/// produced for an absent or empty wire value, so this preserves today's
-/// behaviour while still erroring on malformed input.
+/// For fields whose public type is still plain `f64` and so cannot represent
+/// "unset". `0.0` is what those fields already produced for an absent or empty
+/// wire value, so this preserves today's behaviour while still erroring on
+/// malformed input.
 ///
-/// Every call site is a candidate for `Option<f64>` in the follow-up
-/// decimal-quantity work — grep this name for the worklist.
+/// Most call sites are permanent: the field is always populated on real wire, so
+/// `0.0` is unreachable in practice. Only `ContractDetails::{min_size,
+/// size_increment, suggested_size_increment}` are queued to become `Option<f64>`
+/// in the #716 follow-up, where an absent value is both reachable and meaningful
+/// (a `size_increment` of `0.0` is nonsense). See `plans/decimal-wire-parsing.md`.
 pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }
@@ -208,7 +215,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.parent_id = proto.parent_id.unwrap_or_default();
 
     order.action = Action::from(proto.action.as_deref().unwrap_or("BUY"));
-    // pattern D: absent means 0 upstream (Order.cs leaves TotalQuantity at decimal's default)
+    // Absent means 0 upstream (Order.cs leaves TotalQuantity at decimal's default).
     order.total_quantity = parse_decimal_or_zero(proto.total_quantity.as_deref())?;
     order.display_size = proto.display_size.map(Some).unwrap_or(Some(0));
     order.order_type = s(&proto.order_type);
@@ -366,7 +373,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.is_oms_container = proto.is_oms_container.unwrap_or_default();
     order.discretionary_up_to_limit_price = proto.discretionary_up_to_limit_price.unwrap_or_default();
     order.auto_cancel_date = s(&proto.auto_cancel_date);
-    // pattern U: absent means unset upstream (Order.cs ctor sets decimal.MaxValue)
+    // Absent means unset upstream (Order.cs ctor sets decimal.MaxValue).
     order.filled_quantity = parse_decimal_or_zero(proto.filled_quantity.as_deref())?;
     order.ref_futures_con_id = proto.ref_futures_con_id.map(Some).unwrap_or(Some(0));
     order.auto_cancel_parent = proto.auto_cancel_parent.unwrap_or_default();
@@ -504,12 +511,11 @@ pub fn decode_execution(proto: &proto::Execution) -> Result<Execution, Error> {
         account_number: s(&proto.acct_number),
         exchange: s(&proto.exchange),
         side: parse_required::<ExecutionSide>(proto.side.as_deref(), "Execution.side")?,
-        // pattern D: absent means 0 upstream (Execution.cs ctor sets Shares/CumQty to 0)
+        // Absent means 0 upstream (Execution.cs ctor sets Shares/CumQty to 0).
         shares: parse_decimal_or_zero(proto.shares.as_deref())?,
         price: proto.price.unwrap_or_default(),
         perm_id: proto.perm_id.unwrap_or_default(),
         liquidation: if proto.is_liquidation.unwrap_or_default() { 1 } else { 0 },
-        // pattern D, as above
         cumulative_quantity: parse_decimal_or_zero(proto.cum_qty.as_deref())?,
         average_price: proto.avg_price.unwrap_or_default(),
         order_reference: s(&proto.order_ref),
@@ -572,8 +578,8 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
             .unwrap_or_default(),
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
-        // pattern U: absent means unset upstream (ContractDetails.cs ctor sets
-        // decimal.MaxValue). These three become Option<f64> in the follow-up PR.
+        // Absent means unset upstream (ContractDetails.cs ctor sets decimal.MaxValue).
+        // These three become Option<f64> in the follow-up PR.
         min_size: parse_decimal_or_zero(proto_details.min_size.as_deref())?,
         size_increment: parse_decimal_or_zero(proto_details.size_increment.as_deref())?,
         suggested_size_increment: parse_decimal_or_zero(proto_details.suggested_size_increment.as_deref())?,

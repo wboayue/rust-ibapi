@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 #[test]
 fn test_decode_family_codes_rejects_text_framing() {
     let message = super::ResponseMessage::from("78\02\0ACC1\0FC1\0ACC2\0FC2\0");
@@ -637,52 +639,40 @@ fn test_decode_verify_completed_proto_failure_path() {
 }
 
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
-//
-// The helper's own semantics are covered in `src/proto/decoders_tests.rs`; these
-// assert only that each decoder feeds its decimal field through it.
-
-/// Encode a `proto::Position` carrying `position` verbatim on the wire.
-fn position_with_wire_size(position: &str) -> Vec<u8> {
-    use prost::Message;
-
-    crate::proto::Position {
-        account: Some("DU1234".into()),
-        contract: Some(crate::proto::Contract {
-            con_id: Some(265598),
-            ..Default::default()
-        }),
-        position: Some(position.into()),
-        avg_cost: Some(150.25),
-    }
-    .encode_to_vec()
-}
 
 #[test]
 fn test_decode_position_proto_preserves_fractional_position() {
     // Crypto and fractional-share accounts really do report these; the old
     // `parse_f64` path happened to handle them, but nothing pinned it.
-    let result = super::decode_position_proto(&position_with_wire_size("0.5")).unwrap();
-    assert_eq!(result.position, 0.5);
+    use crate::testdata::builders::positions::position;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = position().account("DU1234").contract_id(265598).position(0.5).encode_proto();
+
+    assert_eq!(super::decode_position_proto(&bytes).unwrap().position, 0.5);
 }
 
 #[test]
 fn test_decode_position_proto_rejects_malformed_position() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
+    use prost::Message;
 
-    assert_decimal_parse_error(super::decode_position_proto(&position_with_wire_size("abc")), "abc");
-}
+    // The builder stringifies an f64, so a malformed wire value needs raw proto.
+    let bytes = crate::proto::Position {
+        account: Some("DU1234".into()),
+        contract: Some(crate::proto::Contract {
+            con_id: Some(265598),
+            ..Default::default()
+        }),
+        position: Some("abc".into()),
+        avg_cost: Some(150.25),
+    }
+    .encode_to_vec();
 
-#[test]
-fn test_decode_position_proto_treats_sentinel_as_unset() {
-    // "2147483647" is TWS's unset marker, not a 2.1-billion-share position.
-    // The field is still a plain f64, so unset collapses to 0.0 for now.
-    let result = super::decode_position_proto(&position_with_wire_size("2147483647")).unwrap();
-    assert_eq!(result.position, 0.0);
+    assert_decimal_parse_error(super::decode_position_proto(&bytes), "abc");
 }
 
 #[test]
 fn test_decode_position_multi_proto_rejects_malformed_position() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
     use prost::Message;
 
     let bytes = crate::proto::PositionMulti {
@@ -703,7 +693,6 @@ fn test_decode_position_multi_proto_rejects_malformed_position() {
 
 #[test]
 fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
     use prost::Message;
 
     let bytes = crate::proto::PortfolioValue {
@@ -721,7 +710,6 @@ fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
 
 #[test]
 fn test_decode_pnl_single_proto_rejects_malformed_position() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
     use prost::Message;
 
     let bytes = crate::proto::PnLSingle {

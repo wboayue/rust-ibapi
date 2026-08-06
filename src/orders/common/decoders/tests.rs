@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 use super::*;
 use crate::contracts::Symbol;
 use crate::messages::ResponseMessage;
@@ -431,7 +433,6 @@ fn test_decode_order_status_rejects_text_framing() {
 
 #[test]
 fn test_decode_order_status_proto_rejects_malformed_filled() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
     use prost::Message;
 
     let bytes = crate::proto::OrderStatus {
@@ -448,7 +449,6 @@ fn test_decode_order_status_proto_rejects_malformed_filled() {
 
 #[test]
 fn test_decode_order_status_proto_rejects_malformed_remaining() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
     use prost::Message;
 
     let bytes = crate::proto::OrderStatus {

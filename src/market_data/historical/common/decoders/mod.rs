@@ -103,10 +103,15 @@ use crate::proto::decoders::{parse_decimal_or_zero, parse_i32 as parse_str_i32, 
 
 pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
     let msg = proto::HistoricalData::decode(bytes)?;
-    msg.historical_data_bars
-        .iter()
-        .map(|b| decode_historical_data_bar(b, -1))
-        .collect::<Result<Vec<_>, Error>>()
+    // Sized up front rather than `.collect::<Result<Vec<_>, _>>()`: collecting into
+    // a Result goes through `process_results`, whose `size_hint` lower bound is 0
+    // (it may short-circuit), so the Vec would grow by doubling. Bar responses run
+    // to tens of thousands of rows.
+    let mut bars = Vec::with_capacity(msg.historical_data_bars.len());
+    for bar in &msg.historical_data_bars {
+        bars.push(decode_historical_data_bar(bar, -1)?);
+    }
+    Ok(bars)
 }
 
 fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) -> Result<Bar, Error> {

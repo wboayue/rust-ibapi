@@ -1,3 +1,5 @@
+use crate::common::test_utils::helpers::assert_decimal_parse_error;
+
 use super::*;
 use prost::Message;
 use time::macros::{date, datetime};
@@ -369,9 +371,8 @@ fn test_decode_histogram_data_rejects_text_framing() {
 // Bar volume/wap are the only historical decimal fields PR-A touches; the tick
 // and histogram sizes move in the follow-up PR that retypes them to Option<f64>.
 
+/// The builder stringifies an f64, so a malformed wire value needs raw proto.
 fn historical_data_bytes(volume: &str) -> Vec<u8> {
-    use prost::Message;
-
     crate::proto::HistoricalData {
         req_id: Some(9000),
         historical_data_bars: vec![crate::proto::HistoricalDataBar {
@@ -390,22 +391,30 @@ fn historical_data_bytes(volume: &str) -> Vec<u8> {
 
 #[test]
 fn test_decode_historical_data_proto_rejects_malformed_volume() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-
     assert_decimal_parse_error(super::decode_historical_data_proto(&historical_data_bytes("abc")), "abc");
 }
 
 #[test]
 fn test_decode_historical_data_proto_preserves_fractional_volume() {
-    let bars = super::decode_historical_data_proto(&historical_data_bytes("0.5")).unwrap();
+    use crate::testdata::builders::market_data::{historical_data_daily_bar, historical_data_response};
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = historical_data_response()
+        .bar(
+            historical_data_daily_bar("20230101")
+                .ohlc(100.0, 101.0, 99.0, 100.5)
+                .volume(0.5)
+                .wap(100.25)
+                .count(10),
+        )
+        .encode_proto();
+
+    let bars = super::decode_historical_data_proto(&bytes).unwrap();
     assert_eq!(bars[0].volume, 0.5);
 }
 
 #[test]
 fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
-    use crate::common::test_utils::helpers::assert_decimal_parse_error;
-    use prost::Message;
-
     let bytes = crate::proto::HistoricalDataUpdate {
         req_id: Some(9000),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {

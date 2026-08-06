@@ -689,6 +689,7 @@ mod decimal_wire_tests {
 
     // --- behaviour change worth naming ---
 
+    /// The builder stringifies an f64, so a malformed wire value needs raw proto.
     fn tick_price_bytes(size: &str) -> Vec<u8> {
         crate::proto::TickPrice {
             req_id: Some(9000),
@@ -711,7 +712,8 @@ mod decimal_wire_tests {
     fn tick_price_sentinel_size_still_degrades_to_price() {
         // The `Ok(None)` path is unchanged: an unset size is a real wire state
         // and must keep producing a size-less `TickTypes::Price`.
-        match decode_tick_price_proto(&tick_price_bytes("2147483647")).unwrap() {
+        let bytes = tick_price().tick_type(1).price(100.0).size(2147483647.0).encode_proto();
+        match decode_tick_price_proto(&bytes).unwrap() {
             TickTypes::Price(tick) => assert_eq!(tick.price, 100.0),
             other => panic!("expected TickTypes::Price for an unset size, got {other:?}"),
         }
@@ -719,7 +721,8 @@ mod decimal_wire_tests {
 
     #[test]
     fn tick_price_fractional_size_produces_price_size() {
-        match decode_tick_price_proto(&tick_price_bytes("0.5")).unwrap() {
+        let bytes = tick_price().tick_type(1).price(100.0).size(0.5).encode_proto();
+        match decode_tick_price_proto(&bytes).unwrap() {
             TickTypes::PriceSize(tick) => assert_eq!(tick.size, 0.5),
             other => panic!("expected TickTypes::PriceSize, got {other:?}"),
         }
