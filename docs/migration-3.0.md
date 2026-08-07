@@ -924,6 +924,24 @@ println!("Size: {}", fmt_size(tick.size));
 
 `Option<f64>` is an intermediate step. A dedicated decimal quantity type is planned, so sizes will eventually round-trip the wire's decimal representation exactly rather than through binary floating point.
 
+### 36. `Client::check_server_version` is crate-private
+
+The async `Client` exposed `check_server_version(required_version, feature)` as `pub` while the blocking `Client` kept the same method `pub(crate)`. That was drift, not design — the method is the internal guard each version-gated API calls before encoding a request, and nothing in `examples/` or the integration crates ever called it. Both are now `pub(crate)`.
+
+If you were calling it to branch on server support, compare against `Client::server_version()` directly:
+
+```rust,ignore
+// v3.x before — async only
+client.check_server_version(server_versions::SIZE_RULES, "size rules")?;
+
+// v3.0 — the constants are public; the guard is not
+if client.server_version() < server_versions::SIZE_RULES {
+    // fall back
+}
+```
+
+The version-gated methods still perform this check themselves and return `Error::ServerVersion` when the gateway is too old, so an explicit pre-check is only needed when you want to branch instead of erroring.
+
 ## Before / after: common subscription patterns
 
 ### Order construction

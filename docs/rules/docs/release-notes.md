@@ -33,8 +33,9 @@ The changelog bullet answers "what changed"; the release note answers "what do I
 The code sample is what makes the difference — a reader scanning a release decides whether to
 upgrade based on whether the new call looks like something they want to type.
 
-Draft from [`CHANGELOG.md`](changelog-entry.md)'s `## [Unreleased]` section, not from the merge
-log. If a release note has no changelog bullet behind it, the changelog was skipped in some PR.
+Draft from the `## [Unreleased]` section of `CHANGELOG.md`, not from the merge log — see
+[changelog entry](changelog-entry.md) for how those bullets are written. If a release note has
+no changelog bullet behind it, the changelog was skipped in some PR.
 
 ## Precedents
 

@@ -18,7 +18,7 @@ followed by a runnable example — `no_run` is the norm, `ignore` is acceptable 
 canonical happy-path call.
 
 The heading is part of it. A bare fenced block still compiles under `cargo test --doc`, but
-docs.rs renders no "Examples" section for it, and the file stops matching its 128 siblings.
+docs.rs renders no "Examples" section for it, and the file stops matching its 132 siblings.
 Spell it `# Examples`, plural, even when there is one.
 
 Exempt: struct field getters and trivial `is_*` predicates. An example on those is noise.
@@ -42,11 +42,12 @@ than the other examples in the same file. See [doc parity audit](doc-parity-audi
 
 ## Coverage today
 
-128 of 153 `impl Client` methods carry `# Examples`. The gap is inventoried in
-[plans/code-consistency-followups.md](../../../plans/code-consistency-followups.md) — eight
-genuine misses (`exercise_options`, `market_rule`, `family_codes`, `server_time_millis`,
-`cancel_historical_ticks`, `cancel_contract_details`, and async `market_data`), plus the
-trivial client accessors that are exempt. Take one when you are already in the file.
+132 of 152 `impl Client` methods carry `# Examples`. The gap is inventoried in
+[plans/code-consistency-followups.md](../../../plans/code-consistency-followups.md) — nine
+sites across seven methods (`exercise_options`, `market_rule`, `family_codes`,
+`server_time_millis`, `cancel_historical_ticks`, `cancel_contract_details`, and async
+`market_data`), plus eleven trivial client accessors that are exempt. Take one when you are
+already in the file.
 
 ## Precedents
 

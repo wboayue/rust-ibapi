@@ -20,8 +20,10 @@ stale README does.
 
 - Group under `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. Omit empty
   groups; keep the survivors in that order.
-- One bullet per change, imperative and concise, ending with the PR number:
-  `- Classify TWS codes 10089/10167 as informational so delayed-data subscriptions stay open (#677).`
+- One bullet per change, imperative and concise, ending with the PR number. Verbatim from
+  `CHANGELOG.md`:
+  `- Delayed-data advisories (codes 10089/10167) no longer terminate a market-data subscription before its data arrives (#677).`
+  Note what it leads with — the effect a user would notice, not the mechanism that produced it.
 - Breaking changes go under `Changed` or `Removed` **and** get a section in
   `docs/migration-3.0.md` — see [user docs sync](user-docs-sync.md).
 

@@ -120,6 +120,9 @@ precedents. Every rule now lives in a node; nothing is inline.
   [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-3.0.md`
   ship with the change; their fenced Rust snippets are compiled by nothing
 - **Drafting GitHub release notes** → [release notes](docs/rules/docs/release-notes.md)
+- **Establishing, changing, or retiring a project convention** →
+  [rule nodes](docs/rules/README.md) — the convention gets a node and one line in this index,
+  or it is not a convention
 
 > **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
 > a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
