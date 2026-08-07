@@ -25,8 +25,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        feature: [sync, async]
-    name: CI ${{ matrix.feature }}
+        # One leg per genuinely distinct feature configuration. `default =
+        # ["async"]` and cargo features are additive, so `--features sync` leaves
+        # the async client enabled — it is NOT the sync-only build, which is why
+        # the flags are spelled out per leg instead of interpolating a name.
+        # See docs/rules/parity/feature-matrix.md.
+        include:
+          - name: async
+            flags: ""
+          - name: sync
+            flags: "--no-default-features --features sync"
+          - name: all-features
+            flags: "--all-features"
+    name: CI ${{ matrix.name }}
 
     steps:
       - name: Checkout code
@@ -41,7 +52,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.feature }}
+          key: ${{ matrix.name }}
           cache-on-failure: true
           # Cache target directory for each feature set separately
           cache-targets: true
@@ -54,27 +65,27 @@ jobs:
 
       # Build with optimizations for faster subsequent steps
       - name: Build
-        run: cargo build --features ${{ matrix.feature }}
+        run: cargo build ${{ matrix.flags }}
 
       # Run clippy before tests to catch issues early
       - name: Run clippy
-        run: cargo clippy --all-targets --features ${{ matrix.feature }} -- -D warnings
+        run: cargo clippy --all-targets ${{ matrix.flags }} -- -D warnings
 
       # Run tests
       - name: Run tests
-        run: cargo test --features ${{ matrix.feature }}
+        run: cargo test ${{ matrix.flags }}
 
       # Build examples (only if previous steps pass)
       - name: Build examples
-        run: cargo build --examples --features ${{ matrix.feature }}
+        run: cargo build --examples ${{ matrix.flags }}
 
       # Build documentation
       - name: Build documentation
-        run: cargo doc --no-deps --features ${{ matrix.feature }}
+        run: cargo doc --no-deps ${{ matrix.flags }}
 
       # Check that benches compile (if any exist)
       - name: Check benches compile
-        run: cargo check --benches --features ${{ matrix.feature }} || true
+        run: cargo check --benches ${{ matrix.flags }} || true
 
   # Separate minimal job for basic checks that don't need feature matrix
   basic-checks:

@@ -26,28 +26,28 @@ cargo test --all-features                             # sync + async + utoipa
 feature flags are additive, so `--features sync` means *sync **and** async*. Only
 `--no-default-features` drops the async client.
 
+`just test` runs all three, and `ci.yml` has one matrix leg per configuration (`async`, `sync`,
+`all-features`), each running build → clippy → test → examples → doc. The legs spell their
+flags out rather than interpolating a feature name, precisely so the additive-features trap
+cannot come back.
+
 ## Why
 
-That trap is load-bearing, because the project's own tooling falls into it. `just test` runs
-`cargo test --features sync` then `--features async`, so it covers async-only and
-sync-plus-async — **never sync-only**. `ci.yml`'s matrix is `feature: [sync, async]` with the
-same flag shape, so it has the same blind spot, and it has no `--all-features` leg at all.
-
-What actually exercises sync-only:
-
-| Gate | Runs sync-only? |
-|---|---|
-| `just test` | No — `--features sync` keeps async on |
-| `ci.yml` (per PR) | No — same flag shape |
-| `RUSTDOCFLAGS=… cargo doc … --no-default-features --features sync` | Yes, compile only |
-| `coverage.yml` | Yes — but `on: push` to `main`, i.e. after merge |
-
-So a sync-only break is invisible on the PR that introduces it and on every PR after it, until
-someone reads the Coverage job. Run the sync-only line yourself; nothing upstream will.
+The trap used to be load-bearing, because the project's own tooling fell into it. Until #724,
+`just test` ran `--features sync` then `--features async` — async-only and sync-plus-async,
+**never sync-only** — and `ci.yml`'s matrix was `feature: [sync, async]` with the same flag
+shape and no `--all-features` leg. A sync-only break was invisible on the PR that introduced it
+and on every PR after it; only `coverage.yml` caught it, and that runs `on: push` to `main`,
+i.e. after merge.
 
 `lib.rs` is the usual casualty: it is compiled in every configuration, so an unguarded
-`#[tokio::main]` doctest there breaks sync-only while all three CI legs stay green. Gate
-per-configuration doc examples with `cfg_attr` rather than assuming the async form.
+`#[tokio::main]` doctest there breaks sync-only. Gate per-configuration doc examples with
+`cfg_attr` rather than assuming the async form.
+
+Keep all three legs. They fail in different directions: async-only catches an item that
+silently depends on `sync`, sync-only catches the reverse, and `--all-features` catches
+same-name collisions that neither single-feature build can see — see
+[dual-feature types](dual-feature-types.md).
 
 ## Precedents
 
@@ -55,3 +55,6 @@ per-configuration doc examples with `cfg_attr` rather than assuming the async fo
   Sync-only doctests stopped compiling; all PR checks passed.
 - #671 — the fix, 11 commits and five days later. The Coverage job had been red the whole
   time. `cfg_attr`-gated async and sync forms of each `lib.rs` example.
+- #724 — closed the gate gap that let #658 through: three explicit legs in `just test` and
+  `ci.yml`, and swept `docs/build-and-test.md`, which had taught `--features sync` as "the
+  sync build" throughout.

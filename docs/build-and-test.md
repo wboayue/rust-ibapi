@@ -1,21 +1,26 @@
 # Build and Test Guide
 
+> **`--features sync` is not the sync-only build.** `default = ["async"]` and cargo features
+> are additive, so `--features sync` gives you sync **and** async. Every sync command below
+> therefore uses `--no-default-features --features sync`. See
+> [docs/rules/parity/feature-matrix.md](rules/parity/feature-matrix.md).
+
 ## Build Commands
 
 ### Basic Build
 ```bash
 # Build with sync support
-cargo build --features sync
+cargo build --no-default-features --features sync
 
 # Build with async support
 cargo build --features async
 
 # Release build with optimizations
-cargo build --release --features sync
+cargo build --release --no-default-features --features sync
 cargo build --release --features async
 
 # Build all targets including examples
-cargo build --all-targets --features sync
+cargo build --all-targets --no-default-features --features sync
 cargo build --all-targets --features async
 ```
 
@@ -23,22 +28,22 @@ cargo build --all-targets --features async
 
 ```bash
 # Run sync tests
-cargo test --features sync
+cargo test --no-default-features --features sync
 
 # Run async tests
 cargo test --features async
 
 # Run specific test
-cargo test test_name --features sync
+cargo test test_name --no-default-features --features sync
 
 # Test specific module
-cargo test --package ibapi module_name:: --features sync
+cargo test --package ibapi module_name:: --no-default-features --features sync
 
 # Run with output
-cargo test --features sync -- --nocapture
+cargo test --no-default-features --features sync -- --nocapture
 
 # Run doctests only
-cargo test --doc --features sync
+cargo test --doc --no-default-features --features sync
 ```
 
 ### Code Quality
@@ -51,7 +56,7 @@ cargo fmt
 cargo fmt --check
 
 # Run clippy
-cargo clippy --features sync -- -D warnings
+cargo clippy --no-default-features --features sync -- -D warnings
 cargo clippy --features async -- -D warnings
 
 # Generate coverage report (nightly is required for --doctests)
@@ -119,35 +124,45 @@ fn test_message_format() {
 }
 ```
 
-## Running Tests for Both Modes
+## Running Tests for Every Configuration
 
-Always test both implementations:
+Three configurations, not two — async-only, sync-only, and both-plus-`utoipa`. A type or impl
+can compile in two of them and fail the third:
 
 ```bash
-# Using just command
+# Using just command (runs all three)
 just test
 
 # Or manually
-cargo test --features sync
-cargo test --features async
+cargo test                                          # async only (default)
+cargo test --no-default-features --features sync     # sync only
+cargo test --all-features                            # sync + async + utoipa
 
 # Test everything (tests + clippy + fmt)
 cargo fmt --check && \
-cargo clippy --features sync -- -D warnings && \
-cargo clippy --features async -- -D warnings && \
-cargo test --features sync && \
-cargo test --features async
+cargo clippy --all-targets -- -D warnings && \
+cargo clippy --all-targets --no-default-features --features sync -- -D warnings && \
+cargo clippy --all-targets --all-features -- -D warnings && \
+cargo test && \
+cargo test --no-default-features --features sync && \
+cargo test --all-features
 ```
 
 ## Continuous Integration
 
-The project should pass these checks before merging:
+`ci.yml` runs one matrix leg per configuration — `async`, `sync`, and `all-features` — and each
+leg runs the full sequence:
 
 1. **Formatting**: `cargo fmt --check`
-2. **Linting**: `cargo clippy` for both features
-3. **Tests**: All tests passing for both features
-4. **Documentation**: `cargo doc` builds without warnings
-5. **Examples**: All examples compile
+2. **Linting**: `cargo clippy --all-targets … -- -D warnings`
+3. **Tests**: `cargo test`
+4. **Documentation**: `cargo doc --no-deps` builds without warnings
+5. **Examples**: `cargo build --examples`
+6. **Benches**: `cargo check --benches` (non-blocking)
+
+The legs spell their flags out rather than interpolating a feature name, because
+`--features sync` would silently leave the async client enabled — the bug that let a sync-only
+break sit unnoticed through 11 merges (#658 → #671).
 
 ## Performance Testing
 
@@ -155,17 +170,17 @@ For performance-critical code:
 
 ```bash
 # Run benchmarks
-cargo bench --features sync
+cargo bench --no-default-features --features sync
 
 # Profile with flamegraph
-cargo flamegraph --features sync --example market_data
+cargo flamegraph --no-default-features --features sync --example market_data
 ```
 
 ## Debugging
 
 ### Enable Debug Logging
 ```bash
-RUST_LOG=debug cargo test --features sync -- --nocapture
+RUST_LOG=debug cargo test --no-default-features --features sync -- --nocapture
 RUST_LOG=ibapi=trace cargo run --example connect
 ```
 
