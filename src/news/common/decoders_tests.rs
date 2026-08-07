@@ -94,28 +94,40 @@ fn test_decode_news_providers_proto_empty() {
 fn test_decode_news_providers_rejects_text_framing() {
     let message = ResponseMessage::from("newsProviders\01\0BZ\0Benzinga\0");
     let err = decode_news_providers(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }
 
 #[test]
 fn test_decode_news_bulletin_rejects_text_framing() {
     let message = ResponseMessage::from("14\01\01\02\0msg\0NYSE\0");
     let err = decode_news_bulletin(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }
 
 #[test]
 fn test_decode_historical_news_rejects_text_framing() {
     let message = ResponseMessage::from("86\09000\02024-12-23 19:45:00.0\0DJ-N\0a\0h\0");
     let err = decode_historical_news(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }
 
 #[test]
 fn test_decode_news_article_rejects_text_framing() {
     let message = ResponseMessage::from("83\09000\00\0body\0");
     let err = decode_news_article(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }
 
 #[test]
@@ -158,5 +170,8 @@ fn test_decode_tick_news_proto_invalid_timestamp() {
 fn test_decode_tick_news_rejects_text_framing() {
     let message = ResponseMessage::from("84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0");
     let err = decode_tick_news(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }

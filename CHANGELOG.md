@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Error::UnexpectedWireFormat`, returned when a proto-only decoder receives a text-framed message. Previously this shared `Error::UnexpectedResponse` with the unrelated "message is not for this decoder" case, which the dispatcher skips silently. `Error` is `#[non_exhaustive]`, so the new variant is not a breaking change (#731).
+
 ### Changed
 
+- A text-framed message reaching a proto-only decoder now fails the subscription instead of being skipped. At `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives proto-framed, so reaching this means the gateway broke protocol — previously the message was dropped and the subscription silently yielded nothing. Wrong-message-type frames are still skipped, which is what shared channels need (#731).
 - Historical tick and histogram sizes are now `Option<f64>` instead of `i32`: `TickMidpoint.size`, `TickLast.size`, `TickBidAsk.size_bid`/`size_ask`, and `HistogramEntry.size`. IBKR models these as decimals on the wire, and the old `i32` parse silently truncated fractional sizes — a crypto tick of `0.5` decoded as `0`. `None` means TWS sent no value (field absent, empty, or an "unset" sentinel); `Some(0.0)` is a real zero. This also changes the serialized shape — a size is now `100.0` rather than `100`, absent is `null` rather than `0`, and the `utoipa` schema becomes a nullable `number` (#716).
 - `ContractDetails.min_size`, `size_increment`, and `suggested_size_increment` are now `Option<f64>` instead of `f64`. Contracts without size rules omit these on the wire, where the old `0.0` was indistinguishable from a real value and a `size_increment` of `0.0` is nonsense (#716).
 

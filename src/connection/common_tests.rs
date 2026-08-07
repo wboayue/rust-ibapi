@@ -325,7 +325,7 @@ fn test_parse_account_info_next_valid_id_rejects_text_framing() {
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
         .expect_err("text-framed NextValidId must be rejected");
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
 
 #[test]
@@ -335,7 +335,7 @@ fn test_parse_account_info_managed_accounts_rejects_text_framing() {
     let err = handler
         .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
         .expect_err("text-framed ManagedAccounts must be rejected");
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
 
 #[test]

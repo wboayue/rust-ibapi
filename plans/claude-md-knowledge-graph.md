@@ -312,10 +312,13 @@ another references a *different* rule 19. Any surviving "rule N" citation has to
 against the `CLAUDE.md` of its own date. Both `plans/` files that were organised by number now
 cite nodes.
 
-## Prose replaced by a gate — #730
+## Prose replaced by gates — #730, #731
 
-`CLAUDE.md` carried two "traps that pass CI silently", and one of them is now enforced by
-code instead — the first entry in the follow-up list, and the reason it is gone from it.
+`CLAUDE.md` carried two "traps that pass CI silently". Both are now enforced by code, and the
+standing warning is gone from the file.
+
+### The registration trap — #730
+
 The guard is `debug_assert_request_id_routable`
 (`src/subscriptions/common.rs`) runs in both subscription constructors and panics when a
 `request_id`-keyed subscription is built for a decoder declaring a response type the
@@ -339,18 +342,41 @@ missing gate.** The rule entered `CLAUDE.md` with #647 on 2026-05-27, three week
 put the second instance in the tree. It described that failure accurately for ten weeks and
 caught none of it.
 
-The second trap — a text-framed fixture reaching a proto-only decoder is skip-classified, so
-the test goes green with its assertions unrun — is still prose. It resists the same treatment:
+### The fixture-framing trap — #731
+
+The second trap looked harder, and the #730 write-up said so: a text-framed fixture reaching a
+proto-only decoder is skip-classified, so the test goes green with its assertions unrun — but
 `Error::UnexpectedResponse` legitimately means "not my message" on shared channels, and
-several tests assert the skip on purpose, so the fixture-shape bug is not separable from
-correct behaviour without a distinct error variant. Left in `CLAUDE.md`, alone now.
+several tests assert that skip on purpose.
+
+**The two failures were never the same thing; one variant was doing both jobs.** Splitting
+them by *call site* separates them cleanly:
+
+| Call site | Meaning | Disposition |
+|---|---|---|
+| `_ => Err(Error::unexpected_response(message))` | not my message type | `Skip` |
+| `message.require_proto()?` | my message type, unreadable framing | `Error` |
+
+So `require_proto()` now returns a new `Error::UnexpectedWireFormat`, which
+`process_decode_result` does not skip. `Error` is `#[non_exhaustive]`, so the variant is
+additive. The trap now costs a red test instead of a silent one; production behaviour is
+unchanged in practice, since at floor 213 every message with a proto decoder arrives
+proto-framed.
+
+The sweep was 40 tests, and their names did the sorting: every one of them was already called
+`*_rejects_text_framing`, so the failing set *was* the set to update — no judgement call per
+site. The single exception is the tell: `test_decode_realtime_bar_text_arrival_skip_classifies`
+was named for the behaviour being removed, and it was the only test whose name had to change.
+**When a rename sweep is driven by the test names themselves, the one test that doesn't fit
+the pattern is the one encoding the old contract.**
+
+The lesson generalises past this instance: the #730 write-up recorded this trap as *resistant*
+to gating because two cases shared an error variant. That framing was the obstacle. The
+question worth asking first is not "how do I detect the bad case" but "why are these two cases
+the same value" — and the answer was that they never should have been.
 
 ## Follow-ups
 
-- **Give the fixture-framing trap a gate too.** Needs `require_proto`'s rejection to be
-  distinguishable from an ordinary wrong-channel skip — a separate `Error` variant, or a
-  test-build counter on `MessageBusStub` for responses no subscriber decoded. Until then it is
-  the only silent-failure clause left in `CLAUDE.md`.
 - **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
   once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
   checking that a cited symbol exists does not check it. The two live counts are 134/152

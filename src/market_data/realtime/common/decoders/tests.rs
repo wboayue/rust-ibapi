@@ -52,14 +52,14 @@ mod realtime_bar_tests {
     }
 
     #[test]
-    fn test_decode_realtime_bar_text_arrival_skip_classifies() {
-        // Text arrival at a proto-only decoder must surface UnexpectedResponse so
-        // the dispatcher skip-classifies rather than terminating — see
-        // docs/rules/wire/proto-only-decoding.md.
+    fn test_decode_realtime_bar_rejects_text_framing() {
+        // Text arrival at a proto-only decoder surfaces UnexpectedWireFormat, which
+        // the dispatcher raises rather than skipping — the message was addressed to
+        // this decoder. See docs/rules/wire/proto-only-decoding.md.
         let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
         match decode_realtime_bar(&mut message) {
-            Err(Error::UnexpectedResponse(_)) => {}
-            other => panic!("expected UnexpectedResponse, got {other:?}"),
+            Err(Error::UnexpectedWireFormat(_)) => {}
+            other => panic!("expected UnexpectedWireFormat, got {other:?}"),
         }
     }
 }
@@ -324,7 +324,10 @@ mod market_depth_tests {
     fn test_decode_market_depth_exchanges_rejects_text_framing() {
         let message = ResponseMessage::from("71\02\0ISLAND\0STK\0NASDAQ\0DEEP2\01\0NYSE\0STK\0NYSE\0DEEP\01\0");
         let err = decode_market_depth_exchanges(&message).unwrap_err();
-        assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+        assert!(
+            matches!(err, Error::UnexpectedWireFormat(_)),
+            "expected UnexpectedWireFormat, got {err:?}"
+        );
     }
 }
 

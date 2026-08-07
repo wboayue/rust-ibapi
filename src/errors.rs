@@ -98,6 +98,21 @@ pub enum Error {
     #[error("UnexpectedResponse: {0}")]
     UnexpectedResponse(String),
 
+    /// A proto-only decoder received a text-framed message. The string carries
+    /// the `Debug` repr of the offending envelope.
+    ///
+    /// Deliberately distinct from [`Error::UnexpectedResponse`]. That one means
+    /// "not my message type", which the dispatcher *skips* — correct on a shared
+    /// channel carrying several types. A framing mismatch is not skippable: the
+    /// message was addressed to this decoder and could not be read, so skipping
+    /// it drops data silently. At
+    /// `server_versions::PROTOBUF_REST_MESSAGES_3` every inbound message with a
+    /// proto decoder arrives proto-framed, so reaching this in production means
+    /// the gateway broke protocol; in a test it means the fixture was built
+    /// text-framed for a proto-only type.
+    #[error("UnexpectedWireFormat: proto-only decoder received a text-framed message: {0}")]
+    UnexpectedWireFormat(String),
+
     /// Stream ended unexpectedly.
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
@@ -156,6 +171,13 @@ impl Error {
     /// downstream code.
     pub(crate) fn unexpected_response(message: &ResponseMessage) -> Error {
         Error::UnexpectedResponse(format!("{message:?}"))
+    }
+
+    /// Build an [`Error::UnexpectedWireFormat`] from an internal `ResponseMessage`.
+    /// Same capture as [`Error::unexpected_response`]; the separate variant is
+    /// what keeps a framing mismatch out of the dispatcher's skip path.
+    pub(crate) fn unexpected_wire_format(message: &ResponseMessage) -> Error {
+        Error::UnexpectedWireFormat(format!("{message:?}"))
     }
 
     /// Build an [`Error::Parse`] when the failing input came from a text-protocol
@@ -257,6 +279,7 @@ impl Clone for Error {
             Error::Shutdown => Error::Shutdown,
             Error::EndOfStream => Error::EndOfStream,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
+            Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,

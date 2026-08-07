@@ -164,8 +164,10 @@ pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Re
 // src/<module>/common/decoders.rs
 //
 // The transport is protobuf-only. `require_proto()` hands back the payload from
-// `raw_bytes`, or returns `Error::UnexpectedResponse` if a text-framed message
+// `raw_bytes`, or returns `Error::UnexpectedWireFormat` if a text-framed message
 // reaches this decoder (a stale test fixture, or a future-version regression).
+// That variant is *not* skipped — it fails the subscription, unlike the
+// wrong-message-type `Error::UnexpectedResponse` below.
 pub(in crate::<module>) fn decode_my_response(message: &ResponseMessage) -> Result<MyData, Error> {
     decode_my_response_proto(message.require_proto()?)
 }

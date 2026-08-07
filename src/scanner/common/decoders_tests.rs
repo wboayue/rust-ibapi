@@ -75,13 +75,14 @@ fn test_decode_scanner_parameters_proto_empty() {
 #[test]
 fn test_decode_scanner_data_rejects_text_framing() {
     // Servers ≥ the connection floor always emit ScannerData in proto.
-    // Text-framed arrival skip-classifies via `UnexpectedResponse` rather than
-    // terminating the subscription — see docs/rules/wire/proto-only-decoding.md.
+    // Text-framed arrival raises `UnexpectedWireFormat` — the message was
+    // addressed to this decoder, so it is not skippable. See
+    // docs/rules/wire/proto-only-decoding.md.
     let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0");
     let err = decode_scanner_data(&message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -90,7 +91,7 @@ fn test_decode_scanner_parameters_rejects_text_framing() {
     let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0");
     let err = decode_scanner_parameters(&message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }

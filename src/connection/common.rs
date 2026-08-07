@@ -384,8 +384,9 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 /// binary message ID exceeds [`PROTOBUF_MSG_ID`], the payload is
 /// protobuf-encoded; otherwise it is NUL-delimited text. At floor 213 the
 /// text branch is unreachable through production decoders (WSH metadata/
-/// event-data come through it via tests; any TWS-emitted text frame falls
-/// through to the dispatcher catch-all and is skip-classified).
+/// event-data come through it via tests; a TWS-emitted text frame for a type
+/// with a proto decoder raises `Error::UnexpectedWireFormat`, and one with no
+/// decoder at all falls through to the dispatcher catch-all and is skipped).
 pub fn parse_raw_message(data: &[u8]) -> (ResponseMessage, Option<String>) {
     let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
 

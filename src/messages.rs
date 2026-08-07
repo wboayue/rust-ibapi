@@ -812,11 +812,13 @@ impl ResponseMessage {
     }
 
     /// Raw protobuf payload bytes for use by proto-only decoders. Text-framed
-    /// arrival returns `Error::UnexpectedResponse`, which the dispatcher
-    /// skip-classifies (per docs/rules/wire/proto-only-decoding.md) rather than terminating the
-    /// subscription.
+    /// arrival returns `Error::UnexpectedWireFormat`, which the dispatcher
+    /// surfaces rather than skip-classifying — the message was addressed to this
+    /// decoder, so dropping it would lose data silently. A wrong *message type*
+    /// is the skippable case and keeps `Error::UnexpectedResponse`. See
+    /// docs/rules/wire/proto-only-decoding.md.
     pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
-        self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
+        self.raw_bytes().ok_or_else(|| crate::Error::unexpected_wire_format(self))
     }
 
     /// Returns `true` if the message informs about API shutdown.

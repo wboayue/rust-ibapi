@@ -85,7 +85,7 @@ let result = client.some_method()?;
 // assert result decoded the scripted response
 ```
 
-Responses are proto-framed: `proto_response(...)` takes bytes from a field-minimal builder in `src/testdata/builders/<domain>.rs`. A text-framed fixture reaching a proto-only decoder is skip-classified, so the test passes with its assertions unrun.
+Responses are proto-framed: `proto_response(...)` takes bytes from a field-minimal builder in `src/testdata/builders/<domain>.rs`. A text-framed fixture reaching a proto-only decoder fails the subscription with `Error::UnexpectedWireFormat`.
 
 ### Table-Driven Tests
 

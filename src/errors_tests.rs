@@ -83,6 +83,24 @@ fn unexpected_response_display_includes_message_debug() {
 }
 
 #[test]
+fn unexpected_wire_format_display_includes_message_debug() {
+    let msg = ResponseMessage::from("50\0\09000\0");
+    let error = Error::unexpected_wire_format(&msg);
+    assert!(error.to_string().starts_with("UnexpectedWireFormat:"), "got {error}");
+    assert!(error.to_string().contains("raw_bytes: None"), "got {error}");
+}
+
+#[test]
+fn unexpected_wire_format_survives_clone() {
+    // The manual Clone impl is variant-by-variant; a missed arm would collapse
+    // this to Error::Simple and stop matching the pattern the dispatcher uses.
+    let msg = ResponseMessage::from("50\0\09000\0");
+    let error = Error::unexpected_wire_format(&msg);
+    assert!(matches!(error.clone(), Error::UnexpectedWireFormat(_)));
+    assert_eq!(error.clone().to_string(), error.to_string());
+}
+
+#[test]
 fn error_source_returns_none_for_simple() {
     let error = Error::Simple("test error".to_string());
     assert!(error.source().is_none());

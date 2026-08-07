@@ -27,11 +27,11 @@ fn test_decode_wsh_event_data_proto() {
 #[test]
 fn test_decode_wsh_metadata_rejects_text_framing() {
     // Text-framed arrival at a proto-only decoder must surface
-    // UnexpectedResponse (docs/rules/wire/proto-only-decoding.md).
+    // UnexpectedWireFormat (docs/rules/wire/proto-only-decoding.md).
     let message = ResponseMessage::from("104\09000\0{\"hi\":1}\0");
     match decode_wsh_metadata(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
+        Err(Error::UnexpectedWireFormat(_)) => {}
+        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
     }
 }
 
@@ -39,7 +39,7 @@ fn test_decode_wsh_metadata_rejects_text_framing() {
 fn test_decode_wsh_event_data_rejects_text_framing() {
     let message = ResponseMessage::from("105\09000\0{\"event\":\"e\"}\0");
     match decode_wsh_event_data(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
+        Err(Error::UnexpectedWireFormat(_)) => {}
+        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
     }
 }
