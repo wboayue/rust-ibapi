@@ -46,7 +46,17 @@ example of adding a module.
 
 - #657 — the sweep that established the flat layout and drew the line at helper modules: main
   file flat, helpers may nest.
-- #729 — closed the last drift: `Client::order` and `Client::market_data` moved out of
-  `client/` into `orders/{sync,async}.rs` and `market_data/realtime/{sync,async}.rs`, next to
-  the sibling entry points (`realtime_bars`, `tick_by_tick`, `market_depth`) they had diverged
-  from. No exceptions remain — every `impl Client` block outside `client/` is a domain's.
+- #729 — closed the `client/` drift: `Client::order` and `Client::market_data` moved out of
+  `client/sync.rs` and `client/async.rs` into `orders/{sync,async}.rs` and
+  `market_data/realtime/{sync,async}.rs`, next to the sibling entry points (`realtime_bars`,
+  `tick_by_tick`, `market_depth`) they had diverged from. `client/` now holds only
+  cross-cutting mechanics.
+
+## Known drift
+
+`Client::submit_oca_orders` is a public client method in an `impl Client` block at
+`orders/builder/sync_impl.rs` and `orders/builder/async_impl.rs` — the right domain, the wrong
+file. The helper carve-out above does not cover it: that blesses `<domain>/<side>/foo.rs`
+*under* the side file, and these are siblings of it. Its body is a loop over `next_order_id()`
++ `submit_order()` with no builder coupling, so it belongs in `orders/{sync,async}.rs`. Two
+sites; move them when you are next in that file, and do not read them as precedent.

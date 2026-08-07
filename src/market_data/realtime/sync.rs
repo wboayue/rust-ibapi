@@ -24,15 +24,10 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
 }
 
 impl Client {
-    /// Requests real time market data.
+    /// Returns a builder for a streaming level-1 market data subscription.
     ///
-    /// Creates a market data subscription builder with a fluent interface.
-    ///
-    /// This is the preferred way to subscribe to market data, providing a more
-    /// intuitive and discoverable API than the raw method.
-    ///
-    /// # Arguments
-    /// * `contract` - The contract to receive market data for
+    /// Streams by default; `.snapshot()` switches to a one-shot request. See
+    /// [`MarketDataBuilder`] for the chained methods.
     ///
     /// # Examples
     ///
@@ -54,12 +49,14 @@ impl Client {
     ///     match tick? {
     ///         TickTypes::Price(price) => println!("Price: {price:?}"),
     ///         TickTypes::Size(size) => println!("Size: {size:?}"),
-    ///         TickTypes::SnapshotEnd => subscription.cancel(),
     ///         _ => {}
     ///     }
     /// }
     /// # Ok::<(), ibapi::Error>(())
     /// ```
+    ///
+    /// A one-shot snapshot, driven manually. To just collect the ticks and stop, prefer
+    /// [`MarketDataBuilder::snapshot_once`], which wraps this loop with a timeout.
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
@@ -69,7 +66,6 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     ///
-    /// // Request a one-time snapshot
     /// let subscription = client.market_data(&contract)
     ///     .snapshot()
     ///     .subscribe()

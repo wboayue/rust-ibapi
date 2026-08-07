@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, create_test_client, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
@@ -540,16 +540,16 @@ async fn test_global_cancel() {
     assert_request(&message_bus, 0, &global_cancel_request());
 }
 
+// Covers the `Client::order` delegate only. Field-by-field builder semantics are
+// asserted in orders/builder/tests.rs against a mock client; what is unique here
+// is that the entry point binds the real `Client` and the given contract.
 #[tokio::test]
 async fn order_entry_point_builds_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let (client, _) = create_test_client();
     let contract = Contract::stock("AAPL").build();
 
     let order = client.order(&contract).buy(100).limit(50.0).build().expect("build failed");
 
     assert_eq!(order.action, Action::Buy);
-    assert_eq!(order.total_quantity, 100.0);
-    assert_eq!(order.order_type, "LMT");
     assert_eq!(order.limit_price, Some(50.0));
 }
