@@ -2,78 +2,16 @@ use super::*;
 use crate::messages::ResponseMessage;
 
 #[test]
-fn test_is_stream_end() {
-    let test_msg = ResponseMessage::from_simple("test");
-    assert!(is_stream_end(&Error::EndOfStream));
-    assert!(!is_stream_end(&Error::unexpected_response(&test_msg)));
-    assert!(!is_stream_end(&Error::ConnectionFailed));
-}
+fn test_is_undeclared() {
+    // The skip decision, which used to live in an error variant.
+    let ids = &[IncomingMessages::TickPrice, IncomingMessages::TickSize];
 
-#[test]
-fn test_should_store_error() {
-    let test_msg = ResponseMessage::from_simple("test");
-    assert!(!should_store_error(&Error::EndOfStream));
-    assert!(should_store_error(&Error::unexpected_response(&test_msg)));
-    assert!(should_store_error(&Error::ConnectionFailed));
-}
-
-#[test]
-fn test_process_decode_result() {
-    // Test success case
-    match process_decode_result::<i32>(Ok(42)) {
-        ProcessingResult::Success(val) => assert_eq!(val, 42),
-        _ => panic!("Expected Success"),
-    }
-
-    // Test EndOfStream
-    match process_decode_result::<i32>(Err(Error::EndOfStream)) {
-        ProcessingResult::EndOfStream => {}
-        _ => panic!("Expected EndOfStream"),
-    }
-
-    // Test skip case (wrong-channel message)
-    let test_msg = ResponseMessage::from_simple("test");
-    match process_decode_result::<i32>(Err(Error::unexpected_response(&test_msg))) {
-        ProcessingResult::Skip => {}
-        _ => panic!("Expected Skip"),
-    }
-
-    // A framing mismatch is NOT skippable — the message was addressed to this
-    // decoder, so dropping it would lose data (and leave a test green with its
-    // assertions unrun). See docs/rules/testing/fixture-builders.md.
-    match process_decode_result::<i32>(Err(Error::unexpected_wire_format(&test_msg))) {
-        ProcessingResult::Error(Error::UnexpectedWireFormat(_)) => {}
-        other => panic!("Expected Error(UnexpectedWireFormat), got {other:?}"),
-    }
-
-    // Test error case
-    match process_decode_result::<i32>(Err(Error::ConnectionFailed)) {
-        ProcessingResult::Error(Error::ConnectionFailed) => {}
-        _ => panic!("Expected Error"),
-    }
-}
-
-#[test]
-fn test_filter_notice() {
-    use crate::messages::Notice;
-
-    match filter_notice::<i32>(Ok(SubscriptionItem::Data(42))) {
-        Some(Ok(42)) => {}
-        other => panic!("expected Some(Ok(42)), got {other:?}"),
-    }
-
-    let notice = Notice {
-        code: 2104,
-        message: "Market data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    };
-    assert!(filter_notice::<i32>(Ok(SubscriptionItem::Notice(notice))).is_none());
-
-    match filter_notice::<i32>(Err(Error::ConnectionFailed)) {
-        Some(Err(Error::ConnectionFailed)) => {}
-        other => panic!("expected Some(Err(ConnectionFailed)), got {other:?}"),
-    }
+    assert!(!is_undeclared(ids, &ResponseMessage::from("1\0payload\0")));
+    assert!(!is_undeclared(ids, &ResponseMessage::from("2\0payload\0")));
+    assert!(is_undeclared(ids, &ResponseMessage::from("3\0payload\0")));
+    // An empty declaration skips everything — which is why the trait const has
+    // no default and `with_decoder` takes it as a required argument.
+    assert!(is_undeclared(&[], &ResponseMessage::from("1\0payload\0")));
 }
 
 #[test]

@@ -770,10 +770,9 @@ async fn subscription_cancel_only_sends_once() {
     assert_eq!(message_bus.request_messages.read().unwrap().len(), 2, "drop after cancel is a no-op");
 }
 
-/// Async mirror of the same-named test in `sync_tests.rs`. The classification
-/// lives in `process_decode_result`, shared by both transports — this pins that
-/// the async `poll_next` path surfaces it too rather than swallowing it in its
-/// own skip loop.
+/// Async mirror of the same-named test in `sync_tests.rs`. Both drivers share
+/// the terminate path, but each has its own poll loop — this pins that the async
+/// one surfaces the error rather than swallowing it.
 ///
 /// See docs/rules/testing/fixture-builders.md.
 #[tokio::test]

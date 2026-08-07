@@ -81,47 +81,16 @@ impl RoutedItem {
     }
 }
 
-/// Checks if an error indicates the end of a stream
-#[allow(dead_code)]
-pub(crate) fn is_stream_end(error: &Error) -> bool {
-    matches!(error, Error::EndOfStream)
-}
-
-/// Checks if an error should be stored for later retrieval
-#[allow(dead_code)]
-pub(crate) fn should_store_error(error: &Error) -> bool {
-    !is_stream_end(error)
-}
-
-/// Common error types that can occur during subscription processing
-#[derive(Debug)]
-pub(crate) enum ProcessingResult<T> {
-    /// Successfully processed a value
-    Success(T),
-    /// Message not intended for this subscription — skip silently.
-    /// Occurs on shared broadcast channels where messages from other
-    /// subscriptions can arrive on the same channel.
-    Skip,
-    /// Encountered an error that should be stored
-    Error(Error),
-    /// Stream has ended normally
-    EndOfStream,
-}
-
-/// Process a decoding result into a common processing result.
+/// `true` when `message` is not this subscription's to decode.
 ///
-/// Only [`Error::UnexpectedResponse`] — "not my message type" — is skippable.
-/// [`Error::UnexpectedWireFormat`] deliberately falls through to `Error`: the
-/// message *was* for this decoder and could not be read, and skipping it left
-/// tests green with their post-`next_data()` assertions unrun. See
-/// `docs/rules/testing/fixture-builders.md`.
-pub(crate) fn process_decode_result<T>(result: Result<T, Error>) -> ProcessingResult<T> {
-    match result {
-        Ok(val) => ProcessingResult::Success(val),
-        Err(Error::EndOfStream) => ProcessingResult::EndOfStream,
-        Err(Error::UnexpectedResponse(_)) => ProcessingResult::Skip,
-        Err(err) => ProcessingResult::Error(err),
-    }
+/// Shared and order-id channels fan several message types out to subscriptions
+/// that each declare a subset, so a frame belonging to a sibling is routine and
+/// simply skipped.
+///
+/// Lives here because both drivers must answer it identically — the sync/async
+/// pair is exactly where a duplicated predicate drifts.
+pub(crate) fn is_undeclared(ids: &[IncomingMessages], message: &ResponseMessage) -> bool {
+    !ids.contains(&message.message_type())
 }
 
 /// Context for decoding responses, providing all necessary state for decoders.
@@ -168,12 +137,15 @@ impl DecoderContext {
 /// Decoders receive a `DecoderContext` containing server version, timezone, and other
 /// context needed to properly decode messages.
 pub(crate) trait StreamDecoder<T> {
-    /// Message types this stream can handle.
+    /// Message types this stream can handle. **The complete set** — a type
+    /// absent from this list never reaches [`Self::decode`], so adding a
+    /// `decode` arm means adding the type here too or the arm is dead code.
     ///
-    /// Load-bearing for `request_id`-keyed subscriptions: every type listed here
-    /// is checked against the routing allow-list by
-    /// [`debug_assert_request_id_routable`] when the subscription is built.
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
+    /// No default, deliberately: an omitted declaration would skip everything,
+    /// so it must be a compile error. See
+    /// `docs/rules/wire/proto-only-decoding.md` for what enforces the two lists
+    /// agreeing — and what does not.
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
 
     /// Decode a response message into the stream's data type
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<T, Error>;

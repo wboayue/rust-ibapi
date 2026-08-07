@@ -38,7 +38,9 @@ pub(crate) fn should_retry_request(error: &Error, retry_count: u32) -> bool {
 /// Checks if an error is transient and may succeed on retry
 pub(crate) fn is_transient_error(error: &Error) -> bool {
     match error {
-        Error::UnexpectedResponse(_) => true,
+        // Not retryable since #732: the variant now means "declared but
+        // unhandled", a bug in the decoder rather than a stray frame.
+        Error::UnexpectedResponse(_) => false,
         Error::Io(io_err) => matches!(io_err.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock | ErrorKind::TimedOut),
         _ => false,
     }
@@ -92,9 +94,9 @@ pub(crate) fn categorize_error(error: &Error) -> ErrorCategory {
         Error::Notice(_) => ErrorCategory::ServerError,
         Error::Cancelled => ErrorCategory::Cancelled,
         Error::Shutdown | Error::NotImplemented | Error::AlreadySubscribed => ErrorCategory::Fatal,
-        Error::UnexpectedResponse(_) | Error::UnexpectedEndOfStream => ErrorCategory::Transient,
-        // A framing mismatch cannot succeed on retry — the gateway broke protocol.
-        Error::UnexpectedWireFormat(_) => ErrorCategory::Fatal,
+        Error::UnexpectedEndOfStream => ErrorCategory::Transient,
+        // Neither can succeed on retry: a decoder bug and a broken-protocol frame.
+        Error::UnexpectedResponse(_) | Error::UnexpectedWireFormat(_) => ErrorCategory::Fatal,
         _ => ErrorCategory::Transient,
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::messages::{encode_protobuf_message, OutgoingMessages, ResponseMessage};
+use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use std::sync::Arc;
 
@@ -7,6 +7,8 @@ use std::sync::Arc;
 struct EndOfStreamItem;
 
 impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
     fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<EndOfStreamItem, Error> {
         Err(Error::EndOfStream)
     }
@@ -17,43 +19,44 @@ impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
 }
 
 #[test]
-fn test_subscription_skips_unexpected_messages_without_limit() {
+fn test_subscription_skips_undeclared_messages_without_limit() {
     use std::sync::atomic::AtomicUsize;
 
     static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+    /// Declares only `TickPrice`; `TickSize` frames must never reach `decode`.
     #[derive(Debug)]
-    struct SkipThenSuccess;
+    struct DeclaresTickPrice;
 
-    impl StreamDecoder<SkipThenSuccess> for SkipThenSuccess {
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<SkipThenSuccess, Error> {
-            let n = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            if n < 20 {
-                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
-            } else {
-                Ok(SkipThenSuccess)
-            }
+    impl StreamDecoder<DeclaresTickPrice> for DeclaresTickPrice {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DeclaresTickPrice, Error> {
+            CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+            Ok(DeclaresTickPrice)
         }
     }
 
-    CALL_COUNT.store(0, Ordering::Relaxed);
-
-    // 20 stray messages + 1 valid (more than the old MAX_DECODE_RETRIES=10)
-    let mut responses: Vec<String> = (0..21).map(|_| "1|msg".to_string()).collect();
+    // Many undeclared messages, then one the decoder declares.
+    let mut responses: Vec<String> = (0..20).map(|_| "2|stray".to_string()).collect();
+    responses.push("1|msg".to_string());
     // Sentinel to avoid blocking on the channel after success
     responses.push("1|done".to_string());
 
     let stub = MessageBusStub::with_responses(responses);
     let message_bus = Arc::new(stub);
 
-    let sub: Subscription<SkipThenSuccess> = {
+    let sub: Subscription<DeclaresTickPrice> = {
         let internal = message_bus.send_request(1, &[]).unwrap();
         Subscription::new(message_bus.clone(), internal, DecoderContext::default())
     };
 
-    let result = sub.next();
-    assert!(result.is_some(), "subscription should survive 20 skips and return valid message");
-    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 21);
+    assert!(sub.next().is_some(), "subscription should survive 20 skips and return valid message");
+    assert_eq!(
+        CALL_COUNT.load(Ordering::Relaxed),
+        1,
+        "the 20 undeclared frames must be filtered before decode, not skipped inside it"
+    );
 }
 
 #[test]
@@ -66,6 +69,8 @@ fn test_routed_item_error_terminates_subscription() {
     struct DataItem;
 
     impl StreamDecoder<DataItem> for DataItem {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
         fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
             Ok(DataItem)
         }
@@ -97,6 +102,8 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
     struct DataItem;
 
     impl StreamDecoder<DataItem> for DataItem {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
         fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
             Ok(DataItem)
         }
@@ -113,7 +120,7 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
             advanced_order_reject_json: String::new(),
         }))
         .unwrap();
-    sender.send(RoutedItem::Response(ResponseMessage::from("1|data\0"))).unwrap();
+    sender.send(RoutedItem::Response(ResponseMessage::from("1\0data\0"))).unwrap();
 
     let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
     let stub = Arc::new(MessageBusStub::default());
@@ -159,14 +166,16 @@ use crate::transport::SubscriptionBuilder;
 use crossbeam::channel;
 use std::time::Duration;
 
-/// Test decoder for the collect tests: payload is text field 0; the value `-1`
-/// marks a snapshot-end sentinel (mirrors `TickTypes::SnapshotEnd`).
+/// Test decoder for the collect tests: the value `-1` marks a snapshot-end
+/// sentinel (mirrors `TickTypes::SnapshotEnd`).
 #[derive(Debug, PartialEq)]
 struct CollectItem(i32);
 
 impl StreamDecoder<CollectItem> for CollectItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
     fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
-        Ok(CollectItem(msg.peek_int(0)?))
+        Ok(CollectItem(msg.peek_int(1)?))
     }
 
     fn is_snapshot_end(&self) -> bool {
@@ -190,8 +199,10 @@ fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscriptio
     (sub, keep)
 }
 
+/// Field 0 is the message id (`TickPrice`, matching `CollectItem`'s
+/// declaration); the payload the decoder reads sits at field 1.
 fn data(value: i32) -> RoutedItem {
-    RoutedItem::Response(ResponseMessage::from(&format!("{value}\0")))
+    RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
 }
 
 #[test]
@@ -272,4 +283,36 @@ fn test_collect_for_filters_notices() {
 
     // Notice is dropped (logged); only data is collected.
     assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+}
+
+/// The complement of `test_subscription_skips_undeclared_messages_without_limit`.
+/// Declaring a type the `decode` match does not handle is a bug, and it must be
+/// loud: the `_` arm's `UnexpectedResponse` is no longer skippable, so it
+/// terminates instead of silently yielding nothing.
+#[test]
+fn test_declared_type_with_no_decode_arm_terminates() {
+    #[derive(Debug)]
+    struct DeclaresMoreThanItHandles;
+
+    impl StreamDecoder<DeclaresMoreThanItHandles> for DeclaresMoreThanItHandles {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice, IncomingMessages::TickSize];
+
+        fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<DeclaresMoreThanItHandles, Error> {
+            match msg.message_type() {
+                IncomingMessages::TickPrice => Ok(DeclaresMoreThanItHandles),
+                _ => Err(Error::unexpected_response(msg)),
+            }
+        }
+    }
+
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["2|declared but unhandled".to_string()]));
+    let sub: Subscription<DeclaresMoreThanItHandles> = {
+        let internal = message_bus.send_request(1, &[]).unwrap();
+        Subscription::new(message_bus.clone(), internal, DecoderContext::default())
+    };
+
+    assert!(
+        matches!(sub.next(), Some(Err(Error::UnexpectedResponse(_)))),
+        "a declared-but-unhandled type must surface, not vanish"
+    );
 }

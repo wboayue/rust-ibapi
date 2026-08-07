@@ -7,9 +7,10 @@ triggers:
   - writing or modifying a domain decoder
   - adding a StreamDecoder impl
   - a subscription terminates on an unexpected message
-symbols: [require_proto, process_decode_result, StreamDecoder, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
+  - adding a decode arm for a new message type
+symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders]
-precedents: ["#508", "#731"]
+precedents: ["#508", "#731", "#732"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -17,8 +18,22 @@ Every domain decoder reads its payload with `message.require_proto()` and feeds 
 `prost::Message::decode(...)`. There is no text branch and no format dispatch — `decode_proto_or_text`
 was retired with the floor ratchet.
 
-End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`.
-Never `Error::NotImplemented` or `Error::Simple(...)`.
+**`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
+filter: the sync and async subscription drivers drop anything not listed there *before* calling
+`decode`, because shared channels carry several types. A `decode` arm for an unlisted type is
+dead code. (The historical-tick driver in `market_data/historical/common/tick.rs` has its own
+single-valued `TickDecoder::MESSAGE_TYPE` doing the same job — a third mechanism, not yet
+unified.)
+
+End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`
+anyway. It is now a backstop for the two lists disagreeing, not a control-flow signal — it
+terminates the subscription, loudly. Never `Error::NotImplemented` or `Error::Simple(...)`.
+
+**Only one of the two drift directions is caught.** Declared-but-unhandled hits that backstop
+and fails loudly. Handled-but-undeclared is silent: the arm is unreachable and the message
+vanishes. Most domains' stub tests would catch it because they drive a real subscription, but
+`contracts`, `market_data/realtime`, and `wsh` test their decoders by calling `decode`
+directly and would not. Check the const when you add an arm.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
@@ -28,23 +43,25 @@ pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result
 
 ## Why
 
-The catch-all arm decides what an unrecognised message does to a live subscription.
-`process_decode_result` (`src/subscriptions/common.rs`) maps `UnexpectedResponse` to
-`ProcessingResult::Skip` — the message is dropped and the subscription survives. Every other
-error variant terminates it. A subscription that dies because TWS sent one message the
-decoder didn't recognise is the bug class of issue #508.
+`process_decode_result` (`src/subscriptions/common.rs`) used to map `UnexpectedResponse` to
+`ProcessingResult::Skip`, which made an error variant carry dispatch semantics. That is the
+defect behind both #508 (a subscription died on one unrecognised message) and #731 (a
+mis-framed fixture vanished): the same variant is returned to users as a genuine error by ~20
+one-shot call sites, so any decoder that reused it silently inherited "drop this". #732 moved
+the decision to the declared list, where it is data rather than an error code.
 
-`require_proto()` returns a **different** variant — `Error::UnexpectedWireFormat` — and that
-one is *not* skippable. The two failures look alike and are not:
+`require_proto()` returns `Error::UnexpectedWireFormat`, distinct from `UnexpectedResponse`
+because the two failures look alike and are not:
 
-| Call site | Meaning | Disposition |
-|---|---|---|
-| `_ => Err(Error::unexpected_response(message))` | not my message type | `Skip` — shared channels carry several types |
-| `message.require_proto()?` | my message type, unreadable framing | `Error` — the message was addressed to this decoder |
+| Call site | Meaning |
+|---|---|
+| `_ => Err(Error::unexpected_response(message))` | declared but unhandled — a bug in this impl |
+| `message.require_proto()?` | handled, but the framing is unreadable |
 
-A mis-framed fixture therefore fails its test rather than leaving it green with the
-post-`next_data()` assertions unrun — see [fixture builders](../testing/fixture-builders.md).
-At `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives
+Both terminate. Neither is skipped. A mis-framed fixture therefore fails its test rather than
+leaving it green with the post-`next_data()` assertions unrun — see
+[fixture builders](../testing/fixture-builders.md). At
+`server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives
 proto-framed, so `UnexpectedWireFormat` in production means the gateway broke protocol.
 
 `ResponseMessage::peek_int` is the mirror image — proto framing at a text-field accessor —
@@ -69,3 +86,5 @@ other two:
 - #508 — the original bug: an unknown message type terminated the subscription instead of
   being skipped.
 - #731 — split the framing failure out of the skip path so the fixture trap fails loudly.
+- #732 — retired skip-by-error-variant entirely; `RESPONSE_MESSAGE_IDS` is now the filter and
+  the const lost its default so every impl must declare one.

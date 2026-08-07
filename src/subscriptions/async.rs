@@ -11,9 +11,9 @@ use futures::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem};
+use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
@@ -94,6 +94,11 @@ pub struct Subscription<T> {
     cancel_fn: Option<Arc<CancelFn>>,
     /// Snapshot-end detector captured from the decoder (`None` for pre-decoded subscriptions).
     snapshot_end_fn: Option<SnapshotEndFn<T>>,
+    /// The decoder's declared message types, captured because `poll_next` has
+    /// erased the decoder to a closure. Required, not optional: an absent
+    /// declaration would silently disable the skip filter, which is the failure
+    /// shape `RESPONSE_MESSAGE_IDS` dropped its default to prevent.
+    response_message_ids: &'static [IncomingMessages],
 }
 
 enum SubscriptionInner<T> {
@@ -136,6 +141,7 @@ impl<T> Clone for Subscription<T> {
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
             snapshot_end_fn: self.snapshot_end_fn,
+            response_message_ids: self.response_message_ids,
         }
     }
 }
@@ -150,6 +156,7 @@ impl<T> Subscription<T> {
         internal: AsyncInternalSubscription,
         message_bus: Arc<dyn AsyncMessageBus>,
         decoder: D,
+        response_message_ids: &'static [IncomingMessages],
         request_id: Option<i32>,
         order_id: Option<i32>,
         context: DecoderContext,
@@ -171,6 +178,7 @@ impl<T> Subscription<T> {
             message_bus: Some(message_bus),
             cancel_fn: None,
             snapshot_end_fn: None,
+            response_message_ids,
         }
     }
 
@@ -188,7 +196,7 @@ impl<T> Subscription<T> {
     {
         super::common::debug_assert_request_id_routable::<T, D>(request_id);
 
-        let mut sub = Self::with_decoder(internal, message_bus, D::decode, request_id, order_id, context);
+        let mut sub = Self::with_decoder(internal, message_bus, D::decode, D::RESPONSE_MESSAGE_IDS, request_id, order_id, context);
         sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
         // Capture the decoder's snapshot-end detector so `poll_next` (which lacks the
         // `StreamDecoder` bound) can flag a completed snapshot and skip the cancel on
@@ -226,6 +234,8 @@ impl<T> Subscription<T> {
             message_bus: None,
             cancel_fn: None,
             snapshot_end_fn: None,
+            // Pre-decoded subscriptions never reach the filter (other poll_next arm).
+            response_message_ids: &[],
         }
     }
 
@@ -352,14 +362,15 @@ impl<T: Send + 'static> Stream for Subscription<T> {
             stream_ended,
             snapshot_ended,
             snapshot_end_fn,
+            response_message_ids,
             ..
         } = this;
         loop {
             match inner {
                 SubscriptionInner::WithDecoder { subscription, decoder } => {
                     // Drain the BroadcastStream synchronously while items are
-                    // ready, so we can apply Skip without re-yielding to the
-                    // executor between immediately-available items.
+                    // ready, so skipped frames don't re-yield to the executor
+                    // between immediately-available items.
                     let routed = match Pin::new(&mut subscription.stream).poll_next(cx) {
                         Poll::Ready(Some(Ok(item))) => item,
                         Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
@@ -369,23 +380,22 @@ impl<T: Send + 'static> Stream for Subscription<T> {
 
                     match routed {
                         RoutedItem::Response(mut message) => {
-                            let result = decoder(context, &mut message);
-                            match process_decode_result(result) {
-                                ProcessingResult::Success(val) => {
+                            if is_undeclared(response_message_ids, &message) {
+                                log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
+                                continue;
+                            }
+                            match decoder(context, &mut message) {
+                                Ok(val) => {
                                     if snapshot_end_fn.is_some_and(|is_end| is_end(&val)) {
                                         snapshot_ended.store(true, Ordering::Relaxed);
                                     }
                                     return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
                                 }
-                                ProcessingResult::EndOfStream => {
+                                Err(Error::EndOfStream) => {
                                     stream_ended.store(true, Ordering::Relaxed);
                                     return Poll::Ready(None);
                                 }
-                                ProcessingResult::Skip => {
-                                    log::trace!("skipping unexpected message on shared channel");
-                                    continue;
-                                }
-                                ProcessingResult::Error(err) => {
+                                Err(err) => {
                                     stream_ended.store(true, Ordering::Relaxed);
                                     return Poll::Ready(Some(Err(err)));
                                 }

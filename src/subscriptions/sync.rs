@@ -7,9 +7,7 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{
-    debug_assert_request_id_routable, filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem,
-};
+use super::common::{debug_assert_request_id_routable, filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
@@ -161,22 +159,22 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
     fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
         match response {
-            Some(RoutedItem::Response(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
-                ProcessingResult::Success(val) => {
+            Some(RoutedItem::Response(message)) if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) => {
+                log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
+                NextAction::Skip
+            }
+            Some(RoutedItem::Response(mut message)) => match T::decode(&self.context, &mut message) {
+                Ok(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
                     }
                     NextAction::Return(Some(Ok(SubscriptionItem::Data(val))))
                 }
-                ProcessingResult::Skip => {
-                    log::trace!("skipping unexpected message on shared channel");
-                    NextAction::Skip
-                }
-                ProcessingResult::EndOfStream => {
+                Err(Error::EndOfStream) => {
                     self.stream_ended.store(true, Ordering::Relaxed);
                     NextAction::Return(None)
                 }
-                ProcessingResult::Error(err) => {
+                Err(err) => {
                     match &err {
                         Error::Notice(n) => warn!("subscription terminated by TWS error {n}"),
                         _ => error!("error decoding message: {err}"),

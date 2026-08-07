@@ -143,9 +143,9 @@ This is an allow-list, not a sentinel — it deliberately prevents misrouting me
 `ResponseMessage::request_id()` short-circuits on a missing entry *before* reaching its
 protobuf-envelope branch, so a message with no entry silently never routes.
 
-⚠️ `MessageBusStub` tests sit below the dispatcher and pass with the registration missing.
-Only a live-gateway smoke test surfaces the gap. Full detail:
-[proto-aware accessors](rules/wire/proto-aware-accessors.md).
+`MessageBusStub` tests sit below the dispatcher and pass with the registration missing, but
+they do run the subscription constructor, where `debug_assert_request_id_routable` catches it
+(#730). Full detail: [proto-aware accessors](rules/wire/proto-aware-accessors.md).
 
 ### Step 4: Implement Shared Business Logic
 
@@ -166,8 +166,7 @@ pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Re
 // The transport is protobuf-only. `require_proto()` hands back the payload from
 // `raw_bytes`, or returns `Error::UnexpectedWireFormat` if a text-framed message
 // reaches this decoder (a stale test fixture, or a future-version regression).
-// That variant is *not* skipped — it fails the subscription, unlike the
-// wrong-message-type `Error::UnexpectedResponse` below.
+// It fails the subscription; nothing here is silently skipped.
 pub(in crate::<module>) fn decode_my_response(message: &ResponseMessage) -> Result<MyData, Error> {
     decode_my_response_proto(message.require_proto()?)
 }
@@ -187,7 +186,7 @@ misleading. Once verified, add `impl FromStr<Err = Error>` and decode with the g
 back to `T::default()`, which masks incomplete TWS responses. Full detail:
 [wire enum typing](rules/wire/enum-typing.md).
 
-For `StreamDecoder::decode`, end the match with `_ => Err(Error::unexpected_response(message))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508. Full detail: [proto-only decoding](rules/wire/proto-only-decoding.md).
+For `StreamDecoder`, list every type your `decode` match handles in `RESPONSE_MESSAGE_IDS` — the subscription drivers skip anything not listed there before `decode` runs, so an arm for an unlisted type is dead code. End the match with `_ => Err(Error::unexpected_response(message))` as a backstop for the two disagreeing; never `NotImplemented` or `Simple`. Full detail: [proto-only decoding](rules/wire/proto-only-decoding.md).
 
 ### Step 5: Implement Sync Version
 

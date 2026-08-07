@@ -33,10 +33,10 @@ not `Builder::new()`.
 
 Use `text_response(...)` only for message types with no proto decoder. A text-framed
 response reaching a proto-only decoder fails the subscription with
-`Error::UnexpectedWireFormat`, which `process_decode_result` does not skip — so a fixture left
-in the legacy `response_messages: Vec<String>` form dies on its `expect`/`unwrap` rather than
-iterating zero times and asserting nothing. Only `Error::UnexpectedResponse` — wrong message
-*type* — is skipped, which is what shared channels need. See
+`Error::UnexpectedWireFormat` — so a fixture left in the legacy
+`response_messages: Vec<String>` form dies on its `expect`/`unwrap` rather than iterating zero
+times and asserting nothing. No error variant is skippable; whether a message belongs to a
+subscription is decided from `RESPONSE_MESSAGE_IDS` before decoding. See
 [proto-only decoding](../wire/proto-only-decoding.md).
 
 Field-minimal scales further than it looks: PR #534's `ContractDataResponse` covers roughly
