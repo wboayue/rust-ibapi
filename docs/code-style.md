@@ -69,7 +69,7 @@ Always run `cargo fmt` before committing code. The project uses default rustfmt 
 
 Run clippy for both feature flags before committing:
 ```bash
-cargo clippy --features sync -- -D warnings
+cargo clippy --no-default-features --features sync -- -D warnings
 cargo clippy --features async -- -D warnings
 ```
 

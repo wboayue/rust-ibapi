@@ -101,14 +101,15 @@ job (`on: push` to `main`) went red and stayed red for 11 commits until #671 fix
 `CLAUDE.md` clippy trio had the same flag bug and is corrected in this PR — its middle config
 was sync+async, while the rustdoc trio's middle config was genuinely sync-only.
 
-### Follow-up this pass surfaced (not done here)
+### Follow-up this pass surfaced — ~~open~~ **closed in the stacked PR**
 
-**`just test` and `ci.yml` do not cover sync-only or `--all-features`.** Verified green today,
-so this is latent, not broken. Fixing it means a `just test` leg
-(`cargo test --no-default-features --features sync`) and a CI matrix entry — a behavior change
-to the gates, deliberately out of scope for a docs migration. Decide separately whether the CI
-minutes are worth it, or whether the corrected local commands plus the post-merge Coverage job
-are enough.
+`just test` and `ci.yml` did not cover sync-only or `--all-features`. Both now run one leg per
+configuration, with flags spelled out per leg so the additive-features trap cannot reappear
+through a `matrix.feature` interpolation. `docs/build-and-test.md` and `docs/code-style.md`
+carried the same misconception in ~16 command lines and were swept.
+
+CI cost: two legs to three, so roughly +50% wall-clock on the matrix job. Judged worth it —
+the gap it closes went unnoticed through 11 merges.
 
 ## Retrieval check — run this before migrating further
 

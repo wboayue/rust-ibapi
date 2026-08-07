@@ -25,12 +25,18 @@ versions:
     @git tag
 
 # Run tests for both sync and async features
+# One leg per feature configuration. `--features sync` would NOT be the sync-only
+# build: default = ["async"] and cargo features are additive, so it means sync AND
+# async. See docs/rules/parity/feature-matrix.md.
 test:
-    @echo "Running sync tests..."
-    cargo test --features sync
+    @echo "Running async tests (default features)..."
+    cargo test
     @echo ""
-    @echo "Running async tests..."
-    cargo test --features async
+    @echo "Running sync-only tests..."
+    cargo test --no-default-features --features sync
+    @echo ""
+    @echo "Running all-features tests (sync + async + utoipa)..."
+    cargo test --all-features
 
 # Run sync integration tests (requires running gateway)
 integration-sync:
