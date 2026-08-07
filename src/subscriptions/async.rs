@@ -186,6 +186,8 @@ impl<T> Subscription<T> {
         D: StreamDecoder<T> + 'static,
         T: StreamDecoder<T> + 'static,
     {
+        super::common::debug_assert_request_id_routable::<T, D>(request_id);
+
         let mut sub = Self::with_decoder(internal, message_bus, D::decode, request_id, order_id, context);
         sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
         // Capture the decoder's snapshot-end detector so `poll_next` (which lacks the

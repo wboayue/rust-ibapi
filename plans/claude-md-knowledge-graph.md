@@ -104,7 +104,7 @@ job (`on: push` to `main`) went red and stayed red for 11 commits until #671 fix
 `CLAUDE.md` clippy trio had the same flag bug and is corrected in this PR — its middle config
 was sync+async, while the rustdoc trio's middle config was genuinely sync-only.
 
-### Follow-up this pass surfaced — ~~open~~ **closed in the stacked PR**
+### Follow-up this pass surfaced, closed in the stacked PR
 
 `just test` and `ci.yml` did not cover sync-only or `--all-features`. Both now run one leg per
 configuration, with flags spelled out per leg so the additive-features trap cannot reappear
@@ -312,48 +312,53 @@ another references a *different* rule 19. Any surviving "rule N" citation has to
 against the `CLAUDE.md` of its own date. Both `plans/` files that were organised by number now
 cite nodes.
 
+## Prose replaced by a gate — #730
+
+`CLAUDE.md` carried two "traps that pass CI silently", and one of them is now enforced by
+code instead — the first entry in the follow-up list, and the reason it is gone from it.
+The guard is `debug_assert_request_id_routable`
+(`src/subscriptions/common.rs`) runs in both subscription constructors and panics when a
+`request_id`-keyed subscription is built for a decoder declaring a response type the
+dispatcher cannot route to it. Classification is `first_unroutable_by_request_id`
+(`src/transport/routing.rs`); it accepts on the same three arms `determine_routing` uses.
+
+The placement is what makes it work. `MessageBusStub` tests bypass the dispatcher — that is
+the whole reason the failure was invisible — but they do not bypass the constructor, so the
+guard fires in exactly the tests that used to pass in silence. Compiled out of release builds;
+the invariant is over static tables and cannot depend on caller input.
+
+**It found a live bug on its first run.** `MarketDataType` has been in `TickTypes`'s
+`RESPONSE_MESSAGE_IDS` since #516 (2026-05-05) and never in `text_request_id_field`, so
+`TickTypes::MarketDataType` could not reach a `market_data` subscription — the tick was routed
+to a shared channel nobody subscribes to and dropped. Nine tests failed the moment the guard
+went in. The decoder had a unit test, and it passed: it calls `TickTypes::decode` directly,
+which is the same one-layer-too-low seam the rule warns about.
+
+Generalising past this file: **a rule that names its own silent-failure mode is a rule with a
+missing gate.** The rule entered `CLAUDE.md` with #647 on 2026-05-27, three weeks *after* #516
+put the second instance in the tree. It described that failure accurately for ten weeks and
+caught none of it.
+
+The second trap — a text-framed fixture reaching a proto-only decoder is skip-classified, so
+the test goes green with its assertions unrun — is still prose. It resists the same treatment:
+`Error::UnexpectedResponse` legitimately means "not my message" on shared channels, and
+several tests assert the skip on purpose, so the fixture-shape bug is not separable from
+correct behaviour without a distinct error variant. Left in `CLAUDE.md`, alone now.
+
 ## Follow-ups
 
-- **Replace the two inline silent-failure warnings with a real gate.** A test asserting that
-  every `IncomingMessages` variant reachable by a public API has a `text_request_id_field`
-  entry would retire that clause from prose entirely. Prose is the weakest possible
-  enforcement for a failure mode that passes CI.
-- ~~**Audit the remaining rules for rot** before migrating each cluster.~~ **Done — all six
-  clusters audited.** What replaces it: re-audit on a cadence, and count the completeness
-  claims rather than only checking that cited symbols exist. The three live counts to re-check
-  are 128/153 `# Examples`, the `<dir>/tests.rs` residue, and the four `client/` methods that
-  belong in domain modules.
+- **Give the fixture-framing trap a gate too.** Needs `require_proto`'s rejection to be
+  distinguishable from an ordinary wrong-channel skip — a separate `Error` variant, or a
+  test-build counter on `MessageBusStub` for responses no subscriber decoded. Until then it is
+  the only silent-failure clause left in `CLAUDE.md`.
+- **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
+  once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
+  checking that a cited symbol exists does not check it. The two live counts are 134/152
+  `# Examples` and the `<dir>/tests.rs` residue.
 - **Close the two inventories the audits opened.** Eight missing `# Examples` and the
   `param-budget` violations both sit in
   [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
   take-one-when-you-are-in-the-file work rather than sweeps.
-- ~~**Move `Client::order` and `Client::market_data` into their domain modules.**~~ **Done in
-  #729.** `order` → `orders/{sync,async}.rs`, `market_data` →
-  `market_data/realtime/{sync,async}.rs`. The "Known drift" section is gone from
-  [domain module layout](../docs/rules/style/domain-module-layout.md); the node now documents
-  no exceptions.
-
-  **The doc gap travelled with the method.** Async `market_data` was one of the nine missing
-  `# Examples` sites *and* the only doc-parity miss among them — a one-line summary against the
-  sync twin's two runnable examples. Written on arrival, so the count is now 134 of 152.
-  Moving a method is the cheapest moment to close its doc debt: the twin is already open in
-  the diff.
-- ~~**Stale rule-number citations in source.**~~ **Done in the `testing/` pass.** All 27
-  `rule N` citations across `src/` now name node paths instead of numbers. (A 28th,
-  `orders/mod.rs:1115`, is IBKR's Rule 80A — a false positive, left alone.)
-
-  **Mapping by number would have been wrong.** The four citations in `market_data/historical/`
-  read "rule 19 canary acceptable for builder-fed helpers" — that is the
-  `#[allow(clippy::too_many_arguments)]` exception, a **different rule 19** from the migrated
-  one (proto fixture migration). Meanwhile ten citations said "rule 20" for what is now
-  `proto-only-decoding` (id 15), because they were written under the older numbering, while
-  `display_groups/async_tests.rs:72` says "rule 15" for the *same* node under current
-  numbering. Old and current schemes coexist in `src/` with no marker distinguishing them, so
-  every site had to be read for intent. This is the strongest evidence yet for retiring
-  numbers entirely rather than maintaining them.
-
-  The four builder-fed `#[allow(clippy::too_many_arguments)]` sites now cite
-  [param budget](../docs/rules/style/param-budget.md), closed in the `style/` pass.
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one

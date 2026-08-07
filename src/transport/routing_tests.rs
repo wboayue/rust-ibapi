@@ -397,3 +397,40 @@ fn test_determine_routing_protobuf_request_id_message() {
         routing => panic!("Expected ByRequestId(314), got {routing:?}"),
     }
 }
+
+#[test]
+fn test_determine_routing_protobuf_market_data_type() {
+    // Regression for the silent drop: MarketDataType is declared by the
+    // `TickTypes` decoder, so it has to reach a request_id-keyed subscription.
+    // Before it was added to `text_request_id_field` it fell through to
+    // ByMessageType and landed on a shared channel nobody subscribes to.
+    let bytes = crate::proto::MarketDataType {
+        req_id: Some(9001),
+        market_data_type: Some(3),
+    }
+    .encode_to_vec();
+    let message = proto_response(IncomingMessages::MarketDataType, bytes);
+    match determine_routing(&message) {
+        RoutingDecision::ByRequestId(id) => assert_eq!(id, 9001),
+        routing => panic!("Expected ByRequestId(9001), got {routing:?}"),
+    }
+}
+
+#[test]
+fn test_first_unroutable_by_request_id_accepts_registered_types() {
+    // The three ways in, one per arm of `routable_to_request_id_subscription`.
+    let declared = &[
+        IncomingMessages::TickPrice,         // text_request_id_field entry
+        IncomingMessages::CommissionsReport, // order-scoped, arrives via the order-id channel
+        IncomingMessages::Error,             // classified before the allow-list
+    ];
+    assert_eq!(first_unroutable_by_request_id(declared), None);
+    assert_eq!(first_unroutable_by_request_id(&[]), None);
+}
+
+#[test]
+fn test_first_unroutable_by_request_id_reports_first_offender() {
+    // FamilyCodes and MarketRule are shared-channel types with no request id.
+    let declared = &[IncomingMessages::TickPrice, IncomingMessages::FamilyCodes, IncomingMessages::MarketRule];
+    assert_eq!(first_unroutable_by_request_id(declared), Some(IncomingMessages::FamilyCodes));
+}

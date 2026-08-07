@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem};
+use super::common::{
+    debug_assert_request_id_routable, filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem,
+};
 use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
@@ -59,6 +61,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         let request_id = subscription.request_id;
         let order_id = subscription.order_id;
         let message_type = subscription.message_type;
+
+        debug_assert_request_id_routable::<T, T>(request_id);
 
         Subscription {
             context,

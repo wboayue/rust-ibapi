@@ -346,6 +346,7 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::DisplayGroupList
         | IncomingMessages::DisplayGroupUpdated
         | IncomingMessages::ExecutionDataEnd
+        | IncomingMessages::MarketDataType
         | IncomingMessages::MarketDepth
         | IncomingMessages::MarketDepthL2
         | IncomingMessages::PositionMulti

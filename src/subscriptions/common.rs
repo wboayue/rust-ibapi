@@ -162,8 +162,11 @@ impl DecoderContext {
 /// Decoders receive a `DecoderContext` containing server version, timezone, and other
 /// context needed to properly decode messages.
 pub(crate) trait StreamDecoder<T> {
-    /// Message types this stream can handle
-    #[allow(dead_code)]
+    /// Message types this stream can handle.
+    ///
+    /// Load-bearing for `request_id`-keyed subscriptions: every type listed here
+    /// is checked against the routing allow-list by
+    /// [`debug_assert_request_id_routable`] when the subscription is built.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
 
     /// Decode a response message into the stream's data type
@@ -178,6 +181,33 @@ pub(crate) trait StreamDecoder<T> {
     #[allow(unused)]
     fn is_snapshot_end(&self) -> bool {
         false
+    }
+}
+
+/// Debug-build guard: panics when a `request_id`-keyed subscription is built for
+/// a decoder declaring a response type the dispatcher cannot route to it.
+///
+/// This is the enforcement the registration rule otherwise lacks. A decoder
+/// claiming a message type missing from `text_request_id_field` gets a
+/// subscription that silently never yields it, and no `MessageBusStub` test
+/// notices, because those inject responses below the dispatcher — before PR #730
+/// only a live gateway showed the gap (PR #647). They do run this constructor,
+/// which is why the check sits here rather than in a test of its own.
+///
+/// Compiled out of release builds; the invariant is over static tables, so it
+/// cannot depend on anything a caller passes in.
+pub(crate) fn debug_assert_request_id_routable<T, D: StreamDecoder<T>>(request_id: Option<i32>) {
+    if !cfg!(debug_assertions) || request_id.is_none() {
+        return;
+    }
+
+    if let Some(kind) = crate::transport::routing::first_unroutable_by_request_id(D::RESPONSE_MESSAGE_IDS) {
+        panic!(
+            "{} declares {kind:?} in RESPONSE_MESSAGE_IDS, but {kind:?} has no `text_request_id_field` entry \
+             in src/messages.rs — a request_id-keyed subscription can never receive it. \
+             See docs/rules/wire/proto-aware-accessors.md",
+            std::any::type_name::<D>()
+        );
     }
 }
 

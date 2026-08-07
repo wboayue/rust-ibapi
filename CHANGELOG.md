@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `TickTypes::MarketDataType` now reaches `Client::market_data` subscriptions. The message type was missing from the request-id routing allow-list, so TWS's market-data-type notifications (real-time / frozen / delayed / delayed-frozen, sent on subscribe and whenever the feed switches) were routed to a shared channel nobody subscribes to and dropped. The decoder has produced the variant since #516; nothing could ever yield it (#730).
+
 - Decimal-typed wire fields no longer fall back to `0` when the value fails to parse; a malformed value now surfaces as `Error::Parse` and fails the request or subscription instead of being silently swallowed. Covers order quantities, execution shares, positions, contract-detail sizes, bar volume/WAP, tick and market-depth sizes (#716).
 - TWS "unset" sentinels (`2147483647`, `9223372036854775807`, `-9223372036854775808`, `1.7976931348623157E308`) are now recognized on those same fields rather than only `OrderState.suggested_size` and `OrderAllocation.*`. They decode to `None`, or to `0.0` on fields still typed `f64`, instead of leaking as a literal 2.1-billion size (#716).
 
