@@ -97,6 +97,10 @@ jobs:
       - name: Check Cargo.toml
         run: |
           cargo metadata --format-version 1 > /dev/null
+
+      # Validate the docs/rules/ knowledge graph and its CLAUDE.md index
+      - name: Check rules graph
+        run: ./tools/check-rules-graph.sh
           
       # Audit dependencies for security vulnerabilities
       - name: Security audit
