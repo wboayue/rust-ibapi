@@ -55,12 +55,6 @@ precedents. Everything not yet migrated is still inline under Key Points below.
   [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md)
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
 
-> **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
-> a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
-> dispatcher and pass without it. And a text-framed fixture reaching a proto-only decoder is
-> skip-classified, so the test goes green with its post-`next_data()` assertions unrun.
-> Neither failure announces itself; read the linked nodes before touching either surface.
-
 ### Testing
 
 - **Adding a `pub` / `pub(crate)` fn, or checking coverage before opening a PR** →
@@ -72,6 +66,16 @@ precedents. Everything not yet migrated is still inline under Key Points below.
 - **Asserting against a version-gated API** → [derive from constants](docs/rules/testing/derive-from-constants.md)
 - **Writing a doc-test that must *not* compile** → [pin compile_fail codes](docs/rules/testing/pin-compile-fail-codes.md)
 - **A function that reads the clock and then branches** → [clock seams](docs/rules/testing/clock-seams.md)
+
+> **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
+> a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
+> dispatcher and pass without it; see
+> [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md). And a text-framed fixture
+> reaching a proto-only decoder is skip-classified, so the test goes green with its
+> post-`next_data()` assertions unrun; see
+> [fixture builders](docs/rules/testing/fixture-builders.md) and
+> [proto-only decoding](docs/rules/wire/proto-only-decoding.md). Neither failure announces
+> itself; read the linked nodes before touching either surface.
 
 Rule numbers 6, 8, 10, 15–17, 19–22, and 26 are retired, not reused — the gaps are deliberate.
 Numbering is dropped entirely once the remaining clusters migrate; see

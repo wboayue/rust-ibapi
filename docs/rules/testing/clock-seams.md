@@ -22,7 +22,9 @@ Keep the public method as a one-line wrapper that fetches the clock and delegate
 dates:
 
 ```rust
-let expiry = ContractMonth::third_friday_from(date!(2025 - 03 - 21));
+// production: ExpirationDate::third_friday_of_month() reads the clock, delegates
+let tf = ExpirationDate::third_friday_from(date!(2025 - 03 - 22));
+assert_eq!(format!("{}", tf), "20250418"); // past the third Friday, rolls a month
 ```
 
 Use `time::macros::date!` for literal dates, not `Date::from_calendar_date(..).unwrap()` — it
@@ -34,9 +36,11 @@ The seam is the function that takes the value as a parameter. Everything non-det
 belongs on one side of it and all the logic on the other, so tests can drive every arm without
 waiting for a Friday.
 
-`src/contracts/types.rs` is the worked example: `next_friday_from` and `third_friday_from` take
-a `Date`, while `front_from` and `next_quarter_from` take `(year, month, day)` — either shape
-works, the point is that the clock read happens in the caller.
+`src/contracts/types.rs` is the worked example, across two types. `ExpirationDate` carries
+`next_friday_from` / `third_friday_from`, which take a `Date`; `ContractMonth` carries
+`front_from` / `next_quarter_from`, which take `(year, month, day)`. Either shape works — the
+point is that the clock read happens in the caller. The helpers stay private; the sibling
+`types_tests.rs` reaches them through `use super::*;`.
 
 The same structure applies to any non-deterministic read that production then branches on —
 env vars, random generators — not just time.
