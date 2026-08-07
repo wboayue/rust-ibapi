@@ -92,6 +92,9 @@ src/<module>/
 Response fixtures do **not** live in the module. They belong to the crate-wide
 `src/testdata/builders/<domain>.rs`, one builder per domain implementing `ResponseProtoEncoder`.
 
+Why the client surface belongs here rather than in `client/`, and where helper modules may
+nest: [domain module layout](rules/style/domain-module-layout.md).
+
 ## Module Structure Pattern
 
 Follow this pattern when creating new modules:

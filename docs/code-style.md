@@ -14,8 +14,7 @@
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max 50 lines per function; extract if larger
-- Functions with 4+ parameters should use a builder pattern. The receiver (`self` / `&self` / `&mut self`) does not count toward this budget — `pub fn foo(&self, a, b, c)` is compliant; `pub fn foo(&self, a, b, c, d)` is not.
-- **Builder rationale matters.** The rule exists to spare callers from positional-argument noise when there are optional / defaultable fields. A 4+ param function where *every* arg is required with no reasonable default gains little from a builder — `client.foo(a, b, c, d, e)` is no worse than `client.foo(a).b(b).c(c).d(d).e(e).run()`. For all-required signatures, prefer grouping related args into a struct (e.g. `DateRange { start, end }`) or accept the violation with a comment, rather than mechanical builder conversion.
+- Three parameters is the budget; the receiver does not count. See [param budget](rules/style/param-budget.md) for what a fourth argument should become and when a flat signature is still right.
 
 ### Composition
 - Combine small, focused components to build complex behavior
@@ -67,11 +66,9 @@ Always run `cargo fmt` before committing code. The project uses default rustfmt 
 
 ## Linting
 
-Run clippy for both feature flags before committing:
-```bash
-cargo clippy --no-default-features --features sync -- -D warnings
-cargo clippy --features async -- -D warnings
-```
+Run clippy once per feature configuration before committing — three legs, all with
+`--all-targets`, spelled out in [pre-PR checks](rules/workflow/pre-pr-checks.md). Note that
+`--features sync` alone leaves the default `async` feature on, so it is not the sync-only build.
 
 ## Naming Conventions
 

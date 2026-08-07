@@ -3,8 +3,8 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status:** `wire/`, `testing/`, `parity/`, and `workflow/` clusters migrated. Two clusters
-remain inline.
+**Status:** `wire/`, `testing/`, `parity/`, `workflow/`, and `style/` clusters migrated. One
+cluster (`docs/`) remains inline.
 
 ## Why
 
@@ -157,6 +157,50 @@ already in the module.
 audits so far checked that cited symbols exist. Neither checked whether "fully applied", "zero
 remaining", or "all N sites" was still true, and that is the class that failed twice.
 
+## What shipped in the style/ pass
+
+| Node | From | Status |
+|---|---|---|
+| `style/domain-module-layout.md` | rule 2 | active |
+| `style/param-budget.md` | rule 4 | active |
+| `style/narrow-reexports.md` | rule 14 | active |
+| `style/macros-last-resort.md` | rule 25 | active |
+
+Rule 4 was the one rule with a **verbatim second copy** outside `CLAUDE.md` — its two SRP
+bullets in `docs/code-style.md` repeated the builder rationale word for word. That copy is now
+a one-line pointer at the node. Same shape as the Quick Commands duplication the `workflow/`
+pass found, and the reason to grep `docs/` for a rule's text before migrating it.
+
+### Rot corrected while migrating
+
+Rules 14 and 25 audited clean on names and on counts — `src/macros.rs` hosts exactly the two
+macros rule 25 names, `impl_str_partial_eq!` still has 3 invocations and `impl_wire_enum!` 8,
+both generic demotions (`check_serde_round_trip`, `check_str_partial_eq_round_trip`) survive
+as generics, and `orders/common` / `accounts/common` still expose their decoders via
+`pub(super) mod` + a narrow `pub(crate) use` list.
+
+| Was | Is |
+|---|---|
+| Rule 2: "Client methods live in domain modules, not in `client/sync.rs`" | True of 11 domains and **false of four sites**: `Client::order` and `Client::market_data` are defined in `client/sync.rs` and `client/async.rs`, while every sibling builder entry point (`realtime_bars`, `tick_by_tick`, `market_depth`) lives in its domain module. Recorded as known drift on the node |
+| Rule 4 implied `#[allow(clippy::too_many_arguments)]` is the canary for the 3-param budget | Clippy's default threshold is **7** — it fires at eight or more, and the budget is three. All four `#[allow]` sites in the tree are 8-arg encoders; a 4-to-7-arg signature passes every gate silently. The budget has no enforcement at all |
+| Rule 4's `DateRange { start, end }` | Hypothetical — no such type exists. Kept as illustration, marked as one |
+| Rule 25 credits the orphan rule only implicitly ("can't be deduplicated via a blanket trait impl") | `impl_wire_enum!`'s own doc names it outright: `impl<T: WireEnum> Display` is blocked by the orphan rule, which is *why* the macro is the only viable shape. Promoted to the node's first justification |
+
+Two clippy blocks were also still two legs without `--all-targets` — `docs/code-style.md`'s
+Linting section and `docs/build-and-test.md`'s Code Quality block. The `parity/` pass swept
+`build-and-test.md`'s *pre-PR* block and missed the one 80 lines above it, which is how the same
+file ended up contradicting itself. `build-and-test.md` now spells the three legs out once;
+`code-style.md` points at [pre-PR checks](../docs/rules/workflow/pre-pr-checks.md) rather than
+becoming a third copy.
+
+**Review of this pass caught two fabricated counts in the new nodes.** `param-budget` credited
+`PeggedToBenchmark` with "seven defaultable fields" (six setters over eight fields — the number
+matched nothing), and `domain-module-layout` said "eleven domains" over a list of ten plus
+`client`. Neither came from stale evidence; both were invented while writing prose *about* the
+danger of invented counts. Third pass running where a count claim failed, and the first where
+the count was new rather than inherited — so the lesson generalises past migration: **any
+number in a node needs a command behind it at the moment it is written.**
+
 ## Retrieval check — run this before migrating further
 
 **Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,
@@ -200,12 +244,11 @@ session is noisy evidence; re-run if the result is ambiguous.
 
 ## Remaining clusters
 
-Migrate in this order — highest density and clearest boundaries first:
+One cluster left:
 
 | Order | Cluster | Rules | Notes |
 |---|---|---|---|
-| 1 | `style/` | 2, 4, 14, 25 | Rule 4 is cited by prose in `market_data/historical/` and by rule 25; wire both up when it lands |
-| 2 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | Rule 27 already links out to `modernize-touched-modules` and `dual-feature-types` |
+| 1 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | Rule 27 already links out to `modernize-touched-modules` and `dual-feature-types`, and `param-budget` defers its `Option<T>`-removal sub-rule to it |
 
 **Do not renumber surviving rules.** The gap at 15–20 is deliberate. Rule numbers are already
 unreliable across stores — one memory cites "rules 20/22" for the family now at 15/17, and
@@ -234,9 +277,8 @@ by rule number throughout. Numbering is retired at the end of migration, not inc
   every site had to be read for intent. This is the strongest evidence yet for retiring
   numbers entirely rather than maintaining them.
 
-  The builder-fed sites now carry the rationale in prose with no citation, since the governing
-  rule (4, param budget) is still inline and unmigrated. Link them to the node when `style/`
-  ships.
+  The four builder-fed `#[allow(clippy::too_many_arguments)]` sites now cite
+  [param budget](../docs/rules/style/param-budget.md), closed in the `style/` pass.
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one

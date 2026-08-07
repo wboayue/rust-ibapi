@@ -130,6 +130,9 @@ src/<module>/
 └── async.rs       # Asynchronous implementation
 ```
 
+The `impl Client` blocks for a domain live in that domain's `sync.rs` / `async.rs`, never in
+`client/` — see [domain module layout](rules/style/domain-module-layout.md).
+
 ### Example Module Implementation
 
 ```rust
