@@ -36,8 +36,12 @@ Client-method violations exposed by the receiver clarification (each appears in 
 ## Out-of-scope on the audit pass
 
 - [Coverage floor](../docs/rules/testing/coverage-floor.md) (90% target, audit-time rule 6) — not audited; run `just cover` per PR.
-- Rule 11 (integration crate builds) — gates run on touch.
-- Audited clean: rules 13, 14, 23, 25 (still inline), plus
+- [Integration crate builds](../docs/rules/workflow/integration-crate-builds.md) (audit-time
+  rule 11) — gates run on touch.
+- Audited clean: rules 14, 25 (still inline),
+  [no parity wrappers](../docs/rules/parity/no-parity-wrappers.md) (audit-time rule 13),
+  [restrict after callers](../docs/rules/workflow/restrict-after-callers.md) (audit-time
+  rule 23), plus
   [wire enum typing](../docs/rules/wire/enum-typing.md) (audit-time rule 16),
   [floor-ratchet splits](../docs/rules/wire/floor-ratchet-splits.md) (audit-time rule 20), and
   [clock seams](../docs/rules/testing/clock-seams.md) (audit-time rule 26).

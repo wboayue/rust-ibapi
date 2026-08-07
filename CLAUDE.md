@@ -81,6 +81,20 @@ precedents. Everything not yet migrated is still inline under Key Points below.
 - **Consuming an async `Subscription<T>`** →
   [subscription consumer idiom](docs/rules/parity/subscription-consumer-idiom.md)
 
+### Workflow
+
+- **About to commit or open a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
+  the rustdoc trio is a local-only gate; CI does not fail on broken intra-doc links
+- **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
+  [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
+  outside `default-members`, so every automated gate skips them
+- **Editing a module that still carries old idioms** →
+  [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md)
+- **Adding `#[non_exhaustive]` / `#[must_use]`, removing a `pub` field, or narrowing to
+  `pub(crate)`** → [restrict after callers](docs/rules/workflow/restrict-after-callers.md)
+- **A clippy lint fires locally but not in CI, or you are upgrading Rust** →
+  [pinned toolchain](docs/rules/workflow/pinned-toolchain.md)
+
 > **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
 > a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
 > dispatcher and pass without it; see
@@ -91,59 +105,60 @@ precedents. Everything not yet migrated is still inline under Key Points below.
 > [proto-only decoding](docs/rules/wire/proto-only-decoding.md). Neither failure announces
 > itself; read the linked nodes before touching either surface.
 
-Rule numbers 1, 5, 6, 8, 10, 12, 13, 15–17, 19–22, 24, and 26 are retired, not reused — the
-gaps are deliberate.
+Rule numbers 1, 3, 5–13, 15–17, 19–24, and 26 are retired, not reused — the gaps are
+deliberate.
 Numbering is dropped entirely once the remaining clusters migrate; see
 [plans/claude-md-knowledge-graph.md](plans/claude-md-knowledge-graph.md).
 
 ## Key Points to Remember
 
 2. **Follow module structure**: Client methods live as `impl Client` blocks in domain modules (e.g., `news/sync.rs`), not in `client/sync.rs` or `client/async.rs`. Prefer the flat `<domain>/sync.rs` + `<domain>/async.rs` layout over `<domain>/sync/mod.rs` — the project minimizes `mod.rs` files. Use `common/` for shared logic between sync/async. Protobuf decoders live in each domain's `common/decoders.rs`; shared proto→domain converters live in `proto/decoders.rs`
-3. **Run quality checks before committing**: every command in [Quick Commands](#quick-commands) below — formatter, all three clippy configs, all three rustdoc configs. `cargo test --doc` only validates doc-test compilation, not intra-doc link resolution; that's why the rustdoc step is separate
 4. **Design principles**: see [docs/code-style.md](docs/code-style.md#design-principles) for SRP, composition, and avoiding repetition. Project-specific constraint: max 3 params per function — use a builder for 4+. The receiver (`self` / `&self` / `&mut self`) does not count toward this budget; `pub fn foo(&self, a, b, c)` is at the limit, `pub fn foo(&self, a, b, c, d)` needs a builder. **Builder rationale matters**: the rule's goal is to spare callers from positional-argument noise when there are optional / defaultable fields. A 4+ param function where *every* arg is required with no reasonable default gains little from a builder — `client.foo(a, b, c, d, e)` is no worse than `client.foo(a).b(b).c(c).d(d).e(e).run()`. For all-required signatures, prefer grouping related args into a struct (e.g. `DateRange { start, end }`) or accept the violation with a comment, rather than mechanical builder conversion
-7. **Pinned Rust toolchain**: `rust-toolchain.toml` pins this branch to a specific Rust version (1.95.0 on `main`, 1.93.0 on `v2-stable`); `.github/workflows/ci.yml` pins `dtolnay/rust-toolchain@<same-version>`. CI and local must agree on the version so clippy lints don't surprise anyone. To upgrade: bump both files in the same PR, fix any new lints, verify CI green
-9. **Modernize touched modules**: When modifying a module for a feature or fix, also bring the rest of it up to current project conventions in the same PR — extract inline tests to a sibling `_tests.rs`, fix small style drift, normalize patterns. Be aggressive: don't leave a module half-migrated. Large mechanical sweeps unrelated to the feature still belong in their own PR
-11. **Build integration crates when touching wire surfaces**: The `integration/` workspace (`ibapi-integration-sync`, `ibapi-integration-async`, `ibapi-test`) is **not** in `default-members`. Plain `cargo build` / `cargo test` / `cargo clippy --all-targets` skip these crates. When a change touches `Subscription`, the proto encoders/decoders, or anything wire-format-adjacent, also run `cargo build -p ibapi-integration-sync --tests` and the async equivalent (and the matching `cargo clippy -p ... --tests -- -D warnings`). Compilation against these crates is the contract — no live gateway needed for this check
 14. **Narrow re-exports over widened module visibility**: To expose 1–3 items from an otherwise-private module, prefer `pub(crate) use foo::{bar, baz};` at the parent over widening the module declaration to `pub(crate) mod foo`. The latter exposes every `pub(crate)` item inside the module to the whole crate; the former exposes exactly the names you intend. Common trigger: cross-domain code (e.g. `connection/` reaching into `orders/` or `accounts/` decoders) — keep that cross-cut narrow
 18. **Public API needs a doc-example**: every `pub fn` / `pub` constructor / public builder entry point gets a `# Examples` block with a runnable (`no_run` / `ignore` is fine) example showing the canonical happy-path call. The example is part of the contract — it teaches the idiom, doubles as a compile-time regression guard against signature drift, and matches what users see on docs.rs. Don't drop it as "redundant with the builder's `subscribe()` example"; the entry point and the terminal action are different surfaces. Tiny accessors (struct field getters, trivial `is_*` predicates) are exempt — examples on those would be noise
-23. **Restrictive API additions: modernize callers first, restrict second**: For PRs that add compile-time restrictions to a public type — `#[non_exhaustive]`, removed `Default` impls, removed/renamed `pub` fields, `#[must_use]` on a builder — split into PR-A "modernize callers to a workspace-green alternative" + PR-B "add the restriction." Each PR keeps the workspace green; the restriction PR stays small and reviewable once callers are out of the way. Precedent: PR #547 modernized 15 example sites + a README snippet → PR #548 added `#[non_exhaustive]` on `Contract` + the parity regression test. Distinct from [floor-ratchet splits](docs/rules/wire/floor-ratchet-splits.md) (specifically about proto floor ratchets); same shape, different domain. **Sub-rule for `pub` → `pub(crate)` visibility narrowings**: a plan claim like "the narrowing is transparent because internal callsites already use crate-local paths" misses every other public-API surface that references the type. Before scoping, grep for the type in: (a) public `Error` enum variant payloads (`pub enum Error { ... Foo(T), ... }` — the variant is `pub`, the payload type isn't; rustc fires `private_interfaces`), (b) public trait method signatures (`pub trait Bar { fn baz(&mut T); }` — same lint), (c) public fn return types or arguments, (d) public struct field types. Each match needs a decision in the plan: convert (variant payload → `String` + add `Error::foo(&T) -> Error` constructor helper), seal (sealed-trait pattern instead of `#[allow(private_interfaces)]` on every impl), or `#[allow(private_interfaces)]` when the surface is intentionally public-but-uncallable externally (the type-argument is unconstructible by downstream code). Precedent: PR #581's narrowing of `ResponseMessage` to `pub(crate)` surfaced 5 `private_interfaces` warnings (`TickDecoder::decode` + 3 impls + `Error::UnexpectedResponse`) + 5 dead-code warnings the plan didn't anticipate, expanding the PR scope mid-flight. Pair with the audit memory: `feedback_narrowing_transparency_audit.md`
 25. **Macros only when ordinary Rust can't express the pattern**: Macros add a translation layer — readers parse syntax twice, error spans drift, and tooling (goto-def, rust-analyzer expansion) degrades. Default to generics, trait impls, helper functions, slices + `for`-loops, or table-driven tests with parameterized inputs. **Per-type `#[test]` granularity alone is not enough** — a generic `fn check_X<T: ...>(sample: &str)` + thin per-type `#[test] fn` wrappers gives the same independent pass/fail and clear test names, without the macro tax. Macros earn their cost in three specific cases: (a) **shape-identical impls across newtypes/wrappers** that can't be deduplicated via a blanket trait impl — precedent: PR #548's `impl_str_partial_eq!` collapsed 12 `PartialEq<str>` impls (4 directions × 3 newtypes) into 3 invocations, −55 lines; (b) **bodies that rely on inherent methods or constructs that don't compose generically** — `<$t>::new`, `.as_str()`, struct-literal access without a trait, etc. — where defining a test-only trait costs more than the macro saves. Precedent: `string_newtype_surface!` in `src/contracts/types_tests.rs` calls inherent `<$t>::new` and `.as_str()`. **Counter-examples**: (i) a serde round-trip uses only trait methods (`Serialize`/`Deserialize`/`From<&str>`) — PR #554 originally wrote `serde_round_trip!`, then refactored to a generic `check_serde_round_trip<T>` + 3 thin `#[test] fn` wrappers; (ii) the `str_eq_round_trip!` macro (originally PR #548) was demoted in PR #554 to `check_str_partial_eq_round_trip<T>` — the `PartialEq<str>` / `PartialEq<&str>` impls are traits, so a `where T: PartialEq<str> + for<'a> PartialEq<&'a str> + for<'a> From<&'a str>, str: PartialEq<T>, for<'a> &'a str: PartialEq<T>` clause works, even if the HRTB bounds look heavy; (c) **contexts where generics aren't legal** — `const` initializers, `prost::Message` derive bodies, declarative DSL surfaces. Before writing a `macro_rules!`, ask: would a generic function with a trait bound work? a `for case in [(x, y), ...]` loop? a table-driven `#[rstest]`-style test? If yes, take that path. **/simplify must challenge new macros twice**: first whether they can collapse together (PR #554 folded `string_newtype_new_monomorphizations!` into `string_newtype_surface!`), then whether each surviving macro's body actually needs the macro (PR #554 demoted `serde_round_trip!` to a generic helper after the first /simplify pass missed it). Sister to rule 4 (composition over repetition) and the `Macro out repeated trait impls` memory; the inverse of "speculative macro infrastructure". **Crate-wide macro home**: shape-identical trait-impl macros that cross module boundaries live in `src/macros.rs`, reachable via `#[macro_use] mod macros;` in `lib.rs`. Currently hosts `impl_str_partial_eq!` (for string-newtype `PartialEq<str>` impls) and `impl_wire_enum!` (for `Display` / `FromStr<Err = Error>` / `ToField` from `as_str` + `from_wire` data tables). When promoting a module-local macro crate-wide, copy it to `src/macros.rs`; don't `#[macro_export]` (that leaks to the public API on docs.rs)
-27. **"Doc parity" requests imply a signature audit**: When the ask is "make async docs match sync" (or vice versa) on a domain module, audit **three** layers before opening the PR, not just the asked-for one: (a) **doc content** — `# Arguments`, `# Examples` blocks, struct-level docs (the asked-for thing); (b) **parameter naming** — same-semantics-different-name drift like `interval_end` vs `end_date`; (c) **signature shape** — `Option<T>` vs `T`, separate methods vs single-with-`Option`-arg, terminal-types vs typed-args. The doc gap is the trigger; signature divergence is often the bigger fish. Per rule 9 (modernize touched modules), fix all three in the same PR. Precedent: PR #573 (issue #210) — original ask was "doc parity" for async historical; what shipped was 9 docs + 1 signature reshape (`Option<WhatToShow>` → `WhatToShow` on `historical_data` + `historical_data_streaming`) + 1 method split (`historical_schedule` → `historical_schedules` + `historical_schedules_ending_now`) + 1 parameter rename (`interval_end` → `end_date`). Sister rules: rule 9 (modernize in scope), [dual-feature types](docs/rules/parity/dual-feature-types.md) (the *types* axis); this rule covers the docs/naming/shape axis of dual-feature parity. **Sub-rule for `Option<T>` removal**: before flipping `Option<T>` → `T` on a public arg, run the three-source check — encoder/wire (is `None` representable?), C# `EClient.cs` (is field documented as required?), all callers (what fraction wrap with `Some(...)`?). If wire allows but every real caller wraps, drop the `Option`. Watch out: tests passing `None` for incidental laziness (exercising an early-failure path where the arg is irrelevant) don't count as "real `None` callsites." **Sub-rule for "magic-`None` splits"**: when a public `foo(arg: Option<T>, ...)` API surfaces magic-`None` problems and gets split into `foo(arg: T)` + `foo_default(...)` — accept the split as the **correct intermediate** in a 3-step evolution: bad shape (magic-`None`) → split → fluent builder with explicit `.named_setter(value)` for the optional. The destination is the builder; the split is a planned waypoint, not a final answer. **Per-method cross-feature pairing for doc-examples**: when async doc-example imports differ from sibling async methods in the same file, prefer matching the sync counterpart per-method (intentional pairing) over intra-file uniformity — /simplify reviewers who flag "intra-file inconsistency" on dual-feature docs are often missing the pairing axis (PR #573 /simplify deferred the `prelude`-import streaming example for this reason)
+27. **"Doc parity" requests imply a signature audit**: When the ask is "make async docs match sync" (or vice versa) on a domain module, audit **three** layers before opening the PR, not just the asked-for one: (a) **doc content** — `# Arguments`, `# Examples` blocks, struct-level docs (the asked-for thing); (b) **parameter naming** — same-semantics-different-name drift like `interval_end` vs `end_date`; (c) **signature shape** — `Option<T>` vs `T`, separate methods vs single-with-`Option`-arg, terminal-types vs typed-args. The doc gap is the trigger; signature divergence is often the bigger fish. Per [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md), fix all three in the same PR. Precedent: PR #573 (issue #210) — original ask was "doc parity" for async historical; what shipped was 9 docs + 1 signature reshape (`Option<WhatToShow>` → `WhatToShow` on `historical_data` + `historical_data_streaming`) + 1 method split (`historical_schedule` → `historical_schedules` + `historical_schedules_ending_now`) + 1 parameter rename (`interval_end` → `end_date`). Sister rules: [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md), [dual-feature types](docs/rules/parity/dual-feature-types.md) (the *types* axis); this rule covers the docs/naming/shape axis of dual-feature parity. **Sub-rule for `Option<T>` removal**: before flipping `Option<T>` → `T` on a public arg, run the three-source check — encoder/wire (is `None` representable?), C# `EClient.cs` (is field documented as required?), all callers (what fraction wrap with `Some(...)`?). If wire allows but every real caller wraps, drop the `Option`. Watch out: tests passing `None` for incidental laziness (exercising an early-failure path where the arg is irrelevant) don't count as "real `None` callsites." **Sub-rule for "magic-`None` splits"**: when a public `foo(arg: Option<T>, ...)` API surfaces magic-`None` problems and gets split into `foo(arg: T)` + `foo_default(...)` — accept the split as the **correct intermediate** in a 3-step evolution: bad shape (magic-`None`) → split → fluent builder with explicit `.named_setter(value)` for the optional. The destination is the builder; the split is a planned waypoint, not a final answer. **Per-method cross-feature pairing for doc-examples**: when async doc-example imports differ from sibling async methods in the same file, prefer matching the sync counterpart per-method (intentional pairing) over intra-file uniformity — /simplify reviewers who flag "intra-file inconsistency" on dual-feature docs are often missing the pairing axis (PR #573 /simplify deferred the `prelude`-import streaming example for this reason)
 
 ## Quick Commands
+
+The pre-PR gate, in full — see
+[pre-PR checks](docs/rules/workflow/pre-pr-checks.md) for what each one catches and which of
+them CI does *not* run:
 
 ```bash
 # Format code
 cargo fmt
 
-# Run clippy (cover every configuration)
-# `--features sync` alone would keep the default async client on — use
-# --no-default-features for the genuine sync-only build. See
-# docs/rules/parity/feature-matrix.md.
+# Clippy, one run per feature configuration.
+# `--features sync` alone keeps the default async client on; use
+# --no-default-features for the genuine sync-only build.
+# See docs/rules/parity/feature-matrix.md.
 cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --no-default-features --features sync -- -D warnings
-cargo clippy --all-features
+cargo clippy --all-targets --all-features -- -D warnings
 
-# Check rustdoc intra-doc links (separate from `cargo test --doc`)
+# Rustdoc intra-doc links — local-only gate; `cargo test --doc` misses these
+# and CI's `cargo doc` runs without RUSTDOCFLAGS.
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --no-default-features --features sync
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
-# Run all tests
+# Run all tests (one leg per feature configuration)
 just test
+```
 
-# Build integration crates (compile check, no live gateway)
+Situational — run when the change touches the matching surface:
+
+```bash
+# Wire surfaces: integration crates are outside default-members, so every
+# other gate skips them. See docs/rules/workflow/integration-crate-builds.md.
 cargo build -p ibapi-integration-sync  --tests
 cargo build -p ibapi-integration-async --tests
 
-# Generate coverage report (opens HTML report in browser)
-# Uses `cargo +nightly llvm-cov --all-features --doctests` — nightly is required
-# because rustdoc's --persist-doctests (the hook llvm-cov needs to instrument
-# doc-tests) sits behind -Z unstable-options. Stable + --lib alone over-counts:
-# it misses every doc-test example AND inserts phantom uncovered regions on
-# `..Default::default()` and `/// ```` lines, so files like contracts/mod.rs
-# show ~12% phantom-uncovered that disappears under nightly + --doctests.
-# Stable still drives build/test/CI; this is a workflow-only nightly use.
+# CLAUDE.md, docs/rules/, or plans/ — validates the rule graph and its index
+just rules-check
+
+# Coverage report, nightly-only. See docs/rules/testing/coverage-floor.md.
 just cover
 ```
 
