@@ -13,7 +13,7 @@ pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_optio
 // MarketRule / SecurityDefinitionOptionParameter are <= the connection floor,
 // so the server always emits proto framing for these messages — text-framed
 // arrival is rejected via `ResponseMessage::require_proto` and skip-classifies
-// (rule 20).
+// (docs/rules/wire/proto-only-decoding.md).
 
 pub(in crate::contracts) fn decode_contract_details(_server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     decode_contract_data_proto(message.require_proto()?)

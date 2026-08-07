@@ -139,22 +139,23 @@ by rule number throughout. Numbering is retired at the end of migration, not inc
   enforcement for a failure mode that passes CI.
 - **Audit the remaining rules for rot** the way 15–20 were audited, before migrating each
   cluster. Assume they have it.
-- **Stale rule-number citations in source: 18 sites, not one.** A grep during the `testing/`
-  pass found 27 `rule N` citations across `src/` (28 counting `orders/mod.rs:1115`, which is
-  IBKR's Rule 80A and a false positive). The `testing/` pass rewrote the 8 it made dangle —
-  rules 10 and 21 — to node paths. The remaining 18 cite the retired wire numbers 15, 16, 17,
-  19, and 20, and were already dangling before that pass:
+- ~~**Stale rule-number citations in source.**~~ **Done in the `testing/` pass.** All 27
+  `rule N` citations across `src/` now name node paths instead of numbers. (A 28th,
+  `orders/mod.rs:1115`, is IBKR's Rule 80A — a false positive, left alone.)
 
-  | Number | Sites |
-  |---|---|
-  | 20 | `messages.rs:894`, `market_data/realtime/common/decoders/tests.rs:57`, `contracts/common/decoders/mod.rs:16` + `tests.rs:140`, `wsh/common/decoders_tests.rs:30`, `news/common/decoders.rs:14`, `orders/common/decoders/mod.rs:8` + `tests.rs:374`, `scanner/common/decoders.rs:21` + `decoders_tests.rs:78` |
-  | 19 | `market_data/historical/{sync,async}.rs`, `common/encoders.rs` ×2 |
-  | 17 | `messages.rs:983`, `messages/tests.rs:311` |
-  | 16 | `proto/decoders.rs:57`, `:108` |
-  | 15 | `display_groups/async_tests.rs:72` |
+  **Mapping by number would have been wrong.** The four citations in `market_data/historical/`
+  read "rule 19 canary acceptable for builder-fed helpers" — that is the
+  `#[allow(clippy::too_many_arguments)]` exception, a **different rule 19** from the migrated
+  one (proto fixture migration). Meanwhile ten citations said "rule 20" for what is now
+  `proto-only-decoding` (id 15), because they were written under the older numbering, while
+  `display_groups/async_tests.rs:72` says "rule 15" for the *same* node under current
+  numbering. Old and current schemes coexist in `src/` with no marker distinguishing them, so
+  every site had to be read for intent. This is the strongest evidence yet for retiring
+  numbers entirely rather than maintaining them.
 
-  Rewrite each to the node path — `docs/rules/wire/<node>.md` — rather than a new number. Do
-  it as one sweep; piecemeal fixes mean touching the same files on every cluster migration.
+  The builder-fed sites now carry the rationale in prose with no citation, since the governing
+  rule (4, param budget) is still inline and unmigrated. Link them to the node when `style/`
+  ships.
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one

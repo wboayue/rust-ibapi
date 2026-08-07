@@ -54,7 +54,7 @@ const UNSET_DECIMAL_WIRE: [&str; 3] = [
 /// The error arm is the point of the helper. Its predecessors ended in
 /// `unwrap_or_default()`, so a wire value of `"0.5"` failed `parse::<i32>()` and
 /// silently became `0` — data loss on fractional (crypto) sizes, issue #716. Per
-/// CLAUDE.md rule 16, a decoder rejects malformed input rather than defaulting.
+/// docs/rules/wire/enum-typing.md, a decoder rejects malformed input rather than defaulting.
 ///
 /// Whitespace is not trimmed: `Some(" ")` is an error, matching C#'s
 /// `decimal.Parse(" ")`, which throws.
@@ -105,7 +105,7 @@ pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
 /// Parse a required enumerated wire field. Both `None` and empty strings
 /// surface as `Error::Parse`: an empty wire on a required field is a TWS
 /// protocol bug, not a default. Silent fallback to `T::default()` masks
-/// incomplete responses (CLAUDE.md rule 16).
+/// incomplete responses (docs/rules/wire/enum-typing.md).
 ///
 /// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
 /// and text-protocol callers can pass `Some(text_str.as_str())` without

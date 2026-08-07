@@ -891,7 +891,7 @@ impl ResponseMessage {
 
     /// Raw protobuf payload bytes for use by proto-only decoders. Text-framed
     /// arrival returns `Error::UnexpectedResponse`, which the dispatcher
-    /// skip-classifies (per CLAUDE.md rule 20) rather than terminating the
+    /// skip-classifies (per docs/rules/wire/proto-only-decoding.md) rather than terminating the
     /// subscription.
     pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
@@ -980,7 +980,7 @@ impl ResponseMessage {
     /// [`Self::request_id`]'s text-fallback path (tests only at floor 213)
     /// and the handshake parser (pre-proto framing).
     ///
-    /// Refuses proto-framed messages defensively (per CLAUDE.md rule 17):
+    /// Refuses proto-framed messages defensively (per docs/rules/wire/proto-aware-accessors.md):
     /// if `raw_bytes()` is `Some`, the caller picked the wrong accessor —
     /// they should be decoding the proto envelope, not reading a text-field
     /// index. Production callers (`request_id`, handshake) already gate on

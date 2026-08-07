@@ -54,7 +54,7 @@ mod realtime_bar_tests {
     #[test]
     fn test_decode_realtime_bar_text_arrival_skip_classifies() {
         // Text arrival at a proto-only decoder must surface UnexpectedResponse so
-        // the dispatcher skip-classifies (rule 20) rather than terminating.
+        // the dispatcher skip-classifies (docs/rules/wire/proto-only-decoding.md) rather than terminating.
         let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
         match decode_realtime_bar(&mut message) {
             Err(Error::UnexpectedResponse(_)) => {}
