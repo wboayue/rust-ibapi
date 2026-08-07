@@ -9,7 +9,7 @@ triggers:
   - adding #[allow(clippy::too_many_arguments)]
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
-related: [domain-module-layout, macros-last-resort, modernize-touched-modules]
+related: [domain-module-layout, macros-last-resort, doc-parity-audit]
 precedents: ["#549", "#573", "#660"]
 memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_split_to_builder]
 ---
@@ -46,10 +46,10 @@ rule with no gate behind it.
 
 An `Option`-heavy public signature is usually two problems at once. Before building a setter
 for an `Option<T>` argument, check whether the `Option` should exist at all — if the wire
-allows `None` but every real caller passes `Some(x)`, drop it (that sub-rule is still inline in
-`CLAUDE.md`, rule 27). When a magic-`None` API does get split, `foo(Option<T>)` → `foo(T)` +
-`foo_default()` → builder is the planned three-step path; the split is a waypoint, not the
-destination.
+allows `None` but every real caller passes `Some(x)`, drop it. When a magic-`None` API does get
+split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planned three-step path;
+the split is a waypoint, not the destination. Both sub-rules live in
+[doc parity audit](../docs/doc-parity-audit.md).
 
 The open violation inventory — four internal helpers and three client methods, with a
 per-signature verdict on each — lives in

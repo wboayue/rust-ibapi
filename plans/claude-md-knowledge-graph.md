@@ -213,6 +213,12 @@ number in a node needs a command behind it at the moment it is written.**
 | `docs/release-notes.md` | the Release Notes Guidelines section | active |
 | `docs/user-docs-sync.md` | the Maintaining Documentation section | active |
 
+`style/param-budget` deferred its `Option<T>`-removal sub-rule to "rule 27, still inline in
+`CLAUDE.md`" one pass ago; that sentence became false here and now points at
+`doc-parity-audit`. Worth noting as a mechanic: a node written during migration that defers to
+an unmigrated rule carries a dangling reference until the target lands, and nothing but reading
+it catches that.
+
 Three `CLAUDE.md` *sections* migrated alongside the two numbered rules — they were rules in
 everything but numbering, and each is situational (you need the changelog rule when shipping a
 user-facing change, not on every turn). With them gone, `Key Points to Remember` is empty and
