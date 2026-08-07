@@ -81,48 +81,16 @@ impl RoutedItem {
     }
 }
 
-/// Checks if an error indicates the end of a stream
-#[allow(dead_code)]
-pub(crate) fn is_stream_end(error: &Error) -> bool {
-    matches!(error, Error::EndOfStream)
-}
-
-/// Checks if an error should be stored for later retrieval
-#[allow(dead_code)]
-pub(crate) fn should_store_error(error: &Error) -> bool {
-    !is_stream_end(error)
-}
-
-/// Common error types that can occur during subscription processing
-#[derive(Debug)]
-pub(crate) enum ProcessingResult<T> {
-    /// Successfully processed a value
-    Success(T),
-    /// Encountered an error that should be stored
-    Error(Error),
-    /// Stream has ended normally
-    EndOfStream,
-}
-
-/// Process a decoding result into a common processing result.
+/// `true` when `message` is not this subscription's to decode.
 ///
-/// Every error now terminates the subscription except [`Error::EndOfStream`],
-/// whose name and disposition agree everywhere it is used — the transport
-/// raises it too, and it always means the stream is over.
+/// Shared and order-id channels fan several message types out to subscriptions
+/// that each declare a subset, so a frame belonging to a sibling is routine and
+/// simply skipped.
 ///
-/// **No error variant means "skip" any more.** Whether a message belongs to this
-/// subscription is answered before `decode` runs, from
-/// [`StreamDecoder::RESPONSE_MESSAGE_IDS`]. That indirection was the defect
-/// behind #508 and #731: `Error::UnexpectedResponse` is returned to users as a
-/// real error by ~20 one-shot call sites, and *also* meant "silently drop this"
-/// here, so any decoder that reused the variant inherited the skip disposition
-/// without asking for it.
-pub(crate) fn process_decode_result<T>(result: Result<T, Error>) -> ProcessingResult<T> {
-    match result {
-        Ok(val) => ProcessingResult::Success(val),
-        Err(Error::EndOfStream) => ProcessingResult::EndOfStream,
-        Err(err) => ProcessingResult::Error(err),
-    }
+/// Lives here because both drivers must answer it identically — the sync/async
+/// pair is exactly where a duplicated predicate drifts.
+pub(crate) fn is_undeclared(ids: &[IncomingMessages], message: &ResponseMessage) -> bool {
+    !ids.contains(&message.message_type())
 }
 
 /// Context for decoding responses, providing all necessary state for decoders.
@@ -170,18 +138,13 @@ impl DecoderContext {
 /// context needed to properly decode messages.
 pub(crate) trait StreamDecoder<T> {
     /// Message types this stream can handle. **The complete set** — a type
-    /// absent from this list never reaches [`Self::decode`].
+    /// absent from this list never reaches [`Self::decode`], so adding a
+    /// `decode` arm means adding the type here too or the arm is dead code.
     ///
-    /// Load-bearing twice over, which is why it has no default: the subscription
-    /// drivers skip anything not listed here (shared channels carry several
-    /// types), and [`debug_assert_request_id_routable`] checks every entry
-    /// against the routing allow-list when a `request_id`-keyed subscription is
-    /// built.
-    ///
-    /// Adding a `decode` arm therefore means adding the type here too. Forget
-    /// it and the arm is dead — but every domain's stub tests feed the types
-    /// they care about through a real subscription, so the omission fails a
-    /// test rather than reaching a user.
+    /// No default, deliberately: an omitted declaration would skip everything,
+    /// so it must be a compile error. See
+    /// `docs/rules/wire/proto-only-decoding.md` for what enforces the two lists
+    /// agreeing — and what does not.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
 
     /// Decode a response message into the stream's data type

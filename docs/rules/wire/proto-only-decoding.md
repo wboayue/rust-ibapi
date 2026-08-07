@@ -19,12 +19,21 @@ Every domain decoder reads its payload with `message.require_proto()` and feeds 
 was retired with the floor ratchet.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
-filter: both subscription drivers drop anything not listed there *before* calling `decode`,
-because shared channels carry several types. A `decode` arm for an unlisted type is dead code.
+filter: the sync and async subscription drivers drop anything not listed there *before* calling
+`decode`, because shared channels carry several types. A `decode` arm for an unlisted type is
+dead code. (The historical-tick driver in `market_data/historical/common/tick.rs` has its own
+single-valued `TickDecoder::MESSAGE_TYPE` doing the same job — a third mechanism, not yet
+unified.)
 
 End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`
 anyway. It is now a backstop for the two lists disagreeing, not a control-flow signal — it
 terminates the subscription, loudly. Never `Error::NotImplemented` or `Error::Simple(...)`.
+
+**Only one of the two drift directions is caught.** Declared-but-unhandled hits that backstop
+and fails loudly. Handled-but-undeclared is silent: the arm is unreachable and the message
+vanishes. Most domains' stub tests would catch it because they drive a real subscription, but
+`contracts`, `market_data/realtime`, and `wsh` test their decoders by calling `decode`
+directly and would not. Check the const when you add an arm.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {

@@ -111,9 +111,16 @@ fn test_is_transient_error() {
 
     let test_cases = vec![
         TestCase {
-            name: "unexpected_response",
-            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")), // TickGeneric message type
-            expected: true,
+            // Since #732 this means "declared but unhandled" — a decoder bug,
+            // not a stray frame, so retrying cannot help.
+            name: "unexpected_response_not_transient",
+            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")),
+            expected: false,
+        },
+        TestCase {
+            name: "unexpected_wire_format_not_transient",
+            error: Error::unexpected_wire_format(&crate::messages::ResponseMessage::from("45\0")),
+            expected: false,
         },
         TestCase {
             name: "io_interrupted",
@@ -177,9 +184,16 @@ fn test_should_retry_request() {
         },
         TestCase {
             name: "transient_error_first_retry",
-            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")), // TickGeneric message type
+            error: Error::Io(io::Error::new(ErrorKind::Interrupted, "interrupted")),
             retry_count: 0,
             expected: true,
+        },
+        TestCase {
+            // Not retryable since #732: a decoder bug, not a stray frame.
+            name: "unexpected_response_no_retry",
+            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")),
+            retry_count: 0,
+            expected: false,
         },
         TestCase {
             name: "fatal_error_no_retry",
@@ -430,9 +444,11 @@ fn test_error_categorization() {
         },
         // Transient category
         TestCase {
+            // Fatal since #732 — a decoder that declares a type it does not
+            // handle will not start handling it on retry.
             name: "unexpected_response",
-            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")), // TickGeneric message type
-            expected: ErrorCategory::Transient,
+            error: Error::unexpected_response(&crate::messages::ResponseMessage::from("45\0")),
+            expected: ErrorCategory::Fatal,
         },
         TestCase {
             name: "unexpected_end_of_stream",

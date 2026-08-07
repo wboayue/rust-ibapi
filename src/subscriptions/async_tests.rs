@@ -37,6 +37,7 @@ async fn test_subscription_with_decoder() {
             };
             Ok(bar)
         },
+        &[IncomingMessages::TickPrice],
         Some(9000),
         None,
         DecoderContext::default(),
@@ -101,6 +102,7 @@ async fn test_routed_item_error_surfaces_through_async_subscription() {
         internal,
         message_bus,
         |_context, _msg| Ok("should-not-be-called".to_string()),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -122,6 +124,7 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -155,6 +158,7 @@ async fn test_subscription_next_with_error() {
         internal,
         message_bus,
         |_context, _msg| Err(Error::Simple("decode error".into())),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -179,6 +183,7 @@ async fn test_subscription_next_end_of_stream() {
         internal,
         message_bus,
         |_context, _msg| Err(Error::EndOfStream),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -212,6 +217,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
                 Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
             }
         },
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -236,6 +242,10 @@ async fn test_subscription_no_retries_after_end_of_stream() {
 
 #[tokio::test]
 async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
+    use std::sync::atomic::AtomicUsize;
+
+    static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+
     /// Declares only `TickPrice`; `TickSize` frames must never reach `decode`.
     #[derive(Debug)]
     struct DeclaresTickPrice;
@@ -244,6 +254,7 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
         fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DeclaresTickPrice, Error> {
+            CALL_COUNT.fetch_add(1, Ordering::Relaxed);
             Ok(DeclaresTickPrice)
         }
     }
@@ -255,8 +266,7 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
     let mut subscription: Subscription<DeclaresTickPrice> =
         Subscription::new_from_internal::<DeclaresTickPrice>(internal, message_bus, Some(1), None, DecoderContext::default());
 
-    // 20 undeclared frames — more than the old MAX_DECODE_RETRIES=10, so this
-    // also pins that skipping is uncapped — then one the decoder declares.
+    // Many undeclared frames, then one the decoder declares.
     for _ in 0..20 {
         tx.send(ResponseMessage::from("2\0stray\0").into()).unwrap();
     }
@@ -265,6 +275,11 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
     assert!(
         matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))),
         "subscription should not have stopped while skipping undeclared messages"
+    );
+    assert_eq!(
+        CALL_COUNT.load(Ordering::Relaxed),
+        1,
+        "the 20 undeclared frames must be filtered before decode, not skipped inside it"
     );
 }
 
@@ -282,6 +297,7 @@ async fn test_subscription_cancel() {
         internal,
         message_bus.clone(),
         |_context, _msg| Ok("test".to_string()),
+        &[IncomingMessages::NotValid],
         Some(123),
         None,
         DecoderContext::default(),
@@ -308,6 +324,7 @@ async fn test_subscription_clone() {
         internal,
         message_bus,
         |_context, _msg| Ok("test".to_string()),
+        &[IncomingMessages::NotValid],
         Some(456),
         Some(789),
         DecoderContext::default()
@@ -336,6 +353,7 @@ async fn test_subscription_drop_with_cancel() {
             internal,
             message_bus.clone(),
             |_context, _msg| Ok("test".to_string()),
+            &[IncomingMessages::NotValid],
             Some(999),
             None,
             DecoderContext::default(),
@@ -372,6 +390,7 @@ async fn test_subscription_with_context() {
         internal,
         message_bus,
         |_context, _msg| Ok("test".to_string()),
+        &[IncomingMessages::NotValid],
         None,
         None,
         context.clone(),
@@ -454,6 +473,7 @@ async fn test_data_stream_filters_notices() {
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -486,6 +506,7 @@ async fn test_routed_item_notice_surfaces_as_subscription_item() {
         internal,
         message_bus,
         |_context, _msg| Ok("data".to_string()),
+        &[IncomingMessages::NotValid],
         None,
         None,
         DecoderContext::default(),
@@ -544,15 +565,16 @@ async fn subscription_impls_stream() {
     let mut subscription: Subscription<i32> = Subscription::with_decoder(
         internal,
         message_bus,
-        |_ctx, msg| Ok(msg.peek_int(0).unwrap_or_default()),
+        |_ctx, msg| Ok(msg.peek_int(1).unwrap_or_default()),
+        &[IncomingMessages::TickPrice],
         Some(1),
         None,
         DecoderContext::default(),
     );
 
-    tx.send(RoutedItem::Response(ResponseMessage::from("10\0"))).unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("20\0"))).unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("30\0"))).unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("1\010\0"))).unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("1\020\0"))).unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("1\030\0"))).unwrap();
 
     // One-shot read via StreamExt::next.
     let first = subscription.next().await;
@@ -576,13 +598,14 @@ async fn filter_data_stream_drops_notices() {
     let subscription: Subscription<i32> = Subscription::with_decoder(
         internal,
         message_bus,
-        |_ctx, msg| Ok(msg.peek_int(0).unwrap_or_default()),
+        |_ctx, msg| Ok(msg.peek_int(1).unwrap_or_default()),
+        &[IncomingMessages::TickPrice],
         Some(7),
         None,
         DecoderContext::default(),
     );
 
-    tx.send(RoutedItem::Response(ResponseMessage::from("11\0"))).unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("1\011\0"))).unwrap();
     tx.send(RoutedItem::Notice(Notice {
         code: 2104,
         message: "data farm OK".into(),
@@ -590,7 +613,7 @@ async fn filter_data_stream_drops_notices() {
         advanced_order_reject_json: String::new(),
     }))
     .unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("13\0"))).unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("1\013\0"))).unwrap();
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
     let mut data = subscription.filter_data();
@@ -625,8 +648,8 @@ async fn pre_decoded_subscription_polls() {
 
 use std::time::Duration;
 
-/// Test decoder for the collect tests: payload is text field 0; the value `-1`
-/// marks a snapshot-end sentinel (mirrors `TickTypes::SnapshotEnd`).
+/// Test decoder for the collect tests: the value `-1` marks a snapshot-end
+/// sentinel (mirrors `TickTypes::SnapshotEnd`).
 #[derive(Debug, PartialEq)]
 struct CollectItem(i32);
 
@@ -658,7 +681,9 @@ fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscriptio
     for item in items {
         tx.send(item).unwrap();
     }
-    let sub = Subscription::<CollectItem>::with_decoder(internal, message_bus, CollectItem::decode, None, None, DecoderContext::default());
+    // `new_from_internal` rather than `with_decoder` so the declared-id filter is
+    // live here, matching the sync twin.
+    let sub = Subscription::<CollectItem>::new_from_internal::<CollectItem>(internal, message_bus, Some(1), None, DecoderContext::default());
     let keep = if keep_open { Some(tx) } else { None };
     (sub, keep)
 }

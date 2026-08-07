@@ -388,19 +388,30 @@ The fix that suggested itself — `decode -> Result<Option<T>, Error>` — would
 been sitting on `StreamDecoder` since before this arc, `#[allow(dead_code)]` until #730 made
 it load-bearing for the routing guard. It is exactly the question the drivers were asking the
 error type: *is this message mine?* So both drivers now filter on it before calling `decode`,
-`ProcessingResult::Skip` is gone, and no error variant carries dispatch semantics. Zero
-changes to the 28 decoders.
+`ProcessingResult::Skip` is gone, and no error variant carries dispatch semantics.
 
-The const also lost its default (`= &[]`), which turns a missing declaration from a
-skip-everything silent failure into a compile error. That mattered immediately: nine test-side
-fake decoders failed to compile and had to declare what they actually consume.
+**The reason to prefer the const is not that it touches fewer files** — that was the first
+justification written here, and `/simplify` was right to call it the weakest available one.
+The real reason is that a const is *statically inspectable* and a return value is not.
+`debug_assert_request_id_routable` reads `RESPONSE_MESSAGE_IDS` at subscription-build time to
+catch the #647/#730 routing gap; encode the same answer in `decode`'s return type and that
+guard has nothing to read, so you retire one silent-failure class by reopening another.
+Dropping the const's default (`= &[]`) is the same property — "declare or don't compile" is
+enforceable on a const and not on a return shape. That mattered immediately: nine test-side
+fake decoders failed to compile and had to declare what they consume.
 
-**The risk moved rather than vanished, and it is worth naming.** Skip is now driven by a
-hand-maintained list, so a `decode` arm whose type is not declared becomes dead code. Two
-things bound it: the arm is not silent at runtime (the `_ =>` backstop terminates loudly if
-the lists disagree the other way), and every domain's stub tests feed their types through a
-real subscription — the whole suite passed unchanged, which is what says the 28 existing lists
-are accurate.
+**The risk moved rather than vanished, and only half of it is bounded.** Skip is now driven by
+a hand-maintained list. Declared-but-unhandled is caught loudly by the `_ =>` backstop.
+Handled-but-undeclared is not, and it is the worse direction: the arm is unreachable and data
+vanishes quietly. The first write-up of this section claimed "every domain's stub tests feed
+their types through a real subscription" — `/simplify` checked, and it is false for
+`contracts`, `market_data/realtime`, and `wsh`, which call `decode` directly. So the suite
+passing unchanged is good evidence for 5 of 8 domains, not all of them.
+
+What genuinely improves is the *trigger*. The old mistake was action-at-a-distance — reuse a
+variant, inherit a disposition you never knew you were choosing. The new one is local and
+visible: a line missing from a const ten lines above the match you are editing. Likelihood
+drops even though severity doesn't, and a cross-check test would close it (see follow-ups).
 
 **The reusable lesson: when a fix needs a fact, check whether the codebase already declares
 it.** Three PRs in a row here found the answer in `RESPONSE_MESSAGE_IDS` — #730 read it for the
@@ -408,6 +419,40 @@ routing guard, #732 for the skip filter — a constant that had been dead code f
 life.
 
 ## Follow-ups
+
+- **Cross-check the two lists so `RESPONSE_MESSAGE_IDS` cannot drift from the `decode` arms.**
+  One test, roughly 40 lines: for each decoder, feed a minimal frame of every
+  `IncomingMessages` variant through `decode` and assert
+  `matches!(err, UnexpectedResponse(_)) || D::RESPONSE_MESSAGE_IDS.contains(&id)` — the
+  no-arm case is exactly the one that returns `UnexpectedResponse`, so the two directions are
+  mechanically distinguishable. This closes the handled-but-undeclared direction #732 left
+  open, and is cheaper than the alternative (a `stream_decoder!` macro generating const and
+  match from one source, which `macros-last-resort` would have to be argued past at N=28).
+  Costs a hand-listed decoder roster, the same rot risk #730 declined — worth it here because
+  the gap it covers is silent.
+
+- **Unify the third driver.** `market_data/historical/common/tick.rs::classify` has its own
+  skip filter over `TickDecoder::MESSAGE_TYPE` (singular) and its own `TickAction::Skip`. It is
+  `RESPONSE_MESSAGE_IDS` with arity 1, and #732 did not touch it, so a future change to skip
+  semantics has to be made twice. The rule node now says so out loud rather than claiming
+  there are two drivers.
+
+- **Audit the 41 `RESPONSE_MESSAGE_IDS` entries against the const's new meaning.** Eight
+  decoders declare `IncomingMessages::Error`, which `determine_routing` classifies *before* the
+  allow-list — it arrives as `RoutedItem::Error`/`Notice` and can never reach `decode`.
+  Harmless, but #732 redefined the const as "the complete set of types that reach `decode`",
+  and under that contract declaring an unreachable type is exactly the kind of misleading
+  declaration the change set out to remove. `routable_to_request_id_subscription` already
+  special-cases `Error` to stop those declarations tripping the routing guard — const declares,
+  guard exempts, circular.
+
+- **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
+  `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound
+  message (routing, `request_id`, the new filter, the decoder's own match). Worse,
+  `from_protobuf` does `message_type.to_string()` per message purely so the discriminant can be
+  re-parsed downstream — `fields[0]` has no other reader. Storing `kind: IncomingMessages` at
+  construction makes the accessor a field read and removes an allocation per message. Pure
+  perf, no behaviour change.
 
 - **Collapse the 40 `*_rejects_text_framing` asserts into one helper.** They spell the same
   assertion four different ways across 12 files, with four different panic messages. #731 is
@@ -426,6 +471,15 @@ life.
   `param-budget` violations both sit in
   [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
   take-one-when-you-are-in-the-file work rather than sweeps.
+- **Finish the error-classification audit.** #731's write-up named three tables encoding the
+  same variant→disposition decision — `process_decode_result`, `is_transient_error`,
+  `categorize_error` — and #732's first draft deleted that bullet having fixed one. `/simplify`
+  caught it; `is_transient_error` and `categorize_error` are corrected here (both now treat
+  `UnexpectedResponse` as fatal, since it means "decoder bug" rather than "stray frame"), but
+  the underlying point stands: nothing enforces that a new `Error` variant gets classified in
+  all of them, and both those functions are dead code with `#![allow(dead_code)]`. Decide
+  whether they have a future or should be deleted.
+
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one

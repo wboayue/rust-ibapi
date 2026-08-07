@@ -37,10 +37,7 @@ fn test_subscription_skips_undeclared_messages_without_limit() {
         }
     }
 
-    CALL_COUNT.store(0, Ordering::Relaxed);
-
-    // 20 undeclared messages then a declared one — more than the old
-    // MAX_DECODE_RETRIES=10, so this also pins that skipping is uncapped.
+    // Many undeclared messages, then one the decoder declares.
     let mut responses: Vec<String> = (0..20).map(|_| "2|stray".to_string()).collect();
     responses.push("1|msg".to_string());
     // Sentinel to avoid blocking on the channel after success
@@ -169,8 +166,8 @@ use crate::transport::SubscriptionBuilder;
 use crossbeam::channel;
 use std::time::Duration;
 
-/// Test decoder for the collect tests: payload is text field 0; the value `-1`
-/// marks a snapshot-end sentinel (mirrors `TickTypes::SnapshotEnd`).
+/// Test decoder for the collect tests: the value `-1` marks a snapshot-end
+/// sentinel (mirrors `TickTypes::SnapshotEnd`).
 #[derive(Debug, PartialEq)]
 struct CollectItem(i32);
 
