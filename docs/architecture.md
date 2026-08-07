@@ -101,17 +101,21 @@ graph TD
     ModRoot -->|#cfg feature=async| AsyncImpl
     
     Common --> Encoders[encoders.rs<br/>Message Encoding]
-    Common --> Decoders[decoders.rs<br/>Message Decoding]
-    Common --> TestData[test_data.rs<br/>Test Fixtures]
+    Common --> Decoders[decoders.rs<br/>Protobuf Decoding]
     
     SyncImpl -->|uses| Common
     AsyncImpl -->|uses| Common
+    
+    TestData[src/testdata/builders/module.rs<br/>Response Fixtures] -.->|feeds tests for| Decoders
     
     style ModRoot fill:#fff9c4
     style Common fill:#f0f4c3
     style SyncImpl fill:#dcedc8
     style AsyncImpl fill:#c5e1a5
+    style TestData fill:#e1e1e1
 ```
+
+Test fixtures live in the crate-wide `src/testdata/builders/<domain>.rs`, **not** under `module/common/` — one builder per domain, implementing `ResponseProtoEncoder`.
 
 Each API module follows a consistent structure:
 

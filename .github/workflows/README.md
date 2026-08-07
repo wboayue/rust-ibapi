@@ -31,7 +31,7 @@ The main CI workflow that runs on every push and pull request to the main branch
 ### coverage.yml
 Runs after successful CI workflow completion:
 - Generates code coverage for both `sync` and `async` features
-- Uses cargo-tarpaulin for coverage measurement
+- Uses cargo-llvm-cov on nightly for coverage measurement (nightly is required for `--doctests`)
 - Uploads results to Coveralls in parallel
 - Merges coverage from both feature sets
 
