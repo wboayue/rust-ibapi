@@ -18,8 +18,10 @@ parent rather than widening the module declaration:
 
 ```rust
 // orders/common/mod.rs
-pub(super) mod decoders;                       // the module stays narrow
-pub(crate) use decoders::{decode_commission_report, decode_open_order, decode_order_status};
+pub(super) mod decoders;  // the module stays narrow
+pub(crate) use decoders::{
+    decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status,
+};
 ```
 
 `pub(crate) mod decoders;` would instead hand every `pub(crate)` item inside `decoders` — and

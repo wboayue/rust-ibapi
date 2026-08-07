@@ -186,9 +186,20 @@ as generics, and `orders/common` / `accounts/common` still expose their decoders
 | Rule 4's `DateRange { start, end }` | Hypothetical — no such type exists. Kept as illustration, marked as one |
 | Rule 25 credits the orphan rule only implicitly ("can't be deduplicated via a blanket trait impl") | `impl_wire_enum!`'s own doc names it outright: `impl<T: WireEnum> Display` is blocked by the orphan rule, which is *why* the macro is the only viable shape. Promoted to the node's first justification |
 
-`docs/code-style.md`'s Linting section was also two clippy legs without `--all-targets` — the
-same misconception the `parity/` pass swept out of `build-and-test.md`, missed there. Corrected
-to the three-leg trio.
+Two clippy blocks were also still two legs without `--all-targets` — `docs/code-style.md`'s
+Linting section and `docs/build-and-test.md`'s Code Quality block. The `parity/` pass swept
+`build-and-test.md`'s *pre-PR* block and missed the one 80 lines above it, which is how the same
+file ended up contradicting itself. `build-and-test.md` now spells the three legs out once;
+`code-style.md` points at [pre-PR checks](../docs/rules/workflow/pre-pr-checks.md) rather than
+becoming a third copy.
+
+**Review of this pass caught two fabricated counts in the new nodes.** `param-budget` credited
+`PeggedToBenchmark` with "seven defaultable fields" (six setters over eight fields — the number
+matched nothing), and `domain-module-layout` said "eleven domains" over a list of ten plus
+`client`. Neither came from stale evidence; both were invented while writing prose *about* the
+danger of invented counts. Third pass running where a count claim failed, and the first where
+the count was new rather than inherited — so the lesson generalises past migration: **any
+number in a node needs a command behind it at the moment it is written.**
 
 ## Retrieval check — run this before migrating further
 

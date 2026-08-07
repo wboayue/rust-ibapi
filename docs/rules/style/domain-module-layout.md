@@ -36,10 +36,11 @@ the pair in `<domain>/sync.rs` + `<domain>/async.rs` puts the two implementation
 next to each other, so parity drift is visible in a two-file diff rather than spread across
 `client/`. It also keeps `client/` from growing into the file that every domain PR touches.
 
-Eleven domains follow this today (`accounts`, `contracts`, `config`, `display_groups`,
-`market_data/historical`, `market_data/realtime`, `news`, `orders`, `scanner`, `wsh`, plus
-`client` itself for its own mechanics). `docs/architecture.md` and `docs/extending-api.md`
-carry the directory diagram and a worked example of adding a module.
+Ten domains follow this today — `accounts`, `config`, `contracts`, `display_groups`,
+`market_data/historical`, `market_data/realtime`, `news`, `orders`, `scanner`, `wsh` — which
+with `client`'s own mechanics makes eleven `impl Client` sites in the tree.
+`docs/architecture.md` and `docs/extending-api.md` carry the directory diagram and a worked
+example of adding a module.
 
 ## Known drift
 

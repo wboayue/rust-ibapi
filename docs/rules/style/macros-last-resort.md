@@ -40,14 +40,21 @@ error spans point into generated code; goto-def and rust-analyzer degrade at the
 tax is worth paying to delete fifty lines of mechanical impls and not worth paying to save
 five.
 
-The live examples, and what each one buys:
+All eight macros in `src/`, and what each one buys:
 
-| Macro | Invocations | Why not a function |
+| Macro | Home | Why not a function |
 |---|---|---|
-| `impl_str_partial_eq!` | 3 newtypes × 4 directions = 12 impls | Orphan rule: `impl PartialEq<Symbol> for str` cannot be blanket |
-| `impl_wire_enum!` | 8 enums × 3 impls = 24 impls | Same — `Display` / `FromStr` / `ToField` on foreign traits. The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
-| `string_newtype_surface!` | 5 test fns | Calls inherent `<$t>::new` and `.as_str()` |
-| `single_req_id_request_builder!` | test fixtures | Generates a new named struct per proto type |
+| `impl_str_partial_eq!` | `macros.rs` | Orphan rule: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions = 12 impls |
+| `impl_wire_enum!` | `macros.rs` | Same — `Display` / `FromStr` / `ToField` are foreign traits. 8 enums × 3 impls = 24. The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
+| `string_newtype_surface!` | `contracts/types_tests.rs` | Calls inherent `<$t>::new` and `.as_str()`; 5 test fns |
+| `single_req_id_request_builder!` | `testdata/builders/mod.rs` | Generates a new named struct per proto type |
+| `request_id_response_builder!` | `testdata/builders/mod.rs` | Same — a distinct nominal type per fixture |
+| `empty_request_builder!` | `testdata/builders/mod.rs` | Same |
+| `encode_cancel_by_id!` | `proto/encoders.rs` | Names a distinct `proto::` struct literal per call; there is no trait over "prost message with a `req_id` field" |
+| `encode_empty_proto!` | `proto/encoders.rs` | Same, for the no-field request bodies |
+
+The last five are all case 3 — a type name is the argument, and generics cannot construct a
+type they were handed as an identifier.
 
 And the counter-examples, both from #554, which are the shape to imitate when a reviewer asks
 "does this need to be a macro?":

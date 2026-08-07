@@ -55,9 +55,12 @@ cargo fmt
 # Check formatting
 cargo fmt --check
 
-# Run clippy
-cargo clippy --no-default-features --features sync -- -D warnings
-cargo clippy --features async -- -D warnings
+# Run clippy — one leg per feature configuration, all with --all-targets.
+# `--features sync` alone leaves the default async feature on, so it is not
+# the sync-only build. Same three legs as the pre-PR gate below.
+cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --no-default-features --features sync -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 
 # Generate coverage report (nightly is required for --doctests)
 cargo +nightly llvm-cov --all-features --doctests --html --open

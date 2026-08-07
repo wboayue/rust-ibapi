@@ -67,16 +67,8 @@ Always run `cargo fmt` before committing code. The project uses default rustfmt 
 ## Linting
 
 Run clippy once per feature configuration before committing — three legs, all with
-`--all-targets`:
-
-```bash
-cargo clippy --all-targets -- -D warnings
-cargo clippy --all-targets --no-default-features --features sync -- -D warnings
-cargo clippy --all-targets --all-features -- -D warnings
-```
-
-`--features sync` alone leaves the default `async` feature on, so it is not the sync-only
-build. Full gate: [pre-PR checks](rules/workflow/pre-pr-checks.md).
+`--all-targets`, spelled out in [pre-PR checks](rules/workflow/pre-pr-checks.md). Note that
+`--features sync` alone leaves the default `async` feature on, so it is not the sync-only build.
 
 ## Naming Conventions
 

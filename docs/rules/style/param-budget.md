@@ -59,8 +59,8 @@ when you are already in the file.
 ## Precedents
 
 - #660 — the `pegged_to_benchmark` free function became `PeggedToBenchmark::new(action,
-  quantity, starting_price)` plus setters for the seven defaultable fields. The clear-win
-  shape: three required args at the entry point, everything optional named.
+  quantity, starting_price)` plus six setters for the optional fields. The clear-win shape:
+  three required args at the entry point, everything optional named.
 - #549 — the order-construction sweep, which is what a fluent builder buys at the call site
   (`.buy(100).limit(150.0).submit()`), and where builder enum coverage has to be audited
   against the underlying enum.
