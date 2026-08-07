@@ -35,6 +35,23 @@ Client-method violations exposed by the receiver clarification (each appears in 
 - **`contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)`** — 4 args all required, but `exchange` documents `""` as a meaningful default. Marginal. **Defer / decide case-by-case;** if revisiting, consider typing `exchange` as `Option<Exchange>` and dropping the magic empty string.
 - **`news::Client::historical_news(&self, contract_id, provider_codes, start_time, end_time, total_results)`** — 5 args all required, no defaults. **Skip the builder.** Better remedy if any: group `start_time` + `end_time` into a `DateRange` type. Leaving as-is is also defensible.
 
+## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
+
+Counted 2026-08-07 while migrating the `docs/` cluster: 128 of 153 `impl Client` methods carry
+the block. Eight genuine misses, listed sync-side first where both exist:
+
+- `orders::Client::exercise_options` — has `# Arguments`, no example. Six params, so the
+  example carries real weight.
+- `contracts::Client::market_rule`, `contracts::Client::cancel_contract_details`
+- `accounts::Client::server_time_millis` (sync + async), `accounts::Client::family_codes`
+- `market_data::historical::Client::cancel_historical_ticks` (sync + async)
+- `client::Client::market_data` — **async only**; the sync twin has one. A
+  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.
+
+The remaining thirteen are the trivial client accessors the rule exempts — `client_id`,
+`next_request_id`, `next_order_id`, `connection_time`, `time_zone`, `server_version`,
+`check_server_version`. Leave them.
+
 ## Out-of-scope on the audit pass
 
 - [Coverage floor](../docs/rules/testing/coverage-floor.md) (90% target, audit-time rule 6) — not audited; run `just cover` per PR.

@@ -151,7 +151,7 @@ impl Client {
     /// This is the primary API for creating orders, providing a fluent interface
     /// that guides you through the order creation process.
     ///
-    /// # Example
+    /// # Examples
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;

@@ -3,8 +3,10 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status:** `wire/`, `testing/`, `parity/`, `workflow/`, and `style/` clusters migrated. One
-cluster (`docs/`) remains inline.
+**Status: complete.** All six clusters — `wire/`, `testing/`, `parity/`, `workflow/`, `style/`,
+`docs/` — are migrated. `CLAUDE.md` carries no inline rules and rule numbering is retired.
+`CLAUDE.md` was 5,012 words when the migration started and is 1,310 now — a 74% cut in what
+every session loads, with none of the content lost.
 
 ## Why
 
@@ -201,9 +203,44 @@ danger of invented counts. Third pass running where a count claim failed, and th
 the count was new rather than inherited — so the lesson generalises past migration: **any
 number in a node needs a command behind it at the moment it is written.**
 
-## Retrieval check — run this before migrating further
+## What shipped in the docs/ pass
 
-**Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,
+| Node | From | Status |
+|---|---|---|
+| `docs/public-api-examples.md` | rule 18 | active |
+| `docs/doc-parity-audit.md` | rule 27 | active |
+| `docs/changelog-entry.md` | the Changelog section | active |
+| `docs/release-notes.md` | the Release Notes Guidelines section | active |
+| `docs/user-docs-sync.md` | the Maintaining Documentation section | active |
+
+Three `CLAUDE.md` *sections* migrated alongside the two numbered rules — they were rules in
+everything but numbering, and each is situational (you need the changelog rule when shipping a
+user-facing change, not on every turn). With them gone, `Key Points to Remember` is empty and
+deleted, and the retired-numbers paragraph is replaced by the standing warning that a "rule N"
+citation must be resolved against the `CLAUDE.md` of its own date.
+
+### Rot corrected while migrating
+
+| Was | Is |
+|---|---|
+| Rule 18: "every `pub fn` gets a `# Examples` block" | Holds for **128 of 153** `impl Client` methods. Eight genuine misses (`exercise_options`, `market_rule`, `family_codes`, `server_time_millis` ×2, `cancel_historical_ticks` ×2, `cancel_contract_details`), one of them a parity miss — async `market_data` has no example while its sync twin does. Inventoried in `plans/code-consistency-followups.md`; the trivial accessors the rule exempts account for the rest |
+| Rule 18 implied the heading is the block | `head_timestamp` had a runnable example with **no `# Examples` heading** — it compiles under `cargo test --doc` but docs.rs renders no Examples section, and its async twin has the heading. Fixed here, along with two `# Example` singulars on `Client::order` and one `//` typo inside a doc fence |
+| Rule 27's precedent: #573 split `historical_schedule` into `historical_schedules` + `historical_schedules_ending_now` | **Neither method exists.** Step 3 of the magic-`None` evolution shipped: the surface is now the builder `historical_schedules(&contract, duration).fetch()`. Test and example *names* still say `..._ending_now`. This is the rule's own prediction coming true, so the node keeps the precedent and says how it ended |
+| Release Notes Guidelines listed five formatting rules | Missing the one thing the notes carry that the changelog does not — **contributor attribution**. v3.2.0 has both forms (`Thanks to @bebop23 for the contribution.`, `Thanks to @thimo-seidel for the report.`) and the convention lived only in the maintainer's memory store. Now in the node |
+
+`CHANGELOG.md` audited clean against every claim in the Changelog section: group order, the
+PR-number suffix, `## [Unreleased]` at the top, newest-first version sections, and the
+link-reference definitions at the bottom. The v3.3.0 release notes match their format too,
+except that the H3 heading takes multiple PR numbers (`(#707, #708)`) where the rule showed one
+— the node now allows both.
+
+## Retrieval check
+
+Was the gate on migrating each further cluster. With the migration finished it becomes the
+regression check: re-run it after a round of node edits, or whenever a node's trigger phrasing
+is rewritten.
+
+**Run 2026-08-06: 3/3 pass.** Three fresh subagents,
 one probe each, no knowledge of the graph design or the expected answers. Every one opened
 its node as its *first* read and surfaced the required content. None answered from the index
 line alone.
@@ -239,21 +276,34 @@ The probes, retained for re-runs — three questions, each answerable only from 
    → must name `src/testdata/builders/<domain>.rs`.
 
 **Fail criterion:** answering from the index line alone, without opening the node, on 2 of 3
-probes ⇒ the trigger phrasing is too weak. Revise before migrating another cluster. One
-session is noisy evidence; re-run if the result is ambiguous.
+probes ⇒ the trigger phrasing is too weak. One session is noisy evidence; re-run if the result
+is ambiguous.
 
-## Remaining clusters
+## What the six audits found, in aggregate
 
-One cluster left:
+Every cluster was audited before migrating, and every cluster but one had rot. The pattern
+across all six:
 
-| Order | Cluster | Rules | Notes |
-|---|---|---|---|
-| 1 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | Rule 27 already links out to `modernize-touched-modules` and `dual-feature-types`, and `param-budget` defers its `Option<T>`-removal sub-rule to it |
+- **Names decay quietly.** `peek_string`, `filter_data_stream`,
+  `historical_schedules_ending_now` — each cited confidently, none existing.
+- **Completeness claims decay faster.** "Fully applied", "zero remaining", "every `pub fn`" was
+  wrong in `sibling-test-files` (two dozen `<dir>/tests.rs` left), `domain-module-layout` (four
+  `client/` methods), and `public-api-examples` (25 of 153). Checking that a cited symbol exists
+  does not check this class; it has to be counted.
+- **The directive almost always survived.** In six passes, no rule was found to be wrong about
+  what to do — only about what the code looked like, which gate enforced it, or how a precedent
+  ended. That is the argument for the split: the directive is stable enough to index, the
+  evidence is not.
+- **Enforcement claims were the most dangerous.** Rule 1's sync-only build, rule 3's rustdoc
+  trio, rule 4's `too_many_arguments` "canary" — three separate rules implied a gate that did
+  not exist. Two are now real CI legs; the third is documented as ungated.
 
-**Do not renumber surviving rules.** The gap at 15–20 is deliberate. Rule numbers are already
-unreliable across stores — one memory cites "rules 20/22" for the family now at 15/17, and
-another references a *different* rule 19. `plans/code-consistency-followups.md` is organised
-by rule number throughout. Numbering is retired at the end of migration, not incrementally.
+**Numbering is retired, not renumbered.** It was retired in one step at the end rather than
+compacted along the way, because the numbers were already unreliable across stores — one memory
+cites "rules 20/22" for the family now at `proto-only-decoding` / `proto-aware-accessors`, and
+another references a *different* rule 19. Any surviving "rule N" citation has to be resolved
+against the `CLAUDE.md` of its own date. Both `plans/` files that were organised by number now
+cite nodes.
 
 ## Follow-ups
 
@@ -261,8 +311,18 @@ by rule number throughout. Numbering is retired at the end of migration, not inc
   every `IncomingMessages` variant reachable by a public API has a `text_request_id_field`
   entry would retire that clause from prose entirely. Prose is the weakest possible
   enforcement for a failure mode that passes CI.
-- **Audit the remaining rules for rot** the way 15–20 were audited, before migrating each
-  cluster. Assume they have it.
+- ~~**Audit the remaining rules for rot** before migrating each cluster.~~ **Done — all six
+  clusters audited.** What replaces it: re-audit on a cadence, and count the completeness
+  claims rather than only checking that cited symbols exist. The three live counts to re-check
+  are 128/153 `# Examples`, the `<dir>/tests.rs` residue, and the four `client/` methods that
+  belong in domain modules.
+- **Close the two inventories the audits opened.** Eight missing `# Examples` and the
+  `param-budget` violations both sit in
+  [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
+  take-one-when-you-are-in-the-file work rather than sweeps.
+- **Move `Client::order` and `Client::market_data` into their domain modules.** Four sites; the
+  only standing violation of [domain module layout](../docs/rules/style/domain-module-layout.md)
+  and the one piece of drift a node currently documents rather than fixes.
 - ~~**Stale rule-number citations in source.**~~ **Done in the `testing/` pass.** All 27
   `rule N` citations across `src/` now name node paths instead of numbers. (A 28th,
   `orders/mod.rs:1115`, is IBKR's Rule 80A — a false positive, left alone.)
@@ -282,9 +342,12 @@ by rule number throughout. Numbering is retired at the end of migration, not inc
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one
-  dangling `[[dual-feature-public-types]]` points at CLAUDE.md rule 12 — it resolves for free
-  once rule 12 becomes `parity/dual-feature-types.md`.
+  dangling `[[dual-feature-public-types]]` points at CLAUDE.md rule 12 — now resolvable, since
+  rule 12 is `parity/dual-feature-types.md`. The release-notes attribution convention that
+  lived only in that store is now in [release notes](../docs/rules/docs/release-notes.md);
+  sweep for others like it.
 - **Consider promoting clusters to subagents.** The node bodies would become the agent
   prompts. Stronger enforcement (the agent always has its rules) at the cost of a round-trip
-  and losing the rules from the main thread. Only worth it once the cluster boundaries have
-  proven stable.
+  and losing the rules from the main thread. The cluster boundaries held across all six passes
+  with only one node splitting across two clusters (rule 19), so the precondition is now met —
+  this is the next structural question, if there is one.

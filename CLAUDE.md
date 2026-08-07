@@ -46,7 +46,7 @@ Default all work — features and fixes — to `main` alone. Do **not** open v2-
 
 Detail lives in [`docs/rules/`](docs/rules/README.md), one directive per file. Follow the
 link when the situation matches — the node carries the mechanics, the bug class, and the
-precedents. Everything not yet migrated is still inline under Key Points below.
+precedents. Every rule now lives in a node; nothing is inline.
 
 ### Wire protocol — protobuf-only at `server_versions::PROTOBUF_REST_MESSAGES_3` (213)
 
@@ -107,6 +107,20 @@ precedents. Everything not yet migrated is still inline under Key Points below.
 - **A clippy lint fires locally but not in CI, or you are upgrading Rust** →
   [pinned toolchain](docs/rules/workflow/pinned-toolchain.md)
 
+### Documentation
+
+- **Adding a `pub fn`, constructor, or builder entry point** →
+  [public API examples](docs/rules/docs/public-api-examples.md)
+- **Asked to make async docs match sync, or removing an `Option<T>` argument** →
+  [doc parity audit](docs/rules/docs/doc-parity-audit.md) — the doc gap is the trigger, the
+  signature drift underneath is the job
+- **Opening a PR that changes public behavior** →
+  [changelog entry](docs/rules/docs/changelog-entry.md) — same PR, under `## [Unreleased]`
+- **Removing or renaming anything public** →
+  [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-3.0.md`
+  ship with the change; their fenced Rust snippets are compiled by nothing
+- **Drafting GitHub release notes** → [release notes](docs/rules/docs/release-notes.md)
+
 > **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
 > a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
 > dispatcher and pass without it; see
@@ -117,15 +131,10 @@ precedents. Everything not yet migrated is still inline under Key Points below.
 > [proto-only decoding](docs/rules/wire/proto-only-decoding.md). Neither failure announces
 > itself; read the linked nodes before touching either surface.
 
-Rule numbers 1–17 and 19–26 are retired, not reused — the gaps are deliberate. Only 18 and 27
-are still inline below.
-Numbering is dropped entirely once the last cluster migrates; see
+Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
+an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not
+against this file — the numbering shifted at least once while it was in use. See
 [plans/claude-md-knowledge-graph.md](plans/claude-md-knowledge-graph.md).
-
-## Key Points to Remember
-
-18. **Public API needs a doc-example**: every `pub fn` / `pub` constructor / public builder entry point gets a `# Examples` block with a runnable (`no_run` / `ignore` is fine) example showing the canonical happy-path call. The example is part of the contract — it teaches the idiom, doubles as a compile-time regression guard against signature drift, and matches what users see on docs.rs. Don't drop it as "redundant with the builder's `subscribe()` example"; the entry point and the terminal action are different surfaces. Tiny accessors (struct field getters, trivial `is_*` predicates) are exempt — examples on those would be noise
-27. **"Doc parity" requests imply a signature audit**: When the ask is "make async docs match sync" (or vice versa) on a domain module, audit **three** layers before opening the PR, not just the asked-for one: (a) **doc content** — `# Arguments`, `# Examples` blocks, struct-level docs (the asked-for thing); (b) **parameter naming** — same-semantics-different-name drift like `interval_end` vs `end_date`; (c) **signature shape** — `Option<T>` vs `T`, separate methods vs single-with-`Option`-arg, terminal-types vs typed-args. The doc gap is the trigger; signature divergence is often the bigger fish. Per [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md), fix all three in the same PR. Precedent: PR #573 (issue #210) — original ask was "doc parity" for async historical; what shipped was 9 docs + 1 signature reshape (`Option<WhatToShow>` → `WhatToShow` on `historical_data` + `historical_data_streaming`) + 1 method split (`historical_schedule` → `historical_schedules` + `historical_schedules_ending_now`) + 1 parameter rename (`interval_end` → `end_date`). Sister rules: [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md), [dual-feature types](docs/rules/parity/dual-feature-types.md) (the *types* axis); this rule covers the docs/naming/shape axis of dual-feature parity. **Sub-rule for `Option<T>` removal**: before flipping `Option<T>` → `T` on a public arg, run the three-source check — encoder/wire (is `None` representable?), C# `EClient.cs` (is field documented as required?), all callers (what fraction wrap with `Some(...)`?). If wire allows but every real caller wraps, drop the `Option`. Watch out: tests passing `None` for incidental laziness (exercising an early-failure path where the arg is irrelevant) don't count as "real `None` callsites." **Sub-rule for "magic-`None` splits"**: when a public `foo(arg: Option<T>, ...)` API surfaces magic-`None` problems and gets split into `foo(arg: T)` + `foo_default(...)` — accept the split as the **correct intermediate** in a 3-step evolution: bad shape (magic-`None`) → split → fluent builder with explicit `.named_setter(value)` for the optional. The destination is the builder; the split is a planned waypoint, not a final answer. **Per-method cross-feature pairing for doc-examples**: when async doc-example imports differ from sibling async methods in the same file, prefer matching the sync counterpart per-method (intentional pairing) over intra-file uniformity — /simplify reviewers who flag "intra-file inconsistency" on dual-feature docs are often missing the pairing axis (PR #573 /simplify deferred the `prelude`-import streaming example for this reason)
 
 ## Quick Commands
 
@@ -197,49 +206,3 @@ IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
 - DO NOT include "Generated with Claude Code" or similar attribution in commit messages
 - Keep commit messages focused on the technical changes and their purpose
 
-## Release Notes Guidelines
-
-Use this format for GitHub release notes:
-
-- Group changes under `## What's New` and `## Bug Fixes` headings as applicable
-- Each item gets an `### H3 heading` with short description and PR number (e.g., `### Feature name (#123)`)
-- One-sentence summary below the heading
-- A code sample showing typical usage in a fenced ```rust block
-- Order items by significance (most impactful first)
-
-## Changelog
-
-Maintain a root `CHANGELOG.md` in [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format, versioned per [SemVer](https://semver.org/spec/v2.0.0.html).
-
-- **Every PR with a user-facing change adds an entry under `## [Unreleased]`** in the same PR, grouped by change type — `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security` (omit empty groups, keep them in that order). A stale changelog is a blocker, same as a stale README/migration guide.
-- Internal-only work (refactors, tests, CI, doc-only edits, dependency bumps with no behavior change) needs **no** entry. If unsure, ask "would a downstream user notice?" — if no, skip it.
-- One bullet per change: imperative, concise, ending with the PR number — e.g. `- Classify TWS codes 10089/10167 as informational so delayed-data subscriptions stay open (#677).` Breaking changes go under `Changed`/`Removed` and must also be reflected in `docs/migration-3.0.md`.
-- **On release**: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (ISO 8601 date), then add a fresh empty `## [Unreleased]` at the top. Keep version sections newest-first. Update the link-reference definitions at the bottom (`[Unreleased]` → `compare/vX.Y.Z...HEAD`, `[X.Y.Z]` → the tag/compare URL).
-- The changelog is the curated, append-as-you-go history; GitHub release notes (above) are the same entries expanded with code samples at release time. Keep the two consistent.
-
-## Maintaining Documentation
-
-Keep `CLAUDE.md`, `README.md`, and documentation up to date as the codebase evolves. When patterns change, conventions are established, or new modules are added, update the relevant files.
-
-### Keep `README.md` and `docs/migration-3.0.md` in sync with v3.0 work
-
-Treat `README.md` and `docs/migration-3.0.md` as part of the public API. Every PR that lands a v3.0 breaking change must update both in the same PR — leaving them stale produces the worst kind of drift, where the migration guide tells users to follow patterns that no longer compile.
-
-Update `docs/migration-3.0.md` whenever the PR:
-
-- Removes or renames a public type, struct field, enum variant, method, or re-export.
-- Changes the type of a public field (`String` → typed enum, `bool` → typed mode enum, etc.).
-- Changes the shape of a return type (e.g. `Subscription<T>::next()` envelope changes, new `Result` variants).
-- Adds or removes a public builder method, callback hook, or feature flag that 2.x users would discover via search.
-
-Update `README.md` whenever the PR:
-
-- Touches code shown in any README example (the examples must still compile and reflect the canonical idiom).
-- Removes a variant matched on in any README `match` block.
-- Adds an idiom that should be the canonical happy-path (e.g. `is_terminal()` instead of magic-string compares — once shipped, the README should show the new form).
-
-Mechanical check before opening the PR: grep `README.md`, every `docs/*.md`, and module-level rustdoc for any name you changed, removed, or replaced in this PR. Stale references are blockers, not nits.
-
-**Markdown fenced code blocks aren't compile-checked.** `cargo test --doc` only runs `# Examples` blocks in `.rs` files; ```rust blocks in `README.md` and `docs/*.md` are prose. They rot silently every time a field is renamed, a method removed, or a public type reshaped — and there's no CI gate to catch it. After grepping, *read each remaining hit* and verify the snippet would compile against current public API (mental compile pass: do those identifiers exist? do those methods chain on those receivers? are field types still spelled that way?). PR #549's order-construction sweep surfaced six broken `order_builder::market_order(...).condition(...).build()` chains in `docs/api-patterns.md` (Order has no `.condition()` method) and `Order { lmt_price: ..., tif: "GTC".to_string() }` blocks in `docs/order-types.md` (real fields: `limit_price`, `tif: TimeInForce`) — both shipped wrong for months because nothing tested them.
-
-Cross-link in both directions: a new section in `docs/migration-3.0.md` should usually be linkable from a README example or its surrounding prose, and the README's "Migrating?" pointer near the top should keep working.
