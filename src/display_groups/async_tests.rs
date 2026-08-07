@@ -69,7 +69,8 @@ async fn test_update_display_group() {
 
 #[tokio::test]
 async fn test_subscribe_to_group_events_skips_wrong_message_type() {
-    // Regression for docs/rules/wire/proto-only-decoding.md: wrong-type frames must skip-classify, not terminate.
+    // Regression for docs/rules/wire/proto-only-decoding.md: wrong-type frames
+    // must skip-classify, not terminate.
     let wrong = proto_response(
         IncomingMessages::DisplayGroupList,
         display_group_updated().contract_info("wrong message").encode_proto(),

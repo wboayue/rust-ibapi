@@ -137,8 +137,8 @@ fn test_decode_option_chain_proto() {
 
 // Servers ≥ the connection floor always emit ContractData / SymbolSamples /
 // MarketRule / SecurityDefinitionOptionParameter in proto. Text-framed arrival
-// skip-classifies via `UnexpectedResponse` (docs/rules/wire/proto-only-decoding.md) rather than terminating
-// the subscription.
+// skip-classifies via `UnexpectedResponse` rather than terminating the
+// subscription — see docs/rules/wire/proto-only-decoding.md.
 
 #[test]
 fn test_decode_contract_details_rejects_text_framing() {
