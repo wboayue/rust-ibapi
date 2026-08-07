@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
@@ -94,6 +94,10 @@ pub struct Subscription<T> {
     cancel_fn: Option<Arc<CancelFn>>,
     /// Snapshot-end detector captured from the decoder (`None` for pre-decoded subscriptions).
     snapshot_end_fn: Option<SnapshotEndFn<T>>,
+    /// The decoder's declared message types, captured because `poll_next` has
+    /// erased the decoder to a closure. `None` means "no declaration available"
+    /// (raw `with_decoder` callers) and disables the filter.
+    response_message_ids: Option<&'static [IncomingMessages]>,
 }
 
 enum SubscriptionInner<T> {
@@ -136,6 +140,7 @@ impl<T> Clone for Subscription<T> {
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
             snapshot_end_fn: self.snapshot_end_fn,
+            response_message_ids: self.response_message_ids,
         }
     }
 }
@@ -171,6 +176,7 @@ impl<T> Subscription<T> {
             message_bus: Some(message_bus),
             cancel_fn: None,
             snapshot_end_fn: None,
+            response_message_ids: None,
         }
     }
 
@@ -194,6 +200,7 @@ impl<T> Subscription<T> {
         // `StreamDecoder` bound) can flag a completed snapshot and skip the cancel on
         // drop — the async mirror of the sync side's intrinsic `snapshot_ended` tracking.
         sub.snapshot_end_fn = Some(<T as StreamDecoder<T>>::is_snapshot_end);
+        sub.response_message_ids = Some(D::RESPONSE_MESSAGE_IDS);
         sub
     }
 
@@ -226,6 +233,7 @@ impl<T> Subscription<T> {
             message_bus: None,
             cancel_fn: None,
             snapshot_end_fn: None,
+            response_message_ids: None,
         }
     }
 
@@ -352,6 +360,7 @@ impl<T: Send + 'static> Stream for Subscription<T> {
             stream_ended,
             snapshot_ended,
             snapshot_end_fn,
+            response_message_ids,
             ..
         } = this;
         loop {
@@ -369,6 +378,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
 
                     match routed {
                         RoutedItem::Response(mut message) => {
+                            // Shared channels carry several message types; anything this
+                            // decoder does not declare belongs to another subscription.
+                            if response_message_ids.is_some_and(|ids| !ids.contains(&message.message_type())) {
+                                log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
+                                continue;
+                            }
                             let result = decoder(context, &mut message);
                             match process_decode_result(result) {
                                 ProcessingResult::Success(val) => {
@@ -380,10 +395,6 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                                 ProcessingResult::EndOfStream => {
                                     stream_ended.store(true, Ordering::Relaxed);
                                     return Poll::Ready(None);
-                                }
-                                ProcessingResult::Skip => {
-                                    log::trace!("skipping unexpected message on shared channel");
-                                    continue;
                                 }
                                 ProcessingResult::Error(err) => {
                                     stream_ended.store(true, Ordering::Relaxed);

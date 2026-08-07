@@ -98,10 +98,6 @@ pub(crate) fn should_store_error(error: &Error) -> bool {
 pub(crate) enum ProcessingResult<T> {
     /// Successfully processed a value
     Success(T),
-    /// Message not intended for this subscription — skip silently.
-    /// Occurs on shared broadcast channels where messages from other
-    /// subscriptions can arrive on the same channel.
-    Skip,
     /// Encountered an error that should be stored
     Error(Error),
     /// Stream has ended normally
@@ -110,16 +106,21 @@ pub(crate) enum ProcessingResult<T> {
 
 /// Process a decoding result into a common processing result.
 ///
-/// Only [`Error::UnexpectedResponse`] — "not my message type" — is skippable.
-/// [`Error::UnexpectedWireFormat`] deliberately falls through to `Error`: the
-/// message *was* for this decoder and could not be read, and skipping it left
-/// tests green with their post-`next_data()` assertions unrun. See
-/// `docs/rules/testing/fixture-builders.md`.
+/// Every error now terminates the subscription except [`Error::EndOfStream`],
+/// whose name and disposition agree everywhere it is used — the transport
+/// raises it too, and it always means the stream is over.
+///
+/// **No error variant means "skip" any more.** Whether a message belongs to this
+/// subscription is answered before `decode` runs, from
+/// [`StreamDecoder::RESPONSE_MESSAGE_IDS`]. That indirection was the defect
+/// behind #508 and #731: `Error::UnexpectedResponse` is returned to users as a
+/// real error by ~20 one-shot call sites, and *also* meant "silently drop this"
+/// here, so any decoder that reused the variant inherited the skip disposition
+/// without asking for it.
 pub(crate) fn process_decode_result<T>(result: Result<T, Error>) -> ProcessingResult<T> {
     match result {
         Ok(val) => ProcessingResult::Success(val),
         Err(Error::EndOfStream) => ProcessingResult::EndOfStream,
-        Err(Error::UnexpectedResponse(_)) => ProcessingResult::Skip,
         Err(err) => ProcessingResult::Error(err),
     }
 }
@@ -168,12 +169,20 @@ impl DecoderContext {
 /// Decoders receive a `DecoderContext` containing server version, timezone, and other
 /// context needed to properly decode messages.
 pub(crate) trait StreamDecoder<T> {
-    /// Message types this stream can handle.
+    /// Message types this stream can handle. **The complete set** — a type
+    /// absent from this list never reaches [`Self::decode`].
     ///
-    /// Load-bearing for `request_id`-keyed subscriptions: every type listed here
-    /// is checked against the routing allow-list by
-    /// [`debug_assert_request_id_routable`] when the subscription is built.
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
+    /// Load-bearing twice over, which is why it has no default: the subscription
+    /// drivers skip anything not listed here (shared channels carry several
+    /// types), and [`debug_assert_request_id_routable`] checks every entry
+    /// against the routing allow-list when a `request_id`-keyed subscription is
+    /// built.
+    ///
+    /// Adding a `decode` arm therefore means adding the type here too. Forget
+    /// it and the arm is dead — but every domain's stub tests feed the types
+    /// they care about through a real subscription, so the omission fails a
+    /// test rather than reaching a user.
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
 
     /// Decode a response message into the stream's data type
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<T, Error>;

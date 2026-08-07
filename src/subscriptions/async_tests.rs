@@ -1,6 +1,6 @@
 use super::*;
 use crate::market_data::realtime::Bar;
-use crate::messages::{Notice, OutgoingMessages};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
@@ -235,47 +235,37 @@ async fn test_subscription_no_retries_after_end_of_stream() {
 }
 
 #[tokio::test]
-async fn test_subscription_skips_unexpected_messages_without_retry_limit() {
+async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
+    /// Declares only `TickPrice`; `TickSize` frames must never reach `decode`.
+    #[derive(Debug)]
+    struct DeclaresTickPrice;
+
+    impl StreamDecoder<DeclaresTickPrice> for DeclaresTickPrice {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DeclaresTickPrice, Error> {
+            Ok(DeclaresTickPrice)
+        }
+    }
+
     let message_bus = Arc::new(MessageBusStub::default());
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let call_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let call_count_clone = call_count.clone();
+    let mut subscription: Subscription<DeclaresTickPrice> =
+        Subscription::new_from_internal::<DeclaresTickPrice>(internal, message_bus, Some(1), None, DecoderContext::default());
 
-    // Decoder: returns UnexpectedResponse for the first 20 messages (more than
-    // MAX_DECODE_RETRIES=10), then returns a success value. If UnexpectedResponse
-    // counted toward the retry limit, the subscription would give up after 10.
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        move |_context, _msg| {
-            let n = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            if n < 20 {
-                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
-            } else {
-                Ok("success".to_string())
-            }
-        },
-        None,
-        None,
-        DecoderContext::default(),
-    );
-
-    // Send 21 messages — 20 will be "unexpected" (skipped), 1 will succeed
-    for _ in 0..21 {
-        tx.send(ResponseMessage::from("msg\0").into()).unwrap();
+    // 20 undeclared frames — more than the old MAX_DECODE_RETRIES=10, so this
+    // also pins that skipping is uncapped — then one the decoder declares.
+    for _ in 0..20 {
+        tx.send(ResponseMessage::from("2\0stray\0").into()).unwrap();
     }
+    tx.send(ResponseMessage::from("1\0msg\0").into()).unwrap();
 
     assert!(
-        matches!(
-            subscription.next().await,
-            Some(Ok(SubscriptionItem::Data(ref s))) if s == "success"
-        ),
-        "subscription should not have stopped after skipping unexpected messages"
+        matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))),
+        "subscription should not have stopped while skipping undeclared messages"
     );
-    // All 21 messages should have been processed (20 skipped + 1 success)
-    assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 21);
 }
 
 #[tokio::test]
@@ -398,6 +388,8 @@ async fn test_subscription_new_from_internal_simple() {
     struct TestItem;
 
     impl StreamDecoder<TestItem> for TestItem {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
         fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<TestItem, Error> {
             Ok(TestItem)
         }
@@ -639,8 +631,10 @@ use std::time::Duration;
 struct CollectItem(i32);
 
 impl StreamDecoder<CollectItem> for CollectItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
     fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
-        Ok(CollectItem(msg.peek_int(0)?))
+        Ok(CollectItem(msg.peek_int(1)?))
     }
 
     fn is_snapshot_end(&self) -> bool {
@@ -648,8 +642,10 @@ impl StreamDecoder<CollectItem> for CollectItem {
     }
 }
 
+/// Field 0 is the message id (`TickPrice`, matching `CollectItem`'s
+/// declaration); the payload the decoder reads sits at field 1.
 fn collect_data(value: i32) -> RoutedItem {
-    RoutedItem::Response(ResponseMessage::from(&format!("{value}\0")))
+    RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
 }
 
 /// Build a `Subscription<CollectItem>` pre-loaded with `items`. When `keep_open`

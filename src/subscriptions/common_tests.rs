@@ -31,16 +31,14 @@ fn test_process_decode_result() {
         _ => panic!("Expected EndOfStream"),
     }
 
-    // Test skip case (wrong-channel message)
+    // No error variant means "skip" any more — that decision is made from
+    // `RESPONSE_MESSAGE_IDS` before `decode` runs. Both of these terminate.
     let test_msg = ResponseMessage::from_simple("test");
     match process_decode_result::<i32>(Err(Error::unexpected_response(&test_msg))) {
-        ProcessingResult::Skip => {}
-        _ => panic!("Expected Skip"),
+        ProcessingResult::Error(Error::UnexpectedResponse(_)) => {}
+        other => panic!("Expected Error(UnexpectedResponse), got {other:?}"),
     }
 
-    // A framing mismatch is NOT skippable — the message was addressed to this
-    // decoder, so dropping it would lose data (and leave a test green with its
-    // assertions unrun). See docs/rules/testing/fixture-builders.md.
     match process_decode_result::<i32>(Err(Error::unexpected_wire_format(&test_msg))) {
         ProcessingResult::Error(Error::UnexpectedWireFormat(_)) => {}
         other => panic!("Expected Error(UnexpectedWireFormat), got {other:?}"),

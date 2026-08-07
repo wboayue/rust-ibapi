@@ -375,24 +375,39 @@ to gating because two cases shared an error variant. That framing was the obstac
 question worth asking first is not "how do I detect the bad case" but "why are these two cases
 the same value" — and the answer was that they never should have been.
 
+### The mechanism underneath both — #732
+
+`/simplify` on #731 found that the two traps were instances, not the defect. `Result<T, Error>`
+was a three-way channel: "skip me" travelled in-band as `Error::UnexpectedResponse`, a variant
+~20 one-shot call sites also return *to the user* as a genuine error. Any decoder that reused
+it inherited "silently drop this" without asking. #508 was the first patch, #731 the second,
+so the rule of three tripped.
+
+The fix that suggested itself — `decode -> Result<Option<T>, Error>` — would have touched all
+28 decoder impls. **The better answer was already in the tree.** `RESPONSE_MESSAGE_IDS` had
+been sitting on `StreamDecoder` since before this arc, `#[allow(dead_code)]` until #730 made
+it load-bearing for the routing guard. It is exactly the question the drivers were asking the
+error type: *is this message mine?* So both drivers now filter on it before calling `decode`,
+`ProcessingResult::Skip` is gone, and no error variant carries dispatch semantics. Zero
+changes to the 28 decoders.
+
+The const also lost its default (`= &[]`), which turns a missing declaration from a
+skip-everything silent failure into a compile error. That mattered immediately: nine test-side
+fake decoders failed to compile and had to declare what they actually consume.
+
+**The risk moved rather than vanished, and it is worth naming.** Skip is now driven by a
+hand-maintained list, so a `decode` arm whose type is not declared becomes dead code. Two
+things bound it: the arm is not silent at runtime (the `_ =>` backstop terminates loudly if
+the lists disagree the other way), and every domain's stub tests feed their types through a
+real subscription — the whole suite passed unchanged, which is what says the 28 existing lists
+are accurate.
+
+**The reusable lesson: when a fix needs a fact, check whether the codebase already declares
+it.** Three PRs in a row here found the answer in `RESPONSE_MESSAGE_IDS` — #730 read it for the
+routing guard, #732 for the skip filter — a constant that had been dead code for most of its
+life.
+
 ## Follow-ups
-
-- **Stop dispatching skip-vs-terminate on an error variant.** `/simplify` on #731 named the
-  real defect underneath both traps: `Result<T, Error>` is being used as a three-way channel,
-  where "skip me" is in-band and carried by `Error::UnexpectedResponse` — a variant that ~20
-  one-shot call sites also return *to the user* as a genuine error. `require_proto()` reused
-  it and silently inherited its disposition; that is the whole bug. The generalising fix is to
-  make disposition explicit — `StreamDecoder::decode -> Result<Option<T>, Error>` (`None` =
-  not my message type), or a named `DecodedItem::{Value(T), NotForMe}` — after which
-  `process_decode_result` and `ProcessingResult::Skip` both disappear and no error variant
-  carries dispatch semantics.
-
-  **This is the third occurrence, so the rule-of-three trips.** #508 was the first patch (an
-  unknown type terminated the subscription), #731 the second. Corroborating evidence from the
-  same review: the same variant-classification decision is duplicated across three tables —
-  `process_decode_result`, `is_transient_error`, and `categorize_error` — and #731 had to
-  audit all three by hand, with nothing enforcing that it did. Landing this retires the class
-  rather than patching instances.
 
 - **Collapse the 40 `*_rejects_text_framing` asserts into one helper.** They spell the same
   assertion four different ways across 12 files, with four different panic messages. #731 is

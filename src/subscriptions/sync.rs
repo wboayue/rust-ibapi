@@ -161,16 +161,18 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
     fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
         match response {
+            // Shared channels carry several message types; anything this
+            // decoder does not declare belongs to another subscription.
+            Some(RoutedItem::Response(message)) if !T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) => {
+                log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
+                NextAction::Skip
+            }
             Some(RoutedItem::Response(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
                 ProcessingResult::Success(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
                     }
                     NextAction::Return(Some(Ok(SubscriptionItem::Data(val))))
-                }
-                ProcessingResult::Skip => {
-                    log::trace!("skipping unexpected message on shared channel");
-                    NextAction::Skip
                 }
                 ProcessingResult::EndOfStream => {
                     self.stream_ended.store(true, Ordering::Relaxed);
