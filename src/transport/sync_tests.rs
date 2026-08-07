@@ -246,7 +246,7 @@ impl Exchange {
 /// Builds the handshake request string the client sends, derived from the
 /// handler's advertised version range (mirrors `format_handshake`). Deriving it
 /// from the constants keeps these fixtures correct across floor/max ratchets
-/// (CLAUDE.md rule 21).
+/// (docs/rules/testing/derive-from-constants.md).
 fn handshake_request(handler: &ConnectionHandler) -> String {
     format!("v{}..{}", handler.min_version, handler.max_version)
 }

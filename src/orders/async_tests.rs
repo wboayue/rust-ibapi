@@ -120,7 +120,7 @@ async fn test_place_order() {
 }
 
 // Drives the real async place_order path and decodes the captured wire bytes to confirm
-// hedge_max_size rides the outbound PlaceOrderRequest proto (CLAUDE.md rule 10).
+// hedge_max_size rides the outbound PlaceOrderRequest proto (docs/rules/testing/exercise-production-code.md).
 #[tokio::test]
 async fn place_order_encodes_hedge_max_size() {
     use crate::common::test_utils::helpers::decode_request_proto;
@@ -141,7 +141,7 @@ async fn place_order_encodes_hedge_max_size() {
 }
 
 // Placing an order with hedge_max_size against a server below the gate is rejected
-// before anything is sent (CLAUDE.md rule 10 — real verify path).
+// before anything is sent (docs/rules/testing/exercise-production-code.md — real verify path).
 #[tokio::test]
 async fn place_order_rejects_hedge_max_size_below_gate() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));

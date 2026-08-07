@@ -67,7 +67,7 @@ fn parse_optional_unknown_propagates_fromstr_err() {
 // elsewhere assert only that each decoder is *wired* to this helper.
 
 /// Every input class that must decode to "no value". The literal-sentinel rows are
-/// derived from the constant under test rather than re-typed (CLAUDE.md rule 21).
+/// derived from the constant under test rather than re-typed (docs/rules/testing/derive-from-constants.md).
 fn unset_inputs() -> impl Iterator<Item = Option<&'static str>> {
     [
         None,     // field absent
@@ -161,7 +161,7 @@ fn parse_decimal_or_zero_propagates_parse_error() {
     assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse(_, _, _))));
 }
 
-// === decode_combo_leg end-to-end (CLAUDE.md rule 10) ===
+// === decode_combo_leg end-to-end (docs/rules/testing/exercise-production-code.md) ===
 
 fn proto_leg(action: Option<&str>) -> proto::ComboLeg {
     proto::ComboLeg {

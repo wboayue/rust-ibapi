@@ -1184,7 +1184,7 @@ fn test_notice_category_partition() {
 
 #[test]
 fn test_connectivity_status_from_code_table() {
-    // Derive expectations from the code constants (rule 21): each farm-code set
+    // Derive expectations from the code constants (docs/rules/testing/derive-from-constants.md): each farm-code set
     // maps to its status; everything else maps to None.
     let cases: &[(&[i32], ConnectivityStatus)] = &[
         (&FARM_OK_CODES, ConnectivityStatus::Ok),

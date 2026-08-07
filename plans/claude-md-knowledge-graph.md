@@ -3,8 +3,7 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status:** `wire/` cluster migrated (rules 15–20), plus one seeded `testing/` node. Five
-clusters remain inline.
+**Status:** `wire/` and `testing/` clusters migrated. Four clusters remain inline.
 
 ## Why
 
@@ -45,6 +44,35 @@ builder-placement and field-minimal conventions are live and belong to `testing/
 | `Error::UnexpectedResponse` implied to carry a `ResponseMessage` | Carries a `String` since `ResponseMessage` became `pub(crate)` (#581) |
 | "floor 213" as a bare number | `server_versions::PROTOBUF_REST_MESSAGES_3`. `PROTOBUF` is a *different*, lower constant (201) |
 | `routes_by_request_id` described as a table | A function wrapping `text_request_id_field`, which is the source of truth |
+
+## What shipped in the testing/ pass
+
+| Node | From | Status |
+|---|---|---|
+| `testing/coverage-floor.md` | rule 6 | active |
+| `testing/sibling-test-files.md` | rule 8 | active |
+| `testing/exercise-production-code.md` | rule 10 | active |
+| `testing/derive-from-constants.md` | rule 21 | active |
+| `testing/pin-compile-fail-codes.md` | rule 22 | active |
+| `testing/clock-seams.md` | rule 26 | active |
+
+These join `testing/fixture-builders.md`, seeded during the `wire/` pass from rule 19's
+builder half.
+
+### Rot corrected while migrating
+
+Rules 6, 8, 21, and 26 audited clean — `just cover`'s nightly invocation, the 87 `#[path]`
+test wirings with zero inline `mod tests` remaining, `ProtocolFeature { name, min_version }`,
+and all four `*_from` helpers verified present. Rule 22 was substantially wrong:
+
+| Was | Is |
+|---|---|
+| Rule 22's precedent pins `compile_fail,E0639` for "cannot construct a `#[non_exhaustive]` struct externally" | **No such doc-test exists.** The repo's only `compile_fail` is `compile_fail,E0599` at `src/contracts/mod.rs:312`, guarding a *typestate builder* terminal — `Contract::futures("ES").build()` with no month. Wrong code and wrong subject |
+| Rule 22: "same logic applies to `trybuild` `compile_fail` files" | There is no `trybuild` dependency |
+| Rule 10: `assert_request<B>(builder)` | `assert_request(&message_bus, index, &builder)` — three args; the msg id comes from `B::MSG_ID` via `RequestEncoder` |
+
+The directive in each case survived; only the evidence was wrong. That is the same pattern the
+`wire/` audit found, and it is the argument for auditing every cluster before migrating it.
 
 ## Retrieval check — run this before migrating further
 
@@ -93,11 +121,10 @@ Migrate in this order — highest density and clearest boundaries first:
 
 | Order | Cluster | Rules | Notes |
 |---|---|---|---|
-| 1 | `testing/` | 6, 8, 10, 21, 22, 26 | **Extend** the seeded directory; don't recreate it |
-| 2 | `parity/` | 1, 5, 12, 13, 24 | sync/async axis |
-| 3 | `workflow/` | 3, 7, 9, 11, 23 | |
-| 4 | `style/` | 2, 4, 14, 25 | |
-| 5 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | |
+| 1 | `parity/` | 1, 5, 12, 13, 24 | sync/async axis |
+| 2 | `workflow/` | 3, 7, 9, 11, 23 | |
+| 3 | `style/` | 2, 4, 14, 25 | |
+| 4 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | |
 
 **Do not renumber surviving rules.** The gap at 15–20 is deliberate. Rule numbers are already
 unreliable across stores — one memory cites "rules 20/22" for the family now at 15/17, and
@@ -112,9 +139,22 @@ by rule number throughout. Numbering is retired at the end of migration, not inc
   enforcement for a failure mode that passes CI.
 - **Audit the remaining rules for rot** the way 15–20 were audited, before migrating each
   cluster. Assume they have it.
-- **A stale rule-number citation exists in source:** `src/news/common/decoders.rs` cites
-  "(rule 20)" for what is now the proto-only-decoding rule. Sweep for others when numbering
-  is retired.
+- **Stale rule-number citations in source: 18 sites, not one.** A grep during the `testing/`
+  pass found 27 `rule N` citations across `src/` (28 counting `orders/mod.rs:1115`, which is
+  IBKR's Rule 80A and a false positive). The `testing/` pass rewrote the 8 it made dangle —
+  rules 10 and 21 — to node paths. The remaining 18 cite the retired wire numbers 15, 16, 17,
+  19, and 20, and were already dangling before that pass:
+
+  | Number | Sites |
+  |---|---|
+  | 20 | `messages.rs:894`, `market_data/realtime/common/decoders/tests.rs:57`, `contracts/common/decoders/mod.rs:16` + `tests.rs:140`, `wsh/common/decoders_tests.rs:30`, `news/common/decoders.rs:14`, `orders/common/decoders/mod.rs:8` + `tests.rs:374`, `scanner/common/decoders.rs:21` + `decoders_tests.rs:78` |
+  | 19 | `market_data/historical/{sync,async}.rs`, `common/encoders.rs` ×2 |
+  | 17 | `messages.rs:983`, `messages/tests.rs:311` |
+  | 16 | `proto/decoders.rs:57`, `:108` |
+  | 15 | `display_groups/async_tests.rs:72` |
+
+  Rewrite each to the node path — `docs/rules/wire/<node>.md` — rather than a new number. Do
+  it as one sweep; piecemeal fixes mean touching the same files on every cluster migration.
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
   fixture/builder group sits outside the wikilink graph using backticked filenames; and one
