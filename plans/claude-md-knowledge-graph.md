@@ -183,7 +183,7 @@ as generics, and `orders/common` / `accounts/common` still expose their decoders
 
 | Was | Is |
 |---|---|
-| Rule 2: "Client methods live in domain modules, not in `client/sync.rs`" | True of 11 domains and **false of four sites**: `Client::order` and `Client::market_data` are defined in `client/sync.rs` and `client/async.rs`, while every sibling builder entry point (`realtime_bars`, `tick_by_tick`, `market_depth`) lives in its domain module. Recorded as known drift on the node |
+| Rule 2: "Client methods live in domain modules, not in `client/sync.rs`" | True of 11 domains and **false of four sites**: `Client::order` and `Client::market_data` are defined in `client/sync.rs` and `client/async.rs`, while every sibling builder entry point (`realtime_bars`, `tick_by_tick`, `market_depth`) lives in its domain module. Recorded as known drift on the node. **Closed in #729** — all four sites moved, drift section deleted |
 | Rule 4 implied `#[allow(clippy::too_many_arguments)]` is the canary for the 3-param budget | Clippy's default threshold is **7** — it fires at eight or more, and the budget is three. All four `#[allow]` sites in the tree are 8-arg encoders; a 4-to-7-arg signature passes every gate silently. The budget has no enforcement at all |
 | Rule 4's `DateRange { start, end }` | Hypothetical — no such type exists. Kept as illustration, marked as one |
 | Rule 25 credits the orphan rule only implicitly ("can't be deduplicated via a blanket trait impl") | `impl_wire_enum!`'s own doc names it outright: `impl<T: WireEnum> Display` is blocked by the orphan rule, which is *why* the macro is the only viable shape. Promoted to the node's first justification |
@@ -327,9 +327,17 @@ cite nodes.
   `param-budget` violations both sit in
   [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
   take-one-when-you-are-in-the-file work rather than sweeps.
-- **Move `Client::order` and `Client::market_data` into their domain modules.** Four sites; the
-  only standing violation of [domain module layout](../docs/rules/style/domain-module-layout.md)
-  and the one piece of drift a node currently documents rather than fixes.
+- ~~**Move `Client::order` and `Client::market_data` into their domain modules.**~~ **Done in
+  #729.** `order` → `orders/{sync,async}.rs`, `market_data` →
+  `market_data/realtime/{sync,async}.rs`. The "Known drift" section is gone from
+  [domain module layout](../docs/rules/style/domain-module-layout.md); the node now documents
+  no exceptions.
+
+  **The doc gap travelled with the method.** Async `market_data` was one of the nine missing
+  `# Examples` sites *and* the only doc-parity miss among them — a one-line summary against the
+  sync twin's two runnable examples. Written on arrival, so the count is now 134 of 152.
+  Moving a method is the cheapest moment to close its doc debt: the twin is already open in
+  the diff.
 - ~~**Stale rule-number citations in source.**~~ **Done in the `testing/` pass.** All 27
   `rule N` citations across `src/` now name node paths instead of numbers. (A 28th,
   `orders/mod.rs:1115`, is IBKR's Rule 80A — a false positive, left alone.)

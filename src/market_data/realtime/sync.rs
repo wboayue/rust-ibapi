@@ -8,6 +8,7 @@ use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, DepthMarketDataDescription, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
+use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
 
@@ -23,6 +24,65 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
 }
 
 impl Client {
+    /// Returns a builder for a streaming level-1 market data subscription.
+    ///
+    /// Streams by default; `.snapshot()` switches to a one-shot request. See
+    /// [`MarketDataBuilder`] for the chained methods.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::TickTypes;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// // Subscribe to real-time streaming data with specific tick types
+    /// let subscription = client.market_data(&contract)
+    ///     .generic_ticks(&["233", "236"])  // RTVolume and Shortable
+    ///     .subscribe()
+    ///     .expect("subscription failed");
+    ///
+    /// for tick in subscription.iter_data() {
+    ///     match tick? {
+    ///         TickTypes::Price(price) => println!("Price: {price:?}"),
+    ///         TickTypes::Size(size) => println!("Size: {size:?}"),
+    ///         _ => {}
+    ///     }
+    /// }
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    ///
+    /// A one-shot snapshot, driven manually. To just collect the ticks and stop, prefer
+    /// [`MarketDataBuilder::snapshot_once`], which wraps this loop with a timeout.
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::TickTypes;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let subscription = client.market_data(&contract)
+    ///     .snapshot()
+    ///     .subscribe()
+    ///     .expect("subscription failed");
+    ///
+    /// for tick in subscription.iter_data() {
+    ///     if let TickTypes::SnapshotEnd = tick? {
+    ///         println!("Snapshot complete");
+    ///         break;
+    ///     }
+    /// }
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn market_data<'a>(&'a self, contract: &'a Contract) -> MarketDataBuilder<'a, Self> {
+        MarketDataBuilder::new(self, contract)
+    }
+
     /// Returns a builder for a real-time 5-second bar subscription.
     ///
     /// Defaults to `WhatToShow::Trades` and `TradingHours::Regular`. See

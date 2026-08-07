@@ -19,8 +19,6 @@ use crate::transport::{
 use crate::Error;
 
 use super::id_generator::ClientIdManager;
-use crate::contracts::Contract;
-use crate::orders::OrderBuilder;
 
 /// Asynchronous TWS API Client
 pub struct Client {
@@ -270,36 +268,6 @@ impl Client {
     /// Sets the current value of order ID.
     pub(crate) fn set_next_order_id(&self, order_id: i32) {
         self.id_manager.set_order_id(order_id);
-    }
-
-    /// Start building an order for the given contract
-    ///
-    /// This is the primary API for creating orders, providing a fluent interface
-    /// that guides you through the order creation process.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::stock("AAPL").build();
-    ///     
-    ///     let order_id = client.order(&contract)
-    ///         .buy(100)
-    ///         .limit(50.0)
-    ///         .submit().await.expect("order submission failed");
-    /// }
-    /// ```
-    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
-        OrderBuilder::new(self, contract)
-    }
-
-    /// Creates a market data subscription builder with a fluent interface.
-    pub fn market_data<'a>(&'a self, contract: &'a Contract) -> crate::market_data::builder::MarketDataBuilder<'a, Self> {
-        crate::market_data::builder::MarketDataBuilder::new(self, contract)
     }
 
     /// Check server version requirement

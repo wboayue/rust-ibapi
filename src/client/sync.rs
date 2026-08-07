@@ -14,11 +14,8 @@ use time_tz::Tz;
 use crate::client::builders::client_builder::sync_impl::ClientBuilder;
 use crate::connection::common::StartupMessage;
 use crate::connection::{sync::Connection, ConnectionMetadata};
-use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::builder::MarketDataBuilder;
 use crate::messages::OutgoingMessages;
-use crate::orders::OrderBuilder;
 use crate::transport::sync::NoticeBroadcaster;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 
@@ -146,28 +143,6 @@ impl Client {
         self.id_manager.set_order_id(order_id);
     }
 
-    /// Start building an order for the given contract
-    ///
-    /// This is the primary API for creating orders, providing a fluent interface
-    /// that guides you through the order creation process.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::stock("AAPL").build();
-    ///
-    /// let order_id = client.order(&contract)
-    ///     .buy(100)
-    ///     .limit(50.0)
-    ///     .submit().expect("order submission failed");
-    /// ```
-    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
-        OrderBuilder::new(self, contract)
-    }
-
     /// Returns the version of the TWS API server to which the client is connected.
     /// This version is determined during the initial connection handshake.
     ///
@@ -286,69 +261,6 @@ impl Client {
     /// ```
     pub fn notice_stream(&self) -> Result<crate::subscriptions::notice_stream::sync_impl::NoticeStream, Error> {
         Ok(self.message_bus.notice_subscribe())
-    }
-
-    /// Requests real time market data.
-    ///
-    /// Creates a market data subscription builder with a fluent interface.
-    ///
-    /// This is the preferred way to subscribe to market data, providing a more
-    /// intuitive and discoverable API than the raw method.
-    ///
-    /// # Arguments
-    /// * `contract` - The contract to receive market data for
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::realtime::TickTypes;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::stock("AAPL").build();
-    ///
-    /// // Subscribe to real-time streaming data with specific tick types
-    /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233", "236"])  // RTVolume and Shortable
-    ///     .subscribe()
-    ///     .expect("subscription failed");
-    ///
-    /// for tick in subscription.iter_data() {
-    ///     match tick? {
-    ///         TickTypes::Price(price) => println!("Price: {price:?}"),
-    ///         TickTypes::Size(size) => println!("Size: {size:?}"),
-    ///         TickTypes::SnapshotEnd => subscription.cancel(),
-    ///         _ => {}
-    ///     }
-    /// }
-    /// # Ok::<(), ibapi::Error>(())
-    /// ```
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::realtime::TickTypes;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::stock("AAPL").build();
-    ///
-    /// // Request a one-time snapshot
-    /// let subscription = client.market_data(&contract)
-    ///     .snapshot()
-    ///     .subscribe()
-    ///     .expect("subscription failed");
-    ///
-    /// for tick in subscription.iter_data() {
-    ///     if let TickTypes::SnapshotEnd = tick? {
-    ///         println!("Snapshot complete");
-    ///         break;
-    ///     }
-    /// }
-    /// # Ok::<(), ibapi::Error>(())
-    /// ```
-    pub fn market_data<'a>(&'a self, contract: &'a Contract) -> MarketDataBuilder<'a, Self> {
-        MarketDataBuilder::new(self, contract)
     }
 
     // == Internal Use ==

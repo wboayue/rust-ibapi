@@ -38,15 +38,19 @@ Client-method violations exposed by the receiver clarification (each appears in 
 ## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
 
 Counted 2026-08-07 while migrating the `docs/` cluster: 132 of 152 `impl Client` methods carry
-the block. Nine sites across seven methods, listed sync-side first where both exist:
+the block. Nine sites across seven methods, listed sync-side first where both exist. Eight
+remain — async `market_data` was closed in #729:
 
 - `orders::Client::exercise_options` — has `# Arguments`, no example. Six params, so the
   example carries real weight.
 - `contracts::Client::market_rule`, `contracts::Client::cancel_contract_details`
 - `accounts::Client::server_time_millis` (sync + async), `accounts::Client::family_codes`
 - `market_data::historical::Client::cancel_historical_ticks` (sync + async)
-- `client::Client::market_data` — **async only**; the sync twin has one. A
-  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.
+- ~~`client::Client::market_data` — **async only**; the sync twin has one. A
+  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.~~
+  **Done in #729**, which moved the method to
+  `market_data::realtime::Client::market_data`; the two sync examples now have async
+  twins. Closing it during the move cost nothing — the sync twin was in the same diff.
 
 The remaining eleven sites are the six accessors the rule exempts — `client_id`,
 `next_request_id`, `next_order_id`, `connection_time`, `time_zone`, and async `server_version`.
@@ -57,6 +61,31 @@ workflow ever needs documenting, they are where it goes.
 `check_server_version` was on this list until it turned out to be `pub` on async and
 `pub(crate)` on sync — a visibility asymmetry, not a doc gap. Narrowed to `pub(crate)` on both
 in the same PR.
+
+## `market_data` realtime seam — opened by #729's `/simplify`
+
+Both are restructuring, deferred out of #729 rather than landed in a cleanup pass.
+
+- **`MarketDataBuilder` sits a directory above its three siblings.** It lives in
+  `src/market_data/builder/` — a three-line module whose sole content is that one type — while
+  `RealtimeBarsBuilder`, `MarketDepthBuilder`, and `TickByTickBuilder` live in
+  `src/market_data/realtime/builder/`. After #729 moved the entry point into
+  `market_data/realtime/{sync,async}.rs`, the new `impl Client` blocks have to reach *upward*
+  out of `realtime/` for it, on lines adjacent to siblings that resolve via `super::`. Its only
+  consumers in the tree are realtime. Fix: move it to `realtime/builder/market_data.rs` and add
+  it to that module's `pub use`. Breaking — `crate::market_data::builder::MarketDataBuilder` is
+  a public path, referenced from `realtime/generic_tick.rs` and doc links in
+  `subscriptions/{sync,async}.rs` — so it needs its own PR with a `migration-3.0.md` note.
+- **`market_data::realtime::sync::market_data` is `pub` where its siblings are `pub(crate)`.**
+  The free fn at `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
+  `tick_by_tick` beside it are `pub(crate)`. Under `#[cfg(all(feature = "sync", not(feature =
+  "async")))] pub use sync::*` that makes it reachable as
+  `ibapi::market_data::realtime::market_data` in sync-only builds. Async has no public
+  counterpart at all — `subscribe_market_data` is `pub(crate)` on `impl Client`. Pre-existing,
+  but co-locating the builder entry point in #729 turned it into a same-file inconsistency.
+  Narrowing is a public-API change: audit callers first per
+  [restrict after callers](../docs/rules/workflow/restrict-after-callers.md), and it needs a
+  `CHANGELOG.md` entry.
 
 ## Out-of-scope on the audit pass
 

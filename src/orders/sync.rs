@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
-use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
+use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
@@ -9,6 +9,28 @@ use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 
 impl Client {
+    /// Start building an order for the given contract
+    ///
+    /// This is the primary API for creating orders, providing a fluent interface
+    /// that guides you through the order creation process.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .limit(50.0)
+    ///     .submit().expect("order submission failed");
+    /// ```
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
+        OrderBuilder::new(self, contract)
+    }
+
     /// Requests all *current* open orders in associated accounts at the current moment.
     /// Open orders are returned once; this function does not initiate a subscription.
     ///

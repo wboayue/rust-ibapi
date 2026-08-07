@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
+use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client, proto_response, request_message_count};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderStatusKind};
@@ -610,4 +610,18 @@ fn order_update_stream_already_subscribed() {
         Error::AlreadySubscribed => {}
         other => assert!(false, "expected AlreadySubscribed error, got: {:?}", other),
     }
+}
+
+// Covers the `Client::order` delegate only. Field-by-field builder semantics are
+// asserted in orders/builder/tests.rs against a mock client; what is unique here
+// is that the entry point binds the real `Client` and the given contract.
+#[test]
+fn order_entry_point_builds_order() {
+    let (client, _) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+
+    let order = client.order(&contract).buy(100).limit(50.0).build().expect("build failed");
+
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.limit_price, Some(50.0));
 }

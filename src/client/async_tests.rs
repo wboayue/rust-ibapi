@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
-use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -51,12 +50,9 @@ async fn check_server_version_branches() {
 }
 
 #[tokio::test]
-async fn builder_factories_are_constructable() {
+async fn decoder_context_is_constructable() {
     let client = stubbed_client();
-    let contract = Contract::stock("AAPL").build();
 
-    let _ = client.order(&contract);
-    let _ = client.market_data(&contract);
     let _ = client.decoder_context();
 }
 
