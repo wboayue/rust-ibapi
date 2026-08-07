@@ -48,8 +48,33 @@ builder-placement and field-minimal conventions are live and belong to `testing/
 
 ## Retrieval check — run this before migrating further
 
-**Not yet run.** It must happen in a session that did not design the graph, and it is the
-gate on continuing. Three probes, each answerable only from a node:
+**Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,
+one probe each, no knowledge of the graph design or the expected answers. Every one opened
+its node as its *first* read and surfaced the required content. None answered from the index
+line alone.
+
+| Probe | Node opened | Surfaced | Verdict |
+|---|---|---|---|
+| 1 | `wire/proto-aware-accessors.md` | `raw_bytes`-first branch + `text_request_id_field` registration | pass |
+| 2 | `wire/enum-typing.md` | verify-wire-first → **no**, cited free-form `"Filled Size: 1"` | pass |
+| 3 | `testing/fixture-builders.md` | `src/testdata/builders/<domain>.rs` | pass |
+
+Two findings from the run:
+
+- **This file contaminates its own probes.** Probes 1 and 2 both grepped into it and hit the
+  question list *and* the expected answers below. Both read their node first, so the answers
+  were node-driven, and probe 1 self-reported the leak — but a re-run must hold the probes
+  outside the repo, or the result means nothing.
+- **Probe 1 outran its node.** `contract_id` sits at a *varying* tag nested inside a
+  `Contract` sub-message (tag 2 for `ContractData` / `OpenOrder` / `ExecutionDetails` /
+  `Position`, tag 1 for `PortfolioValue` / `CompletedOrder`, tag 3 for `PositionMulti`), so
+  unlike its siblings it needs a `match self.message_type()` and one envelope per tag
+  position. The probe also caught a `dead_code` trap the node omits: `ResponseMessage` is
+  `pub(crate)` since #581, so a new `pub fn` with no in-crate caller trips `-D warnings`
+  (precedent: `is_shutdown`'s `#[cfg_attr(not(feature = "sync"), allow(dead_code))]`). Good
+  trigger, thin mechanics — fold both into the node when it is next touched.
+
+The probes, retained for re-runs — three questions, each answerable only from a node:
 
 1. *"I'm adding a `contract_id()` accessor to `ResponseMessage` — what do I need to know?"*
    → must surface the `raw_bytes`-first branch **and** the `text_request_id_field` registration.
