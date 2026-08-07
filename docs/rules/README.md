@@ -87,7 +87,8 @@ untrustworthy. Name the fn, test, or type and let the reader grep; the validator
 |---|---|
 | `wire/` | Protobuf transport: decoders, accessors, wire-format typing |
 | `testing/` | Fixtures, coverage, what a test must exercise |
+| `parity/` | The sync/async axis: feature configurations, dual-feature types, consumer idioms |
 
-Remaining clusters (`parity/`, `workflow/`, `style/`, `docs/`) are still inline in
-`CLAUDE.md`. See [plans/claude-md-knowledge-graph.md](../../plans/claude-md-knowledge-graph.md)
-for the migration order.
+Remaining clusters (`workflow/`, `style/`, `docs/`) are still inline in `CLAUDE.md`. See
+[plans/claude-md-knowledge-graph.md](../../plans/claude-md-knowledge-graph.md) for the
+migration order.
