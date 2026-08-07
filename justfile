@@ -10,6 +10,10 @@ proto:
 cover:
     cargo +nightly llvm-cov --all-features --doctests --html --open
 
+# Validate the docs/rules/ knowledge graph and its CLAUDE.md index
+rules-check:
+    ./tools/check-rules-graph.sh
+
 # Tags repo with specified version
 tag VERSION:
     echo "Tagging repo with version {{VERSION}}"

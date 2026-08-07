@@ -141,7 +141,8 @@ This is an allow-list, not a sentinel — it deliberately prevents misrouting me
 protobuf-envelope branch, so a message with no entry silently never routes.
 
 ⚠️ `MessageBusStub` tests sit below the dispatcher and pass with the registration missing.
-Only a live-gateway smoke test surfaces the gap.
+Only a live-gateway smoke test surfaces the gap. Full detail:
+[proto-aware accessors](rules/wire/proto-aware-accessors.md).
 
 ### Step 4: Implement Shared Business Logic
 
@@ -178,9 +179,10 @@ For any `String` field that looks like it carries a fixed vocabulary, verify aga
 wire fixtures and the C# reference before typing it as an enum — field-name resemblance is
 misleading. Once verified, add `impl FromStr<Err = Error>` and decode with the generic
 `parse_required` / `parse_optional` helpers in `src/proto/decoders.rs` rather than falling
-back to `T::default()`, which masks incomplete TWS responses.
+back to `T::default()`, which masks incomplete TWS responses. Full detail:
+[wire enum typing](rules/wire/enum-typing.md).
 
-For `StreamDecoder::decode`, end the match with `_ => Err(Error::unexpected_response(message))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508.
+For `StreamDecoder::decode`, end the match with `_ => Err(Error::unexpected_response(message))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508. Full detail: [proto-only decoding](rules/wire/proto-only-decoding.md).
 
 ### Step 5: Implement Sync Version
 

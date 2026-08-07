@@ -40,7 +40,7 @@ async fn test_place_order() {
 
 The `server_version` passed to `Client::stubbed` gates *outbound* encoder feature checks (`SIZE_RULES` above), not the wire format — `stubbed` builds `ConnectionMetadata` directly and never runs the `require_protobuf_support` floor check, because `MessageBusStub` sits below the dispatcher.
 
-A text-framed response reaching a proto-only decoder is skip-classified rather than raised, so a fixture left in the legacy `response_messages: Vec<String>` form shows up as a **passing test whose post-`next_data()` assertions never run**. Use `text_response(...)` only for message types with no proto decoder.
+A text-framed response reaching a proto-only decoder is skip-classified rather than raised, so a fixture left in the legacy `response_messages: Vec<String>` form shows up as a **passing test whose post-`next_data()` assertions never run**. Use `text_response(...)` only for message types with no proto decoder. Full detail: [fixture builders](rules/testing/fixture-builders.md).
 
 Counterpart `MessageBusStub::default()` exists for tests that just need a `Client` (accessor tests, builder smoke tests).
 
