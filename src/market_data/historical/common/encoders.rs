@@ -46,8 +46,8 @@ pub(crate) fn encode_request_head_timestamp(request_id: i32, contract: &Contract
 
 // pub(crate) wire encoder for `HistoricalDataRequest`. Called from the
 // `HistoricalDataBuilder` finalisers, which present the typed surface to
-// users; the flat-arg encoder is the deliberate seam to prost (the too_many_arguments
-// canary is acceptable for builder-fed helpers).
+// users; the flat-arg encoder is the deliberate seam to prost (the builder-fed
+// exception in docs/rules/style/param-budget.md).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_request_historical_data(
     request_id: i32,
@@ -85,8 +85,8 @@ pub(crate) fn encode_request_historical_data(
 
 // pub(crate) wire encoder for `HistoricalTicksRequest`. Called from the
 // `HistoricalTicksBuilder` finalisers, which present the typed surface to
-// users; the flat-arg encoder is the deliberate seam to prost (the too_many_arguments
-// canary is acceptable for builder-fed helpers).
+// users; the flat-arg encoder is the deliberate seam to prost (the builder-fed
+// exception in docs/rules/style/param-budget.md).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_request_historical_ticks(
     request_id: i32,

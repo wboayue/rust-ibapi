@@ -86,10 +86,11 @@ untrustworthy. Name the fn, test, or type and let the reader grep; the validator
 | Cluster | Covers |
 |---|---|
 | `wire/` | Protobuf transport: decoders, accessors, wire-format typing |
+| `style/` | How code is shaped: module layout, signatures, visibility, macros |
 | `testing/` | Fixtures, coverage, what a test must exercise |
 | `parity/` | The sync/async axis: feature configurations, dual-feature types, consumer idioms |
 | `workflow/` | How a change gets made and shipped: local gates, toolchain, scope, restriction ordering |
 
-Remaining clusters (`style/`, `docs/`) are still inline in `CLAUDE.md`. See
+The remaining cluster (`docs/`) is still inline in `CLAUDE.md`. See
 [plans/claude-md-knowledge-graph.md](../../plans/claude-md-knowledge-graph.md) for the
 migration order.
