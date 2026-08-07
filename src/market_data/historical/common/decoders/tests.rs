@@ -301,7 +301,7 @@ fn test_decode_historical_data_update_proto_missing_bar_defaults() {
 
 // ---------------------------------------------------------------------------
 // Public-wrapper guards. Each `decode_X(message)` rejects text framing with
-// `Error::ServerVersion` via `require_proto()` — scanner precedent #532.
+// `Error::UnexpectedWireFormat` via `require_proto()` — scanner precedent #532.
 // ---------------------------------------------------------------------------
 
 fn text_message(payload: &str) -> ResponseMessage {

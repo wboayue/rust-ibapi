@@ -124,13 +124,6 @@ precedents. Every rule now lives in a node; nothing is inline.
   [rule nodes](docs/rules/README.md) — the convention gets a node and one line in this index,
   or it is not a convention
 
-> **Both wire traps are gated now — no standing warning here.** A missing
-> `text_request_id_field` entry fails a stub test via `debug_assert_request_id_routable`
-> (#730), and a mis-framed fixture fails via `Error::UnexpectedWireFormat` (#731) instead of
-> being skipped. If you hit either, the node explains it:
-> [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md),
-> [fixture builders](docs/rules/testing/fixture-builders.md).
-
 Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
 an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not
 against this file — the numbering shifted at least once while it was in use. See

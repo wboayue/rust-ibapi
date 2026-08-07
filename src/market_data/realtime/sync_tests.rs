@@ -684,11 +684,10 @@ fn test_tick_by_tick_last() {
 /// See docs/rules/testing/fixture-builders.md.
 #[test]
 fn test_text_framed_fixture_fails_the_subscription() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        "50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0".to_owned(),
-    ]));
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    // Payload beyond the message id and request id is irrelevant — the decoder
+    // rejects on framing before reading a field.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["50\0\09000\0".to_owned()]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
 
     let bars = client

@@ -377,6 +377,32 @@ the same value" — and the answer was that they never should have been.
 
 ## Follow-ups
 
+- **Stop dispatching skip-vs-terminate on an error variant.** `/simplify` on #731 named the
+  real defect underneath both traps: `Result<T, Error>` is being used as a three-way channel,
+  where "skip me" is in-band and carried by `Error::UnexpectedResponse` — a variant that ~20
+  one-shot call sites also return *to the user* as a genuine error. `require_proto()` reused
+  it and silently inherited its disposition; that is the whole bug. The generalising fix is to
+  make disposition explicit — `StreamDecoder::decode -> Result<Option<T>, Error>` (`None` =
+  not my message type), or a named `DecodedItem::{Value(T), NotForMe}` — after which
+  `process_decode_result` and `ProcessingResult::Skip` both disappear and no error variant
+  carries dispatch semantics.
+
+  **This is the third occurrence, so the rule-of-three trips.** #508 was the first patch (an
+  unknown type terminated the subscription), #731 the second. Corroborating evidence from the
+  same review: the same variant-classification decision is duplicated across three tables —
+  `process_decode_result`, `is_transient_error`, and `categorize_error` — and #731 had to
+  audit all three by hand, with nothing enforcing that it did. Landing this retires the class
+  rather than patching instances.
+
+- **Collapse the 40 `*_rejects_text_framing` asserts into one helper.** They spell the same
+  assertion four different ways across 12 files, with four different panic messages. #731 is
+  the evidence: a pure variant rename touched all 40 sites and produced ~600 of its ~700
+  test-side lines; with a helper it would have been one line. The precedent is
+  `assert_decimal_parse_error` in `src/common/test_utils.rs` — same shape, 33 call sites, and
+  its doc states this exact rationale. Not speculative infra: the consumers exist today, and
+  the three largest files already import from that module. Deferred out of #731 as
+  restructuring, per [/simplify scope discipline](../CLAUDE.md).
+
 - **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
   once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
   checking that a cited symbol exists does not check it. The two live counts are 134/152

@@ -31,18 +31,13 @@ not `Builder::new()`.
 
 ## Why
 
-A text-framed response reaching a proto-only decoder used to be skip-classified, not raised —
-so a fixture left in the legacy `response_messages: Vec<String>` form showed up as a **passing
-test whose post-`next_data()` assertions never ran**. The test was green and asserted nothing.
-
-**Since #731 that fails loudly.** `require_proto()` returns `Error::UnexpectedWireFormat`,
-which `process_decode_result` does not skip, so the subscription yields a terminal error and
-the test dies on its `expect`/`unwrap` instead of iterating zero times. Only
-`Error::UnexpectedResponse` — wrong message *type* — is still skipped, which is what shared
-channels need. See [proto-only decoding](../wire/proto-only-decoding.md).
-
-The rule is unchanged: use `text_response(...)` only for message types with no proto decoder.
-What changed is that getting it wrong now costs you a red test rather than a silent one.
+Use `text_response(...)` only for message types with no proto decoder. A text-framed
+response reaching a proto-only decoder fails the subscription with
+`Error::UnexpectedWireFormat`, which `process_decode_result` does not skip — so a fixture left
+in the legacy `response_messages: Vec<String>` form dies on its `expect`/`unwrap` rather than
+iterating zero times and asserting nothing. Only `Error::UnexpectedResponse` — wrong message
+*type* — is skipped, which is what shared channels need. See
+[proto-only decoding](../wire/proto-only-decoding.md).
 
 Field-minimal scales further than it looks: PR #534's `ContractDataResponse` covers roughly
 50 `proto::ContractData` fields with about 15 setters. Document any `Default` that is

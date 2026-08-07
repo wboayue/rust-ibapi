@@ -92,12 +92,12 @@ fn unexpected_wire_format_display_includes_message_debug() {
 
 #[test]
 fn unexpected_wire_format_survives_clone() {
-    // The manual Clone impl is variant-by-variant; a missed arm would collapse
-    // this to Error::Simple and stop matching the pattern the dispatcher uses.
+    // `clone_preserves_payloaded_variants` only compares Display, which a
+    // collapse to Error::Simple would survive (see
+    // `clone_collapses_parse_time_to_simple`). This pins the discriminant, which
+    // is what the dispatcher matches on.
     let msg = ResponseMessage::from("50\0\09000\0");
-    let error = Error::unexpected_wire_format(&msg);
-    assert!(matches!(error.clone(), Error::UnexpectedWireFormat(_)));
-    assert_eq!(error.clone().to_string(), error.to_string());
+    assert!(matches!(Error::unexpected_wire_format(&msg).clone(), Error::UnexpectedWireFormat(_)));
 }
 
 #[test]
@@ -255,6 +255,7 @@ fn clone_preserves_payloaded_variants() {
         Error::InvalidArgument("a".into()),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
+        Error::unexpected_wire_format(&response),
         tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),

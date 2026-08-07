@@ -42,15 +42,13 @@ one is *not* skippable. The two failures look alike and are not:
 | `_ => Err(Error::unexpected_response(message))` | not my message type | `Skip` — shared channels carry several types |
 | `message.require_proto()?` | my message type, unreadable framing | `Error` — the message was addressed to this decoder |
 
-Skipping the second one was the trap: a text-framed fixture pointed at a proto-only decoder
-produced a **passing test whose post-`next_data()` assertions never ran**. Since #731 it
-surfaces as a terminal error on the subscription, so the test fails where it used to go
-green. See [fixture builders](../testing/fixture-builders.md).
+A mis-framed fixture therefore fails its test rather than leaving it green with the
+post-`next_data()` assertions unrun — see [fixture builders](../testing/fixture-builders.md).
+At `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives
+proto-framed, so `UnexpectedWireFormat` in production means the gateway broke protocol.
 
-Production behaviour is unchanged in practice: at
-`server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives
-proto-framed, so reaching `UnexpectedWireFormat` means the gateway broke protocol — which is
-worth raising, not swallowing.
+`ResponseMessage::peek_int` is the mirror image — proto framing at a text-field accessor —
+and returns the same variant. A framing mismatch is never skippable in either direction.
 
 `Error::UnexpectedResponse` carries a `String`, not a `ResponseMessage` — the constructor
 `Error::unexpected_response(&message)` formats it, because `ResponseMessage` became

@@ -98,19 +98,17 @@ pub enum Error {
     #[error("UnexpectedResponse: {0}")]
     UnexpectedResponse(String),
 
-    /// A proto-only decoder received a text-framed message. The string carries
-    /// the `Debug` repr of the offending envelope.
+    /// A message arrived in the wrong wire format for the reader handling it —
+    /// text framing at a proto-only decoder, or proto framing at a text-field
+    /// accessor. The string carries the `Debug` repr of the offending envelope.
     ///
-    /// Deliberately distinct from [`Error::UnexpectedResponse`]. That one means
-    /// "not my message type", which the dispatcher *skips* — correct on a shared
-    /// channel carrying several types. A framing mismatch is not skippable: the
-    /// message was addressed to this decoder and could not be read, so skipping
-    /// it drops data silently. At
-    /// `server_versions::PROTOBUF_REST_MESSAGES_3` every inbound message with a
-    /// proto decoder arrives proto-framed, so reaching this in production means
-    /// the gateway broke protocol; in a test it means the fixture was built
-    /// text-framed for a proto-only type.
-    #[error("UnexpectedWireFormat: proto-only decoder received a text-framed message: {0}")]
+    /// Deliberately distinct from [`Error::UnexpectedResponse`], which means
+    /// "not my message type" and is *skipped* on shared channels. A framing
+    /// mismatch is not skippable: the message was addressed to this reader and
+    /// could not be read. At `server_versions::PROTOBUF_REST_MESSAGES_3` this is
+    /// unreachable in production, so receiving it means the gateway broke
+    /// protocol.
+    #[error("UnexpectedWireFormat: {0}")]
     UnexpectedWireFormat(String),
 
     /// Stream ended unexpectedly.
@@ -174,8 +172,7 @@ impl Error {
     }
 
     /// Build an [`Error::UnexpectedWireFormat`] from an internal `ResponseMessage`.
-    /// Same capture as [`Error::unexpected_response`]; the separate variant is
-    /// what keeps a framing mismatch out of the dispatcher's skip path.
+    /// Same capture as [`Error::unexpected_response`], different variant.
     pub(crate) fn unexpected_wire_format(message: &ResponseMessage) -> Error {
         Error::UnexpectedWireFormat(format!("{message:?}"))
     }
