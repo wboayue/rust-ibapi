@@ -3,7 +3,7 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status:** `wire/` and `testing/` clusters migrated. Four clusters remain inline.
+**Status:** `wire/`, `testing/`, and `parity/` clusters migrated. Three clusters remain inline.
 
 ## Why
 
@@ -74,6 +74,42 @@ and all four `*_from` helpers verified present. Rule 22 was substantially wrong:
 The directive in each case survived; only the evidence was wrong. That is the same pattern the
 `wire/` audit found, and it is the argument for auditing every cluster before migrating it.
 
+## What shipped in the parity/ pass
+
+| Node | From | Status |
+|---|---|---|
+| `parity/feature-matrix.md` | rule 1 | active |
+| `parity/no-block-on.md` | rule 5 | active |
+| `parity/dual-feature-types.md` | rule 12 | active |
+| `parity/no-parity-wrappers.md` | rule 13 | active |
+| `parity/subscription-consumer-idiom.md` | rule 24 | active |
+
+### Rot corrected while migrating
+
+Rules 5, 12, and 24 audited clean — no `block_on` in `src/`, `server_version_cache: AtomicI32`
+present, `NoticeStream`'s `sync_impl` / `async_impl` split and `client::blocking` mirror intact,
+`r#async::` paths real, and both tests rule 24 names still exist.
+
+| Was | Is |
+|---|---|
+| Rule 13: acceptable mirror is "`filter_data` / `filter_data_stream`" | **No `filter_data_stream` method exists.** Both sides spell it `filter_data`; the *return* types differ (`FilterData<I>` vs `FilterDataStream<S>`). `filter_data_stream_drops_notices` is a test name — likely the source of the confusion |
+| Rule 1: "default-async, sync-only, and all-features builds must compile and pass tests" | True as a *requirement*, but **nothing enforced sync-only on a PR.** `just test` and `ci.yml` both use `--features sync`, which keeps `default = ["async"]` on — that leg is sync **plus** async. `--all-features` has no CI leg at all |
+
+The rule-1 finding has a documented incident: #658 added an unconditional `#[tokio::main]`
+doctest to `lib.rs`, breaking sync-only compilation. Every PR check stayed green; the Coverage
+job (`on: push` to `main`) went red and stayed red for 11 commits until #671 fixed it. The
+`CLAUDE.md` clippy trio had the same flag bug and is corrected in this PR — its middle config
+was sync+async, while the rustdoc trio's middle config was genuinely sync-only.
+
+### Follow-up this pass surfaced (not done here)
+
+**`just test` and `ci.yml` do not cover sync-only or `--all-features`.** Verified green today,
+so this is latent, not broken. Fixing it means a `just test` leg
+(`cargo test --no-default-features --features sync`) and a CI matrix entry — a behavior change
+to the gates, deliberately out of scope for a docs migration. Decide separately whether the CI
+minutes are worth it, or whether the corrected local commands plus the post-merge Coverage job
+are enough.
+
 ## Retrieval check — run this before migrating further
 
 **Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,
@@ -121,10 +157,9 @@ Migrate in this order — highest density and clearest boundaries first:
 
 | Order | Cluster | Rules | Notes |
 |---|---|---|---|
-| 1 | `parity/` | 1, 5, 12, 13, 24 | sync/async axis |
-| 2 | `workflow/` | 3, 7, 9, 11, 23 | |
-| 3 | `style/` | 2, 4, 14, 25 | |
-| 4 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | |
+| 1 | `workflow/` | 3, 7, 9, 11, 23 | |
+| 2 | `style/` | 2, 4, 14, 25 | |
+| 3 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | |
 
 **Do not renumber surviving rules.** The gap at 15–20 is deliberate. Rule numbers are already
 unreliable across stores — one memory cites "rules 20/22" for the family now at 15/17, and
