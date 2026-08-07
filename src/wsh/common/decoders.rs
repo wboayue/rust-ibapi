@@ -1,5 +1,5 @@
 //! Decoders for Wall Street Horizon messages. Proto-only; text framing
-//! surfaces as `Error::UnexpectedResponse` via `require_proto()`.
+//! surfaces as `Error::UnexpectedWireFormat` via `require_proto()`.
 
 use prost::Message;
 

@@ -83,6 +83,24 @@ fn unexpected_response_display_includes_message_debug() {
 }
 
 #[test]
+fn unexpected_wire_format_display_includes_message_debug() {
+    let msg = ResponseMessage::from("50\0\09000\0");
+    let error = Error::unexpected_wire_format(&msg);
+    assert!(error.to_string().starts_with("UnexpectedWireFormat:"), "got {error}");
+    assert!(error.to_string().contains("raw_bytes: None"), "got {error}");
+}
+
+#[test]
+fn unexpected_wire_format_survives_clone() {
+    // `clone_preserves_payloaded_variants` only compares Display, which a
+    // collapse to Error::Simple would survive (see
+    // `clone_collapses_parse_time_to_simple`). This pins the discriminant, which
+    // is what the dispatcher matches on.
+    let msg = ResponseMessage::from("50\0\09000\0");
+    assert!(matches!(Error::unexpected_wire_format(&msg).clone(), Error::UnexpectedWireFormat(_)));
+}
+
+#[test]
 fn error_source_returns_none_for_simple() {
     let error = Error::Simple("test error".to_string());
     assert!(error.source().is_none());
@@ -237,6 +255,7 @@ fn clone_preserves_payloaded_variants() {
         Error::InvalidArgument("a".into()),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
+        Error::unexpected_wire_format(&response),
         tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),

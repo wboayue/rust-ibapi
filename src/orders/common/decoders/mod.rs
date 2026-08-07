@@ -5,7 +5,8 @@ use crate::Error;
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
 // OrderStatus, ExecutionData, and CommissionReport are <= the connection floor.
 // The server always emits proto framing for these messages; text-framed arrival
-// is rejected via `ResponseMessage::require_proto` and skip-classifies (docs/rules/wire/proto-only-decoding.md).
+// is rejected via `ResponseMessage::require_proto`, which raises
+// `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
 pub(crate) fn decode_open_order(message: &mut ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order_proto(message.require_proto()?)

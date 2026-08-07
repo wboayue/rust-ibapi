@@ -6,10 +6,10 @@ status: active
 triggers:
   - building a response test fixture
   - adding a MessageBusStub test for a new message type
-  - a test passes but its assertions never seem to run
-symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, ordered_responses]
+  - a test fails with UnexpectedWireFormat
+symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, ordered_responses, Error::UnexpectedWireFormat]
 related: [proto-only-decoding, fixture-migration]
-precedents: ["#534", "#543"]
+precedents: ["#534", "#543", "#731"]
 memory: [feedback_test_fixtures_placement, feedback_testdata_builder_no_new, feedback_no_speculative_test_infra, project_error_response_builder_gap, feedback_mirror_production_patterns]
 ---
 
@@ -31,10 +31,13 @@ not `Builder::new()`.
 
 ## Why
 
-A text-framed response reaching a proto-only decoder is skip-classified, not raised — so a
-fixture left in the legacy `response_messages: Vec<String>` form shows up as a **passing test
-whose post-`next_data()` assertions never run**. The test is green and asserts nothing. Use
-`text_response(...)` only for message types with no proto decoder.
+Use `text_response(...)` only for message types with no proto decoder. A text-framed
+response reaching a proto-only decoder fails the subscription with
+`Error::UnexpectedWireFormat`, which `process_decode_result` does not skip — so a fixture left
+in the legacy `response_messages: Vec<String>` form dies on its `expect`/`unwrap` rather than
+iterating zero times and asserting nothing. Only `Error::UnexpectedResponse` — wrong message
+*type* — is skipped, which is what shared channels need. See
+[proto-only decoding](../wire/proto-only-decoding.md).
 
 Field-minimal scales further than it looks: PR #534's `ContractDataResponse` covers roughly
 50 `proto::ContractData` fields with about 15 setters. Document any `Default` that is
@@ -59,6 +62,7 @@ constant like `SIZE_RULES` in a stub test is correct, not a leftover.
 
 - #534 — field-minimal builders for deeply-nested protos.
 - #543 — /simplify caught fixture helpers misplaced under `<domain>/common/`.
+- #731 — made a mis-framed fixture fail its test instead of silently skipping.
 
 See also [docs/testing-patterns.md](../../testing-patterns.md) for choosing between
 `MessageBusStub`, `MemoryStream`, and `spawn_handshake_listener`.

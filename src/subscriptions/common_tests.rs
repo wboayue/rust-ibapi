@@ -38,6 +38,14 @@ fn test_process_decode_result() {
         _ => panic!("Expected Skip"),
     }
 
+    // A framing mismatch is NOT skippable — the message was addressed to this
+    // decoder, so dropping it would lose data (and leave a test green with its
+    // assertions unrun). See docs/rules/testing/fixture-builders.md.
+    match process_decode_result::<i32>(Err(Error::unexpected_wire_format(&test_msg))) {
+        ProcessingResult::Error(Error::UnexpectedWireFormat(_)) => {}
+        other => panic!("Expected Error(UnexpectedWireFormat), got {other:?}"),
+    }
+
     // Test error case
     match process_decode_result::<i32>(Err(Error::ConnectionFailed)) {
         ProcessingResult::Error(Error::ConnectionFailed) => {}

@@ -675,3 +675,28 @@ fn test_tick_by_tick_last() {
             .ignore_size(false),
     );
 }
+
+/// The fixture trap, end to end. A text-framed response reaching the proto-only
+/// `Bar` decoder used to be skip-classified, so this subscription yielded
+/// nothing and a test written as `for bar in sub.iter_data() { assert!(..) }`
+/// passed with zero iterations. Since #731 it surfaces as a terminal error.
+///
+/// See docs/rules/testing/fixture-builders.md.
+#[test]
+fn test_text_framed_fixture_fails_the_subscription() {
+    // Payload beyond the message id and request id is irrelevant — the decoder
+    // rejects on framing before reading a field.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["50\0\09000\0".to_owned()]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let bars = client
+        .realtime_bars(&contract)
+        .subscribe()
+        .expect("Failed to create realtime bars subscription");
+
+    match bars.next() {
+        Some(Err(Error::UnexpectedWireFormat(_))) => {}
+        other => panic!("expected UnexpectedWireFormat on the subscription, got {other:?}"),
+    }
+}

@@ -812,11 +812,13 @@ impl ResponseMessage {
     }
 
     /// Raw protobuf payload bytes for use by proto-only decoders. Text-framed
-    /// arrival returns `Error::UnexpectedResponse`, which the dispatcher
-    /// skip-classifies (per docs/rules/wire/proto-only-decoding.md) rather than terminating the
-    /// subscription.
+    /// arrival returns `Error::UnexpectedWireFormat`, which the dispatcher
+    /// surfaces rather than skip-classifying — the message was addressed to this
+    /// decoder, so dropping it would lose data silently. A wrong *message type*
+    /// is the skippable case and keeps `Error::UnexpectedResponse`. See
+    /// docs/rules/wire/proto-only-decoding.md.
     pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
-        self.raw_bytes().ok_or_else(|| crate::Error::unexpected_response(self))
+        self.raw_bytes().ok_or_else(|| crate::Error::unexpected_wire_format(self))
     }
 
     /// Returns `true` if the message informs about API shutdown.
@@ -907,9 +909,13 @@ impl ResponseMessage {
     /// they should be decoding the proto envelope, not reading a text-field
     /// index. Production callers (`request_id`, handshake) already gate on
     /// `raw_bytes().is_none()` so this guard is unreachable from them.
+    ///
+    /// This is [`Self::require_proto`]'s mirror image, and returns the same
+    /// `Error::UnexpectedWireFormat` — a framing mismatch is never the
+    /// skippable `UnexpectedResponse`, in either direction.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if self.raw_bytes().is_some() {
-            return Err(Error::unexpected_response(self));
+            return Err(Error::unexpected_wire_format(self));
         }
         if i >= self.fields.len() {
             return Err(Error::eof_at(i, "int"));

@@ -11,7 +11,8 @@ use crate::Error;
 // (`PROTOBUF_MARKET_DATA` = 206 for `TickNews`, `PROTOBUF_NEWS_DATA` = 209 for
 // the rest) sit at or below the connection floor, so the server always emits
 // proto framing for these messages — text-framed arrival is rejected via
-// `ResponseMessage::require_proto` and skip-classifies (docs/rules/wire/proto-only-decoding.md).
+// `ResponseMessage::require_proto`, which raises `Error::UnexpectedWireFormat`
+// (docs/rules/wire/proto-only-decoding.md).
 
 pub(in crate::news) fn decode_news_providers(message: &ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
     decode_news_providers_proto(message.require_proto()?)

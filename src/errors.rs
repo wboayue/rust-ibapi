@@ -98,6 +98,19 @@ pub enum Error {
     #[error("UnexpectedResponse: {0}")]
     UnexpectedResponse(String),
 
+    /// A message arrived in the wrong wire format for the reader handling it —
+    /// text framing at a proto-only decoder, or proto framing at a text-field
+    /// accessor. The string carries the `Debug` repr of the offending envelope.
+    ///
+    /// Deliberately distinct from [`Error::UnexpectedResponse`], which means
+    /// "not my message type" and is *skipped* on shared channels. A framing
+    /// mismatch is not skippable: the message was addressed to this reader and
+    /// could not be read. At `server_versions::PROTOBUF_REST_MESSAGES_3` this is
+    /// unreachable in production, so receiving it means the gateway broke
+    /// protocol.
+    #[error("UnexpectedWireFormat: {0}")]
+    UnexpectedWireFormat(String),
+
     /// Stream ended unexpectedly.
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
@@ -156,6 +169,12 @@ impl Error {
     /// downstream code.
     pub(crate) fn unexpected_response(message: &ResponseMessage) -> Error {
         Error::UnexpectedResponse(format!("{message:?}"))
+    }
+
+    /// Build an [`Error::UnexpectedWireFormat`] from an internal `ResponseMessage`.
+    /// Same capture as [`Error::unexpected_response`], different variant.
+    pub(crate) fn unexpected_wire_format(message: &ResponseMessage) -> Error {
+        Error::UnexpectedWireFormat(format!("{message:?}"))
     }
 
     /// Build an [`Error::Parse`] when the failing input came from a text-protocol
@@ -257,6 +276,7 @@ impl Clone for Error {
             Error::Shutdown => Error::Shutdown,
             Error::EndOfStream => Error::EndOfStream,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
+            Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,

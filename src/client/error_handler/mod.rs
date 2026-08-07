@@ -93,6 +93,8 @@ pub(crate) fn categorize_error(error: &Error) -> ErrorCategory {
         Error::Cancelled => ErrorCategory::Cancelled,
         Error::Shutdown | Error::NotImplemented | Error::AlreadySubscribed => ErrorCategory::Fatal,
         Error::UnexpectedResponse(_) | Error::UnexpectedEndOfStream => ErrorCategory::Transient,
+        // A framing mismatch cannot succeed on retry — the gateway broke protocol.
+        Error::UnexpectedWireFormat(_) => ErrorCategory::Fatal,
         _ => ErrorCategory::Transient,
     }
 }

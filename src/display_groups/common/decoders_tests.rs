@@ -27,5 +27,8 @@ fn test_decode_display_group_updated_proto_empty_contract_info() {
 fn test_decode_display_group_updated_rejects_text_framing() {
     let message = ResponseMessage::from("68\01\09000\0265598@SMART\0");
     let err = decode_display_group_updated(&message).unwrap_err();
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected UnexpectedWireFormat, got {err:?}"
+    );
 }

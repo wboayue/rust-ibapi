@@ -312,13 +312,15 @@ fn test_response_message_peek_operations() {
 #[test]
 fn peek_int_rejects_proto_framed_message() {
     // Per docs/rules/wire/proto-aware-accessors.md, text-index accessors must be
-    // proto-aware. peek_int defensively returns Err(UnexpectedResponse) on a
+    // proto-aware. peek_int defensively returns Err(UnexpectedWireFormat) on a
     // proto-framed message even if the caller passes a valid text-field index —
     // production callers already gate on raw_bytes().is_none() before invoking, so
-    // the guard is unreachable in correct paths but catches misuse.
+    // the guard is unreachable in correct paths but catches misuse. Same variant
+    // as require_proto's opposite-direction guard: a framing mismatch is never
+    // the skippable UnexpectedResponse.
     let proto_msg = ResponseMessage::from_protobuf(5, vec![0x08, 0x7B]);
-    assert!(matches!(proto_msg.peek_int(0), Err(crate::Error::UnexpectedResponse(_))));
-    assert!(matches!(proto_msg.peek_int(1), Err(crate::Error::UnexpectedResponse(_))));
+    assert!(matches!(proto_msg.peek_int(0), Err(crate::Error::UnexpectedWireFormat(_))));
+    assert!(matches!(proto_msg.peek_int(1), Err(crate::Error::UnexpectedWireFormat(_))));
 }
 
 #[test]

@@ -375,8 +375,8 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
 // =============================================================================
 //
 // Servers ≥ the connection floor always emit these messages in
-// proto framing. Text-framed arrival skip-classifies via UnexpectedResponse
-// rather than terminating the subscription.
+// proto framing. Text-framed arrival raises UnexpectedWireFormat — the message
+// was addressed to this decoder, so it is not skippable.
 
 #[test]
 fn test_decode_open_order_rejects_text_framing() {
@@ -384,8 +384,8 @@ fn test_decode_open_order_rejects_text_framing() {
     let mut message = ResponseMessage::from("5\013\076792991\0AAPL\0STK\0");
     let err = decode_open_order(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -394,8 +394,8 @@ fn test_decode_completed_order_rejects_text_framing() {
     let mut message = ResponseMessage::from("101\0265598\0AAPL\0STK\0");
     let err = decode_completed_order(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -404,8 +404,8 @@ fn test_decode_execution_data_rejects_text_framing() {
     let mut message = ResponseMessage::from("11\09000\042\0265598\0AAPL\0STK\0");
     let err = decode_execution_data(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -414,8 +414,8 @@ fn test_decode_commission_report_rejects_text_framing() {
     let mut message = ResponseMessage::from("59\01\0exec001\02.5\0USD\0");
     let err = decode_commission_report(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -424,8 +424,8 @@ fn test_decode_order_status_rejects_text_framing() {
     let mut message = ResponseMessage::from("3\013\0PreSubmitted\00\0100\00.0\01376327563\00\00.0\0100\0\00.0\0");
     let err = decode_order_status(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 

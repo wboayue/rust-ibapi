@@ -769,3 +769,29 @@ async fn subscription_cancel_only_sends_once() {
     drop(subscription);
     assert_eq!(message_bus.request_messages.read().unwrap().len(), 2, "drop after cancel is a no-op");
 }
+
+/// Async mirror of the same-named test in `sync_tests.rs`. The classification
+/// lives in `process_decode_result`, shared by both transports — this pins that
+/// the async `poll_next` path surfaces it too rather than swallowing it in its
+/// own skip loop.
+///
+/// See docs/rules/testing/fixture-builders.md.
+#[tokio::test]
+async fn test_text_framed_fixture_fails_the_subscription() {
+    // Payload beyond the message id and request id is irrelevant — the decoder
+    // rejects on framing before reading a field.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["50\0\09000\0".to_owned()]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let mut bars = client
+        .realtime_bars(&contract)
+        .subscribe()
+        .await
+        .expect("Failed to create realtime bars subscription");
+
+    match bars.next().await {
+        Some(Err(Error::UnexpectedWireFormat(_))) => {}
+        other => panic!("expected UnexpectedWireFormat on the subscription, got {other:?}"),
+    }
+}

@@ -108,7 +108,13 @@ pub(crate) enum ProcessingResult<T> {
     EndOfStream,
 }
 
-/// Process a decoding result into a common processing result
+/// Process a decoding result into a common processing result.
+///
+/// Only [`Error::UnexpectedResponse`] — "not my message type" — is skippable.
+/// [`Error::UnexpectedWireFormat`] deliberately falls through to `Error`: the
+/// message *was* for this decoder and could not be read, and skipping it left
+/// tests green with their post-`next_data()` assertions unrun. See
+/// `docs/rules/testing/fixture-builders.md`.
 pub(crate) fn process_decode_result<T>(result: Result<T, Error>) -> ProcessingResult<T> {
     match result {
         Ok(val) => ProcessingResult::Success(val),

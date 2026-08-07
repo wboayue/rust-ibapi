@@ -137,16 +137,16 @@ fn test_decode_option_chain_proto() {
 
 // Servers ≥ the connection floor always emit ContractData / SymbolSamples /
 // MarketRule / SecurityDefinitionOptionParameter in proto. Text-framed arrival
-// skip-classifies via `UnexpectedResponse` rather than terminating the
-// subscription — see docs/rules/wire/proto-only-decoding.md.
+// raises `UnexpectedWireFormat` — the message was addressed to this decoder, so
+// it is not skippable. See docs/rules/wire/proto-only-decoding.md.
 
 #[test]
 fn test_decode_contract_details_rejects_text_framing() {
     let mut message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
     let err = decode_contract_details(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -155,8 +155,8 @@ fn test_decode_contract_descriptions_rejects_text_framing() {
     let mut message = ResponseMessage::from("79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0");
     let err = decode_contract_descriptions(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -165,8 +165,8 @@ fn test_decode_market_rule_rejects_text_framing() {
     let mut message = ResponseMessage::from("87\026\01\00\00.01\0");
     let err = decode_market_rule(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
 
@@ -175,7 +175,7 @@ fn test_decode_option_chain_rejects_text_framing() {
     let mut message = ResponseMessage::from("75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0");
     let err = decode_option_chain(&mut message).expect_err("text framing must be rejected");
     assert!(
-        matches!(err, Error::UnexpectedResponse(_)),
-        "expected Error::UnexpectedResponse, got {err:?}"
+        matches!(err, Error::UnexpectedWireFormat(_)),
+        "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
