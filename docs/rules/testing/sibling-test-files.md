@@ -8,8 +8,8 @@ triggers:
   - adding tests to a module that has none
   - sweeping inline test modules out of a file
 symbols: [cfg(test), path-attribute]
-related: [coverage-floor, exercise-production-code]
-precedents: ["#657"]
+related: [coverage-floor, exercise-production-code, modernize-touched-modules]
+precedents: ["#657", "#726"]
 memory: [feedback_sed_inline_test_extraction, project_main_flat_helpers_nested_pattern]
 ---
 
@@ -28,9 +28,14 @@ mod tests;
 ## Why
 
 The project minimizes `mod.rs` files, and an inline test module makes every implementation
-file longer than the code it holds. The convention is fully applied: 87 `#[path = "*_tests.rs"]`
-wirings, zero remaining inline `mod tests {` blocks. A new inline block is drift, not a
-judgment call.
+file longer than the code it holds. No inline `#[cfg(test)] mod ... { }` block remains in
+`src/`, so a new one is drift, not a judgment call.
+
+The *placement* half is less finished than the count suggests: alongside the 87
+`#[path = "*_tests.rs"]` wirings, about two dozen `mod tests;` declarations still resolve to a
+`<dir>/tests.rs`. Convert one when you are already editing that module — see
+[modernize touched modules](../workflow/modernize-touched-modules.md) — and do not read the
+surviving `<dir>/tests.rs` files as precedent.
 
 This does **not** mean flattening helper modules. `<domain>/<side>.rs` as the main file with
 `<domain>/<side>/foo.rs` helpers underneath is canonical Rust and stays; only the *test* file
@@ -41,5 +46,6 @@ Read + Write + Edit per file.
 
 ## Precedents
 
-- #657 — the bulk extraction sweep that established the `sed` recipe and closed out the last
-  inline modules.
+- #657 — the bulk extraction sweep that established the `sed` recipe.
+- #726 — moved the last inline block (`from_str_tests` in `src/messages.rs`) out, and corrected
+  this node's "fully applied" claim: the `<dir>/tests.rs` residue had gone unnoticed.

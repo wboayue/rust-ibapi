@@ -3,7 +3,8 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status:** `wire/`, `testing/`, and `parity/` clusters migrated. Three clusters remain inline.
+**Status:** `wire/`, `testing/`, `parity/`, and `workflow/` clusters migrated. Two clusters
+remain inline.
 
 ## Why
 
@@ -111,6 +112,51 @@ carried the same misconception in ~16 command lines and were swept.
 CI cost: two legs to three, so roughly +50% wall-clock on the matrix job. Judged worth it —
 the gap it closes went unnoticed through 11 merges.
 
+## What shipped in the workflow/ pass
+
+| Node | From | Status |
+|---|---|---|
+| `workflow/pre-pr-checks.md` | rule 3 | active |
+| `workflow/pinned-toolchain.md` | rule 7 | active |
+| `workflow/modernize-touched-modules.md` | rule 9 | active |
+| `workflow/integration-crate-builds.md` | rule 11 | active |
+| `workflow/restrict-after-callers.md` | rule 23 | active |
+
+`CLAUDE.md`'s Quick Commands block survives the migration — the commands themselves are worth
+keeping in permanent context — but its comment blocks, which had grown into a second copy of
+rules 3 and 6, now point at the nodes. It is also split into the unconditional gate and the
+situational one (integration builds, `just rules-check`, `just cover`).
+
+### Rot corrected while migrating
+
+Rules 9 and 11 audited clean. Rule 7's version pins are correct (1.95.0 on `main`, 1.93.0 on
+`v2-stable`), though it undersold the mechanics — `ci.yml` pins the toolchain in **two** jobs,
+and `coverage.yml` / `security.yml` are deliberately unpinned.
+
+| Was | Is |
+|---|---|
+| Rule 3: "all three clippy configs" — third line was `cargo clippy --all-features` | Weaker than the CI leg it mirrors, which runs `--all-targets ... -- -D warnings`. Corrected in the block |
+| Rule 3 implies the rustdoc trio mirrors CI | **CI never sets `RUSTDOCFLAGS`.** `ci.yml` runs bare `cargo doc --no-deps`, so a broken intra-doc link warns and passes. The local trio is the *only* gate; docs.rs is where it otherwise surfaces |
+| Rule 23's precedent: #547 → #548 added `#[non_exhaustive]` on `Contract` | #665 **removed it again** — with the fields typed, it was construction friction guarding mistakes that already failed to compile. The caller-first split was still right; the restriction was not. #548's `compile_fail` guard went with it, which is why [pin compile_fail codes](../docs/rules/testing/pin-compile-fail-codes.md) found no such doc-test in the `testing/` pass — same deletion, found from the other end |
+
+The #665 reversal is now the most instructive half of that node: it is a precedent for the
+ordering rule *and* a counter-example to the restriction itself, which is the point
+`#[non_exhaustive]` is deliberate rather than default.
+
+**Review of this pass caught the graph doing it again.** The rule-9 node first claimed #657 left
+"no inline blocks and every test file `#[path]`-wired." Neither half held: `src/messages.rs` had
+an inline `#[cfg(test)] mod from_str_tests { ... }`, and about two dozen `mod tests;`
+declarations still resolve to `<dir>/tests.rs` — the layout
+[sibling test files](../docs/rules/testing/sibling-test-files.md) names as the anti-pattern.
+That node's own "the convention is fully applied" line (shipped in the `testing/` pass) had the
+same overstatement, and was corrected here. The inline block moved to `src/messages/tests.rs`;
+the `<dir>/tests.rs` residue is left to the rule that governs it — convert one when you are
+already in the module.
+
+**Lesson for the remaining passes: audit the completeness claims, not just the API names.** Both
+audits so far checked that cited symbols exist. Neither checked whether "fully applied", "zero
+remaining", or "all N sites" was still true, and that is the class that failed twice.
+
 ## Retrieval check — run this before migrating further
 
 **Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,
@@ -158,9 +204,8 @@ Migrate in this order — highest density and clearest boundaries first:
 
 | Order | Cluster | Rules | Notes |
 |---|---|---|---|
-| 1 | `workflow/` | 3, 7, 9, 11, 23 | |
-| 2 | `style/` | 2, 4, 14, 25 | |
-| 3 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | |
+| 1 | `style/` | 2, 4, 14, 25 | Rule 4 is cited by prose in `market_data/historical/` and by rule 25; wire both up when it lands |
+| 2 | `docs/` | 18, 27 + Changelog / Release Notes / Maintaining Documentation | Rule 27 already links out to `modernize-touched-modules` and `dual-feature-types` |
 
 **Do not renumber surviving rules.** The gap at 15–20 is deliberate. Rule numbers are already
 unreliable across stores — one memory cites "rules 20/22" for the family now at 15/17, and
