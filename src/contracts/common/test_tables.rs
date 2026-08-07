@@ -168,9 +168,9 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].industry, "Consumer, Cyclical");
                 assert_eq!(contracts[0].category, "Auto Manufacturers");
                 assert_eq!(contracts[0].stock_type, "COMMON");
-                assert_eq!(contracts[0].min_size, 1.0);
-                assert_eq!(contracts[0].size_increment, 1.0);
-                assert_eq!(contracts[0].suggested_size_increment, 100.0);
+                assert_eq!(contracts[0].min_size, Some(1.0));
+                assert_eq!(contracts[0].size_increment, Some(1.0));
+                assert_eq!(contracts[0].suggested_size_increment, Some(100.0));
             }),
         },
         ContractDetailsTestCase {

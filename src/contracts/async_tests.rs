@@ -385,9 +385,9 @@ async fn request_stock_contract_details() {
     assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
     assert_eq!(contracts[0].long_name, "TESLA INC");
     assert_eq!(contracts[0].stock_type, "COMMON");
-    assert_eq!(contracts[0].min_size, 1.0);
-    assert_eq!(contracts[0].size_increment, 1.0);
-    assert_eq!(contracts[0].suggested_size_increment, 100.0);
+    assert_eq!(contracts[0].min_size, Some(1.0));
+    assert_eq!(contracts[0].size_increment, Some(1.0));
+    assert_eq!(contracts[0].suggested_size_increment, Some(100.0));
 }
 
 #[tokio::test]

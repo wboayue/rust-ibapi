@@ -10,8 +10,8 @@ fn tick_batch_response(done: bool) -> RoutedItem {
     RoutedItem::Response(proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 12.00, 100, "NYSE"))
-            .tick(historical_tick_last(1_681_133_401, 12.01, 200, "NYSE"))
+            .tick(historical_tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
+            .tick(historical_tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
             .done(done)
             .encode_proto(),
     ))
