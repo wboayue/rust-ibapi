@@ -1,12 +1,21 @@
 # Code-consistency follow-ups
 
 Remaining open items from the CLAUDE.md alignment audit (ran 2026-05-28). All other
-tracks from that audit have shipped — Rule 8 inline-test sweep (PR #657), Rule 18 async
-`# Examples` (PRs #657/#659), Rule 2 flat layout, `pegged_to_benchmark` builder (PR #660),
-and the Rule 19 `#[allow(too_many_arguments)]` justification comments. Re-run the audit
-before starting new follow-ups to catch fresh drift.
+tracks from that audit have shipped — the [sibling test files](../docs/rules/testing/sibling-test-files.md)
+inline-test sweep (PR #657), rule 18 async `# Examples` (PRs #657/#659), rule 2 flat layout,
+`pegged_to_benchmark` builder (PR #660), and the builder-fed
+`#[allow(clippy::too_many_arguments)]` justification comments. Re-run the audit before
+starting new follow-ups to catch fresh drift.
 
-## Rule 4 — public functions with 4+ params
+> **On rule numbers.** This file predates the [knowledge-graph migration](claude-md-knowledge-graph.md);
+> migrated rules are cited by node path below, and only rules still inline in `CLAUDE.md` keep
+> a number. Two audit-time numbers did not mean what they look like today: the
+> `too_many_arguments` track above was recorded as "rule 19", but rule 19 was then the proto
+> fixture sweep — that exception belongs to rule 4's param budget. And the audit's "rule 20"
+> was the ratchet/cleanup split, not proto-only decoding. Resolve any number found here
+> against `git show <commit-before-2026-05-28>:CLAUDE.md`, never against the current file.
+
+## Rule 4 (param budget, still inline) — public functions with 4+ params
 
 Treat the rule as "4+ args with at least one optional / defaultable field needs a builder";
 pure-required signatures don't benefit (receiver `&self` excluded from the budget).
@@ -26,6 +35,9 @@ Client-method violations exposed by the receiver clarification (each appears in 
 
 ## Out-of-scope on the audit pass
 
-- Rule 6 (90% coverage target) — not audited; run `just cover` per PR.
+- [Coverage floor](../docs/rules/testing/coverage-floor.md) (90% target, audit-time rule 6) — not audited; run `just cover` per PR.
 - Rule 11 (integration crate builds) — gates run on touch.
-- Rules 13, 14, 16, 20, 23, 25, 26 — audited clean.
+- Audited clean: rules 13, 14, 23, 25 (still inline), plus
+  [wire enum typing](../docs/rules/wire/enum-typing.md) (audit-time rule 16),
+  [floor-ratchet splits](../docs/rules/wire/floor-ratchet-splits.md) (audit-time rule 20), and
+  [clock seams](../docs/rules/testing/clock-seams.md) (audit-time rule 26).
