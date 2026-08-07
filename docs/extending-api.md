@@ -81,12 +81,16 @@ src/<module>/
 ├── common/        # Shared implementation details
 │   ├── mod.rs     # Export encoders/decoders
 │   ├── encoders.rs # Message encoding functions
-│   ├── decoders.rs # Message decoding functions
-│   ├── test_tables.rs # Shared test cases (optional)
-│   └── test_data.rs # Common test fixtures (optional)
+│   ├── decoders.rs # Protobuf decoding functions
+│   └── test_tables.rs # Shared test cases (optional)
 ├── sync.rs        # Synchronous implementation
-└── async.rs       # Asynchronous implementation
+├── async.rs       # Asynchronous implementation
+├── sync_tests.rs  # Tests for sync.rs (flat sibling, never inline `mod tests`)
+└── async_tests.rs # Tests for async.rs
 ```
+
+Response fixtures do **not** live in the module. They belong to the crate-wide
+`src/testdata/builders/<domain>.rs`, one builder per domain implementing `ResponseProtoEncoder`.
 
 ## Module Structure Pattern
 
@@ -124,9 +128,20 @@ Define data types in the module's `mod.rs` file - these should be available rega
 
 Make sure the appropriate incoming message and outgoing message identifiers are defined in `src/messages.rs`.
 
-### Step 3: Update Message Type to Request ID Map
+### Step 3: Register the Message for Request-ID Routing
 
-When processing messages received from TWS, the request ID needs to be determined. A map of message type to request ID position is maintained in `src/messages.rs` and may need to be updated.
+When processing messages received from TWS, the dispatcher needs to know which request a
+message belongs to. `text_request_id_field(kind) -> Option<usize>` in `src/messages.rs` is
+the single source of truth; `routes_by_request_id(kind) -> bool` is a thin wrapper over it.
+Add an entry for any new inbound message type that correlates to a request.
+
+This is an allow-list, not a sentinel — it deliberately prevents misrouting messages where
+`int @ tag 1` means something else (`MarketRule.market_rule_id`, `OrderBound.perm_id`).
+`ResponseMessage::request_id()` short-circuits on a missing entry *before* reaching its
+protobuf-envelope branch, so a message with no entry silently never routes.
+
+⚠️ `MessageBusStub` tests sit below the dispatcher and pass with the registration missing.
+Only a live-gateway smoke test surfaces the gap.
 
 ### Step 4: Implement Shared Business Logic
 
@@ -144,18 +159,11 @@ pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Re
 
 // src/<module>/common/decoders.rs
 //
-// Dispatch on wire format. On server_version >= PROTOBUF (201), TWS may send
-// either text or protobuf for the same message type — text decoders run on a
-// protobuf ResponseMessage will EOF on field 2, because the protobuf form
-// carries only [msg_id_str] in `fields` and the payload lives in `raw_bytes`.
-pub(in crate::<module>) fn decode_my_response(message: &mut ResponseMessage) -> Result<MyData, Error> {
-    message.decode_proto_or_text(decode_my_response_proto, |msg| {
-        msg.skip(); // message type
-        msg.skip(); // request id (if present in this message type)
-        Ok(MyData {
-            field: msg.next_string()?,
-        })
-    })
+// The transport is protobuf-only. `require_proto()` hands back the payload from
+// `raw_bytes`, or returns `Error::UnexpectedResponse` if a text-framed message
+// reaches this decoder (a stale test fixture, or a future-version regression).
+pub(in crate::<module>) fn decode_my_response(message: &ResponseMessage) -> Result<MyData, Error> {
+    decode_my_response_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_my_response_proto(bytes: &[u8]) -> Result<MyData, Error> {
@@ -166,7 +174,13 @@ pub(crate) fn decode_my_response_proto(bytes: &[u8]) -> Result<MyData, Error> {
 }
 ```
 
-For `StreamDecoder::decode`, end the match with `_ => Err(Error::UnexpectedResponse(message.clone()))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508.
+For any `String` field that looks like it carries a fixed vocabulary, verify against captured
+wire fixtures and the C# reference before typing it as an enum — field-name resemblance is
+misleading. Once verified, add `impl FromStr<Err = Error>` and decode with the generic
+`parse_required` / `parse_optional` helpers in `src/proto/decoders.rs` rather than falling
+back to `T::default()`, which masks incomplete TWS responses.
+
+For `StreamDecoder::decode`, end the match with `_ => Err(Error::unexpected_response(message))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508.
 
 ### Step 5: Implement Sync Version
 

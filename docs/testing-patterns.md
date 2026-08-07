@@ -12,26 +12,35 @@ This document describes the test-fixture strategy for the rust-ibapi crate. Test
 
 ## Pattern 1: `MessageBusStub` for domain tests
 
-Most per-domain tests use this. The stub records outbound `request_messages` and replays scripted `response_messages` through whatever channel kind the request expects (request/order/shared).
+Most per-domain tests use this. The stub records outbound `request_messages` and replays pre-built `ordered_responses` through whatever channel kind the request expects (request/order/shared).
+
+The transport is protobuf-only, so responses are proto-framed with `proto_response(msg_type, bytes)` and the bytes come from a field-minimal builder in `src/testdata/builders/<domain>.rs` via `ResponseProtoEncoder::encode_proto()`. Both helpers live in `crate::common::test_utils::helpers`.
 
 ```rust
-// src/orders/sync/tests.rs
-#[test]
-fn place_order() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "5|2|637533641|ES|FUT|...".to_owned(),  // OpenOrder
-            "3|1|Submitted|0|1|0|...".to_owned(),    // OrderStatus
-        ],
-    });
+// src/orders/async_tests.rs
+#[tokio::test]
+async fn test_place_order() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).contract_id(637533641).symbol("ES").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().order_id(1).status(OrderStatusKind::Submitted).encode_proto(),
+        ),
+    ]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let mut subscription = client.place_order(1, &contract, &order).expect("...");
+    let mut subscription = client.place_order(1, &contract, &order).await.expect("...");
     // assert subscription yields decoded responses
     // assert message_bus.request_messages records the encoded request
 }
 ```
+
+The `server_version` passed to `Client::stubbed` gates *outbound* encoder feature checks (`SIZE_RULES` above), not the wire format — `stubbed` builds `ConnectionMetadata` directly and never runs the `require_protobuf_support` floor check, because `MessageBusStub` sits below the dispatcher.
+
+A text-framed response reaching a proto-only decoder is skip-classified rather than raised, so a fixture left in the legacy `response_messages: Vec<String>` form shows up as a **passing test whose post-`next_data()` assertions never run**. Use `text_response(...)` only for message types with no proto decoder.
 
 Counterpart `MessageBusStub::default()` exists for tests that just need a `Client` (accessor tests, builder smoke tests).
 
@@ -128,8 +137,10 @@ just cover                                         # HTML report, opens browser
 cargo test --features sync client::sync::tests
 ```
 
-Per CLAUDE.md item 5, every PR should pass `cargo clippy` in all three configurations: default, `--features sync`, `--all-features`.
+Per CLAUDE.md's "Run quality checks before committing", every PR should pass `cargo clippy` in all three configurations: default, `--features sync`, `--all-features`.
 
 ## Recording real messages
 
-When implementing tests for a new feature, capture real protocol bytes against a paper IB Gateway with `IBAPI_RECORDING_DIR=/tmp/tws-messages`, then use those captured frames in `MessageBusStub::response_messages` or `MemoryStream::push_inbound` calls.
+When implementing tests for a new feature, capture real protocol bytes against a paper IB Gateway with `IBAPI_RECORDING_DIR=/tmp/tws-messages`. Use the captured frames to derive the field values for a `src/testdata/builders/<domain>.rs` builder, then feed it through `MessageBusStub::with_ordered_responses` via `proto_response(...)`. For raw-byte fixtures — `MemoryStream::push_inbound` and `spawn_handshake_listener` — use `binary_proto(msg_id, &proto)`, which prepends the 4-byte framing.
+
+Captured frames are also the evidence base for deciding whether a `String` field really carries enumerated values before typing it as an enum.

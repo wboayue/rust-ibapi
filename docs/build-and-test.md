@@ -54,8 +54,8 @@ cargo fmt --check
 cargo clippy --features sync -- -D warnings
 cargo clippy --features async -- -D warnings
 
-# Generate coverage report
-cargo tarpaulin -o html
+# Generate coverage report (nightly is required for --doctests)
+cargo +nightly llvm-cov --all-features --doctests --html --open
 # or using just
 just cover
 ```
@@ -67,15 +67,17 @@ See [docs/testing-patterns.md](testing-patterns.md) for the full fixture stratif
 ### Domain test pattern (`MessageBusStub`)
 
 ```rust
-let message_bus = Arc::new(MessageBusStub {
-    request_messages: RwLock::new(vec![]),
-    response_messages: vec!["<scripted-response>".to_owned()],
-});
+let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+    IncomingMessages::OrderStatus,
+    order_status().order_id(1).status(OrderStatusKind::Submitted).encode_proto(),
+)]));
 let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 let result = client.some_method()?;
 // assert request_messages records the encoded request
 // assert result decoded the scripted response
 ```
+
+Responses are proto-framed: `proto_response(...)` takes bytes from a field-minimal builder in `src/testdata/builders/<domain>.rs`. A text-framed fixture reaching a proto-only decoder is skip-classified, so the test passes with its assertions unrun.
 
 ### Table-Driven Tests
 
