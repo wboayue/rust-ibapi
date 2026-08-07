@@ -213,6 +213,9 @@ fn test_text_request_id_field() {
     // Field-2 messages (request_id after a version field).
     assert_eq!(text_request_id_field(IncomingMessages::TickPrice), Some(2));
     assert_eq!(text_request_id_field(IncomingMessages::ContractDataEnd), Some(2));
+    // MarketDataType is declared by the `TickTypes` decoder — without an entry
+    // the tick never reaches the subscription that asked for it.
+    assert_eq!(text_request_id_field(IncomingMessages::MarketDataType), Some(2));
 
     // Shared and unrouted messages get None.
     assert_eq!(text_request_id_field(IncomingMessages::ManagedAccounts), None);

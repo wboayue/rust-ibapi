@@ -1,7 +1,7 @@
 //! Common message routing logic for sync and async implementations
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
+use crate::messages::{routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
 
 use super::RoutedItem;
 
@@ -106,6 +106,29 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
         return RoutingDecision::ByRequestId(request_id);
     }
     RoutingDecision::ByMessageType(message_type)
+}
+
+/// `true` when a subscription keyed by `request_id` can receive `message_type`.
+///
+/// Three ways in, matching the arm order of [`determine_routing`]: `Error` is
+/// classified before the allow-list is consulted, order-scoped types arrive over
+/// the order-id channel, and everything else needs a `text_request_id_field`
+/// entry.
+fn routable_to_request_id_subscription(message_type: IncomingMessages) -> bool {
+    message_type == IncomingMessages::Error || is_order_message(message_type) || routes_by_request_id(message_type)
+}
+
+/// The first type in `message_types` that a `request_id`-keyed subscription
+/// declares but could never receive; `None` when all of them reach it.
+///
+/// Guards a failure that is otherwise silent end to end: with no
+/// `text_request_id_field` entry [`determine_routing`] falls through to
+/// `ByMessageType`, the message goes to a shared channel nobody subscribed to,
+/// and the subscription simply never yields that variant. `MessageBusStub`
+/// tests inject below the dispatcher, so they stay green. See
+/// `docs/rules/wire/proto-aware-accessors.md`.
+pub(crate) fn first_unroutable_by_request_id(message_types: &[IncomingMessages]) -> Option<IncomingMessages> {
+    message_types.iter().copied().find(|&kind| !routable_to_request_id_subscription(kind))
 }
 
 /// Routing strategy for order-related messages.

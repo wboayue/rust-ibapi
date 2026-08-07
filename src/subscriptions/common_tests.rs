@@ -205,3 +205,31 @@ fn test_decoder_context_debug_format() {
     assert!(debug_str.contains("request_type"));
     assert!(debug_str.contains("Some"));
 }
+
+/// The routing guard is the enforcement behind
+/// `docs/rules/wire/proto-aware-accessors.md`. `FamilyCodes` is a shared-channel
+/// type with no `text_request_id_field` entry, so a request_id-keyed
+/// subscription could never receive it.
+struct UnroutableDecoder;
+
+impl StreamDecoder<UnroutableDecoder> for UnroutableDecoder {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::FamilyCodes];
+
+    fn decode(_context: &DecoderContext, _message: &mut ResponseMessage) -> Result<Self, Error> {
+        Err(Error::NotImplemented)
+    }
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "has no `text_request_id_field` entry")]
+fn test_debug_assert_request_id_routable_rejects_unroutable_declaration() {
+    debug_assert_request_id_routable::<UnroutableDecoder, UnroutableDecoder>(Some(42));
+}
+
+#[test]
+fn test_debug_assert_request_id_routable_skips_unkeyed_subscriptions() {
+    // Order-id and shared-channel subscriptions pass `None`; their decoders
+    // legitimately declare types with no request id (positions, news bulletins).
+    debug_assert_request_id_routable::<UnroutableDecoder, UnroutableDecoder>(None);
+}

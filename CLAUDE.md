@@ -124,15 +124,16 @@ precedents. Every rule now lives in a node; nothing is inline.
   [rule nodes](docs/rules/README.md) — the convention gets a node and one line in this index,
   or it is not a convention
 
-> **Two traps that pass CI silently.** A new public API on a proto inbound message type needs
-> a `text_request_id_field` entry in `src/messages.rs` — `MessageBusStub` tests sit below the
-> dispatcher and pass without it; see
-> [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md). And a text-framed fixture
-> reaching a proto-only decoder is skip-classified, so the test goes green with its
-> post-`next_data()` assertions unrun; see
-> [fixture builders](docs/rules/testing/fixture-builders.md) and
-> [proto-only decoding](docs/rules/wire/proto-only-decoding.md). Neither failure announces
-> itself; read the linked nodes before touching either surface.
+> **One trap that still passes CI silently.** A text-framed fixture reaching a proto-only
+> decoder is skip-classified, so the test goes green with its post-`next_data()` assertions
+> unrun; see [fixture builders](docs/rules/testing/fixture-builders.md) and
+> [proto-only decoding](docs/rules/wire/proto-only-decoding.md). The failure does not announce
+> itself; read both nodes before building a fixture.
+>
+> Its sibling — a missing `text_request_id_field` entry for a new public API on a proto inbound
+> message type — is now gated by `debug_assert_request_id_routable` in the subscription
+> constructors, so it fails a stub test instead of a live gateway. See
+> [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md).
 
 Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
 an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not

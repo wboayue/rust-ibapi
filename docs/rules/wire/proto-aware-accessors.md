@@ -8,9 +8,9 @@ triggers:
   - adding a public API on a proto inbound message type
   - subscription routing silently returns no data
   - a new IncomingMessages variant correlates to a request
-symbols: [ResponseMessage, peek_int, request_id, order_id, execution_id, routes_by_request_id, text_request_id_field]
-related: [proto-only-decoding]
-precedents: ["#519", "#647"]
+symbols: [ResponseMessage, peek_int, request_id, order_id, execution_id, routes_by_request_id, text_request_id_field, debug_assert_request_id_routable, first_unroutable_by_request_id]
+related: [proto-only-decoding, coverage-floor]
+precedents: ["#519", "#647", "#730"]
 memory: [feedback_request_id_index_registration, feedback_sync_protobuf_routing, project_protobuf_only]
 ---
 
@@ -39,8 +39,25 @@ That table is a deliberate allow-list, not a sentinel. It prevents misrouting me
 tests still construct text-framed fixtures.
 
 **`MessageBusStub` tests structurally bypass the dispatcher and pass with the registration
-missing.** Only a live-gateway smoke test surfaces the gap. PR #647 shipped exactly this bug,
-then refactored the table.
+missing.** PR #647 shipped exactly this bug, then refactored the table; before #730 only a
+live-gateway smoke test surfaced the gap.
+
+## The gate
+
+`debug_assert_request_id_routable` (`src/subscriptions/common.rs`) runs in both subscription
+constructors and panics when a `request_id`-keyed subscription is built for a decoder whose
+`RESPONSE_MESSAGE_IDS` names a type the dispatcher cannot route to it. The classification is
+`first_unroutable_by_request_id` in `src/transport/routing.rs`, whose three accepting arms
+mirror `determine_routing`: `Error`, order-scoped types, and anything with a
+`text_request_id_field` entry.
+
+Stub tests bypass the dispatcher but not the constructor, so this fires in exactly the tests
+that used to pass silently. It is compiled out of release builds — the invariant is over
+static tables and cannot depend on caller input.
+
+Its reach is the set of decoders some test instantiates. A decoder with no test at all is
+still unguarded, which is one more reason for
+[coverage floor](../testing/coverage-floor.md).
 
 On the minimal-envelope point: the dispatcher calls these accessors three or four times per
 inbound message. A full decode of `OpenOrder` or `ExecutionDetails` costs roughly twenty
@@ -54,3 +71,7 @@ panicking accessor was the root of PR #519's bug class.
 - #519 — a panicking accessor on a proto-framed message.
 - #647 — shipped a missing routing registration, then split the table into
   `routes_by_request_id` + `text_request_id_field`.
+- #730 — replaced the prose warning with the constructor guard. It found a second instance on
+  its first run: `MarketDataType`, declared by the `TickTypes` decoder since #516 and missing
+  from the table ever since, so `TickTypes::MarketDataType` never reached a `market_data`
+  subscription.
