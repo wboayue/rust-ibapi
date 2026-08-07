@@ -143,6 +143,20 @@ The #665 reversal is now the most instructive half of that node: it is a precede
 ordering rule *and* a counter-example to the restriction itself, which is the point
 `#[non_exhaustive]` is deliberate rather than default.
 
+**Review of this pass caught the graph doing it again.** The rule-9 node first claimed #657 left
+"no inline blocks and every test file `#[path]`-wired." Neither half held: `src/messages.rs` had
+an inline `#[cfg(test)] mod from_str_tests { ... }`, and about two dozen `mod tests;`
+declarations still resolve to `<dir>/tests.rs` — the layout
+[sibling test files](../docs/rules/testing/sibling-test-files.md) names as the anti-pattern.
+That node's own "the convention is fully applied" line (shipped in the `testing/` pass) had the
+same overstatement, and was corrected here. The inline block moved to `src/messages/tests.rs`;
+the `<dir>/tests.rs` residue is left to the rule that governs it — convert one when you are
+already in the module.
+
+**Lesson for the remaining passes: audit the completeness claims, not just the API names.** Both
+audits so far checked that cited symbols exist. Neither checked whether "fully applied", "zero
+remaining", or "all N sites" was still true, and that is the class that failed twice.
+
 ## Retrieval check — run this before migrating further
 
 **Run 2026-08-06: 3/3 pass. Gate is clear; migration may continue.** Three fresh subagents,

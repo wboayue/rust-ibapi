@@ -14,7 +14,7 @@ memory: [feedback_ci_clippy_flags, feedback_rustdoc_link_check, feedback_self_re
 ---
 
 Before opening a PR, run every gate — formatter, clippy in all three feature configurations,
-rustdoc in all three, and the tests:
+rustdoc in all three, the tests, and the examples:
 
 ```bash
 cargo fmt
@@ -28,7 +28,13 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --no-default-features --features 
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
 just test
+
+cargo build --examples
+cargo build --examples --no-default-features --features sync
 ```
+
+`just test` does not build `examples/`, and a signature change breaks examples as readily as it
+breaks callers — that is a whole caller surface the test suite never touches.
 
 Add `just rules-check` when the change touches `CLAUDE.md`, `docs/rules/`, or `plans/`, and the
 [integration crate builds](integration-crate-builds.md) when it touches a wire surface.
@@ -45,11 +51,15 @@ The three feature configurations are not interchangeable and `--features sync` i
 sync-only build; see [feature matrix](../parity/feature-matrix.md) for why, and for the
 incident where a sync-only break survived 11 merges.
 
-The rest is CI parity rather than novelty: `ci.yml` runs `cargo fmt -- --check`,
-`cargo clippy --all-targets <flags> -- -D warnings`, and `cargo test <flags>` on each of the
-three legs, plus `just rules-check` in `basic-checks`. Running them locally costs one loop
-instead of a push-wait-red-fix cycle, on the same toolchain CI uses — see
-[pinned toolchain](pinned-toolchain.md).
+**Know which half of the list has no safety net.** `ci.yml` re-runs `cargo fmt -- --check`,
+`cargo clippy --all-targets <flags> -- -D warnings`, `cargo test <flags>`, and
+`cargo build --examples` on each of the three legs, and `basic-checks` runs the rules-graph
+script — skip those locally and CI catches you. Nothing re-runs the rustdoc trio or the
+[integration crate builds](integration-crate-builds.md); skip those and the breakage ships.
+
+Run the CI-covered half locally anyway, on the same toolchain CI uses — see
+[pinned toolchain](pinned-toolchain.md) — because one local loop beats a push-wait-red-fix
+cycle.
 
 ## Precedents
 

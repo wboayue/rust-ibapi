@@ -37,8 +37,10 @@ small way next to your change, fix it here rather than filing it.
 
 ## Precedents
 
-- #657 — the sweep that ended the inline-test era; there are now no `#[cfg(test)] mod tests`
-  blocks left in `src/` and every test file is `#[path]`-wired. See
+- #657 — the bulk inline-test extraction sweep, and a good picture of what a sweep does and
+  does not finish. It left 87 `#[path]`-wired sibling files, but about two dozen `mod tests;`
+  declarations still resolve to a `<dir>/tests.rs` rather than a `_tests.rs` sibling. Those are
+  the leftovers this rule is for: convert the one in front of you, not all of them. See
   [sibling test files](../testing/sibling-test-files.md).
 - #573 — asked for doc parity on one module, shipped docs plus a signature reshape, a method
   split, and a parameter rename, because they were all drift in the module being touched. The

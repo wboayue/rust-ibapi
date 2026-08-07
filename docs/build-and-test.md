@@ -148,6 +148,9 @@ cargo test --no-default-features --features sync && \
 cargo test --all-features
 ```
 
+This chain does not cover intra-doc links or the integration crates. For the full pre-PR gate,
+see [pre-PR checks](rules/workflow/pre-pr-checks.md).
+
 ## Continuous Integration
 
 `ci.yml` runs one matrix leg per configuration — `async`, `sync`, and `all-features` — and each
@@ -156,7 +159,9 @@ leg runs the full sequence:
 1. **Formatting**: `cargo fmt --check`
 2. **Linting**: `cargo clippy --all-targets … -- -D warnings`
 3. **Tests**: `cargo test`
-4. **Documentation**: `cargo doc --no-deps` builds without warnings
+4. **Documentation**: `cargo doc --no-deps` — note this leg runs **without** `RUSTDOCFLAGS`, so
+   a broken intra-doc link warns and still passes. Catching those is local-only; see
+   [pre-PR checks](rules/workflow/pre-pr-checks.md)
 5. **Examples**: `cargo build --examples`
 6. **Benches**: `cargo check --benches` (non-blocking)
 

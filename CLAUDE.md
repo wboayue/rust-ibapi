@@ -145,6 +145,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
 # Run all tests (one leg per feature configuration)
 just test
+
+# Examples are a caller surface `just test` never compiles
+cargo build --examples
+cargo build --examples --no-default-features --features sync
 ```
 
 Situational — run when the change touches the matching surface:
