@@ -371,7 +371,7 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
 }
 
 // =============================================================================
-// Text-framing rejection (rule 20)
+// Text-framing rejection (docs/rules/wire/proto-only-decoding.md)
 // =============================================================================
 //
 // Servers ≥ the connection floor always emit these messages in

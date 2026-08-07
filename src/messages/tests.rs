@@ -308,7 +308,7 @@ fn test_response_message_peek_operations() {
 
 #[test]
 fn peek_int_rejects_proto_framed_message() {
-    // CLAUDE.md rule 17: text-index accessors must be proto-aware. peek_int
+    // docs/rules/wire/proto-aware-accessors.md: text-index accessors must be proto-aware. peek_int
     // defensively returns Err(UnexpectedResponse) on a proto-framed message
     // even if the caller passes a valid text-field index — production callers
     // already gate on raw_bytes().is_none() before invoking, so the guard is
@@ -1184,7 +1184,7 @@ fn test_notice_category_partition() {
 
 #[test]
 fn test_connectivity_status_from_code_table() {
-    // Derive expectations from the code constants (rule 21): each farm-code set
+    // Derive expectations from the code constants (docs/rules/testing/derive-from-constants.md): each farm-code set
     // maps to its status; everything else maps to None.
     let cases: &[(&[i32], ConnectivityStatus)] = &[
         (&FARM_OK_CODES, ConnectivityStatus::Ok),

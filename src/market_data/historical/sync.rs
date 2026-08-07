@@ -326,7 +326,7 @@ pub(crate) fn historical_data_stream(
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the
 // public API is already a builder, so flat args here are the deliberate
-// seam between the typed builder and the wire encoder (rule 19 canary
+// seam between the typed builder and the wire encoder (the too_many_arguments canary is
 // acceptable for builder-fed helpers).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn historical_ticks<T: TickDecoder<T>>(
