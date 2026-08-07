@@ -28,7 +28,8 @@ assert_eq!(format!("{}", tf), "20250418"); // past the third Friday, rolls a mon
 ```
 
 Use `time::macros::date!` for literal dates, not `Date::from_calendar_date(..).unwrap()` — it
-is the project standard (`src/lib_tests.rs:2`, `examples/async/wsh_event_data_by_contract.rs:17`).
+is the project standard (`src/lib_tests.rs`, `examples/async/wsh_event_data_by_contract.rs`,
+and many `datetime!` callsites in `src/messages/tests.rs`).
 
 ## Why
 

@@ -47,7 +47,7 @@ everything and bounces you to a browser.
 ## Precedents
 
 - #540 — `ProtocolFeature::new` looked covered (every `Features::*` constant invokes it) but
-  reported 0%. The runtime test at `src/protocol_tests.rs:5` is the fix, and the reason that
-  line exists.
+  reported 0%. `protocol_feature_new_constructs_runtime_value` in `src/protocol_tests.rs` is
+  the fix, and the reason that test exists.
 - #554 — `contracts/types.rs` 61.4% → 99.6%, via [clock seams](clock-seams.md) plus serde
   round-trips and exercising both `&str` and `String` monomorphizations of `impl Into<T>`.

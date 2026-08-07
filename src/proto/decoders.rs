@@ -53,8 +53,9 @@ const UNSET_DECIMAL_WIRE: [&str; 3] = [
 ///
 /// The error arm is the point of the helper. Its predecessors ended in
 /// `unwrap_or_default()`, so a wire value of `"0.5"` failed `parse::<i32>()` and
-/// silently became `0` — data loss on fractional (crypto) sizes, issue #716. Per
-/// docs/rules/wire/enum-typing.md, a decoder rejects malformed input rather than defaulting.
+/// silently became `0` — data loss on fractional (crypto) sizes, issue #716.
+/// Per docs/rules/wire/enum-typing.md, a decoder rejects malformed input rather
+/// than defaulting.
 ///
 /// Whitespace is not trimmed: `Some(" ")` is an error, matching C#'s
 /// `decimal.Parse(" ")`, which throws.

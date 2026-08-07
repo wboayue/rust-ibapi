@@ -2,14 +2,21 @@
 #
 # Validates the docs/rules/ knowledge graph and its index in CLAUDE.md.
 #
-#   1. every markdown link in CLAUDE.md and docs/rules/** resolves to a real file
+#   1. every markdown link in CLAUDE.md, docs/rules/**, and plans/*.md resolves
+#      to a real file
 #   2. every node's frontmatter `id` matches its filename stem
 #   3. every `related:` id names an existing node
 #   4. CLAUDE.md contains no `@`-imports (they would inline every node into
 #      context on every session, defeating the point of the index)
+#   5. no node cites a `file.rs:NNN` line number — line refs rot silently the
+#      same way the retired rule numbers did, and nothing recomputes them. Name
+#      the fn, test, or type instead.
 #
 # `memory:` entries are deliberately NOT validated — that directory lives
 # outside the repo and is specific to one maintainer.
+#
+# plans/*.md is in scope for check 1 because plan files cite nodes by relative
+# path; those links were hand-verified once and would otherwise rot unwatched.
 
 set -uo pipefail
 
@@ -64,7 +71,7 @@ done
 
 # --- 1. markdown links resolve ----------------------------------------------
 
-for file in $INDEX $(nodes) "$RULES_DIR/README.md"; do
+for file in $INDEX $(nodes) "$RULES_DIR/README.md" $(find plans -name '*.md' | sort); do
     dir="$(dirname "$file")"
     grep -o '](\([^) ]*\))' "$file" 2>/dev/null | sed 's/^](//; s/)$//' | while read -r link; do
         case "$link" in
@@ -82,6 +89,16 @@ if grep -nE '^[[:space:]]*@[A-Za-z0-9_./-]+' "$INDEX" >/dev/null 2>&1; then
     grep -nE '^[[:space:]]*@[A-Za-z0-9_./-]+' "$INDEX" |
         sed "s|^|$INDEX: @-import would inline this file into every session -> line |" >>"$ERRORS"
 fi
+
+# --- 5. no line-number citations in nodes -----------------------------------
+#
+# `src/foo.rs:312` is correct until the next edit to foo.rs, and nothing here can
+# recompute it. Name the fn / test / type and let the reader grep.
+
+for file in $(nodes); do
+    grep -nE '[A-Za-z0-9_/.-]+\.(rs|sh|toml|md):[0-9]+' "$file" |
+        sed "s|^|$file: line-number citation (name the fn or test instead) -> line |" >>"$ERRORS"
+done
 
 # --- report -----------------------------------------------------------------
 
