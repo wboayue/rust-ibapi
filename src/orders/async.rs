@@ -11,6 +11,31 @@ use super::common::{decoders, encoders, verify};
 use super::*;
 
 impl Client {
+    /// Start building an order for the given contract
+    ///
+    /// This is the primary API for creating orders, providing a fluent interface
+    /// that guides you through the order creation process.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     let order_id = client.order(&contract)
+    ///         .buy(100)
+    ///         .limit(50.0)
+    ///         .submit().await.expect("order submission failed");
+    /// }
+    /// ```
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
+        OrderBuilder::new(self, contract)
+    }
+
     /// Subscribes to order update events. Only one subscription can be active at a time.
     ///
     /// To pair a [`CommissionReport`] with the

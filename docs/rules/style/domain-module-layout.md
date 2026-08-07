@@ -42,15 +42,11 @@ with `client`'s own mechanics makes eleven `impl Client` sites in the tree.
 `docs/architecture.md` and `docs/extending-api.md` carry the directory diagram and a worked
 example of adding a module.
 
-## Known drift
-
-`Client::order` and `Client::market_data` — the two builder entry points — sit in
-`client/sync.rs` and `client/async.rs`, while every sibling entry point (`realtime_bars`,
-`tick_by_tick`, `market_depth`, and the historical builders) sits in its domain module. Four
-sites, two methods × two features. Move them when you are next in that file; do not read them
-as precedent.
-
 ## Precedents
 
 - #657 — the sweep that established the flat layout and drew the line at helper modules: main
   file flat, helpers may nest.
+- #729 — closed the last drift: `Client::order` and `Client::market_data` moved out of
+  `client/` into `orders/{sync,async}.rs` and `market_data/realtime/{sync,async}.rs`, next to
+  the sibling entry points (`realtime_bars`, `tick_by_tick`, `market_depth`) they had diverged
+  from. No exceptions remain — every `impl Client` block outside `client/` is a domain's.

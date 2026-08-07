@@ -38,15 +38,19 @@ Client-method violations exposed by the receiver clarification (each appears in 
 ## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
 
 Counted 2026-08-07 while migrating the `docs/` cluster: 132 of 152 `impl Client` methods carry
-the block. Nine sites across seven methods, listed sync-side first where both exist:
+the block. Nine sites across seven methods, listed sync-side first where both exist. Eight
+remain — async `market_data` was closed in #729:
 
 - `orders::Client::exercise_options` — has `# Arguments`, no example. Six params, so the
   example carries real weight.
 - `contracts::Client::market_rule`, `contracts::Client::cancel_contract_details`
 - `accounts::Client::server_time_millis` (sync + async), `accounts::Client::family_codes`
 - `market_data::historical::Client::cancel_historical_ticks` (sync + async)
-- `client::Client::market_data` — **async only**; the sync twin has one. A
-  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.
+- ~~`client::Client::market_data` — **async only**; the sync twin has one. A
+  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.~~
+  **Done in #729**, which moved the method to
+  `market_data::realtime::Client::market_data`; the two sync examples now have async
+  twins. Closing it during the move cost nothing — the sync twin was in the same diff.
 
 The remaining eleven sites are the six accessors the rule exempts — `client_id`,
 `next_request_id`, `next_order_id`, `connection_time`, `time_zone`, and async `server_version`.
