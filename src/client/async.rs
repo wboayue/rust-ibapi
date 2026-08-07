@@ -277,7 +277,7 @@ impl Client {
     /// This is the primary API for creating orders, providing a fluent interface
     /// that guides you through the order creation process.
     ///
-    /// # Example
+    /// # Examples
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
@@ -303,7 +303,7 @@ impl Client {
     }
 
     /// Check server version requirement
-    pub fn check_server_version(&self, required_version: i32, feature: &str) -> Result<(), Error> {
+    pub(crate) fn check_server_version(&self, required_version: i32, feature: &str) -> Result<(), Error> {
         if self.server_version < required_version {
             return Err(Error::ServerVersion(required_version, self.server_version, feature.into()));
         }

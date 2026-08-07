@@ -22,6 +22,8 @@ use crate::market_data::TradingHours;
 impl Client {
     /// Returns the timestamp of earliest available historical data for a contract and data type.
     ///
+    /// # Examples
+    ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
@@ -210,7 +212,7 @@ impl Client {
     ///
     /// ```no_run
     /// use time::macros::datetime;
-    //
+    ///
     /// use ibapi::contracts::Contract;
     /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::historical::BarSize;

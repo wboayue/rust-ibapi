@@ -8,7 +8,7 @@ triggers:
   - N near-identical trait impls or test functions across types
   - reviewing a PR that adds a macro
 symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum]
-related: [param-budget, exercise-production-code, fixture-builders]
+related: [param-budget, fixture-builders]
 precedents: ["#548", "#554"]
 memory: [feedback_macro_repeated_trait_impls, feedback_no_speculative_test_infra, feedback_mirror_production_patterns]
 ---

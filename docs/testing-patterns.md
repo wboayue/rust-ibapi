@@ -134,10 +134,10 @@ cargo llvm-cov --all-features --summary-only      # text summary
 just cover                                         # HTML report, opens browser
 
 # Specific module
-cargo test --features sync client::sync::tests
+cargo test --no-default-features --features sync client::sync::tests
 ```
 
-Per CLAUDE.md's "Run quality checks before committing", every PR should pass `cargo clippy` in all three configurations: default, `--features sync`, `--all-features`.
+Every PR should pass `cargo clippy --all-targets` in all three configurations — default (async), `--no-default-features --features sync`, and `--all-features`. Note that `--features sync` alone leaves the default async feature on, so it is not the sync-only build. Full gate: [pre-PR checks](rules/workflow/pre-pr-checks.md).
 
 ## Recording real messages
 

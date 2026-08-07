@@ -10,6 +10,15 @@ directive is what you need at the moment of writing code; the evidence is what y
 deciding whether the directive still applies. Splitting them lets the index stay short
 enough to keep in context permanently while the reasoning stays available on demand.
 
+## When a convention changes
+
+Update the node, not just the code. A new convention gets a node plus one index line in
+`CLAUDE.md`; a changed one gets its directive rewritten and its precedent extended; a retired
+one becomes `status: historical` and leaves the index. Nothing here is compile-checked, so a
+node that no longer matches `src/` is indistinguishable from one that does until someone reads
+both — which is how five errors accumulated across rules 15–20 before the first audit found
+them.
+
 ## Node format
 
 ```markdown
@@ -90,7 +99,8 @@ untrustworthy. Name the fn, test, or type and let the reader grep; the validator
 | `testing/` | Fixtures, coverage, what a test must exercise |
 | `parity/` | The sync/async axis: feature configurations, dual-feature types, consumer idioms |
 | `workflow/` | How a change gets made and shipped: local gates, toolchain, scope, restriction ordering |
+| `docs/` | What ships alongside the code: rustdoc examples, changelog, migration guide, release notes |
 
-The remaining cluster (`docs/`) is still inline in `CLAUDE.md`. See
-[plans/claude-md-knowledge-graph.md](../../plans/claude-md-knowledge-graph.md) for the
-migration order.
+Migration complete — `CLAUDE.md` carries no inline rules. See
+[plans/claude-md-knowledge-graph.md](../../plans/claude-md-knowledge-graph.md) for the history
+and the open follow-ups.
