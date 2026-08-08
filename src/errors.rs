@@ -238,6 +238,15 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Returns `true` if a read timed out with no data, which both dispatchers
+    /// treat as "nothing yet" rather than a failure — the socket is fine and the
+    /// next poll continues. Distinct from [`Self::is_connection_lost`], which
+    /// means the socket is gone.
+    pub(crate) fn is_read_timeout(&self) -> bool {
+        use std::io::ErrorKind;
+        matches!(self, Error::Io(io_err) if matches!(io_err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut))
+    }
 }
 
 // Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.

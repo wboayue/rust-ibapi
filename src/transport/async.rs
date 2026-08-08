@@ -319,18 +319,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                         break;
                     }
                     result = message_bus.read_and_route_message() => {
-                        use crate::client::error_handler::{is_connection_error, is_timeout_error};
-
                         match result {
                             Ok(_) => continue,
-                            Err(ref err) if is_timeout_error(err) => {
+                            Err(ref err) if err.is_read_timeout() => {
                                 if message_bus.shutdown_requested.load(Ordering::Relaxed) {
                                     debug!("dispatcher task exiting");
                                     break;
                                 }
                                 continue;
                             }
-                            Err(ref err) if is_connection_error(err) => {
+                            Err(ref err) if err.is_connection_lost() => {
                                 error!("Connection error detected, attempting to reconnect: {err:?}");
                                 message_bus.connected.store(false, Ordering::Relaxed);
 
