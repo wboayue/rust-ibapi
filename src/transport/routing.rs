@@ -110,12 +110,18 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
 /// `true` when a subscription keyed by `request_id` can receive `message_type`.
 ///
-/// Three ways in, matching the arm order of [`determine_routing`]: `Error` is
-/// classified before the allow-list is consulted, order-scoped types arrive over
-/// the order-id channel, and everything else needs a `text_request_id_field`
-/// entry.
+/// Two ways in, matching the arm order of [`determine_routing`]: order-scoped
+/// types arrive over the order-id channel, and everything else needs a
+/// `text_request_id_field` entry.
+///
+/// `Error` is not one of them, and used to be exempted here so that decoders
+/// declaring it would not trip the guard — const declares, guard exempts,
+/// circular. [`determine_routing`] classifies `Error` before the allow-list is
+/// consulted, so it reaches a subscription as `RoutedItem::Error`/`Notice` and
+/// never as a `Response` to decode. The declarations were removed instead; see
+/// `test_no_decoder_declares_dispatcher_intercepted_types`.
 fn routable_to_request_id_subscription(message_type: IncomingMessages) -> bool {
-    message_type == IncomingMessages::Error || is_order_message(message_type) || routes_by_request_id(message_type)
+    is_order_message(message_type) || routes_by_request_id(message_type)
 }
 
 /// The first type in `message_types` that a `request_id`-keyed subscription

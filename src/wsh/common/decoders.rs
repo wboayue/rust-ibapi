@@ -15,13 +15,19 @@ pub(crate) fn decode_wsh_event_data(message: &ResponseMessage) -> Result<WshEven
     decode_wsh_event_data_proto(message.require_proto()?)
 }
 
-/// Dispatch on incoming message type and forward to the typed decoder. Routes
-/// `Error` frames into `Error::Notice` and any other variant into
-/// `Error::UnexpectedResponse`.
+/// Dispatch on incoming message type and forward to the typed decoder. Any
+/// other variant becomes `Error::UnexpectedResponse`.
+///
+/// There is deliberately no `IncomingMessages::Error` arm. The dispatcher
+/// classifies error frames before either caller sees them — `determine_routing`
+/// returns `RoutingDecision::Error`, so an error reaches the subscription as
+/// `RoutedItem::Error`/`Notice`, never as `RoutedItem::Response`. Both callers
+/// consume only the `Response` side: the `StreamDecoder` impls match on it, and
+/// the one-shot request path reaches this through `RoutedItem::into_legacy`,
+/// which maps errors to `Some(Err(_))` and never runs the processor.
 pub(in crate::wsh) fn decode_metadata_message(message: &ResponseMessage) -> Result<WshMetadata, Error> {
     match message.message_type() {
         IncomingMessages::WshMetaData => decode_wsh_metadata(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }
@@ -29,7 +35,6 @@ pub(in crate::wsh) fn decode_metadata_message(message: &ResponseMessage) -> Resu
 pub(in crate::wsh) fn decode_event_data_message(message: &ResponseMessage) -> Result<WshEventData, Error> {
     match message.message_type() {
         IncomingMessages::WshEventData => decode_wsh_event_data(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }

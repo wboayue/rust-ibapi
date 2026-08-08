@@ -47,15 +47,6 @@ mod account_summary_tests {
     }
 
     #[test]
-    fn test_decode_error_message() {
-        // Error on the same request_id channel surfaces as Error::Notice, not a
-        // parse failure or "unexpected message" error (#434).
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = AccountSummaryResult::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
-    }
-
-    #[test]
     fn test_cancel_message() {
         let bytes = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
@@ -73,11 +64,7 @@ mod account_summary_tests {
     fn test_response_message_ids() {
         assert_eq!(
             AccountSummaryResult::RESPONSE_MESSAGE_IDS,
-            &[
-                IncomingMessages::AccountSummary,
-                IncomingMessages::AccountSummaryEnd,
-                IncomingMessages::Error
-            ]
+            &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd]
         );
     }
 }
@@ -119,14 +106,7 @@ mod pnl_tests {
 
     #[test]
     fn test_response_message_ids() {
-        assert_eq!(PnL::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnL, IncomingMessages::Error]);
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = PnL::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
+        assert_eq!(PnL::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnL]);
     }
 }
 
@@ -164,14 +144,7 @@ mod pnl_single_tests {
 
     #[test]
     fn test_response_message_ids() {
-        assert_eq!(PnLSingle::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnLSingle, IncomingMessages::Error]);
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = PnLSingle::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
+        assert_eq!(PnLSingle::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnLSingle]);
     }
 }
 
@@ -226,15 +199,8 @@ mod position_update_tests {
     fn test_response_message_ids() {
         assert_eq!(
             PositionUpdate::RESPONSE_MESSAGE_IDS,
-            &[IncomingMessages::Position, IncomingMessages::PositionEnd, IncomingMessages::Error]
+            &[IncomingMessages::Position, IncomingMessages::PositionEnd]
         );
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = PositionUpdate::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -296,19 +262,8 @@ mod position_update_multi_tests {
     fn test_response_message_ids() {
         assert_eq!(
             PositionUpdateMulti::RESPONSE_MESSAGE_IDS,
-            &[
-                IncomingMessages::PositionMulti,
-                IncomingMessages::PositionMultiEnd,
-                IncomingMessages::Error
-            ]
+            &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd]
         );
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -399,16 +354,8 @@ mod account_update_tests {
                 IncomingMessages::PortfolioValue,
                 IncomingMessages::AccountUpdateTime,
                 IncomingMessages::AccountDownloadEnd,
-                IncomingMessages::Error,
             ]
         );
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = AccountUpdate::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -468,19 +415,8 @@ mod account_update_multi_tests {
     fn test_response_message_ids() {
         assert_eq!(
             AccountUpdateMulti::RESPONSE_MESSAGE_IDS,
-            &[
-                IncomingMessages::AccountUpdateMulti,
-                IncomingMessages::AccountUpdateMultiEnd,
-                IncomingMessages::Error
-            ]
+            &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd]
         );
-    }
-
-    #[test]
-    fn test_decode_error_message() {
-        let mut message = proto_error_response(123, 10089, "Requested market data is not subscribed");
-        let err = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
-        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 

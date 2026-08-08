@@ -442,14 +442,52 @@ life.
   semantics has to be made twice. The rule node now says so out loud rather than claiming
   there are two drivers.
 
-- **Audit the 41 `RESPONSE_MESSAGE_IDS` entries against the const's new meaning.** Eight
-  decoders declare `IncomingMessages::Error`, which `determine_routing` classifies *before* the
-  allow-list — it arrives as `RoutedItem::Error`/`Notice` and can never reach `decode`.
-  Harmless, but #732 redefined the const as "the complete set of types that reach `decode`",
-  and under that contract declaring an unreachable type is exactly the kind of misleading
-  declaration the change set out to remove. `routable_to_request_id_subscription` already
-  special-cases `Error` to stop those declarations tripping the routing guard — const declares,
-  guard exempts, circular.
+- ~~**Audit the 41 `RESPONSE_MESSAGE_IDS` entries against the const's new meaning.**~~
+  **Shipped.** Both numbers in the original bullet were wrong, and the audit is what caught
+  them: there are **78** declared entries, not 41, and **16** decoders declared
+  `IncomingMessages::Error`, not eight. Counting them took one throwaway test over the roster
+  #733 had already built — which is the argument for building the roster, and one more instance
+  of the count class this file keeps failing.
+
+  The finding itself held. `determine_routing` classifies `Error` before the allow-list, so it
+  arrives as `RoutedItem::Error`/`Notice` and never as the `Response` that `decode` consumes.
+  All 16 declarations and their `decode` arms are gone, and `routable_to_request_id_subscription`
+  lost the `Error` exemption that had been keeping them legal — the circle is broken from the
+  const side, not the guard side. `test_response_message_ids_match_decode_arms` now names the
+  mistake specifically for `Error` and `Shutdown` rather than reporting it as a generic
+  declared-but-unhandled failure.
+
+  **The proof generalises further than the const.** The one-shot request path reads through
+  `RoutedItem::into_legacy`, which maps an error to `Some(Err(_))` and never runs the
+  processor — so every `IncomingMessages::Error` arm in a one-shot `decode_*_message` is dead
+  too. Two of those (`wsh::decode_metadata_message`, `decode_event_data_message`) are shared
+  with a `StreamDecoder` and were removed here; the rest are a separate follow-up below.
+
+  Removing the arms cost 15 decoder-level `test_decode_error_message*` tests, all asserting a
+  path only `MessageBusStub` can produce. The behaviour they claimed to cover is tested at both
+  layers that actually implement it — `test_hard_error_with_request_id_terminates_subscription`
+  and `test_subscription_hard_error_terminates_stream`, in each transport's tests.
+
+- **Retire the remaining one-shot `IncomingMessages::Error` arms.** The audit above proved the
+  whole class dead, not just the `StreamDecoder` half: `fold_one_shot` only ever calls its
+  processor on `Some(Ok(_))`, and `RoutedItem::into_legacy` yields that only for
+  `RoutedItem::Response`. So the `Error` arms in `accounts::decode_soft_dollar_tiers_message` /
+  `decode_user_info_message` / `decode_replace_fa_end_message`,
+  `contracts::decode_smart_components_message`, `scanner::decode_scanner_message`, and both
+  `config::common::decoders` dispatchers can never fire, as can the inline
+  `Ok(message) if message.message_type() == IncomingMessages::Error` guards in
+  `contracts::{sync,async}` and `market_data::historical::{sync,async}`. Mechanical, but each
+  deletion needs its test checked — the same 15-test cost pattern as #734. Left out of #734 to
+  keep that PR's boundary at the surface the follow-up named.
+
+- **Make `MessageBusStub` classify like the dispatcher.** It hands every fixture to the
+  subscription as `RoutedItem::Response`, including `Error` frames, which the real dispatcher
+  never does — that mismatch is why 15 decoder-level error tests existed and passed. This is
+  the same structural blind spot #730 recorded (stub tests inject below `determine_routing`),
+  seen from the fixture side rather than the routing side. Running fixtures through
+  `determine_routing`/`classify_error` in `mock_request` would close it; the risk is the tail of
+  stub tests using warning or data-advisory codes, which would become `RoutedItem::Notice` and
+  be skipped rather than surfacing as `Err`.
 
 - **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
   `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound

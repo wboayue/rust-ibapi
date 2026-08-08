@@ -720,33 +720,6 @@ async fn test_historical_data_streaming_with_updates() {
 }
 
 #[tokio::test]
-async fn test_historical_data_streaming_error_response() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
-        9000,
-        162,
-        "Historical Market Data Service error message:No market data permissions.",
-    )]));
-
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
-
-    let contract = Contract::stock("SPY").build();
-
-    let mut subscription = client
-        .historical_data(&contract, BarSize::Hour)
-        .duration(Duration::days(1))
-        .stream()
-        .await
-        .expect("streaming request should succeed");
-
-    // Should yield Some(Err(_)) — Subscription<T> surfaces errors through next().
-    let Some(Err(err)) = subscription.next().await else {
-        panic!("error should arrive as Some(Err(_))");
-    };
-    assert!(err.to_string().contains("No market data permissions"), "Error should contain the message");
-}
-
-#[tokio::test]
 async fn test_tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),

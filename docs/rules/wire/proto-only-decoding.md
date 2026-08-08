@@ -10,7 +10,7 @@ triggers:
   - adding a decode arm for a new message type
 symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders]
-precedents: ["#508", "#731", "#732"]
+precedents: ["#508", "#731", "#732", "#733", "#734"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -40,6 +40,14 @@ runtime via the backstop; handled-but-undeclared would not, which is why the tes
 Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` blocks under `src/`
 against the hand-listed roster, so adding a decoder without registering it fails rather than
 going unchecked.
+
+**Never declare `IncomingMessages::Error` or `Shutdown`, and never write a `decode` arm for
+them.** `determine_routing` classifies both before any allow-list, so an error reaches the
+subscription as `RoutedItem::Error`/`Notice` and a shutdown ends the dispatcher loop — neither
+ever arrives as the `RoutedItem::Response` that `decode` consumes. The same holds for one-shot
+requests, which read through `RoutedItem::into_legacy`: an error becomes `Some(Err(_))` and the
+processor never runs. Sixteen decoders declared `Error` anyway; the check above names the
+mistake specifically.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
@@ -94,3 +102,7 @@ other two:
 - #731 — split the framing failure out of the skip path so the fixture trap fails loudly.
 - #732 — retired skip-by-error-variant entirely; `RESPONSE_MESSAGE_IDS` is now the filter and
   the const lost its default so every impl must declare one.
+- #733 — gated both drift directions; the roster is counted against the tree.
+- #734 — audited all 78 declared entries under the const's new meaning. Sixteen declared
+  `IncomingMessages::Error`, which the dispatcher intercepts; those and their `decode` arms are
+  gone, along with the guard exemption that had been keeping them legal.

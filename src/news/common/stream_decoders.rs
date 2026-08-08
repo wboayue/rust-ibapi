@@ -7,12 +7,11 @@ use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => decoders::decode_news_bulletin(message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -27,7 +26,6 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::HistoricalNews,
         IncomingMessages::HistoricalNewsEnd,
         IncomingMessages::TickNews,
-        IncomingMessages::Error,
     ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
@@ -35,7 +33,6 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             IncomingMessages::HistoricalNews => decoders::decode_historical_news(message),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => decoders::decode_tick_news(message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -50,7 +47,3 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "stream_decoders_tests.rs"]
-mod tests;

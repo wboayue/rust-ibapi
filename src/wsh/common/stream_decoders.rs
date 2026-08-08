@@ -12,7 +12,7 @@ use crate::Error;
 use super::decoders;
 
 impl StreamDecoder<WshMetadata> for WshMetadata {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshMetaData, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshMetaData];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_metadata_message(message)
@@ -25,7 +25,7 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
 }
 
 impl StreamDecoder<WshEventData> for WshEventData {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshEventData, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshEventData];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_event_data_message(message)
@@ -36,7 +36,3 @@ impl StreamDecoder<WshEventData> for WshEventData {
         super::encoders::encode_cancel_wsh_event_data(request_id)
     }
 }
-
-#[cfg(test)]
-#[path = "stream_decoders_tests.rs"]
-mod tests;

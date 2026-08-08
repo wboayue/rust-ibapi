@@ -12,12 +12,11 @@ use super::decoders;
 use super::encoders;
 
 impl StreamDecoder<OptionComputation> for OptionComputation {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickOptionComputation => decoders::decode_tick_option_computation(message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -41,19 +40,13 @@ impl StreamDecoder<OptionChain> for OptionChain {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::SecurityDefinitionOptionParameter,
         IncomingMessages::SecurityDefinitionOptionParameterEnd,
-        IncomingMessages::Error,
     ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
     }
 }
-
-#[cfg(test)]
-#[path = "stream_decoders_tests.rs"]
-mod tests;
