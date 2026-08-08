@@ -313,7 +313,7 @@ mod market_depth_tests {
             )
             .encode_proto();
 
-        let exchanges = decode_market_depth_exchanges_proto(&bytes).expect("decode failed");
+        let exchanges = decode_market_depth_exchanges_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).expect("decode failed");
         assert_eq!(exchanges.len(), 2);
         assert_eq!(exchanges[0].exchange_name, "ISLAND");
         assert_eq!(exchanges[0].listing_exchange, "NASDAQ");

@@ -8,9 +8,9 @@ triggers:
   - passing a processor to one_shot_shared or one_shot_by_request_id
   - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, one_shot_shared, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset, PAIRS]
+symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
-precedents: ["#736", "#738", "#740", "#741", "#745"]
+precedents: ["#736", "#738", "#740", "#741", "#745", "#749"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
@@ -21,14 +21,15 @@ the one it asked for. Do that with `request_helpers::expect_proto`, never with a
 request_helpers::blocking::one_shot_by_request_id(
     self,
     encoders::encode_request_user_info,
-    expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
+    expect_proto(decoders::decode_user_info_proto),
 )
 ```
 
-The processor argument is the only place the expected type appears, so a new one-shot API cannot
-narrow "later" — there is no wrapper to add it to. Give the decoder a `decode_*_proto(&[u8])`
-sibling if it lacks one; the message-level `decode_x(&ResponseMessage)` form exists only for
-`StreamDecoder` impls now.
+The expected message type is not written here. It is `ProtoPayload::MESSAGE_ID` on the payload
+the decoder accepts — `decode_user_info_proto(p: proto::UserInfo)` — so naming the decoder names
+the frame. A one-shot API's decoder therefore takes the *decoded* `prost` type, not `&[u8]`;
+give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one, which
+`expect_proto` will demand anyway since it cannot infer `MESSAGE_ID` otherwise.
 
 **There are two one-shot helpers, and both retry.** `one_shot_by_request_id` for a
 request-id request, `one_shot_shared` for a shared channel. Neither takes a
@@ -39,26 +40,12 @@ half of why a `feature` parameter cannot come back. 44 of the 54 one-shot sites 
 the 10 that do not are `server_time`, `managed_accounts`, `request_fa`, `next_valid_order_id`,
 and `scanner_parameters`, none of which carries a `MinServerVer` in the C# client.
 
+Neither helper takes an `on_none` either: a closed stream is `Error::UnexpectedEndOfStream`.
+The ten sites where "TWS sent nothing" is a legitimate empty answer chain
+`.or_else(empty_on_end_of_stream)`.
+
 A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
 `request_helpers` so that hand-rolling one is not reachable from a domain module.
-
-**Nothing in the type system enforces this**, and treating the signature as the guarantee is the
-mistake this node exists to prevent. `expected` and `decode` are unrelated — `R` is inferred from
-the decoder — so `expect_proto(IncomingMessages::UserInfo, decode_family_codes_proto)` compiles
-and feeds one message's bytes to another's prost type. The helpers also still accept a bare
-`impl Fn(&ResponseMessage)`, so skipping the narrow compiles too.
-
-The gate is `test_expect_proto_sites_match_the_roster` (`src/common/one_shot_pairing_tests.rs`).
-It scrapes every `expect_proto` site out of `src/` and checks each pair against a declared
-`PAIRS` roster, both directions, plus `SITES_PER_PAIR == 2` — sync and async each spell the pair
-once, and a count of 1 means they have drifted. **Adding a one-shot API means adding a `PAIRS`
-line** — unless the response type is a `StreamDecoder`, in which case its `RESPONSE_MESSAGE_IDS`
-is the narrow and `test_response_message_ids_match_decode_arms` is the gate. The four
-option-computation sites are the case: they pass `OptionComputation::decode` and are covered
-there, not by `PAIRS`. Giving such a payload a `decode_*_proto` sibling so it could use
-`expect_proto` would narrow it twice and give it two decoders.
-
-That is the standing cost of keeping the pairing outside the type system.
 
 Do not reach for `expect_proto` inside `impl StreamDecoder::decode`; see
 [proto-only decoding](proto-only-decoding.md) for what that surface owes instead.
@@ -75,17 +62,23 @@ The consequence is quiet. A foreign proto handed to the wrong `prost` type usual
 *something* — field numbers overlap across messages — so the caller gets a plausible struct full
 of wrong values rather than an error.
 
-`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than another
-parameter on the two one-shot helpers. When it was written both helpers carried four or five
-arguments against a budget of three (see [param budget](../style/param-budget.md)) with no
-builder in front of them. #745 dropped `on_none`, so they now take three and four — an
-`expected` parameter would put them back at four and five, and the argument holds for the same
-reason it did.
+**The pair moved twice, and where it landed is the point.** #738 put it at the call site as
+`expect_proto(IncomingMessages::UserInfo, decode_user_info_proto)`, which made narrowing
+structural — a site could not name a payload decoder without naming a frame — but left the two
+arguments unrelated to the compiler, so a mispairing built and ran. Catching that took a
+hand-listed roster and a source-scraping test, and the pair was spelled twice per API since sync
+and async each carry a call site. #749 moved it onto the payload type, where it is a property
+rather than an argument: 25 `impl ProtoPayload` declarations replace 50 call-site literals plus
+the roster.
 
-The honest end state is a `trait ProtoPayload { const MESSAGE_ID; fn decode(&[u8]) }` implemented
-once per payload, which makes `expect_proto::<T>()` take no literals and retires both the roster
-and this node's standing cost. Tracked in
-[plans/claude-md-knowledge-graph.md](../../../plans/claude-md-knowledge-graph.md).
+That is not the same as "the type system enforces it". A wrong `MESSAGE_ID` in an impl is still
+possible; it is caught by the per-API round-trip tests, which now fail with `expected
+FamilyCodes, got .. kind: UserInfo` rather than decoding one message's bytes into another's type
+and asserting on the result.
+
+`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than another
+parameter on the two one-shot helpers, which take three and four arguments against a budget of
+three (see [param budget](../style/param-budget.md)) with no builder in front of them.
 
 ## Why every one-shot retries
 
@@ -112,10 +105,18 @@ axis they are not choosing gets chosen for them.
 - #738 — moved the pair to the call site, deleted 30 wrapper functions, and swept the last
   unnarrowed site (`next_valid_order_id`, on the shared `RequestIds` channel). The gate came
   second, after a review mutated three sites and found only incidental round-trip tests failed;
-  the same mutation now fails the roster by name.
+  a roster test then failed the same mutation by name.
 - #740 — narrowed `StreamDecoder::decode` to `&ResponseMessage`, which is what let the four
   option-computation sites stop hand-rolling `send_raw` + fold. Their decoder wanted `&mut`, and
   the retrying helper's processor bound is `Fn(&ResponseMessage)`; the `&mut` turned out to be
   vestigial rather than a real constraint.
 - #741 — deleted `one_shot_request` and `fold_one_shot_mut`; every one-shot retries and no
   hand-rolled folds remain. Mechanism above.
+- #745 — dropped `on_none`. 44 of 54 sites passed the same closure and the other 10 passed one
+  empty vector spelled two ways, which is the tell that nobody was choosing.
+- #749 — `ProtoPayload` moved the pair onto the payload; the roster and its scraping test are
+  deleted. The plan that proposed this keyed the trait on the **decoded** type, which cannot
+  work: `server_time`, `server_time_millis`, and `head_timestamp` all return `OffsetDateTime`,
+  so one type would have needed three `MESSAGE_ID`s. Keying on the `prost` payload has no
+  collisions — a counter-example worth keeping, since the version that fails is the one that
+  reads more natural.

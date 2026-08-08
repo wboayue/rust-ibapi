@@ -39,17 +39,37 @@ fn test_empty_on_end_of_stream_converts_only_that_variant() {
 
 #[test]
 fn test_expect_proto_decodes_the_expected_type() {
-    let processor = expect_proto(IncomingMessages::CurrentTime, |bytes: &[u8]| Ok(bytes.len()));
-    assert!(matches!(processor(&current_time_message()), Ok(0)));
+    // The expected type is not passed: it is CurrentTime::MESSAGE_ID, reached
+    // through the payload this decoder accepts.
+    let processor = expect_proto(|payload: crate::proto::CurrentTime| Ok(payload.current_time));
+    assert!(matches!(processor(&current_time_message()), Ok(None)));
 }
 
 #[test]
 fn test_expect_proto_rejects_a_foreign_type() {
     // The frame is well-formed proto — only the type is wrong. Without the
     // narrow, the payload decoder would run on another message's bytes.
-    let processor = expect_proto(IncomingMessages::UserInfo, |bytes: &[u8]| Ok(bytes.len()));
+    let processor = expect_proto(|payload: crate::proto::UserInfo| Ok(payload.white_branding_id));
     let err = processor(&current_time_message()).expect_err("foreign type must be rejected");
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+}
+
+#[test]
+fn test_expect_proto_narrows_to_the_payloads_own_message_id() {
+    // The pairing a hand-listed roster used to guard: every declared payload
+    // narrows to its own MESSAGE_ID, and a frame of that type is what it
+    // accepts. Checked here for one payload per collision-prone shape; the
+    // compiler covers the rest, since a call site cannot name a type without
+    // its id.
+    use crate::proto::payload::ProtoPayload;
+
+    assert_eq!(crate::proto::CurrentTime::MESSAGE_ID, IncomingMessages::CurrentTime);
+    assert_eq!(crate::proto::CurrentTimeInMillis::MESSAGE_ID, IncomingMessages::CurrentTimeInMillis);
+    assert_eq!(crate::proto::HeadTimestamp::MESSAGE_ID, IncomingMessages::HeadTimestamp);
+    // The three whose proto name and wire name disagree.
+    assert_eq!(crate::proto::MarketDepthExchanges::MESSAGE_ID, IncomingMessages::MktDepthExchanges);
+    assert_eq!(crate::proto::SoftDollarTiers::MESSAGE_ID, IncomingMessages::SoftDollarTier);
+    assert_eq!(crate::proto::ReceiveFa::MESSAGE_ID, IncomingMessages::ReceiveFA);
 }
 
 /// The retry wiring, exercised through a public one-shot rather than through
@@ -135,7 +155,7 @@ mod retry_wiring {
 fn test_expect_proto_rejects_text_framing_of_the_expected_type() {
     // Right type, unreadable framing: UnexpectedWireFormat, not UnexpectedResponse (#731).
     let message = ResponseMessage::from("49\01\01678890000\0");
-    let processor = expect_proto(IncomingMessages::CurrentTime, |bytes: &[u8]| Ok(bytes.len()));
+    let processor = expect_proto(|payload: crate::proto::CurrentTime| Ok(payload.current_time));
     let err = processor(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
 }

@@ -712,14 +712,27 @@ decoders).
   second that drifts. `test_decoder_roster_is_complete` counts per trait, so adding a
   `TickDecoder` while deleting a `StreamDecoder` cannot net out to a passing total.
 
-- **Retire the `PAIRS` roster with a `ProtoPayload` trait.** `trait ProtoPayload { const
-  MESSAGE_ID: IncomingMessages; fn decode(bytes: &[u8]) -> Result<Self, Error>; }` implemented
-  once per payload makes `expect_proto::<T>()` take zero literals, moves the pair to where it is
-  a property (the proto type, not the caller), deletes the hand-listed roster *and* the
-  sync/async double-spelling in one move, and makes the population enumerable the way
-  `check_all` enumerates `StreamDecoder`. 25 impls plus a signature change on three helpers —
-  restructuring, deferred out of #738's `/simplify` per
-  [scope discipline](../CLAUDE.md#maintaining-the-rule-graph).
+- ~~**Retire the `PAIRS` roster with a `ProtoPayload` trait.**~~ **Shipped in #749**, with one
+  correction to the design: **the trait as the bullet wrote it cannot compile.** It keyed on the
+  decoded type (`fn decode(bytes) -> Result<Self>`), and three one-shots decode to the same
+  `OffsetDateTime` — `server_time`, `server_time_millis`, `head_timestamp` — so one type would
+  have needed three `MESSAGE_ID`s. Keying on the **`prost` payload** instead has no collisions:
+  every message has its own generated type by construction.
+
+  That change carries its weight further than the roster. The 25 one-shot decoders now take
+  their decoded payload rather than `&[u8]`, so `expect_proto(decode_user_info_proto)` infers
+  the payload from the decoder and reads `MESSAGE_ID` off it. 50 call-site literals and the
+  scraping test are gone; what remains is 25 declarations in the one place the fact belongs.
+
+  **It is not "the type system enforces it now", and the node says so.** A wrong `MESSAGE_ID`
+  in an impl still compiles; it is caught by the per-API round-trip tests, verified by mutating
+  `UserInfo => FamilyCodes` and watching both `test_user_info` tests fail with `expected
+  FamilyCodes, got .. kind: UserInfo`. What changed is that the wrong line is now one line in a
+  table rather than one of 50 call sites, and the failure names both types.
+
+  The test-side effect was the surprise: 35 call sites got **shorter**, because a test that
+  built a `prost` struct, encoded it, and handed the bytes to a decoder that immediately decoded
+  them was doing a round trip the signature had forced on it. Most now pass the struct.
 
 - ~~**Widen the one-shot helpers to `&mut ResponseMessage` and delete `fold_one_shot_mut`.**~~
   **Shipped in #740 + #741, by narrowing rather than widening.** The bullet assumed the `&mut` was

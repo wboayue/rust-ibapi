@@ -52,24 +52,16 @@ fn test_decode_scanner_data_proto() {
 
 #[test]
 fn test_decode_scanner_parameters_proto() {
-    use prost::Message;
     let xml = "<ScanParameterResponse><ScanTypeList /></ScanParameterResponse>";
     let proto_msg = crate::proto::ScannerParameters { xml: Some(xml.into()) };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_scanner_parameters_proto(&bytes).unwrap();
+    let result = decode_scanner_parameters_proto(proto_msg).unwrap();
     assert_eq!(result, xml);
 }
 
 #[test]
 fn test_decode_scanner_parameters_proto_empty() {
-    use prost::Message;
     let proto_msg = crate::proto::ScannerParameters { xml: None };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_scanner_parameters_proto(&bytes).unwrap();
+    let result = decode_scanner_parameters_proto(proto_msg).unwrap();
     assert_eq!(result, "");
 }
 

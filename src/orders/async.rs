@@ -3,7 +3,7 @@
 use time::OffsetDateTime;
 
 use crate::common::request_helpers::{self, expect_proto};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
@@ -222,7 +222,7 @@ impl Client {
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,
-            expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
+            expect_proto(decoders::decode_next_valid_id_proto),
         )
         .await?;
 

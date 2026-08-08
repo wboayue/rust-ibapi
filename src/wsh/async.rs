@@ -4,7 +4,6 @@ use time::Date;
 
 use crate::{
     common::request_helpers::{self, expect_proto},
-    messages::IncomingMessages,
     protocol::{check_version, Features},
     subscriptions::Subscription,
     Client, Error,
@@ -33,7 +32,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             encoders::encode_request_wsh_metadata,
-            expect_proto(IncomingMessages::WshMetaData, decoders::decode_wsh_metadata_proto),
+            expect_proto(decoders::decode_wsh_metadata_proto),
         )
         .await
     }
@@ -86,7 +85,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
-            expect_proto(IncomingMessages::WshEventData, decoders::decode_wsh_event_data_proto),
+            expect_proto(decoders::decode_wsh_event_data_proto),
         )
         .await
     }

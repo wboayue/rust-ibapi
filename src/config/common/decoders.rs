@@ -1,8 +1,6 @@
 //! Decoders for configuration messages. Proto-only; text framing surfaces as
 //! `Error::UnexpectedWireFormat` via `require_proto()`.
 
-use prost::Message;
-
 use crate::config::{
     ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,
     UpdateConfigResponse,
@@ -10,8 +8,7 @@ use crate::config::{
 use crate::proto;
 use crate::Error;
 
-pub(in crate::config) fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
-    let p = proto::ConfigResponse::decode(bytes)?;
+pub(in crate::config) fn decode_config_proto(p: crate::proto::ConfigResponse) -> Result<Config, Error> {
     Ok(Config {
         lock_and_exit: p.lock_and_exit.map(convert_lock_and_exit),
         messages: p.messages.into_iter().map(convert_message).collect(),
@@ -116,8 +113,7 @@ fn convert_smart_routing(p: proto::OrdersSmartRoutingConfig) -> OrdersSmartRouti
     }
 }
 
-pub(in crate::config) fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {
-    let p = proto::UpdateConfigResponse::decode(bytes)?;
+pub(in crate::config) fn decode_update_config_proto(p: crate::proto::UpdateConfigResponse) -> Result<UpdateConfigResponse, Error> {
     Ok(UpdateConfigResponse {
         status: p.status,
         message: p.message,

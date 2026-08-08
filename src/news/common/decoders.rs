@@ -14,8 +14,7 @@ use crate::Error;
 // `ResponseMessage::require_proto`, which raises `Error::UnexpectedWireFormat`
 // (docs/rules/wire/proto-only-decoding.md).
 
-pub(crate) fn decode_news_providers_proto(bytes: &[u8]) -> Result<Vec<NewsProvider>, Error> {
-    let p = crate::proto::NewsProviders::decode(bytes)?;
+pub(crate) fn decode_news_providers_proto(p: crate::proto::NewsProviders) -> Result<Vec<NewsProvider>, Error> {
     Ok(p.news_providers
         .into_iter()
         .map(|np| NewsProvider {
@@ -72,8 +71,7 @@ pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, E
     })
 }
 
-pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody, Error> {
-    let p = crate::proto::NewsArticle::decode(bytes)?;
+pub(crate) fn decode_news_article_proto(p: crate::proto::NewsArticle) -> Result<NewsArticleBody, Error> {
     Ok(NewsArticleBody {
         article_type: ArticleType::from(p.article_type.unwrap_or_default()),
         article_text: p.article_text.unwrap_or_default(),

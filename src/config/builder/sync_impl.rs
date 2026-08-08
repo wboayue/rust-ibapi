@@ -5,7 +5,6 @@ use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::config::common::{decoders, encoders};
 use crate::config::UpdateConfigResponse;
-use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::Error;
 
@@ -43,7 +42,7 @@ impl UpdateConfigBuilder<'_, Client> {
         request_helpers::blocking::one_shot_by_request_id(
             self.client,
             |request_id| encoders::encode_update_config(&self.to_proto(request_id)),
-            expect_proto(IncomingMessages::UpdateConfigResponse, decoders::decode_update_config_proto),
+            expect_proto(decoders::decode_update_config_proto),
         )
     }
 }

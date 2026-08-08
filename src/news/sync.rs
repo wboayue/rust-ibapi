@@ -10,7 +10,7 @@ use crate::client::blocking::{SharesChannel, Subscription};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
 
 impl SharesChannel for Vec<NewsProvider> {}
@@ -38,7 +38,7 @@ impl Client {
             self,
             OutgoingMessages::RequestNewsProviders,
             encoders::encode_request_news_providers,
-            expect_proto(IncomingMessages::NewsProviders, decoders::decode_news_providers_proto),
+            expect_proto(decoders::decode_news_providers_proto),
         )
     }
 
@@ -154,7 +154,7 @@ impl Client {
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_news_article(request_id, provider_code, article_id),
-            expect_proto(IncomingMessages::NewsArticle, decoders::decode_news_article_proto),
+            expect_proto(decoders::decode_news_article_proto),
         )
     }
 

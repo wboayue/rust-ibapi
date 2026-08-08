@@ -93,7 +93,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
-            expect_proto(IncomingMessages::SymbolSamples, decoders::decode_symbol_samples_proto),
+            expect_proto(decoders::decode_symbol_samples_proto),
         )
         .await
         .or_else(empty_on_end_of_stream)
@@ -128,7 +128,7 @@ impl Client {
             self,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
-            expect_proto(IncomingMessages::MarketRule, decoders::decode_market_rule_proto),
+            expect_proto(decoders::decode_market_rule_proto),
         )
         .await
     }
@@ -166,7 +166,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
-            expect_proto(IncomingMessages::SmartComponents, decoders::decode_smart_components_proto),
+            expect_proto(decoders::decode_smart_components_proto),
         )
         .await
     }

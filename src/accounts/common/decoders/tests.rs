@@ -7,7 +7,7 @@ fn test_decode_server_time_proto_via_builder() {
     use time::macros::datetime;
 
     let bytes = current_time().timestamp(1678890000).encode_proto();
-    let result = super::decode_server_time_proto(&bytes).unwrap();
+    let result = super::decode_server_time_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result, datetime!(2023-03-15 14:20:00 UTC));
 }
 
@@ -18,7 +18,7 @@ fn test_decode_server_time_millis_proto_via_builder() {
     use time::macros::datetime;
 
     let bytes = current_time_in_millis().millis(1_678_890_000_123).encode_proto();
-    let result = super::decode_server_time_millis_proto(&bytes).unwrap();
+    let result = super::decode_server_time_millis_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result, datetime!(2023-03-15 14:20:00.123 UTC));
 }
 
@@ -403,7 +403,7 @@ fn test_decode_managed_accounts_proto() {
     let mut bytes = Vec::new();
     proto_msg.encode(&mut bytes).unwrap();
 
-    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    let result = super::decode_managed_accounts_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result, vec!["DU1111", "DU2222", "DU3333"]);
 }
 
@@ -417,7 +417,7 @@ fn test_decode_managed_accounts_proto_skips_empty() {
     let mut bytes = Vec::new();
     proto_msg.encode(&mut bytes).unwrap();
 
-    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    let result = super::decode_managed_accounts_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result, vec!["DU1111", "DU2222"]);
 }
 
@@ -428,7 +428,7 @@ fn test_decode_managed_accounts_proto_empty_list() {
     let mut bytes = Vec::new();
     proto_msg.encode(&mut bytes).unwrap();
 
-    let result = super::decode_managed_accounts_proto(&bytes).unwrap();
+    let result = super::decode_managed_accounts_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert!(result.is_empty());
 }
 
@@ -450,7 +450,7 @@ fn test_decode_family_codes_proto() {
     let mut bytes = Vec::new();
     proto_msg.encode(&mut bytes).unwrap();
 
-    let result = super::decode_family_codes_proto(&bytes).unwrap();
+    let result = super::decode_family_codes_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].account_id, "DU1111");
     assert_eq!(result[0].family_code, "FAM_A");
@@ -465,13 +465,12 @@ fn test_decode_family_codes_proto_empty() {
     let mut bytes = Vec::new();
     proto_msg.encode(&mut bytes).unwrap();
 
-    let result = super::decode_family_codes_proto(&bytes).unwrap();
+    let result = super::decode_family_codes_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert!(result.is_empty());
 }
 
 #[test]
 fn test_decode_soft_dollar_tiers_proto_round_trip() {
-    use prost::Message;
     let p = crate::proto::SoftDollarTiers {
         req_id: Some(1),
         soft_dollar_tiers: vec![
@@ -487,7 +486,7 @@ fn test_decode_soft_dollar_tiers_proto_round_trip() {
             },
         ],
     };
-    let tiers = super::decode_soft_dollar_tiers_proto(&p.encode_to_vec()).unwrap();
+    let tiers = super::decode_soft_dollar_tiers_proto(p).unwrap();
     assert_eq!(tiers.len(), 2);
     assert_eq!(tiers[0].name, "Tier1");
     assert_eq!(tiers[1].display_name, "Tier 2");
@@ -495,91 +494,84 @@ fn test_decode_soft_dollar_tiers_proto_round_trip() {
 
 #[test]
 fn test_decode_user_info_proto_round_trip() {
-    use prost::Message;
     let p = crate::proto::UserInfo {
         req_id: Some(1),
         white_branding_id: Some("brand-xyz".into()),
     };
-    let info = super::decode_user_info_proto(&p.encode_to_vec()).unwrap();
+    let info = super::decode_user_info_proto(p).unwrap();
     assert_eq!(info.white_branding_id, "brand-xyz");
 }
 
 #[test]
 fn test_decode_receive_fa_proto_round_trip() {
     use crate::accounts::FaDataType;
-    use prost::Message;
+
     let p = crate::proto::ReceiveFa {
         fa_data_type: Some(FaDataType::Groups as i32),
         xml: Some("<groups/>".into()),
     };
-    let cfg = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap();
+    let cfg = super::decode_receive_fa_proto(p).unwrap();
     assert_eq!(cfg.fa_data_type, FaDataType::Groups);
     assert_eq!(cfg.xml, "<groups/>");
 }
 
 #[test]
 fn test_decode_receive_fa_rejects_invalid_fa_data_type() {
-    use prost::Message;
     let p = crate::proto::ReceiveFa {
         fa_data_type: Some(2),
         xml: Some("<bad/>".into()),
     };
-    let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
+    let err = super::decode_receive_fa_proto(p).unwrap_err();
     assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
 }
 
 #[test]
 fn test_decode_receive_fa_rejects_missing_fa_data_type() {
-    use prost::Message;
     let p = crate::proto::ReceiveFa {
         fa_data_type: None,
         xml: Some("<groups/>".into()),
     };
-    let err = super::decode_receive_fa_proto(&p.encode_to_vec()).unwrap_err();
+    let err = super::decode_receive_fa_proto(p).unwrap_err();
     assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
 }
 
 #[test]
 fn test_decode_replace_fa_end_proto_round_trip() {
-    use prost::Message;
     let p = crate::proto::ReplaceFaEnd {
         req_id: Some(7),
         text: Some("done".into()),
     };
-    let result = super::decode_replace_fa_end_proto(&p.encode_to_vec()).unwrap();
+    let result = super::decode_replace_fa_end_proto(p).unwrap();
     assert_eq!(result.text, "done");
 }
 
 #[test]
 fn test_decode_verify_message_api_proto_round_trip() {
-    use prost::Message;
     let p = crate::proto::VerifyMessageApi {
         api_data: Some("payload".into()),
     };
-    let challenge = super::decode_verify_message_api_proto(&p.encode_to_vec()).unwrap();
+    let challenge = super::decode_verify_message_api_proto(p).unwrap();
     assert_eq!(challenge.api_data, "payload");
 }
 
 #[test]
 fn test_decode_verify_completed_proto_round_trip() {
-    use prost::Message;
     let p = crate::proto::VerifyCompleted {
         is_successful: Some(true),
         error_text: Some(String::new()),
     };
-    let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
+    let result = super::decode_verify_completed_proto(p).unwrap();
     assert!(result.is_successful);
     assert_eq!(result.error_text, "");
 }
 
 #[test]
 fn test_decode_verify_completed_proto_failure_path() {
-    use prost::Message;
     let p = crate::proto::VerifyCompleted {
         is_successful: Some(false),
         error_text: Some("signature mismatch".into()),
     };
-    let result = super::decode_verify_completed_proto(&p.encode_to_vec()).unwrap();
+    let result = super::decode_verify_completed_proto(p).unwrap();
     assert!(!result.is_successful);
     assert_eq!(result.error_text, "signature mismatch");
 }

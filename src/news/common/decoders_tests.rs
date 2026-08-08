@@ -29,10 +29,7 @@ fn test_decode_news_article_proto() {
         article_text: Some("Full article text here".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_news_article_proto(&bytes).unwrap();
+    let result = decode_news_article_proto(proto_msg).unwrap();
     assert_eq!(result.article_type, ArticleType::Text);
     assert_eq!(result.article_text, "Full article text here");
 }
@@ -71,10 +68,7 @@ fn test_decode_news_providers_proto() {
             },
         ],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_news_providers_proto(&bytes).unwrap();
+    let result = decode_news_providers_proto(proto_msg).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].code, "BRFG");
     assert_eq!(result[0].name, "Briefing.com");
@@ -85,10 +79,7 @@ fn test_decode_news_providers_proto() {
 #[test]
 fn test_decode_news_providers_proto_empty() {
     let proto_msg = crate::proto::NewsProviders { news_providers: vec![] };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_news_providers_proto(&bytes).unwrap();
+    let result = decode_news_providers_proto(proto_msg).unwrap();
     assert!(result.is_empty());
 }
 
