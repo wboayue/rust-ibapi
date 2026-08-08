@@ -1,4 +1,6 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_wsh_metadata_proto() {
@@ -28,18 +30,10 @@ fn test_decode_wsh_event_data_proto() {
 fn test_decode_wsh_metadata_rejects_text_framing() {
     // Text-framed arrival at a proto-only decoder must surface
     // UnexpectedWireFormat (docs/rules/wire/proto-only-decoding.md).
-    let message = ResponseMessage::from("104\09000\0{\"hi\":1}\0");
-    match decode_wsh_metadata(&message) {
-        Err(Error::UnexpectedWireFormat(_)) => {}
-        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
-    }
+    assert_rejects_text_framing(IncomingMessages::WshMetaData, "104\09000\0{\"hi\":1}\0", decode_wsh_metadata);
 }
 
 #[test]
 fn test_decode_wsh_event_data_rejects_text_framing() {
-    let message = ResponseMessage::from("105\09000\0{\"event\":\"e\"}\0");
-    match decode_wsh_event_data(&message) {
-        Err(Error::UnexpectedWireFormat(_)) => {}
-        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
-    }
+    assert_rejects_text_framing(IncomingMessages::WshEventData, "105\09000\0{\"event\":\"e\"}\0", decode_wsh_event_data);
 }

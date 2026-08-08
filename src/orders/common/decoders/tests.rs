@@ -1,10 +1,10 @@
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
 
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::contracts::Symbol;
-use crate::messages::ResponseMessage;
+use crate::messages::IncomingMessages;
 use crate::orders::{Action, OrderStatusKind};
-use crate::server_versions;
 
 #[test]
 fn test_decode_open_order_proto() {
@@ -380,52 +380,38 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
 
 #[test]
 fn test_decode_open_order_rejects_text_framing() {
-    let _ = server_versions::PROTOBUF_REST_MESSAGES_3;
-    let message = ResponseMessage::from("5\013\076792991\0AAPL\0STK\0");
-    let err = decode_open_order(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
+    assert_rejects_text_framing(IncomingMessages::OpenOrder, "5\013\076792991\0AAPL\0STK\0", decode_open_order);
 }
 
 #[test]
 fn test_decode_completed_order_rejects_text_framing() {
-    let message = ResponseMessage::from("101\0265598\0AAPL\0STK\0");
-    let err = decode_completed_order(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
+    assert_rejects_text_framing(IncomingMessages::CompletedOrder, "101\0265598\0AAPL\0STK\0", decode_completed_order);
 }
 
 #[test]
 fn test_decode_execution_data_rejects_text_framing() {
-    let message = ResponseMessage::from("11\09000\042\0265598\0AAPL\0STK\0");
-    let err = decode_execution_data(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::ExecutionData,
+        "11\09000\042\0265598\0AAPL\0STK\0",
+        decode_execution_data,
     );
 }
 
 #[test]
 fn test_decode_commission_report_rejects_text_framing() {
-    let message = ResponseMessage::from("59\01\0exec001\02.5\0USD\0");
-    let err = decode_commission_report(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::CommissionsReport,
+        "59\01\0exec001\02.5\0USD\0",
+        decode_commission_report,
     );
 }
 
 #[test]
 fn test_decode_order_status_rejects_text_framing() {
-    let message = ResponseMessage::from("3\013\0PreSubmitted\00\0100\00.0\01376327563\00\00.0\0100\0\00.0\0");
-    let err = decode_order_status(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::OrderStatus,
+        "3\013\0PreSubmitted\00\0100\00.0\01376327563\00\00.0\0100\0\00.0\0",
+        decode_order_status,
     );
 }
 

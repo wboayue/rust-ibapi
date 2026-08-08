@@ -1,4 +1,6 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_news_bulletin_proto() {
@@ -92,21 +94,15 @@ fn test_decode_news_providers_proto_empty() {
 
 #[test]
 fn test_decode_news_bulletin_rejects_text_framing() {
-    let message = ResponseMessage::from("14\01\01\02\0msg\0NYSE\0");
-    let err = decode_news_bulletin(&message).unwrap_err();
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
-    );
+    assert_rejects_text_framing(IncomingMessages::NewsBulletins, "14\01\01\02\0msg\0NYSE\0", decode_news_bulletin);
 }
 
 #[test]
 fn test_decode_historical_news_rejects_text_framing() {
-    let message = ResponseMessage::from("86\09000\02024-12-23 19:45:00.0\0DJ-N\0a\0h\0");
-    let err = decode_historical_news(&message).unwrap_err();
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::HistoricalNews,
+        "86\09000\02024-12-23 19:45:00.0\0DJ-N\0a\0h\0",
+        decode_historical_news,
     );
 }
 
@@ -148,10 +144,9 @@ fn test_decode_tick_news_proto_invalid_timestamp() {
 
 #[test]
 fn test_decode_tick_news_rejects_text_framing() {
-    let message = ResponseMessage::from("84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0");
-    let err = decode_tick_news(&message).unwrap_err();
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::TickNews,
+        "84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0",
+        decode_tick_news,
     );
 }

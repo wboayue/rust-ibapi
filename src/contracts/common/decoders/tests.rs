@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::messages::IncomingMessages;
 use prost::Message;
 
 #[test]
@@ -141,20 +143,18 @@ fn test_decode_option_chain_proto() {
 
 #[test]
 fn test_decode_contract_details_rejects_text_framing() {
-    let message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
-    let err = decode_contract_details(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::ContractData,
+        "10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0",
+        decode_contract_details,
     );
 }
 
 #[test]
 fn test_decode_option_chain_rejects_text_framing() {
-    let message = ResponseMessage::from("75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0");
-    let err = decode_option_chain(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::SecurityDefinitionOptionParameter,
+        "75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0",
+        decode_option_chain,
     );
 }
