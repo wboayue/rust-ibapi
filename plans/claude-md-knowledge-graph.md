@@ -630,17 +630,27 @@ decoders).
   both client methods — which is itself evidence of how much of the mock existed only to feed a
   duplicate.
 
-  **What remains, and why it is not mechanical.** The `submit` / `submit_all` /
-  `submit_oca_orders` / `submit_with_updates` shadows are still there. `submit_all` and
-  `submit_oca_orders` carry real logic (id reservation, `parent_id` wiring, transmit flags), so
-  they are the drift-prone ones worth doing next. Converting them means asserting on the
-  captured `PlaceOrderRequest` proto via `decode_request_proto` rather than on a decoded `Order`
-  struct — a better assertion, but a rewrite per test, not a substitution. One test cannot move
-  at all: `test_order_submit_with_error` injects a failure from `submit_order`, which
-  `MessageBusStub` has no way to produce, so it is testing the mock's error injection rather
-  than any production path. A textbook
-  [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
-  the largest one left in the tree.
+  **The rest is closed in #750, and the mock is gone entirely.** Both `submit_impl/tests.rs`
+  files are deleted; 12 shadow tests became 14 at the real seam, in
+  `orders/{sync,async}_tests.rs` against `Client::stubbed`, asserting on the captured
+  `PlaceOrderRequest` proto rather than on a decoded `Order`.
+
+  **The shadow's `submit_all` was already a different algorithm.** It numbered the trio
+  `base_id + i` from a single `next_order_id()`; production calls `next_order_id()` three times
+  and reserves the ids up front. Same output when ids increment by one, which is why four tests
+  named for bracket submission never noticed. That is the drift the follow-up predicted, found
+  by deleting rather than by reading.
+
+  `test_order_submit_with_error` did not move, as predicted: it injects a failure from the
+  mock's `submit_order`, which `MessageBusStub` cannot produce, so it tested the mock's error
+  injection. What replaced it tests a rejection the production path *can* produce — an invalid
+  quantity and a non-finite price, both of which must fail before anything reaches the wire, with
+  `request_message_count == 0` as the assertion.
+
+  With the shadows gone the two mock clients had no callers except three builder-only
+  integration tests that never submitted anything; those now take a stubbed `Client`, and 174
+  lines of mock go with them (`src/orders/builder/tests.rs`: 292 lines → 123). **A mock that exists to host a copy of the code under test takes
+  the rest of its file with it when the copy dies.**
 
 - ~~**Cache the message discriminant on `ResponseMessage`.**~~ **Shipped in #748, and "no
   behaviour change" was wrong in an instructive way.** The mechanical half went as written:

@@ -676,3 +676,184 @@ fn analyze_reports_end_of_stream_when_no_order_arrives() {
     let result = client.order(&contract).buy(100).limit(50.0).analyze();
     assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }
+
+// The `submit` family, against `Client::stubbed` rather than a mock client that
+// carried its own copy of each method. The shadows dated from before the
+// builder had a real seam to test against; #735 moved `analyze` off its shadow
+// after one of them turned out to carry the very bug the PR was fixing.
+
+#[test]
+fn submit_assigns_the_next_order_id_and_sends_the_order() {
+    let (client, bus) = create_blocking_test_client();
+    client.set_next_order_id(100);
+    let contract = Contract::stock("AAPL").build();
+
+    let order_id = client.order(&contract).buy(100).limit(50.0).submit().expect("submit should succeed");
+    assert_eq!(order_id.value(), 100);
+
+    assert_eq!(request_message_count(&bus), 1);
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
+    assert_eq!(request.order_id, Some(100));
+    let order = request.order.expect("request carries an order");
+    assert_eq!(order.action.as_deref(), Some("BUY"));
+    assert_eq!(order.order_type.as_deref(), Some("LMT"));
+    assert_eq!(order.lmt_price, Some(50.0));
+    assert!(!order.what_if.unwrap_or_default(), "submit is not a what-if order");
+}
+
+#[test]
+fn submit_rejects_an_invalid_order_before_sending() {
+    let (client, bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client
+        .order(&contract)
+        .buy(-100)
+        .market()
+        .submit()
+        .expect_err("a negative quantity is invalid");
+    assert!(err.to_string().contains("Invalid quantity"), "got {err}");
+    assert_eq!(request_message_count(&bus), 0, "an invalid order must not reach the wire");
+}
+
+#[test]
+fn submit_all_reserves_three_ids_and_wires_the_bracket() {
+    let (client, bus) = create_blocking_test_client();
+    client.set_next_order_id(200);
+    let contract = Contract::stock("AAPL").build();
+
+    let ids = client
+        .order(&contract)
+        .buy(100)
+        .good_till_cancel()
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .submit_all()
+        .expect("bracket submission should succeed");
+
+    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (200, 201, 202));
+    assert_eq!(request_message_count(&bus), 3);
+
+    let orders: Vec<crate::proto::Order> = (0..3)
+        .map(|i| {
+            decode_request_proto::<crate::proto::PlaceOrderRequest>(&bus, i)
+                .order
+                .expect("request carries an order")
+        })
+        .collect();
+
+    // Parent first, then the two children pointing back at it. A proto field
+    // at its default is omitted on the wire, so read them through unwrap_or_default.
+    assert_eq!(
+        orders.iter().map(|o| o.parent_id.unwrap_or_default()).collect::<Vec<_>>(),
+        vec![0, 200, 200]
+    );
+
+    // Only the last order transmits, so TWS receives the trio atomically.
+    assert_eq!(
+        orders.iter().map(|o| o.transmit.unwrap_or_default()).collect::<Vec<_>>(),
+        vec![false, false, true]
+    );
+
+    // Time in force propagates from the parent builder to all three.
+    for order in &orders {
+        assert_eq!(order.tif.as_deref(), Some("GTC"));
+    }
+
+    assert_eq!(orders[1].action.as_deref(), Some("SELL"));
+    assert_eq!(orders[1].lmt_price, Some(55.0));
+    assert_eq!(orders[2].order_type.as_deref(), Some("STP"));
+    assert_eq!(orders[2].aux_price, Some(45.0));
+}
+
+#[test]
+fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
+    let (client, bus) = create_blocking_test_client();
+    client.set_next_order_id(300);
+    let apple = Contract::stock("AAPL").build();
+    let microsoft = Contract::stock("MSFT").build();
+
+    let first = client
+        .order(&apple)
+        .buy(100)
+        .limit(50.0)
+        .oca_group("TestOCA", 1)
+        .build_order()
+        .expect("order should build");
+    let second = client
+        .order(&microsoft)
+        .buy(100)
+        .limit(45.0)
+        .oca_group("TestOCA", 1)
+        .build_order()
+        .expect("order should build");
+
+    let ids = client
+        .submit_oca_orders(vec![(apple, first), (microsoft, second)])
+        .expect("OCA submission should succeed");
+
+    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![300, 301]);
+    assert_eq!(request_message_count(&bus), 2);
+
+    for i in 0..2 {
+        let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, i);
+        let order = request.order.expect("request carries an order");
+        assert_eq!(order.oca_group.as_deref(), Some("TestOCA"));
+        assert_eq!(order.oca_type, Some(1));
+    }
+}
+
+#[test]
+fn build_order_does_not_reach_the_wire() {
+    let (client, bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+
+    let order = client
+        .order(&contract)
+        .sell(100)
+        .trailing_stop(5.0, 95.0)
+        .build_order()
+        .expect("order should build");
+
+    assert_eq!(order.order_type, "TRAIL");
+    assert_eq!(order.trailing_percent, Some(5.0));
+    assert_eq!(order.trail_stop_price, Some(95.0));
+    assert_eq!(request_message_count(&bus), 0);
+}
+
+#[test]
+fn submit_carries_algo_parameters_to_the_wire() {
+    // The mock-client shadow asserted this against a captured `Order` struct;
+    // at the real seam the assertion is what TWS receives.
+    let (client, bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+
+    client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .algo("VWAP")
+        .algo_param("startTime", "09:30:00")
+        .algo_param("endTime", "16:00:00")
+        .submit()
+        .expect("submit should succeed");
+
+    let order = decode_request_proto::<crate::proto::PlaceOrderRequest>(&bus, 0)
+        .order
+        .expect("request carries an order");
+    assert_eq!(order.algo_strategy.as_deref(), Some("VWAP"));
+    assert_eq!(order.algo_params.get("startTime").map(String::as_str), Some("09:30:00"));
+    assert_eq!(order.algo_params.get("endTime").map(String::as_str), Some("16:00:00"));
+}
+
+#[test]
+fn submit_rejects_a_non_finite_price_before_sending() {
+    let (client, bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client.order(&contract).buy(100).limit(f64::NAN).submit().expect_err("NaN is not a price");
+    assert!(err.to_string().contains("Invalid price"), "got {err}");
+    assert_eq!(request_message_count(&bus), 0);
+}

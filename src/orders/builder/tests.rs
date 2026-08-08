@@ -3,7 +3,7 @@
 
 #[cfg(all(test, feature = "sync"))]
 mod sync_integration_tests {
-    use super::mock_client::mock::MockOrderClient;
+    use crate::common::test_utils::helpers::create_blocking_test_client;
     use crate::contracts::{Contract, Currency, Exchange, Symbol};
     use crate::orders::OrderBuilder;
     use crate::orders::{Action, OcaType, TimeInForce};
@@ -20,7 +20,7 @@ mod sync_integration_tests {
 
     #[test]
     fn test_full_order_workflow() {
-        let client = MockOrderClient::new();
+        let (client, _bus) = create_blocking_test_client();
         let contract = create_stock_contract("AAPL");
 
         // Create multiple orders
@@ -46,7 +46,7 @@ mod sync_integration_tests {
 
     #[test]
     fn test_complex_order_combinations() {
-        let client = MockOrderClient::new();
+        let (client, _bus) = create_blocking_test_client();
         let contract = create_stock_contract("MSFT");
 
         // Test complex order with multiple attributes
@@ -80,7 +80,7 @@ mod sync_integration_tests {
 
 #[cfg(all(test, feature = "async"))]
 mod async_integration_tests {
-    use super::async_mock_client::mock::AsyncMockClient;
+    use crate::common::test_utils::helpers::create_test_client;
     use crate::contracts::{Contract, Currency, Exchange, Symbol};
     use crate::orders::Action;
     use crate::orders::OrderBuilder;
@@ -97,7 +97,7 @@ mod async_integration_tests {
 
     #[tokio::test]
     async fn test_async_full_order_workflow() {
-        let client = AsyncMockClient::new();
+        let (client, _bus) = create_test_client();
         let contract = create_stock_contract("AAPL");
 
         // Create multiple orders
@@ -119,174 +119,5 @@ mod async_integration_tests {
         assert_eq!(orders[2].order_type, "STP LMT");
         assert_eq!(orders[2].aux_price, Some(145.00));
         assert_eq!(orders[2].limit_price, Some(148.00));
-    }
-}
-
-// Mock client implementations for testing
-#[cfg(all(test, feature = "sync"))]
-pub mod mock_client {
-    pub mod mock {
-        use crate::contracts::Contract;
-        use crate::errors::Error;
-        use crate::orders::Order;
-        use std::sync::{Arc, Mutex};
-
-        /// Mock client for testing OrderBuilder
-        pub struct MockOrderClient {
-            next_order_id: Arc<Mutex<i32>>,
-            submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
-            submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
-        }
-
-        impl Default for MockOrderClient {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
-        impl MockOrderClient {
-            pub fn new() -> Self {
-                Self {
-                    next_order_id: Arc::new(Mutex::new(100)),
-                    submitted_orders: Arc::new(Mutex::new(Vec::new())),
-                    submit_order_responses: Arc::new(Mutex::new(Vec::new())),
-                }
-            }
-
-            pub fn set_next_order_id(&self, id: i32) {
-                *self.next_order_id.lock().unwrap() = id;
-            }
-
-            pub fn next_order_id(&self) -> i32 {
-                let mut id = self.next_order_id.lock().unwrap();
-                let current = *id;
-                *id += 1;
-                current
-            }
-
-            pub fn add_submit_order_response(&self, response: Result<(), Error>) {
-                self.submit_order_responses.lock().unwrap().push(response);
-            }
-
-            pub fn get_submitted_orders(&self) -> Vec<(i32, Contract, Order)> {
-                self.submitted_orders.lock().unwrap().clone()
-            }
-
-            pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-                self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-
-                let mut responses = self.submit_order_responses.lock().unwrap();
-                if !responses.is_empty() {
-                    responses.remove(0)
-                } else {
-                    Ok(())
-                }
-            }
-
-            pub fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::OrderId>, Error> {
-                let mut order_ids = Vec::new();
-                for (contract, order) in orders.iter() {
-                    let order_id = self.next_order_id();
-                    order_ids.push(crate::orders::OrderId::new(order_id));
-                    self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-                }
-                Ok(order_ids)
-            }
-        }
-    }
-}
-
-#[cfg(all(test, feature = "async"))]
-pub mod async_mock_client {
-    pub mod mock {
-        use crate::contracts::Contract;
-        use crate::errors::Error;
-        use crate::orders::{Order, OrderUpdate};
-        use futures::stream::{self, Stream};
-        use std::pin::Pin;
-        use std::sync::{Arc, Mutex};
-
-        /// Async mock client for testing OrderBuilder
-        pub struct AsyncMockClient {
-            next_order_id: Arc<Mutex<i32>>,
-            submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
-            submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
-            order_update_streams: Arc<Mutex<Vec<Vec<OrderUpdate>>>>,
-        }
-
-        impl Default for AsyncMockClient {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
-        impl AsyncMockClient {
-            pub fn new() -> Self {
-                Self {
-                    next_order_id: Arc::new(Mutex::new(100)),
-                    submitted_orders: Arc::new(Mutex::new(Vec::new())),
-                    submit_order_responses: Arc::new(Mutex::new(Vec::new())),
-                    order_update_streams: Arc::new(Mutex::new(Vec::new())),
-                }
-            }
-
-            pub fn set_next_order_id(&self, id: i32) {
-                *self.next_order_id.lock().unwrap() = id;
-            }
-
-            pub fn next_order_id(&self) -> i32 {
-                let mut id = self.next_order_id.lock().unwrap();
-                let current = *id;
-                *id += 1;
-                current
-            }
-
-            pub fn add_submit_order_response(&self, response: Result<(), Error>) {
-                self.submit_order_responses.lock().unwrap().push(response);
-            }
-
-            pub fn add_order_update_stream(&self, updates: Vec<OrderUpdate>) {
-                self.order_update_streams.lock().unwrap().push(updates);
-            }
-
-            pub fn get_submitted_orders(&self) -> Vec<(i32, Contract, Order)> {
-                self.submitted_orders.lock().unwrap().clone()
-            }
-
-            pub async fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-                self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-
-                let mut responses = self.submit_order_responses.lock().unwrap();
-                if !responses.is_empty() {
-                    responses.remove(0)
-                } else {
-                    Ok(())
-                }
-            }
-
-            pub async fn submit_order_with_updates(
-                &self,
-                order_id: i32,
-                contract: &Contract,
-                order: &Order,
-            ) -> Result<Pin<Box<dyn Stream<Item = OrderUpdate> + Send>>, Error> {
-                self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-
-                let mut streams = self.order_update_streams.lock().unwrap();
-                let updates = if !streams.is_empty() { streams.remove(0) } else { vec![] };
-
-                Ok(Box::pin(stream::iter(updates)))
-            }
-
-            pub async fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::OrderId>, Error> {
-                let mut order_ids = Vec::new();
-                for (contract, order) in orders.iter() {
-                    let order_id = self.next_order_id();
-                    order_ids.push(crate::orders::OrderId::new(order_id));
-                    self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-                }
-                Ok(order_ids)
-            }
-        }
     }
 }
