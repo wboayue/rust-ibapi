@@ -468,26 +468,35 @@ life.
   layers that actually implement it — `test_hard_error_with_request_id_terminates_subscription`
   and `test_subscription_hard_error_terminates_stream`, in each transport's tests.
 
-- **Retire the remaining one-shot `IncomingMessages::Error` arms.** The audit above proved the
-  whole class dead, not just the `StreamDecoder` half: `fold_one_shot` only ever calls its
-  processor on `Some(Ok(_))`, and `RoutedItem::into_legacy` yields that only for
-  `RoutedItem::Response`. So the `Error` arms in `accounts::decode_soft_dollar_tiers_message` /
-  `decode_user_info_message` / `decode_replace_fa_end_message`,
-  `contracts::decode_smart_components_message`, `scanner::decode_scanner_message`, and both
-  `config::common::decoders` dispatchers can never fire, as can the inline
-  `Ok(message) if message.message_type() == IncomingMessages::Error` guards in
-  `contracts::{sync,async}` and `market_data::historical::{sync,async}`. Mechanical, but each
-  deletion needs its test checked — the same 15-test cost pattern as #734. Left out of #734 to
-  keep that PR's boundary at the surface the follow-up named.
+- ~~**Retire the remaining one-shot `IncomingMessages::Error` arms.**~~ ~~**Make
+  `MessageBusStub` classify like the dispatcher.**~~ **Both shipped in #735, and they turned
+  out to be one job.** Thirteen dead sites went: seven `decode_*_message` dispatchers
+  (`accounts` ×3, `contracts`, `scanner`, `config` ×2) and six inline
+  `message.message_type() == IncomingMessages::Error` guards in `contracts::{sync,async}` and
+  `market_data::historical::{sync,async}`. Kept: `connection/common.rs`, which reads frames
+  during the handshake before a dispatcher exists, and `messages/parser_registry.rs`, which is
+  a trace-parser table.
 
-- **Make `MessageBusStub` classify like the dispatcher.** It hands every fixture to the
-  subscription as `RoutedItem::Response`, including `Error` frames, which the real dispatcher
-  never does — that mismatch is why 15 decoder-level error tests existed and passed. This is
-  the same structural blind spot #730 recorded (stub tests inject below `determine_routing`),
-  seen from the fixture side rather than the routing side. Running fixtures through
-  `determine_routing`/`classify_error` in `mock_request` would close it; the risk is the tail of
-  stub tests using warning or data-advisory codes, which would become `RoutedItem::Notice` and
-  be skipped rather than surfacing as `Err`.
+  **Deleting the arms was going to cost a third batch of tests, and that was the signal to stop
+  deleting.** #734 dropped 17 tests because only `MessageBusStub` could produce their input;
+  two more were about to go the same way. The rule of three tripped, so the stub was fixed
+  instead: `routed_items()` runs every fixture through `determine_routing`/`classify_error`, so
+  an error frame arrives as `RoutedItem::Error`/`Notice` exactly as on the wire. Both tests then
+  passed unmodified. **Fixing the fixture kept the coverage that deleting the arms would have
+  destroyed** — and the two tests #734 deleted on the same grounds would have survived it too.
+
+  The feared tail — warning and data-advisory codes becoming `Notice` and being filtered —
+  never materialised: one test needed touching across both legs, and only because its assertion
+  encoded the old wart.
+
+  **One dead arm was hiding a live bug.** Blocking `matching_symbols` read its response with
+  `if let Some(Ok(mut message))`, so a routed error fell through to `Ok(Vec::new())` — a
+  rejected pattern was indistinguishable from "no symbols matched". Its async twin already had
+  `Some(Err(e)) => return Err(e)`. The dead `IncomingMessages::Error` arm sitting next to the
+  hole is what makes it legible: someone meant to handle errors and wired it one layer too low,
+  and the arm's unreachability is exactly why the omission below it stayed invisible.
+  **A dead arm is worth reading before deleting — it marks where someone expected a case to
+  arrive, which is where to check whether the real case is handled at all.**
 
 - **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
   `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound

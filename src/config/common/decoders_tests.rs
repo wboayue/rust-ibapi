@@ -60,10 +60,17 @@ fn test_decode_config_message_dispatches_config_response() {
 }
 
 #[test]
-fn test_decode_config_message_routes_error() {
-    // IncomingMessages::Error == 4; a text-framed error surfaces as an Err.
+fn test_decode_config_message_rejects_error_frames() {
+    // IncomingMessages::Error == 4. The dispatcher classifies error frames, so
+    // one never reaches a decoder — this decoder claims no arm for it, and the
+    // `_` backstop must treat it like any other foreign type. The one-shot
+    // dispatchers have no equivalent of the StreamDecoder cross-check test, so
+    // the assertion is pinned per site. See docs/rules/wire/proto-only-decoding.md.
     let message = ResponseMessage::from("4\09000\0322\0error text\0");
-    assert!(decode_config_message(&message).is_err());
+    match decode_config_message(&message) {
+        Err(Error::UnexpectedResponse(_)) => {}
+        other => panic!("expected UnexpectedResponse, got {other:?}"),
+    }
 }
 
 #[test]
@@ -109,9 +116,13 @@ fn test_decode_update_config_message_populated() {
 }
 
 #[test]
-fn test_decode_update_config_message_routes_error() {
+fn test_decode_update_config_message_rejects_error_frames() {
+    // Mirrors test_decode_config_message_rejects_error_frames.
     let message = ResponseMessage::from("4\09000\0322\0error text\0");
-    assert!(decode_update_config_message(&message).is_err());
+    match decode_update_config_message(&message) {
+        Err(Error::UnexpectedResponse(_)) => {}
+        other => panic!("expected UnexpectedResponse, got {other:?}"),
+    }
 }
 
 #[test]

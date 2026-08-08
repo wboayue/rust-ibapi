@@ -1,5 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, text_response, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_tws_error_message, proto_error_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::common::test_tables::*;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -422,15 +424,19 @@ fn test_cancel_contract_details() {
 
 #[test]
 fn test_matching_symbols_returns_server_error() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
-        "4|2|9000|321|invalid pattern|",
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        321,
+        "invalid pattern",
     )]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
+    // The TWS error itself, not a generic UnexpectedResponse, and not the
+    // `Ok(vec![])` the sync path returned before it handled `Some(Err(_))`.
     let Err(err) = client.matching_symbols("???") else {
         panic!("expected Err");
     };
-    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
+    assert_tws_error_message(err, 321, "invalid pattern");
 }
 
 #[test]

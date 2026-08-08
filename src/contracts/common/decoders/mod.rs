@@ -114,7 +114,6 @@ pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartCom
 pub(in crate::contracts) fn decode_smart_components_message(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
     match message.message_type() {
         IncomingMessages::SmartComponents => decode_smart_components(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }

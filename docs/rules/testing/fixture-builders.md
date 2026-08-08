@@ -51,6 +51,23 @@ and refactored them into named builders in `testdata/builders/market_data.rs`.
 A builder needs a **current test consumer**. Matching the encoder file one-to-one "for
 completeness" is not a consumer.
 
+## What the stub does and does not simulate
+
+`MessageBusStub` sits below the dispatcher, so a fixture reaches the subscription without
+being routed. Two consequences pull in opposite directions:
+
+- **It does classify `Error` frames** (since #735). `routed_items()` runs each fixture through
+  `determine_routing`/`classify_error`, so an error frame arrives as
+  `RoutedItem::Error`/`Notice` exactly as it would on the wire. Before that it arrived as a
+  `RoutedItem::Response`, which no real transport produces — that gap is what let decoders grow
+  unreachable `IncomingMessages::Error` arms with passing tests to match. A warning or
+  data-advisory code now becomes a `Notice` and is filtered by `iter_data()`/`filter_data`;
+  assert on `SubscriptionItem::Notice` if that is the point of the test.
+- **It does not route by channel.** The stub has one channel per request, so a fixture reaches
+  the subscription regardless of whether `determine_routing` could have addressed it there.
+  `debug_assert_request_id_routable` covers that half; see
+  [proto-aware accessors](../wire/proto-aware-accessors.md).
+
 ## Note on `server_version`
 
 The version passed to `Client::stubbed` gates *outbound encoder* feature checks, not the
@@ -63,6 +80,7 @@ constant like `SIZE_RULES` in a stub test is correct, not a leftover.
 - #534 — field-minimal builders for deeply-nested protos.
 - #543 — /simplify caught fixture helpers misplaced under `<domain>/common/`.
 - #731 — made a mis-framed fixture fail its test instead of silently skipping.
+- #735 — taught the stub to classify `Error` frames like the dispatcher.
 
 See also [docs/testing-patterns.md](../../testing-patterns.md) for choosing between
 `MessageBusStub`, `MemoryStream`, and `spawn_handshake_listener`.
