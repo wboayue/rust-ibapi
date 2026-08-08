@@ -60,6 +60,18 @@ impl Client {
     ///
     /// # Arguments
     /// * `request_id` - The request ID returned by a prior `contract_details` call.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // `request_id` is the id the in-flight `contract_details` call was issued with;
+    /// // cancelling one that has already completed is harmless.
+    /// let request_id = client.next_request_id();
+    /// client.cancel_contract_details(request_id).expect("cancel failed");
+    /// ```
     pub fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
         check_version(self.server_version, Features::CANCEL_CONTRACT_DATA)?;
 
@@ -73,6 +85,27 @@ impl Client {
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // Market rule ids come from a contract's details.
+    /// let details = client.contract_details(&Contract::stock("AAPL").build()).expect("request failed");
+    /// let rule_id: i32 = details[0]
+    ///     .market_rule_ids
+    ///     .first()
+    ///     .and_then(|id| id.parse().ok())
+    ///     .expect("contract has no market rule ids");
+    ///
+    /// let rule = client.market_rule(rule_id).expect("market rule request failed");
+    /// for increment in &rule.price_increments {
+    ///     println!("above {}: increment {}", increment.low_edge, increment.increment);
+    /// }
+    /// ```
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
         check_version(self.server_version, Features::MARKET_RULES)?;
 

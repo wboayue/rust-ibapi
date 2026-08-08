@@ -37,6 +37,15 @@ impl Client {
     }
 
     /// Requests the current server time with millisecond precision.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let server_time = client.server_time_millis().expect("error requesting server time");
+    /// println!("server time to the millisecond: {server_time:?}");
+    /// ```
     pub fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version, Features::CURRENT_TIME_IN_MILLIS)?;
 
@@ -294,6 +303,15 @@ impl Client {
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let codes = client.family_codes().expect("error requesting family codes");
+    /// println!("family codes: {codes:?}")
+    /// ```
     pub fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
         check_version(self.server_version, Features::FAMILY_CODES)?;
 

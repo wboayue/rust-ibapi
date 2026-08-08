@@ -210,6 +210,20 @@ impl Client {
     ///
     /// # Arguments
     /// * `request_id` - The request ID of the historical ticks subscription to cancel.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     // `request_id` is the id the in-flight `historical_ticks` request was issued with.
+    ///     let request_id = client.next_request_id();
+    ///     client.cancel_historical_ticks(request_id).await.expect("cancel failed");
+    /// }
+    /// ```
     pub async fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
         check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 
