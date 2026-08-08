@@ -1052,9 +1052,9 @@ fn test_historical_data_with_end_message() {
 }
 
 #[test]
-fn test_historical_data_connection_reset_after_retries() {
-    // Empty responses → channel closes immediately → subscription.next() returns
-    // None on every retry → loop exhausts MAX_RETRIES and returns ConnectionReset.
+fn test_historical_data_end_of_stream_is_not_retried() {
+    // Empty responses → channel closes immediately → subscription.next() yields
+    // None. A closed stream is not a reset: it fails on the first attempt.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -1063,11 +1063,34 @@ fn test_historical_data_connection_reset_after_retries() {
         .duration(Duration::days(1))
         .fetch();
 
-    // The first None response returns UnexpectedEndOfStream (the loop early-exits).
     assert!(
         matches!(result, Err(Error::UnexpectedEndOfStream)),
         "expected UnexpectedEndOfStream, got {result:?}"
     );
+    assert_eq!(request_message_count(&message_bus), 1, "a closed stream must not be retried");
+}
+
+#[test]
+fn test_historical_data_retries_a_connection_reset() {
+    let message_bus = Arc::new(
+        MessageBusStub::with_ordered_responses(vec![proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                .encode_proto(),
+        )])
+        .with_connection_resets(1),
+    );
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let data = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
+        .expect("the reset must be retried, not surfaced");
+
+    assert_eq!(data.bars.len(), 1);
+    assert_eq!(request_message_count(&message_bus), 2, "the retry must re-send the request");
 }
 
 #[test]

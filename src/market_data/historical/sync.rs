@@ -7,13 +7,14 @@ use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
 use crate::common::request_helpers::{self, expect_proto};
+use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
 use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
 use crate::transport::{InternalSubscription, MessageBus};
-use crate::{client::sync::Client, Error, MAX_RETRIES};
+use crate::{client::sync::Client, Error};
 
 use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
@@ -249,7 +250,7 @@ pub(crate) fn historical_data(
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(client.server_version(), contract, end_date, Some(what_to_show))?;
 
-    for _ in 0..MAX_RETRIES {
+    retry_on_connection_reset(|| {
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -265,26 +266,26 @@ pub(crate) fn historical_data(
 
         let subscription = builder.send_raw(request)?;
 
-        match subscription.next() {
-            Some(Ok(message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                let mut data = decoders::decode_historical_data(&message)?;
-
-                if let Some(Ok(end_msg)) = subscription.next() {
-                    let (start, end) = decoders::decode_historical_data_end(&end_msg)?;
-                    data.start = start;
-                    data.end = end;
-                }
-
-                return Ok(data);
-            }
-            Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
-            Some(Err(Error::ConnectionReset)) => {}
+        let mut data = match subscription.next() {
+            Some(Ok(message)) => decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?,
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),
-        }
-    }
+        };
 
-    Err(Error::ConnectionReset)
+        // The end frame is a second read, which is why this is not a one-shot
+        // and cannot use the helpers in `common::request_helpers`.
+        match subscription.next() {
+            Some(Ok(end_message)) => {
+                let (start, end) = decoders::decode_historical_data_end(&end_message)?;
+                data.start = start;
+                data.end = end;
+            }
+            Some(Err(e)) => return Err(e),
+            None => {}
+        }
+
+        Ok(data)
+    })
 }
 
 pub(crate) fn historical_data_stream(
