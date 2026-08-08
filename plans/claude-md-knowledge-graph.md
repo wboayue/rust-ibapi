@@ -617,7 +617,7 @@ decoders).
   saying why, so it read as "narrowing there is redundant." Recorded on the node as a
   counter-example. Convergent agreement across independent reviewers is not evidence; the gate is.
 
-- **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
+- ~~**The order-builder tests re-implement the code they test.**~~ `src/orders/builder/{sync,async}_impl/tests.rs`
   define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
   `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero
   coverage — which is why the `analyze` bug above survived four tests named for it. #735 added
