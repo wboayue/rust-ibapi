@@ -1632,3 +1632,16 @@ mod from_str_tests {
         assert_eq!(parsed, IncomingMessages::NotValid);
     }
 }
+
+#[test]
+fn expect_type_narrows_or_rejects() {
+    // Sibling of `require_proto`: narrows the type rather than the framing, and
+    // rejects with the same terminating variant.
+    let message = ResponseMessage::from(&format!("{}\0payload\0", IncomingMessages::FamilyCodes as i32));
+
+    let matched = message.expect_type(IncomingMessages::FamilyCodes).expect("matching type passes through");
+    assert_eq!(matched.message_type(), IncomingMessages::FamilyCodes);
+
+    let err = message.expect_type(IncomingMessages::UserInfo).expect_err("mismatched type is rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+}

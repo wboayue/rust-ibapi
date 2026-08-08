@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_blocking_test_client, create_blocking_test_client_with_ordered_proto_responses,
-    proto_error_response, proto_response, request_message_count,
+    decode_request_proto, proto_error_response, proto_response, request_message_count,
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
@@ -134,8 +134,6 @@ fn place_order() {
 // hedge_max_size rides the outbound PlaceOrderRequest proto (docs/rules/testing/exercise-production-code.md).
 #[test]
 fn place_order_encodes_hedge_max_size() {
-    use crate::common::test_utils::helpers::decode_request_proto;
-
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE);
 
@@ -629,9 +627,8 @@ fn order_entry_point_builds_order() {
     assert_eq!(order.limit_price, Some(50.0));
 }
 
-// Drives the real `OrderBuilder::analyze` — the builder tests re-implement it
-// against a mock client, so this is the only coverage of the production path.
-// A rejected what-if order arrives as a routed `Err`; before #735 the read
+// Drives the real `OrderBuilder::analyze`. A rejected what-if order arrives as
+// a routed `Err`; before #735 the read
 // discarded it and the caller saw `UnexpectedEndOfStream`.
 #[test]
 fn analyze_surfaces_rejected_what_if_order() {
@@ -649,4 +646,33 @@ fn analyze_surfaces_rejected_what_if_order() {
         .analyze()
         .expect_err("a rejected what-if order must surface the rejection");
     assert_tws_error_message(err, 201, "Insufficient buying power");
+}
+
+// Happy path for the real `OrderBuilder::analyze`, replacing the mock-client
+// shadow that carried its own copy of the method (and its own copy of the bug
+// #735 fixed). Asserts both halves of the contract: the OrderState comes back
+// from the OpenOrder whose id matches, and the request went out what-if.
+#[test]
+fn analyze_returns_order_state_for_the_matching_order() {
+    let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+    )]);
+    client.set_next_order_id(90);
+    let contract = Contract::stock("AAPL").build();
+
+    let state = client.order(&contract).buy(100).limit(50.0).analyze().expect("analyze should succeed");
+    assert_eq!(state.status, OrderStatusKind::PreSubmitted);
+
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
+    assert_eq!(request.order.expect("request carries an order").what_if, Some(true));
+}
+
+#[test]
+fn analyze_reports_end_of_stream_when_no_order_arrives() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![]);
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client.order(&contract).buy(100).limit(50.0).analyze();
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }

@@ -8,6 +8,7 @@ use super::common::{self, decoders, encoders};
 use super::*;
 use crate::client::blocking::{SharesChannel, Subscription};
 use crate::client::sync::Client;
+use crate::common::request_helpers;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
@@ -33,15 +34,13 @@ impl Client {
     pub fn news_providers(&self) -> Result<Vec<NewsProvider>, Error> {
         self.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
 
-        let request = encoders::encode_request_news_providers()?;
-        let subscription = self.send_shared_request(OutgoingMessages::RequestNewsProviders, request)?;
-
-        match subscription.next() {
-            Some(Ok(message)) => decoders::decode_news_providers(&message),
-            Some(Err(Error::ConnectionReset)) => self.news_providers(),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestNewsProviders,
+            encoders::encode_request_news_providers,
+            decoders::decode_news_providers,
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Subscribes to IB's News Bulletins.
@@ -153,16 +152,12 @@ impl Client {
     pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
         self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
-        let request_id = self.next_request_id();
-        let request = encoders::encode_request_news_article(request_id, provider_code, article_id)?;
-
-        let subscription = self.send_request(request_id, request)?;
-        match subscription.next() {
-            Some(Ok(message)) => decoders::decode_news_article(&message),
-            Some(Err(Error::ConnectionReset)) => self.news_article(provider_code, article_id),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_news_article(request_id, provider_code, article_id),
+            decoders::decode_news_article,
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Requests realtime contract specific news

@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, proto_error_response,
-    proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
+    proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
@@ -126,8 +126,6 @@ async fn test_place_order() {
 // hedge_max_size rides the outbound PlaceOrderRequest proto (docs/rules/testing/exercise-production-code.md).
 #[tokio::test]
 async fn place_order_encodes_hedge_max_size() {
-    use crate::common::test_utils::helpers::decode_request_proto;
-
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE);
 
@@ -573,4 +571,37 @@ async fn analyze_surfaces_rejected_what_if_order() {
         .await
         .expect_err("a rejected what-if order must surface the rejection");
     assert_tws_error_message(err, 201, "Insufficient buying power");
+}
+
+// Async twin of `analyze_returns_order_state_for_the_matching_order`; see the
+// blocking test for why this replaced a mock-client shadow.
+#[tokio::test]
+async fn analyze_returns_order_state_for_the_matching_order() {
+    let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+    )]);
+    client.set_next_order_id(90);
+    let contract = Contract::stock("AAPL").build();
+
+    let state = client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .analyze()
+        .await
+        .expect("analyze should succeed");
+    assert_eq!(state.status, OrderStatusKind::PreSubmitted);
+
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
+    assert_eq!(request.order.expect("request carries an order").what_if, Some(true));
+}
+
+#[tokio::test]
+async fn analyze_reports_end_of_stream_when_no_order_arrives() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![]);
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client.order(&contract).buy(100).limit(50.0).analyze().await;
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }

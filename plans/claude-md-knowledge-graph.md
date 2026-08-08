@@ -526,6 +526,26 @@ life.
   `accounts` ×3, `contracts`, `config` ×2, `scanner`. An `expect_type(message, expected)` helper
   makes each a one-liner. Rule of three is well past, but it touches seven modules.
 
+- **Six one-shot folds are still hand-rolled.** `/simplify` on #736 found the conversion
+  incomplete: `head_timestamp` and `histogram_data` in `market_data/historical/{sync,async}` and
+  `market_depth_exchanges` in `market_data/realtime/{sync,async}`. `histogram_data` and
+  `market_depth_exchanges` are drop-ins; `head_timestamp` needs a dispatcher, and the async twin
+  retries on `None` rather than `ConnectionReset` — an unbounded recursion the helper would
+  bound. `historical_schedule` is convertible too but retries `ConnectionReset` unboundedly on
+  purpose, so it needs a decision rather than a substitution.
+
+- **Make the expected message type a helper parameter (`one_shot_typed`).** Eleven
+  `decode_*_message` wrappers now exist only to pair one `IncomingMessages` variant with one
+  decoder, and every one of those decoders already has a `decode_*_proto(&[u8])` sibling. A
+  helper taking `(expected, decode_proto)` would delete the pure dispatchers and the
+  `.require_proto()?` inside them. The stronger argument is not tidiness: narrowing is currently
+  opt-in, and four one-shot sites do not narrow at all — `decode_news_providers`,
+  `decode_news_article`, `decode_scanner_parameters`, `decode_verify_message_api` are passed
+  bare. A type parameter closes those by construction. Note the wrappers are not one population:
+  eight are one-shot only, two (wsh) are dual-use, and the `StreamDecoder` surface should not
+  adopt it at all — there the expected set is already declared in `RESPONSE_MESSAGE_IDS`, so a
+  hand-written narrow inside `decode` is a third copy of the same fact.
+
 - **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
   define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
   `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero
@@ -533,7 +553,24 @@ life.
   two tests at the real seam for `analyze` only; `submit`, `build_order`, and the bracket-order
   builders still have none. The async shadow carried the very discard the PR fixed
   (`while let Some(Ok(..))`) and was corrected in place, which is the argument for deleting the
-  shadows rather than maintaining two copies. A textbook
+  shadows rather than maintaining two copies.
+
+  **The `analyze` half is closed.** Both shadow `analyze` impls and their four tests are gone;
+  the coverage moved to `orders/{sync,async}_tests.rs` against `Client::stubbed`, where the
+  happy path, the empty-stream path, and the rejection path all run the production method.
+  Removing that one shadow made the entire mock `place_order` path dead — field, setter, and
+  both client methods — which is itself evidence of how much of the mock existed only to feed a
+  duplicate.
+
+  **What remains, and why it is not mechanical.** The `submit` / `submit_all` /
+  `submit_oca_orders` / `submit_with_updates` shadows are still there. `submit_all` and
+  `submit_oca_orders` carry real logic (id reservation, `parent_id` wiring, transmit flags), so
+  they are the drift-prone ones worth doing next. Converting them means asserting on the
+  captured `PlaceOrderRequest` proto via `decode_request_proto` rather than on a decoded `Order`
+  struct — a better assertion, but a rewrite per test, not a substitution. One test cannot move
+  at all: `test_order_submit_with_error` injects a failure from `submit_order`, which
+  `MessageBusStub` has no way to produce, so it is testing the mock's error injection rather
+  than any production path. A textbook
   [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
   the largest one left in the tree.
 

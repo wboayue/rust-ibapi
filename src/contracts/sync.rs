@@ -6,7 +6,6 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::StreamDecoder;
 use crate::{client::sync::Client, Error};
-use log::info;
 
 impl Client {
     /// Requests contract information.
@@ -44,8 +43,8 @@ impl Client {
         while let Some(response) = responses.next() {
             log::debug!("response: {response:#?}");
             match response {
-                Ok(mut message) if message.message_type() == IncomingMessages::ContractData => {
-                    let decoded = decoders::decode_contract_details(self.server_version, &mut message)?;
+                Ok(message) if message.message_type() == IncomingMessages::ContractData => {
+                    let decoded = decoders::decode_contract_details(&message)?;
                     contract_details.push(decoded);
                 }
                 Ok(message) if message.message_type() == IncomingMessages::ContractDataEnd => return Ok(contract_details),
@@ -75,16 +74,14 @@ impl Client {
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        check_version(self.server_version, Features::MARKET_RULES)?;
-
-        let request = encoders::encode_request_market_rule(market_rule_id)?;
-        let subscription = self.shared_request(OutgoingMessages::RequestMarketRule).send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::blocking::one_shot_request(
+            self,
+            Features::MARKET_RULES,
+            OutgoingMessages::RequestMarketRule,
+            || encoders::encode_request_market_rule(market_rule_id),
+            decoders::decode_market_rule_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Requests the underlying exchanges that contribute to a consolidated (BBO) feed.
@@ -142,22 +139,12 @@ impl Client {
     pub fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
         check_version(self.server_version, Features::REQ_MATCHING_SYMBOLS)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
-        let subscription = builder.send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(mut message)) => match message.message_type() {
-                IncomingMessages::SymbolSamples => decoders::decode_contract_descriptions(self.server_version, &mut message),
-                _ => {
-                    info!("unexpected message: {message:?}");
-                    Err(Error::unexpected_response(&message))
-                }
-            },
-            Some(Err(e)) => Err(e),
-            None => Ok(Vec::new()),
-        }
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
+            decoders::decode_contract_descriptions_message,
+            || Ok(Vec::new()),
+        )
     }
 
     /// Calculates an option's price based on the provided volatility and its underlying's price.

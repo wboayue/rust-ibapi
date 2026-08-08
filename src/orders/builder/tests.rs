@@ -123,25 +123,19 @@ mod async_integration_tests {
 }
 
 // Mock client implementations for testing
-#[cfg(test)]
+#[cfg(all(test, feature = "sync"))]
 pub mod mock_client {
     pub mod mock {
         use crate::contracts::Contract;
         use crate::errors::Error;
-        use crate::orders::{Order, PlaceOrder};
+        use crate::orders::Order;
         use std::sync::{Arc, Mutex};
 
-        #[allow(dead_code)]
-        type OcaOrderList = Vec<Vec<(Contract, Order)>>;
-
         /// Mock client for testing OrderBuilder
-        #[allow(dead_code)]
         pub struct MockOrderClient {
             next_order_id: Arc<Mutex<i32>>,
             submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
-            place_order_responses: Arc<Mutex<Vec<Vec<PlaceOrder>>>>,
             submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
-            oca_orders: Arc<Mutex<OcaOrderList>>,
         }
 
         impl Default for MockOrderClient {
@@ -150,15 +144,12 @@ pub mod mock_client {
             }
         }
 
-        #[allow(dead_code)]
         impl MockOrderClient {
             pub fn new() -> Self {
                 Self {
                     next_order_id: Arc::new(Mutex::new(100)),
                     submitted_orders: Arc::new(Mutex::new(Vec::new())),
-                    place_order_responses: Arc::new(Mutex::new(Vec::new())),
                     submit_order_responses: Arc::new(Mutex::new(Vec::new())),
-                    oca_orders: Arc::new(Mutex::new(Vec::new())),
                 }
             }
 
@@ -171,10 +162,6 @@ pub mod mock_client {
                 let current = *id;
                 *id += 1;
                 current
-            }
-
-            pub fn add_place_order_response(&self, response: Vec<PlaceOrder>) {
-                self.place_order_responses.lock().unwrap().push(response);
             }
 
             pub fn add_submit_order_response(&self, response: Result<(), Error>) {
@@ -196,17 +183,6 @@ pub mod mock_client {
                 }
             }
 
-            pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<PlaceOrder>, Error> {
-                self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-
-                let mut responses = self.place_order_responses.lock().unwrap();
-                if !responses.is_empty() {
-                    Ok(responses.remove(0))
-                } else {
-                    Ok(vec![])
-                }
-            }
-
             pub fn submit_oca_orders(&self, orders: Vec<(Contract, Order)>) -> Result<Vec<crate::orders::OrderId>, Error> {
                 let mut order_ids = Vec::new();
                 for (contract, order) in orders.iter() {
@@ -214,7 +190,6 @@ pub mod mock_client {
                     order_ids.push(crate::orders::OrderId::new(order_id));
                     self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
                 }
-                self.oca_orders.lock().unwrap().push(orders);
                 Ok(order_ids)
             }
         }
@@ -226,7 +201,7 @@ pub mod async_mock_client {
     pub mod mock {
         use crate::contracts::Contract;
         use crate::errors::Error;
-        use crate::orders::{Order, OrderUpdate, PlaceOrder};
+        use crate::orders::{Order, OrderUpdate};
         use futures::stream::{self, Stream};
         use std::pin::Pin;
         use std::sync::{Arc, Mutex};
@@ -235,7 +210,6 @@ pub mod async_mock_client {
         pub struct AsyncMockClient {
             next_order_id: Arc<Mutex<i32>>,
             submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
-            place_order_responses: Arc<Mutex<Vec<Vec<PlaceOrder>>>>,
             submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
             order_update_streams: Arc<Mutex<Vec<Vec<OrderUpdate>>>>,
         }
@@ -251,7 +225,6 @@ pub mod async_mock_client {
                 Self {
                     next_order_id: Arc::new(Mutex::new(100)),
                     submitted_orders: Arc::new(Mutex::new(Vec::new())),
-                    place_order_responses: Arc::new(Mutex::new(Vec::new())),
                     submit_order_responses: Arc::new(Mutex::new(Vec::new())),
                     order_update_streams: Arc::new(Mutex::new(Vec::new())),
                 }
@@ -266,10 +239,6 @@ pub mod async_mock_client {
                 let current = *id;
                 *id += 1;
                 current
-            }
-
-            pub fn add_place_order_response(&self, response: Vec<PlaceOrder>) {
-                self.place_order_responses.lock().unwrap().push(response);
             }
 
             pub fn add_submit_order_response(&self, response: Result<(), Error>) {
@@ -293,24 +262,6 @@ pub mod async_mock_client {
                 } else {
                     Ok(())
                 }
-            }
-
-            pub async fn place_order(
-                &self,
-                order_id: i32,
-                contract: &Contract,
-                order: &Order,
-            ) -> Result<Pin<Box<dyn Stream<Item = Result<PlaceOrder, Error>> + Send>>, Error> {
-                self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
-
-                let mut responses = self.place_order_responses.lock().unwrap();
-                let items = if !responses.is_empty() {
-                    responses.remove(0).into_iter().map(Ok).collect::<Vec<_>>()
-                } else {
-                    vec![]
-                };
-
-                Ok(Box::pin(stream::iter(items)))
             }
 
             pub async fn submit_order_with_updates(

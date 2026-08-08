@@ -2,6 +2,7 @@
 
 use super::common::{decoders, encoders};
 use super::*;
+use crate::common::request_helpers;
 use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
@@ -23,14 +24,14 @@ impl Client {
     /// }
     /// ```
     pub async fn scanner_parameters(&self) -> Result<String, Error> {
-        let request = encoders::encode_scanner_parameters()?;
-        let mut subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
-
-        match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_scanner_parameters(&message),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestScannerParameters,
+            encoders::encode_scanner_parameters,
+            decoders::decode_scanner_parameters,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
     /// Starts a subscription to market scan results based on the provided parameters.
