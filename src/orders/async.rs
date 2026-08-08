@@ -2,7 +2,7 @@
 
 use time::OffsetDateTime;
 
-use crate::common::request_helpers::expect_proto;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
@@ -218,7 +218,7 @@ impl Client {
     /// }
     /// ```
     pub async fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let next_order_id = crate::common::request_helpers::one_shot_with_retry(
+        let next_order_id = request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,

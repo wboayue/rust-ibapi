@@ -5,6 +5,11 @@ use crate::Error;
 
 /// Fold a one-shot subscription's single response into a result.
 ///
+/// Private on purpose. The only callers are the two retrying helpers below, and
+/// that is what makes "every one-shot retries" true — reachable from a domain
+/// module, it is a ready-made way to hand-roll a one-shot without retry, which
+/// is the bug #741 removed.
+///
 /// `Some(Err)` propagates the routed error — e.g. a request-less hard error
 /// fanned out to one-shot shared channels — instead of masking it as a
 /// default value (#694). `on_none` decides what a closed stream means for
@@ -16,7 +21,7 @@ use crate::Error;
 /// `decode_*_message` dispatcher that matches on `IncomingMessages::Error` is
 /// writing an arm that cannot fire. See
 /// `docs/rules/wire/proto-only-decoding.md`.
-pub(crate) fn fold_one_shot<R>(
+fn fold_one_shot<R>(
     response: Option<Result<ResponseMessage, Error>>,
     processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
     on_none: impl FnOnce() -> Result<R, Error>,
@@ -162,8 +167,6 @@ mod async_helpers {
     use crate::protocol::{check_version, ProtocolFeature};
     use crate::subscriptions::{StreamDecoder, Subscription};
     use crate::Error;
-    #[allow(unused_imports)] // Used in one_shot_request
-    use futures::StreamExt;
 
     /// Async helper for requests that need a request ID and return a subscription
     pub async fn request_with_id<T>(

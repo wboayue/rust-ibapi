@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
-use crate::common::request_helpers::expect_proto;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::{client::sync::Client, server_versions, Error};
@@ -215,7 +215,7 @@ impl Client {
     /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let next_order_id = crate::common::request_helpers::blocking::one_shot_with_retry(
+        let next_order_id = request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,

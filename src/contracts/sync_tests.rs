@@ -468,6 +468,21 @@ fn test_market_rule_returns_eof_on_empty_stream() {
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
+/// The version check used to be a mandatory argument to `one_shot_request`;
+/// #741 moved it inline, so deleting it now compiles. The async twin
+/// (`market_rule_rejects_old_server_version`) was already covered — this is the
+/// side that was not.
+#[test]
+fn test_market_rule_rejects_old_server_version() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES - 1);
+
+    let result = client.market_rule(26);
+
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "got {result:?}");
+    assert_eq!(request_message_count(&message_bus), 0, "must not send below the version floor");
+}
+
 #[test]
 fn test_calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));

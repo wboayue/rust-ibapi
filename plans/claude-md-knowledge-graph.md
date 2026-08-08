@@ -708,22 +708,50 @@ decoders).
 
 - ~~**Decide which one-shots should retry.**~~ **Shipped in #741: all of them, and the question
   was malformed.** The counts held exactly — 44 retrying, 4 non-retrying, 6 hand-rolled — but
-  "by choice" did not. `one_shot_request` was the only helper taking a `ProtocolFeature`, so the
-  four version-gated shared-channel one-shots picked it and gave up retry as a side effect, while
-  `market_depth_exchanges` — equally version-gated — called `check_version` inline and kept retry.
-  Nobody chose; the helper chose.
+  "by choice" did not. Nobody chose; the helper chose — the mechanism, and the two-axes lesson it
+  generalises to, are on
+  [one-shot narrowing](../docs/rules/wire/one-shot-narrowing.md#why-every-one-shot-retries).
 
-  Deleting `one_shot_request` and moving its four sites to the inline form leaves two helpers that
-  differ only in whether the request carries an id, and no one-shot without retry. **When two
-  helpers differ on two axes and callers only care about one, the axis they are not choosing gets
-  chosen for them** — which is the reusable half, and it reads nothing like "document the
-  rationale," the shape the bullet expected.
+  What belongs here is what the node cannot carry: the bullet asked for a *rationale to write
+  down*, and there was none to find. Every framing it offered — "decide which should retry",
+  "nothing says why `head_timestamp` retries and `market_rule` does not" — presumed a decision had
+  been made. Checking whether that was true came before answering it, and inverted the task.
 
   Untested, and worth saying so: `MessageBusStub` cannot produce `Error::ConnectionReset` — only
-  the real transport's reconnect path emits it — so no per-API test covers retry wiring for these
-  five or for the 44 that already had it. The combinator itself is covered in
-  `src/common/retry_tests.rs`. Closing that is a follow-up below. The next
+  the real transport's reconnect path emits it — so no per-API test covers retry wiring, for the
+  10 sites migrated here or the 44 that already retried. The combinator itself is covered in
+  `src/common/retry_tests.rs`. Closing that is a follow-up below. Command for the total:
+  `grep -rn "one_shot_with_retry(\|one_shot_request_with_retry(" --include=*.rs src/ | grep -v -E "_tests\.rs|/tests\.rs" | grep -v "pub \(async \)\?fn" | wc -l`
+  → 54, which is 44 + 4 + 6 and the sum the three pre-#741 counts were always claiming.
+
+  **The count in the first draft of this bullet said 49, and nothing produced it.** It was
+  written in the same paragraph as the sentence admitting the retry path is untested — so the
+  claim that got checked was the one about coverage, and the arithmetic beside it went out
+  unchecked. Fourth instance in this file. The next
   author picks a helper by copying a neighbour.
+
+- **Give `on_none` a default and get both one-shot helpers under the param budget.** 42 of the 54
+  sites pass the identical `|| Err(Error::UnexpectedEndOfStream)`; of the rest, 6 pass
+  `|| Ok(Vec::new())` and 4 pass `|| Ok(Vec::default())` — the same value spelled two ways, which
+  is the tell that nobody is choosing here either. Defaulting it and adding an `_or_else` variant
+  for the dozen collection sites lands the helpers at 3 and 2 parameters, under
+  [param budget](../docs/rules/style/param-budget.md) for the first time, and deletes ~42 closures.
+  The node currently argues that `expect_proto` had to be a combinator *because* the helpers are
+  over budget; this removes the premise. 54 sites, so it is restructuring.
+
+- **Rename the helpers now that `_with_retry` distinguishes nothing.** With the non-retrying
+  helper gone, both names carry a suffix no longer contrasting with anything, while the axis that
+  does distinguish them — shared channel vs request id — is not in either name.
+  `one_shot_shared` / `one_shot_by_request_id` say it. 54 call sites; worth folding into the
+  `on_none` change rather than doing separately.
+
+- **`historical_data` still hand-rolls its retry, and the two sides have already drifted.**
+  `src/market_data/historical/{sync,async}.rs` each write `for _ in 0..MAX_RETRIES` instead of
+  calling `retry_on_connection_reset`, because the fetch reads two frames (data, then
+  `HistoricalDataEnd`) and is not a one-shot. They disagree on the terminal cases: sync retries
+  `Some(Err(ConnectionReset))` and errors on `None`; async does the reverse. This is the last
+  instance of the hand-rolled-retry class #741 closed everywhere else, and the drift is exactly
+  what a shared helper prevents — the sync/async pair is where a duplicated predicate always goes.
 
 - **Teach `MessageBusStub` to inject `Error::ConnectionReset`.** Nothing verifies that any of the
   49 one-shots actually retries — the stub models a message bus, and `ConnectionReset` is
