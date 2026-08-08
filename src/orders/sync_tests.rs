@@ -625,3 +625,29 @@ fn order_entry_point_builds_order() {
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.limit_price, Some(50.0));
 }
+
+// Drives the real `OrderBuilder::analyze` — the builder tests re-implement it
+// against a mock client, so this is the only coverage of the production path.
+// A rejected what-if order arrives as a routed `Err`; before #735 the read
+// discarded it and the caller saw `UnexpectedEndOfStream`.
+#[test]
+fn analyze_surfaces_rejected_what_if_order() {
+    use crate::common::test_utils::helpers::{assert_tws_error_message, proto_error_response};
+
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        201,
+        "Order rejected - reason:Insufficient buying power",
+    )]));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .analyze()
+        .expect_err("a rejected what-if order must surface the rejection");
+    assert_tws_error_message(err, 201, "Insufficient buying power");
+}

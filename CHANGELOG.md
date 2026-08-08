@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `OrderBuilder::analyze()` (what-if orders, blocking and async) now returns the TWS rejection instead of `Error::UnexpectedEndOfStream`. A rejected what-if order arrives as a routed error, which the response read discarded — the blocking path via `if let Ok(..)` inside the loop, the async path by ending its `while let Some(Ok(..))` loop — so the caller lost the reason (e.g. code 201, `Order rejected - reason:...`) and got a generic end-of-stream error. Rejection is a routine outcome for a what-if order, so this was the likeliest path to hit it (#735).
+
 - `matching_symbols()` on the blocking client now returns the TWS error instead of an empty list. A routed error arrives as `Some(Err(_))`, which the `if let Some(Ok(_))` read discarded, so a rejected pattern silently returned `Ok(vec![])` — indistinguishable from "no symbols matched". The async client already propagated it (#735).
 
 - `TickTypes::MarketDataType` now reaches `Client::market_data` subscriptions. The message type was missing from the request-id routing allow-list, so TWS's market-data-type notifications (real-time / frozen / delayed / delayed-frozen, sent on subscribe and whenever the feed switches) were routed to a shared channel nobody subscribes to and dropped. The decoder has produced the variant since #516; nothing could ever yield it (#730).

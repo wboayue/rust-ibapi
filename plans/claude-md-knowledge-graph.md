@@ -498,6 +498,28 @@ life.
   **A dead arm is worth reading before deleting — it marks where someone expected a case to
   arrive, which is where to check whether the real case is handled at all.**
 
+  **The #734 deletions were wrong in principle, not just in outcome.** The justification was
+  "the mechanism is covered at the transport layer", which conflates *delivery* with
+  *consumption*. The transport tests prove the dispatcher produces `RoutedItem::Error`; they say
+  nothing about whether a given public API hands it to the caller — and two APIs did not. Both
+  deleted tests were restored and passed unmodified against the classifying stub.
+
+  A sweep of every `Some(Ok(..))` consumption site for the same shape found one more:
+  `OrderBuilder::analyze()` dropped routed errors on both sides (`if let Ok(..)` inside the
+  loop on sync, `while let Some(Ok(..))` on async), returning `UnexpectedEndOfStream` instead of
+  the rejection — on the one API where rejection is a routine outcome. Every other site handles
+  `Some(Err(e))`. **The per-API question "does this consume `Err`?" needs asking once per
+  public entry point; no shared layer answers it.**
+
+- **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
+  define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
+  `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero
+  coverage — which is why the `analyze` bug above survived four tests named for it. #735 added
+  two tests at the real seam for `analyze` only; `submit`, `build_order`, and the bracket-order
+  builders still have none. A textbook
+  [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
+  the largest one left in the tree.
+
 - **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
   `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound
   message (routing, `request_id`, the new filter, the decoder's own match). Worse,
