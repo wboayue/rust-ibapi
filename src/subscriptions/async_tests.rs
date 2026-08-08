@@ -6,17 +6,14 @@ use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
 use crate::subscriptions::SubscriptionItemStreamExt;
 use futures::StreamExt;
-use std::sync::RwLock;
 use time::OffsetDateTime;
 use tokio::sync::{broadcast, mpsc};
 
 #[tokio::test]
 async fn test_subscription_with_decoder() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["1|9000|20241231 12:00:00|100.5|101.0|100.0|100.25|1000|100.2|5|0".to_string()],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        "1|9000|20241231 12:00:00|100.5|101.0|100.0|100.25|1000|100.2|5|0".to_string(),
+    ]));
 
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);

@@ -9,16 +9,12 @@ mod sync_tests {
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
     use crate::testdata::builders::ResponseProtoEncoder;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
     use std::time::Duration;
 
     #[test]
     fn test_market_data_builder_default() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -31,11 +27,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_with_generic_ticks() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -52,11 +44,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_add_generic_tick_appends() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -79,11 +67,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_add_generic_tick_after_bulk() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -106,11 +90,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_snapshot() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -127,11 +107,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_regulatory_snapshot() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
@@ -148,11 +124,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_streaming_after_snapshot() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -170,11 +142,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_full_configuration() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
@@ -229,16 +197,12 @@ mod async_tests {
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
     use crate::testdata::builders::ResponseProtoEncoder;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
     use std::time::Duration;
 
     #[tokio::test]
     async fn test_market_data_builder_async() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -257,11 +221,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn test_market_data_builder_add_generic_tick_async() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
@@ -285,11 +245,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn test_market_data_builder_regulatory_snapshot_async() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 

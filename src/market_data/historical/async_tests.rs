@@ -22,7 +22,6 @@ use crate::testdata::builders::market_data::{
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
 use std::sync::Arc;
-use std::sync::RwLock;
 use time::macros::{date, datetime};
 
 fn test_contract() -> Contract {
@@ -745,11 +744,7 @@ async fn test_historical_data_streaming_error_response() {
 
 #[tokio::test]
 async fn test_tick_subscription_sends_cancel_on_drop() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
     let internal = AsyncInternalSubscription::new(rx);
@@ -768,11 +763,7 @@ async fn test_tick_subscription_sends_cancel_on_drop() {
 
 #[tokio::test]
 async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
     let internal = AsyncInternalSubscription::new(rx);
@@ -790,11 +781,7 @@ async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
 
 #[tokio::test]
 async fn test_tick_subscription_drop_after_done_does_not_cancel() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let (_tx, rx) = tokio::sync::broadcast::channel(16);
     let internal = AsyncInternalSubscription::new(rx);
@@ -813,11 +800,7 @@ async fn test_tick_subscription_drop_after_done_does_not_cancel() {
 
 #[tokio::test]
 async fn test_streaming_subscription_sends_cancel_on_drop() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);
@@ -844,11 +827,7 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
 
 #[tokio::test]
 async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);

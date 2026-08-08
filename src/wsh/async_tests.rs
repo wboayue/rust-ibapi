@@ -9,18 +9,14 @@ use crate::testdata::builders::wsh::{
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::wsh::common::test_data;
 use futures::StreamExt;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_wsh_metadata_table() {
     use crate::wsh::common::test_tables::{wsh_metadata_test_cases, ApiExpectedResult};
 
     for test_case in wsh_metadata_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: test_case.response_messages,
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
         let result = client.wsh_metadata().await;
@@ -46,17 +42,13 @@ async fn test_wsh_metadata_table() {
 async fn test_wsh_metadata_request_body() {
     use crate::wsh::common::test_data::json_responses;
 
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![proto_response(
-            IncomingMessages::WshMetaData,
-            wsh_metadata_response()
-                .request_id(TEST_REQ_ID_FIRST)
-                .data_json(json_responses::METADATA_SIMPLE)
-                .encode_proto(),
-        )],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::WshMetaData,
+        wsh_metadata_response()
+            .request_id(TEST_REQ_ID_FIRST)
+            .data_json(json_responses::METADATA_SIMPLE)
+            .encode_proto(),
+    )]));
 
     let client = Client::stubbed(message_bus.clone(), crate::server_versions::WSHE_CALENDAR);
     client.wsh_metadata().await.expect("metadata request failed");
@@ -69,11 +61,7 @@ async fn test_wsh_event_data_by_contract_table() {
     use crate::wsh::common::test_tables::{event_data_by_contract_test_cases, ApiExpectedResult};
 
     for test_case in event_data_by_contract_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: test_case.response_messages,
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
         let result = client
@@ -119,11 +107,7 @@ async fn test_wsh_event_data_by_filter_subscription_table() {
     use crate::wsh::common::test_tables::subscription_test_cases;
 
     for test_case in subscription_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: test_case.response_messages,
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
         let mut subscription = client
@@ -186,11 +170,7 @@ async fn test_wsh_event_data_by_filter_integration_table() {
     use crate::wsh::common::test_tables::{event_data_by_filter_integration_test_cases, IntegrationExpectedResult};
 
     for test_case in event_data_by_filter_integration_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: test_case.response_messages,
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
 
@@ -254,11 +234,7 @@ async fn test_server_version_validation_table() {
     use crate::wsh::common::test_tables::server_version_test_cases;
 
     for test_case in server_version_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
 
@@ -299,11 +275,7 @@ async fn test_subscription_integration_table() {
     use crate::wsh::common::test_tables::subscription_integration_test_cases;
 
     for test_case in subscription_integration_test_cases() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: test_case.response_messages,
-        });
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
         let result = client.wsh_event_data_by_filter("test_filter", None, None).await;
