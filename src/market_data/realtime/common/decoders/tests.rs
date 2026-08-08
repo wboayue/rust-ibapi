@@ -1,5 +1,7 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::proto_response;
+use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::subscriptions::DecoderContext;
@@ -56,11 +58,11 @@ mod realtime_bar_tests {
         // Text arrival at a proto-only decoder surfaces UnexpectedWireFormat, which
         // the dispatcher raises rather than skipping — the message was addressed to
         // this decoder. See docs/rules/wire/proto-only-decoding.md.
-        let message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
-        match decode_realtime_bar(&message) {
-            Err(Error::UnexpectedWireFormat(_)) => {}
-            other => panic!("expected UnexpectedWireFormat, got {other:?}"),
-        }
+        assert_rejects_text_framing(
+            IncomingMessages::RealTimeBars,
+            "50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0",
+            decode_realtime_bar,
+        );
     }
 }
 

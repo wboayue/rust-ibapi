@@ -650,14 +650,34 @@ decoders).
   construction makes the accessor a field read and removes an allocation per message. Pure
   perf, no behaviour change.
 
-- **Collapse the 40 `*_rejects_text_framing` asserts into one helper.** They spell the same
-  assertion four different ways across 12 files, with four different panic messages. #731 is
-  the evidence: a pure variant rename touched all 40 sites and produced ~600 of its ~700
-  test-side lines; with a helper it would have been one line. The precedent is
-  `assert_decimal_parse_error` in `src/common/test_utils.rs` — same shape, 33 call sites, and
-  its doc states this exact rationale. Not speculative infra: the consumers exist today, and
-  the three largest files already import from that module. Deferred out of #731 as
-  restructuring, per [/simplify scope discipline](../CLAUDE.md).
+- ~~**Collapse the 40 `*_rejects_text_framing` asserts into one helper.**~~ **Shipped in #747.**
+  `assert_rejects_text_framing` in `src/common/test_utils.rs`, next to the
+  `assert_decimal_parse_error` precedent it was modelled on. The four spellings (`expect_err` +
+  `matches!`, `unwrap_err` + `matches!`, a `match` with `panic!`, and three different panic
+  messages) are one.
+
+  **The population was 24 tests, not 40** — 23 of them decoder-shaped and converted, plus
+  `expect_proto`'s own test, which is about the combinator rather than a decoder and keeps its
+  shape. #731's 40 was a count of *sites it edited*; the rename touched assertion lines, not
+  tests, and this file copied it forward as a test count across three passes. Eighth instance,
+  and the first traceable to a unit change rather than a miscount. Commands:
+  `grep -rn "fn test_\w*rejects_text_framing" --include=*.rs src/ | wc -l` → 24;
+  `grep -rn "assert_rejects_text_framing(" --include=*.rs src/ | grep -v "pub fn" | wc -l` → 23.
+  The first draft of this bullet said 23 and cited a grep returning 25, having counted the
+  helper's own definition — written, again, inside the paragraph about miscounting.
+
+  **The helper earns more than deduplication, and that was not in the bullet.** It takes the
+  expected `IncomingMessages` and checks it against the frame's own leading discriminant before
+  the decoder runs. Nothing else does: `require_proto` rejects the framing without ever reading
+  the type, so a fixture claiming the wrong message id passes anyway — which is exactly the
+  class #738 caught four times by accident (`87` for `MarketRule`, which is 93; a literal
+  `"newsProviders"` parsing as no discriminant at all). All 23 fixtures are honest today,
+  verified by conversion; the guard is what keeps the 24th from not being. A pure
+  extract-the-common-assertion would have preserved the blind spot exactly.
+
+  One test keeps its own shape: `connection`'s handshake reader takes `&mut ResponseMessage` —
+  the documented last cursor-advancing site — so it passes a closure that clones. The
+  divergence is visible in one line instead of hidden in a fourth spelling.
 
 - ~~**Gate the three `TickDecoder::RESPONSE_MESSAGE_IDS` consts.**~~ **Shipped in #739.** The
   review's mutation reproduced first — `TickDecoder<TickBidAsk>` declaring

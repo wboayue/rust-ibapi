@@ -1,5 +1,6 @@
 use super::*;
-use crate::messages::ResponseMessage;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_scanner_data_proto() {
@@ -78,10 +79,9 @@ fn test_decode_scanner_data_rejects_text_framing() {
     // Text-framed arrival raises `UnexpectedWireFormat` — the message was
     // addressed to this decoder, so it is not skippable. See
     // docs/rules/wire/proto-only-decoding.md.
-    let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0");
-    let err = decode_scanner_data(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::ScannerData,
+        "20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0",
+        decode_scanner_data,
     );
 }

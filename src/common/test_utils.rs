@@ -272,6 +272,39 @@ pub mod helpers {
             other => panic!("expected Error::Parse for {offending_value:?}, got {other:?}"),
         }
     }
+
+    /// Asserts that a proto-only decoder rejects a text-framed frame of the type
+    /// it handles, with [`Error::UnexpectedWireFormat`](crate::Error::UnexpectedWireFormat).
+    ///
+    /// One assertion for every `*_rejects_text_framing` test. The 22 of them
+    /// spelled it four ways (`expect_err` + `matches!`, `unwrap_err` + `matches!`,
+    /// a `match` with `panic!`, and three different panic messages), which is why
+    /// #731's rename of a single variant produced ~600 test-side lines.
+    ///
+    /// `expected` is checked against the frame's own leading discriminant before
+    /// the decoder runs. That is not ceremony: `require_proto` fails on framing
+    /// without reading the type, so a fixture naming the wrong message id passes
+    /// the assertion anyway — #738 found exactly that in four fixtures (`87` for
+    /// `MarketRule`, which is 93; a literal `"newsProviders"` that parses as no
+    /// discriminant at all). A fixture field no assertion depends on will be
+    /// wrong eventually.
+    pub fn assert_rejects_text_framing<T: std::fmt::Debug>(
+        expected: crate::messages::IncomingMessages,
+        text_frame: &str,
+        decode: impl FnOnce(&crate::messages::ResponseMessage) -> Result<T, crate::Error>,
+    ) {
+        let message = crate::messages::ResponseMessage::from(text_frame);
+        assert_eq!(
+            message.message_type(),
+            expected,
+            "fixture is framed as the wrong message type; the decoder never reads it"
+        );
+
+        match decode(&message) {
+            Err(crate::Error::UnexpectedWireFormat(_)) => {}
+            other => panic!("expected Error::UnexpectedWireFormat for a text-framed {expected:?}, got {other:?}"),
+        }
+    }
 }
 
 /// Generic round-trip / reject-unknown helpers for typed wire enums built with `impl_wire_enum!`.

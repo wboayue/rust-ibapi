@@ -1,4 +1,6 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::messages::IncomingMessages;
 use crate::testdata::builders::display_groups::display_group_updated;
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -25,10 +27,9 @@ fn test_decode_display_group_updated_proto_empty_contract_info() {
 
 #[test]
 fn test_decode_display_group_updated_rejects_text_framing() {
-    let message = ResponseMessage::from("68\01\09000\0265598@SMART\0");
-    let err = decode_display_group_updated(&message).unwrap_err();
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
+    assert_rejects_text_framing(
+        IncomingMessages::DisplayGroupUpdated,
+        "68\01\09000\0265598@SMART\0",
+        decode_display_group_updated,
     );
 }

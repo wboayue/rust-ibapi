@@ -1,5 +1,7 @@
 use super::*;
+use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{proto_error_response, proto_response};
+use crate::messages::IncomingMessages;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
@@ -320,22 +322,21 @@ fn test_parse_account_info_multiple_messages_callback() {
 
 #[test]
 fn test_parse_account_info_next_valid_id_rejects_text_framing() {
+    // The handshake is the one reader still advancing a cursor, so it takes
+    // `&mut` where every decoder takes `&` — hence the clone rather than a
+    // direct hand-off to the shared assertion.
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from("9\01\01000\0");
-    let err = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
-        .expect_err("text-framed NextValidId must be rejected");
-    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
+    assert_rejects_text_framing(IncomingMessages::NextValidId, "9\01\01000\0", |message| {
+        handler.parse_account_info(TEST_SERVER_VERSION, &mut message.clone(), &empty_ctx())
+    });
 }
 
 #[test]
 fn test_parse_account_info_managed_accounts_rejects_text_framing() {
     let handler = ConnectionHandler::default();
-    let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
-    let err = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
-        .expect_err("text-framed ManagedAccounts must be rejected");
-    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
+    assert_rejects_text_framing(IncomingMessages::ManagedAccounts, "15\01\0DU123,DU456\0", |message| {
+        handler.parse_account_info(TEST_SERVER_VERSION, &mut message.clone(), &empty_ctx())
+    });
 }
 
 #[test]
