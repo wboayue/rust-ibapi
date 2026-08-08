@@ -46,6 +46,14 @@ That reading is exactly why a missing backstop is not a style question. A `decod
 straight into `require_proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
 reads it as claiming an arm for every discriminant it scans and can say nothing about it.
 
+**The const stays a slice even for the six single-type decoders, and the narrow stays a
+hardcoded literal.** Both look like duplication and neither is. Collapsing to
+`const MESSAGE_TYPE` with a derived `RESPONSE_MESSAGE_IDS = &[Self::MESSAGE_TYPE]` compiles, but
+`StreamDecoder`'s multi-type impls cannot use it, so one filter (`is_undeclared`) would read two
+declaration forms. And deriving the narrow from `Self::RESPONSE_MESSAGE_IDS` makes the gate
+circular — `handled` would be computed from the same const as `declared`, so every declaration
+would agree with itself, including a wrong one. A cross-check needs two independent statements.
+
 Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder`
 blocks under `src/` against the hand-listed roster — per trait, so adding one while deleting the
 other cannot net out — and fails when a new decoder goes unregistered.

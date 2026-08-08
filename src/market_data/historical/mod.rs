@@ -751,12 +751,9 @@ pub trait TickDecoder<T> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
     /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
     ///
-    /// Every impl narrows with `message.expect_type(..)?` first. A tick type
-    /// consumes exactly one message type, so there is no match to hang a `_ =>`
-    /// backstop on and the narrow *is* the backstop — the same reasoning that
-    /// keeps `expect_type` in the single-type `StreamDecoder` impls. Without it
-    /// the roster check cannot tell "this decoder handles that type" from "this
-    /// decoder was handed the wrong frame".
+    /// Every impl narrows with `message.expect_type(..)?` first: it is the
+    /// single-type form of the `_ =>` backstop and is *not* redundant with the
+    /// const. See `docs/rules/wire/proto-only-decoding.md`.
     fn decode(message: &ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
