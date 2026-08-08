@@ -54,6 +54,85 @@ fn test_expect_proto_rejects_a_foreign_type() {
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
 }
 
+/// The retry wiring, exercised through a public one-shot rather than through
+/// the combinator.
+///
+/// `src/common/retry.rs` covers `retry_on_connection_reset` itself, but nothing
+/// covered the wiring — that a one-shot re-encodes and re-sends its request when
+/// the transport hands it a reset. That gap is why #741 could move ten APIs onto
+/// the retrying helper on the strength of reading the call site. `server_time`
+/// stands in for the 54 sites; the resend count is `request_messages()`.
+#[cfg(test)]
+mod retry_wiring {
+    use crate::messages::IncomingMessages;
+    use crate::stubs::MessageBusStub;
+    use crate::testdata::builders::accounts::current_time;
+    use crate::testdata::builders::ResponseProtoEncoder;
+    use crate::{common::test_utils::helpers::proto_response, server_versions, Error};
+    use std::sync::Arc;
+
+    fn stub(resets: usize) -> Arc<MessageBusStub> {
+        Arc::new(
+            MessageBusStub::with_ordered_responses(vec![proto_response(IncomingMessages::CurrentTime, current_time().encode_proto())])
+                .with_connection_resets(resets),
+        )
+    }
+
+    #[cfg(feature = "sync")]
+    #[test]
+    fn test_sync_one_shot_resends_after_a_connection_reset() {
+        use crate::client::blocking::Client;
+
+        let message_bus = stub(2);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        client.server_time().expect("two resets are under the retry limit");
+        assert_eq!(message_bus.request_messages().len(), 3, "each retry must re-send the request");
+    }
+
+    #[cfg(feature = "sync")]
+    #[test]
+    fn test_sync_one_shot_gives_up_past_the_retry_limit() {
+        use crate::client::blocking::Client;
+        use crate::common::retry::DEFAULT_MAX_RETRIES;
+
+        let attempts = DEFAULT_MAX_RETRIES as usize + 1;
+        let message_bus = stub(attempts);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        let error = client.server_time().expect_err("the reset must surface once retries are spent");
+        assert!(matches!(error, Error::ConnectionReset), "got {error:?}");
+        assert_eq!(message_bus.request_messages().len(), attempts);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_one_shot_resends_after_a_connection_reset() {
+        use crate::Client;
+
+        let message_bus = stub(2);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        client.server_time().await.expect("two resets are under the retry limit");
+        assert_eq!(message_bus.request_messages().len(), 3, "each retry must re-send the request");
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_one_shot_gives_up_past_the_retry_limit() {
+        use crate::common::retry::DEFAULT_MAX_RETRIES;
+        use crate::Client;
+
+        let attempts = DEFAULT_MAX_RETRIES as usize + 1;
+        let message_bus = stub(attempts);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        let error = client.server_time().await.expect_err("the reset must surface once retries are spent");
+        assert!(matches!(error, Error::ConnectionReset), "got {error:?}");
+        assert_eq!(message_bus.request_messages().len(), attempts);
+    }
+}
+
 #[test]
 fn test_expect_proto_rejects_text_framing_of_the_expected_type() {
     // Right type, unreadable framing: UnexpectedWireFormat, not UnexpectedResponse (#731).

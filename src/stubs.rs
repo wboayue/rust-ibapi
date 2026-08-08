@@ -1,6 +1,9 @@
 use std::{
     collections::HashSet,
-    sync::{LazyLock, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        LazyLock, Mutex, RwLock,
+    },
 };
 
 #[cfg(feature = "sync")]
@@ -38,6 +41,9 @@ pub(crate) struct MessageBusStub {
     /// that mix dual-format decoders (e.g. OpenOrder text + ExecutionData proto
     /// in the same `place_order` flow at floor 203).
     pub ordered_responses: Vec<ResponseMessage>,
+    /// Requests still to be answered with [`Error::ConnectionReset`] before the
+    /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
+    connection_resets: AtomicUsize,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -52,6 +58,7 @@ impl Default for MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
             ordered_responses: vec![],
+            connection_resets: AtomicUsize::new(0),
         }
     }
 }
@@ -70,6 +77,7 @@ impl MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages,
             ordered_responses: vec![],
+            connection_resets: AtomicUsize::new(0),
         }
     }
 
@@ -82,7 +90,25 @@ impl MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
             ordered_responses,
+            connection_resets: AtomicUsize::new(0),
         }
+    }
+
+    /// Answer the first `count` requests with [`Error::ConnectionReset`] before
+    /// serving the configured responses.
+    ///
+    /// The real transport synthesizes `ConnectionReset` in its reconnect path
+    /// (`notify_all`), which the stub bypasses — so before this existed, no test
+    /// could reach the retry wiring every one-shot request goes through (#741),
+    /// only the combinator in `src/common/retry.rs`. The assertion is a resend
+    /// count: `request_messages().len()` is the number of attempts, because each
+    /// retry re-encodes and re-sends.
+    ///
+    /// Same move as #735 made for error frames — a fixture that lies about what
+    /// the wire produces makes the tests that depend on it worthless.
+    pub fn with_connection_resets(self, count: usize) -> Self {
+        self.connection_resets.store(count, Ordering::SeqCst);
+        self
     }
 
     pub fn request_messages(&self) -> Vec<Vec<u8>> {
@@ -117,6 +143,21 @@ impl MessageBusStub {
         self.response_messages_decoded().into_iter().map(classify_like_dispatcher).collect()
     }
 
+    /// What one request's subscription receives.
+    ///
+    /// Identical to [`Self::routed_items`] unless the stub was built with
+    /// [`Self::with_connection_resets`], in which case the leading requests get
+    /// a reset instead — the transport delivers one to every in-flight
+    /// subscription when the socket drops, and delivers no responses at all.
+    fn routed_items_for_request(&self) -> Vec<RoutedItem> {
+        let remaining = self.connection_resets.load(Ordering::SeqCst);
+        if remaining > 0 {
+            self.connection_resets.store(remaining - 1, Ordering::SeqCst);
+            return vec![RoutedItem::Error(Error::ConnectionReset)];
+        }
+        self.routed_items()
+    }
+
     /// Record the outbound request and hand back a subscription pre-loaded with
     /// the configured responses. Every async `send_*` differs only in the id or
     /// message-type argument it ignores.
@@ -125,7 +166,7 @@ impl MessageBusStub {
         self.request_messages.write().unwrap().push(message);
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        for item in self.routed_items() {
+        for item in self.routed_items_for_request() {
             sender.send(item).unwrap();
         }
 
@@ -161,8 +202,8 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
-    fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error> {
-        mock_request(self, Some(request_id), None, packet);
+    fn cancel_subscription(&self, _request_id: i32, packet: &[u8]) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(packet.to_vec());
         Ok(())
     }
 
@@ -198,8 +239,8 @@ impl MessageBus for MessageBusStub {
         Ok(subscription)
     }
 
-    fn cancel_order_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error> {
-        mock_request(self, Some(request_id), None, packet);
+    fn cancel_order_subscription(&self, _request_id: i32, packet: &[u8]) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(packet.to_vec());
 
         let stub_id = self as *const _ as usize;
         ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
@@ -211,8 +252,8 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, None, Some(message_type), message))
     }
 
-    fn cancel_shared_subscription(&self, message_type: OutgoingMessages, packet: &[u8]) -> Result<(), Error> {
-        mock_request(self, None, Some(message_type), packet);
+    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, packet: &[u8]) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(packet.to_vec());
         Ok(())
     }
 
@@ -241,7 +282,7 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
 
-    for item in stub.routed_items() {
+    for item in stub.routed_items_for_request() {
         sender.send(item).unwrap();
     }
 

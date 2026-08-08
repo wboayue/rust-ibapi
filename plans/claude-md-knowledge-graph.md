@@ -753,13 +753,25 @@ decoders).
   instance of the hand-rolled-retry class #741 closed everywhere else, and the drift is exactly
   what a shared helper prevents — the sync/async pair is where a duplicated predicate always goes.
 
-- **Teach `MessageBusStub` to inject `Error::ConnectionReset`.** Nothing verifies that any of the
-  49 one-shots actually retries — the stub models a message bus, and `ConnectionReset` is
-  synthesized by the transport's reconnect path (`notify_all`), which the stub bypasses. So the
-  retry wiring is checked only by reading the call site, and #741 moved five APIs onto it on that
-  basis. The precedent for the fix is #735, which made the stub classify error frames like the
-  dispatcher and recovered coverage that deleting the arms would have destroyed; this is the same
-  move one layer out. A resend count (`request_messages.len()`) is the assertion.
+- ~~**Teach `MessageBusStub` to inject `Error::ConnectionReset`.**~~ **Shipped in #743.**
+  `with_connection_resets(n)` answers the first `n` requests with a bare
+  `RoutedItem::Error(Error::ConnectionReset)` and no responses, which is what the socket dropping
+  actually looks like; the assertion is the resend count, as the bullet predicted. Four tests
+  through `server_time` on both sides cover the two outcomes — under the limit it re-sends and
+  succeeds, past it the reset surfaces — and a mutation (retry limit 0) reproduces red before the
+  fix, which is the only evidence that matters for a test claiming to gate something.
+
+  **The coverage is one site, not 54, and saying otherwise would repeat the mistake this file
+  keeps recording.** `server_time` stands in for the roster; nothing checks that the other 53
+  sites call a retrying helper rather than hand-rolling. What changed is that the capability
+  exists, so the next API that needs it has somewhere to assert.
+
+  Precursor in #742: 55 of the stub's 56 struct-literal construction sites became
+  `with_responses` / `with_ordered_responses` calls. A field costs one edit now rather than 56 —
+  and the reason the field was cheap to add is the reason it had never been added.
+
+  The bullet said "49 one-shots" where the bullet above it says 54 and produces the command for
+  it. Sixth instance in this file, and the first where the two numbers were in adjacent bullets.
 
 - **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
   once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
