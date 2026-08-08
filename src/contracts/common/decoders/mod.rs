@@ -1,6 +1,7 @@
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
+use crate::common::error_helpers;
 use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain, SmartComponent};
 
 // `TickOptionComputation` (msg 21, gate 206 PROTOBUF_MARKET_DATA) is decoded
@@ -25,10 +26,7 @@ pub(in crate::contracts) fn decode_contract_descriptions(message: &ResponseMessa
 
 /// Dispatch a `SymbolSamples` frame. Shape mirrors [`decode_smart_components_message`].
 pub(in crate::contracts) fn decode_contract_descriptions_message(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
-    match message.message_type() {
-        IncomingMessages::SymbolSamples => decode_contract_descriptions(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_contract_descriptions(error_helpers::expect_message_type(message, IncomingMessages::SymbolSamples)?)
 }
 
 pub(in crate::contracts) fn decode_market_rule(message: &ResponseMessage) -> Result<MarketRule, Error> {
@@ -37,10 +35,7 @@ pub(in crate::contracts) fn decode_market_rule(message: &ResponseMessage) -> Res
 
 /// Dispatch a `MarketRule` frame. Shape mirrors [`decode_smart_components_message`].
 pub(in crate::contracts) fn decode_market_rule_message(message: &ResponseMessage) -> Result<MarketRule, Error> {
-    match message.message_type() {
-        IncomingMessages::MarketRule => decode_market_rule(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_market_rule(error_helpers::expect_message_type(message, IncomingMessages::MarketRule)?)
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
@@ -125,10 +120,7 @@ pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartCom
 }
 
 pub(in crate::contracts) fn decode_smart_components_message(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
-    match message.message_type() {
-        IncomingMessages::SmartComponents => decode_smart_components(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_smart_components(error_helpers::expect_message_type(message, IncomingMessages::SmartComponents)?)
 }
 
 #[cfg(test)]

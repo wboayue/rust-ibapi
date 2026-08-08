@@ -3,6 +3,7 @@
 
 use prost::Message;
 
+use crate::common::error_helpers;
 use crate::config::{
     ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,
     UpdateConfigResponse,
@@ -16,10 +17,7 @@ use crate::Error;
 /// `IncomingMessages::Error` arm — the dispatcher classifies error frames, so
 /// one never reaches a decoder; see `docs/rules/wire/proto-only-decoding.md`.
 pub(in crate::config) fn decode_config_message(message: &ResponseMessage) -> Result<Config, Error> {
-    match message.message_type() {
-        IncomingMessages::ConfigResponse => decode_config_proto(message.require_proto()?),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_config_proto(error_helpers::expect_message_type(message, IncomingMessages::ConfigResponse)?.require_proto()?)
 }
 
 fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
@@ -131,10 +129,7 @@ fn convert_smart_routing(p: proto::OrdersSmartRoutingConfig) -> OrdersSmartRouti
 /// Dispatch on the incoming message type and forward to the update-config
 /// decoder. Mirrors [`decode_config_message`].
 pub(in crate::config) fn decode_update_config_message(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
-    match message.message_type() {
-        IncomingMessages::UpdateConfigResponse => decode_update_config_proto(message.require_proto()?),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_update_config_proto(error_helpers::expect_message_type(message, IncomingMessages::UpdateConfigResponse)?.require_proto()?)
 }
 
 fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {

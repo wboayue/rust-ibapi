@@ -2,7 +2,24 @@
 
 #![allow(dead_code)] // These utilities will be used by other modules
 
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
+
+/// Narrows a response frame to one expected message type.
+///
+/// Every `decode_*_message` dispatcher answers the same question — is this the
+/// frame I asked for? — and there is exactly one right answer for everything
+/// else: `Error::UnexpectedResponse`, which terminates rather than skips. There
+/// is deliberately no `IncomingMessages::Error` case: the dispatcher classifies
+/// error frames before any decoder sees them, so one cannot arrive here. See
+/// `docs/rules/wire/proto-only-decoding.md`.
+pub fn expect_message_type(message: &ResponseMessage, expected: IncomingMessages) -> Result<&ResponseMessage, Error> {
+    if message.message_type() == expected {
+        Ok(message)
+    } else {
+        Err(Error::unexpected_response(message))
+    }
+}
 
 /// Ensures a value is present, returning an error with the specified message if None
 pub fn require<T>(value: Option<T>, error_message: &str) -> Result<T, Error> {

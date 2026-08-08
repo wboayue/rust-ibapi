@@ -3,6 +3,7 @@
 
 use prost::Message;
 
+use crate::common::error_helpers;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::wsh::{WshEventData, WshMetadata};
 use crate::Error;
@@ -26,17 +27,11 @@ pub(crate) fn decode_wsh_event_data(message: &ResponseMessage) -> Result<WshEven
 /// the one-shot request path reaches this through `RoutedItem::into_legacy`,
 /// which maps errors to `Some(Err(_))` and never runs the processor.
 pub(in crate::wsh) fn decode_metadata_message(message: &ResponseMessage) -> Result<WshMetadata, Error> {
-    match message.message_type() {
-        IncomingMessages::WshMetaData => decode_wsh_metadata(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_wsh_metadata(error_helpers::expect_message_type(message, IncomingMessages::WshMetaData)?)
 }
 
 pub(in crate::wsh) fn decode_event_data_message(message: &ResponseMessage) -> Result<WshEventData, Error> {
-    match message.message_type() {
-        IncomingMessages::WshEventData => decode_wsh_event_data(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+    decode_wsh_event_data(error_helpers::expect_message_type(message, IncomingMessages::WshEventData)?)
 }
 
 pub(crate) fn decode_wsh_metadata_proto(bytes: &[u8]) -> Result<WshMetadata, Error> {

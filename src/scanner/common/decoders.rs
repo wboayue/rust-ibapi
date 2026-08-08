@@ -4,16 +4,14 @@ use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
 use super::super::ScannerData;
+use crate::common::error_helpers;
 
 /// Shared decode function for scanner data messages. Any other message type
 /// becomes `Error::UnexpectedResponse`. There is no `IncomingMessages::Error`
 /// arm because an error frame never reaches a decoder — see
 /// `docs/rules/wire/proto-only-decoding.md`.
-pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    match message.message_type() {
-        IncomingMessages::ScannerData => decode_scanner_data(message),
-        _ => Err(Error::unexpected_response(message)),
-    }
+pub(in crate::scanner) fn decode_scanner_message(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    decode_scanner_data(error_helpers::expect_message_type(message, IncomingMessages::ScannerData)?)
 }
 
 // Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),

@@ -166,3 +166,18 @@ fn test_error_message_formatting() {
         panic!("Expected Error::InvalidArgument");
     }
 }
+
+#[test]
+fn test_expect_message_type() {
+    use crate::messages::{IncomingMessages, ResponseMessage};
+
+    let message = ResponseMessage::from("78\0payload\0");
+
+    let matched = expect_message_type(&message, IncomingMessages::FamilyCodes).expect("matching type must pass through");
+    assert_eq!(matched.message_type(), IncomingMessages::FamilyCodes);
+
+    // Anything else terminates rather than skips — `UnexpectedResponse` no
+    // longer carries dispatch semantics (#732).
+    let err = expect_message_type(&message, IncomingMessages::UserInfo).expect_err("mismatched type must be rejected");
+    assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
+}
