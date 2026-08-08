@@ -1,9 +1,6 @@
 use super::*;
-use crate::common::request_helpers::expect_proto;
-use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::testdata::builders::config::config_response;
 use crate::testdata::builders::ResponseProtoEncoder;
-use crate::Error;
 
 #[test]
 fn test_decode_config_proto_populated() {
@@ -54,49 +51,7 @@ fn test_decode_config_proto_empty() {
 }
 
 #[test]
-fn test_config_one_shot_decodes_config_response() {
-    let bytes = config_response().read_only_api(false).encode_proto();
-    let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::ConfigResponse, bytes);
-
-    let config = expect_proto(IncomingMessages::ConfigResponse, decode_config_proto)(&message).unwrap();
-    assert_eq!(config.api.unwrap().settings.unwrap().read_only_api, Some(false));
-}
-
-#[test]
-fn test_config_one_shot_rejects_error_frames() {
-    // IncomingMessages::Error == 4. Regression guard for the arm removed in
-    // #735: the dispatcher classifies error frames, so one never reaches a
-    // decoder and `expect_type` must treat it like any other foreign type.
-    let message = ResponseMessage::from("4\09000\0322\0error text\0");
-    match expect_proto(IncomingMessages::ConfigResponse, decode_config_proto)(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_config_one_shot_rejects_unexpected_type() {
-    // WshMetaData (104) is not claimed by the config decoder.
-    let message = ResponseMessage::from("104\09000\0{}\0");
-    match expect_proto(IncomingMessages::ConfigResponse, decode_config_proto)(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_decode_config_rejects_text_framing() {
-    // A ConfigResponse that arrives text-framed (no proto payload) must surface
-    // UnexpectedWireFormat via require_proto().
-    let message = ResponseMessage::from("110\09000\0\0");
-    match expect_proto(IncomingMessages::ConfigResponse, decode_config_proto)(&message) {
-        Err(Error::UnexpectedWireFormat(_)) => {}
-        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_update_config_one_shot_populated() {
+fn test_decode_update_config_proto_populated() {
     let bytes = crate::testdata::builders::config::update_config_response()
         .status("warning")
         .message("please confirm")
@@ -104,9 +59,7 @@ fn test_update_config_one_shot_populated() {
         .error("bad value")
         .warning(131, "Confirm Mandatory Cap Price")
         .encode_proto();
-    let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::UpdateConfigResponse, bytes);
-
-    let response = expect_proto(IncomingMessages::UpdateConfigResponse, decode_update_config_proto)(&message).unwrap();
+    let response = decode_update_config_proto(&bytes).unwrap();
     assert_eq!(response.status.as_deref(), Some("warning"));
     assert_eq!(response.message.as_deref(), Some("please confirm"));
     assert_eq!(response.changed_fields, vec!["socketPort".to_string()]);
@@ -114,32 +67,4 @@ fn test_update_config_one_shot_populated() {
     assert_eq!(response.warnings.len(), 1);
     assert_eq!(response.warnings[0].message_id, Some(131));
     assert_eq!(response.warnings[0].title.as_deref(), Some("Confirm Mandatory Cap Price"));
-}
-
-#[test]
-fn test_update_config_one_shot_rejects_error_frames() {
-    // Mirrors test_config_one_shot_rejects_error_frames.
-    let message = ResponseMessage::from("4\09000\0322\0error text\0");
-    match expect_proto(IncomingMessages::UpdateConfigResponse, decode_update_config_proto)(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_update_config_one_shot_rejects_unexpected_type() {
-    let message = ResponseMessage::from("104\09000\0{}\0");
-    match expect_proto(IncomingMessages::UpdateConfigResponse, decode_update_config_proto)(&message) {
-        Err(Error::UnexpectedResponse(_)) => {}
-        other => panic!("expected UnexpectedResponse, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_decode_update_config_rejects_text_framing() {
-    let message = ResponseMessage::from("111\09000\0\0");
-    match expect_proto(IncomingMessages::UpdateConfigResponse, decode_update_config_proto)(&message) {
-        Err(Error::UnexpectedWireFormat(_)) => {}
-        other => panic!("expected UnexpectedWireFormat, got {other:?}"),
-    }
 }

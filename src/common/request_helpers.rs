@@ -46,16 +46,26 @@ pub(crate) fn fold_one_shot_mut<R>(
 /// for that message's protobuf payload.
 ///
 /// Narrowing used to be opt-in: each domain hand-wrote a `decode_*_message`
-/// wrapper doing `expect_type(..)?` before its real decoder, and the call sites
-/// that forgot one simply decoded whatever frame arrived on the shared channel.
-/// Threading the expected type through the processor makes it structural — a
-/// one-shot helper cannot be handed a decoder without also being told which
-/// frame it belongs to.
+/// wrapper doing `expect_type(..)?` before its real decoder, and the sites that
+/// had no wrapper decoded whatever frame arrived on the shared channel.
+/// Threading the expected type through the processor puts both halves at the
+/// call site, where the request that asked for the frame is.
 ///
-/// Not for [`StreamDecoder`](crate::client::StreamDecoder) implementations:
-/// there the accepted set is already declared in `RESPONSE_MESSAGE_IDS` and the
-/// drivers filter on it, so a narrow inside `decode` would be a third copy of
-/// the same fact.
+/// **The type system does not enforce this**, and saying otherwise would be the
+/// more dangerous mistake. `expected` and `decode` are unrelated — `R` is
+/// inferred from the decoder — so a mispaired call compiles and feeds one
+/// message's bytes to another's prost type; and the one-shot helpers still take
+/// a bare `impl Fn(&ResponseMessage)`, so a decoder that skips the narrow also
+/// compiles. Both are caught by `test_expect_proto_sites_match_the_roster`
+/// (`src/common/one_shot_pairing_tests.rs`), which is the gate, not the signature.
+///
+/// Not for [`StreamDecoder`](crate::client::StreamDecoder) implementations —
+/// but not because a narrow there is redundant. `decode` still owes its
+/// `_ => Err(unexpected_response(..))` backstop, and a single-type decoder has
+/// no match to hang one on, so `message.expect_type(..)?` *is* its backstop:
+/// drop it and `test_response_message_ids_match_decode_arms` reads the decoder
+/// as claiming an arm for every message type. What `expect_proto` would add
+/// there is the payload decode, which `decode` already owns.
 pub(crate) fn expect_proto<R>(
     expected: IncomingMessages,
     decode: impl Fn(&[u8]) -> Result<R, Error>,
@@ -66,6 +76,10 @@ pub(crate) fn expect_proto<R>(
 #[cfg(test)]
 #[path = "request_helpers_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "one_shot_pairing_tests.rs"]
+mod one_shot_pairing_tests;
 
 // Sync implementations
 #[cfg(feature = "sync")]

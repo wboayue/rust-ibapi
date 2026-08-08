@@ -15,7 +15,8 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshMetaData];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_metadata_message(message)
+        // Single-arm backstop; see the scanner impl for why this is not redundant.
+        decoders::decode_wsh_metadata(message.expect_type(IncomingMessages::WshMetaData)?)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -28,7 +29,7 @@ impl StreamDecoder<WshEventData> for WshEventData {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshEventData];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_event_data_message(message)
+        decoders::decode_wsh_event_data(message.expect_type(IncomingMessages::WshEventData)?)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {

@@ -3,7 +3,7 @@
 use time::OffsetDateTime;
 
 use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription};
-use crate::common::request_helpers::expect_proto;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, Error};
@@ -28,7 +28,7 @@ impl Client {
     /// println!("server time: {server_time:?}");
     /// ```
     pub fn server_time(&self) -> Result<OffsetDateTime, Error> {
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
@@ -41,7 +41,7 @@ impl Client {
     pub fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version, Features::CURRENT_TIME_IN_MILLIS)?;
 
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
@@ -70,7 +70,7 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        crate::common::request_helpers::blocking::shared_subscription(
+        request_helpers::blocking::shared_subscription(
             self,
             Features::POSITIONS,
             OutgoingMessages::RequestPositions,
@@ -130,7 +130,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        crate::common::request_helpers::blocking::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
+        request_helpers::blocking::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
     }
 
     /// Requests real time updates for daily PnL of individual positions.
@@ -158,7 +158,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
-        crate::common::request_helpers::blocking::request_with_id(self, Features::REALIZED_PNL, |id| {
+        request_helpers::blocking::request_with_id(self, Features::REALIZED_PNL, |id| {
             encoders::encode_request_pnl_single(id, account, contract_id, model_code)
         })
     }
@@ -186,7 +186,7 @@ impl Client {
     /// }
     /// ```
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        crate::common::request_helpers::blocking::request_with_id(self, Features::ACCOUNT_SUMMARY, |id| {
+        request_helpers::blocking::request_with_id(self, Features::ACCOUNT_SUMMARY, |id| {
             encoders::encode_request_account_summary(id, group, tags)
         })
     }
@@ -223,7 +223,7 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
-        crate::common::request_helpers::blocking::shared_request(self, OutgoingMessages::RequestAccountData, || {
+        request_helpers::blocking::shared_request(self, OutgoingMessages::RequestAccountData, || {
             encoders::encode_request_account_updates(true, account)
         })
     }
@@ -286,7 +286,7 @@ impl Client {
     /// println!("managed accounts: {accounts:?}")
     /// ```
     pub fn managed_accounts(&self) -> Result<Vec<String>, Error> {
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
@@ -297,7 +297,7 @@ impl Client {
 
     /// Get current [FamilyCode]s for all accessible accounts.
     pub fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        crate::common::request_helpers::blocking::one_shot_request(
+        request_helpers::blocking::one_shot_request(
             self,
             Features::FAMILY_CODES,
             OutgoingMessages::RequestFamilyCodes,
@@ -324,7 +324,7 @@ impl Client {
     pub fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
         check_version(self.server_version, Features::SOFT_DOLLAR_TIER)?;
 
-        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+        request_helpers::blocking::one_shot_request_with_retry(
             self,
             encoders::encode_request_soft_dollar_tiers,
             expect_proto(IncomingMessages::SoftDollarTier, decoders::decode_soft_dollar_tiers_proto),
@@ -347,7 +347,7 @@ impl Client {
     pub fn user_info(&self) -> Result<UserInfo, Error> {
         check_version(self.server_version, Features::USER_INFO)?;
 
-        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+        request_helpers::blocking::one_shot_request_with_retry(
             self,
             encoders::encode_request_user_info,
             expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
@@ -372,7 +372,7 @@ impl Client {
     /// println!("{}", cfg.xml);
     /// ```
     pub fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::RequestFA,
             || encoders::encode_request_fa(fa_data_type as i32),
@@ -401,7 +401,7 @@ impl Client {
     pub fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
         check_version(self.server_version, Features::REPLACE_FA_END)?;
 
-        crate::common::request_helpers::blocking::one_shot_request_with_retry(
+        request_helpers::blocking::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
             expect_proto(IncomingMessages::ReplaceFAEnd, decoders::decode_replace_fa_end_proto),
@@ -444,7 +444,7 @@ impl Client {
     pub fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
         check_version(self.server_version, Features::LINKING)?;
 
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyRequest,
             || encoders::encode_verify_request(api_name, api_version),
@@ -472,7 +472,7 @@ impl Client {
     pub fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
         check_version(self.server_version, Features::LINKING)?;
 
-        crate::common::request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyMessage,
             || encoders::encode_verify_message(api_data),

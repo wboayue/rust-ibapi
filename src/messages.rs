@@ -840,7 +840,7 @@ impl ResponseMessage {
         if self.message_type() == expected {
             Ok(self)
         } else {
-            Err(Error::unexpected_response(self))
+            Err(Error::UnexpectedResponse(format!("expected {expected:?}, got {self:?}")))
         }
     }
 

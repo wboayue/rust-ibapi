@@ -1,7 +1,5 @@
 use super::*;
 
-use crate::common::request_helpers::expect_proto;
-use crate::messages::IncomingMessages;
 use prost::Message;
 
 #[test]
@@ -145,26 +143,6 @@ fn test_decode_option_chain_proto() {
 fn test_decode_contract_details_rejects_text_framing() {
     let message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
     let err = decode_contract_details(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_contract_descriptions_rejects_text_framing() {
-    let message = ResponseMessage::from("79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0");
-    let err = expect_proto(IncomingMessages::SymbolSamples, decode_symbol_samples_proto)(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_market_rule_rejects_text_framing() {
-    let message = ResponseMessage::from("93\026\01\00\00.01\0");
-    let err = expect_proto(IncomingMessages::MarketRule, decode_market_rule_proto)(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"

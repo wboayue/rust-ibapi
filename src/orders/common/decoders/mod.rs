@@ -141,8 +141,8 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
     })
 }
 
-pub(crate) fn decode_next_valid_id(message: &ResponseMessage) -> Result<i32, Error> {
-    let p: crate::proto::NextValidId = prost::Message::decode(message.require_proto()?)?;
+pub(crate) fn decode_next_valid_id_proto(bytes: &[u8]) -> Result<i32, Error> {
+    let p: crate::proto::NextValidId = prost::Message::decode(bytes)?;
     Ok(p.order_id.unwrap_or_default())
 }
 

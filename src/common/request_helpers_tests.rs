@@ -3,7 +3,7 @@ use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
 fn current_time_message() -> ResponseMessage {
-    ResponseMessage::from_protobuf(IncomingMessages::CurrentTime as i32, vec![])
+    crate::common::test_utils::helpers::proto_response(IncomingMessages::CurrentTime, vec![])
 }
 
 #[test]
@@ -40,24 +40,15 @@ fn test_fold_one_shot_delegates_closed_stream_to_on_none() {
 }
 
 #[test]
-fn test_fold_one_shot_mut_shares_the_fold_one_shot_disposition() {
-    // Same three arms as fold_one_shot; only the processor's borrow differs.
+fn test_fold_one_shot_mut_hands_the_processor_a_mutable_borrow() {
+    // The three arms are covered above — `fold_one_shot` delegates here — so all
+    // this pins is the `&mut` shape the four option-computation sites need.
     let result = fold_one_shot_mut(
         Some(Ok(current_time_message())),
-        |m| Ok(m.message_type()),
+        |m: &mut ResponseMessage| Ok(m.message_type()),
         || Err(Error::UnexpectedEndOfStream),
     );
     assert!(matches!(result, Ok(IncomingMessages::CurrentTime)));
-
-    let result: Result<IncomingMessages, Error> = fold_one_shot_mut(
-        Some(Err(Error::ConnectionReset)),
-        |m| Ok(m.message_type()),
-        || panic!("on_none must not run for Some(Err)"),
-    );
-    assert!(matches!(result, Err(Error::ConnectionReset)));
-
-    let result: Result<i32, Error> = fold_one_shot_mut(None, |_| Ok(1), || Ok(0));
-    assert!(matches!(result, Ok(0)));
 }
 
 #[test]

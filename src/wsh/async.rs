@@ -3,7 +3,8 @@
 use time::Date;
 
 use crate::{
-    common::request_helpers,
+    common::request_helpers::{self, expect_proto},
+    messages::IncomingMessages,
     protocol::{check_version, Features},
     subscriptions::Subscription,
     Client, Error,
@@ -29,9 +30,12 @@ impl Client {
     pub async fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
         check_version(self.server_version(), Features::WSHE_CALENDAR)?;
 
-        request_helpers::one_shot_request_with_retry(self, encoders::encode_request_wsh_metadata, decoders::decode_metadata_message, || {
-            Err(Error::UnexpectedEndOfStream)
-        })
+        request_helpers::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_wsh_metadata,
+            expect_proto(IncomingMessages::WshMetaData, decoders::decode_wsh_metadata_proto),
+            || Err(Error::UnexpectedEndOfStream),
+        )
         .await
     }
 
@@ -83,7 +87,7 @@ impl Client {
         request_helpers::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
-            decoders::decode_event_data_message,
+            expect_proto(IncomingMessages::WshEventData, decoders::decode_wsh_event_data_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await

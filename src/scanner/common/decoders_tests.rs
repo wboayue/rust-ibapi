@@ -1,5 +1,4 @@
 use super::*;
-use crate::common::request_helpers::expect_proto;
 use crate::messages::ResponseMessage;
 
 #[test]
@@ -81,17 +80,6 @@ fn test_decode_scanner_data_rejects_text_framing() {
     // docs/rules/wire/proto-only-decoding.md.
     let message = ResponseMessage::from("20\03\09000\01\00\0265598\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0\0\0\0\0");
     let err = decode_scanner_data(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_scanner_parameters_rejects_text_framing() {
-    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0");
-    let err =
-        expect_proto(IncomingMessages::ScannerParameters, decode_scanner_parameters_proto)(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"

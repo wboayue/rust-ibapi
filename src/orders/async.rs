@@ -2,7 +2,8 @@
 
 use time::OffsetDateTime;
 
-use crate::messages::OutgoingMessages;
+use crate::common::request_helpers::expect_proto;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
@@ -221,10 +222,11 @@ impl Client {
 
         let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
 
-        let next_order_id =
-            crate::common::request_helpers::fold_one_shot(internal_subscription.next().await, decoders::decode_next_valid_id, || {
-                Err(Error::UnexpectedEndOfStream)
-            })?;
+        let next_order_id = crate::common::request_helpers::fold_one_shot(
+            internal_subscription.next().await,
+            expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
+            || Err(Error::UnexpectedEndOfStream),
+        )?;
 
         self.set_next_order_id(next_order_id);
         Ok(next_order_id)

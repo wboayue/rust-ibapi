@@ -3,8 +3,9 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
+use crate::common::request_helpers::expect_proto;
 use crate::contracts::Contract;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 
@@ -218,8 +219,11 @@ impl Client {
 
         let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-        let next_order_id =
-            crate::common::request_helpers::fold_one_shot(subscription.next(), decoders::decode_next_valid_id, || Err(Error::UnexpectedEndOfStream))?;
+        let next_order_id = crate::common::request_helpers::fold_one_shot(
+            subscription.next(),
+            expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
+            || Err(Error::UnexpectedEndOfStream),
+        )?;
 
         self.set_next_order_id(next_order_id);
         Ok(next_order_id)

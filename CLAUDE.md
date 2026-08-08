@@ -54,6 +54,9 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Adding a `ResponseMessage` accessor, or a public API on a proto inbound message type** →
   [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md)
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
+- **Adding a one-shot client method, or passing a processor to a `one_shot_*` helper** →
+  [one-shot narrowing](docs/rules/wire/one-shot-narrowing.md) — the `(message type, decoder)`
+  pair is gated by a hand-listed roster, not by the type system
 
 ### Code structure and style
 

@@ -3,7 +3,7 @@
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
-use crate::common::request_helpers::expect_proto;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
@@ -108,7 +108,7 @@ impl Client {
     /// }
     /// ```
     pub async fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        crate::common::request_helpers::one_shot_request(
+        request_helpers::one_shot_request(
             self,
             Features::FAMILY_CODES,
             OutgoingMessages::RequestFamilyCodes,
@@ -336,7 +336,7 @@ impl Client {
     /// }
     /// ```
     pub async fn managed_accounts(&self) -> Result<Vec<String>, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
@@ -361,7 +361,7 @@ impl Client {
     /// }
     /// ```
     pub async fn server_time(&self) -> Result<OffsetDateTime, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
@@ -375,7 +375,7 @@ impl Client {
     pub async fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::CURRENT_TIME_IN_MILLIS)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
@@ -405,7 +405,7 @@ impl Client {
     pub async fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
         check_version(self.server_version(), Features::SOFT_DOLLAR_TIER)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             encoders::encode_request_soft_dollar_tiers,
             expect_proto(IncomingMessages::SoftDollarTier, decoders::decode_soft_dollar_tiers_proto),
@@ -431,7 +431,7 @@ impl Client {
     pub async fn user_info(&self) -> Result<UserInfo, Error> {
         check_version(self.server_version(), Features::USER_INFO)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             encoders::encode_request_user_info,
             expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
@@ -459,7 +459,7 @@ impl Client {
     /// }
     /// ```
     pub async fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestFA,
             move || encoders::encode_request_fa(fa_data_type as i32),
@@ -491,7 +491,7 @@ impl Client {
     pub async fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
         check_version(self.server_version(), Features::REPLACE_FA_END)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             move |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
             expect_proto(IncomingMessages::ReplaceFAEnd, decoders::decode_replace_fa_end_proto),
@@ -539,7 +539,7 @@ impl Client {
     pub async fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
         check_version(self.server_version(), Features::LINKING)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyRequest,
             move || encoders::encode_verify_request(api_name, api_version),
@@ -570,7 +570,7 @@ impl Client {
     pub async fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
         check_version(self.server_version(), Features::LINKING)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyMessage,
             move || encoders::encode_verify_message(api_data),

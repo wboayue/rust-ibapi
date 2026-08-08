@@ -1,15 +1,9 @@
 use prost::Message;
 
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::Error;
 
 use super::super::ScannerData;
-
-/// Shared decode entry point for scanner data frames. Narrowing rationale lives
-/// on [`ResponseMessage::expect_type`].
-pub(in crate::scanner) fn decode_scanner_message(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    decode_scanner_data(message.expect_type(IncomingMessages::ScannerData)?)
-}
 
 // Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
 // at or below the connection floor (`require_protobuf_support`), so the server
