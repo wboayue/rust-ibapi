@@ -420,6 +420,32 @@ it.** Three PRs in a row here found the answer in `RESPONSE_MESSAGE_IDS` — #73
 routing guard, #732 for the skip filter — a constant that had been dead code for most of its
 life.
 
+## The maintenance protocol is load-bearing now
+
+The founding motivation for this migration was that **the rules rotted silently** — nothing
+compile-checks `CLAUDE.md`, and every one of the six cluster audits found decay. `just
+rules-check` closed the structural half (links, ids, `related`, `@`-imports, line-number
+citations) but validates nothing about whether a node is still *true*, which is the half that
+actually decayed.
+
+That gap was covered only by prose in `docs/rules/README.md` — a file that loads on demand,
+i.e. exactly when you are already thinking about the graph, and never when you are deleting a
+function some node happens to cite. The obligations now live in
+[Maintaining the rule graph](../CLAUDE.md#maintaining-the-rule-graph) in permanent context, and
+`docs/rules/README.md` keeps the mechanics and points up rather than restating them.
+
+Cost: `CLAUDE.md` goes 1,256 → 1,558 words. Against the 5,012 the migration started from, that
+is still a 69% cut, and it buys the one thing the index could not previously do — fire on
+*writing* a claim rather than on reading one.
+
+What made it into permanent context is what the audits proved, not everything that could be
+said: retire-don't-delete, grep the graph when renaming, put a command behind every count,
+append precedents including the ones that became counter-examples, and treat a node describing
+its own silent failure as a missing gate. The counts rule earns its line twice over — two
+fabricated counts shipped in the `style/` pass in prose *about* fabricated counts, and the
+`#734` follow-up bullet in this file got both its numbers wrong (41 vs 78 entries, eight vs 16
+decoders).
+
 ## Follow-ups
 
 - ~~**Cross-check the two lists so `RESPONSE_MESSAGE_IDS` cannot drift from the `decode`

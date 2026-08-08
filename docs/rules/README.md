@@ -12,12 +12,17 @@ enough to keep in context permanently while the reasoning stays available on dem
 
 ## When a convention changes
 
-Update the node, not just the code. A new convention gets a node plus one index line in
-`CLAUDE.md`; a changed one gets its directive rewritten and its precedent extended; a retired
-one becomes `status: historical` and leaves the index. Nothing here is compile-checked, so a
-node that no longer matches `src/` is indistinguishable from one that does until someone reads
-both — which is how five errors accumulated across rules 15–20 before the first audit found
-them.
+The obligations — when a node is created, rewritten, or retired, and what has to be re-checked
+alongside it — are in **[Maintaining the rule graph](../../CLAUDE.md#maintaining-the-rule-graph)**,
+because they have to fire without opening this file. This page carries the mechanics they refer
+to: the node format below, `triggers` phrasing, `status`, links, and the validator.
+
+The reason those obligations are worth their space in permanent context: nothing here is
+compile-checked, so a node that no longer matches `src/` is indistinguishable from one that
+does until someone reads both. That is how five errors accumulated across rules 15–20 before
+the first audit found them, and every cluster audited since has had the same class — names
+decay quietly, and completeness claims ("fully applied", "zero remaining", "every `pub fn`")
+decay faster than names.
 
 ## Node format
 
