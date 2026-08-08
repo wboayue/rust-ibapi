@@ -56,7 +56,7 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
 - **Adding a one-shot client method, or passing a processor to a `one_shot_*` helper** →
   [one-shot narrowing](docs/rules/wire/one-shot-narrowing.md) — the `(message type, decoder)`
-  pair is gated by a hand-listed roster, not by the type system
+  pair lives on the payload's `ProtoPayload` impl, so the call site names neither
 
 ### Code structure and style
 
@@ -69,6 +69,9 @@ precedents. Every rule now lives in a node; nothing is inline.
   [narrow re-exports](docs/rules/style/narrow-reexports.md)
 - **About to write a `macro_rules!`, or reviewing one** →
   [macros last resort](docs/rules/style/macros-last-resort.md)
+- **Adding a named builder method that sets an enum, or adding a variant to such an enum** →
+  [builder enum coverage](docs/rules/style/builder-enum-coverage.md) — exhaustiveness checking
+  does not reach "one setter per variant"
 
 ### Testing
 

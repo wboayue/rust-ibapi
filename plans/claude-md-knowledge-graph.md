@@ -3,10 +3,13 @@
 Migration roadmap. `CLAUDE.md` becomes a trigger-phrased index; each directive becomes one
 node under `docs/rules/` carrying its own evidence and typed edges.
 
-**Status: complete.** All six clusters — `wire/`, `testing/`, `parity/`, `workflow/`, `style/`,
-`docs/` — are migrated. `CLAUDE.md` carries no inline rules and rule numbering is retired.
-`CLAUDE.md` was 5,012 words when the migration started and is 1,310 now — a 74% cut in what
-every session loads, with none of the content lost.
+**Status: complete, follow-ups closed.** All six clusters — `wire/`, `testing/`, `parity/`,
+`workflow/`, `style/`, `docs/` — are migrated, `CLAUDE.md` carries no inline rules, and rule
+numbering is retired. `CLAUDE.md` was 5,012 words when the migration started and is 1,625 now
+(`wc -w CLAUDE.md`) — a 68% cut in what every session loads, with none of the content lost.
+
+The follow-up list below is worked through; see [Where this ended up](#where-this-ended-up) for
+what each item became.
 
 ## Why
 
@@ -856,14 +859,30 @@ decoders).
   The bullet said "49 one-shots" where the bullet above it says 54 and produces the command for
   it. Sixth instance in this file, and the first where the two numbers were in adjacent bullets.
 
-- **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
-  once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
-  checking that a cited symbol exists does not check it. The two live counts are 134/152
-  `# Examples` and the `<dir>/tests.rs` residue.
-- **Close the two inventories the audits opened.** Eight missing `# Examples` and the
-  `param-budget` violations both sit in
-  [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
-  take-one-when-you-are-in-the-file work rather than sweeps.
+- ~~**Re-audit on a cadence, counting the completeness claims.**~~ **Both live counts re-run in
+  #751 and #753, and both had moved.** `# Examples` was "132 of 152"; it is 143 of 154 with zero
+  genuine gaps (11 exempt accessors). The `<dir>/tests.rs` residue was "about two dozen"; it is
+  21, against 85 flat `*_tests.rs`. Neither node had been wrong about *what* was missing — both
+  were wrong about the total, because the denominator moves with every PR that adds a method or
+  a test file.
+
+  **That is the durable finding, and it is narrower than "counts rot".** Across every count this
+  arc corrected — 40 vs 24 text-framing tests, 42 vs 44 `on_none` sites, 49 vs 54 one-shots,
+  132/152 vs 143/154 examples, four vs 26 unnarrowed sites — the *list* was right and the
+  *total* was stale in all but one. Lists are written by looking; totals are written by
+  remembering. Both nodes now carry the command beside the number.
+
+- ~~**Close the two inventories the audits opened.**~~ **Both closed.** The `# Examples` half in
+  #751 (eight methods written, zero genuine gaps left). The `param-budget` half in #752: its one
+  "strong builder candidate" — `wsh_event_data_by_contract`, 1 required argument and 4 `Option`s
+  — became a builder, along with `wsh_event_data_by_filter`. **Every call site in the repository
+  passed `None` for every optional argument**, examples and integration tests alike, which is
+  the cleanest evidence a signature can give that nobody is choosing.
+
+  The other two public sites keep the decisions the audit already made (`option_chain`:
+  deferred, and the interesting fix is `Option<Exchange>` rather than a builder;
+  `historical_news`: skip). The four internal violations stay take-one-when-you-are-in-the-file.
+
 - ~~**Finish the error-classification audit.**~~ **Shipped in #746: deleted, and the enforcement
   question dissolved with them.** The bullet asked whether `is_transient_error` and
   `categorize_error` have a future. Their module said so itself: *"Remove this when async
@@ -888,15 +907,62 @@ decoders).
   future that nothing re-checks.** The condition here was checkable in one grep, and the answer
   had been "yes, and it went another way" for months.
 
-- **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
-  same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole
-  fixture/builder group sits outside the wikilink graph using backticked filenames; and one
-  dangling `[[dual-feature-public-types]]` points at CLAUDE.md rule 12 — now resolvable, since
-  rule 12 is `parity/dual-feature-types.md`. The release-notes attribution convention that
-  lived only in that store is now in [release notes](../docs/rules/docs/release-notes.md);
-  sweep for others like it.
-- **Consider promoting clusters to subagents.** The node bodies would become the agent
-  prompts. Stronger enforcement (the agent always has its rules) at the cost of a round-trip
-  and losing the rules from the main thread. The cluster boundaries held across all six passes
-  with only one node splitting across two clusters (rule 19), so the precondition is now met —
-  this is the next structural question, if there is one.
+- ~~**Reconcile the maintainer's memory store.**~~ **Done, and the drift was structural rather
+  than cosmetic.** The store had 84 memories, of which **82 carried a `name:` that was not the
+  filename** — a title (`Branch-then-PR default for substantive changes`) where the format wants
+  the slug that `[[wikilinks]]` resolve against. That is what produced the two syntaxes: writers
+  linked to what a file *looked* like it was called, so 12 of 27 distinct wikilinks dangled,
+  every one of them a kebab-case spelling of an existing snake_case file.
+
+  Fixed by making `name:` the filename stem everywhere (82 files), rewriting the 19 kebab links
+  onto their real targets, and converting the 21 backticked `` `feedback_x.md` `` cross-references
+  — the fixture/builder group the bullet named — into wikilinks. The graph now has 34 links and
+  zero dangling. The one genuine orphan was `[[dual-feature-public-types]]`, which never pointed
+  at a memory at all: its target is the rule node `parity/dual-feature-types.md`, and it now says
+  so in prose rather than as a link that cannot resolve by construction.
+
+  **The convention sweep the bullet asked for found one.** "A fluent builder's named methods must
+  cover every variant of the enum they wrap" lived only in
+  [[feedback_builder_enum_coverage_audit]] — a real convention, established by #549, with a
+  bug class and a canary (`_ => unreachable!()` at a caller) and no node. It has one now:
+  [builder enum coverage](../docs/rules/style/builder-enum-coverage.md). Everything else in the
+  store that reads like a convention was already covered — the branch-then-PR default by
+  `CLAUDE.md`'s Branches section, the toolchain pin by
+  [pinned toolchain](../docs/rules/workflow/pinned-toolchain.md), the builder entry-point form by
+  [fixture builders](../docs/rules/testing/fixture-builders.md), release-note attribution by
+  [release notes](../docs/rules/docs/release-notes.md).
+
+- ~~**Consider promoting clusters to subagents.**~~ **Decided: no, and the reason came out of the
+  work rather than out of the design.** The precondition held — cluster boundaries survived all
+  six passes — but the premise did not. The bullet's case was *stronger enforcement*: an agent
+  always carries its own rules.
+
+  Nothing in this arc was caught by a rule being loaded at the right moment. The routing gap
+  (#730), the mispairing (#738/#749), the drifted `TickDecoder` consts (#739), the shadow
+  `submit_all` (#750) and the async retry inversion (#744) were each caught by a test that could
+  fail, and each of them had been described accurately in prose for weeks or months beforehand.
+  The graph's job is to carry *why*, so the next author changing the gate knows what it is for;
+  it is not the enforcement layer, and moving it into a subagent would trade context for a
+  property it does not have.
+
+  Revisit only if a cluster's nodes stop fitting in a read — the cost that would actually change
+  the calculation is size, not retrieval.
+
+## Where this ended up
+
+Every follow-up above is closed. What the arc converted, in one line each:
+
+| Was prose | Is now |
+|---|---|
+| "register new request-id APIs in the allow-list" | `debug_assert_request_id_routable` (#730) |
+| "a text-framed fixture skips silently" | `Error::UnexpectedWireFormat` (#731) |
+| "`RESPONSE_MESSAGE_IDS` must match the `decode` arms" | `test_response_message_ids_match_decode_arms` (#733, #739) |
+| "pair the message type with the right decoder" | `ProtoPayload::MESSAGE_ID` (#749) |
+| "every one-shot should retry" | one helper, no non-retrying alternative (#741, #745) |
+| "the retry wiring is untested" | `with_connection_resets` + four tests (#743) |
+| "these tests re-implement the code they test" | deleted, with the mock (#750) |
+
+The pattern the whole arc repeats: **a rule that describes its own silent failure is a missing
+gate, and the fix is usually already declared somewhere in the tree.** Three PRs found the fact
+they needed in `RESPONSE_MESSAGE_IDS`; #749 found it in the generated `prost` types; #746 found
+that the module's own TODO had already answered the question.
