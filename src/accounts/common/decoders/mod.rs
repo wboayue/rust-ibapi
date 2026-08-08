@@ -45,20 +45,17 @@ pub(crate) fn decode_account_update_time(message: &ResponseMessage) -> Result<Ac
     decode_account_update_time_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_server_time_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
-    let proto = proto::CurrentTime::decode(bytes)?;
+pub(crate) fn decode_server_time_proto(proto: crate::proto::CurrentTime) -> Result<OffsetDateTime, Error> {
     let timestamp = proto.current_time.unwrap_or(0);
     OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_proto("current_time", e.to_string()))
 }
 
-pub(crate) fn decode_server_time_millis_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
-    let proto = proto::CurrentTimeInMillis::decode(bytes)?;
+pub(crate) fn decode_server_time_millis_proto(proto: crate::proto::CurrentTimeInMillis) -> Result<OffsetDateTime, Error> {
     let millis = proto.current_time_in_millis.unwrap_or(0);
     OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
 }
 
-pub(crate) fn decode_managed_accounts_proto(bytes: &[u8]) -> Result<Vec<String>, Error> {
-    let p = proto::ManagedAccounts::decode(bytes)?;
+pub(crate) fn decode_managed_accounts_proto(p: crate::proto::ManagedAccounts) -> Result<Vec<String>, Error> {
     Ok(p.accounts_list
         .as_deref()
         .unwrap_or_default()
@@ -170,8 +167,7 @@ pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMu
     })
 }
 
-pub(crate) fn decode_family_codes_proto(bytes: &[u8]) -> Result<Vec<FamilyCode>, Error> {
-    let p = proto::FamilyCodes::decode(bytes)?;
+pub(crate) fn decode_family_codes_proto(p: crate::proto::FamilyCodes) -> Result<Vec<FamilyCode>, Error> {
     Ok(p.family_codes
         .into_iter()
         .map(|c| FamilyCode {
@@ -181,20 +177,17 @@ pub(crate) fn decode_family_codes_proto(bytes: &[u8]) -> Result<Vec<FamilyCode>,
         .collect())
 }
 
-pub(crate) fn decode_soft_dollar_tiers_proto(bytes: &[u8]) -> Result<Vec<SoftDollarTier>, Error> {
-    let p = proto::SoftDollarTiers::decode(bytes)?;
+pub(crate) fn decode_soft_dollar_tiers_proto(p: crate::proto::SoftDollarTiers) -> Result<Vec<SoftDollarTier>, Error> {
     Ok(p.soft_dollar_tiers.iter().map(proto::decoders::decode_soft_dollar_tier).collect())
 }
 
-pub(crate) fn decode_user_info_proto(bytes: &[u8]) -> Result<UserInfo, Error> {
-    let p = proto::UserInfo::decode(bytes)?;
+pub(crate) fn decode_user_info_proto(p: crate::proto::UserInfo) -> Result<UserInfo, Error> {
     Ok(UserInfo {
         white_branding_id: p.white_branding_id.unwrap_or_default(),
     })
 }
 
-pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
-    let p = proto::ReceiveFa::decode(bytes)?;
+pub(crate) fn decode_receive_fa_proto(p: crate::proto::ReceiveFa) -> Result<FaConfig, Error> {
     let fa_data_type = p
         .fa_data_type
         .ok_or_else(|| Error::Parse(0, String::new(), "missing fa_data_type in ReceiveFa".into()))
@@ -205,22 +198,19 @@ pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
     })
 }
 
-pub(crate) fn decode_replace_fa_end_proto(bytes: &[u8]) -> Result<ReplaceFaResult, Error> {
-    let p = proto::ReplaceFaEnd::decode(bytes)?;
+pub(crate) fn decode_replace_fa_end_proto(p: crate::proto::ReplaceFaEnd) -> Result<ReplaceFaResult, Error> {
     Ok(ReplaceFaResult {
         text: p.text.unwrap_or_default(),
     })
 }
 
-pub(crate) fn decode_verify_message_api_proto(bytes: &[u8]) -> Result<VerificationChallenge, Error> {
-    let p = proto::VerifyMessageApi::decode(bytes)?;
+pub(crate) fn decode_verify_message_api_proto(p: crate::proto::VerifyMessageApi) -> Result<VerificationChallenge, Error> {
     Ok(VerificationChallenge {
         api_data: p.api_data.unwrap_or_default(),
     })
 }
 
-pub(crate) fn decode_verify_completed_proto(bytes: &[u8]) -> Result<VerificationResult, Error> {
-    let p = proto::VerifyCompleted::decode(bytes)?;
+pub(crate) fn decode_verify_completed_proto(p: crate::proto::VerifyCompleted) -> Result<VerificationResult, Error> {
     Ok(VerificationResult {
         is_successful: p.is_successful.unwrap_or_default(),
         error_text: p.error_text.unwrap_or_default(),

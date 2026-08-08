@@ -74,10 +74,7 @@ fn test_decode_symbol_samples_proto() {
             },
         ],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_symbol_samples_proto(&bytes).unwrap();
+    let result = decode_symbol_samples_proto(proto_msg).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].contract.contract_id, 265598);
     assert_eq!(result[0].contract.symbol.to_string(), "AAPL");
@@ -101,10 +98,7 @@ fn test_decode_market_rule_proto() {
             },
         ],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_market_rule_proto(&bytes).unwrap();
+    let result = decode_market_rule_proto(proto_msg).unwrap();
     assert_eq!(result.market_rule_id, 26);
     assert_eq!(result.price_increments.len(), 2);
     assert_eq!(result.price_increments[0].low_edge, 0.0);

@@ -1,6 +1,7 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
+use crate::proto::payload::ProtoPayload;
 use crate::Error;
 
 /// Fold a one-shot subscription's single response into a result.
@@ -63,13 +64,17 @@ pub(crate) fn empty_on_end_of_stream<R: Default>(error: Error) -> Result<R, Erro
 /// Threading the expected type through the processor puts both halves at the
 /// call site, where the request that asked for the frame is.
 ///
-/// **The type system does not enforce this**, and saying otherwise would be the
-/// more dangerous mistake. `expected` and `decode` are unrelated — `R` is
-/// inferred from the decoder — so a mispaired call compiles and feeds one
-/// message's bytes to another's prost type; and the one-shot helpers still take
-/// a bare `impl Fn(&ResponseMessage)`, so a decoder that skips the narrow also
-/// compiles. Both are caught by `test_expect_proto_sites_match_the_roster`
-/// (`src/common/one_shot_pairing_tests.rs`), which is the gate, not the signature.
+/// The expected message type is not an argument: it is
+/// [`ProtoPayload::MESSAGE_ID`] on the payload the decoder accepts, so a call
+/// site cannot name one without the other and cannot name them inconsistently.
+/// That replaced a hand-listed roster and a source-scraping test, which is what
+/// checking the pairing costs when it is spelled at the call site — twice, since
+/// sync and async each carry one.
+///
+/// What the type system still does not enforce is that a one-shot goes through
+/// this at all: the helpers take a bare `impl Fn(&ResponseMessage)`, so a
+/// processor that skips the narrow compiles. The narrow is unskippable only in
+/// the sense that there is no longer a plausible-looking way to write it wrong.
 ///
 /// Not for [`StreamDecoder`](crate::client::StreamDecoder) implementations —
 /// but not because a narrow there is redundant. `decode` still owes its
@@ -78,20 +83,19 @@ pub(crate) fn empty_on_end_of_stream<R: Default>(error: Error) -> Result<R, Erro
 /// drop it and `test_response_message_ids_match_decode_arms` reads the decoder
 /// as claiming an arm for every message type. What `expect_proto` would add
 /// there is the payload decode, which `decode` already owns.
-pub(crate) fn expect_proto<R>(
-    expected: IncomingMessages,
-    decode: impl Fn(&[u8]) -> Result<R, Error>,
-) -> impl Fn(&ResponseMessage) -> Result<R, Error> {
-    move |message| decode(message.expect_type(expected)?.require_proto()?)
+pub(crate) fn expect_proto<P, R>(decode: impl Fn(P) -> Result<R, Error>) -> impl Fn(&ResponseMessage) -> Result<R, Error>
+where
+    P: ProtoPayload,
+{
+    move |message| {
+        let bytes = message.expect_type(P::MESSAGE_ID)?.require_proto()?;
+        decode(P::decode(bytes)?)
+    }
 }
 
 #[cfg(test)]
 #[path = "request_helpers_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "one_shot_pairing_tests.rs"]
-mod one_shot_pairing_tests;
 
 // Sync implementations
 #[cfg(feature = "sync")]

@@ -1,7 +1,7 @@
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::contracts::{Contract, TagValue};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
@@ -247,7 +247,7 @@ impl Client {
             self,
             OutgoingMessages::RequestMktDepthExchanges,
             encoders::encode_request_market_depth_exchanges,
-            expect_proto(IncomingMessages::MktDepthExchanges, decoders::decode_market_depth_exchanges_proto),
+            expect_proto(decoders::decode_market_depth_exchanges_proto),
         )
         .await
         .or_else(empty_on_end_of_stream)

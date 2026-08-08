@@ -354,9 +354,9 @@ pub mod source_scan {
     /// `tests.rs` and `*_tests.rs` are skipped: they hold test-only decoders and
     /// fixtures that exist to exercise the drivers, not to decode a wire
     /// message, and a roster gate that counted them would report failures no
-    /// production change could fix. Two gates depend on that definition —
-    /// `response_message_ids_tests` and `one_shot_pairing_tests` — and they must
-    /// agree, or one silently scans a different tree than it reports on.
+    /// production change could fix. `response_message_ids_tests` is the one gate
+    /// that depends on this definition, since #749 replaced the other — the
+    /// one-shot pairing roster — with a trait the compiler enumerates.
     ///
     /// Takes a visitor rather than returning a `Vec` so a caller looking for
     /// several things reads each file once.

@@ -120,7 +120,7 @@ fn test_decode_head_timestamp_proto() {
         head_timestamp: Some("1609459200".into()),
     };
 
-    let result = decode_head_timestamp_proto(&proto_msg.encode_to_vec()).unwrap();
+    let result = decode_head_timestamp_proto(proto_msg).unwrap();
     assert_eq!(result, OffsetDateTime::from_unix_timestamp(1609459200).unwrap());
 }
 
@@ -197,7 +197,7 @@ fn test_decode_histogram_data_proto() {
         ],
     };
 
-    let result = decode_histogram_data_proto(&proto_msg.encode_to_vec()).unwrap();
+    let result = decode_histogram_data_proto(proto_msg).unwrap();
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].price, 100.5);
     assert_eq!(result[0].size, Some(50.0));
@@ -234,7 +234,7 @@ fn test_decode_historical_schedule_proto() {
         }],
     };
 
-    let result = decode_historical_schedule_proto(&proto_msg.encode_to_vec()).unwrap();
+    let result = decode_historical_schedule_proto(proto_msg).unwrap();
     assert_eq!(result.time_zone, "US/Eastern");
     assert_eq!(result.sessions.len(), 1);
     assert_eq!(result.sessions[0].reference, date!(2026 - 01 - 02));
@@ -251,7 +251,7 @@ fn test_decode_historical_schedule_unknown_timezone_errors() {
         historical_sessions: vec![],
     };
 
-    let err = decode_historical_schedule_proto(&proto_msg.encode_to_vec()).expect_err("unknown tz must error");
+    let err = decode_historical_schedule_proto(proto_msg).expect_err("unknown tz must error");
     assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
     let rendered = err.to_string();
     assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
@@ -459,7 +459,7 @@ fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
 fn test_decode_histogram_data_proto_preserves_fractional_size() {
     let bytes = histogram_data_response().entry(histogram_entry(125.5, 0.5)).encode_proto();
 
-    let entries = super::decode_histogram_data_proto(&bytes).unwrap();
+    let entries = super::decode_histogram_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(entries[0].size, Some(0.5));
 }
 
@@ -471,7 +471,10 @@ fn test_decode_histogram_data_proto_rejects_malformed_size() {
         .entry(histogram_entry(125.5, 0.0).size_wire(Some("abc")))
         .encode_proto();
 
-    assert_decimal_parse_error(super::decode_histogram_data_proto(&bytes), "abc");
+    assert_decimal_parse_error(
+        super::decode_histogram_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")),
+        "abc",
+    );
 }
 
 #[test]

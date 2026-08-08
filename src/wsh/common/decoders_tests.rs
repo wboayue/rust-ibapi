@@ -10,7 +10,7 @@ fn test_decode_wsh_metadata_proto() {
     }
     .encode_to_vec();
 
-    let result = decode_wsh_metadata_proto(&bytes).unwrap();
+    let result = decode_wsh_metadata_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result.data_json, r#"{"key":"value"}"#);
 }
 
@@ -22,7 +22,7 @@ fn test_decode_wsh_event_data_proto() {
     }
     .encode_to_vec();
 
-    let result = decode_wsh_event_data_proto(&bytes).unwrap();
+    let result = decode_wsh_event_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(result.data_json, r#"{"event":"earnings"}"#);
 }
 

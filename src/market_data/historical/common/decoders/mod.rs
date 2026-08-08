@@ -120,8 +120,7 @@ fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) 
     })
 }
 
-pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
-    let msg = proto::HeadTimestamp::decode(bytes)?;
+pub(crate) fn decode_head_timestamp_proto(msg: crate::proto::HeadTimestamp) -> Result<OffsetDateTime, Error> {
     parse_unix_seconds_str(&msg.head_timestamp.unwrap_or_default())
 }
 
@@ -191,8 +190,7 @@ pub(crate) fn decode_historical_data_end_proto(bytes: &[u8]) -> Result<(OffsetDa
     Ok((start, end))
 }
 
-pub(crate) fn decode_histogram_data_proto(bytes: &[u8]) -> Result<Vec<HistogramEntry>, Error> {
-    let p = proto::HistogramData::decode(bytes)?;
+pub(crate) fn decode_histogram_data_proto(p: crate::proto::HistogramData) -> Result<Vec<HistogramEntry>, Error> {
     let mut entries = Vec::with_capacity(p.histogram_data_entries.len());
     for e in &p.histogram_data_entries {
         entries.push(HistogramEntry {
@@ -203,8 +201,7 @@ pub(crate) fn decode_histogram_data_proto(bytes: &[u8]) -> Result<Vec<HistogramE
     Ok(entries)
 }
 
-pub(crate) fn decode_historical_schedule_proto(bytes: &[u8]) -> Result<Schedule, Error> {
-    let p = proto::HistoricalSchedule::decode(bytes)?;
+pub(crate) fn decode_historical_schedule_proto(p: crate::proto::HistoricalSchedule) -> Result<Schedule, Error> {
     let time_zone_name = p.time_zone.unwrap_or_default();
     let time_zone = parse_time_zone(&time_zone_name)?;
 

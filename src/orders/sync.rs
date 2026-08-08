@@ -5,7 +5,7 @@ use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOp
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 
@@ -219,7 +219,7 @@ impl Client {
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,
-            expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
+            expect_proto(decoders::decode_next_valid_id_proto),
         )?;
 
         self.set_next_order_id(next_order_id);

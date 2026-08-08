@@ -38,8 +38,7 @@ pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails
     crate::proto::decoders::decode_contract_details(proto_contract, proto_details)
 }
 
-pub(crate) fn decode_symbol_samples_proto(bytes: &[u8]) -> Result<Vec<ContractDescription>, Error> {
-    let p: crate::proto::SymbolSamples = Message::decode(bytes)?;
+pub(crate) fn decode_symbol_samples_proto(p: crate::proto::SymbolSamples) -> Result<Vec<ContractDescription>, Error> {
     p.contract_descriptions
         .into_iter()
         .map(|d| {
@@ -57,8 +56,7 @@ pub(crate) fn decode_symbol_samples_proto(bytes: &[u8]) -> Result<Vec<ContractDe
         .collect()
 }
 
-pub(crate) fn decode_market_rule_proto(bytes: &[u8]) -> Result<MarketRule, Error> {
-    let p: crate::proto::MarketRule = Message::decode(bytes)?;
+pub(crate) fn decode_market_rule_proto(p: crate::proto::MarketRule) -> Result<MarketRule, Error> {
     Ok(MarketRule {
         market_rule_id: p.market_rule_id.unwrap_or_default(),
         price_increments: p
@@ -84,8 +82,7 @@ pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Err
     })
 }
 
-pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartComponent>, Error> {
-    let p: crate::proto::SmartComponents = Message::decode(bytes)?;
+pub(crate) fn decode_smart_components_proto(p: crate::proto::SmartComponents) -> Result<Vec<SmartComponent>, Error> {
     Ok(p.smart_components
         .into_iter()
         .map(|c| SmartComponent {

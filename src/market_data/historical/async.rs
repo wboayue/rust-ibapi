@@ -61,7 +61,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
-            expect_proto(IncomingMessages::HeadTimestamp, decoders::decode_head_timestamp_proto),
+            expect_proto(decoders::decode_head_timestamp_proto),
         )
         .await
     }
@@ -254,7 +254,7 @@ impl Client {
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
-            expect_proto(IncomingMessages::HistogramData, decoders::decode_histogram_data_proto),
+            expect_proto(decoders::decode_histogram_data_proto),
         )
         .await
         .or_else(empty_on_end_of_stream)
@@ -396,7 +396,7 @@ pub(crate) async fn historical_schedule(
                 &Vec::<crate::contracts::TagValue>::default(),
             )
         },
-        expect_proto(IncomingMessages::HistoricalSchedule, decoders::decode_historical_schedule_proto),
+        expect_proto(decoders::decode_historical_schedule_proto),
     )
     .await
 }

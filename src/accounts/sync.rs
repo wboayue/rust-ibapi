@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 
 use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, Error};
 
@@ -32,7 +32,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
-            expect_proto(IncomingMessages::CurrentTime, decoders::decode_server_time_proto),
+            expect_proto(decoders::decode_server_time_proto),
         )
     }
 
@@ -44,7 +44,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
-            expect_proto(IncomingMessages::CurrentTimeInMillis, decoders::decode_server_time_millis_proto),
+            expect_proto(decoders::decode_server_time_millis_proto),
         )
     }
 
@@ -288,7 +288,7 @@ impl Client {
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
-            expect_proto(IncomingMessages::ManagedAccounts, decoders::decode_managed_accounts_proto),
+            expect_proto(decoders::decode_managed_accounts_proto),
         )
         .or_else(empty_on_end_of_stream)
     }
@@ -301,7 +301,7 @@ impl Client {
             self,
             OutgoingMessages::RequestFamilyCodes,
             encoders::encode_request_family_codes,
-            expect_proto(IncomingMessages::FamilyCodes, decoders::decode_family_codes_proto),
+            expect_proto(decoders::decode_family_codes_proto),
         )
         .or_else(empty_on_end_of_stream)
     }
@@ -326,7 +326,7 @@ impl Client {
         request_helpers::blocking::one_shot_by_request_id(
             self,
             encoders::encode_request_soft_dollar_tiers,
-            expect_proto(IncomingMessages::SoftDollarTier, decoders::decode_soft_dollar_tiers_proto),
+            expect_proto(decoders::decode_soft_dollar_tiers_proto),
         )
     }
 
@@ -345,11 +345,7 @@ impl Client {
     pub fn user_info(&self) -> Result<UserInfo, Error> {
         check_version(self.server_version, Features::USER_INFO)?;
 
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            encoders::encode_request_user_info,
-            expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
-        )
+        request_helpers::blocking::one_shot_by_request_id(self, encoders::encode_request_user_info, expect_proto(decoders::decode_user_info_proto))
     }
 
     /// Request the current Financial Advisor configuration as an XML string.
@@ -373,7 +369,7 @@ impl Client {
             self,
             OutgoingMessages::RequestFA,
             || encoders::encode_request_fa(fa_data_type as i32),
-            expect_proto(IncomingMessages::ReceiveFA, decoders::decode_receive_fa_proto),
+            expect_proto(decoders::decode_receive_fa_proto),
         )
     }
 
@@ -400,7 +396,7 @@ impl Client {
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
-            expect_proto(IncomingMessages::ReplaceFAEnd, decoders::decode_replace_fa_end_proto),
+            expect_proto(decoders::decode_replace_fa_end_proto),
         )
     }
 
@@ -443,7 +439,7 @@ impl Client {
             self,
             OutgoingMessages::VerifyRequest,
             || encoders::encode_verify_request(api_name, api_version),
-            expect_proto(IncomingMessages::VerifyMessageApi, decoders::decode_verify_message_api_proto),
+            expect_proto(decoders::decode_verify_message_api_proto),
         )
     }
 
@@ -470,7 +466,7 @@ impl Client {
             self,
             OutgoingMessages::VerifyMessage,
             || encoders::encode_verify_message(api_data),
-            expect_proto(IncomingMessages::VerifyCompleted, decoders::decode_verify_completed_proto),
+            expect_proto(decoders::decode_verify_completed_proto),
         )
     }
 }

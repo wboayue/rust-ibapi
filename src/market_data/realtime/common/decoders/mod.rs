@@ -141,8 +141,7 @@ pub(crate) fn decode_mid_point_tick_proto(bytes: &[u8]) -> Result<MidPoint, Erro
     })
 }
 
-pub(crate) fn decode_market_depth_exchanges_proto(bytes: &[u8]) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    let p = crate::proto::MarketDepthExchanges::decode(bytes)?;
+pub(crate) fn decode_market_depth_exchanges_proto(p: crate::proto::MarketDepthExchanges) -> Result<Vec<DepthMarketDataDescription>, Error> {
     Ok(p.depth_market_data_descriptions
         .into_iter()
         .map(|d| DepthMarketDataDescription {

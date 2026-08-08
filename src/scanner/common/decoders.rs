@@ -11,8 +11,7 @@ use super::super::ScannerData;
 // rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
-pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Error> {
-    let p = crate::proto::ScannerParameters::decode(bytes)?;
+pub(crate) fn decode_scanner_parameters_proto(p: crate::proto::ScannerParameters) -> Result<String, Error> {
     Ok(p.xml.unwrap_or_default())
 }
 

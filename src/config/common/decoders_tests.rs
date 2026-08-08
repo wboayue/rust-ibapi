@@ -14,7 +14,7 @@ fn test_decode_config_proto_populated() {
         .message(1, "Order Warning", false)
         .encode_proto();
 
-    let config = decode_config_proto(&bytes).unwrap();
+    let config = decode_config_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
 
     let api = config.api.expect("api present");
     let settings = api.settings.expect("settings present");
@@ -39,9 +39,7 @@ fn test_decode_config_proto_populated() {
 
 #[test]
 fn test_decode_config_proto_empty() {
-    let bytes = proto::ConfigResponse::default().encode_to_vec();
-
-    let config = decode_config_proto(&bytes).unwrap();
+    let config = decode_config_proto(proto::ConfigResponse::default()).unwrap();
 
     assert_eq!(config, Config::default());
     assert!(config.api.is_none());
@@ -59,7 +57,7 @@ fn test_decode_update_config_proto_populated() {
         .error("bad value")
         .warning(131, "Confirm Mandatory Cap Price")
         .encode_proto();
-    let response = decode_update_config_proto(&bytes).unwrap();
+    let response = decode_update_config_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
     assert_eq!(response.status.as_deref(), Some("warning"));
     assert_eq!(response.message.as_deref(), Some("please confirm"));
     assert_eq!(response.changed_fields, vec!["socketPort".to_string()]);
