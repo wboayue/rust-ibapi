@@ -5,12 +5,12 @@ cluster: wire
 status: active
 triggers:
   - writing or modifying a domain decoder
-  - adding a StreamDecoder impl
+  - adding a StreamDecoder or TickDecoder impl
   - a subscription terminates on an unexpected message
   - adding a decode arm for a new message type
-symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
+symbols: [require_proto, process_decode_result, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -22,22 +22,19 @@ was retired with the floor ratchet.
 filter: all three drivers drop anything not listed there *before* calling `decode`, because
 shared channels carry several types. A `decode` arm for an unlisted type is dead code. The third
 driver is `market_data/historical/common/tick.rs::classify`, over `TickDecoder`, which declares
-the same `RESPONSE_MESSAGE_IDS` const and filters with the same `is_undeclared` helper — a tick
-type simply declares one entry (#738). **The filter is shared; the gate below is not.**
-`collect_stream_decoder_impls` matches `impl StreamDecoder<` only, so the three `TickDecoder`
-consts are unchecked in both directions — over-declaring one routes a foreign frame's bytes into
-`proto::HistoricalTicks*`, and no test fails. Closing that is a follow-up in
-[plans/claude-md-knowledge-graph.md](../../../plans/claude-md-knowledge-graph.md).
+the same const and filters with the same `is_undeclared` helper — a tick type simply declares
+one entry (#738).
 
-End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`
-anyway. A decoder that consumes exactly one type has no match to hang that on, so
-`message.expect_type(IncomingMessages::X)?` is its backstop and is *not* redundant with the
-const — #738 removed two of them as duplication and the gate immediately read those decoders as
-claiming an arm for every message type. Either form is a backstop for the two lists disagreeing,
-not a control-flow signal — it terminates the subscription, loudly. Never
-`Error::NotImplemented` or `Error::Simple(...)`.
+**Every `decode` needs a backstop, and it is what makes the gate below able to read it.** End a
+multi-type `impl StreamDecoder<T>::decode` match with
+`_ => Err(Error::unexpected_response(message))`. A decoder consuming exactly one type has no
+match to hang that on, so `message.expect_type(IncomingMessages::X)?` is its backstop and is
+*not* redundant with the const — that is the form the scanner, both wsh, and all three
+`TickDecoder` impls take. Either way it is a backstop for the two lists disagreeing, not a
+control-flow signal: it terminates the subscription, loudly. Never `Error::NotImplemented` or
+`Error::Simple(...)`.
 
-**Both drift directions are gated for `StreamDecoder`**, by `test_response_message_ids_match_decode_arms`
+**Both drift directions are gated, for both traits**, by `test_response_message_ids_match_decode_arms`
 (`src/subscriptions/response_message_ids_tests.rs`). It probes every decoder with a minimal
 text-framed message of every `IncomingMessages` discriminant and requires the two lists to
 agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
@@ -45,9 +42,13 @@ anything else means an arm exists — `Ok`, `EndOfStream`, or the `UnexpectedWir
 `require_proto()` raises on text framing. Declared-but-unhandled would also fail loudly at
 runtime via the backstop; handled-but-undeclared would not, which is why the test exists.
 
-Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` blocks under `src/`
-against the hand-listed roster, so adding a decoder without registering it fails rather than
-going unchecked.
+That reading is exactly why a missing backstop is not a style question. A `decode` that dives
+straight into `require_proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
+reads it as claiming an arm for every discriminant it scans and can say nothing about it.
+
+Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder`
+blocks under `src/` against the hand-listed roster — per trait, so adding one while deleting the
+other cannot net out — and fails when a new decoder goes unregistered.
 
 **Never declare `IncomingMessages::Error` or `Shutdown`, and never write a `decode` arm for
 them.** `determine_routing` classifies both before any allow-list, so an error reaches the
@@ -124,3 +125,10 @@ other two:
   copy of the same fact", and `test_response_message_ids_match_decode_arms` caught it within the
   hour. The narrow is the single-arm form of the backstop, not a duplicate of the const. It also
   showed the const's rename to `TickDecoder` bought the name without the gate.
+- #739 — closed that gap, and the ordering is the lesson. The gate could not simply be pointed at
+  `TickDecoder`: with no backstop in the three impls, every probe reached `require_proto()` and
+  the decoders read as handling everything. Adding `expect_type` first is what made them legible,
+  which is the same fact #738 learned from the other direction — it deleted two backstops as
+  redundant, this one had to add three before a gate could exist. Confirmed against the tree: the
+  over-declaration #738 used as its proof (`TickBidAsk` declaring `UserInfo`) passed all 1364 sync
+  tests before, and now fails by name.

@@ -750,6 +750,13 @@ pub trait TickDecoder<T> {
     /// declare exactly one entry.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
     /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
+    ///
+    /// Every impl narrows with `message.expect_type(..)?` first. A tick type
+    /// consumes exactly one message type, so there is no match to hang a `_ =>`
+    /// backstop on and the narrow *is* the backstop — the same reasoning that
+    /// keeps `expect_type` in the single-type `StreamDecoder` impls. Without it
+    /// the roster check cannot tell "this decoder handles that type" from "this
+    /// decoder was handed the wrong frame".
     fn decode(message: &ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
@@ -758,7 +765,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickBidAsk];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
-        common::decoders::decode_historical_ticks_bid_ask(message)
+        common::decoders::decode_historical_ticks_bid_ask(message.expect_type(IncomingMessages::HistoricalTickBidAsk)?)
     }
 }
 
@@ -767,7 +774,7 @@ impl TickDecoder<TickLast> for TickLast {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickLast];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
-        common::decoders::decode_historical_ticks_last(message)
+        common::decoders::decode_historical_ticks_last(message.expect_type(IncomingMessages::HistoricalTickLast)?)
     }
 }
 
@@ -776,7 +783,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTick];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
-        common::decoders::decode_historical_ticks_mid_point(message)
+        common::decoders::decode_historical_ticks_mid_point(message.expect_type(IncomingMessages::HistoricalTick)?)
     }
 }
 
