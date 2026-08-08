@@ -574,3 +574,38 @@ async fn analyze_surfaces_rejected_what_if_order() {
         .expect_err("a rejected what-if order must surface the rejection");
     assert_tws_error_message(err, 201, "Insufficient buying power");
 }
+
+// Async twin of `analyze_returns_order_state_for_the_matching_order`; see the
+// blocking test for why this replaced a mock-client shadow.
+#[tokio::test]
+async fn analyze_returns_order_state_for_the_matching_order() {
+    use crate::common::test_utils::helpers::decode_request_proto;
+
+    let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+    )]);
+    client.set_next_order_id(90);
+    let contract = Contract::stock("AAPL").build();
+
+    let state = client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .analyze()
+        .await
+        .expect("analyze should succeed");
+    assert_eq!(state.status, OrderStatusKind::PreSubmitted);
+
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
+    assert_eq!(request.order.expect("request carries an order").what_if, Some(true));
+}
+
+#[tokio::test]
+async fn analyze_reports_end_of_stream_when_no_order_arrives() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![]);
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client.order(&contract).buy(100).limit(50.0).analyze().await;
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
+}

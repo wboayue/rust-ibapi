@@ -533,7 +533,24 @@ life.
   two tests at the real seam for `analyze` only; `submit`, `build_order`, and the bracket-order
   builders still have none. The async shadow carried the very discard the PR fixed
   (`while let Some(Ok(..))`) and was corrected in place, which is the argument for deleting the
-  shadows rather than maintaining two copies. A textbook
+  shadows rather than maintaining two copies.
+
+  **The `analyze` half is closed.** Both shadow `analyze` impls and their four tests are gone;
+  the coverage moved to `orders/{sync,async}_tests.rs` against `Client::stubbed`, where the
+  happy path, the empty-stream path, and the rejection path all run the production method.
+  Removing that one shadow made the entire mock `place_order` path dead — field, setter, and
+  both client methods — which is itself evidence of how much of the mock existed only to feed a
+  duplicate.
+
+  **What remains, and why it is not mechanical.** The `submit` / `submit_all` /
+  `submit_oca_orders` / `submit_with_updates` shadows are still there. `submit_all` and
+  `submit_oca_orders` carry real logic (id reservation, `parent_id` wiring, transmit flags), so
+  they are the drift-prone ones worth doing next. Converting them means asserting on the
+  captured `PlaceOrderRequest` proto via `decode_request_proto` rather than on a decoded `Order`
+  struct — a better assertion, but a rewrite per test, not a substitution. One test cannot move
+  at all: `test_order_submit_with_error` injects a failure from `submit_order`, which
+  `MessageBusStub` has no way to produce, so it is testing the mock's error injection rather
+  than any production path. A textbook
   [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
   the largest one left in the tree.
 

@@ -1,7 +1,7 @@
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::mock_client::mock::MockOrderClient;
-use crate::orders::{Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderData, OrderId, OrderState, PlaceOrder, TimeInForce};
+use crate::orders::{Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderId, TimeInForce};
 
 fn create_stock_contract(symbol: &str) -> Contract {
     Contract {
@@ -20,10 +20,6 @@ mod orders {
     pub fn submit_order(client: &MockOrderClient, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
         client.submit_order(order_id, contract, order)
     }
-
-    pub fn place_order(client: &MockOrderClient, order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<PlaceOrder>, Error> {
-        client.place_order(order_id, contract, order)
-    }
 }
 
 // Now we need to implement the submit method for MockOrderClient
@@ -41,29 +37,6 @@ impl<'a> OrderBuilder<'a, MockOrderClient> {
         let order = self.build()?;
         orders::submit_order(client, order_id, contract, &order)?;
         Ok(OrderId::new(order_id))
-    }
-
-    /// Analyze order for margin/commission (what-if)
-    pub fn analyze(mut self) -> Result<OrderState, Error> {
-        self.what_if = true;
-        let client = self.client;
-        let contract = self.contract;
-        let order_id = client.next_order_id();
-        let order = self.build()?;
-
-        // Submit what-if order and get the response
-        let responses = orders::place_order(client, order_id, contract, &order)?;
-
-        // Look for the order state in the responses
-        for response in responses {
-            if let PlaceOrder::OpenOrder(order_data) = response {
-                if order_data.order_id == order_id {
-                    return Ok(order_data.order_state);
-                }
-            }
-        }
-
-        Err(Error::UnexpectedEndOfStream)
     }
 }
 
@@ -120,39 +93,6 @@ fn test_order_submit() {
     assert_eq!(submitted[0].2.total_quantity, 100.0);
     assert_eq!(submitted[0].2.order_type, "LMT");
     assert_eq!(submitted[0].2.limit_price, Some(50.00));
-}
-
-#[test]
-fn test_order_analyze() {
-    let client = MockOrderClient::new();
-    let contract = create_stock_contract("AAPL");
-
-    // Set up a custom response for what-if analysis
-    let order_state = OrderState {
-        commission: Some(2.50),
-        initial_margin_before: Some(20000.00),
-        initial_margin_after: Some(25000.00),
-        ..Default::default()
-    };
-
-    client.add_place_order_response(vec![PlaceOrder::OpenOrder(OrderData {
-        order_id: 100,
-        contract: contract.clone(),
-        order: Default::default(),
-        order_state: order_state.clone(),
-    })]);
-
-    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00);
-
-    let analysis = builder.analyze().unwrap();
-    assert_eq!(analysis.commission, Some(2.50));
-    assert_eq!(analysis.initial_margin_before, Some(20000.00));
-    assert_eq!(analysis.initial_margin_after, Some(25000.00));
-
-    // Verify what-if flag was set
-    let submitted = client.get_submitted_orders();
-    assert_eq!(submitted.len(), 1);
-    assert!(submitted[0].2.what_if);
 }
 
 #[test]
@@ -276,18 +216,4 @@ fn test_order_submit_with_error() {
     let result = builder.submit();
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Order rejected"));
-}
-
-#[test]
-fn test_analyze_no_response() {
-    let client = MockOrderClient::new();
-    let contract = create_stock_contract("AAPL");
-
-    // Set up empty response (no order state)
-    client.add_place_order_response(vec![]);
-
-    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00);
-
-    let result = builder.analyze();
-    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }
