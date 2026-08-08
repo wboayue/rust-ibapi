@@ -218,15 +218,14 @@ impl Client {
     /// }
     /// ```
     pub async fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let message = encoders::encode_next_valid_order_id()?;
-
-        let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
-
-        let next_order_id = crate::common::request_helpers::fold_one_shot(
-            internal_subscription.next().await,
+        let next_order_id = crate::common::request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestIds,
+            encoders::encode_next_valid_order_id,
             expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
             || Err(Error::UnexpectedEndOfStream),
-        )?;
+        )
+        .await?;
 
         self.set_next_order_id(next_order_id);
         Ok(next_order_id)

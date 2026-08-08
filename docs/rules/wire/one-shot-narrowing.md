@@ -5,11 +5,12 @@ cluster: wire
 status: active
 triggers:
   - adding a one-shot client method
-  - passing a processor to one_shot_request or one_shot_with_retry
+  - passing a processor to one_shot_with_retry or one_shot_request_with_retry
+  - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, one_shot_request, one_shot_with_retry, one_shot_request_with_retry, fold_one_shot, expect_type, PAIRS]
+symbols: [expect_proto, one_shot_with_retry, one_shot_request_with_retry, fold_one_shot, expect_type, retry_on_connection_reset, PAIRS]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
-precedents: ["#736", "#738"]
+precedents: ["#736", "#738", "#740", "#741"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
@@ -29,6 +30,11 @@ The processor argument is the only place the expected type appears, so a new one
 narrow "later" — there is no wrapper to add it to. Give the decoder a `decode_*_proto(&[u8])`
 sibling if it lacks one; the message-level `decode_x(&ResponseMessage)` form exists only for
 `StreamDecoder` impls now.
+
+**There are two one-shot helpers, and both retry.** `one_shot_request_with_retry` for a
+request-id request, `one_shot_with_retry` for a shared channel. Neither takes a
+`ProtocolFeature`: call `check_version(..)?` on the line above, as every version-gated one-shot
+already does. A one-shot that does not retry is a bug, not a choice — see below.
 
 **Nothing in the type system enforces this**, and treating the signature as the guarantee is the
 mistake this node exists to prevent. `expected` and `decode` are unrelated — `R` is inferred from
@@ -57,15 +63,32 @@ The consequence is quiet. A foreign proto handed to the wrong `prost` type usual
 *something* — field numbers overlap across messages — so the caller gets a plausible struct full
 of wrong values rather than an error.
 
-`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than a fourth
-parameter on the three one-shot helpers, because those helpers already carry six arguments
-against a budget of three (see [param budget](../style/param-budget.md)) and none of them has a
-builder in front of it.
+`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than a fifth
+parameter on the two one-shot helpers, because both already carry four or five arguments against
+a budget of three (see [param budget](../style/param-budget.md)) and neither has a builder in
+front of it.
 
 The honest end state is a `trait ProtoPayload { const MESSAGE_ID; fn decode(&[u8]) }` implemented
 once per payload, which makes `expect_proto::<T>()` take no literals and retires both the roster
 and this node's standing cost. Tracked in
 [plans/claude-md-knowledge-graph.md](../../../plans/claude-md-knowledge-graph.md).
+
+## Why every one-shot retries
+
+`retry_on_connection_reset` fires only on `Error::ConnectionReset` and gives up after three
+attempts. Every one-shot here is a read — encode, send, read one frame — so replaying it after
+the gateway drops the connection costs nothing and loses no server-side state. There is no
+one-shot for which the answer differs, which is why the helper no longer offers the choice.
+
+It used to. A third helper, `one_shot_request`, was the only one taking a `ProtocolFeature`, so
+the four version-gated shared-channel one-shots (`market_rule`, `family_codes`, sync and async)
+picked it and silently gave up retry — while `market_depth_exchanges`, equally version-gated,
+called `check_version` inline and kept it. **The distinction was never about retry.** #741
+deleted the helper and moved its four sites to the inline form, so the two survivors differ only
+in whether the request carries an id.
+
+The general shape: when two helpers differ on two axes and callers only care about one, the
+axis they are not choosing gets chosen for them.
 
 ## Precedents
 
@@ -76,3 +99,10 @@ and this node's standing cost. Tracked in
   unnarrowed site (`next_valid_order_id`, on the shared `RequestIds` channel). The gate came
   second, after a review mutated three sites and found only incidental round-trip tests failed;
   the same mutation now fails the roster by name.
+- #740 — narrowed `StreamDecoder::decode` to `&ResponseMessage`, which is what let the four
+  option-computation sites stop hand-rolling `send_raw` + fold. Their decoder wanted `&mut`, and
+  the retrying helper's processor bound is `Fn(&ResponseMessage)`; the `&mut` turned out to be
+  vestigial rather than a real constraint.
+- #741 — deleted `one_shot_request` and `fold_one_shot_mut`, so every one-shot retries and no
+  hand-rolled folds remain. The retry gap it closed was invisible in the signature: the helper
+  that carried the version check was the one without retry.

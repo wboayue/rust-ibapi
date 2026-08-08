@@ -108,9 +108,10 @@ impl Client {
     /// }
     /// ```
     pub async fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        request_helpers::one_shot_request(
+        check_version(self.server_version(), Features::FAMILY_CODES)?;
+
+        request_helpers::one_shot_with_retry(
             self,
-            Features::FAMILY_CODES,
             OutgoingMessages::RequestFamilyCodes,
             encoders::encode_request_family_codes,
             expect_proto(IncomingMessages::FamilyCodes, decoders::decode_family_codes_proto),

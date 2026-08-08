@@ -121,22 +121,6 @@ mod sync_helpers {
         client.shared_request(message_type).send(request)
     }
 
-    /// Helper for one-shot requests that process a single response
-    pub fn one_shot_request<R>(
-        client: &Client,
-        feature: ProtocolFeature,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl FnOnce() -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        check_version(client.server_version(), feature)?;
-        let request = encoder()?;
-        let subscription = client.shared_request(message_type).send_raw(request)?;
-
-        super::fold_one_shot(subscription.next(), processor, on_none)
-    }
-
     /// Helper for one-shot requests with retry logic
     pub fn one_shot_with_retry<R>(
         client: &Client,
@@ -222,22 +206,6 @@ mod async_helpers {
     {
         let request = encoder()?;
         client.shared_request(message_type).send::<T>(request).await
-    }
-
-    /// Async helper for one-shot requests that process a single response
-    pub async fn one_shot_request<R>(
-        client: &Client,
-        feature: ProtocolFeature,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl FnOnce() -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        check_version(client.server_version(), feature)?;
-        let request = encoder()?;
-        let mut subscription = client.shared_request(message_type).send_raw(request).await?;
-
-        super::fold_one_shot(subscription.next().await, processor, on_none)
     }
 
     /// Async helper for one-shot requests with retry logic

@@ -687,19 +687,51 @@ decoders).
   restructuring, deferred out of #738's `/simplify` per
   [scope discipline](../CLAUDE.md#maintaining-the-rule-graph).
 
-- **Widen the one-shot helpers to `&mut ResponseMessage` and delete `fold_one_shot_mut`.**
-  The bound on `one_shot_request_with_retry` is what forces the four option-computation sites to
-  hand-roll `send_raw` + fold; every existing `&`-taking site reborrows for free. Doing it would
-  also give `calculate_option_price` / `calculate_implied_volatility` the connection-reset retry
-  every other one-shot has — they are the only ones without it, which #738 noticed and did not
-  fix, in the PR whose fourth goal was bounding retries. Third time a `_mut` variant has been
-  bolted on beside a helper rather than into it.
+- ~~**Widen the one-shot helpers to `&mut ResponseMessage` and delete `fold_one_shot_mut`.**~~
+  **Shipped in #740 + #741, by narrowing rather than widening.** The bullet assumed the `&mut` was
+  load-bearing. It was vestigial: `StreamDecoder::decode` had carried it since the text era, and
+  every one of the ~25 decoder functions took the message mutably and immediately called
+  `require_proto()`, which takes `&self`. The library compiled in all three feature configs on the
+  signature change alone — no body needed touching, which is the proof. The only production code
+  still advancing a cursor is the handshake, which never goes through `StreamDecoder`:
+  `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v _tests`
+  → two hits, both in `connection/common.rs`.
 
-- **Decide which one-shots should retry.** Post-#738: 44 retrying, 4 non-retrying by choice
-  (`market_rule`, `family_codes`, sync+async), 6 hand-rolled without it. Nothing says why
-  `head_timestamp` retries and `market_rule` does not, and the choice is invisible in the
-  signature since `retry_on_connection_reset` fires only on `Error::ConnectionReset`. The next
+  So the four option-computation sites did not need a wider helper; they needed a decoder that
+  told the truth about what it reads. `fold_one_shot_mut` and the `From<&mut ResponseMessage> for
+  Notice` coercion shim both existed only to serve that `&mut`, and both are gone.
+
+  **The lesson is about how the bullet was written.** "Widen the helper" named a fix for a
+  constraint nobody had checked was real. One grep would have inverted it, and the same grep was
+  available when the bullet was written. Third instance in this file of a claim that needed a
+  command and did not get one — the first two were counts, this one was a constraint.
+
+- ~~**Decide which one-shots should retry.**~~ **Shipped in #741: all of them, and the question
+  was malformed.** The counts held exactly — 44 retrying, 4 non-retrying, 6 hand-rolled — but
+  "by choice" did not. `one_shot_request` was the only helper taking a `ProtocolFeature`, so the
+  four version-gated shared-channel one-shots picked it and gave up retry as a side effect, while
+  `market_depth_exchanges` — equally version-gated — called `check_version` inline and kept retry.
+  Nobody chose; the helper chose.
+
+  Deleting `one_shot_request` and moving its four sites to the inline form leaves two helpers that
+  differ only in whether the request carries an id, and no one-shot without retry. **When two
+  helpers differ on two axes and callers only care about one, the axis they are not choosing gets
+  chosen for them** — which is the reusable half, and it reads nothing like "document the
+  rationale," the shape the bullet expected.
+
+  Untested, and worth saying so: `MessageBusStub` cannot produce `Error::ConnectionReset` — only
+  the real transport's reconnect path emits it — so no per-API test covers retry wiring for these
+  five or for the 44 that already had it. The combinator itself is covered in
+  `src/common/retry_tests.rs`. Closing that is a follow-up below. The next
   author picks a helper by copying a neighbour.
+
+- **Teach `MessageBusStub` to inject `Error::ConnectionReset`.** Nothing verifies that any of the
+  49 one-shots actually retries — the stub models a message bus, and `ConnectionReset` is
+  synthesized by the transport's reconnect path (`notify_all`), which the stub bypasses. So the
+  retry wiring is checked only by reading the call site, and #741 moved five APIs onto it on that
+  basis. The precedent for the fix is #735, which made the stub classify error frames like the
+  dispatcher and recovered coverage that deleting the arms would have destroyed; this is the same
+  move one layer out. A resend count (`request_messages.len()`) is the assertion.
 
 - **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
   once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and
