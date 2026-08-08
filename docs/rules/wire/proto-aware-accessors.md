@@ -20,7 +20,21 @@ branch. Every production inbound message arrives proto-framed: `fields` holds on
 message id and the payload lives in `raw_bytes`.
 
 Don't decode the whole proto struct to read one field. Define a minimal `prost::Message`
-envelope and let prost length-skip the rest.
+envelope and let prost length-skip the rest — `ProtoIdEnvelope` (`int32 @ tag 1`) covers most
+messages, `ExecutionDetailsMinimal` shows the nested case.
+
+**A field's tag is not always the same across messages, and that decides the shape of the
+accessor.** `request_id` and `order_id` sit at tag 1 everywhere, so one envelope serves them.
+`contract_id` does not: it is nested inside a `Contract` sub-message that sits at tag 2 for
+`ContractData` / `OpenOrder` / `ExecutionDetails` / `Position`, tag 1 for `PortfolioValue` /
+`CompletedOrder`, and tag 3 for `PositionMulti`. An accessor for it needs
+`match self.message_type()` and one envelope per tag position — check the tags in
+`src/proto/protobuf.rs` before assuming a single envelope will do.
+
+**A new `pub fn` here can trip `-D warnings` before it has a caller.** `ResponseMessage` is
+`pub(crate)` (#581), so an accessor nothing calls yet is dead code, and the same applies
+per-feature: see `is_shutdown`'s `#[cfg_attr(not(feature = "sync"), allow(dead_code))]`, whose
+only caller is the sync transport.
 
 **Adding a public API on a proto inbound message type also requires an entry in
 `text_request_id_field` (`src/messages.rs`).**
