@@ -32,6 +32,31 @@ fn with_ordered_responses_stores_messages() {
 }
 
 #[test]
+fn with_connection_resets_replaces_the_leading_responses() {
+    let stub = MessageBusStub::with_responses(sample_response_messages()).with_connection_resets(2);
+
+    // A reset carries no responses at all — the socket dropped before any arrived.
+    for attempt in 0..2 {
+        let items = stub.routed_items_for_request();
+        assert!(
+            matches!(items.as_slice(), [RoutedItem::Error(Error::ConnectionReset)]),
+            "attempt {attempt} should be a bare reset, got {items:?}"
+        );
+    }
+
+    // Exhausted: the configured responses are served from here on.
+    assert_eq!(stub.routed_items_for_request().len(), 2);
+    assert_eq!(stub.routed_items_for_request().len(), 2);
+}
+
+#[test]
+fn without_connection_resets_every_request_gets_the_responses() {
+    let stub = MessageBusStub::with_responses(sample_response_messages());
+    assert_eq!(stub.routed_items_for_request().len(), 2);
+    assert_eq!(stub.routed_items_for_request().len(), 2);
+}
+
+#[test]
 fn request_messages_returns_clone() {
     let stub = MessageBusStub::default();
     stub.request_messages.write().unwrap().push(b"hello".to_vec());
@@ -63,6 +88,7 @@ fn response_messages_decoded_prefers_ordered_responses() {
         // text payloads are deliberately ignored when ordered_responses is non-empty
         response_messages: vec!["should-not-decode".to_string()],
         ordered_responses: vec![text_response("X|1|")],
+        connection_resets: std::sync::atomic::AtomicUsize::new(0),
     };
     let decoded = stub.response_messages_decoded();
     assert_eq!(decoded.len(), 1);
