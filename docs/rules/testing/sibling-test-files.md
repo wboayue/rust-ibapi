@@ -31,9 +31,10 @@ The project minimizes `mod.rs` files, and an inline test module makes every impl
 file longer than the code it holds. No inline `#[cfg(test)] mod ... { }` block remains in
 `src/`, so a new one is drift, not a judgment call.
 
-The *placement* half is less finished than the count suggests: alongside the 87
-`#[path = "*_tests.rs"]` wirings, about two dozen `mod tests;` declarations still resolve to a
-`<dir>/tests.rs`. Convert one when you are already editing that module — see
+The *placement* half is less finished than the count suggests: alongside the 85 flat
+`*_tests.rs` files, 21 `mod tests;` declarations still resolve to a `<dir>/tests.rs`
+(`find src -name "*_tests.rs" | wc -l` and `find src -name tests.rs | wc -l`, 2026-08-08).
+Convert one when you are already editing that module — see
 [modernize touched modules](../workflow/modernize-touched-modules.md) — and do not read the
 surviving `<dir>/tests.rs` files as precedent.
 
