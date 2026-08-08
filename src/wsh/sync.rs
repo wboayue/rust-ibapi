@@ -10,6 +10,7 @@ use crate::{
     Error,
 };
 
+use super::builder::{WshEventDataBuilder, WshEventFilterBuilder};
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
 impl Client {
@@ -35,15 +36,15 @@ impl Client {
         )
     }
 
-    /// Requests event data for a specified contract from the Wall Street Horizons (WSH) calendar.
+    /// Build a request for Wall Street Horizon events on one contract.
+    ///
+    /// Terminal: [`WshEventDataBuilder::fetch`]. Optional narrowing via
+    /// `.starting()` / `.ending()` / `.limit()` / `.auto_fill()`, each of which
+    /// carries its own server-version requirement.
     ///
     /// # Arguments
     ///
     /// * `contract_id` - Contract identifier for the event request.
-    /// * `start_date`  - Start date of the event request.
-    /// * `end_date`    - End date of the event request.
-    /// * `limit`       - Maximum number of events to return. Maximum of 100.
-    /// * `auto_fill`   - Fields to automatically fill in. See [AutoFill] for more information.
     ///
     /// # Examples
     ///
@@ -53,41 +54,20 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract_id = 76792991; // TSLA
-    /// let event_data = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
+    /// let event_data = client.wsh_event_data_by_contract(contract_id).fetch().expect("request wsh event data failed");
     /// println!("{event_data:?}");
     /// ```
-    pub fn wsh_event_data_by_contract(
-        &self,
-        contract_id: i32,
-        start_date: Option<Date>,
-        end_date: Option<Date>,
-        limit: Option<i32>,
-        auto_fill: Option<AutoFill>,
-    ) -> Result<WshEventData, Error> {
-        check_version(self.server_version, Features::WSHE_CALENDAR)?;
-
-        if auto_fill.is_some() {
-            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
-        }
-
-        if start_date.is_some() || end_date.is_some() || limit.is_some() {
-            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
-        }
-
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
-            expect_proto(decoders::decode_wsh_event_data_proto),
-        )
+    pub fn wsh_event_data_by_contract(&self, contract_id: i32) -> WshEventDataBuilder<'_, Self> {
+        WshEventDataBuilder::new(self, contract_id)
     }
 
-    /// Requests event data from the Wall Street Horizons (WSH) calendar using a JSON filter.
+    /// Build a request for Wall Street Horizon events matching a JSON filter.
+    ///
+    /// Terminal: [`WshEventFilterBuilder::subscribe`].
     ///
     /// # Arguments
     ///
-    /// * `filter`    - Json-formatted string containing all filter values.
-    /// * `limit`     - Maximum number of events to return. Maximum of 100.
-    /// * `auto_fill` - Fields to automatically fill in. See [AutoFill] for more information.
+    /// * `filter` - Json-formatted string containing all filter values.
     ///
     /// # Examples
     ///
@@ -96,34 +76,67 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
-    /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
-    /// for result in event_data {
-    ///     println!("{result:?}");
+    /// let filter = "{}"; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
+    /// let subscription = client.wsh_event_data_by_filter(filter).subscribe().expect("request wsh event data failed");
+    /// for event in subscription.iter_data() {
+    ///     println!("{:?}", event.expect("decode error"));
     /// }
     /// ```
-    pub fn wsh_event_data_by_filter(
-        &self,
-        filter: &str,
-        limit: Option<i32>,
-        auto_fill: Option<AutoFill>,
-    ) -> Result<Subscription<WshEventData>, Error> {
-        if limit.is_some() {
-            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
-        }
-
-        request_helpers::blocking::request_with_id(self, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
-            encoders::encode_request_wsh_event_data(
-                request_id,
-                None,
-                Some(filter),
-                None, // start_date
-                None, // end_date
-                limit,
-                auto_fill,
-            )
-        })
+    pub fn wsh_event_data_by_filter<'a>(&'a self, filter: &'a str) -> WshEventFilterBuilder<'a, Self> {
+        WshEventFilterBuilder::new(self, filter)
     }
+}
+
+/// Request events for one contract. Reached through
+/// [`WshEventDataBuilder::fetch`](super::builder::WshEventDataBuilder::fetch).
+pub(crate) fn wsh_event_data_by_contract(
+    client: &Client,
+    contract_id: i32,
+    start_date: Option<Date>,
+    end_date: Option<Date>,
+    limit: Option<i32>,
+    auto_fill: Option<AutoFill>,
+) -> Result<WshEventData, Error> {
+    check_version(client.server_version, Features::WSHE_CALENDAR)?;
+
+    if auto_fill.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
+    }
+
+    if start_date.is_some() || end_date.is_some() || limit.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+    }
+
+    request_helpers::blocking::one_shot_by_request_id(
+        client,
+        |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
+        expect_proto(decoders::decode_wsh_event_data_proto),
+    )
+}
+
+/// Request events matching a JSON filter. Reached through
+/// [`WshEventFilterBuilder::subscribe`](super::builder::WshEventFilterBuilder::subscribe).
+pub(crate) fn wsh_event_data_by_filter(
+    client: &Client,
+    filter: &str,
+    limit: Option<i32>,
+    auto_fill: Option<AutoFill>,
+) -> Result<Subscription<WshEventData>, Error> {
+    if limit.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+    }
+
+    request_helpers::blocking::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
+        encoders::encode_request_wsh_event_data(
+            request_id,
+            None,
+            Some(filter),
+            None, // start_date
+            None, // end_date
+            limit,
+            auto_fill,
+        )
+    })
 }
 
 #[cfg(test)]

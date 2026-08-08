@@ -30,7 +30,8 @@ fn main() {
     let filter = filter.replace("\n", "").to_string();
 
     let subscription = client
-        .wsh_event_data_by_filter(&filter, None, None)
+        .wsh_event_data_by_filter(&filter)
+        .subscribe()
         .expect("request wsh event data failed");
 
     for event_data in subscription.iter_data() {

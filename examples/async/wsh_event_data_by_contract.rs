@@ -36,20 +36,25 @@ async fn main() {
     let contract_id = 265598; // AAPL contract ID (example - verify with contract details)
 
     // Set date range for events
-    let start_date = Some(date!(2024 - 01 - 01));
-    let end_date = Some(date!(2024 - 12 - 31));
-    let limit = Some(100);
+    let start_date = date!(2024 - 01 - 01);
+    let end_date = date!(2024 - 12 - 31);
+    let limit = 100;
 
     // Configure autofill options
-    let auto_fill = Some(AutoFill {
+    let auto_fill = AutoFill {
         competitors: true, // Include competitor events
         portfolio: false,  // Don't include portfolio positions
         watchlist: false,  // Don't include watchlist items
-    });
+    };
 
     // Request WSH event data
     match client
-        .wsh_event_data_by_contract(contract_id, start_date, end_date, limit, auto_fill)
+        .wsh_event_data_by_contract(contract_id)
+        .starting(start_date)
+        .ending(end_date)
+        .limit(limit)
+        .auto_fill(auto_fill)
+        .fetch()
         .await
     {
         Ok(event_data) => {
