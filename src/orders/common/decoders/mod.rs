@@ -8,23 +8,23 @@ use crate::Error;
 // is rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
-pub(crate) fn decode_open_order(message: &mut ResponseMessage) -> Result<OrderData, Error> {
+pub(crate) fn decode_open_order(message: &ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_order_status(message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
+pub(crate) fn decode_order_status(message: &ResponseMessage) -> Result<OrderStatus, Error> {
     decode_order_status_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_execution_data(message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
+pub(crate) fn decode_execution_data(message: &ResponseMessage) -> Result<ExecutionData, Error> {
     decode_execution_data_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_commission_report(message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
+pub(crate) fn decode_commission_report(message: &ResponseMessage) -> Result<CommissionReport, Error> {
     decode_commission_report_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_completed_order(message: &mut ResponseMessage) -> Result<OrderData, Error> {
+pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderData, Error> {
     decode_completed_order_proto(message.require_proto()?)
 }
 

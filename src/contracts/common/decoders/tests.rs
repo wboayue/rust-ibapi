@@ -151,8 +151,8 @@ fn test_decode_contract_details_rejects_text_framing() {
 
 #[test]
 fn test_decode_option_chain_rejects_text_framing() {
-    let mut message = ResponseMessage::from("75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0");
-    let err = decode_option_chain(&mut message).expect_err("text framing must be rejected");
+    let message = ResponseMessage::from("75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0");
+    let err = decode_option_chain(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"

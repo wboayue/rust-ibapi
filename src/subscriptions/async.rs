@@ -19,7 +19,7 @@ use crate::Error;
 
 // Type aliases to reduce complexity
 type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
-type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
+type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &ResponseMessage) -> Result<T, Error> + Send + Sync>;
 // Non-capturing detector — a plain fn pointer (the decoder's `is_snapshot_end`),
 // so it needs no allocation, no vtable, and is `Copy`.
 type SnapshotEndFn<T> = fn(&T) -> bool;
@@ -162,7 +162,7 @@ impl<T> Subscription<T> {
         context: DecoderContext,
     ) -> Self
     where
-        D: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+        D: Fn(&DecoderContext, &ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
         Self {
             inner: SubscriptionInner::WithDecoder {
@@ -379,12 +379,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                     };
 
                     match routed {
-                        RoutedItem::Response(mut message) => {
+                        RoutedItem::Response(message) => {
                             if is_undeclared(response_message_ids, &message) {
                                 log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                                 continue;
                             }
-                            match decoder(context, &mut message) {
+                            match decoder(context, &message) {
                                 Ok(val) => {
                                     if snapshot_end_fn.is_some_and(|is_end| is_end(&val)) {
                                         snapshot_ended.store(true, Ordering::Relaxed);

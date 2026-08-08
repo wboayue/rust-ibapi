@@ -64,12 +64,11 @@ const DISPATCHER_INTERCEPTED: &[IncomingMessages] = &[IncomingMessages::Error, I
 /// One decoder's declared list against its `decode` arms.
 ///
 /// `decode` arrives as a closure because the two traits spell it differently —
-/// `StreamDecoder` takes a `DecoderContext` and `&mut ResponseMessage`,
-/// `TickDecoder` takes `&ResponseMessage` and returns a batch. Erasing that
-/// difference here keeps the failure taxonomy below in one copy; the alternative
-/// was a second `check` that drifts from this one, which is the shape of defect
-/// this whole file exists to catch.
-fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl Fn(&mut ResponseMessage) -> Result<(), Error>) -> Vec<String> {
+/// `StreamDecoder` also takes a `DecoderContext`, and `TickDecoder` returns a
+/// batch. Erasing that difference here keeps the failure taxonomy below in one
+/// copy; the alternative was a second `check` that drifts from this one, which
+/// is the shape of defect this whole file exists to catch.
+fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl Fn(&ResponseMessage) -> Result<(), Error>) -> Vec<String> {
     let mut failures = Vec::new();
 
     for kind in all_message_types() {
@@ -83,7 +82,7 @@ fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl 
             continue;
         }
 
-        let handled = !matches!(decode(&mut probe(kind)), Err(Error::UnexpectedResponse(_)));
+        let handled = !matches!(decode(&probe(kind)), Err(Error::UnexpectedResponse(_)));
 
         match (declared, handled) {
             (true, false) => failures.push(format!(

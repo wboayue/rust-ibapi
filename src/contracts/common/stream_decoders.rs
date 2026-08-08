@@ -14,7 +14,7 @@ use super::encoders;
 impl StreamDecoder<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickOptionComputation => decoders::decode_tick_option_computation(message),
             _ => Err(Error::unexpected_response(message)),
@@ -42,7 +42,7 @@ impl StreamDecoder<OptionChain> for OptionChain {
         IncomingMessages::SecurityDefinitionOptionParameterEnd,
     ];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),

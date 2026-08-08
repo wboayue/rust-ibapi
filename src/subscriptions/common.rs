@@ -147,8 +147,14 @@ pub(crate) trait StreamDecoder<T> {
     /// `docs/rules/wire/proto-only-decoding.md`.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
 
-    /// Decode a response message into the stream's data type
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<T, Error>;
+    /// Decode a response message into the stream's data type.
+    ///
+    /// Takes the message by shared reference: decoding reads `raw_bytes` and
+    /// hands it to `prost`, which consumes nothing. The `&mut` this carried
+    /// until #740 was left over from the text era, when decoders advanced a
+    /// field cursor with `next_int` / `next_string`. Those still exist, but the
+    /// handshake is their only caller now.
+    fn decode(context: &DecoderContext, message: &ResponseMessage) -> Result<T, Error>;
 
     /// Generate a cancellation message for this stream
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {

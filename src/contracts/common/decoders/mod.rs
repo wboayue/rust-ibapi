@@ -19,7 +19,7 @@ pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -
     decode_contract_data_proto(message.require_proto()?)
 }
 
-pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+pub(in crate::contracts) fn decode_option_chain(message: &ResponseMessage) -> Result<OptionChain, Error> {
     decode_option_chain_proto(message.require_proto()?)
 }
 

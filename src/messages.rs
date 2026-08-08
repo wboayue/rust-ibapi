@@ -1264,15 +1264,6 @@ impl From<&ResponseMessage> for Notice {
     }
 }
 
-impl From<&mut ResponseMessage> for Notice {
-    /// Convenience for decoder call sites that hold `&mut ResponseMessage`.
-    /// Trait dispatch doesn't auto-coerce `&mut T → &T`, so this shim avoids
-    /// `Notice::from(&*message)` boilerplate.
-    fn from(message: &mut ResponseMessage) -> Notice {
-        Notice::from(&*message)
-    }
-}
-
 impl Notice {
     /// Build a client-synthesized notice with no wire timestamp and no
     /// advanced-order-reject JSON. Used by handshake-time observability

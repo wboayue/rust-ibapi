@@ -448,7 +448,7 @@ struct NoticeTestData;
 impl StreamDecoder<NoticeTestData> for NoticeTestData {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistogramData];
 
-    fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<NoticeTestData, Error> {
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<NoticeTestData, Error> {
         Ok(NoticeTestData)
     }
 }

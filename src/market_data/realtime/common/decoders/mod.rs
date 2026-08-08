@@ -11,55 +11,55 @@ use crate::market_data::realtime::{
 };
 use crate::market_data::MarketDataType;
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+pub(crate) fn decode_realtime_bar(message: &ResponseMessage) -> Result<Bar, Error> {
     decode_realtime_bar_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(crate) fn decode_trade_tick(message: &ResponseMessage) -> Result<Trade, Error> {
     decode_trade_tick_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(crate) fn decode_bid_ask_tick(message: &ResponseMessage) -> Result<BidAsk, Error> {
     decode_bid_ask_tick_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
+pub(crate) fn decode_mid_point_tick(message: &ResponseMessage) -> Result<MidPoint, Error> {
     decode_mid_point_tick_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
+pub(crate) fn decode_market_depth(message: &ResponseMessage) -> Result<MarketDepth, Error> {
     decode_market_depth_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+pub(crate) fn decode_market_depth_l2(message: &ResponseMessage) -> Result<MarketDepthL2, Error> {
     decode_market_depth_l2_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_price(message: &mut ResponseMessage) -> Result<TickTypes, Error> {
+pub(crate) fn decode_tick_price(message: &ResponseMessage) -> Result<TickTypes, Error> {
     decode_tick_price_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize, Error> {
+pub(crate) fn decode_tick_size(message: &ResponseMessage) -> Result<TickSize, Error> {
     decode_tick_size_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickString, Error> {
+pub(crate) fn decode_tick_string(message: &ResponseMessage) -> Result<TickString, Error> {
     decode_tick_string_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickGeneric, Error> {
+pub(crate) fn decode_tick_generic(message: &ResponseMessage) -> Result<TickGeneric, Error> {
     decode_tick_generic_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_option_computation(message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
+pub(crate) fn decode_tick_option_computation(message: &ResponseMessage) -> Result<OptionComputation, Error> {
     decode_tick_option_computation_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {
+pub(crate) fn decode_tick_request_parameters(message: &ResponseMessage) -> Result<TickRequestParameters, Error> {
     decode_tick_request_parameters_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_market_data_type(message: &mut ResponseMessage) -> Result<MarketDataType, Error> {
+pub(crate) fn decode_market_data_type(message: &ResponseMessage) -> Result<MarketDataType, Error> {
     decode_market_data_type_proto(message.require_proto()?)
 }
 

@@ -161,7 +161,7 @@ struct UnroutableDecoder;
 impl StreamDecoder<UnroutableDecoder> for UnroutableDecoder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::FamilyCodes];
 
-    fn decode(_context: &DecoderContext, _message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, _message: &ResponseMessage) -> Result<Self, Error> {
         Err(Error::NotImplemented)
     }
 }

@@ -253,7 +253,7 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
     impl StreamDecoder<DeclaresTickPrice> for DeclaresTickPrice {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DeclaresTickPrice, Error> {
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DeclaresTickPrice, Error> {
             CALL_COUNT.fetch_add(1, Ordering::Relaxed);
             Ok(DeclaresTickPrice)
         }
@@ -409,7 +409,7 @@ async fn test_subscription_new_from_internal_simple() {
     impl StreamDecoder<TestItem> for TestItem {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<TestItem, Error> {
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<TestItem, Error> {
             Ok(TestItem)
         }
 
@@ -656,7 +656,7 @@ struct CollectItem(i32);
 impl StreamDecoder<CollectItem> for CollectItem {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-    fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
+    fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<CollectItem, Error> {
         Ok(CollectItem(msg.peek_int(1)?))
     }
 

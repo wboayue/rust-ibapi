@@ -28,7 +28,7 @@ impl DisplayGroupUpdate {
 impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::DisplayGroupUpdated => decoders::decode_display_group_updated(message),
             _ => Err(Error::unexpected_response(message)),

@@ -21,22 +21,8 @@ pub(crate) fn fold_one_shot<R>(
     processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
     on_none: impl FnOnce() -> Result<R, Error>,
 ) -> Result<R, Error> {
-    fold_one_shot_mut(response, |message| processor(message), on_none)
-}
-
-/// [`fold_one_shot`] for decoders that need `&mut ResponseMessage`.
-///
-/// The option-computation decoders take the message mutably (they advance a
-/// text cursor through `DecoderContext`), which the shared `&`-taking
-/// [`fold_one_shot`] cannot express. Same disposition of `Some(Err)` / `None`,
-/// so the two stay one decision rather than two.
-pub(crate) fn fold_one_shot_mut<R>(
-    response: Option<Result<ResponseMessage, Error>>,
-    processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
-    on_none: impl FnOnce() -> Result<R, Error>,
-) -> Result<R, Error> {
     match response {
-        Some(Ok(mut message)) => processor(&mut message),
+        Some(Ok(message)) => processor(&message),
         Some(Err(e)) => Err(e),
         None => on_none(),
     }

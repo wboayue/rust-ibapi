@@ -159,8 +159,8 @@ async fn test_wsh_metadata_decode_table() {
     use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
     for test_case in WSH_METADATA_DECODE_TESTS {
-        let mut message = test_case.metadata_message();
-        let result = WshMetadata::decode(&DecoderContext::default(), &mut message);
+        let message = test_case.metadata_message();
+        let result = WshMetadata::decode(&DecoderContext::default(), &message);
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         assert_eq!(result.unwrap().data_json, test_case.data_json, "Test '{}' json mismatch", test_case.name);
@@ -173,8 +173,8 @@ async fn test_wsh_event_data_decode_table() {
     use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 
     for test_case in WSH_EVENT_DATA_DECODE_TESTS {
-        let mut message = test_case.event_data_message();
-        let result = WshEventData::decode(&DecoderContext::default(), &mut message);
+        let message = test_case.event_data_message();
+        let result = WshEventData::decode(&DecoderContext::default(), &message);
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         assert_eq!(result.unwrap().data_json, test_case.data_json, "Test '{}' json mismatch", test_case.name);

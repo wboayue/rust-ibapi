@@ -10,13 +10,19 @@ triggers:
   - adding a decode arm for a new message type
 symbols: [require_proto, process_decode_result, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
 Every domain decoder reads its payload with `message.require_proto()` and feeds the bytes to
 `prost::Message::decode(...)`. There is no text branch and no format dispatch — `decode_proto_or_text`
 was retired with the floor ratchet.
+
+**Decoding takes `&ResponseMessage`, never `&mut`.** Reading `raw_bytes` and handing it to `prost`
+consumes nothing. `next_int` / `next_string` / `next_double` still exist and still need `&mut`, but
+the handshake (`connection/common.rs`) is their only caller — it reads the server version and time
+off a frame that predates any decoder. A new `&mut ResponseMessage` in a decode path means either a
+text decoder, which the floor ratchet retired, or a signature copied from one.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
 filter: all three drivers drop anything not listed there *before* calling `decode`, because
@@ -133,6 +139,13 @@ other two:
   copy of the same fact", and `test_response_message_ids_match_decode_arms` caught it within the
   hour. The narrow is the single-arm form of the backstop, not a duplicate of the const. It also
   showed the const's rename to `TickDecoder` bought the name without the gate.
+- #740 — narrowed `StreamDecoder::decode` from `&mut ResponseMessage` to `&ResponseMessage`. The
+  `&mut` had been threaded through 29 impls and ~25 decoder functions since the text era and no
+  production decoder mutated: every one took the message mutably and immediately called
+  `require_proto()`, which takes `&self`. The library compiled in all three feature configs on the
+  signature change alone. Command that finds a real cursor user:
+  `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v _tests`
+  → two hits, both in `connection/common.rs`.
 - #739 — closed that gap, and the ordering is the lesson. The gate could not simply be pointed at
   `TickDecoder`: with no backstop in the three impls, every probe reached `require_proto()` and
   the decoders read as handling everything. Adding `expect_type` first is what made them legible,
