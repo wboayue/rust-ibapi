@@ -9,7 +9,7 @@ use log::{error, warn};
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
-use crate::common::request_helpers::{self, expect_proto};
+use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
@@ -58,11 +58,10 @@ impl Client {
     pub async fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::HEAD_TIMESTAMP)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
             expect_proto(IncomingMessages::HeadTimestamp, decoders::decode_head_timestamp_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -252,13 +251,13 @@ impl Client {
     pub async fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
         check_version(self.server_version(), Features::HISTOGRAM)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
             expect_proto(IncomingMessages::HistogramData, decoders::decode_histogram_data_proto),
-            || Ok(Vec::new()),
         )
         .await
+        .or_else(empty_on_end_of_stream)
     }
 }
 
@@ -382,7 +381,7 @@ pub(crate) async fn historical_schedule(
 ) -> Result<Schedule, Error> {
     common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
 
-    request_helpers::one_shot_request_with_retry(
+    request_helpers::one_shot_by_request_id(
         client,
         |request_id| {
             encoders::encode_request_historical_data(
@@ -398,7 +397,6 @@ pub(crate) async fn historical_schedule(
             )
         },
         expect_proto(IncomingMessages::HistoricalSchedule, decoders::decode_historical_schedule_proto),
-        || Err(Error::UnexpectedEndOfStream),
     )
     .await
 }

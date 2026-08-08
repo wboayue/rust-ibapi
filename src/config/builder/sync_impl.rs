@@ -40,11 +40,10 @@ impl UpdateConfigBuilder<'_, Client> {
     pub fn submit(self) -> Result<UpdateConfigResponse, Error> {
         check_version(self.client.server_version, Features::UPDATE_CONFIG)?;
 
-        request_helpers::blocking::one_shot_request_with_retry(
+        request_helpers::blocking::one_shot_by_request_id(
             self.client,
             |request_id| encoders::encode_update_config(&self.to_proto(request_id)),
             expect_proto(IncomingMessages::UpdateConfigResponse, decoders::decode_update_config_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
     }
 }

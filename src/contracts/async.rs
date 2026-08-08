@@ -3,7 +3,7 @@
 use super::common::{decoders, encoders, verify};
 use super::*;
 use crate::client::ClientRequestBuilders;
-use crate::common::request_helpers::{self, expect_proto};
+use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{StreamDecoder, Subscription};
@@ -90,13 +90,13 @@ impl Client {
     pub async fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
             expect_proto(IncomingMessages::SymbolSamples, decoders::decode_symbol_samples_proto),
-            || Ok(Vec::new()),
         )
         .await
+        .or_else(empty_on_end_of_stream)
     }
 
     /// Requests details about a given market rule.
@@ -124,12 +124,11 @@ impl Client {
     pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
         check_version(self.server_version(), Features::MARKET_RULES)?;
 
-        request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
             expect_proto(IncomingMessages::MarketRule, decoders::decode_market_rule_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -164,11 +163,10 @@ impl Client {
     pub async fn smart_components(&self, bbo_exchange: &str) -> Result<Vec<SmartComponent>, Error> {
         check_version(self.server_version(), Features::SMART_COMPONENTS)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
             expect_proto(IncomingMessages::SmartComponents, decoders::decode_smart_components_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -199,11 +197,10 @@ impl Client {
     pub async fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         check_version(self.server_version(), Features::REQ_CALC_OPTION_PRICE)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -239,11 +236,10 @@ impl Client {
     ) -> Result<OptionComputation, Error> {
         check_version(self.server_version(), Features::REQ_CALC_IMPLIED_VOLAT)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }

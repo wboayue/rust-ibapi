@@ -5,12 +5,12 @@ cluster: wire
 status: active
 triggers:
   - adding a one-shot client method
-  - passing a processor to one_shot_with_retry or one_shot_request_with_retry
+  - passing a processor to one_shot_shared or one_shot_by_request_id
   - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, one_shot_with_retry, one_shot_request_with_retry, fold_one_shot, expect_type, retry_on_connection_reset, PAIRS]
+symbols: [expect_proto, one_shot_shared, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset, PAIRS]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
-precedents: ["#736", "#738", "#740", "#741"]
+precedents: ["#736", "#738", "#740", "#741", "#745"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
@@ -18,11 +18,10 @@ A one-shot request reads one frame off a **shared** channel, so it must check th
 the one it asked for. Do that with `request_helpers::expect_proto`, never with a bare decoder:
 
 ```rust
-request_helpers::blocking::one_shot_request_with_retry(
+request_helpers::blocking::one_shot_by_request_id(
     self,
     encoders::encode_request_user_info,
     expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
-    || Err(Error::UnexpectedEndOfStream),
 )
 ```
 
@@ -31,8 +30,8 @@ narrow "later" — there is no wrapper to add it to. Give the decoder a `decode_
 sibling if it lacks one; the message-level `decode_x(&ResponseMessage)` form exists only for
 `StreamDecoder` impls now.
 
-**There are two one-shot helpers, and both retry.** `one_shot_request_with_retry` for a
-request-id request, `one_shot_with_retry` for a shared channel. Neither takes a
+**There are two one-shot helpers, and both retry.** `one_shot_by_request_id` for a
+request-id request, `one_shot_shared` for a shared channel. Neither takes a
 `ProtocolFeature` — do the version check on the line above. Usually that is
 `check_version(server_version, Features::X)?`, but not always: `news` uses
 `check_server_version(..)` and `historical_data` uses `validate_historical_data(..)`, which is
@@ -76,10 +75,12 @@ The consequence is quiet. A foreign proto handed to the wrong `prost` type usual
 *something* — field numbers overlap across messages — so the caller gets a plausible struct full
 of wrong values rather than an error.
 
-`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than a fifth
-parameter on the two one-shot helpers, because both already carry four or five arguments against
-a budget of three (see [param budget](../style/param-budget.md)) and neither has a builder in
-front of it.
+`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than another
+parameter on the two one-shot helpers. When it was written both helpers carried four or five
+arguments against a budget of three (see [param budget](../style/param-budget.md)) with no
+builder in front of them. #745 dropped `on_none`, so they now take three and four — an
+`expected` parameter would put them back at four and five, and the argument holds for the same
+reason it did.
 
 The honest end state is a `trait ProtoPayload { const MESSAGE_ID; fn decode(&[u8]) }` implemented
 once per payload, which makes `expect_proto::<T>()` take no literals and retires both the roster

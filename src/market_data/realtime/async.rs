@@ -1,5 +1,5 @@
 use crate::client::ClientRequestBuilders;
-use crate::common::request_helpers::{self, expect_proto};
+use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::contracts::{Contract, TagValue};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
@@ -243,14 +243,14 @@ impl Client {
     pub async fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 
-        request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestMktDepthExchanges,
             encoders::encode_request_market_depth_exchanges,
             expect_proto(IncomingMessages::MktDepthExchanges, decoders::decode_market_depth_exchanges_proto),
-            || Ok(Vec::new()),
         )
         .await
+        .or_else(empty_on_end_of_stream)
     }
 
     /// Requests real time market data (low-level).

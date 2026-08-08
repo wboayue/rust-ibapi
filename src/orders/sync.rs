@@ -215,12 +215,11 @@ impl Client {
     /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let next_order_id = request_helpers::blocking::one_shot_with_retry(
+        let next_order_id = request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,
             expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )?;
 
         self.set_next_order_id(next_order_id);

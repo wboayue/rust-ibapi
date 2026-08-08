@@ -218,12 +218,11 @@ impl Client {
     /// }
     /// ```
     pub async fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let next_order_id = request_helpers::one_shot_with_retry(
+        let next_order_id = request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestIds,
             encoders::encode_next_valid_order_id,
             expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await?;
 
