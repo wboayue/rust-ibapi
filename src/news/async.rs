@@ -2,6 +2,7 @@
 
 use super::common::{self, decoders, encoders};
 use super::*;
+use crate::common::request_helpers;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
@@ -27,14 +28,14 @@ impl Client {
     pub async fn news_providers(&self) -> Result<Vec<NewsProvider>, Error> {
         self.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
 
-        let request = encoders::encode_request_news_providers()?;
-        let mut subscription = self.send_shared_request(OutgoingMessages::RequestNewsProviders, request).await?;
-
-        match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_news_providers(&message),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestNewsProviders,
+            encoders::encode_request_news_providers,
+            decoders::decode_news_providers,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
     /// Subscribes to IB's News Bulletins.
@@ -139,16 +140,13 @@ impl Client {
     pub async fn news_article(&self, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
         self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
-        let request_id = self.next_request_id();
-        let request = encoders::encode_request_news_article(request_id, provider_code, article_id)?;
-
-        let mut subscription = self.send_request(request_id, request).await?;
-
-        match subscription.next().await {
-            Some(Ok(message)) => decoders::decode_news_article(&message),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_news_article(request_id, provider_code, article_id),
+            decoders::decode_news_article,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
     /// Subscribe to news for a specific contract

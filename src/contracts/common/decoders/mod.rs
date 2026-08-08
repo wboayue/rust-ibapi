@@ -15,19 +15,32 @@ pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_optio
 // arrival is rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
-pub(in crate::contracts) fn decode_contract_details(_server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
     decode_contract_data_proto(message.require_proto()?)
 }
 
-pub(in crate::contracts) fn decode_contract_descriptions(
-    _server_version: i32,
-    message: &mut ResponseMessage,
-) -> Result<Vec<ContractDescription>, Error> {
+pub(in crate::contracts) fn decode_contract_descriptions(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     decode_symbol_samples_proto(message.require_proto()?)
 }
 
-pub(in crate::contracts) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
+/// Dispatch a `SymbolSamples` frame. Shape mirrors [`decode_smart_components_message`].
+pub(in crate::contracts) fn decode_contract_descriptions_message(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+    match message.message_type() {
+        IncomingMessages::SymbolSamples => decode_contract_descriptions(message),
+        _ => Err(Error::unexpected_response(message)),
+    }
+}
+
+pub(in crate::contracts) fn decode_market_rule(message: &ResponseMessage) -> Result<MarketRule, Error> {
     decode_market_rule_proto(message.require_proto()?)
+}
+
+/// Dispatch a `MarketRule` frame. Shape mirrors [`decode_smart_components_message`].
+pub(in crate::contracts) fn decode_market_rule_message(message: &ResponseMessage) -> Result<MarketRule, Error> {
+    match message.message_type() {
+        IncomingMessages::MarketRule => decode_market_rule(message),
+        _ => Err(Error::unexpected_response(message)),
+    }
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {

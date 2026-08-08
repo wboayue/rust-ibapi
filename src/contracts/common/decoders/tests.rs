@@ -1,5 +1,4 @@
 use super::*;
-use crate::server_versions;
 
 use prost::Message;
 
@@ -142,8 +141,8 @@ fn test_decode_option_chain_proto() {
 
 #[test]
 fn test_decode_contract_details_rejects_text_framing() {
-    let mut message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
-    let err = decode_contract_details(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
+    let message = ResponseMessage::from("10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0");
+    let err = decode_contract_details(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"
@@ -152,8 +151,8 @@ fn test_decode_contract_details_rejects_text_framing() {
 
 #[test]
 fn test_decode_contract_descriptions_rejects_text_framing() {
-    let mut message = ResponseMessage::from("79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0");
-    let err = decode_contract_descriptions(server_versions::PROTOBUF_REST_MESSAGES_3, &mut message).expect_err("text framing must be rejected");
+    let message = ResponseMessage::from("79\09000\01\012345\0AAPL\0STK\0NASDAQ\0USD\00\0APPLE INC\0\0");
+    let err = decode_contract_descriptions(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"
@@ -162,8 +161,8 @@ fn test_decode_contract_descriptions_rejects_text_framing() {
 
 #[test]
 fn test_decode_market_rule_rejects_text_framing() {
-    let mut message = ResponseMessage::from("87\026\01\00\00.01\0");
-    let err = decode_market_rule(&mut message).expect_err("text framing must be rejected");
+    let message = ResponseMessage::from("87\026\01\00\00.01\0");
+    let err = decode_market_rule(&message).expect_err("text framing must be rejected");
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected Error::UnexpectedWireFormat, got {err:?}"

@@ -8,7 +8,6 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
-use log::info;
 
 impl Client {
     /// Requests contract information.
@@ -49,11 +48,11 @@ impl Client {
 
         while let Some(response_result) = responses.next().await {
             match response_result {
-                Ok(mut response) => {
+                Ok(response) => {
                     log::debug!("response: {response:#?}");
                     match response.message_type() {
                         IncomingMessages::ContractData => {
-                            let decoded = decoders::decode_contract_details(self.server_version(), &mut response)?;
+                            let decoded = decoders::decode_contract_details(&response)?;
                             contract_details.push(decoded);
                         }
                         IncomingMessages::ContractDataEnd => return Ok(contract_details),
@@ -91,22 +90,13 @@ impl Client {
     pub async fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
-        let mut subscription = builder.send_raw(request).await?;
-
-        match subscription.next().await {
-            Some(Ok(mut message)) => match message.message_type() {
-                IncomingMessages::SymbolSamples => decoders::decode_contract_descriptions(self.server_version(), &mut message),
-                _ => {
-                    info!("unexpected message: {message:?}");
-                    Err(Error::unexpected_response(&message))
-                }
-            },
-            Some(Err(e)) => Err(e),
-            None => Ok(Vec::new()),
-        }
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
+            decoders::decode_contract_descriptions_message,
+            || Ok(Vec::new()),
+        )
+        .await
     }
 
     /// Requests details about a given market rule.
@@ -134,14 +124,15 @@ impl Client {
     pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
         check_version(self.server_version(), Features::MARKET_RULES)?;
 
-        let request = encoders::encode_request_market_rule(market_rule_id)?;
-        let mut subscription = self.shared_request(OutgoingMessages::RequestMarketRule).send_raw(request).await?;
-
-        match subscription.next().await {
-            Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::one_shot_request(
+            self,
+            Features::MARKET_RULES,
+            OutgoingMessages::RequestMarketRule,
+            || encoders::encode_request_market_rule(market_rule_id),
+            decoders::decode_market_rule_message,
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
     /// Requests the underlying exchanges that contribute to a consolidated (BBO) feed.
