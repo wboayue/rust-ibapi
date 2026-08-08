@@ -14,7 +14,6 @@ use crate::testdata::builders::market_data::{
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
-use std::sync::RwLock;
 use time::OffsetDateTime;
 
 #[test]
@@ -516,11 +515,7 @@ fn test_basic_market_data() {
 
 #[test]
 fn test_market_data_with_combo_legs() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
@@ -551,11 +546,7 @@ fn test_market_data_with_combo_legs() {
 
 #[test]
 fn test_market_data_with_delta_neutral() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
@@ -583,11 +574,7 @@ fn test_market_data_with_delta_neutral() {
 
 #[test]
 fn test_market_data_regulatory_snapshot() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-        ordered_responses: vec![],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
     let contract = Contract {

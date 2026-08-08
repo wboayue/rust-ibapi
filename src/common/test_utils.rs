@@ -5,7 +5,7 @@
 pub mod helpers {
     use crate::stubs::MessageBusStub;
     use crate::{server_versions, Client};
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
 
     /// Creates a test client with an empty message bus
     pub fn create_test_client() -> (Client, Arc<MessageBusStub>) {
@@ -14,33 +14,21 @@ pub mod helpers {
 
     /// Creates a test client with a specific server version
     pub fn create_test_client_with_version(server_version: i32) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
     }
 
     /// Creates a test client with specified response messages
     pub fn create_test_client_with_responses(responses: Vec<String>) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: responses,
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         (client, message_bus)
     }
 
     /// Creates a test client with specified response messages and server version
     pub fn create_test_client_with_responses_and_version(responses: Vec<String>, server_version: i32) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: responses,
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
         let client = Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
     }
@@ -73,11 +61,7 @@ pub mod helpers {
         responses: Vec<String>,
         server_version: i32,
     ) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: responses,
-            ordered_responses: vec![],
-        });
+        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
         let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
     }
