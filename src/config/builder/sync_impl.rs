@@ -2,9 +2,10 @@
 
 use super::update_config_builder::UpdateConfigBuilder;
 use crate::client::sync::Client;
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::config::common::{decoders, encoders};
 use crate::config::UpdateConfigResponse;
+use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::Error;
 
@@ -42,7 +43,7 @@ impl UpdateConfigBuilder<'_, Client> {
         request_helpers::blocking::one_shot_request_with_retry(
             self.client,
             |request_id| encoders::encode_update_config(&self.to_proto(request_id)),
-            decoders::decode_update_config_message,
+            expect_proto(IncomingMessages::UpdateConfigResponse, decoders::decode_update_config_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
     }

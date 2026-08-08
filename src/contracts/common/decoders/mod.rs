@@ -1,4 +1,4 @@
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::Error;
 
 use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain, SmartComponent};
@@ -17,24 +17,6 @@ pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_optio
 
 pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
     decode_contract_data_proto(message.require_proto()?)
-}
-
-pub(in crate::contracts) fn decode_contract_descriptions(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
-    decode_symbol_samples_proto(message.require_proto()?)
-}
-
-/// Dispatch a `SymbolSamples` frame.
-pub(in crate::contracts) fn decode_contract_descriptions_message(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
-    decode_contract_descriptions(message.expect_type(IncomingMessages::SymbolSamples)?)
-}
-
-pub(in crate::contracts) fn decode_market_rule(message: &ResponseMessage) -> Result<MarketRule, Error> {
-    decode_market_rule_proto(message.require_proto()?)
-}
-
-/// Dispatch a `MarketRule` frame.
-pub(in crate::contracts) fn decode_market_rule_message(message: &ResponseMessage) -> Result<MarketRule, Error> {
-    decode_market_rule(message.expect_type(IncomingMessages::MarketRule)?)
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
@@ -102,10 +84,6 @@ pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Err
     })
 }
 
-pub(crate) fn decode_smart_components(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
-    decode_smart_components_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartComponent>, Error> {
     let p: crate::proto::SmartComponents = Message::decode(bytes)?;
     Ok(p.smart_components
@@ -116,10 +94,6 @@ pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartCom
             exchange_letter: c.exchange_letter.unwrap_or_default(),
         })
         .collect())
-}
-
-pub(in crate::contracts) fn decode_smart_components_message(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
-    decode_smart_components(message.expect_type(IncomingMessages::SmartComponents)?)
 }
 
 #[cfg(test)]

@@ -3,7 +3,8 @@
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
-use crate::messages::OutgoingMessages;
+use crate::common::request_helpers::{self, expect_proto};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
@@ -107,12 +108,12 @@ impl Client {
     /// }
     /// ```
     pub async fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        crate::common::request_helpers::one_shot_request(
+        request_helpers::one_shot_request(
             self,
             Features::FAMILY_CODES,
             OutgoingMessages::RequestFamilyCodes,
             encoders::encode_request_family_codes,
-            decoders::decode_family_codes,
+            expect_proto(IncomingMessages::FamilyCodes, decoders::decode_family_codes_proto),
             || Ok(Vec::default()),
         )
         .await
@@ -335,11 +336,11 @@ impl Client {
     /// }
     /// ```
     pub async fn managed_accounts(&self) -> Result<Vec<String>, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestManagedAccounts,
             encoders::encode_request_managed_accounts,
-            decoders::decode_managed_accounts,
+            expect_proto(IncomingMessages::ManagedAccounts, decoders::decode_managed_accounts_proto),
             || Ok(Vec::default()),
         )
         .await
@@ -360,11 +361,11 @@ impl Client {
     /// }
     /// ```
     pub async fn server_time(&self) -> Result<OffsetDateTime, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
-            decoders::decode_server_time,
+            expect_proto(IncomingMessages::CurrentTime, decoders::decode_server_time_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -374,11 +375,11 @@ impl Client {
     pub async fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::CURRENT_TIME_IN_MILLIS)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
             encoders::encode_request_server_time_millis,
-            decoders::decode_server_time_millis,
+            expect_proto(IncomingMessages::CurrentTimeInMillis, decoders::decode_server_time_millis_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -404,10 +405,10 @@ impl Client {
     pub async fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
         check_version(self.server_version(), Features::SOFT_DOLLAR_TIER)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             encoders::encode_request_soft_dollar_tiers,
-            decoders::decode_soft_dollar_tiers_message,
+            expect_proto(IncomingMessages::SoftDollarTier, decoders::decode_soft_dollar_tiers_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -430,10 +431,10 @@ impl Client {
     pub async fn user_info(&self) -> Result<UserInfo, Error> {
         check_version(self.server_version(), Features::USER_INFO)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             encoders::encode_request_user_info,
-            decoders::decode_user_info_message,
+            expect_proto(IncomingMessages::UserInfo, decoders::decode_user_info_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -458,11 +459,11 @@ impl Client {
     /// }
     /// ```
     pub async fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::RequestFA,
             move || encoders::encode_request_fa(fa_data_type as i32),
-            decoders::decode_receive_fa,
+            expect_proto(IncomingMessages::ReceiveFA, decoders::decode_receive_fa_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -490,10 +491,10 @@ impl Client {
     pub async fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
         check_version(self.server_version(), Features::REPLACE_FA_END)?;
 
-        crate::common::request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_request_with_retry(
             self,
             move |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
-            decoders::decode_replace_fa_end_message,
+            expect_proto(IncomingMessages::ReplaceFAEnd, decoders::decode_replace_fa_end_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -538,11 +539,11 @@ impl Client {
     pub async fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
         check_version(self.server_version(), Features::LINKING)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyRequest,
             move || encoders::encode_verify_request(api_name, api_version),
-            decoders::decode_verify_message_api,
+            expect_proto(IncomingMessages::VerifyMessageApi, decoders::decode_verify_message_api_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -569,11 +570,11 @@ impl Client {
     pub async fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
         check_version(self.server_version(), Features::LINKING)?;
 
-        crate::common::request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_with_retry(
             self,
             OutgoingMessages::VerifyMessage,
             move || encoders::encode_verify_message(api_data),
-            decoders::decode_verify_completed,
+            expect_proto(IncomingMessages::VerifyCompleted, decoders::decode_verify_completed_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await

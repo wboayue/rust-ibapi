@@ -35,10 +35,6 @@ pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<Ma
     decode_market_depth_l2_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_market_depth_exchanges(message: &ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    decode_market_depth_exchanges_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_tick_price(message: &mut ResponseMessage) -> Result<TickTypes, Error> {
     decode_tick_price_proto(message.require_proto()?)
 }

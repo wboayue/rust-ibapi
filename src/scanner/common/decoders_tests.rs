@@ -85,13 +85,3 @@ fn test_decode_scanner_data_rejects_text_framing() {
         "expected Error::UnexpectedWireFormat, got {err:?}"
     );
 }
-
-#[test]
-fn test_decode_scanner_parameters_rejects_text_framing() {
-    let message = ResponseMessage::from("19\02\0<ScanParameterResponse/>\0");
-    let err = decode_scanner_parameters(&message).expect_err("text framing must be rejected");
-    assert!(
-        matches!(err, Error::UnexpectedWireFormat(_)),
-        "expected Error::UnexpectedWireFormat, got {err:?}"
-    );
-}

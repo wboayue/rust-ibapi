@@ -11,7 +11,7 @@ use log::debug;
 
 use crate::market_data::historical::TickDecoder;
 use crate::messages::Notice;
-use crate::subscriptions::common::RoutedItem;
+use crate::subscriptions::common::{is_undeclared, RoutedItem};
 use crate::Error;
 
 /// The decoded outcome of a single routed item for a tick subscription.
@@ -35,14 +35,14 @@ pub(crate) enum TickAction<T> {
 /// surface it through the subscription's `Err` arm.
 pub(crate) fn classify<T: TickDecoder<T>>(item: RoutedItem) -> TickAction<T> {
     match item {
-        RoutedItem::Response(message) if message.message_type() == T::MESSAGE_TYPE => match T::decode(&message) {
-            Ok((ticks, done)) => TickAction::Batch(ticks, done),
-            Err(e) => TickAction::Error(e),
-        },
-        RoutedItem::Response(message) => {
+        RoutedItem::Response(message) if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) => {
             debug!("unexpected message on historical-ticks channel: {message:?}");
             TickAction::Skip
         }
+        RoutedItem::Response(message) => match T::decode(&message) {
+            Ok((ticks, done)) => TickAction::Batch(ticks, done),
+            Err(e) => TickAction::Error(e),
+        },
         RoutedItem::Notice(notice) => TickAction::Notice(notice),
         RoutedItem::Error(Error::EndOfStream) => TickAction::EndOfStream,
         RoutedItem::Error(e) => TickAction::Error(e),

@@ -828,6 +828,11 @@ impl ResponseMessage {
     /// framing, this one narrows the type. Both return a borrow so they chain in
     /// the position the decoder wants.
     ///
+    /// One-shot request paths should not call this directly — they compose both
+    /// narrows through `request_helpers::expect_proto`, which takes the expected
+    /// type alongside the payload decoder so a call site cannot supply one
+    /// without the other.
+    ///
     /// There is deliberately no `IncomingMessages::Error` case. The dispatcher
     /// classifies error frames before any decoder sees them, so one cannot
     /// arrive here — see `docs/rules/wire/proto-only-decoding.md`.
@@ -835,7 +840,7 @@ impl ResponseMessage {
         if self.message_type() == expected {
             Ok(self)
         } else {
-            Err(Error::unexpected_response(self))
+            Err(Error::UnexpectedResponse(format!("expected {expected:?}, got {self:?}")))
         }
     }
 

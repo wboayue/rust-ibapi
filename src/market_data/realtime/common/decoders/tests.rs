@@ -319,16 +319,6 @@ mod market_depth_tests {
         assert_eq!(exchanges[0].aggregated_group, Some("1".to_string()));
         assert_eq!(exchanges[1].exchange_name, "NYSE");
     }
-
-    #[test]
-    fn test_decode_market_depth_exchanges_rejects_text_framing() {
-        let message = ResponseMessage::from("71\02\0ISLAND\0STK\0NASDAQ\0DEEP2\01\0NYSE\0STK\0NYSE\0DEEP\01\0");
-        let err = decode_market_depth_exchanges(&message).unwrap_err();
-        assert!(
-            matches!(err, Error::UnexpectedWireFormat(_)),
-            "expected UnexpectedWireFormat, got {err:?}"
-        );
-    }
 }
 
 mod tick_price_tests {

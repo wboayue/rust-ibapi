@@ -1,8 +1,7 @@
-use log::debug;
-
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::{Contract, TagValue};
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
@@ -199,21 +198,13 @@ impl Client {
     pub fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 
-        loop {
-            let request = encoders::encode_request_market_depth_exchanges()?;
-            let subscription = self.shared_request(OutgoingMessages::RequestMktDepthExchanges).send_raw(request)?;
-            let response = subscription.next();
-
-            match response {
-                Some(Ok(message)) => return decoders::decode_market_depth_exchanges(&message),
-                Some(Err(Error::ConnectionReset)) => {
-                    debug!("connection reset. retrying market_depth_exchanges");
-                    continue;
-                }
-                Some(Err(e)) => return Err(e),
-                None => return Ok(Vec::new()),
-            }
-        }
+        request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestMktDepthExchanges,
+            encoders::encode_request_market_depth_exchanges,
+            expect_proto(IncomingMessages::MktDepthExchanges, decoders::decode_market_depth_exchanges_proto),
+            || Ok(Vec::new()),
+        )
     }
 
     /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.

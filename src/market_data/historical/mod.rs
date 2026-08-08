@@ -743,15 +743,19 @@ pub use r#async::TickSubscription;
 /// [`TickMidpoint`]); custom implementations are not supported.
 #[allow(private_interfaces)]
 pub trait TickDecoder<T> {
-    /// Message discriminator emitted by TWS for this tick type.
-    const MESSAGE_TYPE: IncomingMessages;
+    /// Message types this decoder consumes; everything else on the channel is
+    /// skipped. Named and shaped to match `StreamDecoder::RESPONSE_MESSAGE_IDS`
+    /// so the tick driver's skip filter is the same decision as the two
+    /// subscription drivers', not a third copy of it — a tick type happens to
+    /// declare exactly one entry.
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
     /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
     fn decode(message: &ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
 #[allow(private_interfaces)]
 impl TickDecoder<TickBidAsk> for TickBidAsk {
-    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickBidAsk;
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickBidAsk];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
         common::decoders::decode_historical_ticks_bid_ask(message)
@@ -760,7 +764,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
 
 #[allow(private_interfaces)]
 impl TickDecoder<TickLast> for TickLast {
-    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickLast;
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickLast];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
         common::decoders::decode_historical_ticks_last(message)
@@ -769,7 +773,7 @@ impl TickDecoder<TickLast> for TickLast {
 
 #[allow(private_interfaces)]
 impl TickDecoder<TickMidpoint> for TickMidpoint {
-    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTick;
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTick];
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
         common::decoders::decode_historical_ticks_mid_point(message)

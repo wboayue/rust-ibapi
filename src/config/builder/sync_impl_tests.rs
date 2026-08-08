@@ -109,7 +109,7 @@ fn test_update_config_bulk_setters() {
 #[test]
 fn test_update_config_response_decoded() {
     // Proves the decoded response flows back through submit(); exhaustive
-    // field-mapping is owned by decoders_tests::test_decode_update_config_message_populated.
+    // field-mapping is owned by decoders_tests::test_decode_update_config_proto_populated.
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response()

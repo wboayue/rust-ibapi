@@ -6,6 +6,7 @@ use log::{error, warn};
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
@@ -43,17 +44,12 @@ impl Client {
     pub fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::HEAD_TIMESTAMP)?;
 
-        let builder = self.request();
-        let request = encoders::encode_request_head_timestamp(builder.request_id(), contract, what_to_show, trading_hours.use_rth())?;
-        let subscription = builder.send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&message)?),
-            Some(Ok(message)) => Err(Error::unexpected_response(&message)),
-            Some(Err(Error::ConnectionReset)) => self.head_timestamp(contract, what_to_show, trading_hours),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
+            expect_proto(IncomingMessages::HeadTimestamp, decoders::decode_head_timestamp_proto),
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Build a request for historical bar data.
@@ -233,18 +229,12 @@ impl Client {
     pub fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
         check_version(self.server_version(), Features::HISTOGRAM)?;
 
-        loop {
-            let builder = self.request();
-            let request = encoders::encode_request_histogram_data(builder.request_id(), contract, trading_hours.use_rth(), period)?;
-            let subscription = builder.send_raw(request)?;
-
-            match subscription.next() {
-                Some(Ok(message)) => return decoders::decode_histogram_data(&message),
-                Some(Err(Error::ConnectionReset)) => continue,
-                Some(Err(e)) => return Err(e),
-                None => return Ok(Vec::new()),
-            }
-        }
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
+            expect_proto(IncomingMessages::HistogramData, decoders::decode_histogram_data_proto),
+            || Ok(Vec::new()),
+        )
     }
 }
 
@@ -367,32 +357,24 @@ pub(crate) fn historical_schedule(
 ) -> Result<Schedule, Error> {
     common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
 
-    loop {
-        let builder = client.request();
-        let request = encoders::encode_request_historical_data(
-            builder.request_id(),
-            contract,
-            end_date,
-            duration,
-            BarSize::Day,
-            Some(WhatToShow::Schedule),
-            true,
-            false,
-            &Vec::<crate::contracts::TagValue>::default(),
-        )?;
-
-        let subscription = builder.send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
-                return decoders::decode_historical_schedule(&message)
-            }
-            Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
-            Some(Err(Error::ConnectionReset)) => {}
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        }
-    }
+    request_helpers::blocking::one_shot_request_with_retry(
+        client,
+        |request_id| {
+            encoders::encode_request_historical_data(
+                request_id,
+                contract,
+                end_date,
+                duration,
+                BarSize::Day,
+                Some(WhatToShow::Schedule),
+                true,
+                false,
+                &Vec::<crate::contracts::TagValue>::default(),
+            )
+        },
+        expect_proto(IncomingMessages::HistoricalSchedule, decoders::decode_historical_schedule_proto),
+        || Err(Error::UnexpectedEndOfStream),
+    )
 }
 
 // TickSubscription and related types

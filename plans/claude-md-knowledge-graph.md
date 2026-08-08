@@ -462,11 +462,11 @@ decoders).
   is the completeness-claim class the six audits found decays fastest, so it gets a command
   behind it rather than a comment.
 
-- **Unify the third driver.** `market_data/historical/common/tick.rs::classify` has its own
-  skip filter over `TickDecoder::MESSAGE_TYPE` (singular) and its own `TickAction::Skip`. It is
-  `RESPONSE_MESSAGE_IDS` with arity 1, and #732 did not touch it, so a future change to skip
-  semantics has to be made twice. The rule node now says so out loud rather than claiming
-  there are two drivers.
+- ~~**Unify the third driver.**~~ **Shipped in #738.** `TickDecoder::MESSAGE_TYPE` became
+  `RESPONSE_MESSAGE_IDS: &'static [IncomingMessages]` and `classify` now filters with the same
+  `is_undeclared` helper the two subscription drivers use. A tick type declares one entry; the
+  arity was the only difference, and spelling it as a list made that visible rather than
+  structural.
 
 - ~~**Audit the 41 `RESPONSE_MESSAGE_IDS` entries against the const's new meaning.**~~
   **Shipped.** Both numbers in the original bullet were wrong, and the audit is what caught
@@ -537,40 +537,82 @@ decoders).
   `Some(Err(e))`. **The per-API question "does this consume `Err`?" needs asking once per
   public entry point; no shared layer answers it.**
 
-- **Adopt `fold_one_shot` at the ~14 sites that hand-roll it.** `Some(Ok(m)) => decode`,
-  `Some(Err(e)) => Err(e)`, `None => default` is spelled out at four sites each in
-  `contracts::{sync,async}`, plus `news::{sync,async}` ×2 each and `scanner::{sync,async}` —
-  while `fold_one_shot` itself has no callers outside `request_helpers.rs`. Two blockers, both
-  vestigial: `decode_contract_descriptions` and `decode_market_rule` take `&mut ResponseMessage`
-  and an unused `server_version`, though their bodies are only `require_proto()?` (a `&self`
-  method). The option-computation sites are genuinely blocked — they need `&mut` plus a
-  `DecoderContext`. `request_helpers` also lacks a request-id/no-retry variant, which is exactly
-  the slot `matching_symbols` falls into. Deferred from #735's `/simplify` as restructuring.
+- ~~**Adopt `fold_one_shot` at the ~14 sites that hand-roll it.**~~ ~~**Collapse the seven
+  identical `decode_*_message` dispatchers.**~~ **Both shipped in #736**, which the follow-up
+  list here did not record — the entries survived two more passes describing work already done,
+  which is the same rot the six audits kept finding, one level up. **A follow-up list is a
+  completeness claim too, and nothing gates it.** The residue each left is closed in #738: the
+  four option-computation sites, called "genuinely blocked" because they need `&mut` plus a
+  `DecoderContext`, now use a `fold_one_shot_mut` that `fold_one_shot` itself delegates to, so
+  the `Some(Err)` / `None` disposition is one decision rather than two.
 
-- **Collapse the seven identical `decode_*_message` dispatchers.** After #734/#735 they are all
-  `match message.message_type() { X => decode_x(m), _ => Err(unexpected_response(m)) }` across
-  `accounts` ×3, `contracts`, `config` ×2, `scanner`. An `expect_type(message, expected)` helper
-  makes each a one-liner. Rule of three is well past, but it touches seven modules.
+- ~~**Six one-shot folds are still hand-rolled.**~~ ~~**Make the expected message type a helper
+  parameter (`one_shot_typed`).**~~ **Both shipped in #738, and they were one job.** The helper
+  is `expect_proto(expected, decode_proto)` — a combinator returning the `impl Fn(&ResponseMessage)`
+  the one-shot helpers already take, rather than a new parameter on three functions that carry
+  six. Keeping the arity fixed matters more than it looks: these helpers are already three over
+  the [param budget](../docs/rules/style/param-budget.md), and the budget has no gate.
 
-- **Six one-shot folds are still hand-rolled.** `/simplify` on #736 found the conversion
-  incomplete: `head_timestamp` and `histogram_data` in `market_data/historical/{sync,async}` and
-  `market_depth_exchanges` in `market_data/realtime/{sync,async}`. `histogram_data` and
-  `market_depth_exchanges` are drop-ins; `head_timestamp` needs a dispatcher, and the async twin
-  retries on `None` rather than `ConnectionReset` — an unbounded recursion the helper would
-  bound. `historical_schedule` is convertible too but retries `ConnectionReset` unboundedly on
-  purpose, so it needs a decision rather than a substitution.
+  **The count in the original bullet was wrong in the safe direction, which is the rarer
+  failure.** It said four one-shot sites do not narrow at all. The real number is 26 sites over
+  13 distinct decoders — every bare `decoders::decode_x` passed as a processor, not just the
+  four that were named. Command:
+  `grep -rn "expect_proto(IncomingMessages::" --include=*.rs src/ | grep -v -E "_tests\.rs|/tests\.rs" | wc -l`
+  → 50 call sites: 20 replaced a `decode_*_message` wrapper, 26 replaced no narrowing at all,
+  and 4 replaced an inline `if message.message_type() == ..` guard. Cross-checked by
+  `SITES_PER_PAIR` in `src/common/one_shot_pairing_tests.rs`: 25 pairs × 2 (sync, async) = 50.
 
-- **Make the expected message type a helper parameter (`one_shot_typed`).** Eleven
-  `decode_*_message` wrappers now exist only to pair one `IncomingMessages` variant with one
-  decoder, and every one of those decoders already has a `decode_*_proto(&[u8])` sibling. A
-  helper taking `(expected, decode_proto)` would delete the pure dispatchers and the
-  `.require_proto()?` inside them. The stronger argument is not tidiness: narrowing is currently
-  opt-in, and four one-shot sites do not narrow at all — `decode_news_providers`,
-  `decode_news_article`, `decode_scanner_parameters`, `decode_verify_message_api` are passed
-  bare. A type parameter closes those by construction. Note the wrappers are not one population:
-  eight are one-shot only, two (wsh) are dual-use, and the `StreamDecoder` surface should not
-  adopt it at all — there the expected set is already declared in `RESPONSE_MESSAGE_IDS`, so a
-  hand-written narrow inside `decode` is a third copy of the same fact.
+  **The first draft of this bullet cited `grep -v _tests`, which returns 56, not the 44 it
+  claimed.** Four test files are named `tests.rs` with no underscore, so the filter missed them.
+  Written inside the bullet arguing that a follow-up list is an ungated completeness claim.
+  Fifth instance in this file of a count that was not run; the fix each time is the same and it
+  keeps not being applied at the moment of writing.
+
+  Narrowing is now structural: a one-shot call site cannot name a payload decoder without also
+  naming the frame it belongs to. 30 decoder functions went with it — 8 `decode_*_message`
+  dispatchers and 22 message-level `require_proto()` wrappers that existed only to be their
+  bodies. The two wsh wrappers stay: they are shared with a `StreamDecoder`, where the expected
+  set is already `RESPONSE_MESSAGE_IDS`.
+
+  **The narrowing found two test fixtures that had been lying, and the class generalises.**
+  `test_decode_market_rule_rejects_text_framing` built its frame with message id 87; `MarketRule`
+  is 93. `test_decode_news_providers_rejects_text_framing` led with the literal string
+  `"newsProviders"`, which parses as no discriminant at all. Both passed for as long as they
+  existed, because the only assertion was that `require_proto()` rejects text framing and the
+  type prefix was never read. **A fixture field that no assertion depends on is unverified
+  input, and it will be wrong.** Two more turned up the same way in the same PR (histogram 89 was
+  right, market-depth-exchanges 71 should have been 80).
+
+  One hand-rolled fold survives on purpose: `historical_data`'s fetch reads *two* frames (the
+  data message, then `HistoricalDataEnd`), so it is not a one-shot at all.
+
+  **`/simplify` found the sweep had missed wsh and `next_valid_order_id`, and that the "44 sites
+  now narrow structurally" claim was false while they existed.** `next_valid_order_id` is the
+  instructive one: it reads the shared `RequestIds` channel through `fold_one_shot` with a bare
+  `decode_next_valid_id`, i.e. exactly the bug class, in the file that had already adopted
+  `fold_one_shot`. Adopting the fold helper reads as adopting the convention; it isn't the same
+  thing, and nothing distinguished them until the roster existed.
+
+  **The bigger finding was that nothing gated the pair at all.** A review mutated three sites to
+  mismatched `(IncomingMessages, decoder)` pairs and only incidental per-API round-trip tests
+  failed — the same silent-failure shape the const's own gate was built for. Closed by
+  `test_expect_proto_sites_match_the_roster` (`src/common/one_shot_pairing_tests.rs`): every site
+  scraped from `src/`, checked against a `PAIRS` roster in both directions, with each pair
+  required to appear exactly twice so sync and async cannot drift. The convention now has a node,
+  [one-shot narrowing](../docs/rules/wire/one-shot-narrowing.md) — it had shipped as a doc comment
+  on a `pub(crate)` fn, which `just rules-check` cannot see because it validates structure, not
+  coverage.
+
+  **And `/simplify` was wrong about one thing, loudly and usefully.** Three of its four agents
+  independently said the `expect_type` inside the two single-type `StreamDecoder::decode` impls
+  (scanner, wsh) was now a redundant third copy of `RESPONSE_MESSAGE_IDS`, quoting the new
+  `expect_proto` doc back at it. Removing them turned
+  `test_response_message_ids_match_decode_arms` red within one run: a decoder with no match has
+  no `_ =>` arm, so `expect_type` *is* its backstop, and without it the probe reads the decoder
+  as claiming an arm for every message type including `Shutdown`. **The doc comment they were
+  quoting was mine and it was the actual defect** — it said "not for `StreamDecoder`" without
+  saying why, so it read as "narrowing there is redundant." Recorded on the node as a
+  counter-example. Convergent agreement across independent reviewers is not evidence; the gate is.
 
 - **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
   define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
@@ -616,6 +658,39 @@ decoders).
   its doc states this exact rationale. Not speculative infra: the consumers exist today, and
   the three largest files already import from that module. Deferred out of #731 as
   restructuring, per [/simplify scope discipline](../CLAUDE.md).
+
+- **Gate the three `TickDecoder::RESPONSE_MESSAGE_IDS` consts.** #738 gave the tick driver the
+  const and the shared `is_undeclared` filter, but `collect_stream_decoder_impls` matches
+  `impl StreamDecoder<` only, so the three consts are unchecked. Proof from the review: setting
+  `TickDecoder<TickBidAsk>::RESPONSE_MESSAGE_IDS` to `&[HistoricalTickBidAsk, UserInfo]` passes
+  all 1384 sync tests. `TickDecoder::decode` also has no `_ =>` backstop and no `expect_type` —
+  it is a straight call into `decode_historical_ticks_*` — so the probe cannot distinguish
+  "arm exists" the way it can for `StreamDecoder`, and giving it one is the precondition.
+  **The rename bought the name without the gate**, which the node now says out loud instead of
+  reading as if the consts are protected.
+
+- **Retire the `PAIRS` roster with a `ProtoPayload` trait.** `trait ProtoPayload { const
+  MESSAGE_ID: IncomingMessages; fn decode(bytes: &[u8]) -> Result<Self, Error>; }` implemented
+  once per payload makes `expect_proto::<T>()` take zero literals, moves the pair to where it is
+  a property (the proto type, not the caller), deletes the hand-listed roster *and* the
+  sync/async double-spelling in one move, and makes the population enumerable the way
+  `check_all` enumerates `StreamDecoder`. 25 impls plus a signature change on three helpers —
+  restructuring, deferred out of #738's `/simplify` per
+  [scope discipline](../CLAUDE.md#maintaining-the-rule-graph).
+
+- **Widen the one-shot helpers to `&mut ResponseMessage` and delete `fold_one_shot_mut`.**
+  The bound on `one_shot_request_with_retry` is what forces the four option-computation sites to
+  hand-roll `send_raw` + fold; every existing `&`-taking site reborrows for free. Doing it would
+  also give `calculate_option_price` / `calculate_implied_volatility` the connection-reset retry
+  every other one-shot has — they are the only ones without it, which #738 noticed and did not
+  fix, in the PR whose fourth goal was bounding retries. Third time a `_mut` variant has been
+  bolted on beside a helper rather than into it.
+
+- **Decide which one-shots should retry.** Post-#738: 44 retrying, 4 non-retrying by choice
+  (`market_rule`, `family_codes`, sync+async), 6 hand-rolled without it. Nothing says why
+  `head_timestamp` retries and `market_rule` does not, and the choice is invisible in the
+  signature since `retry_on_connection_reset` fires only on `Error::ConnectionReset`. The next
+  author picks a helper by copying a neighbour.
 
 - **Re-audit on a cadence, counting the completeness claims.** All six clusters were audited
   once; what decays fastest is "fully applied" / "zero remaining" / "every `pub fn`", and

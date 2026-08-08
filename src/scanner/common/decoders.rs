@@ -1,25 +1,15 @@
 use prost::Message;
 
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::Error;
 
 use super::super::ScannerData;
-
-/// Shared decode entry point for scanner data frames. Narrowing rationale lives
-/// on [`ResponseMessage::expect_type`].
-pub(in crate::scanner) fn decode_scanner_message(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    decode_scanner_data(message.expect_type(IncomingMessages::ScannerData)?)
-}
 
 // Both ScannerParameters and ScannerData gate at `PROTOBUF_SCAN_DATA` (210),
 // at or below the connection floor (`require_protobuf_support`), so the server
 // always emits proto framing for these messages — text-framed arrival is
 // rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
-
-pub(in crate::scanner) fn decode_scanner_parameters(message: &ResponseMessage) -> Result<String, Error> {
-    decode_scanner_parameters_proto(message.require_proto()?)
-}
 
 pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Error> {
     let p = crate::proto::ScannerParameters::decode(bytes)?;

@@ -9,8 +9,8 @@ triggers:
   - a subscription terminates on an unexpected message
   - adding a decode arm for a new message type
 symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
-related: [proto-aware-accessors, enum-typing, fixture-builders]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735"]
+related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -19,17 +19,25 @@ Every domain decoder reads its payload with `message.require_proto()` and feeds 
 was retired with the floor ratchet.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
-filter: the sync and async subscription drivers drop anything not listed there *before* calling
-`decode`, because shared channels carry several types. A `decode` arm for an unlisted type is
-dead code. (The historical-tick driver in `market_data/historical/common/tick.rs` has its own
-single-valued `TickDecoder::MESSAGE_TYPE` doing the same job — a third mechanism, not yet
-unified.)
+filter: all three drivers drop anything not listed there *before* calling `decode`, because
+shared channels carry several types. A `decode` arm for an unlisted type is dead code. The third
+driver is `market_data/historical/common/tick.rs::classify`, over `TickDecoder`, which declares
+the same `RESPONSE_MESSAGE_IDS` const and filters with the same `is_undeclared` helper — a tick
+type simply declares one entry (#738). **The filter is shared; the gate below is not.**
+`collect_stream_decoder_impls` matches `impl StreamDecoder<` only, so the three `TickDecoder`
+consts are unchecked in both directions — over-declaring one routes a foreign frame's bytes into
+`proto::HistoricalTicks*`, and no test fails. Closing that is a follow-up in
+[plans/claude-md-knowledge-graph.md](../../../plans/claude-md-knowledge-graph.md).
 
 End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`
-anyway. It is now a backstop for the two lists disagreeing, not a control-flow signal — it
-terminates the subscription, loudly. Never `Error::NotImplemented` or `Error::Simple(...)`.
+anyway. A decoder that consumes exactly one type has no match to hang that on, so
+`message.expect_type(IncomingMessages::X)?` is its backstop and is *not* redundant with the
+const — #738 removed two of them as duplication and the gate immediately read those decoders as
+claiming an arm for every message type. Either form is a backstop for the two lists disagreeing,
+not a control-flow signal — it terminates the subscription, loudly. Never
+`Error::NotImplemented` or `Error::Simple(...)`.
 
-**Both drift directions are gated**, by `test_response_message_ids_match_decode_arms`
+**Both drift directions are gated for `StreamDecoder`**, by `test_response_message_ids_match_decode_arms`
 (`src/subscriptions/response_message_ids_tests.rs`). It probes every decoder with a minimal
 text-framed message of every `IncomingMessages` discriminant and requires the two lists to
 agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
@@ -109,3 +117,10 @@ other two:
 - #735 — same removal on the one-shot side, and `MessageBusStub` now classifies error frames
   so the input those arms handled can no longer be constructed. Surfaced a real bug behind one
   of them: blocking `matching_symbols` discarded routed errors and returned `Ok(vec![])`.
+- #738 — extended the const to `TickDecoder` so all three drivers share one skip filter, and
+  moved one-shot narrowing to `request_helpers::expect_proto` at the call site (gated separately
+  by `test_expect_proto_sites_match_the_roster`). **A counter-example too:** the same PR first
+  deleted the `expect_type` from the two single-type `StreamDecoder::decode` impls as a "third
+  copy of the same fact", and `test_response_message_ids_match_decode_arms` caught it within the
+  hour. The narrow is the single-arm form of the backstop, not a duplicate of the const. It also
+  showed the const's rename to `TickDecoder` bought the name without the gate.

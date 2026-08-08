@@ -1,7 +1,8 @@
 //! Asynchronous implementation of configuration retrieval.
 
 use crate::{
-    common::request_helpers,
+    common::request_helpers::{self, expect_proto},
+    messages::IncomingMessages,
     protocol::{check_version, Features},
     Client, Error,
 };
@@ -31,9 +32,12 @@ impl Client {
     pub async fn config(&self) -> Result<Config, Error> {
         check_version(self.server_version(), Features::CONFIG)?;
 
-        request_helpers::one_shot_request_with_retry(self, encoders::encode_request_config, decoders::decode_config_message, || {
-            Err(Error::UnexpectedEndOfStream)
-        })
+        request_helpers::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_config,
+            expect_proto(IncomingMessages::ConfigResponse, decoders::decode_config_proto),
+            || Err(Error::UnexpectedEndOfStream),
+        )
         .await
     }
 

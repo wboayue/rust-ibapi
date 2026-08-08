@@ -6,9 +6,9 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
 use crate::client::sync::Client;
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::TagValue;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::{server_versions, Error};
 
 impl Client {
@@ -68,7 +68,7 @@ impl Client {
             self,
             OutgoingMessages::RequestScannerParameters,
             encoders::encode_scanner_parameters,
-            decoders::decode_scanner_parameters,
+            expect_proto(IncomingMessages::ScannerParameters, decoders::decode_scanner_parameters_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
     }

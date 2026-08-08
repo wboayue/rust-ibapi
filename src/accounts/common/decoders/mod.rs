@@ -21,10 +21,6 @@ pub(crate) fn decode_position_multi(message: &ResponseMessage) -> Result<Positio
     decode_position_multi_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_family_codes(message: &ResponseMessage) -> Result<Vec<FamilyCode>, Error> {
-    decode_family_codes_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_pnl(message: &ResponseMessage) -> Result<PnL, Error> {
     decode_pnl_proto(message.require_proto()?)
 }
@@ -49,14 +45,6 @@ pub(crate) fn decode_account_update_time(message: &ResponseMessage) -> Result<Ac
     decode_account_update_time_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_server_time(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
-    decode_server_time_proto(message.require_proto()?)
-}
-
-pub(crate) fn decode_server_time_millis(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
-    decode_server_time_millis_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_server_time_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
     let proto = proto::CurrentTime::decode(bytes)?;
     let timestamp = proto.current_time.unwrap_or(0);
@@ -67,10 +55,6 @@ pub(crate) fn decode_server_time_millis_proto(bytes: &[u8]) -> Result<OffsetDate
     let proto = proto::CurrentTimeInMillis::decode(bytes)?;
     let millis = proto.current_time_in_millis.unwrap_or(0);
     OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
-}
-
-pub(crate) fn decode_managed_accounts(message: &ResponseMessage) -> Result<Vec<String>, Error> {
-    decode_managed_accounts_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_managed_accounts_proto(bytes: &[u8]) -> Result<Vec<String>, Error> {
@@ -197,21 +181,9 @@ pub(crate) fn decode_family_codes_proto(bytes: &[u8]) -> Result<Vec<FamilyCode>,
         .collect())
 }
 
-pub(crate) fn decode_soft_dollar_tiers(message: &ResponseMessage) -> Result<Vec<SoftDollarTier>, Error> {
-    decode_soft_dollar_tiers_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_soft_dollar_tiers_proto(bytes: &[u8]) -> Result<Vec<SoftDollarTier>, Error> {
     let p = proto::SoftDollarTiers::decode(bytes)?;
     Ok(p.soft_dollar_tiers.iter().map(proto::decoders::decode_soft_dollar_tier).collect())
-}
-
-pub(in crate::accounts) fn decode_soft_dollar_tiers_message(message: &ResponseMessage) -> Result<Vec<SoftDollarTier>, Error> {
-    decode_soft_dollar_tiers(message.expect_type(IncomingMessages::SoftDollarTier)?)
-}
-
-pub(crate) fn decode_user_info(message: &ResponseMessage) -> Result<UserInfo, Error> {
-    decode_user_info_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_user_info_proto(bytes: &[u8]) -> Result<UserInfo, Error> {
@@ -219,14 +191,6 @@ pub(crate) fn decode_user_info_proto(bytes: &[u8]) -> Result<UserInfo, Error> {
     Ok(UserInfo {
         white_branding_id: p.white_branding_id.unwrap_or_default(),
     })
-}
-
-pub(in crate::accounts) fn decode_user_info_message(message: &ResponseMessage) -> Result<UserInfo, Error> {
-    decode_user_info(message.expect_type(IncomingMessages::UserInfo)?)
-}
-
-pub(crate) fn decode_receive_fa(message: &ResponseMessage) -> Result<FaConfig, Error> {
-    decode_receive_fa_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
@@ -241,10 +205,6 @@ pub(crate) fn decode_receive_fa_proto(bytes: &[u8]) -> Result<FaConfig, Error> {
     })
 }
 
-pub(crate) fn decode_replace_fa_end(message: &ResponseMessage) -> Result<ReplaceFaResult, Error> {
-    decode_replace_fa_end_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_replace_fa_end_proto(bytes: &[u8]) -> Result<ReplaceFaResult, Error> {
     let p = proto::ReplaceFaEnd::decode(bytes)?;
     Ok(ReplaceFaResult {
@@ -252,23 +212,11 @@ pub(crate) fn decode_replace_fa_end_proto(bytes: &[u8]) -> Result<ReplaceFaResul
     })
 }
 
-pub(in crate::accounts) fn decode_replace_fa_end_message(message: &ResponseMessage) -> Result<ReplaceFaResult, Error> {
-    decode_replace_fa_end(message.expect_type(IncomingMessages::ReplaceFAEnd)?)
-}
-
-pub(crate) fn decode_verify_message_api(message: &ResponseMessage) -> Result<VerificationChallenge, Error> {
-    decode_verify_message_api_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_verify_message_api_proto(bytes: &[u8]) -> Result<VerificationChallenge, Error> {
     let p = proto::VerifyMessageApi::decode(bytes)?;
     Ok(VerificationChallenge {
         api_data: p.api_data.unwrap_or_default(),
     })
-}
-
-pub(crate) fn decode_verify_completed(message: &ResponseMessage) -> Result<VerificationResult, Error> {
-    decode_verify_completed_proto(message.require_proto()?)
 }
 
 pub(crate) fn decode_verify_completed_proto(bytes: &[u8]) -> Result<VerificationResult, Error> {

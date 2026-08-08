@@ -14,10 +14,6 @@ use crate::Error;
 // `ResponseMessage::require_proto`, which raises `Error::UnexpectedWireFormat`
 // (docs/rules/wire/proto-only-decoding.md).
 
-pub(in crate::news) fn decode_news_providers(message: &ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
-    decode_news_providers_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_news_providers_proto(bytes: &[u8]) -> Result<Vec<NewsProvider>, Error> {
     let p = crate::proto::NewsProviders::decode(bytes)?;
     Ok(p.news_providers
@@ -44,10 +40,6 @@ fn try_parse_time_as_utc(time: &str) -> Option<OffsetDateTime> {
         time_tz::OffsetResult::Some(v) => Some(v),
         _ => None,
     }
-}
-
-pub(in crate::news) fn decode_news_article(message: &ResponseMessage) -> Result<NewsArticleBody, Error> {
-    decode_news_article_proto(message.require_proto()?)
 }
 
 pub(in crate::news) fn decode_tick_news(message: &ResponseMessage) -> Result<NewsArticle, Error> {

@@ -119,7 +119,7 @@ fn test_decode_head_timestamp_proto() {
     };
 
     let result = decode_head_timestamp_proto(&proto_msg.encode_to_vec()).unwrap();
-    assert_eq!(result, "1609459200");
+    assert_eq!(result, OffsetDateTime::from_unix_timestamp(1609459200).unwrap());
 }
 
 #[test]
@@ -309,13 +309,6 @@ fn text_message(payload: &str) -> ResponseMessage {
 }
 
 #[test]
-fn test_decode_head_timestamp_rejects_text_framing() {
-    let message = text_message("88\09000\01560346200\0");
-    let err = decode_head_timestamp(&message).expect_err("text framing must be rejected");
-    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
-}
-
-#[test]
 fn test_decode_historical_data_rejects_text_framing() {
     let message = text_message("17\09000\01\020230413\0182.94\0186.50\0180.94\0185.90\0948837.22\0184.869\0324891\0");
     let err = decode_historical_data(&message).expect_err("text framing must be rejected");
@@ -326,13 +319,6 @@ fn test_decode_historical_data_rejects_text_framing() {
 fn test_decode_historical_data_end_rejects_text_framing() {
     let message = text_message("108\09000\020230315 09:30:00 UTC\020230315 10:30:00 UTC\0");
     let err = decode_historical_data_end(&message).expect_err("text framing must be rejected");
-    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
-}
-
-#[test]
-fn test_decode_historical_schedule_rejects_text_framing() {
-    let message = text_message("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
-    let err = decode_historical_schedule(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
 }
 
@@ -361,13 +347,6 @@ fn test_decode_historical_ticks_bid_ask_rejects_text_framing() {
 fn test_decode_historical_ticks_last_rejects_text_framing() {
     let message = text_message("98\09000\01\01681133400\00\011.63\024547\0ISLAND\0 O X\01\0");
     let err = decode_historical_ticks_last(&message).expect_err("text framing must be rejected");
-    assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
-}
-
-#[test]
-fn test_decode_histogram_data_rejects_text_framing() {
-    let message = text_message("89\09000\01\0125.50\01000\0");
-    let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
 }
 

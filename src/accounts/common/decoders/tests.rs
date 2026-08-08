@@ -1,46 +1,6 @@
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
 
 #[test]
-fn test_decode_family_codes_rejects_text_framing() {
-    let message = super::ResponseMessage::from("78\02\0ACC1\0FC1\0ACC2\0FC2\0");
-    let err = super::decode_family_codes(&message).unwrap_err();
-    assert!(
-        matches!(err, super::Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_managed_accounts_rejects_text_framing() {
-    let message = super::ResponseMessage::from("15\01\0DU1234567,DU7654321\0");
-    let err = super::decode_managed_accounts(&message).unwrap_err();
-    assert!(
-        matches!(err, super::Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_server_time_rejects_text_framing() {
-    let message = super::ResponseMessage::from("49\01\01678890000\0");
-    let err = super::decode_server_time(&message).unwrap_err();
-    assert!(
-        matches!(err, super::Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
-fn test_decode_server_time_millis_rejects_text_framing() {
-    let message = super::ResponseMessage::from("109\01678890000123\0");
-    let err = super::decode_server_time_millis(&message).unwrap_err();
-    assert!(
-        matches!(err, super::Error::UnexpectedWireFormat(_)),
-        "expected UnexpectedWireFormat, got {err:?}"
-    );
-}
-
-#[test]
 fn test_decode_server_time_proto_via_builder() {
     use crate::testdata::builders::accounts::current_time;
     use crate::testdata::builders::ResponseProtoEncoder;
@@ -510,13 +470,6 @@ fn test_decode_family_codes_proto_empty() {
 }
 
 #[test]
-fn test_decode_soft_dollar_tiers_rejects_text_framing() {
-    let message = super::ResponseMessage::from("77\01\0Tier1\0val\0Display\0");
-    let err = super::decode_soft_dollar_tiers(&message).unwrap_err();
-    assert!(matches!(err, super::Error::UnexpectedWireFormat(_)), "got {err:?}");
-}
-
-#[test]
 fn test_decode_soft_dollar_tiers_proto_round_trip() {
     use prost::Message;
     let p = crate::proto::SoftDollarTiers {
@@ -538,13 +491,6 @@ fn test_decode_soft_dollar_tiers_proto_round_trip() {
     assert_eq!(tiers.len(), 2);
     assert_eq!(tiers[0].name, "Tier1");
     assert_eq!(tiers[1].display_name, "Tier 2");
-}
-
-#[test]
-fn test_decode_user_info_rejects_text_framing() {
-    let message = super::ResponseMessage::from("107\01\0brand\0");
-    let err = super::decode_user_info(&message).unwrap_err();
-    assert!(matches!(err, super::Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
 
 #[test]

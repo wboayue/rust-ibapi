@@ -7,21 +7,10 @@ use crate::config::{
     ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,
     UpdateConfigResponse,
 };
-use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::proto;
 use crate::Error;
 
-/// Dispatch a config frame to its typed decoder. Narrowing rationale lives on
-/// [`ResponseMessage::expect_type`].
-pub(in crate::config) fn decode_config_message(message: &ResponseMessage) -> Result<Config, Error> {
-    decode_config(message.expect_type(IncomingMessages::ConfigResponse)?)
-}
-
-fn decode_config(message: &ResponseMessage) -> Result<Config, Error> {
-    decode_config_proto(message.require_proto()?)
-}
-
-fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
+pub(in crate::config) fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
     let p = proto::ConfigResponse::decode(bytes)?;
     Ok(Config {
         lock_and_exit: p.lock_and_exit.map(convert_lock_and_exit),
@@ -127,17 +116,7 @@ fn convert_smart_routing(p: proto::OrdersSmartRoutingConfig) -> OrdersSmartRouti
     }
 }
 
-/// Dispatch on the incoming message type and forward to the update-config
-/// decoder. Mirrors [`decode_config_message`].
-pub(in crate::config) fn decode_update_config_message(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
-    decode_update_config(message.expect_type(IncomingMessages::UpdateConfigResponse)?)
-}
-
-fn decode_update_config(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
-    decode_update_config_proto(message.require_proto()?)
-}
-
-fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {
+pub(in crate::config) fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {
     let p = proto::UpdateConfigResponse::decode(bytes)?;
     Ok(UpdateConfigResponse {
         status: p.status,

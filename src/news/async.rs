@@ -2,9 +2,9 @@
 
 use super::common::{self, decoders, encoders};
 use super::*;
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
@@ -32,7 +32,7 @@ impl Client {
             self,
             OutgoingMessages::RequestNewsProviders,
             encoders::encode_request_news_providers,
-            decoders::decode_news_providers,
+            expect_proto(IncomingMessages::NewsProviders, decoders::decode_news_providers_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
@@ -143,7 +143,7 @@ impl Client {
         request_helpers::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_request_news_article(request_id, provider_code, article_id),
-            decoders::decode_news_article,
+            expect_proto(IncomingMessages::NewsArticle, decoders::decode_news_article_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await
