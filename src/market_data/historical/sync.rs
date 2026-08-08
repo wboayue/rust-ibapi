@@ -189,6 +189,17 @@ impl Client {
     ///
     /// # Arguments
     /// * `request_id` - The request ID of the historical ticks subscription to cancel.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // `request_id` is the id the in-flight `historical_ticks` request was issued with.
+    /// let request_id = client.next_request_id();
+    /// client.cancel_historical_ticks(request_id).expect("cancel failed");
+    /// ```
     pub fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
         check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 

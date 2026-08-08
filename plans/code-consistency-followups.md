@@ -37,20 +37,28 @@ Client-method violations exposed by the receiver clarification (each appears in 
 
 ## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
 
-Counted 2026-08-07 while migrating the `docs/` cluster: 132 of 152 `impl Client` methods carry
-the block. Nine sites across seven methods, listed sync-side first where both exist. Eight
-remain — async `market_data` was closed in #729:
+**Closed in #751.** Every `impl Client` method that owes an example has one.
 
-- `orders::Client::exercise_options` — has `# Arguments`, no example. Six params, so the
-  example carries real weight.
-- `contracts::Client::market_rule`, `contracts::Client::cancel_contract_details`
-- `accounts::Client::server_time_millis` (sync + async), `accounts::Client::family_codes`
-- `market_data::historical::Client::cancel_historical_ticks` (sync + async)
-- ~~`client::Client::market_data` — **async only**; the sync twin has one. A
-  [doc parity](../docs/rules/docs/doc-parity-audit.md) miss, not just a coverage one.~~
-  **Done in #729**, which moved the method to
-  `market_data::realtime::Client::market_data`; the two sync examples now have async
-  twins. Closing it during the move cost nothing — the sync twin was in the same diff.
+Re-counted 2026-08-08 with a script that walks each `impl Client` block and reads each method's
+*own* doc comment (`scratchpad/examples_audit.py` in that PR's write-up; the rule is one line of
+`re.match(r'\s{4}pub (?:async )?fn')` inside a brace-tracked block):
+
+| | 2026-08-07 | 2026-08-08, before | after |
+|---|---|---|---|
+| `impl Client` methods | 152 | 154 | 154 |
+| carrying `# Examples` | 132 | 135 | 143 |
+| missing, exempt accessors | 11 | 11 | 11 |
+| missing, genuine | 9 | 8 | **0** |
+
+**The list was right and the denominator was stale**, which is the usual split — the eight
+methods named here were exactly the eight still missing a year-tick later, but "132 of 152" was
+already wrong when written down, because the method count moves with every PR that adds an API.
+A count in prose dates from the moment it was typed; only the command survives.
+
+Written in #751: `server_time_millis` (sync + async), `family_codes` (sync), `market_rule`,
+`cancel_contract_details`, `cancel_historical_ticks` (sync + async), `exercise_options` (sync).
+The three cancel examples say where the `request_id` comes from, which was the reason they had
+no example: it is not a value the method itself hands you.
 
 The remaining eleven sites are the six accessors the rule exempts — `client_id`,
 `next_request_id`, `next_order_id`, `connection_time`, `time_zone`, and async `server_version`.

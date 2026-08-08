@@ -452,6 +452,27 @@ impl Client {
     /// * `account`           - Destination account.
     /// * `ovrd`              - Specifies whether your setting will override the system's natural action. For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
     /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::{Contract, OptionRight};
+    /// use ibapi::orders::ExerciseAction;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
+    /// let subscription = client
+    ///     .exercise_options(&contract, ExerciseAction::Exercise, 1, "DU000001", false, None)
+    ///     .expect("exercise_options failed");
+    ///
+    /// // Consume the subscription so execution updates and commission reports surface.
+    /// for event in subscription.iter_data() {
+    ///     match event {
+    ///         Ok(item) => println!("exercise event: {item:?}"),
+    ///         Err(e) => { eprintln!("exercise err: {e:?}"); break; }
+    ///     }
+    /// }
+    /// ```
     pub fn exercise_options(
         &self,
         contract: &Contract,

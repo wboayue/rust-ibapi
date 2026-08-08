@@ -372,6 +372,18 @@ impl Client {
     }
 
     /// Query the current server time in milliseconds reported by TWS or IB Gateway.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let server_time = client.server_time_millis().await.expect("error requesting server time");
+    ///     println!("server time to the millisecond: {server_time:?}");
+    /// }
+    /// ```
     pub async fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
         check_version(self.server_version(), Features::CURRENT_TIME_IN_MILLIS)?;
 
