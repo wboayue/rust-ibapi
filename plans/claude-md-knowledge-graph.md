@@ -659,15 +659,24 @@ decoders).
   the three largest files already import from that module. Deferred out of #731 as
   restructuring, per [/simplify scope discipline](../CLAUDE.md).
 
-- **Gate the three `TickDecoder::RESPONSE_MESSAGE_IDS` consts.** #738 gave the tick driver the
-  const and the shared `is_undeclared` filter, but `collect_stream_decoder_impls` matches
-  `impl StreamDecoder<` only, so the three consts are unchecked. Proof from the review: setting
-  `TickDecoder<TickBidAsk>::RESPONSE_MESSAGE_IDS` to `&[HistoricalTickBidAsk, UserInfo]` passes
-  all 1384 sync tests. `TickDecoder::decode` also has no `_ =>` backstop and no `expect_type` —
-  it is a straight call into `decode_historical_ticks_*` — so the probe cannot distinguish
-  "arm exists" the way it can for `StreamDecoder`, and giving it one is the precondition.
-  **The rename bought the name without the gate**, which the node now says out loud instead of
-  reading as if the consts are protected.
+- ~~**Gate the three `TickDecoder::RESPONSE_MESSAGE_IDS` consts.**~~ **Shipped in #739.** The
+  review's mutation reproduced first — `TickDecoder<TickBidAsk>` declaring
+  `[HistoricalTickBidAsk, UserInfo]` passed all 1364 sync tests (the bullet said 1384; the count
+  had drifted, as they do) — and now fails by name in both directions.
+
+  **The precondition was the whole job.** The gate could not be pointed at `TickDecoder` as it
+  stood: with no backstop, all three `decode` impls dive straight into `require_proto()` and
+  answer `UnexpectedWireFormat` to every probe, so the check would have read them as handling all
+  88 scanned discriminants and asserted nothing. Adding `expect_type` first is what made them
+  legible. #738 had learned the same fact from the opposite end — it deleted two `expect_type`
+  narrows from single-type `StreamDecoder` impls as redundant and the gate went red within the
+  hour. **A backstop is not defensive coding; it is the thing that makes a decoder's arm set
+  observable from outside.**
+
+  The two traits now share `check_decoder`, with the differing `decode` signatures erased by a
+  closure at the two call sites — the failure taxonomy stays in one copy rather than growing a
+  second that drifts. `test_decoder_roster_is_complete` counts per trait, so adding a
+  `TickDecoder` while deleting a `StreamDecoder` cannot net out to a passing total.
 
 - **Retire the `PAIRS` roster with a `ProtoPayload` trait.** `trait ProtoPayload { const
   MESSAGE_ID: IncomingMessages; fn decode(bytes: &[u8]) -> Result<Self, Error>; }` implemented

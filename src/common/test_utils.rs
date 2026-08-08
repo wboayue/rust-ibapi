@@ -324,6 +324,52 @@ pub mod wire_enum {
     }
 }
 
+/// Walking the crate's own source, for the gates that check a hand-listed roster
+/// against the tree.
+#[cfg(test)]
+pub mod source_scan {
+    use std::path::Path;
+
+    /// Hand every production `.rs` file under `src/` to `visit` as
+    /// `(path, contents)`.
+    ///
+    /// **What counts as production source is defined here and nowhere else.**
+    /// `tests.rs` and `*_tests.rs` are skipped: they hold test-only decoders and
+    /// fixtures that exist to exercise the drivers, not to decode a wire
+    /// message, and a roster gate that counted them would report failures no
+    /// production change could fix. Two gates depend on that definition —
+    /// `response_message_ids_tests` and `one_shot_pairing_tests` — and they must
+    /// agree, or one silently scans a different tree than it reports on.
+    ///
+    /// Takes a visitor rather than returning a `Vec` so a caller looking for
+    /// several things reads each file once.
+    pub fn visit_production_sources(visit: &mut impl FnMut(&Path, &str)) {
+        visit_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), visit);
+    }
+
+    fn visit_dir(dir: &Path, visit: &mut impl FnMut(&Path, &str)) {
+        let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // `file_type()` reuses what `readdir` already returned; `is_dir()`
+            // would re-`stat` every entry.
+            if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                visit_dir(&path, visit);
+                continue;
+            }
+
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if !name.ends_with(".rs") || name == "tests.rs" || name.ends_with("_tests.rs") {
+                continue;
+            }
+
+            let contents = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            visit(&path, &contents);
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "test_utils_tests.rs"]
 mod tests;

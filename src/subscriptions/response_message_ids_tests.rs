@@ -1,9 +1,10 @@
-//! Cross-check of [`StreamDecoder::RESPONSE_MESSAGE_IDS`] against the `decode`
-//! match arms, for every production decoder.
+//! Cross-check of `RESPONSE_MESSAGE_IDS` against the `decode` match arms, for
+//! every production decoder — both [`StreamDecoder`] and
+//! [`TickDecoder`](crate::market_data::historical::TickDecoder).
 //!
-//! Since #732 the const is the sole skip filter: both drivers discard a frame
-//! whose type is absent from it before `decode` is ever called. That makes the
-//! two lists a contract, and it can fail in either direction:
+//! Since #732 the const is the sole skip filter: all three drivers discard a
+//! frame whose type is absent from it before `decode` is ever called. That makes
+//! the two lists a contract, and it can fail in either direction:
 //!
 //! - **Declared but unhandled** — the const names a type `decode` has no arm
 //!   for. Loud already: the `_ =>` backstop returns `UnexpectedResponse` and
@@ -19,12 +20,14 @@
 //! while every real arm either returns `Ok`/`EndOfStream` without touching the
 //! payload or reaches `require_proto()` and returns `Error::UnexpectedWireFormat`
 //! (#731). So `UnexpectedResponse` means "no arm", and anything else means
-//! "arm exists".
+//! "arm exists" — which only holds while every `decode` has a backstop. One that
+//! dives straight into `require_proto()` reads as handling everything.
 
 use std::collections::BTreeSet;
 
 use super::{DecoderContext, StreamDecoder};
 use crate::errors::Error;
+use crate::market_data::historical::TickDecoder;
 use crate::messages::{IncomingMessages, ResponseMessage};
 
 /// Discriminants to probe. Assigned ids run `-2..=111`; the range is a
@@ -58,12 +61,19 @@ fn probe(kind: IncomingMessages) -> ResponseMessage {
 /// circular. The exemption is gone; this keeps the declarations gone with it.
 const DISPATCHER_INTERCEPTED: &[IncomingMessages] = &[IncomingMessages::Error, IncomingMessages::Shutdown];
 
-fn check<D: StreamDecoder<D>>(failures: &mut Vec<String>) {
-    let decoder = std::any::type_name::<D>();
-    let context = DecoderContext::default();
+/// One decoder's declared list against its `decode` arms.
+///
+/// `decode` arrives as a closure because the two traits spell it differently —
+/// `StreamDecoder` takes a `DecoderContext` and `&mut ResponseMessage`,
+/// `TickDecoder` takes `&ResponseMessage` and returns a batch. Erasing that
+/// difference here keeps the failure taxonomy below in one copy; the alternative
+/// was a second `check` that drifts from this one, which is the shape of defect
+/// this whole file exists to catch.
+fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl Fn(&mut ResponseMessage) -> Result<(), Error>) -> Vec<String> {
+    let mut failures = Vec::new();
 
     for kind in all_message_types() {
-        let declared = D::RESPONSE_MESSAGE_IDS.contains(&kind);
+        let declared = declared_ids.contains(&kind);
 
         if declared && DISPATCHER_INTERCEPTED.contains(&kind) {
             failures.push(format!(
@@ -73,10 +83,7 @@ fn check<D: StreamDecoder<D>>(failures: &mut Vec<String>) {
             continue;
         }
 
-        let handled = !matches!(
-            <D as StreamDecoder<D>>::decode(&context, &mut probe(kind)),
-            Err(Error::UnexpectedResponse(_))
-        );
+        let handled = !matches!(decode(&mut probe(kind)), Err(Error::UnexpectedResponse(_)));
 
         match (declared, handled) {
             (true, false) => failures.push(format!(
@@ -90,110 +97,162 @@ fn check<D: StreamDecoder<D>>(failures: &mut Vec<String>) {
             _ => {}
         }
     }
+
+    failures
 }
 
-/// The roster. One line per production `impl StreamDecoder`; kept honest by
-/// [`test_decoder_roster_is_complete`].
-fn check_all(failures: &mut Vec<String>) {
+/// What [`check_all`] accumulates: the failures, and how many decoders of each
+/// trait it actually visited.
+///
+/// The counts are tallied by the `check_*` calls themselves rather than declared
+/// as constants. A hand-typed count is a second statement of what the roster
+/// already says, and it can agree with the tree while disagreeing with the
+/// roster — add a decoder, bump the constant, forget the `check_stream::<Foo>`
+/// line, and the tree count matches while `Foo` is never probed. Counting the
+/// calls makes the roster itself the thing under test.
+#[derive(Default)]
+struct Roster {
+    failures: Vec<String>,
+    stream: usize,
+    tick: usize,
+}
+
+fn check_stream<D: StreamDecoder<D>>(roster: &mut Roster) {
+    let context = DecoderContext::default();
+    roster.stream += 1;
+    roster
+        .failures
+        .extend(check_decoder(std::any::type_name::<D>(), D::RESPONSE_MESSAGE_IDS, |message| {
+            <D as StreamDecoder<D>>::decode(&context, message).map(|_| ())
+        }));
+}
+
+/// The tick driver (`market_data/historical/common/tick.rs::classify`) filters on
+/// the same const through the same `is_undeclared` helper, so it is subject to
+/// the same contract.
+fn check_tick<T: TickDecoder<T>>(roster: &mut Roster) {
+    roster.tick += 1;
+    roster
+        .failures
+        .extend(check_decoder(std::any::type_name::<T>(), T::RESPONSE_MESSAGE_IDS, |message| {
+            <T as TickDecoder<T>>::decode(message).map(|_| ())
+        }));
+}
+
+/// The roster. One line per production `impl StreamDecoder` / `impl TickDecoder`;
+/// kept honest by [`test_decoder_roster_is_complete`].
+fn check_all() -> Roster {
     use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
     use crate::contracts::{OptionChain, OptionComputation};
     use crate::display_groups::DisplayGroupUpdate;
-    use crate::market_data::historical::HistoricalBarUpdate;
+    use crate::market_data::historical::{HistoricalBarUpdate, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
     use crate::news::{NewsArticle, NewsBulletin};
     use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
     use crate::scanner::ScannerData;
     use crate::wsh::{WshEventData, WshMetadata};
 
-    check::<AccountSummaryResult>(failures);
-    check::<AccountUpdate>(failures);
-    check::<AccountUpdateMulti>(failures);
-    check::<PnL>(failures);
-    check::<PnLSingle>(failures);
-    check::<PositionUpdate>(failures);
-    check::<PositionUpdateMulti>(failures);
-    check::<OptionChain>(failures);
-    check::<OptionComputation>(failures);
-    check::<DisplayGroupUpdate>(failures);
-    check::<HistoricalBarUpdate>(failures);
-    check::<Bar>(failures);
-    check::<BidAsk>(failures);
-    check::<MarketDepths>(failures);
-    check::<MidPoint>(failures);
-    check::<TickTypes>(failures);
-    check::<Trade>(failures);
-    check::<NewsArticle>(failures);
-    check::<NewsBulletin>(failures);
-    check::<CancelOrder>(failures);
-    check::<Executions>(failures);
-    check::<ExerciseOptions>(failures);
-    check::<OrderUpdate>(failures);
-    check::<Orders>(failures);
-    check::<PlaceOrder>(failures);
-    check::<Vec<ScannerData>>(failures);
-    check::<WshEventData>(failures);
-    check::<WshMetadata>(failures);
-}
+    let mut roster = Roster::default();
 
-/// Number of `check::<_>` calls in [`check_all`]. Compared against the tree by
-/// [`test_decoder_roster_is_complete`].
-const ROSTER_LEN: usize = 28;
+    check_stream::<AccountSummaryResult>(&mut roster);
+    check_stream::<AccountUpdate>(&mut roster);
+    check_stream::<AccountUpdateMulti>(&mut roster);
+    check_stream::<PnL>(&mut roster);
+    check_stream::<PnLSingle>(&mut roster);
+    check_stream::<PositionUpdate>(&mut roster);
+    check_stream::<PositionUpdateMulti>(&mut roster);
+    check_stream::<OptionChain>(&mut roster);
+    check_stream::<OptionComputation>(&mut roster);
+    check_stream::<DisplayGroupUpdate>(&mut roster);
+    check_stream::<HistoricalBarUpdate>(&mut roster);
+    check_stream::<Bar>(&mut roster);
+    check_stream::<BidAsk>(&mut roster);
+    check_stream::<MarketDepths>(&mut roster);
+    check_stream::<MidPoint>(&mut roster);
+    check_stream::<TickTypes>(&mut roster);
+    check_stream::<Trade>(&mut roster);
+    check_stream::<NewsArticle>(&mut roster);
+    check_stream::<NewsBulletin>(&mut roster);
+    check_stream::<CancelOrder>(&mut roster);
+    check_stream::<Executions>(&mut roster);
+    check_stream::<ExerciseOptions>(&mut roster);
+    check_stream::<OrderUpdate>(&mut roster);
+    check_stream::<Orders>(&mut roster);
+    check_stream::<PlaceOrder>(&mut roster);
+    check_stream::<Vec<ScannerData>>(&mut roster);
+    check_stream::<WshEventData>(&mut roster);
+    check_stream::<WshMetadata>(&mut roster);
+
+    check_tick::<TickBidAsk>(&mut roster);
+    check_tick::<TickLast>(&mut roster);
+    check_tick::<TickMidpoint>(&mut roster);
+
+    roster
+}
 
 #[test]
 fn test_response_message_ids_match_decode_arms() {
-    let mut failures = Vec::new();
-    check_all(&mut failures);
+    let roster = check_all();
 
     assert!(
-        failures.is_empty(),
+        roster.failures.is_empty(),
         "RESPONSE_MESSAGE_IDS and `decode` disagree:\n  {}",
-        failures.join("\n  ")
+        roster.failures.join("\n  ")
     );
 }
 
 /// A hand-listed roster rots the moment someone adds a decoder, and the rot is
 /// silent — the new decoder is simply never checked. Counting the impls in the
-/// tree turns that into a failing test.
+/// tree and comparing against what [`check_all`] actually visited turns that
+/// into a failing test.
+///
+/// Counted per trait, so a `TickDecoder` added while a `StreamDecoder` is
+/// deleted cannot net out to zero.
 #[test]
 fn test_decoder_roster_is_complete() {
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut impls = Vec::new();
-    collect_stream_decoder_impls(&src, &mut impls);
-    impls.sort();
+    let roster = check_all();
+    let found = collect_impls(&[STREAM_HEADER, TICK_HEADER]);
 
+    assert_roster_covers(STREAM_HEADER, &found[0], roster.stream);
+    assert_roster_covers(TICK_HEADER, &found[1], roster.tick);
+}
+
+const STREAM_HEADER: &str = "impl StreamDecoder<";
+const TICK_HEADER: &str = "impl TickDecoder<";
+
+fn assert_roster_covers(header: &str, found: &[String], checked: usize) {
     assert_eq!(
-        impls.len(),
-        ROSTER_LEN,
-        "src/ has {} `impl StreamDecoder` blocks but the roster in this file lists {ROSTER_LEN}. \
-         Add the new decoder to `check_all` and bump `ROSTER_LEN`.\nFound:\n  {}",
-        impls.len(),
-        impls.join("\n  ")
+        found.len(),
+        checked,
+        "src/ has {} `{header}` blocks but `check_all` checks {checked}. \
+         Add the missing decoder to `check_all`.\nFound:\n  {}",
+        found.len(),
+        found.join("\n  ")
     );
 }
 
-/// Production `impl StreamDecoder<..> for ..` headers under `dir`. Test-only
-/// decoders live in `*_tests.rs` / `tests.rs` and are skipped — they exist to
-/// exercise the drivers, not to decode a wire message.
-fn collect_stream_decoder_impls(dir: &std::path::Path, found: &mut Vec<String>) {
-    let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
+/// Production `impl <Trait><..> for ..` headers under `src/`, one bucket per
+/// entry in `headers`.
+///
+/// Takes every header at once so the tree is read once rather than once per
+/// trait. Matching on the header's own prefix excludes generic bounds, which
+/// read `impl<T: TickDecoder<T>> ..` and are not impls of the trait.
+fn collect_impls(headers: &[&str]) -> Vec<Vec<String>> {
+    let mut found = vec![Vec::new(); headers.len()];
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_stream_decoder_impls(&path, found);
-            continue;
-        }
-
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        if !name.ends_with(".rs") || name == "tests.rs" || name.ends_with("_tests.rs") {
-            continue;
-        }
-
-        let contents = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    crate::common::test_utils::source_scan::visit_production_sources(&mut |path, contents| {
         for line in contents.lines() {
-            if line.trim_start().starts_with("impl StreamDecoder<") {
-                found.push(format!("{}: {}", path.display(), line.trim()));
+            let line = line.trim_start();
+            for (bucket, header) in found.iter_mut().zip(headers) {
+                if line.starts_with(header) {
+                    bucket.push(format!("{}: {line}", path.display()));
+                }
             }
         }
+    });
+
+    for bucket in &mut found {
+        bucket.sort();
     }
+    found
 }

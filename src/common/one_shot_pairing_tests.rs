@@ -26,7 +26,6 @@
 //! retire this file.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 /// Sync and async each spell the pair once, and neither is allowed to drift.
 const SITES_PER_PAIR: usize = 2;
@@ -68,24 +67,15 @@ const PAIRS: &[(&str, &str)] = &[
 ];
 
 /// Scrape `(variant, decoder)` out of every `expect_proto(..)` in production
-/// source under `src/`, skipping test files.
-fn collect_sites(dir: &Path, found: &mut Vec<(String, String, String)>) {
-    let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_sites(&path, found);
-            continue;
-        }
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        if !name.ends_with(".rs") || name == "tests.rs" || name.ends_with("_tests.rs") {
-            continue;
-        }
-        let contents = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        for (variant, decoder) in parse_sites(&contents) {
+/// source under `src/`.
+fn collect_sites() -> Vec<(String, String, String)> {
+    let mut found = Vec::new();
+    crate::common::test_utils::source_scan::visit_production_sources(&mut |path, contents| {
+        for (variant, decoder) in parse_sites(contents) {
             found.push((path.display().to_string(), variant, decoder));
         }
-    }
+    });
+    found
 }
 
 /// `expect_proto(IncomingMessages::X, [path::]decode_y_proto)` → `("X", "decode_y_proto")`.
@@ -115,8 +105,7 @@ fn parse_sites(contents: &str) -> Vec<(String, String)> {
 
 #[test]
 fn test_expect_proto_sites_match_the_roster() {
-    let mut sites = Vec::new();
-    collect_sites(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut sites);
+    let sites = collect_sites();
     assert!(
         !sites.is_empty(),
         "scraper found no expect_proto sites — the parser is broken, not the code"
