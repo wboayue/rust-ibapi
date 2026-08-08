@@ -8,7 +8,7 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
-use log::{error, info};
+use log::info;
 
 impl Client {
     /// Requests contract information.
@@ -57,7 +57,6 @@ impl Client {
                             contract_details.push(decoded);
                         }
                         IncomingMessages::ContractDataEnd => return Ok(contract_details),
-                        IncomingMessages::Error => return Err(Error::from(response)),
                         _ => return Err(Error::unexpected_response(&response)),
                     }
                 }
@@ -99,23 +98,15 @@ impl Client {
 
         match subscription.next().await {
             Some(Ok(mut message)) => match message.message_type() {
-                IncomingMessages::SymbolSamples => {
-                    return decoders::decode_contract_descriptions(self.server_version(), &mut message);
-                }
-                IncomingMessages::Error => {
-                    error!("unexpected error: {message:?}");
-                    return Err(Error::unexpected_response(&message));
-                }
+                IncomingMessages::SymbolSamples => decoders::decode_contract_descriptions(self.server_version(), &mut message),
                 _ => {
                     info!("unexpected message: {message:?}");
-                    return Err(Error::unexpected_response(&message));
+                    Err(Error::unexpected_response(&message))
                 }
             },
-            Some(Err(e)) => return Err(e),
-            None => {}
+            Some(Err(e)) => Err(e),
+            None => Ok(Vec::new()),
         }
-
-        Ok(Vec::default())
     }
 
     /// Requests details about a given market rule.

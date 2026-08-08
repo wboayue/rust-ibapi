@@ -209,7 +209,6 @@ pub(crate) fn decode_soft_dollar_tiers_proto(bytes: &[u8]) -> Result<Vec<SoftDol
 pub(in crate::accounts) fn decode_soft_dollar_tiers_message(message: &ResponseMessage) -> Result<Vec<SoftDollarTier>, Error> {
     match message.message_type() {
         IncomingMessages::SoftDollarTier => decode_soft_dollar_tiers(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }
@@ -228,7 +227,6 @@ pub(crate) fn decode_user_info_proto(bytes: &[u8]) -> Result<UserInfo, Error> {
 pub(in crate::accounts) fn decode_user_info_message(message: &ResponseMessage) -> Result<UserInfo, Error> {
     match message.message_type() {
         IncomingMessages::UserInfo => decode_user_info(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }
@@ -263,7 +261,6 @@ pub(crate) fn decode_replace_fa_end_proto(bytes: &[u8]) -> Result<ReplaceFaResul
 pub(in crate::accounts) fn decode_replace_fa_end_message(message: &ResponseMessage) -> Result<ReplaceFaResult, Error> {
     match message.message_type() {
         IncomingMessages::ReplaceFAEnd => decode_replace_fa_end(message),
-        IncomingMessages::Error => Err(Error::from(message)),
         _ => Err(Error::unexpected_response(message)),
     }
 }

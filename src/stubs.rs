@@ -10,6 +10,8 @@ use std::sync::Arc;
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, ResponseMessage};
+use crate::transport::routing::{classify_error, determine_routing, ErrorDisposition, RoutingDecision};
+use crate::transport::RoutedItem;
 use crate::Error;
 
 #[cfg(feature = "sync")]
@@ -99,6 +101,58 @@ impl MessageBusStub {
             .map(|m| ResponseMessage::from(&m.replace('|', "\0")))
             .collect()
     }
+
+    /// Configured responses as the dispatcher would deliver them.
+    ///
+    /// The stub has no dispatcher, so it used to hand every fixture over as
+    /// `RoutedItem::Response` — including `Error` frames, which the real
+    /// transport never does. That gap is why decoders grew unreachable
+    /// `IncomingMessages::Error` arms and why tests asserting them passed:
+    /// only a stub could produce the input. Classifying here keeps the
+    /// fixture-side contract the same as the wire-side one.
+    ///
+    /// This is the same blind spot `debug_assert_request_id_routable` covers
+    /// from the routing side — stub tests inject below `determine_routing`.
+    pub(crate) fn routed_items(&self) -> Vec<RoutedItem> {
+        self.response_messages_decoded().into_iter().map(classify_like_dispatcher).collect()
+    }
+
+    /// Record the outbound request and hand back a subscription pre-loaded with
+    /// the configured responses. Every async `send_*` differs only in the id or
+    /// message-type argument it ignores.
+    #[cfg(feature = "async")]
+    fn seeded_subscription(&self, message: Vec<u8>) -> AsyncInternalSubscription {
+        self.request_messages.write().unwrap().push(message);
+
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
+        for item in self.routed_items() {
+            sender.send(item).unwrap();
+        }
+
+        AsyncInternalSubscription::new(receiver)
+    }
+}
+
+/// Apply the dispatcher's classification to a fixture. The stub has no channel
+/// map, so the routing *target* is irrelevant here — only the classification is,
+/// and it covers both types the dispatcher intercepts before routing
+/// (`DISPATCHER_INTERCEPTED` in `src/subscriptions/response_message_ids_tests.rs`).
+fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
+    match determine_routing(&message) {
+        RoutingDecision::Error(payload) => match classify_error(payload) {
+            // A request-scoped error or warning goes to its subscription.
+            ErrorDisposition::Route(_, item) => item,
+            // Request-less: a warning is informational, a hard error fails the
+            // in-flight one-shot. The stub has exactly one channel, so both
+            // land here rather than on a notice broadcaster.
+            ErrorDisposition::NoticeOnly(notice) => RoutedItem::Notice(notice),
+            ErrorDisposition::NoticeAndFailOneShots(_, error) => RoutedItem::Error(error),
+        },
+        // Ends the dispatcher loop on a real transport, so it never reaches a
+        // decoder there either.
+        RoutingDecision::Shutdown => RoutedItem::Error(Error::Shutdown),
+        _ => message.into(),
+    }
 }
 
 #[cfg(feature = "sync")]
@@ -135,8 +189,8 @@ impl MessageBus for MessageBusStub {
         let (signaler, _) = channel::unbounded();
 
         // Send any pre-configured response messages
-        for message in self.response_messages_decoded() {
-            sender.send(message.into()).unwrap();
+        for item in self.routed_items() {
+            sender.send(item).unwrap();
         }
 
         let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
@@ -187,8 +241,8 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
 
-    for message in stub.response_messages_decoded() {
-        sender.send(message.into()).unwrap();
+    for item in stub.routed_items() {
+        sender.send(item).unwrap();
     }
 
     let mut subscription = SubscriptionBuilder::new().signaler(s1);
@@ -205,39 +259,15 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
     async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for message in self.response_messages_decoded() {
-            sender.send(message.into()).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_order_request(&self, _order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for message in self.response_messages_decoded() {
-            sender.send(message.into()).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_shared_request(&self, _message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for message in self.response_messages_decoded() {
-            sender.send(message.into()).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
@@ -265,8 +295,8 @@ impl AsyncMessageBus for MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
 
         // Send pre-configured response messages
-        for message in self.response_messages_decoded() {
-            sender.send(message.into()).unwrap();
+        for item in self.routed_items() {
+            sender.send(item).unwrap();
         }
 
         let (cleanup_sender, mut cleanup_receiver) = tokio::sync::mpsc::unbounded_channel();

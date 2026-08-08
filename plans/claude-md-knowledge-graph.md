@@ -468,26 +468,74 @@ life.
   layers that actually implement it — `test_hard_error_with_request_id_terminates_subscription`
   and `test_subscription_hard_error_terminates_stream`, in each transport's tests.
 
-- **Retire the remaining one-shot `IncomingMessages::Error` arms.** The audit above proved the
-  whole class dead, not just the `StreamDecoder` half: `fold_one_shot` only ever calls its
-  processor on `Some(Ok(_))`, and `RoutedItem::into_legacy` yields that only for
-  `RoutedItem::Response`. So the `Error` arms in `accounts::decode_soft_dollar_tiers_message` /
-  `decode_user_info_message` / `decode_replace_fa_end_message`,
-  `contracts::decode_smart_components_message`, `scanner::decode_scanner_message`, and both
-  `config::common::decoders` dispatchers can never fire, as can the inline
-  `Ok(message) if message.message_type() == IncomingMessages::Error` guards in
-  `contracts::{sync,async}` and `market_data::historical::{sync,async}`. Mechanical, but each
-  deletion needs its test checked — the same 15-test cost pattern as #734. Left out of #734 to
-  keep that PR's boundary at the surface the follow-up named.
+- ~~**Retire the remaining one-shot `IncomingMessages::Error` arms.**~~ ~~**Make
+  `MessageBusStub` classify like the dispatcher.**~~ **Both shipped in #735, and they turned
+  out to be one job.** Thirteen dead sites went: seven `decode_*_message` dispatchers
+  (`accounts` ×3, `contracts`, `scanner`, `config` ×2) and six inline
+  `message.message_type() == IncomingMessages::Error` guards in `contracts::{sync,async}` and
+  `market_data::historical::{sync,async}`. Kept: `connection/common.rs`, which reads frames
+  during the handshake before a dispatcher exists, and `messages/parser_registry.rs`, which is
+  a trace-parser table.
 
-- **Make `MessageBusStub` classify like the dispatcher.** It hands every fixture to the
-  subscription as `RoutedItem::Response`, including `Error` frames, which the real dispatcher
-  never does — that mismatch is why 15 decoder-level error tests existed and passed. This is
-  the same structural blind spot #730 recorded (stub tests inject below `determine_routing`),
-  seen from the fixture side rather than the routing side. Running fixtures through
-  `determine_routing`/`classify_error` in `mock_request` would close it; the risk is the tail of
-  stub tests using warning or data-advisory codes, which would become `RoutedItem::Notice` and
-  be skipped rather than surfacing as `Err`.
+  **Deleting the arms was going to cost a third batch of tests, and that was the signal to stop
+  deleting.** #734 dropped 17 tests because only `MessageBusStub` could produce their input;
+  two more were about to go the same way. The rule of three tripped, so the stub was fixed
+  instead: `routed_items()` runs every fixture through `determine_routing`/`classify_error`, so
+  an error frame arrives as `RoutedItem::Error`/`Notice` exactly as on the wire. Both tests then
+  passed unmodified. **Fixing the fixture kept the coverage that deleting the arms would have
+  destroyed** — and the two tests #734 deleted on the same grounds would have survived it too.
+
+  The feared tail — warning and data-advisory codes becoming `Notice` and being filtered —
+  never materialised: one test needed touching across both legs, and only because its assertion
+  encoded the old wart.
+
+  **One dead arm was hiding a live bug.** Blocking `matching_symbols` read its response with
+  `if let Some(Ok(mut message))`, so a routed error fell through to `Ok(Vec::new())` — a
+  rejected pattern was indistinguishable from "no symbols matched". Its async twin already had
+  `Some(Err(e)) => return Err(e)`. The dead `IncomingMessages::Error` arm sitting next to the
+  hole is what makes it legible: someone meant to handle errors and wired it one layer too low,
+  and the arm's unreachability is exactly why the omission below it stayed invisible.
+  **A dead arm is worth reading before deleting — it marks where someone expected a case to
+  arrive, which is where to check whether the real case is handled at all.**
+
+  **The #734 deletions were wrong in principle, not just in outcome.** The justification was
+  "the mechanism is covered at the transport layer", which conflates *delivery* with
+  *consumption*. The transport tests prove the dispatcher produces `RoutedItem::Error`; they say
+  nothing about whether a given public API hands it to the caller — and two APIs did not. Both
+  deleted tests were restored and passed unmodified against the classifying stub.
+
+  A sweep of every `Some(Ok(..))` consumption site for the same shape found one more:
+  `OrderBuilder::analyze()` dropped routed errors on both sides (`if let Ok(..)` inside the
+  loop on sync, `while let Some(Ok(..))` on async), returning `UnexpectedEndOfStream` instead of
+  the rejection — on the one API where rejection is a routine outcome. Every other site handles
+  `Some(Err(e))`. **The per-API question "does this consume `Err`?" needs asking once per
+  public entry point; no shared layer answers it.**
+
+- **Adopt `fold_one_shot` at the ~14 sites that hand-roll it.** `Some(Ok(m)) => decode`,
+  `Some(Err(e)) => Err(e)`, `None => default` is spelled out at four sites each in
+  `contracts::{sync,async}`, plus `news::{sync,async}` ×2 each and `scanner::{sync,async}` —
+  while `fold_one_shot` itself has no callers outside `request_helpers.rs`. Two blockers, both
+  vestigial: `decode_contract_descriptions` and `decode_market_rule` take `&mut ResponseMessage`
+  and an unused `server_version`, though their bodies are only `require_proto()?` (a `&self`
+  method). The option-computation sites are genuinely blocked — they need `&mut` plus a
+  `DecoderContext`. `request_helpers` also lacks a request-id/no-retry variant, which is exactly
+  the slot `matching_symbols` falls into. Deferred from #735's `/simplify` as restructuring.
+
+- **Collapse the seven identical `decode_*_message` dispatchers.** After #734/#735 they are all
+  `match message.message_type() { X => decode_x(m), _ => Err(unexpected_response(m)) }` across
+  `accounts` ×3, `contracts`, `config` ×2, `scanner`. An `expect_type(message, expected)` helper
+  makes each a one-liner. Rule of three is well past, but it touches seven modules.
+
+- **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
+  define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
+  `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero
+  coverage — which is why the `analyze` bug above survived four tests named for it. #735 added
+  two tests at the real seam for `analyze` only; `submit`, `build_order`, and the bracket-order
+  builders still have none. The async shadow carried the very discard the PR fixed
+  (`while let Some(Ok(..))`) and was corrected in place, which is the argument for deleting the
+  shadows rather than maintaining two copies. A textbook
+  [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
+  the largest one left in the tree.
 
 - **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
   `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound

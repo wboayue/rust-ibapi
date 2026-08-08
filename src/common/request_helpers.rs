@@ -6,6 +6,13 @@
 /// fanned out to one-shot shared channels — instead of masking it as a
 /// default value (#694). `on_none` decides what a closed stream means for
 /// the caller (a default value, or `Error::UnexpectedEndOfStream`).
+///
+/// `processor` therefore never sees an `IncomingMessages::Error` frame. The
+/// dispatcher classifies those into `RoutedItem::Error`/`Notice`, and
+/// `RoutedItem::into_legacy` turns them into the `Some(Err)` arm above — so a
+/// `decode_*_message` dispatcher that matches on `IncomingMessages::Error` is
+/// writing an arm that cannot fire. See
+/// `docs/rules/wire/proto-only-decoding.md`.
 pub(crate) fn fold_one_shot<R>(
     response: Option<Result<crate::messages::ResponseMessage, crate::Error>>,
     processor: impl FnOnce(&crate::messages::ResponseMessage) -> Result<R, crate::Error>,

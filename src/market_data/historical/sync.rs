@@ -287,7 +287,6 @@ pub(crate) fn historical_data(
 
                 return Ok(data);
             }
-            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
             Some(Ok(message)) => return Err(Error::unexpected_response(&message)),
             Some(Err(Error::ConnectionReset)) => {}
             Some(Err(e)) => return Err(e),

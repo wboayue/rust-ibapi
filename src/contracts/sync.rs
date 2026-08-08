@@ -6,7 +6,7 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::StreamDecoder;
 use crate::{client::sync::Client, Error};
-use log::{error, info};
+use log::info;
 
 impl Client {
     /// Requests contract information.
@@ -49,7 +49,6 @@ impl Client {
                     contract_details.push(decoded);
                 }
                 Ok(message) if message.message_type() == IncomingMessages::ContractDataEnd => return Ok(contract_details),
-                Ok(message) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
                 Ok(message) => return Err(Error::unexpected_response(&message)),
                 Err(e) => return Err(e),
             }
@@ -148,23 +147,17 @@ impl Client {
         let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
         let subscription = builder.send_raw(request)?;
 
-        if let Some(Ok(mut message)) = subscription.next() {
-            match message.message_type() {
-                IncomingMessages::SymbolSamples => {
-                    return decoders::decode_contract_descriptions(self.server_version, &mut message);
-                }
-                IncomingMessages::Error => {
-                    error!("unexpected error: {message:?}");
-                    return Err(Error::unexpected_response(&message));
-                }
+        match subscription.next() {
+            Some(Ok(mut message)) => match message.message_type() {
+                IncomingMessages::SymbolSamples => decoders::decode_contract_descriptions(self.server_version, &mut message),
                 _ => {
                     info!("unexpected message: {message:?}");
-                    return Err(Error::unexpected_response(&message));
+                    Err(Error::unexpected_response(&message))
                 }
-            }
+            },
+            Some(Err(e)) => Err(e),
+            None => Ok(Vec::new()),
         }
-
-        Ok(Vec::new())
     }
 
     /// Calculates an option's price based on the provided volatility and its underlying's price.

@@ -575,13 +575,17 @@ async fn contract_details_propagates_verify_failure() {
 
 #[tokio::test]
 async fn matching_symbols_returns_server_error() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response(
-        "4|2|9000|321|invalid pattern|",
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        321,
+        "invalid pattern",
     )]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
+    // The TWS error itself, not a generic UnexpectedResponse: the dispatcher
+    // classifies error frames, so `matching_symbols` receives `Some(Err(_))`.
     let err = client.matching_symbols("???").await.unwrap_err();
-    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
+    assert_tws_error_message(err, 321, "invalid pattern");
 }
 
 #[tokio::test]

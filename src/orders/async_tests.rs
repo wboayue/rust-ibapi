@@ -1,5 +1,8 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, create_test_client, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, proto_error_response,
+    proto_response, request_message_count, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
@@ -552,4 +555,22 @@ async fn order_entry_point_builds_order() {
 
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.limit_price, Some(50.0));
+}
+
+// Async twin of `analyze_surfaces_rejected_what_if_order`; see that test for why
+// this path is otherwise uncovered.
+#[tokio::test]
+async fn analyze_surfaces_rejected_what_if_order() {
+    let (client, _bus) =
+        create_test_client_with_ordered_proto_responses(vec![proto_error_response(9000, 201, "Order rejected - reason:Insufficient buying power")]);
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .analyze()
+        .await
+        .expect_err("a rejected what-if order must surface the rejection");
+    assert_tws_error_message(err, 201, "Insufficient buying power");
 }

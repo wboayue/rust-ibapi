@@ -67,8 +67,8 @@ impl<'a> OrderBuilder<'a, AsyncMockClient> {
         let mut subscription = orders::place_order(client, order_id, contract, &order).await?;
 
         // Look for the order state in the responses
-        while let Some(Ok(response)) = subscription.next().await {
-            if let PlaceOrder::OpenOrder(order_data) = response {
+        while let Some(response) = subscription.next().await {
+            if let PlaceOrder::OpenOrder(order_data) = response? {
                 if order_data.order_id == order_id {
                     return Ok(order_data.order_state);
                 }

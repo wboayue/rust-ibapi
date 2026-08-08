@@ -10,7 +10,7 @@ triggers:
   - adding a decode arm for a new message type
 symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders]
-precedents: ["#508", "#731", "#732", "#733", "#734"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -106,3 +106,6 @@ other two:
 - #734 — audited all 78 declared entries under the const's new meaning. Sixteen declared
   `IncomingMessages::Error`, which the dispatcher intercepts; those and their `decode` arms are
   gone, along with the guard exemption that had been keeping them legal.
+- #735 — same removal on the one-shot side, and `MessageBusStub` now classifies error frames
+  so the input those arms handled can no longer be constructed. Surfaced a real bug behind one
+  of them: blocking `matching_symbols` discarded routed errors and returned `Ok(vec![])`.
