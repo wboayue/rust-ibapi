@@ -493,7 +493,6 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
         IncomingMessages::HistoricalData,
         IncomingMessages::HistoricalDataUpdate,
         IncomingMessages::HistoricalDataEnd,
-        IncomingMessages::Error,
     ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -504,7 +503,6 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
                 let (start, end) = common::decoders::decode_historical_data_end(message)?;
                 Ok(Self::End { start, end })
             }
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::unexpected_response(message)),
         }
     }

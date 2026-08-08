@@ -890,36 +890,6 @@ fn test_historical_data_streaming_with_updates() {
 }
 
 #[test]
-fn test_historical_data_streaming_error_response() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
-        9000,
-        162,
-        "Historical Market Data Service error message:No market data permissions.",
-    )]));
-
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
-
-    let contract = Contract::stock("SPY").build();
-
-    let subscription = client
-        .historical_data(&contract, BarSize::Hour)
-        .duration(Duration::days(1))
-        .stream()
-        .expect("streaming request should succeed");
-
-    // Error now flows via the Err arm of next_data()
-    let update = subscription.next_data();
-    match update {
-        Some(Err(e)) => assert!(
-            e.to_string().contains("No market data permissions"),
-            "Error should contain the message, got: {e}"
-        ),
-        other => panic!("Expected Some(Err(_)), got {other:?}"),
-    }
-}
-
-#[test]
 fn test_tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),

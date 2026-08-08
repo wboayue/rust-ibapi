@@ -47,9 +47,16 @@ live-gateway smoke test surfaced the gap.
 `debug_assert_request_id_routable` (`src/subscriptions/common.rs`) runs in both subscription
 constructors and panics when a `request_id`-keyed subscription is built for a decoder whose
 `RESPONSE_MESSAGE_IDS` names a type the dispatcher cannot route to it. The classification is
-`first_unroutable_by_request_id` in `src/transport/routing.rs`, whose three accepting arms
-mirror `determine_routing`: `Error`, order-scoped types, and anything with a
-`text_request_id_field` entry.
+`first_unroutable_by_request_id` in `src/transport/routing.rs`, whose two accepting arms
+mirror `determine_routing`: order-scoped types, and anything with a `text_request_id_field`
+entry.
+
+`Error` was a third accepting arm until #734. It is not routable by `request_id` — it has no
+`text_request_id_field` entry — but sixteen decoders declared it, so the guard exempted it to
+keep them passing: const declares, guard exempts, circular. `determine_routing` classifies
+`Error` before the allow-list, so it reaches a subscription as `RoutedItem::Error`/`Notice`
+and never as a `Response` for `decode` to see. The declarations were the wrong half; they were
+removed and the exemption with them.
 
 Stub tests bypass the dispatcher but not the constructor, so this fires in exactly the tests
 that used to pass silently. It is compiled out of release builds — the invariant is over

@@ -46,12 +46,33 @@ fn probe(kind: IncomingMessages) -> ResponseMessage {
     ResponseMessage::from(&format!("{}\0", kind as i32))
 }
 
+/// Message types [`determine_routing`](crate::transport::routing) classifies
+/// before any allow-list is consulted: `Error` becomes `RoutedItem::Error` or
+/// `RoutedItem::Notice`, `Shutdown` ends the dispatcher loop. Neither ever
+/// arrives as a `RoutedItem::Response`, so no `decode` can see one and
+/// declaring either is a claim the dispatcher contradicts.
+///
+/// Sixteen decoders declared `Error` before this check existed, and
+/// `routable_to_request_id_subscription` had to exempt `Error` to stop those
+/// declarations tripping the routing guard — const declares, guard exempts,
+/// circular. The exemption is gone; this keeps the declarations gone with it.
+const DISPATCHER_INTERCEPTED: &[IncomingMessages] = &[IncomingMessages::Error, IncomingMessages::Shutdown];
+
 fn check<D: StreamDecoder<D>>(failures: &mut Vec<String>) {
     let decoder = std::any::type_name::<D>();
     let context = DecoderContext::default();
 
     for kind in all_message_types() {
         let declared = D::RESPONSE_MESSAGE_IDS.contains(&kind);
+
+        if declared && DISPATCHER_INTERCEPTED.contains(&kind) {
+            failures.push(format!(
+                "{decoder} declares {kind:?}, which the dispatcher intercepts before routing — \
+                 it never arrives as a `RoutedItem::Response`, so `decode` cannot see it"
+            ));
+            continue;
+        }
+
         let handled = !matches!(
             <D as StreamDecoder<D>>::decode(&context, &mut probe(kind)),
             Err(Error::UnexpectedResponse(_))

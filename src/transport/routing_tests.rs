@@ -418,14 +418,26 @@ fn test_determine_routing_protobuf_market_data_type() {
 
 #[test]
 fn test_first_unroutable_by_request_id_accepts_registered_types() {
-    // The three ways in, one per arm of `routable_to_request_id_subscription`.
+    // The two ways in, one per arm of `routable_to_request_id_subscription`.
     let declared = &[
         IncomingMessages::TickPrice,         // text_request_id_field entry
         IncomingMessages::CommissionsReport, // order-scoped, arrives via the order-id channel
-        IncomingMessages::Error,             // classified before the allow-list
     ];
     assert_eq!(first_unroutable_by_request_id(declared), None);
     assert_eq!(first_unroutable_by_request_id(&[]), None);
+}
+
+#[test]
+fn test_first_unroutable_by_request_id_rejects_error() {
+    // `Error` used to be exempted here so that decoders declaring it would not
+    // trip the guard — const declares, guard exempts, circular. It is
+    // classified by `determine_routing` before the allow-list and reaches a
+    // subscription as `RoutedItem::Error`/`Notice`, never as a `Response`, so
+    // declaring it is the mistake the guard should report.
+    assert_eq!(
+        first_unroutable_by_request_id(&[IncomingMessages::TickPrice, IncomingMessages::Error]),
+        Some(IncomingMessages::Error)
+    );
 }
 
 #[test]
