@@ -142,9 +142,9 @@ pub(crate) trait StreamDecoder<T> {
     /// `decode` arm means adding the type here too or the arm is dead code.
     ///
     /// No default, deliberately: an omitted declaration would skip everything,
-    /// so it must be a compile error. See
-    /// `docs/rules/wire/proto-only-decoding.md` for what enforces the two lists
-    /// agreeing — and what does not.
+    /// so it must be a compile error. `response_message_ids_tests.rs` enforces
+    /// that this list and the `decode` arms agree in both directions; see
+    /// `docs/rules/wire/proto-only-decoding.md`.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
 
     /// Decode a response message into the stream's data type
@@ -192,3 +192,7 @@ pub(crate) fn debug_assert_request_id_routable<T, D: StreamDecoder<T>>(request_i
 #[cfg(test)]
 #[path = "common_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "response_message_ids_tests.rs"]
+mod response_message_ids_tests;

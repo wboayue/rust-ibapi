@@ -400,18 +400,20 @@ Dropping the const's default (`= &[]`) is the same property — "declare or don'
 enforceable on a const and not on a return shape. That mattered immediately: nine test-side
 fake decoders failed to compile and had to declare what they consume.
 
-**The risk moved rather than vanished, and only half of it is bounded.** Skip is now driven by
-a hand-maintained list. Declared-but-unhandled is caught loudly by the `_ =>` backstop.
-Handled-but-undeclared is not, and it is the worse direction: the arm is unreachable and data
-vanishes quietly. The first write-up of this section claimed "every domain's stub tests feed
-their types through a real subscription" — `/simplify` checked, and it is false for
+**The risk moved rather than vanished, and only half of it was bounded at first.** Skip is now
+driven by a hand-maintained list. Declared-but-unhandled is caught loudly by the `_ =>`
+backstop. Handled-but-undeclared was not, and it is the worse direction: the arm is unreachable
+and data vanishes quietly. The first write-up of this section claimed "every domain's stub
+tests feed their types through a real subscription" — `/simplify` checked, and it is false for
 `contracts`, `market_data/realtime`, and `wsh`, which call `decode` directly. So the suite
-passing unchanged is good evidence for 5 of 8 domains, not all of them.
+passing unchanged was good evidence for 5 of 8 domains, not all of them.
 
 What genuinely improves is the *trigger*. The old mistake was action-at-a-distance — reuse a
 variant, inherit a disposition you never knew you were choosing. The new one is local and
 visible: a line missing from a const ten lines above the match you are editing. Likelihood
-drops even though severity doesn't, and a cross-check test would close it (see follow-ups).
+drops even though severity doesn't. The remaining gap is now closed too — the first follow-up
+below shipped, and both directions are gated by
+`src/subscriptions/response_message_ids_tests.rs`.
 
 **The reusable lesson: when a fix needs a fact, check whether the codebase already declares
 it.** Three PRs in a row here found the answer in `RESPONSE_MESSAGE_IDS` — #730 read it for the
@@ -420,16 +422,19 @@ life.
 
 ## Follow-ups
 
-- **Cross-check the two lists so `RESPONSE_MESSAGE_IDS` cannot drift from the `decode` arms.**
-  One test, roughly 40 lines: for each decoder, feed a minimal frame of every
-  `IncomingMessages` variant through `decode` and assert
-  `matches!(err, UnexpectedResponse(_)) || D::RESPONSE_MESSAGE_IDS.contains(&id)` — the
-  no-arm case is exactly the one that returns `UnexpectedResponse`, so the two directions are
-  mechanically distinguishable. This closes the handled-but-undeclared direction #732 left
-  open, and is cheaper than the alternative (a `stream_decoder!` macro generating const and
-  match from one source, which `macros-last-resort` would have to be argued past at N=28).
-  Costs a hand-listed decoder roster, the same rot risk #730 declined — worth it here because
-  the gap it covers is silent.
+- ~~**Cross-check the two lists so `RESPONSE_MESSAGE_IDS` cannot drift from the `decode`
+  arms.**~~ **Shipped** in `src/subscriptions/response_message_ids_tests.rs`. The probe turned
+  out to be an exact biconditional rather than the one-directional assert the plan sketched:
+  with a *text*-framed minimal frame, `UnexpectedResponse` means "no arm" and everything else
+  means "arm exists", because every real arm either returns without touching the payload or
+  reaches `require_proto()` and raises `UnexpectedWireFormat` (#731). So declared-but-unhandled
+  and handled-but-undeclared are both caught by the same probe, and the second test direction
+  cost nothing. The `stream_decoder!` macro alternative stayed unbuilt, as planned.
+
+  The hand-listed roster cost was real and is itself gated: `test_decoder_roster_is_complete`
+  counts `impl StreamDecoder` blocks under `src/` and fails when the roster falls behind. That
+  is the completeness-claim class the six audits found decays fastest, so it gets a command
+  behind it rather than a comment.
 
 - **Unify the third driver.** `market_data/historical/common/tick.rs::classify` has its own
   skip filter over `TickDecoder::MESSAGE_TYPE` (singular) and its own `TickAction::Skip`. It is
