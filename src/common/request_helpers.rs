@@ -1,5 +1,8 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
+use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::Error;
+
 /// Fold a one-shot subscription's single response into a result.
 ///
 /// `Some(Err)` propagates the routed error — e.g. a request-less hard error
@@ -14,15 +17,50 @@
 /// writing an arm that cannot fire. See
 /// `docs/rules/wire/proto-only-decoding.md`.
 pub(crate) fn fold_one_shot<R>(
-    response: Option<Result<crate::messages::ResponseMessage, crate::Error>>,
-    processor: impl FnOnce(&crate::messages::ResponseMessage) -> Result<R, crate::Error>,
-    on_none: impl FnOnce() -> Result<R, crate::Error>,
-) -> Result<R, crate::Error> {
+    response: Option<Result<ResponseMessage, Error>>,
+    processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
+    on_none: impl FnOnce() -> Result<R, Error>,
+) -> Result<R, Error> {
+    fold_one_shot_mut(response, |message| processor(message), on_none)
+}
+
+/// [`fold_one_shot`] for decoders that need `&mut ResponseMessage`.
+///
+/// The option-computation decoders take the message mutably (they advance a
+/// text cursor through `DecoderContext`), which the shared `&`-taking
+/// [`fold_one_shot`] cannot express. Same disposition of `Some(Err)` / `None`,
+/// so the two stay one decision rather than two.
+pub(crate) fn fold_one_shot_mut<R>(
+    response: Option<Result<ResponseMessage, Error>>,
+    processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
+    on_none: impl FnOnce() -> Result<R, Error>,
+) -> Result<R, Error> {
     match response {
-        Some(Ok(message)) => processor(&message),
+        Some(Ok(mut message)) => processor(&mut message),
         Some(Err(e)) => Err(e),
         None => on_none(),
     }
+}
+
+/// Pair the inbound message type a one-shot request expects with the decoder
+/// for that message's protobuf payload.
+///
+/// Narrowing used to be opt-in: each domain hand-wrote a `decode_*_message`
+/// wrapper doing `expect_type(..)?` before its real decoder, and the call sites
+/// that forgot one simply decoded whatever frame arrived on the shared channel.
+/// Threading the expected type through the processor makes it structural — a
+/// one-shot helper cannot be handed a decoder without also being told which
+/// frame it belongs to.
+///
+/// Not for [`StreamDecoder`](crate::client::StreamDecoder) implementations:
+/// there the accepted set is already declared in `RESPONSE_MESSAGE_IDS` and the
+/// drivers filter on it, so a narrow inside `decode` would be a third copy of
+/// the same fact.
+pub(crate) fn expect_proto<R>(
+    expected: IncomingMessages,
+    decode: impl Fn(&[u8]) -> Result<R, Error>,
+) -> impl Fn(&ResponseMessage) -> Result<R, Error> {
+    move |message| decode(message.expect_type(expected)?.require_proto()?)
 }
 
 #[cfg(test)]

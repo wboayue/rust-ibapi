@@ -1,4 +1,6 @@
+use crate::common::request_helpers::expect_proto;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
+use crate::messages::IncomingMessages;
 
 use super::*;
 use prost::Message;
@@ -119,7 +121,7 @@ fn test_decode_head_timestamp_proto() {
     };
 
     let result = decode_head_timestamp_proto(&proto_msg.encode_to_vec()).unwrap();
-    assert_eq!(result, "1609459200");
+    assert_eq!(result, OffsetDateTime::from_unix_timestamp(1609459200).unwrap());
 }
 
 #[test]
@@ -311,7 +313,7 @@ fn text_message(payload: &str) -> ResponseMessage {
 #[test]
 fn test_decode_head_timestamp_rejects_text_framing() {
     let message = text_message("88\09000\01560346200\0");
-    let err = decode_head_timestamp(&message).expect_err("text framing must be rejected");
+    let err = expect_proto(IncomingMessages::HeadTimestamp, decode_head_timestamp_proto)(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
 }
 
@@ -332,7 +334,8 @@ fn test_decode_historical_data_end_rejects_text_framing() {
 #[test]
 fn test_decode_historical_schedule_rejects_text_framing() {
     let message = text_message("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
-    let err = decode_historical_schedule(&message).expect_err("text framing must be rejected");
+    let err =
+        expect_proto(IncomingMessages::HistoricalSchedule, decode_historical_schedule_proto)(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
 }
 
@@ -367,7 +370,7 @@ fn test_decode_historical_ticks_last_rejects_text_framing() {
 #[test]
 fn test_decode_histogram_data_rejects_text_framing() {
     let message = text_message("89\09000\01\0125.50\01000\0");
-    let err = decode_histogram_data(&message).expect_err("text framing must be rejected");
+    let err = expect_proto(IncomingMessages::HistogramData, decode_histogram_data_proto)(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got: {err:?}");
 }
 

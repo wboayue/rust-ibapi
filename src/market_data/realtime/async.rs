@@ -1,8 +1,7 @@
-use log::debug;
-
 use crate::client::ClientRequestBuilders;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::{Contract, TagValue};
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
@@ -244,20 +243,14 @@ impl Client {
     pub async fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
         check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 
-        loop {
-            let request = encoders::encode_request_market_depth_exchanges()?;
-            let mut subscription = self.shared_request(OutgoingMessages::RequestMktDepthExchanges).send_raw(request).await?;
-            let response = subscription.next().await;
-
-            match response {
-                Some(Ok(message)) => return decoders::decode_market_depth_exchanges(&message),
-                Some(Err(e)) => return Err(e),
-                None => {
-                    debug!("connection reset. retrying market_depth_exchanges");
-                    continue;
-                }
-            }
-        }
+        request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestMktDepthExchanges,
+            encoders::encode_request_market_depth_exchanges,
+            expect_proto(IncomingMessages::MktDepthExchanges, decoders::decode_market_depth_exchanges_proto),
+            || Ok(Vec::new()),
+        )
+        .await
     }
 
     /// Requests real time market data (low-level).

@@ -1,7 +1,7 @@
 use super::common::{decoders, encoders, verify};
 use super::*;
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::StreamDecoder;
@@ -79,7 +79,7 @@ impl Client {
             Features::MARKET_RULES,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
-            decoders::decode_market_rule_message,
+            expect_proto(IncomingMessages::MarketRule, decoders::decode_market_rule_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
     }
@@ -114,7 +114,7 @@ impl Client {
         request_helpers::blocking::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
-            decoders::decode_smart_components_message,
+            expect_proto(IncomingMessages::SmartComponents, decoders::decode_smart_components_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
     }
@@ -142,7 +142,7 @@ impl Client {
         request_helpers::blocking::one_shot_request_with_retry(
             self,
             |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
-            decoders::decode_contract_descriptions_message,
+            expect_proto(IncomingMessages::SymbolSamples, decoders::decode_symbol_samples_proto),
             || Ok(Vec::new()),
         )
     }
@@ -174,11 +174,11 @@ impl Client {
         let message = encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::fold_one_shot_mut(
+            subscription.next(),
+            |message| OptionComputation::decode(&self.decoder_context(), message),
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Calculates the implied volatility based on the hypothetical option price and underlying price.
@@ -208,11 +208,11 @@ impl Client {
         let message = encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::UnexpectedEndOfStream),
-        }
+        request_helpers::fold_one_shot_mut(
+            subscription.next(),
+            |message| OptionComputation::decode(&self.decoder_context(), message),
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
     /// Requests security definition option parameters for viewing a contract's option chain.

@@ -1,9 +1,11 @@
+use crate::common::request_helpers::expect_proto;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
+use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_family_codes_rejects_text_framing() {
     let message = super::ResponseMessage::from("78\02\0ACC1\0FC1\0ACC2\0FC2\0");
-    let err = super::decode_family_codes(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::FamilyCodes, super::decode_family_codes_proto)(&message).unwrap_err();
     assert!(
         matches!(err, super::Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"
@@ -13,7 +15,7 @@ fn test_decode_family_codes_rejects_text_framing() {
 #[test]
 fn test_decode_managed_accounts_rejects_text_framing() {
     let message = super::ResponseMessage::from("15\01\0DU1234567,DU7654321\0");
-    let err = super::decode_managed_accounts(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::ManagedAccounts, super::decode_managed_accounts_proto)(&message).unwrap_err();
     assert!(
         matches!(err, super::Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"
@@ -23,7 +25,7 @@ fn test_decode_managed_accounts_rejects_text_framing() {
 #[test]
 fn test_decode_server_time_rejects_text_framing() {
     let message = super::ResponseMessage::from("49\01\01678890000\0");
-    let err = super::decode_server_time(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::CurrentTime, super::decode_server_time_proto)(&message).unwrap_err();
     assert!(
         matches!(err, super::Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"
@@ -33,7 +35,7 @@ fn test_decode_server_time_rejects_text_framing() {
 #[test]
 fn test_decode_server_time_millis_rejects_text_framing() {
     let message = super::ResponseMessage::from("109\01678890000123\0");
-    let err = super::decode_server_time_millis(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::CurrentTimeInMillis, super::decode_server_time_millis_proto)(&message).unwrap_err();
     assert!(
         matches!(err, super::Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"
@@ -512,7 +514,7 @@ fn test_decode_family_codes_proto_empty() {
 #[test]
 fn test_decode_soft_dollar_tiers_rejects_text_framing() {
     let message = super::ResponseMessage::from("77\01\0Tier1\0val\0Display\0");
-    let err = super::decode_soft_dollar_tiers(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::SoftDollarTier, super::decode_soft_dollar_tiers_proto)(&message).unwrap_err();
     assert!(matches!(err, super::Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
 
@@ -543,7 +545,7 @@ fn test_decode_soft_dollar_tiers_proto_round_trip() {
 #[test]
 fn test_decode_user_info_rejects_text_framing() {
     let message = super::ResponseMessage::from("107\01\0brand\0");
-    let err = super::decode_user_info(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::UserInfo, super::decode_user_info_proto)(&message).unwrap_err();
     assert!(matches!(err, super::Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
 

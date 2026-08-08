@@ -2,9 +2,9 @@
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::TagValue;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
@@ -28,7 +28,7 @@ impl Client {
             self,
             OutgoingMessages::RequestScannerParameters,
             encoders::encode_scanner_parameters,
-            decoders::decode_scanner_parameters,
+            expect_proto(IncomingMessages::ScannerParameters, decoders::decode_scanner_parameters_proto),
             || Err(Error::UnexpectedEndOfStream),
         )
         .await

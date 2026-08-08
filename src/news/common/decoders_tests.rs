@@ -1,4 +1,6 @@
 use super::*;
+use crate::common::request_helpers::expect_proto;
+use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_news_bulletin_proto() {
@@ -92,8 +94,8 @@ fn test_decode_news_providers_proto_empty() {
 
 #[test]
 fn test_decode_news_providers_rejects_text_framing() {
-    let message = ResponseMessage::from("newsProviders\01\0BZ\0Benzinga\0");
-    let err = decode_news_providers(&message).unwrap_err();
+    let message = ResponseMessage::from("85\01\0BZ\0Benzinga\0");
+    let err = expect_proto(IncomingMessages::NewsProviders, decode_news_providers_proto)(&message).unwrap_err();
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"
@@ -123,7 +125,7 @@ fn test_decode_historical_news_rejects_text_framing() {
 #[test]
 fn test_decode_news_article_rejects_text_framing() {
     let message = ResponseMessage::from("83\09000\00\0body\0");
-    let err = decode_news_article(&message).unwrap_err();
+    let err = expect_proto(IncomingMessages::NewsArticle, decode_news_article_proto)(&message).unwrap_err();
     assert!(
         matches!(err, Error::UnexpectedWireFormat(_)),
         "expected UnexpectedWireFormat, got {err:?}"

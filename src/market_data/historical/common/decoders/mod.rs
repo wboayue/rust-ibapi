@@ -10,10 +10,6 @@ use crate::market_data::historical::{
     Bar, BarTimestamp, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
 };
 
-pub(crate) fn decode_head_timestamp(message: &ResponseMessage) -> Result<OffsetDateTime, Error> {
-    parse_unix_seconds_str(&decode_head_timestamp_proto(message.require_proto()?)?)
-}
-
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
     let mk_err = |e: &dyn std::fmt::Display| Error::parse_field(s, format!("invalid unix-second timestamp: {e}"));
     let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| mk_err(&e))?;
@@ -34,10 +30,6 @@ pub(crate) fn decode_historical_data_end(message: &ResponseMessage) -> Result<(O
     decode_historical_data_end_proto(message.require_proto()?)
 }
 
-pub(crate) fn decode_historical_schedule(message: &ResponseMessage) -> Result<Schedule, Error> {
-    decode_historical_schedule_proto(message.require_proto()?)
-}
-
 pub(crate) fn decode_historical_ticks_bid_ask(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
     decode_historical_ticks_bid_ask_proto(message.require_proto()?)
 }
@@ -48,10 +40,6 @@ pub(crate) fn decode_historical_ticks_mid_point(message: &ResponseMessage) -> Re
 
 pub(crate) fn decode_historical_ticks_last(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
     decode_historical_ticks_last_proto(message.require_proto()?)
-}
-
-pub(crate) fn decode_histogram_data(message: &ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
-    decode_histogram_data_proto(message.require_proto()?)
 }
 
 /// Decode a HistoricalDataUpdate message (message type 90).
@@ -132,9 +120,9 @@ fn decode_historical_data_bar(b: &proto::HistoricalDataBar, default_count: i32) 
     })
 }
 
-pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error> {
+pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<OffsetDateTime, Error> {
     let msg = proto::HeadTimestamp::decode(bytes)?;
-    Ok(msg.head_timestamp.unwrap_or_default())
+    parse_unix_seconds_str(&msg.head_timestamp.unwrap_or_default())
 }
 
 pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {

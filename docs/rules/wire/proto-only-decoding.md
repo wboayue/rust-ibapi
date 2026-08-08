@@ -10,7 +10,7 @@ triggers:
   - adding a decode arm for a new message type
 symbols: [require_proto, process_decode_result, StreamDecoder, RESPONSE_MESSAGE_IDS, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
@@ -19,11 +19,11 @@ Every domain decoder reads its payload with `message.require_proto()` and feeds 
 was retired with the floor ratchet.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
-filter: the sync and async subscription drivers drop anything not listed there *before* calling
-`decode`, because shared channels carry several types. A `decode` arm for an unlisted type is
-dead code. (The historical-tick driver in `market_data/historical/common/tick.rs` has its own
-single-valued `TickDecoder::MESSAGE_TYPE` doing the same job — a third mechanism, not yet
-unified.)
+filter: all three drivers drop anything not listed there *before* calling `decode`, because
+shared channels carry several types. A `decode` arm for an unlisted type is dead code. The third
+driver is `market_data/historical/common/tick.rs::classify`, over `TickDecoder`, which declares
+the same `RESPONSE_MESSAGE_IDS` const and filters with the same `is_undeclared` helper — a tick
+type simply declares one entry (#738).
 
 End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected_response(message))`
 anyway. It is now a backstop for the two lists disagreeing, not a control-flow signal — it
