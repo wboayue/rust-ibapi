@@ -29,11 +29,17 @@ End every `impl StreamDecoder<T>::decode` match with `_ => Err(Error::unexpected
 anyway. It is now a backstop for the two lists disagreeing, not a control-flow signal — it
 terminates the subscription, loudly. Never `Error::NotImplemented` or `Error::Simple(...)`.
 
-**Only one of the two drift directions is caught.** Declared-but-unhandled hits that backstop
-and fails loudly. Handled-but-undeclared is silent: the arm is unreachable and the message
-vanishes. Most domains' stub tests would catch it because they drive a real subscription, but
-`contracts`, `market_data/realtime`, and `wsh` test their decoders by calling `decode`
-directly and would not. Check the const when you add an arm.
+**Both drift directions are gated**, by `test_response_message_ids_match_decode_arms`
+(`src/subscriptions/response_message_ids_tests.rs`). It probes every decoder with a minimal
+text-framed message of every `IncomingMessages` discriminant and requires the two lists to
+agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
+anything else means an arm exists — `Ok`, `EndOfStream`, or the `UnexpectedWireFormat` that
+`require_proto()` raises on text framing. Declared-but-unhandled would also fail loudly at
+runtime via the backstop; handled-but-undeclared would not, which is why the test exists.
+
+Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` blocks under `src/`
+against the hand-listed roster, so adding a decoder without registering it fails rather than
+going unchecked.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
