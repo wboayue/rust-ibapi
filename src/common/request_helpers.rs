@@ -5,6 +5,11 @@ use crate::Error;
 
 /// Fold a one-shot subscription's single response into a result.
 ///
+/// Private on purpose. The only callers are the two retrying helpers below, and
+/// that is what makes "every one-shot retries" true — reachable from a domain
+/// module, it is a ready-made way to hand-roll a one-shot without retry, which
+/// is the bug #741 removed.
+///
 /// `Some(Err)` propagates the routed error — e.g. a request-less hard error
 /// fanned out to one-shot shared channels — instead of masking it as a
 /// default value (#694). `on_none` decides what a closed stream means for
@@ -16,7 +21,7 @@ use crate::Error;
 /// `decode_*_message` dispatcher that matches on `IncomingMessages::Error` is
 /// writing an arm that cannot fire. See
 /// `docs/rules/wire/proto-only-decoding.md`.
-pub(crate) fn fold_one_shot<R>(
+fn fold_one_shot<R>(
     response: Option<Result<ResponseMessage, Error>>,
     processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
     on_none: impl FnOnce() -> Result<R, Error>,
@@ -121,22 +126,6 @@ mod sync_helpers {
         client.shared_request(message_type).send(request)
     }
 
-    /// Helper for one-shot requests that process a single response
-    pub fn one_shot_request<R>(
-        client: &Client,
-        feature: ProtocolFeature,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl FnOnce() -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        check_version(client.server_version(), feature)?;
-        let request = encoder()?;
-        let subscription = client.shared_request(message_type).send_raw(request)?;
-
-        super::fold_one_shot(subscription.next(), processor, on_none)
-    }
-
     /// Helper for one-shot requests with retry logic
     pub fn one_shot_with_retry<R>(
         client: &Client,
@@ -178,8 +167,6 @@ mod async_helpers {
     use crate::protocol::{check_version, ProtocolFeature};
     use crate::subscriptions::{StreamDecoder, Subscription};
     use crate::Error;
-    #[allow(unused_imports)] // Used in one_shot_request
-    use futures::StreamExt;
 
     /// Async helper for requests that need a request ID and return a subscription
     pub async fn request_with_id<T>(
@@ -222,22 +209,6 @@ mod async_helpers {
     {
         let request = encoder()?;
         client.shared_request(message_type).send::<T>(request).await
-    }
-
-    /// Async helper for one-shot requests that process a single response
-    pub async fn one_shot_request<R>(
-        client: &Client,
-        feature: ProtocolFeature,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-        processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl FnOnce() -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        check_version(client.server_version(), feature)?;
-        let request = encoder()?;
-        let mut subscription = client.shared_request(message_type).send_raw(request).await?;
-
-        super::fold_one_shot(subscription.next().await, processor, on_none)
     }
 
     /// Async helper for one-shot requests with retry logic

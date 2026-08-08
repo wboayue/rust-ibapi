@@ -122,9 +122,10 @@ impl Client {
     /// }
     /// ```
     pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        request_helpers::one_shot_request(
+        check_version(self.server_version(), Features::MARKET_RULES)?;
+
+        request_helpers::one_shot_with_retry(
             self,
-            Features::MARKET_RULES,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
             expect_proto(IncomingMessages::MarketRule, decoders::decode_market_rule_proto),
@@ -198,16 +199,13 @@ impl Client {
     pub async fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         check_version(self.server_version(), Features::REQ_CALC_OPTION_PRICE)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let message = encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)?;
-        let mut subscription = builder.send_raw(message).await?;
-
-        request_helpers::fold_one_shot(
-            subscription.next().await,
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),
         )
+        .await
     }
 
     /// Calculates the implied volatility based on hypothetical option and its underlying prices.
@@ -241,16 +239,13 @@ impl Client {
     ) -> Result<OptionComputation, Error> {
         check_version(self.server_version(), Features::REQ_CALC_IMPLIED_VOLAT)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let message = encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)?;
-        let mut subscription = builder.send_raw(message).await?;
-
-        request_helpers::fold_one_shot(
-            subscription.next().await,
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),
         )
+        .await
     }
 
     /// Cancels an in-flight contract details request.

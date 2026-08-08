@@ -74,9 +74,10 @@ impl Client {
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        request_helpers::blocking::one_shot_request(
+        check_version(self.server_version, Features::MARKET_RULES)?;
+
+        request_helpers::blocking::one_shot_with_retry(
             self,
-            Features::MARKET_RULES,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
             expect_proto(IncomingMessages::MarketRule, decoders::decode_market_rule_proto),
@@ -169,13 +170,9 @@ impl Client {
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         check_version(self.server_version, Features::REQ_CALC_OPTION_PRICE)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let message = encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)?;
-        let subscription = builder.send_raw(message)?;
-
-        request_helpers::fold_one_shot(
-            subscription.next(),
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),
         )
@@ -203,13 +200,9 @@ impl Client {
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         check_version(self.server_version, Features::REQ_CALC_IMPLIED_VOLAT)?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let message = encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)?;
-        let subscription = builder.send_raw(message)?;
-
-        request_helpers::fold_one_shot(
-            subscription.next(),
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),
         )

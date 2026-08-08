@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
-use crate::common::request_helpers::expect_proto;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::{client::sync::Client, server_versions, Error};
@@ -215,12 +215,10 @@ impl Client {
     /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32, Error> {
-        let message = encoders::encode_next_valid_order_id()?;
-
-        let subscription = self.send_shared_request(OutgoingMessages::RequestIds, message)?;
-
-        let next_order_id = crate::common::request_helpers::fold_one_shot(
-            subscription.next(),
+        let next_order_id = request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::RequestIds,
+            encoders::encode_next_valid_order_id,
             expect_proto(IncomingMessages::NextValidId, decoders::decode_next_valid_id_proto),
             || Err(Error::UnexpectedEndOfStream),
         )?;

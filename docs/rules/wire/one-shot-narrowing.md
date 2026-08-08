@@ -5,11 +5,12 @@ cluster: wire
 status: active
 triggers:
   - adding a one-shot client method
-  - passing a processor to one_shot_request or one_shot_with_retry
+  - passing a processor to one_shot_with_retry or one_shot_request_with_retry
+  - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, one_shot_request, one_shot_with_retry, one_shot_request_with_retry, fold_one_shot, expect_type, PAIRS]
+symbols: [expect_proto, one_shot_with_retry, one_shot_request_with_retry, fold_one_shot, expect_type, retry_on_connection_reset, PAIRS]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
-precedents: ["#736", "#738"]
+precedents: ["#736", "#738", "#740", "#741"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
@@ -30,6 +31,18 @@ narrow "later" — there is no wrapper to add it to. Give the decoder a `decode_
 sibling if it lacks one; the message-level `decode_x(&ResponseMessage)` form exists only for
 `StreamDecoder` impls now.
 
+**There are two one-shot helpers, and both retry.** `one_shot_request_with_retry` for a
+request-id request, `one_shot_with_retry` for a shared channel. Neither takes a
+`ProtocolFeature` — do the version check on the line above. Usually that is
+`check_version(server_version, Features::X)?`, but not always: `news` uses
+`check_server_version(..)` and `historical_data` uses `validate_historical_data(..)`, which is
+half of why a `feature` parameter cannot come back. 44 of the 54 one-shot sites check a version;
+the 10 that do not are `server_time`, `managed_accounts`, `request_fa`, `next_valid_order_id`,
+and `scanner_parameters`, none of which carries a `MinServerVer` in the C# client.
+
+A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
+`request_helpers` so that hand-rolling one is not reachable from a domain module.
+
 **Nothing in the type system enforces this**, and treating the signature as the guarantee is the
 mistake this node exists to prevent. `expected` and `decode` are unrelated — `R` is inferred from
 the decoder — so `expect_proto(IncomingMessages::UserInfo, decode_family_codes_proto)` compiles
@@ -40,7 +53,13 @@ The gate is `test_expect_proto_sites_match_the_roster` (`src/common/one_shot_pai
 It scrapes every `expect_proto` site out of `src/` and checks each pair against a declared
 `PAIRS` roster, both directions, plus `SITES_PER_PAIR == 2` — sync and async each spell the pair
 once, and a count of 1 means they have drifted. **Adding a one-shot API means adding a `PAIRS`
-line.** That is the standing cost of keeping the pairing outside the type system.
+line** — unless the response type is a `StreamDecoder`, in which case its `RESPONSE_MESSAGE_IDS`
+is the narrow and `test_response_message_ids_match_decode_arms` is the gate. The four
+option-computation sites are the case: they pass `OptionComputation::decode` and are covered
+there, not by `PAIRS`. Giving such a payload a `decode_*_proto` sibling so it could use
+`expect_proto` would narrow it twice and give it two decoders.
+
+That is the standing cost of keeping the pairing outside the type system.
 
 Do not reach for `expect_proto` inside `impl StreamDecoder::decode`; see
 [proto-only decoding](proto-only-decoding.md) for what that surface owes instead.
@@ -48,8 +67,8 @@ Do not reach for `expect_proto` inside `impl StreamDecoder::decode`; see
 ## Why
 
 Narrowing used to be opt-in. Each domain hand-wrote a `decode_*_message` wrapper doing
-`expect_type(..)?` before its real decoder, and 24 of the 44 one-shot sites had no wrapper at
-all — they decoded whatever arrived on the channel. The follow-up that scoped #738 put that
+`expect_type(..)?` before its real decoder, and 26 of the 50 `expect_proto` sites had no wrapper
+at all — they decoded whatever arrived on the channel. The follow-up that scoped #738 put that
 number at four; the real one was six times larger, which is the usual shape of a
 completeness claim nobody ran a command for.
 
@@ -57,15 +76,32 @@ The consequence is quiet. A foreign proto handed to the wrong `prost` type usual
 *something* — field numbers overlap across messages — so the caller gets a plausible struct full
 of wrong values rather than an error.
 
-`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than a fourth
-parameter on the three one-shot helpers, because those helpers already carry six arguments
-against a budget of three (see [param budget](../style/param-budget.md)) and none of them has a
-builder in front of it.
+`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than a fifth
+parameter on the two one-shot helpers, because both already carry four or five arguments against
+a budget of three (see [param budget](../style/param-budget.md)) and neither has a builder in
+front of it.
 
 The honest end state is a `trait ProtoPayload { const MESSAGE_ID; fn decode(&[u8]) }` implemented
 once per payload, which makes `expect_proto::<T>()` take no literals and retires both the roster
 and this node's standing cost. Tracked in
 [plans/claude-md-knowledge-graph.md](../../../plans/claude-md-knowledge-graph.md).
+
+## Why every one-shot retries
+
+`retry_on_connection_reset` fires only on `Error::ConnectionReset` and gives up after three
+attempts. Every one-shot here is a read — encode, send, read one frame — so replaying it after
+the gateway drops the connection costs nothing and loses no server-side state. There is no
+one-shot for which the answer differs, which is why the helper no longer offers the choice.
+
+It used to. A third helper, `one_shot_request`, was the only one taking a `ProtocolFeature`, so
+the four version-gated shared-channel one-shots (`market_rule`, `family_codes`, sync and async)
+picked it and silently gave up retry — while `market_depth_exchanges`, equally version-gated,
+called `check_version` inline and kept it. **The distinction was never about retry.** #741
+deleted the helper and moved its four sites to the inline form, so the two survivors differ only
+in whether the request carries an id.
+
+The general shape: when two helpers differ on two axes and callers only care about one, the
+axis they are not choosing gets chosen for them.
 
 ## Precedents
 
@@ -76,3 +112,9 @@ and this node's standing cost. Tracked in
   unnarrowed site (`next_valid_order_id`, on the shared `RequestIds` channel). The gate came
   second, after a review mutated three sites and found only incidental round-trip tests failed;
   the same mutation now fails the roster by name.
+- #740 — narrowed `StreamDecoder::decode` to `&ResponseMessage`, which is what let the four
+  option-computation sites stop hand-rolling `send_raw` + fold. Their decoder wanted `&mut`, and
+  the retrying helper's processor bound is `Fn(&ResponseMessage)`; the `&mut` turned out to be
+  vestigial rather than a real constraint.
+- #741 — deleted `one_shot_request` and `fold_one_shot_mut`; every one-shot retries and no
+  hand-rolled folds remain. Mechanism above.
