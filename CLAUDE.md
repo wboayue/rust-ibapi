@@ -121,13 +121,38 @@ precedents. Every rule now lives in a node; nothing is inline.
   ship with the change; their fenced Rust snippets are compiled by nothing
 - **Drafting GitHub release notes** → [release notes](docs/rules/docs/release-notes.md)
 - **Establishing, changing, or retiring a project convention** →
-  [rule nodes](docs/rules/README.md) — the convention gets a node and one line in this index,
-  or it is not a convention
+  [maintaining the rule graph](#maintaining-the-rule-graph), below
 
 Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
 an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not
 against this file — the numbering shifted at least once while it was in use. See
 [plans/claude-md-knowledge-graph.md](plans/claude-md-knowledge-graph.md).
+
+## Maintaining the rule graph
+
+Nodes ship in the PR that makes their claim true, not afterwards. Mechanics — frontmatter,
+trigger phrasing, clusters, `status` — are in the [rules README](docs/rules/README.md). These
+have to fire without opening it, because **`just rules-check` validates structure only** (links,
+ids, `related`, no `@`-imports, no `file.rs:NNN`) and cannot tell whether a node is still true.
+
+- **Establishing, changing, or retiring a convention** → it gets a node and one index line
+  above, or it is not a convention. Changed: rewrite the directive, extend `precedents`.
+  Retired: `status: historical`, drop the index line, never delete the node — a concluded arc
+  has no trigger, but its reasoning is the expensive part.
+- **Deleting or renaming anything a node might cite** → `grep -rn <symbol> docs/rules/ plans/`
+  in the same PR. A node describing a function that no longer exists reads exactly like one
+  that is correct.
+- **Writing a count or completeness claim** — "all N sites", "fully applied", "zero remaining",
+  "every `pub fn`" → run the command that produces it as you write it, and leave the command in
+  the node. Checking that a cited symbol exists does not check a count, and this is the claim
+  class that has been wrong most often — twice in prose warning about invented counts.
+- **Landing a PR that proves, extends, or contradicts a node** → append to `precedents:` with
+  one line on how it ended. One that became a counter-example is worth more than one that
+  confirmed the rule; record it as such rather than dropping it.
+- **Reading a node that calls its own failure mode silent, unenforced, or ungated** → that is a
+  missing gate, not a documentation problem. Make the failure loud; then rewrite the node's
+  claim rather than appending to it, and delete regression tests the gate made impossible.
+- **Touching `CLAUDE.md`, `docs/rules/`, or `plans/`** → `just rules-check` before the PR.
 
 ## Quick Commands
 
