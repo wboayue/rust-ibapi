@@ -12,8 +12,9 @@ use crate::Error;
 ///
 /// `Some(Err)` propagates the routed error — e.g. a request-less hard error
 /// fanned out to one-shot shared channels — instead of masking it as a
-/// default value (#694). `on_none` decides what a closed stream means for
-/// the caller (a default value, or `Error::UnexpectedEndOfStream`).
+/// default value (#694). A closed stream is `Error::UnexpectedEndOfStream`;
+/// the ten sites that want an empty collection instead say so with
+/// [`empty_on_end_of_stream`].
 ///
 /// `processor` therefore never sees an `IncomingMessages::Error` frame. The
 /// dispatcher classifies those into `RoutedItem::Error`/`Notice`, and
@@ -24,12 +25,32 @@ use crate::Error;
 fn fold_one_shot<R>(
     response: Option<Result<ResponseMessage, Error>>,
     processor: impl FnOnce(&ResponseMessage) -> Result<R, Error>,
-    on_none: impl FnOnce() -> Result<R, Error>,
 ) -> Result<R, Error> {
     match response {
         Some(Ok(message)) => processor(&message),
         Some(Err(e)) => Err(e),
-        None => on_none(),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
+}
+
+/// Read a closed stream as an empty collection rather than an error.
+///
+/// For requests where "TWS sent nothing" is a legitimate empty answer —
+/// no histogram entries, no matching news providers — rather than a
+/// truncated one. Chained onto the call so the choice reads where the
+/// meaning is, not as a closure argument every other site copies:
+///
+/// ```ignore
+/// one_shot_by_request_id(self, encoder, processor).or_else(empty_on_end_of_stream)
+/// ```
+///
+/// This *was* the `on_none` parameter, passed identically by 44 of 54 sites
+/// and as one of two spellings of the same empty vector (`Vec::new()`,
+/// `Vec::default()`) by the other 10 — the tell that nobody was choosing.
+pub(crate) fn empty_on_end_of_stream<R: Default>(error: Error) -> Result<R, Error> {
+    match error {
+        Error::UnexpectedEndOfStream => Ok(R::default()),
+        other => Err(other),
     }
 }
 
@@ -126,35 +147,33 @@ mod sync_helpers {
         client.shared_request(message_type).send(request)
     }
 
-    /// Helper for one-shot requests with retry logic
-    pub fn one_shot_with_retry<R>(
+    /// One-shot request answered on the shared channel for its message type.
+    pub fn one_shot_shared<R>(
         client: &Client,
         message_type: OutgoingMessages,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::blocking::retry_on_connection_reset(|| {
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
-            super::fold_one_shot(subscription.next(), &processor, &on_none)
+            super::fold_one_shot(subscription.next(), &processor)
         })
     }
 
-    /// Helper for one-shot requests with request ID and retry logic
-    pub fn one_shot_request_with_retry<R>(
+    /// One-shot request answered on its own request-id channel.
+    pub fn one_shot_by_request_id<R>(
         client: &Client,
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::blocking::retry_on_connection_reset(|| {
             let request_id = client.next_request_id();
             let request = encoder(request_id)?;
             let subscription = client.send_request(request_id, request)?;
 
-            super::fold_one_shot(subscription.next(), &processor, &on_none)
+            super::fold_one_shot(subscription.next(), &processor)
         })
     }
 }
@@ -211,36 +230,34 @@ mod async_helpers {
         client.shared_request(message_type).send::<T>(request).await
     }
 
-    /// Async helper for one-shot requests with retry logic
-    pub async fn one_shot_with_retry<R>(
+    /// One-shot request answered on the shared channel for its message type.
+    pub async fn one_shot_shared<R>(
         client: &Client,
         message_type: OutgoingMessages,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::retry_on_connection_reset(|| async {
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
-            super::fold_one_shot(subscription.next().await, &processor, &on_none)
+            super::fold_one_shot(subscription.next().await, &processor)
         })
         .await
     }
 
-    /// Async helper for one-shot requests with request ID and retry logic
-    pub async fn one_shot_request_with_retry<R>(
+    /// One-shot request answered on its own request-id channel.
+    pub async fn one_shot_by_request_id<R>(
         client: &Client,
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
-        on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
         crate::common::retry::retry_on_connection_reset(|| async {
             let request_id = client.next_request_id();
             let request = encoder(request_id)?;
             let mut subscription = client.send_request(request_id, request).await?;
 
-            super::fold_one_shot(subscription.next().await, &processor, &on_none)
+            super::fold_one_shot(subscription.next().await, &processor)
         })
         .await
     }

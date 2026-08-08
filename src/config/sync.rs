@@ -31,11 +31,10 @@ impl Client {
     pub fn config(&self) -> Result<Config, Error> {
         check_version(self.server_version, Features::CONFIG)?;
 
-        request_helpers::blocking::one_shot_request_with_retry(
+        request_helpers::blocking::one_shot_by_request_id(
             self,
             encoders::encode_request_config,
             expect_proto(IncomingMessages::ConfigResponse, decoders::decode_config_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
     }
 

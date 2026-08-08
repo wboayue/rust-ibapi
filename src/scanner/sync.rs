@@ -64,12 +64,11 @@ impl Client {
     /// };
     /// ```
     pub fn scanner_parameters(&self) -> Result<String, Error> {
-        request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::RequestScannerParameters,
             encoders::encode_scanner_parameters,
             expect_proto(IncomingMessages::ScannerParameters, decoders::decode_scanner_parameters_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
     }
 

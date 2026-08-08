@@ -364,7 +364,7 @@ async fn test_request_less_hard_error_fails_one_shot_and_spares_stream() {
 
     // One-shot caller fails fast with the real error instead of hanging. Read via
     // the legacy `next()` projection — the same path `next_valid_order_id` and the
-    // `one_shot_with_retry` helper consume — so a `Some(Err(..))` surfaces to callers.
+    // `one_shot_shared` helper consume — so a `Some(Err(..))` surfaces to callers.
     let item = tokio::time::timeout(TICK, one_shot.next())
         .await
         .expect("one-shot got no error before timeout")

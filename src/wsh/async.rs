@@ -30,11 +30,10 @@ impl Client {
     pub async fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
         check_version(self.server_version(), Features::WSHE_CALENDAR)?;
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             encoders::encode_request_wsh_metadata,
             expect_proto(IncomingMessages::WshMetaData, decoders::decode_wsh_metadata_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }
@@ -84,11 +83,10 @@ impl Client {
             check_version(self.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
         }
 
-        request_helpers::one_shot_request_with_retry(
+        request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
             expect_proto(IncomingMessages::WshEventData, decoders::decode_wsh_event_data_proto),
-            || Err(Error::UnexpectedEndOfStream),
         )
         .await
     }

@@ -195,17 +195,16 @@ Add an `impl Client` block in the domain module's `sync.rs`:
 ```rust
 // src/<module>/sync.rs
 use super::common::{encoders, decoders};
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::client::sync::Client;
 
 impl Client {
     pub fn my_function(&self, param: &str) -> Result<MyData, Error> {
-        request_helpers::blocking::one_shot_with_retry(
+        request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::MyRequest,
             || encoders::encode_my_request(self.next_request_id(), param),
-            |message| decoders::decode_my_response(message),
-            || Err(Error::UnexpectedEndOfStream),
+            expect_proto(IncomingMessages::MyResponse, decoders::decode_my_response_proto),
         )
     }
 }
@@ -218,17 +217,16 @@ Add an `impl Client` block in the domain module's `async.rs`:
 ```rust
 // src/<module>/async.rs
 use super::common::{encoders, decoders};
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::Client;
 
 impl Client {
     pub async fn my_function(&self, param: &str) -> Result<MyData, Error> {
-        request_helpers::one_shot_with_retry(
+        request_helpers::one_shot_shared(
             self,
             OutgoingMessages::MyRequest,
             || encoders::encode_my_request(self.next_request_id(), param),
-            |message| decoders::decode_my_response(message),
-            || Err(Error::UnexpectedEndOfStream),
+            expect_proto(IncomingMessages::MyResponse, decoders::decode_my_response_proto),
         ).await
     }
 }
@@ -309,27 +307,27 @@ let valid_value = error_helpers::require_with(some_option, || {
 Provides common request patterns for both sync and async modes:
 
 ```rust
-use crate::common::request_helpers;
+use crate::common::request_helpers::{self, expect_proto};
 
-// For one-shot requests with retry logic (sync, inside impl Client)
+// For one-shot requests (sync, inside impl Client) — every one-shot retries
+// a connection reset; a closed stream is Error::UnexpectedEndOfStream, or chain
+// .or_else(empty_on_end_of_stream) when an empty collection is the right answer.
 pub fn my_api_call(&self) -> Result<MyData, Error> {
-    request_helpers::blocking::one_shot_with_retry(
+    request_helpers::blocking::one_shot_shared(
         self,
         OutgoingMessages::MyRequest,
         || encode_my_request(self.next_request_id()),
-        |message| decode_my_response(message),
-        || Err(Error::UnexpectedEndOfStream),
+        expect_proto(IncomingMessages::MyResponse, decode_my_response_proto),
     )
 }
 
-// For one-shot requests with retry logic (async, inside impl Client)
+// For one-shot requests (async, inside impl Client)
 pub async fn my_api_call(&self) -> Result<MyData, Error> {
-    request_helpers::one_shot_with_retry(
+    request_helpers::one_shot_shared(
         self,
         OutgoingMessages::MyRequest,
         || encode_my_request(self.next_request_id()),
-        |message| decode_my_response(message),
-        || Err(Error::UnexpectedEndOfStream),
+        expect_proto(IncomingMessages::MyResponse, decode_my_response_proto),
     ).await
 }
 

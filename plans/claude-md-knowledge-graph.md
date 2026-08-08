@@ -730,20 +730,35 @@ decoders).
   unchecked. Fourth instance in this file. The next
   author picks a helper by copying a neighbour.
 
-- **Give `on_none` a default and get both one-shot helpers under the param budget.** 42 of the 54
-  sites pass the identical `|| Err(Error::UnexpectedEndOfStream)`; of the rest, 6 pass
-  `|| Ok(Vec::new())` and 4 pass `|| Ok(Vec::default())` — the same value spelled two ways, which
-  is the tell that nobody is choosing here either. Defaulting it and adding an `_or_else` variant
-  for the dozen collection sites lands the helpers at 3 and 2 parameters, under
-  [param budget](../docs/rules/style/param-budget.md) for the first time, and deletes ~42 closures.
-  The node currently argues that `expect_proto` had to be a combinator *because* the helpers are
-  over budget; this removes the premise. 54 sites, so it is restructuring.
+- ~~**Give `on_none` a default and get both one-shot helpers under the param budget.**~~
+  ~~**Rename the helpers now that `_with_retry` distinguishes nothing.**~~ **Both shipped in
+  #745, as one change to the same 54 call sites.** `on_none` is gone rather than defaulted: a
+  closed stream is `Error::UnexpectedEndOfStream` in `fold_one_shot`, and the ten collection
+  sites chain `.or_else(empty_on_end_of_stream)`. That reads at the call site as what it is — a
+  claim that nothing-sent means nothing-to-report — instead of as the fifth argument every other
+  site copies.
 
-- **Rename the helpers now that `_with_retry` distinguishes nothing.** With the non-retrying
-  helper gone, both names carry a suffix no longer contrasting with anything, while the axis that
-  does distinguish them — shared channel vs request id — is not in either name.
-  `one_shot_shared` / `one_shot_by_request_id` say it. 54 call sites; worth folding into the
-  `on_none` change rather than doing separately.
+  **No `_or_else` twin, which the bullet had assumed.** Two helpers × two on-none behaviours
+  would have been four functions per side, eight in the tree. A free function passed to
+  `Result::or_else` composes with both helpers and costs one name. **The plan named a shape
+  (`_or_else` variants) rather than the requirement (a second disposition for ten sites), and
+  the shape was the more expensive way to meet it.**
+
+  The counts: 44 default / 6 `Vec::new()` / 4 `Vec::default()` over 54 sites. The bullet said 42
+  / 6 / 4, and 42 + 6 + 4 is 52 — two short of the 54 the bullet above it counts. A line-oriented
+  grep had missed two sites whose closure wrapped. Seventh instance in this file, and the first
+  where the arithmetic inside the bullet contradicted itself in plain sight.
+
+  Under budget only halfway, and the node says so now rather than claiming the win:
+  `one_shot_by_request_id` takes 3 parameters, at [param
+  budget](../docs/rules/style/param-budget.md); `one_shot_shared` takes 4, because it also names
+  the shared channel. So the premise for `expect_proto` being a combinator survives — an
+  `expected` parameter would put them at 4 and 5.
+
+  Swept with the rename: `docs/extending-api.md`'s four one-shot snippets, which still passed
+  bare decoders (`|message| decoders::decode_my_response(message)`) — the exact anti-pattern
+  [one-shot narrowing](../docs/rules/wire/one-shot-narrowing.md) exists to stop, sitting in the
+  document a new API author copies from. Nothing compiles those fences.
 
 - ~~**`historical_data` still hand-rolls its retry, and the two sides have already drifted.**~~
   **Shipped in #744.** The drift was not cosmetic: async retried the *wrong* case. A routed
