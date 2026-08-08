@@ -293,19 +293,21 @@ fn is_connection_lost_false_for_non_connection() {
 }
 
 #[test]
-fn is_connection_error_delegates_to_is_connection_lost() {
-    use crate::client::error_handler::is_connection_error;
+fn is_read_timeout_only_for_no_data_yet() {
+    // Both dispatchers poll on this: a timed-out read means "nothing arrived",
+    // and must not be confused with the socket being gone.
+    for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::TimedOut] {
+        let error = Error::Io(io::Error::new(kind, "no data"));
+        assert!(error.is_read_timeout(), "{kind:?} should count as a read timeout");
+        assert!(!error.is_connection_lost(), "{kind:?} must not also read as connection-lost");
+    }
 
-    let cases = [
+    for error in [
+        Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, "gone")),
+        Error::Io(io::Error::other("other")),
         Error::ConnectionReset,
-        Error::ConnectionFailed,
-        Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, "x")),
-        Error::Shutdown,
         Error::Cancelled,
-        Error::Io(io::Error::new(io::ErrorKind::NotFound, "x")),
-    ];
-
-    for error in cases {
-        assert_eq!(is_connection_error(&error), error.is_connection_lost(), "diverged for {error:?}");
+    ] {
+        assert!(!error.is_read_timeout(), "{error:?} should not count as a read timeout");
     }
 }

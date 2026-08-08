@@ -792,14 +792,29 @@ decoders).
   `param-budget` violations both sit in
   [plans/code-consistency-followups.md](code-consistency-followups.md), and both are
   take-one-when-you-are-in-the-file work rather than sweeps.
-- **Finish the error-classification audit.** #731's write-up named three tables encoding the
-  same variant→disposition decision — `process_decode_result`, `is_transient_error`,
-  `categorize_error` — and #732's first draft deleted that bullet having fixed one. `/simplify`
-  caught it; `is_transient_error` and `categorize_error` are corrected here (both now treat
-  `UnexpectedResponse` as fatal, since it means "decoder bug" rather than "stray frame"), but
-  the underlying point stands: nothing enforces that a new `Error` variant gets classified in
-  all of them, and both those functions are dead code with `#![allow(dead_code)]`. Decide
-  whether they have a future or should be deleted.
+- ~~**Finish the error-classification audit.**~~ **Shipped in #746: deleted, and the enforcement
+  question dissolved with them.** The bullet asked whether `is_transient_error` and
+  `categorize_error` have a future. Their module said so itself: *"Remove this when async
+  reconnection/retry logic is implemented"* — which shipped, and used `Error::is_connection_lost`
+  and `retry_on_connection_reset` instead. A TODO whose condition came true without anyone
+  noticing.
+
+  Seven items went (`should_retry_request`, `is_transient_error`, `is_fatal_error`,
+  `error_message`, `categorize_error`, `ErrorCategory`, and a second `MAX_RETRIES` shadowing
+  `DEFAULT_MAX_RETRIES`), and with them the whole `client/error_handler` module: the two live
+  predicates were `is_connection_error`, a pure alias for `Error::is_connection_lost`, and
+  `is_timeout_error`, now `Error::is_read_timeout` beside it. Both dispatchers call the methods
+  directly.
+
+  **The `#![allow(dead_code)]` was the whole mechanism.** Five functions and an enum sat unused
+  for as long as they existed while `/simplify` passes and cluster audits read straight past
+  them — including #732's, which *corrected the classification tables in this file* without
+  noticing that two of the three had no callers. Nothing enforces that a new `Error` variant is
+  classified consistently across tables, and after this there is one table, so nothing needs to.
+
+  The reusable form: **a module-level `allow(dead_code)` with a TODO is a claim about the
+  future that nothing re-checks.** The condition here was checkable in one grep, and the answer
+  had been "yes, and it went another way" for months.
 
 - **Reconcile the maintainer's memory store.** Two `[[wikilink]]` syntaxes coexist for the
   same targets (`[[project-protobuf-only]]` vs `[[project_protobuf_only]]`); the whole

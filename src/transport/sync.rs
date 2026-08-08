@@ -268,8 +268,6 @@ impl<S: Stream> TcpMessageBus<S> {
         self.connection.read_message()
     }
     pub(crate) fn dispatch(&self) -> Result<(), Error> {
-        use crate::client::error_handler::{is_connection_error, is_timeout_error};
-
         match self.read_message() {
             Ok(message) => {
                 if message.is_shutdown() {
@@ -280,14 +278,14 @@ impl<S: Stream> TcpMessageBus<S> {
                     Ok(())
                 }
             }
-            Err(ref err) if is_timeout_error(err) => {
+            Err(ref err) if err.is_read_timeout() => {
                 if self.is_shutting_down() {
                     debug!("dispatcher thread exiting");
                     return Err(Error::Shutdown);
                 }
                 Ok(())
             }
-            Err(ref err) if is_connection_error(err) => {
+            Err(ref err) if err.is_connection_lost() => {
                 if self.is_shutting_down() {
                     debug!("dispatcher thread exiting");
                     return Err(Error::Shutdown);
