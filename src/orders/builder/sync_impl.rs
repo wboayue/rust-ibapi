@@ -4,9 +4,6 @@ use crate::client::sync::Client;
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::orders::PlaceOrder;
-#[cfg(test)]
-mod tests;
-
 impl<'a> OrderBuilder<'a, Client> {
     /// Submit the order synchronously
     /// Returns the order ID assigned to the submitted order

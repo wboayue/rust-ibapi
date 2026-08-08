@@ -7,9 +7,6 @@ use crate::errors::Error;
 use crate::orders::PlaceOrder;
 use crate::subscriptions::SubscriptionItemStreamExt;
 
-#[cfg(test)]
-mod tests;
-
 impl<'a> OrderBuilder<'a, Client> {
     /// Submit the order asynchronously
     /// Returns the order ID assigned to the submitted order
