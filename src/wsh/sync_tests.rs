@@ -11,6 +11,44 @@ use crate::testdata::builders::ResponseProtoEncoder;
 use crate::wsh::common::test_data::{self, json_responses};
 use std::sync::Arc;
 
+/// Apply a table row's optional filters to the builder. The row shape predates
+/// #752's builders and keeps its `Option` fields, which is what makes this the
+/// adapter rather than a second API.
+fn by_contract(
+    client: &Client,
+    contract_id: i32,
+    start_date: Option<time::Date>,
+    end_date: Option<time::Date>,
+    limit: Option<i32>,
+    auto_fill: Option<AutoFill>,
+) -> Result<WshEventData, Error> {
+    let mut builder = client.wsh_event_data_by_contract(contract_id);
+    if let Some(start_date) = start_date {
+        builder = builder.starting(start_date);
+    }
+    if let Some(end_date) = end_date {
+        builder = builder.ending(end_date);
+    }
+    if let Some(limit) = limit {
+        builder = builder.limit(limit);
+    }
+    if let Some(auto_fill) = auto_fill {
+        builder = builder.auto_fill(auto_fill);
+    }
+    builder.fetch()
+}
+
+fn by_filter(client: &Client, filter: &str, limit: Option<i32>, auto_fill: Option<AutoFill>) -> Result<Subscription<WshEventData>, Error> {
+    let mut builder = client.wsh_event_data_by_filter(filter);
+    if let Some(limit) = limit {
+        builder = builder.limit(limit);
+    }
+    if let Some(auto_fill) = auto_fill {
+        builder = builder.auto_fill(auto_fill);
+    }
+    builder.subscribe()
+}
+
 #[test]
 fn test_wsh_metadata_table() {
     use crate::wsh::common::test_tables::{wsh_metadata_test_cases, ApiExpectedResult};
@@ -62,7 +100,8 @@ fn test_wsh_event_data_by_contract_table() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus.clone(), test_case.server_version);
-        let result = client.wsh_event_data_by_contract(
+        let result = by_contract(
+            &client,
             test_case.contract_id,
             test_case.start_date,
             test_case.end_date,
@@ -115,9 +154,7 @@ fn test_wsh_event_data_by_filter_subscription_sync() {
     ]));
 
     let client = Client::stubbed(message_bus.clone(), crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-    let subscription = client
-        .wsh_event_data_by_filter(test_data::TEST_FILTER, Some(50), None)
-        .expect("filter request failed");
+    let subscription = by_filter(&client, test_data::TEST_FILTER, Some(50), None).expect("filter request failed");
 
     assert_request(
         &message_bus,
@@ -154,7 +191,7 @@ fn test_wsh_event_data_by_filter_integration_table() {
                     portfolio: false,
                     watchlist: true,
                 };
-                let result = client.wsh_event_data_by_filter(filter, Some(100), Some(auto_fill));
+                let result = by_filter(&client, filter, Some(100), Some(auto_fill));
                 if result.is_ok() {
                     assert_request(
                         &message_bus,
@@ -170,7 +207,7 @@ fn test_wsh_event_data_by_filter_integration_table() {
             }
             "successful filter request without autofill" => {
                 let filter = "filter=value";
-                let result = client.wsh_event_data_by_filter(filter, None, None);
+                let result = by_filter(&client, filter, None, None);
                 if result.is_ok() {
                     assert_request(
                         &message_bus,
@@ -180,7 +217,7 @@ fn test_wsh_event_data_by_filter_integration_table() {
                 }
                 result
             }
-            _ => client.wsh_event_data_by_filter("filter", None, None),
+            _ => by_filter(&client, "filter", None, None),
         };
 
         match test_case.expected_result {
@@ -209,7 +246,8 @@ fn test_server_version_validation_table() {
         let client = Client::stubbed(message_bus, test_case.server_version);
 
         let result = if let Some(contract_id) = test_case.contract_id {
-            client.wsh_event_data_by_contract(
+            by_contract(
+                &client,
                 contract_id,
                 test_case.start_date,
                 test_case.end_date,
@@ -217,9 +255,7 @@ fn test_server_version_validation_table() {
                 test_case.auto_fill,
             )
         } else {
-            client
-                .wsh_event_data_by_filter("filter", test_case.limit, test_case.auto_fill)
-                .map(|_| WshEventData { data_json: "".to_string() })
+            by_filter(&client, "filter", test_case.limit, test_case.auto_fill).map(|_| WshEventData { data_json: "".to_string() })
         };
 
         if test_case.expected_error {
@@ -243,7 +279,7 @@ fn test_subscription_integration_table() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
 
         let client = Client::stubbed(message_bus, test_case.server_version);
-        let result = client.wsh_event_data_by_filter("test_filter", None, None);
+        let result = by_filter(&client, "test_filter", None, None);
 
         assert!(result.is_ok(), "Test '{}' failed to create subscription", test_case.name);
         let subscription = result.unwrap();

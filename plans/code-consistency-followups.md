@@ -22,18 +22,30 @@ starting new follow-ups to catch fresh drift.
 Treat the rule as "4+ args with at least one optional / defaultable field needs a builder";
 pure-required signatures don't benefit (receiver `&self` excluded from the budget).
 
-Internal / free-function violations:
+**The public half is closed in #752.** `wsh_event_data_by_contract` (1 required + 4 `Option`) and
+`wsh_event_data_by_filter` (1 required + 2 `Option`) return `WshEventDataBuilder` /
+`WshEventFilterBuilder`. It was the clearest case in the inventory for a reason worth recording:
+**every call site in the repository — both examples, both integration tests, and the doc examples
+— passed `None` for every optional argument.** A signature nobody exercises past its first
+argument is not carrying five arguments' worth of meaning.
+
+The remaining two public sites keep their decisions from the audit:
+
+- `contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)` — 4
+  required args, but `exchange` documents `""` as a meaningful default. **Deferred.** If
+  revisited, type `exchange` as `Option<Exchange>` and drop the magic empty string; the builder
+  is not the interesting part.
+- `news::Client::historical_news(&self, contract_id, provider_codes, start_time, end_time,
+  total_results)` — 5 args, none optional. **Skip the builder.** A `DateRange` newtype over
+  `start_time` + `end_time` is the only remedy worth considering, and leaving it alone is
+  defensible.
+
+Internal / free-function violations, unchanged — take one when you are already in the file:
 
 - `src/common/error_helpers.rs:31` — `require_range<T>(value, min, max, name)` — internal helper; consider `Range<T>` newtype or a builder.
 - `src/orders/builder/validation.rs:5` — `validate_bracket_prices(action, entry, take_profit, stop_loss)` — internal validation helper.
 - `src/contracts/builders.rs:550` — `iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)` — 4 leg ids; consider a struct of 4 contract ids.
 - `src/orders/common/order_builder/mod.rs:182` — `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` — 5 params; builder.
-
-Client-method violations exposed by the receiver clarification (each appears in `<domain>/sync.rs` + `<domain>/async.rs`):
-
-- **`wsh::Client::wsh_event_data_by_contract(&self, contract_id, start_date, end_date, limit, auto_fill)`** — 1 required + 4 `Option`. Doc example calls `(id, None, None, None, None)`; canonical happy-path is "just events for this contract id." **Strong builder candidate** (the clear win of the three): `WshEventDataBuilder` on `Client::wsh_event_data_by_contract(id) -> WshEventDataBuilder` with `.date_range(start, end)`, `.limit(n)`, `.auto_fill(spec)` setters. Clean standalone PR (sync + async together).
-- **`contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)`** — 4 args all required, but `exchange` documents `""` as a meaningful default. Marginal. **Defer / decide case-by-case;** if revisiting, consider typing `exchange` as `Option<Exchange>` and dropping the magic empty string.
-- **`news::Client::historical_news(&self, contract_id, provider_codes, start_time, end_time, total_results)`** — 5 args all required, no defaults. **Skip the builder.** Better remedy if any: group `start_time` + `end_time` into a `DateRange` type. Leaving as-is is also defensible.
 
 ## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
 

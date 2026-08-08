@@ -24,7 +24,8 @@ async fn wsh_event_data_by_contract() {
     // AAPL contract_id (commonly 265598)
     rate_limit();
     let data = client
-        .wsh_event_data_by_contract(265598, None, None, None, None)
+        .wsh_event_data_by_contract(265598)
+        .fetch()
         .await
         .expect("wsh_event_data_by_contract failed");
     assert!(!data.data_json.is_empty());
@@ -39,7 +40,8 @@ async fn wsh_event_data_by_filter() {
 
     rate_limit();
     let mut subscription = client
-        .wsh_event_data_by_filter("{}", None, None)
+        .wsh_event_data_by_filter("{}")
+        .subscribe()
         .await
         .expect("wsh_event_data_by_filter failed");
     let _item = subscription.next().await;

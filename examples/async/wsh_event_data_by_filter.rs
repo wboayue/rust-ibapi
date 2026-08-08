@@ -41,17 +41,23 @@ async fn main() {
     }"#;
 
     // Limit number of events
-    let limit = Some(50);
+    let limit = 50;
 
     // Configure autofill options
-    let auto_fill = Some(AutoFill {
+    let auto_fill = AutoFill {
         competitors: false,
         portfolio: true, // Include portfolio positions
         watchlist: true, // Include watchlist items
-    });
+    };
 
     // Request WSH event data stream
-    match client.wsh_event_data_by_filter(filter, limit, auto_fill).await {
+    match client
+        .wsh_event_data_by_filter(filter)
+        .limit(limit)
+        .auto_fill(auto_fill)
+        .subscribe()
+        .await
+    {
         Ok(event_stream) => {
             println!("\nStreaming WSH events with filter:");
             println!("Filter: {filter:?}");

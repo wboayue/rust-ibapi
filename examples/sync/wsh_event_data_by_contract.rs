@@ -16,13 +16,12 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let contract_id = 76792991; // TSLA
-    let start_date = None;
-    let end_date = None;
-    let limit = None;
-    let auto_fill = None;
 
+    // Optional narrowing lives on the builder: .starting(), .ending(),
+    // .limit(), .auto_fill(). Unset means TWS decides.
     let event_data = client
-        .wsh_event_data_by_contract(contract_id, start_date, end_date, limit, auto_fill)
+        .wsh_event_data_by_contract(contract_id)
+        .fetch()
         .expect("request wsh event data failed");
 
     println!("{}", event_data.data_json);

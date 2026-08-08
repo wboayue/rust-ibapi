@@ -8,9 +8,11 @@ use std::str;
 
 use serde::{Deserialize, Serialize};
 
+mod builder;
 mod common;
 
 // Re-export common functionality
+pub use builder::{WshEventDataBuilder, WshEventFilterBuilder};
 use common::encoders;
 
 // Feature-specific implementations

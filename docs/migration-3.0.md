@@ -942,6 +942,38 @@ if client.server_version() < server_versions::SIZE_RULES {
 
 The version-gated methods still perform this check themselves and return `Error::ServerVersion` when the gateway is too old, so an explicit pre-check is only needed when you want to branch instead of erroring.
 
+### 37. WSH event data goes through builders
+
+`wsh_event_data_by_contract` took one required argument and four `Option`s; `wsh_event_data_by_filter` took one and two. Every call site in this repository — both examples and both integration tests — passed `None` for all of them. They now return builders, with one setter per optional value:
+
+```rust,ignore
+// v3.x before
+let events = client.wsh_event_data_by_contract(contract_id, None, None, None, None)?;
+let events = client.wsh_event_data_by_contract(
+    contract_id,
+    Some(date!(2024 - 01 - 01)),
+    Some(date!(2024 - 03 - 31)),
+    Some(50),
+    Some(auto_fill),
+)?;
+let subscription = client.wsh_event_data_by_filter(filter, None, None)?;
+
+// v3.0
+let events = client.wsh_event_data_by_contract(contract_id).fetch()?;
+let events = client
+    .wsh_event_data_by_contract(contract_id)
+    .starting(date!(2024 - 01 - 01))
+    .ending(date!(2024 - 03 - 31))
+    .limit(50)
+    .auto_fill(auto_fill)
+    .fetch()?;
+let subscription = client.wsh_event_data_by_filter(filter).subscribe()?;
+```
+
+The terminals differ because the requests do: `.fetch()` returns a single `WshEventData`, `.subscribe()` returns a `Subscription<WshEventData>`. Async is identical with `.await` on the terminal.
+
+Each setter carries its own server-version requirement — `.starting()` / `.ending()` / `.limit()` need `WSH_EVENT_DATA_FILTERS_DATE`, `.auto_fill()` needs `WSH_EVENT_DATA_FILTERS` — so a bare request still works against a gateway that supports none of them. That was true before too; the builder just makes it visible which argument costs which version.
+
 ## Before / after: common subscription patterns
 
 ### Order construction
