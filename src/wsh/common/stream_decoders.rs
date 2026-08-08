@@ -14,7 +14,7 @@ use super::decoders;
 impl StreamDecoder<WshMetadata> for WshMetadata {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshMetaData];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         // Single-arm backstop; see the scanner impl for why this is not redundant.
         decoders::decode_wsh_metadata(message.expect_type(IncomingMessages::WshMetaData)?)
     }
@@ -28,7 +28,7 @@ impl StreamDecoder<WshMetadata> for WshMetadata {
 impl StreamDecoder<WshEventData> for WshEventData {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::WshEventData];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         decoders::decode_wsh_event_data(message.expect_type(IncomingMessages::WshEventData)?)
     }
 

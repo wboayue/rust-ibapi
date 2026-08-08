@@ -19,12 +19,12 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_account_summary() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::AccountSummary,
             account_summary().tag("NetLiquidation").value("123456.78").currency("USD").encode_proto(),
         );
 
-        let result = AccountSummaryResult::decode(&test_context(), &mut message).unwrap();
+        let result = AccountSummaryResult::decode(&test_context(), &message).unwrap();
 
         match result {
             AccountSummaryResult::Summary(summary) => {
@@ -39,9 +39,9 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_account_summary_end() {
-        let mut message = proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto());
+        let message = proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto());
 
-        let result = AccountSummaryResult::decode(&test_context(), &mut message).unwrap();
+        let result = AccountSummaryResult::decode(&test_context(), &message).unwrap();
 
         assert!(matches!(result, AccountSummaryResult::End));
     }
@@ -75,7 +75,7 @@ mod pnl_tests {
 
     #[test]
     fn test_decode_pnl() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::PnL,
             pnl()
                 .daily_pnl(1234.56)
@@ -84,7 +84,7 @@ mod pnl_tests {
                 .encode_proto(),
         );
 
-        let result = PnL::decode(&test_context(), &mut message).unwrap();
+        let result = PnL::decode(&test_context(), &message).unwrap();
 
         assert_eq!(result.daily_pnl, 1234.56);
         assert_eq!(result.unrealized_pnl, Some(2345.67));
@@ -116,7 +116,7 @@ mod pnl_single_tests {
 
     #[test]
     fn test_decode_pnl_single() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::PnLSingle,
             pnl_single()
                 .position(100.0)
@@ -127,7 +127,7 @@ mod pnl_single_tests {
                 .encode_proto(),
         );
 
-        let result = PnLSingle::decode(&test_context(), &mut message).unwrap();
+        let result = PnLSingle::decode(&test_context(), &message).unwrap();
 
         assert_eq!(result.position, 100.0);
         assert_eq!(result.daily_pnl, 1234.56);
@@ -155,7 +155,7 @@ mod position_update_tests {
 
     #[test]
     fn test_decode_position() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::Position,
             position()
                 .account(TEST_ACCOUNT)
@@ -167,7 +167,7 @@ mod position_update_tests {
                 .encode_proto(),
         );
 
-        let result = PositionUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = PositionUpdate::decode(&test_context(), &message).unwrap();
 
         match result {
             PositionUpdate::Position(pos) => {
@@ -182,9 +182,9 @@ mod position_update_tests {
 
     #[test]
     fn test_decode_position_end() {
-        let mut message = proto_response(IncomingMessages::PositionEnd, position_end().encode_proto());
+        let message = proto_response(IncomingMessages::PositionEnd, position_end().encode_proto());
 
-        let result = PositionUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = PositionUpdate::decode(&test_context(), &message).unwrap();
 
         assert!(matches!(result, PositionUpdate::PositionEnd));
     }
@@ -210,7 +210,7 @@ mod position_update_multi_tests {
 
     #[test]
     fn test_decode_position_multi() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::PositionMulti,
             position_multi()
                 .contract_id(12345)
@@ -222,7 +222,7 @@ mod position_update_multi_tests {
                 .encode_proto(),
         );
 
-        let result = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap();
+        let result = PositionUpdateMulti::decode(&test_context(), &message).unwrap();
 
         match result {
             PositionUpdateMulti::Position(pos) => {
@@ -238,9 +238,9 @@ mod position_update_multi_tests {
 
     #[test]
     fn test_decode_position_multi_end() {
-        let mut message = proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto());
+        let message = proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto());
 
-        let result = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap();
+        let result = PositionUpdateMulti::decode(&test_context(), &message).unwrap();
 
         assert!(matches!(result, PositionUpdateMulti::PositionEnd));
     }
@@ -272,7 +272,7 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_account_value() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::AccountValue,
             account_value()
                 .key("NetLiquidation")
@@ -282,7 +282,7 @@ mod account_update_tests {
                 .encode_proto(),
         );
 
-        let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdate::decode(&test_context(), &message).unwrap();
 
         match result {
             AccountUpdate::AccountValue(val) => {
@@ -297,9 +297,9 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_portfolio_value() {
-        let mut message = proto_response(IncomingMessages::PortfolioValue, portfolio_value().contract_id(12345).encode_proto());
+        let message = proto_response(IncomingMessages::PortfolioValue, portfolio_value().contract_id(12345).encode_proto());
 
-        let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdate::decode(&test_context(), &message).unwrap();
 
         match result {
             AccountUpdate::PortfolioValue(val) => {
@@ -315,12 +315,12 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_update_time() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::AccountUpdateTime,
             account_update_time().timestamp("14:30:00").encode_proto(),
         );
 
-        let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdate::decode(&test_context(), &message).unwrap();
 
         match result {
             AccountUpdate::UpdateTime(time) => {
@@ -332,9 +332,9 @@ mod account_update_tests {
 
     #[test]
     fn test_decode_account_download_end() {
-        let mut message = proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto());
+        let message = proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto());
 
-        let result = AccountUpdate::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdate::decode(&test_context(), &message).unwrap();
 
         assert!(matches!(result, AccountUpdate::End));
     }
@@ -364,7 +364,7 @@ mod account_update_multi_tests {
 
     #[test]
     fn test_decode_account_multi_value() {
-        let mut message = proto_response(
+        let message = proto_response(
             IncomingMessages::AccountUpdateMulti,
             account_update_multi()
                 .model_code(TEST_MODEL_CODE)
@@ -374,7 +374,7 @@ mod account_update_multi_tests {
                 .encode_proto(),
         );
 
-        let result = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdateMulti::decode(&test_context(), &message).unwrap();
 
         match result {
             AccountUpdateMulti::AccountMultiValue(val) => {
@@ -390,9 +390,9 @@ mod account_update_multi_tests {
 
     #[test]
     fn test_decode_account_multi_end() {
-        let mut message = proto_response(IncomingMessages::AccountUpdateMultiEnd, account_update_multi_end().encode_proto());
+        let message = proto_response(IncomingMessages::AccountUpdateMultiEnd, account_update_multi_end().encode_proto());
 
-        let result = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap();
+        let result = AccountUpdateMulti::decode(&test_context(), &message).unwrap();
 
         assert!(matches!(result, AccountUpdateMulti::End));
     }
@@ -427,9 +427,9 @@ mod edge_cases {
     #[test]
     fn test_empty_message_handling() {
         // Invalid message with missing fields
-        let mut message = ResponseMessage::from("63\01\0123\0");
+        let message = ResponseMessage::from("63\01\0123\0");
 
-        let result = AccountSummaryResult::decode(&test_context(), &mut message);
+        let result = AccountSummaryResult::decode(&test_context(), &message);
 
         assert!(result.is_err());
     }
@@ -437,9 +437,9 @@ mod edge_cases {
     #[test]
     fn test_malformed_message() {
         // Create a message with missing fields (only has account, missing tag, value, currency)
-        let mut message = ResponseMessage::from("63\01\0123\0DU1234567\0");
+        let message = ResponseMessage::from("63\01\0123\0DU1234567\0");
 
-        let result = AccountSummaryResult::decode(&test_context(), &mut message);
+        let result = AccountSummaryResult::decode(&test_context(), &message);
 
         assert!(result.is_err());
     }
@@ -477,8 +477,8 @@ mod integration_tests {
         ];
 
         let mut results = Vec::new();
-        for mut message in messages {
-            let result = AccountSummaryResult::decode(&test_context(), &mut message).unwrap();
+        for message in messages {
+            let result = AccountSummaryResult::decode(&test_context(), &message).unwrap();
             results.push(result);
         }
 
@@ -506,8 +506,8 @@ mod integration_tests {
         ];
 
         let mut results = Vec::new();
-        for mut message in messages {
-            let result = PositionUpdate::decode(&test_context(), &mut message).unwrap();
+        for message in messages {
+            let result = PositionUpdate::decode(&test_context(), &message).unwrap();
             results.push(result);
         }
 

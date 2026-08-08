@@ -1,4 +1,4 @@
-use super::{expect_proto, fold_one_shot, fold_one_shot_mut};
+use super::{expect_proto, fold_one_shot};
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
@@ -37,18 +37,6 @@ fn test_fold_one_shot_delegates_closed_stream_to_on_none() {
     // ...or an error.
     let result: Result<i32, Error> = fold_one_shot(None, |_| Ok(1), || Err(Error::UnexpectedEndOfStream));
     assert!(matches!(result, Err(Error::UnexpectedEndOfStream)));
-}
-
-#[test]
-fn test_fold_one_shot_mut_hands_the_processor_a_mutable_borrow() {
-    // The three arms are covered above — `fold_one_shot` delegates here — so all
-    // this pins is the `&mut` shape the four option-computation sites need.
-    let result = fold_one_shot_mut(
-        Some(Ok(current_time_message())),
-        |m: &mut ResponseMessage| Ok(m.message_type()),
-        || Err(Error::UnexpectedEndOfStream),
-    );
-    assert!(matches!(result, Ok(IncomingMessages::CurrentTime)));
 }
 
 #[test]

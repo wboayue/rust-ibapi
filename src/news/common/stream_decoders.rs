@@ -9,7 +9,7 @@ use crate::Error;
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => decoders::decode_news_bulletin(message),
             _ => Err(Error::unexpected_response(message)),
@@ -28,7 +28,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::TickNews,
     ];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => decoders::decode_historical_news(message),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),

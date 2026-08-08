@@ -14,18 +14,18 @@ fn updated_proto_message(contract_info: &str) -> ResponseMessage {
 
 #[test]
 fn test_decode_display_group_update() {
-    let mut message = updated_proto_message("265598@SMART");
+    let message = updated_proto_message("265598@SMART");
 
-    let result = DisplayGroupUpdate::decode(&test_context(), &mut message).expect("decoding failed");
+    let result = DisplayGroupUpdate::decode(&test_context(), &message).expect("decoding failed");
 
     assert_eq!(result.contract_info, "265598@SMART");
 }
 
 #[test]
 fn test_decode_display_group_update_empty() {
-    let mut message = updated_proto_message("");
+    let message = updated_proto_message("");
 
-    let result = DisplayGroupUpdate::decode(&test_context(), &mut message).expect("decoding failed");
+    let result = DisplayGroupUpdate::decode(&test_context(), &message).expect("decoding failed");
 
     assert_eq!(result.contract_info, "");
 }
@@ -33,9 +33,9 @@ fn test_decode_display_group_update_empty() {
 #[test]
 fn test_decode_wrong_message_type() {
     let bytes = display_group_updated().contract_info("data").encode_proto();
-    let mut message = proto_response(IncomingMessages::DisplayGroupList, bytes);
+    let message = proto_response(IncomingMessages::DisplayGroupList, bytes);
 
-    let result = DisplayGroupUpdate::decode(&test_context(), &mut message);
+    let result = DisplayGroupUpdate::decode(&test_context(), &message);
 
     assert!(result.is_err());
 }

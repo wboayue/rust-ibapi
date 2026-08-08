@@ -495,7 +495,7 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
         IncomingMessages::HistoricalDataEnd,
     ];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalData => Ok(Self::Historical(common::decoders::decode_historical_data(message)?)),
             IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(message)?)),
@@ -738,9 +738,9 @@ pub use r#async::TickSubscription;
 ///
 /// External users can name the trait as a bound on [`TickSubscription<T>`], but
 /// cannot call [`decode`](Self::decode) themselves — the argument
-/// `&mut ResponseMessage` is crate-private. Implementations are restricted to
-/// the three built-in tick types ([`TickBidAsk`], [`TickLast`],
-/// [`TickMidpoint`]); custom implementations are not supported.
+/// `ResponseMessage` is crate-private. Implementations are restricted to the
+/// three built-in tick types ([`TickBidAsk`], [`TickLast`], [`TickMidpoint`]);
+/// custom implementations are not supported.
 #[allow(private_interfaces)]
 pub trait TickDecoder<T> {
     /// Message types this decoder consumes; everything else on the channel is

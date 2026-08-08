@@ -40,8 +40,8 @@ mod realtime_bar_tests {
 
     #[test]
     fn test_decode_realtime_bar_through_wrapper() {
-        let mut message = proto_response(crate::messages::IncomingMessages::RealTimeBars, fixture());
-        let bar = decode_realtime_bar(&mut message).expect("decode failed");
+        let message = proto_response(crate::messages::IncomingMessages::RealTimeBars, fixture());
+        let bar = decode_realtime_bar(&message).expect("decode failed");
         assert_eq!(bar.open, 4028.75);
     }
 
@@ -56,8 +56,8 @@ mod realtime_bar_tests {
         // Text arrival at a proto-only decoder surfaces UnexpectedWireFormat, which
         // the dispatcher raises rather than skipping — the message was addressed to
         // this decoder. See docs/rules/wire/proto-only-decoding.md.
-        let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
-        match decode_realtime_bar(&mut message) {
+        let message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
+        match decode_realtime_bar(&message) {
             Err(Error::UnexpectedWireFormat(_)) => {}
             other => panic!("expected UnexpectedWireFormat, got {other:?}"),
         }
@@ -118,8 +118,8 @@ mod trade_tick_tests {
 
     #[test]
     fn test_decode_trade_tick_through_wrapper() {
-        let mut message = proto_response(crate::messages::IncomingMessages::TickByTick, fixture(1).encode_proto());
-        let trade = decode_trade_tick(&mut message).expect("decode failed");
+        let message = proto_response(crate::messages::IncomingMessages::TickByTick, fixture(1).encode_proto());
+        let trade = decode_trade_tick(&message).expect("decode failed");
         assert_eq!(trade.price, 3895.25);
     }
 }
@@ -529,10 +529,10 @@ mod market_data_type_tests {
             req_id: Some(9000),
             market_data_type: Some(3),
         };
-        let mut message = proto_response(crate::messages::IncomingMessages::MarketDataType, proto_msg.encode_to_vec());
+        let message = proto_response(crate::messages::IncomingMessages::MarketDataType, proto_msg.encode_to_vec());
         let context = DecoderContext::new(server_versions::PROTOBUF, None);
 
-        match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
+        match TickTypes::decode(&context, &message).expect("proto decode failed") {
             TickTypes::MarketDataType(MarketDataType::Delayed) => {}
             other => panic!("expected MarketDataType(Delayed), got {other:?}"),
         }
@@ -547,10 +547,10 @@ mod market_data_type_tests {
             snapshot_permissions: Some(2),
             ..Default::default()
         };
-        let mut message = proto_response(crate::messages::IncomingMessages::TickReqParams, proto_msg.encode_to_vec());
+        let message = proto_response(crate::messages::IncomingMessages::TickReqParams, proto_msg.encode_to_vec());
         let context = DecoderContext::new(server_versions::PROTOBUF, None);
 
-        match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
+        match TickTypes::decode(&context, &message).expect("proto decode failed") {
             TickTypes::RequestParameters(p) => {
                 assert_eq!(p.min_tick, 0.01);
                 assert_eq!(p.bbo_exchange, "ISLAND");
@@ -563,10 +563,10 @@ mod market_data_type_tests {
     #[test]
     fn test_tick_types_decode_unknown_message_type_skips() {
         // Unknown message types must skip-classify (UnexpectedResponse), not terminate.
-        let mut message = ResponseMessage::from("92\0\0AccountCode\0DU12345\0\0DU12345\0");
+        let message = ResponseMessage::from("92\0\0AccountCode\0DU12345\0\0DU12345\0");
         let context = DecoderContext::new(0, None);
 
-        match TickTypes::decode(&context, &mut message) {
+        match TickTypes::decode(&context, &message) {
             Err(Error::UnexpectedResponse(_)) => {}
             other => panic!("expected UnexpectedResponse, got {other:?}"),
         }

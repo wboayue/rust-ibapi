@@ -9,7 +9,7 @@ struct EndOfStreamItem;
 impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-    fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<EndOfStreamItem, Error> {
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndOfStreamItem, Error> {
         Err(Error::EndOfStream)
     }
 
@@ -31,7 +31,7 @@ fn test_subscription_skips_undeclared_messages_without_limit() {
     impl StreamDecoder<DeclaresTickPrice> for DeclaresTickPrice {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DeclaresTickPrice, Error> {
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DeclaresTickPrice, Error> {
             CALL_COUNT.fetch_add(1, Ordering::Relaxed);
             Ok(DeclaresTickPrice)
         }
@@ -71,7 +71,7 @@ fn test_routed_item_error_terminates_subscription() {
     impl StreamDecoder<DataItem> for DataItem {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DataItem, Error> {
             Ok(DataItem)
         }
     }
@@ -104,7 +104,7 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
     impl StreamDecoder<DataItem> for DataItem {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DataItem, Error> {
             Ok(DataItem)
         }
     }
@@ -174,7 +174,7 @@ struct CollectItem(i32);
 impl StreamDecoder<CollectItem> for CollectItem {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-    fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<CollectItem, Error> {
+    fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<CollectItem, Error> {
         Ok(CollectItem(msg.peek_int(1)?))
     }
 
@@ -297,7 +297,7 @@ fn test_declared_type_with_no_decode_arm_terminates() {
     impl StreamDecoder<DeclaresMoreThanItHandles> for DeclaresMoreThanItHandles {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice, IncomingMessages::TickSize];
 
-        fn decode(_context: &DecoderContext, msg: &mut ResponseMessage) -> Result<DeclaresMoreThanItHandles, Error> {
+        fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<DeclaresMoreThanItHandles, Error> {
             match msg.message_type() {
                 IncomingMessages::TickPrice => Ok(DeclaresMoreThanItHandles),
                 _ => Err(Error::unexpected_response(msg)),

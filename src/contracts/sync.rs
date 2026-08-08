@@ -174,7 +174,7 @@ impl Client {
         let message = encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
-        request_helpers::fold_one_shot_mut(
+        request_helpers::fold_one_shot(
             subscription.next(),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),
@@ -208,7 +208,7 @@ impl Client {
         let message = encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
-        request_helpers::fold_one_shot_mut(
+        request_helpers::fold_one_shot(
             subscription.next(),
             |message| OptionComputation::decode(&self.decoder_context(), message),
             || Err(Error::UnexpectedEndOfStream),

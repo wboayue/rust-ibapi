@@ -163,7 +163,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                 NextAction::Skip
             }
-            Some(RoutedItem::Response(mut message)) => match T::decode(&self.context, &mut message) {
+            Some(RoutedItem::Response(message)) => match T::decode(&self.context, &message) {
                 Ok(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);

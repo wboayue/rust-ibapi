@@ -87,7 +87,7 @@ pub struct BidAsk {
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(message),
             _ => Err(Error::unexpected_response(message)),
@@ -123,7 +123,7 @@ pub struct MidPoint {
 impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(message),
             _ => Err(Error::unexpected_response(message)),
@@ -161,7 +161,7 @@ pub struct Bar {
 impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::RealTimeBars => common::decoders::decode_realtime_bar(message),
             _ => Err(Error::unexpected_response(message)),
@@ -197,7 +197,7 @@ pub struct Trade {
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_trade_tick(message),
             _ => Err(Error::unexpected_response(message)),
@@ -301,7 +301,7 @@ pub struct MarketDepthL2 {
 impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(common::decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(message)?)),
@@ -367,7 +367,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::MarketDataType,
     ];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickPrice => common::decoders::decode_tick_price(message),
             IncomingMessages::TickSize => common::decoders::decode_tick_size(message).map(TickTypes::Size),

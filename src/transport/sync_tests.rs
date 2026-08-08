@@ -1215,7 +1215,7 @@ struct NoticeTestData;
 impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     const RESPONSE_MESSAGE_IDS: &'static [crate::messages::IncomingMessages] = &[crate::messages::IncomingMessages::HistogramData];
 
-    fn decode(_context: &crate::subscriptions::DecoderContext, _msg: &mut ResponseMessage) -> Result<NoticeTestData, Error> {
+    fn decode(_context: &crate::subscriptions::DecoderContext, _msg: &ResponseMessage) -> Result<NoticeTestData, Error> {
         Ok(NoticeTestData)
     }
 }

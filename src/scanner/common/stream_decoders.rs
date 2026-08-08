@@ -8,7 +8,7 @@ use crate::Error;
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         // A single-type decoder has no match, so `expect_type` is its `_ =>`
         // backstop — without it `decode` claims an arm for every message type.
         decoders::decode_scanner_data(message.expect_type(IncomingMessages::ScannerData)?)
