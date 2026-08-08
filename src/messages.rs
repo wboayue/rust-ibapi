@@ -24,11 +24,12 @@ mod tests;
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
 
 /// Messages emitted by TWS/Gateway over the market data socket.
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
     /// Gateway initiated shutdown.
     Shutdown = -2,
     /// Unknown or unsupported message id.
+    #[default]
     NotValid = -1,
     /// Tick price update.
     TickPrice = 1,
@@ -790,10 +791,17 @@ struct ExecutionMinimal {
 pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.
     pub i: usize,
-    /// Raw field buffer backing this message.
+    /// Raw field buffer backing this message. Empty for protobuf frames, whose
+    /// payload lives in `raw_bytes` and whose discriminant lives in `kind`.
     pub fields: Vec<String>,
     /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
     pub raw_bytes: Option<Vec<u8>>,
+    /// The message discriminant, resolved once at construction.
+    ///
+    /// Read 4–6 times per inbound message — routing, request-id extraction, the
+    /// subscription's `RESPONSE_MESSAGE_IDS` filter, the decoder's own match —
+    /// each of which used to re-run `i32::from_str` over `fields[0]`.
+    kind: IncomingMessages,
 }
 
 impl ResponseMessage {
@@ -801,8 +809,9 @@ impl ResponseMessage {
     pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
         Self {
             i: 0,
-            fields: vec![message_type.to_string()],
+            fields: Vec::new(),
             raw_bytes: Some(raw_bytes),
+            kind: IncomingMessages::from(message_type),
         }
     }
 
@@ -852,12 +861,7 @@ impl ResponseMessage {
 
     /// Return the discriminator identifying the message payload.
     pub fn message_type(&self) -> IncomingMessages {
-        if self.fields.is_empty() {
-            IncomingMessages::NotValid
-        } else {
-            let message_id = i32::from_str(&self.fields[0]).unwrap_or(-1);
-            IncomingMessages::from(message_id)
-        }
+        self.kind
     }
 
     /// Try to extract the request id from the message.
@@ -1001,21 +1005,29 @@ impl ResponseMessage {
 
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
+        ResponseMessage::from_text_fields(fields.split_terminator('\x00').map(|x| x.to_string()).collect())
+    }
+
+    /// Text frames keep the discriminant as `fields[0]` — the handshake reader
+    /// walks the field cursor from index 0 — so `kind` is derived from it here
+    /// rather than replacing it.
+    pub(crate) fn from_text_fields(fields: Vec<String>) -> ResponseMessage {
+        let kind = fields
+            .first()
+            .map(|id| IncomingMessages::from(i32::from_str(id).unwrap_or(-1)))
+            .unwrap_or(IncomingMessages::NotValid);
         ResponseMessage {
             i: 0,
-            fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
+            fields,
             raw_bytes: None,
+            kind,
         }
     }
 
     #[cfg(test)]
     /// Build a response message from a pipe-delimited payload (test helper).
     pub fn from_simple(fields: &str) -> ResponseMessage {
-        ResponseMessage {
-            i: 0,
-            fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
-            raw_bytes: None,
-        }
+        ResponseMessage::from_text_fields(fields.split_terminator('|').map(|x| x.to_string()).collect())
     }
 
     /// Encode the message back into a NUL-delimited string.

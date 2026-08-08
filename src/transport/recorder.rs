@@ -73,8 +73,24 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        if let Err(err) = fs::write(self.response_file(record_id), message.encode().replace('\0', "|")) {
+        if let Err(err) = fs::write(self.response_file(record_id), Self::render(message)) {
             warn!("failed to record response: {err}");
+        }
+    }
+
+    /// A protobuf response is recorded as its wire frame — the 4-byte big-endian
+    /// message id followed by the payload — which is what `record_request`
+    /// already writes for outbound messages, and what a replay would need.
+    ///
+    /// Text responses keep their pipe-delimited rendering.
+    ///
+    /// This used to be `message.encode()` for both, which joins the parsed text
+    /// fields. A protobuf frame has none, so every recorded response since the
+    /// transition to protobuf-only was the bare message id and nothing else.
+    fn render(message: &ResponseMessage) -> Vec<u8> {
+        match message.raw_bytes() {
+            Some(payload) => crate::messages::encode_protobuf_message(message.message_type() as i32, payload),
+            None => message.encode().replace('\0', "|").into_bytes(),
         }
     }
 
