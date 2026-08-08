@@ -123,7 +123,7 @@ mod async_integration_tests {
 }
 
 // Mock client implementations for testing
-#[cfg(test)]
+#[cfg(all(test, feature = "sync"))]
 pub mod mock_client {
     pub mod mock {
         use crate::contracts::Contract;
@@ -131,16 +131,11 @@ pub mod mock_client {
         use crate::orders::Order;
         use std::sync::{Arc, Mutex};
 
-        #[allow(dead_code)]
-        type OcaOrderList = Vec<Vec<(Contract, Order)>>;
-
         /// Mock client for testing OrderBuilder
-        #[allow(dead_code)]
         pub struct MockOrderClient {
             next_order_id: Arc<Mutex<i32>>,
             submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
             submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
-            oca_orders: Arc<Mutex<OcaOrderList>>,
         }
 
         impl Default for MockOrderClient {
@@ -149,14 +144,12 @@ pub mod mock_client {
             }
         }
 
-        #[allow(dead_code)]
         impl MockOrderClient {
             pub fn new() -> Self {
                 Self {
                     next_order_id: Arc::new(Mutex::new(100)),
                     submitted_orders: Arc::new(Mutex::new(Vec::new())),
                     submit_order_responses: Arc::new(Mutex::new(Vec::new())),
-                    oca_orders: Arc::new(Mutex::new(Vec::new())),
                 }
             }
 
@@ -197,7 +190,6 @@ pub mod mock_client {
                     order_ids.push(crate::orders::OrderId::new(order_id));
                     self.submitted_orders.lock().unwrap().push((order_id, contract.clone(), order.clone()));
                 }
-                self.oca_orders.lock().unwrap().push(orders);
                 Ok(order_ids)
             }
         }

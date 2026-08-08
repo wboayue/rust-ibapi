@@ -1,11 +1,7 @@
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::async_mock_client::mock::AsyncMockClient;
-use crate::orders::{
-    Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderId, OrderStatus, OrderStatusKind, OrderUpdate, TimeInForce,
-};
-use futures::{Stream, StreamExt};
-use std::pin::Pin;
+use crate::orders::{Action, BracketOrderBuilder, BracketOrderIds, Order, OrderBuilder, OrderId, TimeInForce};
 
 fn create_stock_contract(symbol: &str) -> Contract {
     Contract {
@@ -14,15 +10,6 @@ fn create_stock_contract(symbol: &str) -> Contract {
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         ..Default::default()
-    }
-}
-
-// Mock the orders module functions for testing
-mod orders {
-    use super::*;
-
-    pub async fn submit_order(client: &AsyncMockClient, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-        client.submit_order(order_id, contract, order).await
     }
 }
 
@@ -39,19 +26,8 @@ impl<'a> OrderBuilder<'a, AsyncMockClient> {
         let contract = self.contract;
         let order_id = client.next_order_id();
         let order = self.build()?;
-        orders::submit_order(client, order_id, contract, &order).await?;
+        client.submit_order(order_id, contract, &order).await?;
         Ok(OrderId::new(order_id))
-    }
-
-    /// Submit order and return a stream of updates
-    pub async fn submit_with_updates(self) -> Result<Pin<Box<dyn Stream<Item = OrderUpdate> + Send>>, Error> {
-        let client = self.client;
-        let contract = self.contract;
-        let order_id = client.next_order_id();
-        let order = self.build()?;
-
-        // Use the mock client's submit_order_with_updates method
-        client.submit_order_with_updates(order_id, contract, &order).await
     }
 }
 
@@ -81,7 +57,7 @@ impl<'a> BracketOrderBuilder<'a, AsyncMockClient> {
                 order.transmit = true;
             }
 
-            orders::submit_order(client, order_id, contract, &order).await?;
+            client.submit_order(order_id, contract, &order).await?;
         }
 
         Ok(BracketOrderIds::new(order_ids[0], order_ids[1], order_ids[2]))
@@ -231,84 +207,6 @@ async fn test_async_order_submit_with_error() {
     let result = builder.submit().await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Order rejected"));
-}
-
-#[tokio::test]
-async fn test_async_order_update_stream() {
-    let client = AsyncMockClient::new();
-    let contract = create_stock_contract("AAPL");
-
-    // Set up order update stream
-    client.add_order_update_stream(vec![
-        OrderUpdate::OrderStatus(OrderStatus {
-            order_id: 100,
-            status: OrderStatusKind::PendingSubmit,
-            filled: 0.0,
-            remaining: 100.0,
-            average_fill_price: None,
-            perm_id: 12345,
-            parent_id: 0,
-            last_fill_price: None,
-            client_id: 0,
-            why_held: String::new(),
-            market_cap_price: None,
-        }),
-        OrderUpdate::OrderStatus(OrderStatus {
-            order_id: 100,
-            status: OrderStatusKind::Submitted,
-            filled: 0.0,
-            remaining: 100.0,
-            average_fill_price: None,
-            perm_id: 12345,
-            parent_id: 0,
-            last_fill_price: None,
-            client_id: 0,
-            why_held: String::new(),
-            market_cap_price: None,
-        }),
-        OrderUpdate::OrderStatus(OrderStatus {
-            order_id: 100,
-            status: OrderStatusKind::Filled,
-            filled: 100.0,
-            remaining: 0.0,
-            average_fill_price: Some(50.00),
-            perm_id: 12345,
-            parent_id: 0,
-            last_fill_price: Some(50.00),
-            client_id: 0,
-            why_held: String::new(),
-            market_cap_price: Some(0.0),
-        }),
-    ]);
-
-    client.set_next_order_id(100);
-
-    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00);
-
-    let mut update_stream = builder.submit_with_updates().await.unwrap();
-
-    // Collect all updates
-    let mut updates = Vec::new();
-    while let Some(update) = update_stream.next().await {
-        updates.push(update);
-    }
-
-    assert_eq!(updates.len(), 3);
-
-    // Check status progression
-    if let OrderUpdate::OrderStatus(status) = &updates[0] {
-        assert_eq!(status.status, OrderStatusKind::PendingSubmit);
-    }
-
-    if let OrderUpdate::OrderStatus(status) = &updates[1] {
-        assert_eq!(status.status, OrderStatusKind::Submitted);
-    }
-
-    if let OrderUpdate::OrderStatus(status) = &updates[2] {
-        assert_eq!(status.status, OrderStatusKind::Filled);
-        assert_eq!(status.filled, 100.0);
-        assert_eq!(status.average_fill_price, Some(50.00));
-    }
 }
 
 #[tokio::test]

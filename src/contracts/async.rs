@@ -122,8 +122,6 @@ impl Client {
     /// }
     /// ```
     pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        check_version(self.server_version(), Features::MARKET_RULES)?;
-
         request_helpers::one_shot_request(
             self,
             Features::MARKET_RULES,

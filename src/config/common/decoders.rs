@@ -3,7 +3,6 @@
 
 use prost::Message;
 
-use crate::common::error_helpers;
 use crate::config::{
     ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,
     UpdateConfigResponse,
@@ -12,12 +11,14 @@ use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::proto;
 use crate::Error;
 
-/// Dispatch on the incoming message type and forward to the typed decoder. Any
-/// other variant becomes `Error::UnexpectedResponse`. There is deliberately no
-/// `IncomingMessages::Error` arm — the dispatcher classifies error frames, so
-/// one never reaches a decoder; see `docs/rules/wire/proto-only-decoding.md`.
+/// Dispatch a config frame to its typed decoder. Narrowing rationale lives on
+/// [`ResponseMessage::expect_type`].
 pub(in crate::config) fn decode_config_message(message: &ResponseMessage) -> Result<Config, Error> {
-    decode_config_proto(error_helpers::expect_message_type(message, IncomingMessages::ConfigResponse)?.require_proto()?)
+    decode_config(message.expect_type(IncomingMessages::ConfigResponse)?)
+}
+
+fn decode_config(message: &ResponseMessage) -> Result<Config, Error> {
+    decode_config_proto(message.require_proto()?)
 }
 
 fn decode_config_proto(bytes: &[u8]) -> Result<Config, Error> {
@@ -129,7 +130,11 @@ fn convert_smart_routing(p: proto::OrdersSmartRoutingConfig) -> OrdersSmartRouti
 /// Dispatch on the incoming message type and forward to the update-config
 /// decoder. Mirrors [`decode_config_message`].
 pub(in crate::config) fn decode_update_config_message(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
-    decode_update_config_proto(error_helpers::expect_message_type(message, IncomingMessages::UpdateConfigResponse)?.require_proto()?)
+    decode_update_config(message.expect_type(IncomingMessages::UpdateConfigResponse)?)
+}
+
+fn decode_update_config(message: &ResponseMessage) -> Result<UpdateConfigResponse, Error> {
+    decode_update_config_proto(message.require_proto()?)
 }
 
 fn decode_update_config_proto(bytes: &[u8]) -> Result<UpdateConfigResponse, Error> {

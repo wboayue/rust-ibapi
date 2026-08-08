@@ -1,7 +1,6 @@
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
-use crate::common::error_helpers;
 use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionChain, SmartComponent};
 
 // `TickOptionComputation` (msg 21, gate 206 PROTOBUF_MARKET_DATA) is decoded
@@ -24,18 +23,18 @@ pub(in crate::contracts) fn decode_contract_descriptions(message: &ResponseMessa
     decode_symbol_samples_proto(message.require_proto()?)
 }
 
-/// Dispatch a `SymbolSamples` frame. Shape mirrors [`decode_smart_components_message`].
+/// Dispatch a `SymbolSamples` frame.
 pub(in crate::contracts) fn decode_contract_descriptions_message(message: &ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
-    decode_contract_descriptions(error_helpers::expect_message_type(message, IncomingMessages::SymbolSamples)?)
+    decode_contract_descriptions(message.expect_type(IncomingMessages::SymbolSamples)?)
 }
 
 pub(in crate::contracts) fn decode_market_rule(message: &ResponseMessage) -> Result<MarketRule, Error> {
     decode_market_rule_proto(message.require_proto()?)
 }
 
-/// Dispatch a `MarketRule` frame. Shape mirrors [`decode_smart_components_message`].
+/// Dispatch a `MarketRule` frame.
 pub(in crate::contracts) fn decode_market_rule_message(message: &ResponseMessage) -> Result<MarketRule, Error> {
-    decode_market_rule(error_helpers::expect_message_type(message, IncomingMessages::MarketRule)?)
+    decode_market_rule(message.expect_type(IncomingMessages::MarketRule)?)
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
@@ -120,7 +119,7 @@ pub(crate) fn decode_smart_components_proto(bytes: &[u8]) -> Result<Vec<SmartCom
 }
 
 pub(in crate::contracts) fn decode_smart_components_message(message: &ResponseMessage) -> Result<Vec<SmartComponent>, Error> {
-    decode_smart_components(error_helpers::expect_message_type(message, IncomingMessages::SmartComponents)?)
+    decode_smart_components(message.expect_type(IncomingMessages::SmartComponents)?)
 }
 
 #[cfg(test)]

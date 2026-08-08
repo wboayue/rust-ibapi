@@ -74,8 +74,6 @@ impl Client {
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        check_version(self.server_version, Features::MARKET_RULES)?;
-
         request_helpers::blocking::one_shot_request(
             self,
             Features::MARKET_RULES,

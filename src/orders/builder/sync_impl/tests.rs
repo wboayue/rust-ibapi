@@ -13,15 +13,6 @@ fn create_stock_contract(symbol: &str) -> Contract {
     }
 }
 
-// Mock the orders module functions for testing
-mod orders {
-    use super::*;
-
-    pub fn submit_order(client: &MockOrderClient, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-        client.submit_order(order_id, contract, order)
-    }
-}
-
 // Now we need to implement the submit method for MockOrderClient
 impl<'a> OrderBuilder<'a, MockOrderClient> {
     /// Build the order and return it without submitting
@@ -35,7 +26,7 @@ impl<'a> OrderBuilder<'a, MockOrderClient> {
         let contract = self.contract;
         let order_id = client.next_order_id();
         let order = self.build()?;
-        orders::submit_order(client, order_id, contract, &order)?;
+        client.submit_order(order_id, contract, &order)?;
         Ok(OrderId::new(order_id))
     }
 }
@@ -66,7 +57,7 @@ impl<'a> BracketOrderBuilder<'a, MockOrderClient> {
                 order.transmit = true;
             }
 
-            orders::submit_order(client, order_id, contract, &order)?;
+            client.submit_order(order_id, contract, &order)?;
         }
 
         Ok(BracketOrderIds::new(order_ids[0], order_ids[1], order_ids[2]))

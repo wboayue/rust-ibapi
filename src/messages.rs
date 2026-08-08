@@ -821,6 +821,24 @@ impl ResponseMessage {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_wire_format(self))
     }
 
+    /// Narrow a frame to one expected message type, or fail with
+    /// `Error::UnexpectedResponse`.
+    ///
+    /// [`Self::require_proto`]'s sibling on the other axis: that one narrows the
+    /// framing, this one narrows the type. Both return a borrow so they chain in
+    /// the position the decoder wants.
+    ///
+    /// There is deliberately no `IncomingMessages::Error` case. The dispatcher
+    /// classifies error frames before any decoder sees them, so one cannot
+    /// arrive here — see `docs/rules/wire/proto-only-decoding.md`.
+    pub(crate) fn expect_type(&self, expected: IncomingMessages) -> Result<&Self, Error> {
+        if self.message_type() == expected {
+            Ok(self)
+        } else {
+            Err(Error::unexpected_response(self))
+        }
+    }
+
     /// Returns `true` if the message informs about API shutdown.
     #[cfg_attr(not(feature = "sync"), allow(dead_code))] // sync-transport-only caller
     pub fn is_shutdown(&self) -> bool {

@@ -526,6 +526,26 @@ life.
   `accounts` ×3, `contracts`, `config` ×2, `scanner`. An `expect_type(message, expected)` helper
   makes each a one-liner. Rule of three is well past, but it touches seven modules.
 
+- **Six one-shot folds are still hand-rolled.** `/simplify` on #736 found the conversion
+  incomplete: `head_timestamp` and `histogram_data` in `market_data/historical/{sync,async}` and
+  `market_depth_exchanges` in `market_data/realtime/{sync,async}`. `histogram_data` and
+  `market_depth_exchanges` are drop-ins; `head_timestamp` needs a dispatcher, and the async twin
+  retries on `None` rather than `ConnectionReset` — an unbounded recursion the helper would
+  bound. `historical_schedule` is convertible too but retries `ConnectionReset` unboundedly on
+  purpose, so it needs a decision rather than a substitution.
+
+- **Make the expected message type a helper parameter (`one_shot_typed`).** Eleven
+  `decode_*_message` wrappers now exist only to pair one `IncomingMessages` variant with one
+  decoder, and every one of those decoders already has a `decode_*_proto(&[u8])` sibling. A
+  helper taking `(expected, decode_proto)` would delete the pure dispatchers and the
+  `.require_proto()?` inside them. The stronger argument is not tidiness: narrowing is currently
+  opt-in, and four one-shot sites do not narrow at all — `decode_news_providers`,
+  `decode_news_article`, `decode_scanner_parameters`, `decode_verify_message_api` are passed
+  bare. A type parameter closes those by construction. Note the wrappers are not one population:
+  eight are one-shot only, two (wsh) are dual-use, and the `StreamDecoder` surface should not
+  adopt it at all — there the expected set is already declared in `RESPONSE_MESSAGE_IDS`, so a
+  hand-written narrow inside `decode` is a third copy of the same fact.
+
 - **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
   define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
   `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero

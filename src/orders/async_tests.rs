@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, proto_error_response,
-    proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
+    proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
@@ -126,8 +126,6 @@ async fn test_place_order() {
 // hedge_max_size rides the outbound PlaceOrderRequest proto (docs/rules/testing/exercise-production-code.md).
 #[tokio::test]
 async fn place_order_encodes_hedge_max_size() {
-    use crate::common::test_utils::helpers::decode_request_proto;
-
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE);
 
@@ -579,8 +577,6 @@ async fn analyze_surfaces_rejected_what_if_order() {
 // blocking test for why this replaced a mock-client shadow.
 #[tokio::test]
 async fn analyze_returns_order_state_for_the_matching_order() {
-    use crate::common::test_utils::helpers::decode_request_proto;
-
     let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::OpenOrder,
         open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
