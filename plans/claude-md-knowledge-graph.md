@@ -511,12 +511,29 @@ life.
   `Some(Err(e))`. **The per-API question "does this consume `Err`?" needs asking once per
   public entry point; no shared layer answers it.**
 
+- **Adopt `fold_one_shot` at the ~14 sites that hand-roll it.** `Some(Ok(m)) => decode`,
+  `Some(Err(e)) => Err(e)`, `None => default` is spelled out at four sites each in
+  `contracts::{sync,async}`, plus `news::{sync,async}` ×2 each and `scanner::{sync,async}` —
+  while `fold_one_shot` itself has no callers outside `request_helpers.rs`. Two blockers, both
+  vestigial: `decode_contract_descriptions` and `decode_market_rule` take `&mut ResponseMessage`
+  and an unused `server_version`, though their bodies are only `require_proto()?` (a `&self`
+  method). The option-computation sites are genuinely blocked — they need `&mut` plus a
+  `DecoderContext`. `request_helpers` also lacks a request-id/no-retry variant, which is exactly
+  the slot `matching_symbols` falls into. Deferred from #735's `/simplify` as restructuring.
+
+- **Collapse the seven identical `decode_*_message` dispatchers.** After #734/#735 they are all
+  `match message.message_type() { X => decode_x(m), _ => Err(unexpected_response(m)) }` across
+  `accounts` ×3, `contracts`, `config` ×2, `scanner`. An `expect_type(message, expected)` helper
+  makes each a one-liner. Rule of three is well past, but it touches seven modules.
+
 - **The order-builder tests re-implement the code they test.** `src/orders/builder/{sync,async}_impl/tests.rs`
   define their own `analyze` / `submit` on `OrderBuilder<'a, MockOrderClient>` returning
   `Vec<PlaceOrder>` rather than a `Subscription`, so the production methods on `Client` had zero
   coverage — which is why the `analyze` bug above survived four tests named for it. #735 added
   two tests at the real seam for `analyze` only; `submit`, `build_order`, and the bracket-order
-  builders still have none. A textbook
+  builders still have none. The async shadow carried the very discard the PR fixed
+  (`while let Some(Ok(..))`) and was corrected in place, which is the argument for deleting the
+  shadows rather than maintaining two copies. A textbook
   [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
   the largest one left in the tree.
 

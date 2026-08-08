@@ -1,7 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::{proto_response, tws_error_notice};
+use crate::common::test_utils::helpers::tws_error_notice;
 use crate::market_data::historical::HistoricalParseError;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::orders::builder::ValidationError;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;
@@ -141,29 +141,6 @@ fn from_protobuf_decode_error() {
     let error: Error = protobuf_decode_error().into();
     assert!(matches!(error, Error::ProtobufDecode(_)));
     assert!(error.to_string().contains("protobuf decode error"));
-}
-
-#[test]
-fn from_protobuf_response_message_decodes_envelope() {
-    let envelope = crate::proto::ErrorMessage {
-        id: Some(7),
-        error_time: Some(0),
-        error_code: Some(2104),
-        error_msg: Some("Market data farm OK".to_string()),
-        advanced_order_reject_json: None,
-    };
-    let raw = prost::Message::encode_to_vec(&envelope);
-    let msg = proto_response(IncomingMessages::Error, raw);
-    let error: Error = msg.into();
-    assert!(matches!(error, Error::Notice(ref n) if n.code == 2104 && n.message == "Market data farm OK"));
-}
-
-#[test]
-fn from_protobuf_response_message_falls_back_when_decode_fails() {
-    // Bad protobuf bytes -> falls back to text accessors (both default to 0 / empty).
-    let msg = proto_response(IncomingMessages::Error, vec![0xff, 0xff, 0xff, 0xff]);
-    let error: Error = msg.into();
-    assert!(matches!(error, Error::Notice(ref n) if n.code == 0));
 }
 
 #[test]

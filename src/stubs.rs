@@ -116,12 +116,27 @@ impl MessageBusStub {
     pub(crate) fn routed_items(&self) -> Vec<RoutedItem> {
         self.response_messages_decoded().into_iter().map(classify_like_dispatcher).collect()
     }
+
+    /// Record the outbound request and hand back a subscription pre-loaded with
+    /// the configured responses. Every async `send_*` differs only in the id or
+    /// message-type argument it ignores.
+    #[cfg(feature = "async")]
+    fn seeded_subscription(&self, message: Vec<u8>) -> AsyncInternalSubscription {
+        self.request_messages.write().unwrap().push(message);
+
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
+        for item in self.routed_items() {
+            sender.send(item).unwrap();
+        }
+
+        AsyncInternalSubscription::new(receiver)
+    }
 }
 
-/// Apply [`determine_routing`]'s `Error` arm to a fixture. Everything else is a
-/// `Response`, exactly as the transports treat it — the stub has no channel map
-/// to route by, so the routing *target* is irrelevant here; only the
-/// classification is.
+/// Apply the dispatcher's classification to a fixture. The stub has no channel
+/// map, so the routing *target* is irrelevant here — only the classification is,
+/// and it covers both types the dispatcher intercepts before routing
+/// (`DISPATCHER_INTERCEPTED` in `src/subscriptions/response_message_ids_tests.rs`).
 fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => match classify_error(payload) {
@@ -133,7 +148,10 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
             ErrorDisposition::NoticeOnly(notice) => RoutedItem::Notice(notice),
             ErrorDisposition::NoticeAndFailOneShots(_, error) => RoutedItem::Error(error),
         },
-        _ => RoutedItem::Response(message),
+        // Ends the dispatcher loop on a real transport, so it never reaches a
+        // decoder there either.
+        RoutingDecision::Shutdown => RoutedItem::Error(Error::Shutdown),
+        _ => message.into(),
     }
 }
 
@@ -241,39 +259,15 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
     async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for item in self.routed_items() {
-            sender.send(item).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_order_request(&self, _order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for item in self.routed_items() {
-            sender.send(item).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_shared_request(&self, _message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.request_messages.write().unwrap().push(message);
-
-        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
-        // Send pre-configured response messages
-        for item in self.routed_items() {
-            sender.send(item).unwrap();
-        }
-
-        Ok(AsyncInternalSubscription::new(receiver))
+        Ok(self.seeded_subscription(message))
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {

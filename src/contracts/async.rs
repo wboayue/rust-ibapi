@@ -105,7 +105,7 @@ impl Client {
                 }
             },
             Some(Err(e)) => Err(e),
-            None => Ok(Vec::default()),
+            None => Ok(Vec::new()),
         }
     }
 

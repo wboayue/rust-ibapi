@@ -4,6 +4,7 @@ use super::order_builder::{BracketOrderBuilder, OrderBuilder};
 use super::types::{BracketOrderIds, OrderId};
 use crate::client::r#async::Client;
 use crate::errors::Error;
+use crate::orders::PlaceOrder;
 use crate::subscriptions::SubscriptionItemStreamExt;
 
 #[cfg(test)]
@@ -38,16 +39,15 @@ impl<'a> OrderBuilder<'a, Client> {
         // Submit what-if order and get the response
         let subscription = client.place_order(order_id, contract, &order).await?;
 
-        // Look for the order state in the responses. A rejected what-if order
-        // arrives as a routed `Err`, which the earlier `while let Some(Ok(..))`
-        // read discarded by ending the loop — the caller saw
-        // `UnexpectedEndOfStream` instead of the reason TWS gave (#735).
+        // Look for the order state in the responses. `?` propagates a rejected
+        // what-if order; the earlier `while let Some(Ok(..))` read discarded it by
+        // ending the loop, so the caller saw `UnexpectedEndOfStream` (#735).
         let mut data = subscription.filter_data();
         while let Some(response) = data.next().await {
-            match response {
-                Ok(crate::orders::PlaceOrder::OpenOrder(order_data)) if order_data.order_id == order_id => return Ok(order_data.order_state),
-                Ok(_) => {}
-                Err(e) => return Err(e),
+            if let PlaceOrder::OpenOrder(order_data) = response? {
+                if order_data.order_id == order_id {
+                    return Ok(order_data.order_state);
+                }
             }
         }
 

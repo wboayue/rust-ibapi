@@ -61,11 +61,9 @@ fn test_decode_config_message_dispatches_config_response() {
 
 #[test]
 fn test_decode_config_message_rejects_error_frames() {
-    // IncomingMessages::Error == 4. The dispatcher classifies error frames, so
-    // one never reaches a decoder — this decoder claims no arm for it, and the
-    // `_` backstop must treat it like any other foreign type. The one-shot
-    // dispatchers have no equivalent of the StreamDecoder cross-check test, so
-    // the assertion is pinned per site. See docs/rules/wire/proto-only-decoding.md.
+    // IncomingMessages::Error == 4. Regression guard for the arm removed in
+    // #735: the dispatcher classifies error frames, so one never reaches a
+    // decoder and the `_` backstop must treat it like any other foreign type.
     let message = ResponseMessage::from("4\09000\0322\0error text\0");
     match decode_config_message(&message) {
         Err(Error::UnexpectedResponse(_)) => {}

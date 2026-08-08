@@ -139,18 +139,6 @@ pub enum Error {
     ProtobufDecode(#[from] prost::DecodeError),
 }
 
-impl From<ResponseMessage> for Error {
-    fn from(err: ResponseMessage) -> Error {
-        Error::Notice(Notice::from(&err))
-    }
-}
-
-impl From<&ResponseMessage> for Error {
-    fn from(err: &ResponseMessage) -> Error {
-        Error::Notice(Notice::from(err))
-    }
-}
-
 impl From<crate::transport::routing::DecodedError> for Error {
     /// Project a dispatcher-decoded error payload to [`Error::Notice`].
     /// Mirrors the [`From<ResponseMessage>`] projection but skips the

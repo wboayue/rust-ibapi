@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, count_proto_msgs, proto_error_response, proto_response,
-    request_message_count, TEST_REQ_ID_FIRST,
+    assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, assert_tws_error_message, count_proto_msgs,
+    create_test_client_with_ordered_proto_responses, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::BarTimestamp;
@@ -719,17 +719,15 @@ async fn test_historical_data_streaming_with_updates() {
     );
 }
 
+// Async twin of the sync `test_historical_data_streaming_error_response`; see
+// that test for why this path is covered per API rather than only at the transport.
 #[tokio::test]
 async fn test_historical_data_streaming_error_response() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_error_response(
         9000,
         162,
         "Historical Market Data Service error message:No market data permissions.",
-    )]));
-
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    client.time_zone = Some(time_tz::timezones::db::UTC);
-
+    )]);
     let contract = Contract::stock("SPY").build();
 
     let mut subscription = client
@@ -739,13 +737,10 @@ async fn test_historical_data_streaming_error_response() {
         .await
         .expect("streaming request should succeed");
 
-    // The dispatcher classifies the error frame; this asserts that *this API*
-    // hands it to the caller rather than swallowing it. The transport tests
-    // prove delivery, not consumption — see blocking `matching_symbols` (#735).
     let Some(Err(err)) = subscription.next().await else {
         panic!("error should arrive as Some(Err(_))");
     };
-    assert!(err.to_string().contains("No market data permissions"), "Error should contain the message");
+    assert_tws_error_message(err, 162, "No market data permissions");
 }
 
 #[tokio::test]

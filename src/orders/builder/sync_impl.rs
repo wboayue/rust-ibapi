@@ -3,6 +3,7 @@ use super::types::{BracketOrderIds, OrderId};
 use crate::client::sync::Client;
 use crate::contracts::Contract;
 use crate::errors::Error;
+use crate::orders::PlaceOrder;
 #[cfg(test)]
 mod tests;
 
@@ -35,15 +36,14 @@ impl<'a> OrderBuilder<'a, Client> {
         // Submit what-if order and get the response
         let responses = client.place_order(order_id, contract, &order)?;
 
-        // Look for the order state in the responses. A rejected what-if order
-        // arrives as a routed `Err`, which the earlier `if let Ok(..)` read
-        // discarded — the caller saw `UnexpectedEndOfStream` instead of the
-        // reason TWS gave (#735).
+        // Look for the order state in the responses. `?` propagates a rejected
+        // what-if order; the earlier `if let Ok(..)` read discarded it, so the
+        // caller saw `UnexpectedEndOfStream` instead of TWS's reason (#735).
         for response in responses.iter_data() {
-            match response {
-                Ok(crate::orders::PlaceOrder::OpenOrder(order_data)) if order_data.order_id == order_id => return Ok(order_data.order_state),
-                Ok(_) => {}
-                Err(e) => return Err(e),
+            if let PlaceOrder::OpenOrder(order_data) = response? {
+                if order_data.order_id == order_id {
+                    return Ok(order_data.order_state);
+                }
             }
         }
 

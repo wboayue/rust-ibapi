@@ -1,5 +1,8 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, create_test_client, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, proto_error_response,
+    proto_response, request_message_count, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
@@ -558,15 +561,8 @@ async fn order_entry_point_builds_order() {
 // this path is otherwise uncovered.
 #[tokio::test]
 async fn analyze_surfaces_rejected_what_if_order() {
-    use crate::common::test_utils::helpers::{assert_tws_error_message, proto_error_response};
-
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
-        9000,
-        201,
-        "Order rejected - reason:Insufficient buying power",
-    )]));
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let (client, _bus) =
+        create_test_client_with_ordered_proto_responses(vec![proto_error_response(9000, 201, "Order rejected - reason:Insufficient buying power")]);
     let contract = Contract::stock("AAPL").build();
 
     let err = client

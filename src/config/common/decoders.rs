@@ -11,9 +11,10 @@ use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::proto;
 use crate::Error;
 
-/// Dispatch on the incoming message type and forward to the typed decoder.
-/// Routes `Error` frames into `Error::from` and any other variant into
-/// `Error::UnexpectedResponse`.
+/// Dispatch on the incoming message type and forward to the typed decoder. Any
+/// other variant becomes `Error::UnexpectedResponse`. There is deliberately no
+/// `IncomingMessages::Error` arm — the dispatcher classifies error frames, so
+/// one never reaches a decoder; see `docs/rules/wire/proto-only-decoding.md`.
 pub(in crate::config) fn decode_config_message(message: &ResponseMessage) -> Result<Config, Error> {
     match message.message_type() {
         IncomingMessages::ConfigResponse => decode_config_proto(message.require_proto()?),

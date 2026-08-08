@@ -297,3 +297,31 @@ mod async_tests {
         assert!(AsyncMessageBus::is_connected(&stub));
     }
 }
+
+// `routed_items` is what keeps fixture-side behaviour equal to wire-side: the
+// stub used to hand every fixture over as `RoutedItem::Response`, including the
+// two types the dispatcher intercepts before routing (#735).
+#[test]
+fn routed_items_classifies_dispatcher_intercepted_types() {
+    use crate::common::test_utils::helpers::{proto_error_response, proto_response};
+    use crate::messages::IncomingMessages;
+
+    let stub = MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::TickPrice, vec![]),
+        // Request-scoped hard error -> the owning subscription's Err.
+        proto_error_response(9000, 201, "rejected"),
+        // Warning range 2100..=2169 -> a non-terminal Notice.
+        proto_error_response(9000, 2104, "market data farm ok"),
+        crate::messages::ResponseMessage::from("-2\0"),
+    ]);
+
+    let items = stub.routed_items();
+    assert!(matches!(items[0], RoutedItem::Response(_)), "got {:?}", items[0]);
+    assert!(
+        matches!(&items[1], RoutedItem::Error(Error::Notice(n)) if n.code == 201),
+        "got {:?}",
+        items[1]
+    );
+    assert!(matches!(&items[2], RoutedItem::Notice(n) if n.code == 2104), "got {:?}", items[2]);
+    assert!(matches!(items[3], RoutedItem::Error(Error::Shutdown)), "got {:?}", items[3]);
+}
