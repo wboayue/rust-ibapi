@@ -341,6 +341,3 @@ fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
         None => String::from(""),
     }
 }
-
-// max attempts to retry failed tws requests
-const MAX_RETRIES: i32 = 5;

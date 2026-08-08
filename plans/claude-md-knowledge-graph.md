@@ -745,13 +745,24 @@ decoders).
   `one_shot_shared` / `one_shot_by_request_id` say it. 54 call sites; worth folding into the
   `on_none` change rather than doing separately.
 
-- **`historical_data` still hand-rolls its retry, and the two sides have already drifted.**
-  `src/market_data/historical/{sync,async}.rs` each write `for _ in 0..MAX_RETRIES` instead of
-  calling `retry_on_connection_reset`, because the fetch reads two frames (data, then
-  `HistoricalDataEnd`) and is not a one-shot. They disagree on the terminal cases: sync retries
-  `Some(Err(ConnectionReset))` and errors on `None`; async does the reverse. This is the last
-  instance of the hand-rolled-retry class #741 closed everywhere else, and the drift is exactly
-  what a shared helper prevents — the sync/async pair is where a duplicated predicate always goes.
+- ~~**`historical_data` still hand-rolls its retry, and the two sides have already drifted.**~~
+  **Shipped in #744.** The drift was not cosmetic: async retried the *wrong* case. A routed
+  `ConnectionReset` arrived through `Some(Err(e))` and returned to the caller on the first
+  occurrence, while a closed stream — which no retry can fix — was re-sent five times and then
+  reported as `ConnectionReset`. Sync had it right. Both now call `retry_on_connection_reset`,
+  which also drops the attempt count from `MAX_RETRIES = 5` to the `DEFAULT_MAX_RETRIES = 3` every
+  other request uses; `MAX_RETRIES` had no other reader and is deleted.
+
+  **The two tests that should have caught it were the clearest statement of the bug.** Both were
+  named `test_historical_data_connection_reset_after_retries`, and they asserted opposite
+  outcomes for the same input — `UnexpectedEndOfStream` on sync, `ConnectionReset` after 5 sends
+  on async — each with a comment explaining why its side was correct. **Two sibling tests with
+  the same name and contradictory assertions are a drift report, not coverage.** Reading a
+  sync/async pair side by side is the check; nothing automated compares them.
+
+  The reset case now has a real test on both sides, which #743 is what made possible. The second
+  read (the `HistoricalDataEnd` frame) also dropped `Some(Err)` on both sides — the exact shape
+  #735 swept for — and now propagates.
 
 - ~~**Teach `MessageBusStub` to inject `Error::ConnectionReset`.**~~ **Shipped in #743.**
   `with_connection_resets(n)` answers the first `n` requests with a bare

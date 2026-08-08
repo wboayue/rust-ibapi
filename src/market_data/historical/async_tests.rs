@@ -913,9 +913,11 @@ async fn test_historical_data_with_end_message() {
 }
 
 #[tokio::test]
-async fn test_historical_data_connection_reset_after_retries() {
+async fn test_historical_data_end_of_stream_is_not_retried() {
     // Empty responses → broadcast channel closes immediately → subscription.next()
-    // returns None on every retry → loop exhausts MAX_RETRIES and returns ConnectionReset.
+    // yields None. A closed stream is not a reset: it fails on the first attempt.
+    // Before #744 this side retried it five times and reported ConnectionReset,
+    // while the sync side failed immediately — the two had drifted apart.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -925,9 +927,37 @@ async fn test_historical_data_connection_reset_after_retries() {
         .fetch()
         .await;
 
-    assert!(matches!(result, Err(Error::ConnectionReset)), "expected ConnectionReset, got {result:?}");
-    // Each retry resends the request — MAX_RETRIES = 5.
-    assert_eq!(request_message_count(&message_bus), 5, "should retry MAX_RETRIES times");
+    assert!(
+        matches!(result, Err(Error::UnexpectedEndOfStream)),
+        "expected UnexpectedEndOfStream, got {result:?}"
+    );
+    assert_eq!(request_message_count(&message_bus), 1, "a closed stream must not be retried");
+}
+
+#[tokio::test]
+async fn test_historical_data_retries_a_connection_reset() {
+    // The case the async side never retried: a routed ConnectionReset came back
+    // through `Some(Err(e))` and returned straight to the caller.
+    let message_bus = Arc::new(
+        MessageBusStub::with_ordered_responses(vec![proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                .encode_proto(),
+        )])
+        .with_connection_resets(1),
+    );
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let data = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
+        .await
+        .expect("the reset must be retried, not surfaced");
+
+    assert_eq!(data.bars.len(), 1);
+    assert_eq!(request_message_count(&message_bus), 2, "the retry must re-send the request");
 }
 
 #[tokio::test]
