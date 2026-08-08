@@ -79,6 +79,33 @@ fn test_record_response() {
 }
 
 #[test]
+fn test_record_response_writes_the_protobuf_frame() {
+    // Every response at the protocol floor is proto-framed, and this used to
+    // record `fields.join("\0")` — which for a proto message is the bare
+    // message id, losing the entire payload.
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path().to_str().unwrap();
+
+    temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
+        let payload = vec![0x08, 0xd0, 0x46];
+        let message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::CurrentTime as i32, payload.clone());
+
+        let recorder = MessageRecorder::from_env();
+        recorder.record_response(&message);
+
+        let file = fs::read_dir(&recorder.recording_dir).unwrap().next().unwrap().unwrap().path();
+        let content = fs::read(&file).unwrap();
+
+        assert_eq!(
+            content,
+            encode_protobuf_message(crate::messages::IncomingMessages::CurrentTime as i32, &payload),
+            "a recorded response must be the wire frame a replay would read"
+        );
+        assert!(content.ends_with(&payload), "the payload must survive the round trip");
+    });
+}
+
+#[test]
 fn test_multiple_records() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path().to_str().unwrap();

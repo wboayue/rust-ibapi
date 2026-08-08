@@ -642,13 +642,27 @@ decoders).
   [exercise production code](../docs/rules/testing/exercise-production-code.md) violation, and
   the largest one left in the tree.
 
-- **Cache the message discriminant on `ResponseMessage`.** `message_type()` re-parses
-  `fields[0]` with `i32::from_str` on every call, and it is called 4–6 times per inbound
-  message (routing, `request_id`, the new filter, the decoder's own match). Worse,
-  `from_protobuf` does `message_type.to_string()` per message purely so the discriminant can be
-  re-parsed downstream — `fields[0]` has no other reader. Storing `kind: IncomingMessages` at
-  construction makes the accessor a field read and removes an allocation per message. Pure
-  perf, no behaviour change.
+- ~~**Cache the message discriminant on `ResponseMessage`.**~~ **Shipped in #748, and "no
+  behaviour change" was wrong in an instructive way.** The mechanical half went as written:
+  `kind: IncomingMessages` resolved at construction, `message_type()` a field read,
+  `from_protobuf` no longer allocating a `String` so the discriminant can be re-parsed
+  downstream.
+
+  **`fields[0]` did have another reader, and finding it found a broken feature.** The recorder
+  (`IBAPI_RECORDING_DIR`, documented in `CLAUDE.md`) wrote `message.encode()`, which joins the
+  parsed *text* fields. A proto frame has none — so since the protobuf-only transition every
+  recorded response was the bare message id and no payload, while requests were recorded as raw
+  bytes all along. The asymmetry is what made it invisible: the feature looked like it worked,
+  because half of it did.
+
+  Responses now record as their wire frame, which is also what a replay would need. **The
+  "verify the claim before removing the thing" move is the same one #740 needed** — there the
+  grep inverted the plan, here it turned a perf change into a bug fix. Both bullets asserted a
+  fact about readers that nobody had run a command for.
+
+  A second reader turned up in the sync transport's mock socket, which used `fields[0] == "\0"`
+  as a disconnect sentinel and panicked on the now-empty vector. Loud, immediate, ten tests —
+  the good kind.
 
 - ~~**Collapse the 40 `*_rejects_text_framing` asserts into one helper.**~~ **Shipped in #747.**
   `assert_rejects_text_framing` in `src/common/test_utils.rs`, next to the

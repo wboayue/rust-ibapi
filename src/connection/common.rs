@@ -401,12 +401,7 @@ pub fn parse_raw_message(data: &[u8]) -> (ResponseMessage, Option<String>) {
         debug!("<- {raw_string:?}");
         let mut fields = vec![msg_id.to_string()];
         fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
-        let message = ResponseMessage {
-            i: 0,
-            fields,
-            raw_bytes: None,
-        };
-        (message, Some(raw_string))
+        (ResponseMessage::from_text_fields(fields), Some(raw_string))
     }
 }
 

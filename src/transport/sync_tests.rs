@@ -136,8 +136,9 @@ impl Io for MockSocket {
 
         let response = responses.get(read_call_count).unwrap();
 
-        // disconnect if a null byte response is encountered
-        if response.fields[0] == "\0" {
+        // disconnect if a null byte response is encountered. Protobuf fixtures
+        // carry no text fields at all, so this reads the first one if present.
+        if response.fields.first().is_some_and(|field| field == "\0") {
             return Err(mock_socket_error(ErrorKind::ConnectionReset));
         }
 

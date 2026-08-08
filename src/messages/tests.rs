@@ -1379,6 +1379,26 @@ fn test_response_message_access_patterns() {
 }
 
 #[test]
+fn test_message_type_is_resolved_once_at_construction() {
+    // Text framing keeps the discriminant in fields[0] — the handshake reader
+    // walks the cursor from index 0 — and `kind` is derived from it.
+    let text = ResponseMessage::from("5\0123\0");
+    assert_eq!(text.message_type(), IncomingMessages::OpenOrder);
+    assert_eq!(text.fields[0], "5", "text framing keeps the id as a readable field");
+
+    // Proto framing carries the id out of band, so there are no text fields at
+    // all and nothing re-parses a string to answer message_type().
+    let proto = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, vec![0x08, 0x2a]);
+    assert_eq!(proto.message_type(), IncomingMessages::OpenOrder);
+    assert!(proto.fields.is_empty(), "a proto frame allocates no text fields");
+
+    // An unparseable or absent discriminant is NotValid, as before.
+    assert_eq!(ResponseMessage::from("nonsense\0").message_type(), IncomingMessages::NotValid);
+    assert_eq!(ResponseMessage::from("").message_type(), IncomingMessages::NotValid);
+    assert_eq!(ResponseMessage::default().message_type(), IncomingMessages::NotValid);
+}
+
+#[test]
 fn test_response_message_fields_modification() {
     // Test that ResponseMessage handles field modification correctly
     let mut message = ResponseMessage::from("1\02\03\0");
