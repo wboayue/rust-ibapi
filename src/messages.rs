@@ -804,23 +804,29 @@ pub(crate) struct ResponseMessage {
     kind: IncomingMessages,
     /// The numeric id `kind` was resolved from, retained because that mapping
     /// is lossy: every unrecognized id collapses to
-    /// [`IncomingMessages::NotValid`]. Diagnostics for an unroutable frame need
-    /// the id itself — without it a framing desync and a message type IBKR
-    /// added look identical. Text frames also keep it in `fields[0]`; protobuf
-    /// frames have nowhere else to put it.
+    /// [`IncomingMessages::NotValid`]. See [`UNKNOWN_MESSAGE_TYPE_CODE`] for
+    /// what the id buys a reader that the kind alone cannot.
     message_id: i32,
 }
 
 impl ResponseMessage {
-    /// Build a protobuf response message from a binary message type and raw payload bytes.
-    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
+    /// The one construction path, so `kind` and `message_id` cannot disagree:
+    /// `kind` is always `IncomingMessages::from(message_id)`. The derived
+    /// `Default` upholds it too, by coincidence worth naming — `message_id: 0`
+    /// is unrecognized, and `NotValid` is the enum's `#[default]`.
+    fn new(message_id: i32, fields: Vec<String>, raw_bytes: Option<Vec<u8>>) -> Self {
         Self {
             i: 0,
-            fields: Vec::new(),
-            raw_bytes: Some(raw_bytes),
-            kind: IncomingMessages::from(message_type),
-            message_id: message_type,
+            fields,
+            raw_bytes,
+            kind: IncomingMessages::from(message_id),
+            message_id,
         }
+    }
+
+    /// Build a protobuf response message from a binary message type and raw payload bytes.
+    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
+        Self::new(message_type, Vec::new(), Some(raw_bytes))
     }
 
     /// The numeric message id this frame arrived with, before it was resolved
@@ -828,9 +834,10 @@ impl ResponseMessage {
     /// the [`PROTOBUF_MSG_ID`] offset already removed — i.e. the value that was
     /// looked up, not the raw 4 bytes off the wire.
     ///
-    /// Only interesting when [`Self::message_type`] is
-    /// [`IncomingMessages::NotValid`]; otherwise the kind says the same thing
-    /// with a name.
+    /// Guaranteed for every message, not just unroutable ones:
+    /// `IncomingMessages::from(m.message_id()) == m.message_type()`. Callers
+    /// that need the id back out of a message — the wire recorder, diagnostics
+    /// for an unrecognized frame — depend on that holding for known kinds too.
     pub(crate) fn message_id(&self) -> i32 {
         self.message_id
     }
@@ -1032,14 +1039,8 @@ impl ResponseMessage {
     /// walks the field cursor from index 0 — so `kind` is derived from it here
     /// rather than replacing it.
     pub(crate) fn from_text_fields(fields: Vec<String>) -> ResponseMessage {
-        let message_id = fields.first().map(|id| i32::from_str(id).unwrap_or(-1)).unwrap_or(-1);
-        ResponseMessage {
-            i: 0,
-            fields,
-            raw_bytes: None,
-            kind: IncomingMessages::from(message_id),
-            message_id,
-        }
+        let message_id = fields.first().and_then(|id| i32::from_str(id).ok()).unwrap_or(-1);
+        Self::new(message_id, fields, None)
     }
 
     #[cfg(test)]

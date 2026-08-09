@@ -141,3 +141,37 @@ fn test_disabled_recorder() {
         recorder.record_response(&response);
     });
 }
+
+/// An unrecognized message id must be recorded as itself, not as the `-1` its
+/// kind resolves to. This is the capture an operator would attach to a desync
+/// report, so fabricating the id there destroys the one field that identifies
+/// the fault.
+#[test]
+fn test_record_response_keeps_an_unrecognized_message_id() {
+    use crate::common::test_utils::helpers::UNKNOWN_MESSAGE_ID;
+
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path().to_str().unwrap();
+
+    temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
+        let payload = vec![0x08, 0x64];
+        let message = ResponseMessage::from_protobuf(UNKNOWN_MESSAGE_ID, payload.clone());
+        assert_eq!(
+            message.message_type(),
+            crate::messages::IncomingMessages::NotValid,
+            "fixture must be an unrecognized id"
+        );
+
+        let recorder = MessageRecorder::from_env();
+        recorder.record_response(&message);
+
+        let file = fs::read_dir(&recorder.recording_dir).unwrap().next().unwrap().unwrap().path();
+        let content = fs::read(&file).unwrap();
+
+        assert_eq!(
+            content,
+            encode_protobuf_message(UNKNOWN_MESSAGE_ID, &payload),
+            "the recorded frame must carry the id that arrived, not NotValid's -1"
+        );
+    });
+}

@@ -169,6 +169,17 @@ Restructuring, deliberately not landed in a cleanup pass:
   `warn!` and the notice text interpolate it, so scattered ids (framing slipped) are
   distinguishable from one repeated id (IBKR added a type). Observability *policy* stayed in
   transport; only the information loss was repaired.
+- **`body()` is defined twice, byte-identical** — `transport/async_tests.rs` and
+  `transport/sync_tests.rs` both carry the same `"msg_id|f1|f2"` → wire-bytes fixture builder,
+  doc comment included, and `connection/common_tests.rs` now open-codes the same construction in
+  three places. Shared home is `common::test_utils::helpers`, beside `binary_proto` /
+  `error_frame`; the `debug_assert_ne!` against the `Error` msg id has to move with it.
+- **Two encodings of "no message id"** — `ResponseMessage::default()` yields `0`,
+  `from_text_fields` yields `-1` when `fields[0]` is missing or unparsable. Neither is a wire
+  id, and `-1` is `NotValid`'s own discriminant, so a diagnostic reading "message id -1" is
+  self-referential. The `kind == from(message_id)` invariant holds for both, and `Default` is
+  test-only, so this is cosmetic until it isn't. A named sentinel or `Option<i32>` behind the
+  accessor would settle it.
 - **`CapturingSink` is defined twice** — `connection/common_tests.rs` and
   `transport/common_tests.rs`, same shape, both implementing `NoticeSink`. Shared home is
   `common::test_utils::helpers`. Two consumers today; this is the second occurrence, so by the

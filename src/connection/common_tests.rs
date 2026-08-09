@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{proto_error_response, proto_response};
 use crate::messages::IncomingMessages;
@@ -568,13 +569,13 @@ fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
 fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     // Protobuf framing: wire id carries the PROTOBUF_MSG_ID offset, and
     // message_id() reports the value actually looked up.
-    let (message, _) = parse_raw_message(&crate::messages::encode_protobuf_message(9799, &[0x08, 0x64])).expect("well-formed frame");
+    let (message, _) = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
-    assert_eq!(message.message_id(), 9799);
+    assert_eq!(message.message_id(), helpers::UNKNOWN_MESSAGE_ID);
 
     // Text framing: same accessor, id taken from fields[0]. Must be at or below
-    // PROTOBUF_MSG_ID to reach the text branch at all, so use an unassigned id
-    // in that range rather than the 9799 above.
+    // PROTOBUF_MSG_ID to reach the text branch at all, so it cannot reuse
+    // UNKNOWN_MESSAGE_ID.
     let mut text_frame = 150_i32.to_be_bytes().to_vec();
     text_frame.extend_from_slice(b"1\0");
     let (message, _) = parse_raw_message(&text_frame).expect("well-formed frame");

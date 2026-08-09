@@ -6,6 +6,7 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 // Additional imports for connection tests
 use crate::client::sync::Client;
+use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
@@ -1808,9 +1809,7 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notice_stream = bus.notice_subscribe();
 
-    // Real type 9799 maps to no IncomingMessages variant — what a mis-framed
-    // read produces once the length prefix has slipped.
-    stream.push_inbound(crate::messages::encode_protobuf_message(9799, &[0x08, 0x64]));
+    stream.push_inbound(helpers::unknown_message_frame());
 
     bus.dispatch()?;
 
@@ -1818,7 +1817,7 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
     assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
     // The id survives the protobuf path, where `kind` alone would have lost it.
     assert!(
-        notice.message.contains("9799"),
+        notice.message.contains(&helpers::UNKNOWN_MESSAGE_ID.to_string()),
         "notice must name the offending id, got {:?}",
         notice.message
     );

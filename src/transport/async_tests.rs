@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::*;
+use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{binary_proto, error_frame};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
@@ -934,9 +935,7 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
 
-    // Real type 9799 maps to no IncomingMessages variant — what a mis-framed
-    // read produces once the length prefix has slipped.
-    stream.push_inbound(crate::messages::encode_protobuf_message(9799, &[0x08, 0x64]));
+    stream.push_inbound(crate::common::test_utils::helpers::unknown_message_frame());
 
     bus.read_and_route_message().await.unwrap();
 
@@ -947,7 +946,7 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
     assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
     // The id survives the protobuf path, where `kind` alone would have lost it.
     assert!(
-        notice.message.contains("9799"),
+        notice.message.contains(&helpers::UNKNOWN_MESSAGE_ID.to_string()),
         "notice must name the offending id, got {:?}",
         notice.message
     );
