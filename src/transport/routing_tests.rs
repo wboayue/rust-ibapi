@@ -446,3 +446,16 @@ fn test_first_unroutable_by_request_id_reports_first_offender() {
     let declared = &[IncomingMessages::TickPrice, IncomingMessages::FamilyCodes, IncomingMessages::MarketRule];
     assert_eq!(first_unroutable_by_request_id(declared), Some(IncomingMessages::FamilyCodes));
 }
+
+/// The unknown-message-id alarm in `report_unroutable_frame` only fires for
+/// frames that reach the end of routing unclaimed, so it depends on
+/// `NotValid` landing in `ByMessageType` rather than any id-keyed arm. Nothing
+/// else guards that: `is_order_message`/`is_shared_message` exclude `NotValid`
+/// and `routes_by_request_id(NotValid)` is false, but if any of those shifted
+/// the alarm would go quiet with no test failing.
+#[test]
+fn test_unknown_message_type_routes_by_message_type() {
+    let message = ResponseMessage::from("9999\01\0");
+    assert_eq!(message.message_type(), IncomingMessages::NotValid);
+    assert_eq!(determine_routing(&message), RoutingDecision::ByMessageType(IncomingMessages::NotValid));
+}

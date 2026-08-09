@@ -395,20 +395,22 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 /// stream fixtures, which supply bodies directly and skip the length prefix
 /// entirely. It used to index straight past the end and panic the dispatcher.
 pub fn parse_raw_message(data: &[u8]) -> Result<(ResponseMessage, Option<String>), Error> {
-    let header: [u8; 4] = data
-        .get(..MIN_FRAME_LENGTH)
-        .and_then(|h| h.try_into().ok())
-        .ok_or_else(|| Error::InvalidFrame(format!("frame body of {} bytes cannot hold a message id", data.len())))?;
-    let msg_id = i32::from_be_bytes(header);
+    let Some((header, payload)) = data.split_first_chunk::<MIN_FRAME_LENGTH>() else {
+        return Err(Error::InvalidFrame(format!(
+            "frame body of {} bytes cannot hold a message id",
+            data.len()
+        )));
+    };
+    let msg_id = i32::from_be_bytes(*header);
 
     if msg_id > PROTOBUF_MSG_ID {
         let real_type = msg_id - PROTOBUF_MSG_ID;
         debug!("<- protobuf msg_id={real_type}");
-        let message = ResponseMessage::from_protobuf(real_type, data[MIN_FRAME_LENGTH..].to_vec());
+        let message = ResponseMessage::from_protobuf(real_type, payload.to_vec());
         Ok((message, None))
     } else {
         // Binary message ID, NUL-delimited text payload.
-        let raw_string = String::from_utf8_lossy(&data[MIN_FRAME_LENGTH..]).into_owned();
+        let raw_string = String::from_utf8_lossy(payload).into_owned();
         debug!("<- {raw_string:?}");
         let mut fields = vec![msg_id.to_string()];
         fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));

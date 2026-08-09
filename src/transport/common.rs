@@ -57,20 +57,17 @@ pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
 /// Two very different situations end up here, and conflating them is what made
 /// a desynchronized stream indistinguishable from an idle one:
 ///
-/// - **Unknown message kind** ([`IncomingMessages::NotValid`]) — the 4-byte id
-///   matched nothing we know. Nothing can ever route this, and on a connection
-///   that was healthy a moment ago the overwhelmingly likely cause is a framing
-///   slip, not a new IBKR message type. Warned *and* published to the notice
-///   stream as [`UNKNOWN_MESSAGE_TYPE_CODE`] so a consumer can react
+/// - **Unknown message kind** ([`IncomingMessages::NotValid`]) — nothing can
+///   ever route this, and it is the shape a framing slip takes. Published to
+///   the notice stream as [`UNKNOWN_MESSAGE_TYPE_CODE`] so a consumer can react
 ///   programmatically rather than by reading logs.
-/// - **Known kind, nobody listening** — routine. A shared-channel type with no
-///   current subscriber is an ordinary steady-state condition, so it stays at
-///   `info` and raises no notice.
+/// - **Known kind, nobody listening** — an ordinary steady-state condition, so
+///   it stays at `info` and raises no notice.
 ///
-/// The blocking transport logged the first case at `info`, which is how the
-/// 2026-07-07 incident produced farm notices and no decode error; the async
-/// transport logged nothing at all. See
-/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+/// The blocking transport logged both at `info` and the async transport logged
+/// neither, which is how the incident in
+/// `plans/tick-by-tick-reconnect-decode-desync.md` produced farm notices and no
+/// decode error.
 pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &dyn NoticeSink) {
     if message.message_type() == IncomingMessages::NotValid {
         warn!("unroutable frame: message id maps to no known type — the stream may be desynchronized: {message:?}");
@@ -88,35 +85,21 @@ pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
 
 /// Largest frame body rust-ibapi will accept from a length prefix, matching the
 /// official client's `Constants.MaxMsgSize` (`0x00FFFFFF`, ~16 MiB), which
-/// `EReader.readSingleMessage` enforces with `BAD_LENGTH`.
-///
-/// Nothing about the wire format bounds the 4-byte big-endian prefix on its
-/// own, so without this a desynchronized read interprets payload bytes as a
-/// length of up to 4 GiB.
+/// `EReader.readSingleMessage` enforces with `BAD_LENGTH`. Nothing in the wire
+/// format bounds the 4-byte prefix on its own.
 pub(crate) const MAX_FRAME_LENGTH: usize = 0x00FF_FFFF;
 
 /// Smallest valid frame body: every TWS frame is `[4-byte BE msg_id][payload]`,
 /// so a body that cannot hold the message id is malformed by definition. An
-/// empty payload after the id is legal, hence `<` rather than `<=`.
+/// empty payload after the id is legal.
 pub(crate) const MIN_FRAME_LENGTH: usize = 4;
 
 /// Reject a length prefix that cannot describe a TWS frame, before it is used
 /// to size an allocation or drive a `read_exact`.
 ///
-/// Both failure directions desynchronize the stream permanently rather than
-/// corrupting one message, which is why this returns a hard
-/// [`Error::InvalidFrame`] instead of skipping the frame:
-///
-/// - **Too large** — `read_exact` blocks until that many bytes arrive,
-///   consuming and destroying every real message in between, then yields one
-///   bogus frame; the next read starts at an arbitrary boundary.
-/// - **Too short** — the body cannot carry a message id, so the parse would
-///   index past the end.
-///
-/// A mis-framed protobuf payload still decodes without error (prost skips
-/// unrecognized field numbers), so a silently-accepted bad length surfaces as
-/// plausible-looking wrong values rather than a failure. See
-/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+/// Returns a hard [`Error::InvalidFrame`] rather than skipping the frame,
+/// because either direction desynchronizes the stream permanently instead of
+/// corrupting one message — see that variant's docs for why.
 pub(crate) fn validate_frame_length(length: usize) -> Result<usize, Error> {
     if length > MAX_FRAME_LENGTH {
         return Err(Error::InvalidFrame(format!(

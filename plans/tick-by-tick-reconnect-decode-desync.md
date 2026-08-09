@@ -159,6 +159,38 @@ mode" as a precursor step, not part of the fix.
    **Next up** — and now the cheaper half of it is already done: a desync announces itself, so a
    capture only has to catch the bytes, not detect the event.
 
+### Deferred from the F1/F2/F3 `/simplify` pass
+
+Restructuring, deliberately not landed in a cleanup pass:
+
+- **The unknown-id notice cannot name the id.** `ResponseMessage::from_protobuf` keeps only
+  `kind` and `raw_bytes`, so by the time `report_unroutable_frame` matches `NotValid` the raw
+  numeric id is gone — the notice carries a fixed string and the `warn!` prints `fields: []`.
+  During the very incident this was built for, an operator gets N byte-identical notices. Fix is
+  to preserve the id on the message (a field, or `NotValid(i32)`) and interpolate it, keeping
+  observability *policy* in transport and repairing only the information loss. The doc on
+  `UNKNOWN_MESSAGE_TYPE_CODE` was reworded to stop over-promising discrimination it cannot
+  deliver until this lands. **Highest-value of these.**
+- **`CapturingSink` is defined twice** — `connection/common_tests.rs` and
+  `transport/common_tests.rs`, same shape, both implementing `NoticeSink`. Shared home is
+  `common::test_utils::helpers`. Two consumers today; this is the second occurrence, so by the
+  rule-of-three habit the third trips it.
+- **`NoticeSink` lives in `connection/common.rs` but is transport-shaped** — both impls are
+  transport types, and `transport/common.rs` is now its second consumer. Relocating it to
+  `transport/common.rs` removes the sole `transport → connection::common` edge. Cost today nil.
+- **`MIN_FRAME_LENGTH` does double duty across a layer boundary** — "framing floor" in
+  transport, "skip the message id" in the parser, two concepts sharing the number 4. A
+  `MESSAGE_ID_LEN` in `messages.rs` (which already owns `encode_length`/`PROTOBUF_MSG_ID`) would
+  drop the new `connection → transport::common` import and let the two diverge.
+- **No `Notice` predicate for the client-synthesized codes.** `messages.rs` pairs every code
+  const with a predicate (`is_warning`, `is_system_message`, `is_handshake_synthetic`), but
+  `UNKNOWN_MESSAGE_TYPE_CODE` is `pub` with none, so consumers hand-write `notice.code == ...`.
+  A `Notice::is_client_synthesized()` (code `< 0`) is the proportionate sibling. Note also that
+  a `NotValid` frame raises `-3` during the handshake and `-5` after it — two codes for one
+  condition, split by lifecycle phase.
+- **No end-to-end test** pushes a short body through `MemoryStream` to confirm the bus takes its
+  reconnect branch rather than dying; `parse_raw_message`'s guard is covered only at unit level.
+
 **Still open after step 1:** F2 is the most plausible root cause but is *not confirmed* as the
 one that fired on 2026-07-07 — no capture exists, and F7 explains why one could not have been
 taken. If the corruption recurs on a build carrying this fix, the `Error::InvalidFrame` +

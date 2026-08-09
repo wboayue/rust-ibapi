@@ -59,24 +59,16 @@ fn test_validate_frame_length_accepts_the_legal_range() {
 }
 
 #[test]
-fn test_validate_frame_length_rejects_bodies_too_short_for_a_message_id() {
-    for length in 0..MIN_FRAME_LENGTH {
-        let err = validate_frame_length(length).expect_err("a body too short for a message id must be rejected");
-        assert!(matches!(err, Error::InvalidFrame(_)), "short frame must raise InvalidFrame, got {err:?}");
-        assert!(err.is_connection_lost(), "a desynchronized stream must drive a reconnect");
-    }
-}
-
-#[test]
-fn test_validate_frame_length_rejects_oversized_prefix() {
-    // The desync signature: four garbage bytes read as a length. Unbounded,
-    // this sizes an allocation of up to 4 GiB and then consumes every real
-    // message until it is satisfied.
-    for length in [MAX_FRAME_LENGTH + 1, u32::MAX as usize] {
-        let err = validate_frame_length(length).expect_err("a length past the 16 MiB cap must be rejected");
+fn test_validate_frame_length_rejects_out_of_range_lengths() {
+    // Below: a body that cannot hold the message id. Above: the desync
+    // signature — four garbage bytes read as a length, which unbounded sizes an
+    // allocation of up to 4 GiB and then consumes every real message until it
+    // is satisfied.
+    for length in [0, MIN_FRAME_LENGTH - 1, MAX_FRAME_LENGTH + 1, u32::MAX as usize] {
+        let err = validate_frame_length(length).expect_err("an out-of-range length must be rejected");
         assert!(
             matches!(err, Error::InvalidFrame(_)),
-            "oversized frame must raise InvalidFrame, got {err:?}"
+            "length {length} must raise InvalidFrame, got {err:?}"
         );
         assert!(err.is_connection_lost(), "a desynchronized stream must drive a reconnect");
     }

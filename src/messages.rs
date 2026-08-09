@@ -1126,8 +1126,9 @@ pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
 /// Synthesized notice code emitted when a handshake-time frame's
 /// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
-/// (TWS uses 0+); the only other sentinel in this range is `-2` for the
-/// gateway-initiated shutdown signal. See [`Notice::is_handshake_synthetic`].
+/// (TWS uses 0+); the other client-synthesized codes are
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`] and [`UNKNOWN_MESSAGE_TYPE_CODE`]. See
+/// [`Notice::is_handshake_synthetic`].
 pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 
 /// Synthesized notice code emitted when a typed handshake decoder fails for
@@ -1142,17 +1143,18 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// Synthesized notice code emitted when a frame arrives whose 4-byte message
 /// id maps to no known [`IncomingMessages`] kind, so nothing can route it.
 ///
-/// Negative, like the other client-side sentinels ([`HANDSHAKE_UNKNOWN_FRAME_CODE`],
-/// [`HANDSHAKE_DECODE_FAILURE_CODE`], and `-2` for the gateway shutdown signal);
-/// TWS itself only uses codes 0 and up.
+/// Negative, like the other client-synthesized notice codes
+/// ([`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`]); TWS
+/// itself only uses codes 0 and up.
 ///
-/// This is the observable form of a framing desynchronization. The length
+/// This is the observable form of a framing desynchronization: the length
 /// prefix is positional, so once a read starts at the wrong offset every
 /// subsequent message id is garbage — usually unrecognized (this notice), but
 /// occasionally colliding with a real kind, in which case the payload decodes
-/// without error into plausible-looking wrong values. A burst of these on a
-/// previously healthy connection means the stream slipped, not that IBKR added
-/// a message type.
+/// without error into plausible-looking wrong values. The notice does not name
+/// the offending id, so it cannot on its own distinguish a slipped stream from
+/// an unrecognized message type IBKR has added; correlate with
+/// [`Error::InvalidFrame`](crate::Error::InvalidFrame) and the surrounding logs.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 
 /// Typed classification of a [`Notice`] by TWS error-code range.

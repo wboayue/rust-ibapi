@@ -8,7 +8,7 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
-use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
+use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::transport::sync::MemoryStream;
@@ -1783,7 +1783,7 @@ fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
 fn test_read_message_rejects_out_of_range_length_prefix() {
     use crate::transport::common::{MAX_FRAME_LENGTH, MIN_FRAME_LENGTH};
 
-    for prefix in [0_u32, 3, MAX_FRAME_LENGTH as u32 + 1, u32::MAX] {
+    for prefix in [0, MIN_FRAME_LENGTH as u32 - 1, MAX_FRAME_LENGTH as u32 + 1, u32::MAX] {
         // Prefix only: a valid frame's body never arrives, so if the length were
         // accepted this would block or allocate before noticing anything is wrong.
         let framed = prefix.to_be_bytes().to_vec();
@@ -1796,8 +1796,7 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
     }
 
     // The smallest legal frame still reads: a bare message id with no payload.
-    let mut framed = (MIN_FRAME_LENGTH as u32).to_be_bytes().to_vec();
-    framed.extend_from_slice(&9_i32.to_be_bytes());
+    let framed = encode_raw_length(&9_i32.to_be_bytes());
     assert_eq!(read_message(&mut framed.as_slice()).unwrap(), 9_i32.to_be_bytes());
 }
 
@@ -1809,11 +1808,9 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notice_stream = bus.notice_subscribe();
 
-    // 9999 is past PROTOBUF_MSG_ID, so this parses as a proto frame whose real
-    // type (9799) maps to no IncomingMessages variant.
-    let mut frame = 9999_i32.to_be_bytes().to_vec();
-    frame.extend_from_slice(&[0x08, 0x64]);
-    stream.push_inbound(frame);
+    // Real type 9799 maps to no IncomingMessages variant — what a mis-framed
+    // read produces once the length prefix has slipped.
+    stream.push_inbound(crate::messages::encode_protobuf_message(9799, &[0x08, 0x64]));
 
     bus.dispatch()?;
 
