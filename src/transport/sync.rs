@@ -16,7 +16,7 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::common::{log_orphan, validate_frame_length};
+use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
 };
@@ -381,7 +381,7 @@ impl<S: Stream> TcpMessageBus<S> {
         } else if self.shared_channels.contains_sender(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
-            info!("no recipient found for: {message:?}")
+            report_unroutable_frame(&message, &*self.connection.notice_broadcaster);
         }
     }
 

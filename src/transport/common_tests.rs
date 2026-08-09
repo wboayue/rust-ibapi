@@ -82,6 +82,49 @@ fn test_validate_frame_length_rejects_oversized_prefix() {
     }
 }
 
+/// Collects everything delivered to the notice sink.
+#[derive(Default)]
+struct CapturingSink {
+    notices: std::sync::Mutex<Vec<Notice>>,
+}
+
+impl NoticeSink for CapturingSink {
+    fn deliver(&self, notice: Notice) {
+        self.notices.lock().unwrap().push(notice);
+    }
+}
+
+#[test]
+fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
+    // Message id 9999 maps to no IncomingMessages variant, which is what a
+    // desynchronized read produces: garbage where the id should be.
+    let message = ResponseMessage::from("9999\01\0");
+    assert_eq!(message.message_type(), IncomingMessages::NotValid, "fixture must be unroutable");
+
+    let sink = CapturingSink::default();
+    report_unroutable_frame(&message, &sink);
+
+    let notices = sink.notices.lock().unwrap();
+    assert_eq!(notices.len(), 1, "an unknown kind must be observable, not just logged");
+    assert_eq!(notices[0].code, UNKNOWN_MESSAGE_TYPE_CODE);
+}
+
+#[test]
+fn test_report_unroutable_frame_stays_quiet_for_a_known_kind() {
+    // A known type with no current subscriber is ordinary steady state — it
+    // must not raise a desync notice, or the signal is worthless.
+    let message = ResponseMessage::from("15\01\0DU1234567\0");
+    assert_eq!(message.message_type(), IncomingMessages::ManagedAccounts);
+
+    let sink = CapturingSink::default();
+    report_unroutable_frame(&message, &sink);
+
+    assert!(
+        sink.notices.lock().unwrap().is_empty(),
+        "a known kind with no listener is routine and must raise no notice"
+    );
+}
+
 #[test]
 fn test_fibonacci_backoff() {
     let mut backoff = FibonacciBackoff::new(10);

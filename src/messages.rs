@@ -1139,6 +1139,22 @@ pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 /// [`Notice::is_handshake_synthetic`].
 pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 
+/// Synthesized notice code emitted when a frame arrives whose 4-byte message
+/// id maps to no known [`IncomingMessages`] kind, so nothing can route it.
+///
+/// Negative, like the other client-side sentinels ([`HANDSHAKE_UNKNOWN_FRAME_CODE`],
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`], and `-2` for the gateway shutdown signal);
+/// TWS itself only uses codes 0 and up.
+///
+/// This is the observable form of a framing desynchronization. The length
+/// prefix is positional, so once a read starts at the wrong offset every
+/// subsequent message id is garbage — usually unrecognized (this notice), but
+/// occasionally colliding with a real kind, in which case the payload decodes
+/// without error into plausible-looking wrong values. A burst of these on a
+/// previously healthy connection means the stream slipped, not that IBKR added
+/// a message type.
+pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
+
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all

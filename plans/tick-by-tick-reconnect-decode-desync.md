@@ -149,9 +149,15 @@ mode" as a precursor step, not part of the fix.
    `parse_raw_message` guards the header slice instead of indexing it. Out-of-range prefixes
    raise the new `Error::InvalidFrame`, which `is_connection_lost` reports as true so both
    dispatchers take their reconnect branch. Regression tests at all three seams.
-2. **Then F3** — surface unroutable frames (log + counter, or a synthesized notice) so the next
-   desync is observable instead of silent. **Next up.**
+2. ~~**Then F3**~~ — **done.** `report_unroutable_frame` in `src/transport/common.rs` splits the
+   two cases the old code conflated: an unrecognized message id warns *and* publishes
+   `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`) to the notice stream, while a known kind with no
+   subscriber stays at `info`. Wired into both dispatchers — the blocking one at
+   `process_response_with_id`'s no-recipient branch, the async one at
+   `route_to_shared_channel`'s previously-empty `None` arm.
 3. **Then the raw-frame tap (F7)** if a live capture is still wanted to confirm the trigger.
+   **Next up** — and now the cheaper half of it is already done: a desync announces itself, so a
+   capture only has to catch the bytes, not detect the event.
 
 **Still open after step 1:** F2 is the most plausible root cause but is *not confirmed* as the
 one that fired on 2026-07-07 — no capture exists, and F7 explains why one could not have been

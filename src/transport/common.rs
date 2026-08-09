@@ -4,8 +4,12 @@ use std::time::Duration;
 
 use log::{error, info, warn};
 
+use crate::connection::common::NoticeSink;
 use crate::errors::Error;
-use crate::messages::{ConnectivityStatus, Notice, CONNECTIVITY_RESTORED_DATA_LOST_CODE, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE};
+use crate::messages::{
+    ConnectivityStatus, IncomingMessages, Notice, ResponseMessage, CONNECTIVITY_RESTORED_DATA_LOST_CODE, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
+    UNKNOWN_MESSAGE_TYPE_CODE,
+};
 use crate::subscriptions::common::RoutedItem;
 
 /// A notice reports *healthy* data-farm connectivity ("…connection is OK")
@@ -45,6 +49,37 @@ pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
         RoutedItem::Notice(n) => info!("no recipient for notice (id={request_id}): {n}"),
         RoutedItem::Error(e) => info!("no recipient for error (id={request_id}): {e}"),
         RoutedItem::Response(_) => {}
+    }
+}
+
+/// Report a frame that reached the end of routing with no recipient.
+///
+/// Two very different situations end up here, and conflating them is what made
+/// a desynchronized stream indistinguishable from an idle one:
+///
+/// - **Unknown message kind** ([`IncomingMessages::NotValid`]) — the 4-byte id
+///   matched nothing we know. Nothing can ever route this, and on a connection
+///   that was healthy a moment ago the overwhelmingly likely cause is a framing
+///   slip, not a new IBKR message type. Warned *and* published to the notice
+///   stream as [`UNKNOWN_MESSAGE_TYPE_CODE`] so a consumer can react
+///   programmatically rather than by reading logs.
+/// - **Known kind, nobody listening** — routine. A shared-channel type with no
+///   current subscriber is an ordinary steady-state condition, so it stays at
+///   `info` and raises no notice.
+///
+/// The blocking transport logged the first case at `info`, which is how the
+/// 2026-07-07 incident produced farm notices and no decode error; the async
+/// transport logged nothing at all. See
+/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &dyn NoticeSink) {
+    if message.message_type() == IncomingMessages::NotValid {
+        warn!("unroutable frame: message id maps to no known type — the stream may be desynchronized: {message:?}");
+        notice_sink.deliver(Notice::synthesized(
+            UNKNOWN_MESSAGE_TYPE_CODE,
+            "received a frame whose message id maps to no known type; the stream may be desynchronized".to_string(),
+        ));
+    } else {
+        info!("no recipient found for: {message:?}");
     }
 }
 

@@ -1800,3 +1800,24 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
     framed.extend_from_slice(&9_i32.to_be_bytes());
     assert_eq!(read_message(&mut framed.as_slice()).unwrap(), 9_i32.to_be_bytes());
 }
+
+/// Blocking twin of the async unknown-message-id test. This path already had an
+/// `info!` log, which is exactly why the 2026-07-07 desync went unnoticed —
+/// nothing a consumer could act on. It now raises a notice.
+#[test]
+fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+
+    // 9999 is past PROTOBUF_MSG_ID, so this parses as a proto frame whose real
+    // type (9799) maps to no IncomingMessages variant.
+    let mut frame = 9999_i32.to_be_bytes().to_vec();
+    frame.extend_from_slice(&[0x08, 0x64]);
+    stream.push_inbound(frame);
+
+    bus.dispatch()?;
+
+    let notice = notice_stream.next_timeout(TICK).expect("unknown frame must raise a notice");
+    assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
+    Ok(())
+}
