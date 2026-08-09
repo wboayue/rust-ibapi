@@ -163,14 +163,12 @@ mode" as a precursor step, not part of the fix.
 
 Restructuring, deliberately not landed in a cleanup pass:
 
-- **The unknown-id notice cannot name the id.** `ResponseMessage::from_protobuf` keeps only
-  `kind` and `raw_bytes`, so by the time `report_unroutable_frame` matches `NotValid` the raw
-  numeric id is gone — the notice carries a fixed string and the `warn!` prints `fields: []`.
-  During the very incident this was built for, an operator gets N byte-identical notices. Fix is
-  to preserve the id on the message (a field, or `NotValid(i32)`) and interpolate it, keeping
-  observability *policy* in transport and repairing only the information loss. The doc on
-  `UNKNOWN_MESSAGE_TYPE_CODE` was reworded to stop over-promising discrimination it cannot
-  deliver until this lands. **Highest-value of these.**
+- ~~**The unknown-id notice cannot name the id.**~~ **Done.** `ResponseMessage` carries a
+  `message_id` alongside `kind` — the numeric value `kind` was resolved from, retained because
+  that mapping collapses every unrecognized id to the single `NotValid` variant. Both the
+  `warn!` and the notice text interpolate it, so scattered ids (framing slipped) are
+  distinguishable from one repeated id (IBKR added a type). Observability *policy* stayed in
+  transport; only the information loss was repaired.
 - **`CapturingSink` is defined twice** — `connection/common_tests.rs` and
   `transport/common_tests.rs`, same shape, both implementing `NoticeSink`. Shared home is
   `common::test_utils::helpers`. Two consumers today; this is the second occurrence, so by the

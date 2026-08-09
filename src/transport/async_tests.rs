@@ -945,4 +945,10 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
         .expect("unknown frame must raise a notice")
         .expect("notice stream closed");
     assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
+    // The id survives the protobuf path, where `kind` alone would have lost it.
+    assert!(
+        notice.message.contains("9799"),
+        "notice must name the offending id, got {:?}",
+        notice.message
+    );
 }

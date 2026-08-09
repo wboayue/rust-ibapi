@@ -802,6 +802,13 @@ pub(crate) struct ResponseMessage {
     /// subscription's `RESPONSE_MESSAGE_IDS` filter, the decoder's own match —
     /// each of which used to re-run `i32::from_str` over `fields[0]`.
     kind: IncomingMessages,
+    /// The numeric id `kind` was resolved from, retained because that mapping
+    /// is lossy: every unrecognized id collapses to
+    /// [`IncomingMessages::NotValid`]. Diagnostics for an unroutable frame need
+    /// the id itself — without it a framing desync and a message type IBKR
+    /// added look identical. Text frames also keep it in `fields[0]`; protobuf
+    /// frames have nowhere else to put it.
+    message_id: i32,
 }
 
 impl ResponseMessage {
@@ -812,7 +819,20 @@ impl ResponseMessage {
             fields: Vec::new(),
             raw_bytes: Some(raw_bytes),
             kind: IncomingMessages::from(message_type),
+            message_id: message_type,
         }
+    }
+
+    /// The numeric message id this frame arrived with, before it was resolved
+    /// to an [`IncomingMessages`] kind. For protobuf frames this is the id with
+    /// the [`PROTOBUF_MSG_ID`] offset already removed — i.e. the value that was
+    /// looked up, not the raw 4 bytes off the wire.
+    ///
+    /// Only interesting when [`Self::message_type`] is
+    /// [`IncomingMessages::NotValid`]; otherwise the kind says the same thing
+    /// with a name.
+    pub(crate) fn message_id(&self) -> i32 {
+        self.message_id
     }
 
     /// Raw protobuf payload bytes, if this is a protobuf message.
@@ -1012,15 +1032,13 @@ impl ResponseMessage {
     /// walks the field cursor from index 0 — so `kind` is derived from it here
     /// rather than replacing it.
     pub(crate) fn from_text_fields(fields: Vec<String>) -> ResponseMessage {
-        let kind = fields
-            .first()
-            .map(|id| IncomingMessages::from(i32::from_str(id).unwrap_or(-1)))
-            .unwrap_or(IncomingMessages::NotValid);
+        let message_id = fields.first().map(|id| i32::from_str(id).unwrap_or(-1)).unwrap_or(-1);
         ResponseMessage {
             i: 0,
             fields,
             raw_bytes: None,
-            kind,
+            kind: IncomingMessages::from(message_id),
+            message_id,
         }
     }
 
@@ -1151,10 +1169,12 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// prefix is positional, so once a read starts at the wrong offset every
 /// subsequent message id is garbage — usually unrecognized (this notice), but
 /// occasionally colliding with a real kind, in which case the payload decodes
-/// without error into plausible-looking wrong values. The notice does not name
-/// the offending id, so it cannot on its own distinguish a slipped stream from
-/// an unrecognized message type IBKR has added; correlate with
-/// [`Error::InvalidFrame`](crate::Error::InvalidFrame) and the surrounding logs.
+/// without error into plausible-looking wrong values.
+///
+/// The notice text names the offending id, which is what separates the two
+/// explanations: a slipped stream yields *scattered* ids, while a message type
+/// IBKR has added repeats one. A burst of distinct ids on a previously healthy
+/// connection means the framing slipped.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 
 /// Typed classification of a [`Notice`] by TWS error-code range.

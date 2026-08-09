@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`), a synthesized notice code published to `Client::notice_stream` when a frame's message id maps to no known `IncomingMessages` kind. Joins the existing client-side sentinels (`HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`); TWS itself only uses codes 0 and up. This is the observable form of a framing desynchronization — a burst of these on a previously healthy connection means the stream slipped, not that IBKR added a message type.
+- `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`), a synthesized notice code published to `Client::notice_stream` when a frame's message id maps to no known `IncomingMessages` kind. Joins the existing client-side sentinels (`HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`); TWS itself only uses codes 0 and up. This is the observable form of a framing desynchronization. The notice text names the offending id, which is what separates the two explanations: a slipped stream yields scattered ids, while a message type IBKR has added repeats one.
 
 - `Error::InvalidFrame`, returned when a frame's 4-byte length prefix cannot describe a TWS message — shorter than the message id, or larger than the 16 MiB cap the official client enforces as `Constants.MaxMsgSize`. Classified as `Error::is_connection_lost`, so both dispatchers reconnect: the framing is positional, with no delimiter to re-anchor on, and a reconnect is the only recovery. `Error` is `#[non_exhaustive]`, so the new variant is not a breaking change.
 

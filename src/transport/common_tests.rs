@@ -99,6 +99,14 @@ fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
     let notices = sink.notices.lock().unwrap();
     assert_eq!(notices.len(), 1, "an unknown kind must be observable, not just logged");
     assert_eq!(notices[0].code, UNKNOWN_MESSAGE_TYPE_CODE);
+    // Naming the id is the whole point: scattered ids mean the framing slipped,
+    // one repeated id means IBKR added a message type. Without it the notice
+    // cannot tell those apart.
+    assert!(
+        notices[0].message.contains("9999"),
+        "notice must name the offending id, got {:?}",
+        notices[0].message
+    );
 }
 
 #[test]

@@ -70,10 +70,11 @@ pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
 /// decode error.
 pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &dyn NoticeSink) {
     if message.message_type() == IncomingMessages::NotValid {
-        warn!("unroutable frame: message id maps to no known type — the stream may be desynchronized: {message:?}");
+        let id = message.message_id();
+        warn!("unroutable frame: message id {id} maps to no known type — the stream may be desynchronized: {message:?}");
         notice_sink.deliver(Notice::synthesized(
             UNKNOWN_MESSAGE_TYPE_CODE,
-            "received a frame whose message id maps to no known type; the stream may be desynchronized".to_string(),
+            format!("received a frame with message id {id}, which maps to no known type; the stream may be desynchronized"),
         ));
     } else {
         info!("no recipient found for: {message:?}");
