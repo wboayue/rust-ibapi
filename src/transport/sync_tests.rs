@@ -12,6 +12,7 @@ use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
+use crate::transport::raw_capture::{test_support, RawFrameTap};
 use crate::transport::sync::MemoryStream;
 use crate::transport::MessageBus;
 use log::{debug, trace};
@@ -160,7 +161,7 @@ impl Io for MockSocket {
         // Other responses use binary-text format (4-byte BE msg_id + text payload).
         if exchange.is_handshake {
             let expected = encode_length(&encoded);
-            read_message(&mut expected.as_slice())
+            read_message(&mut expected.as_slice(), &RawFrameTap::disabled())
         } else if let Some(raw) = response.raw_bytes() {
             let msg_id = response.message_type() as i32;
             Ok(crate::messages::encode_protobuf_message(msg_id, raw))
@@ -1789,7 +1790,7 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
         // accepted this would block or allocate before noticing anything is wrong.
         let framed = prefix.to_be_bytes().to_vec();
 
-        let err = read_message(&mut framed.as_slice()).expect_err("an out-of-range length prefix must be rejected");
+        let err = read_message(&mut framed.as_slice(), &RawFrameTap::disabled()).expect_err("an out-of-range length prefix must be rejected");
         assert!(
             matches!(err, Error::InvalidFrame(_)),
             "prefix {prefix} must raise InvalidFrame, got {err:?}"
@@ -1798,7 +1799,34 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
 
     // The smallest legal frame still reads: a bare message id with no payload.
     let framed = encode_raw_length(&9_i32.to_be_bytes());
-    assert_eq!(read_message(&mut framed.as_slice()).unwrap(), 9_i32.to_be_bytes());
+    assert_eq!(
+        read_message(&mut framed.as_slice(), &RawFrameTap::disabled()).unwrap(),
+        9_i32.to_be_bytes()
+    );
+}
+
+/// The blocking frame reader taps the wire, and taps it *below* validation.
+///
+/// Both halves matter. A capture that only holds frames the reader accepted
+/// would be missing the one byte sequence worth capturing: the desync in
+/// `plans/tick-by-tick-reconnect-decode-desync.md` announces itself as a length
+/// prefix that cannot describe a frame, and that prefix is rejected before any
+/// caller sees it.
+#[test]
+fn test_read_message_taps_raw_bytes_including_rejected_prefixes() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let tap = RawFrameTap::capturing_to(dir.path());
+
+    let good = encode_raw_length(&[0, 0, 0, 9, 42]);
+    let bad_prefix = u32::MAX.to_be_bytes();
+
+    assert_eq!(read_message(&mut good.as_slice(), &tap).unwrap(), [0, 0, 0, 9, 42]);
+    let err = read_message(&mut bad_prefix.as_slice(), &tap).expect_err("prefix must be rejected");
+    assert!(matches!(err, Error::InvalidFrame(_)), "got {err:?}");
+
+    let mut expected = good.clone();
+    expected.extend_from_slice(&bad_prefix);
+    assert_eq!(test_support::frames(dir.path()), expected);
 }
 
 /// Blocking twin of the async unknown-message-id test. This path already had an

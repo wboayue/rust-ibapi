@@ -178,13 +178,32 @@ RUST_LOG=ibapi::transport=debug cargo run --features sync --example market_data
 
 ### Record Messages
 ```bash
-# Save all TWS communication
+# Save all TWS communication, one file per message
 IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example market_data
 
-# Files created:
-# /tmp/tws-messages/requests_20240315_143022.txt
-# /tmp/tws-messages/responses_20240315_143022.txt
+# Files created, under a per-run timestamped subdirectory:
+# /tmp/tws-messages/2024-03-15-14-30-0/0000-request.msg
+# /tmp/tws-messages/2024-03-15-14-30-0/0001-response.msg
 ```
+
+### Capture the Raw Wire
+
+Responses above are recorded *after* parsing, so they carry no length prefixes.
+When the framing itself is suspect, tap the socket instead:
+
+```bash
+IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --features sync --example market_data
+
+# The inbound stream byte for byte, plus a per-frame index:
+# /tmp/tws-raw/2024-03-15-14-30-0-inbound-000.bin
+# /tmp/tws-raw/2024-03-15-14-30-0-inbound-000.idx
+
+cargo run --example replay_raw_capture -- /tmp/tws-raw/*-inbound-000.bin
+```
+
+See [Troubleshooting](troubleshooting.md#capture-the-raw-wire-framing-problems)
+for what the output means. Captures are unredacted — they hold account ids,
+positions, and orders.
 
 ## Adding New Examples
 

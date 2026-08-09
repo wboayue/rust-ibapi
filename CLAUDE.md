@@ -222,8 +222,13 @@ When running examples or tests:
 # Set log level
 RUST_LOG=debug cargo run --example <example_name>
 
-# Record TWS messages for debugging
+# Record TWS messages for debugging (parsed messages, re-framed)
 IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
+
+# Capture the raw inbound stream, length prefixes intact. The only tool that
+# can diagnose a framing desync — the recorder above discards the prefix.
+# Walk a capture with `cargo run --example replay_raw_capture -- <file>.bin`.
+IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 ```
 
 ## Git Commit Guidelines

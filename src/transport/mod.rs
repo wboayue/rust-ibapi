@@ -284,5 +284,6 @@ pub use sync::TcpMessageBus;
 pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};
 
 pub mod connection;
+pub(crate) mod raw_capture;
 pub mod recorder;
 pub mod routing;

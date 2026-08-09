@@ -133,13 +133,45 @@ re-synthesises a frame via `encode_protobuf_message(message.message_type() as i3
 Two losses that matter here:
 - **the 4-byte length prefix is never recorded** — and that prefix is precisely what a framing
   desync corrupts;
-- the msg-id round-trip is lossy — an unrecognised type collapses to `NotValid = -1` and is
-  re-encoded as `199`, destroying the garbage id that would identify the shift.
+- the msg-id round-trip was lossy — an unrecognised type collapsed to `NotValid = -1` and was
+  re-encoded as `199`, destroying the garbage id that would identify the shift. *(Repaired in
+  #757; the prefix loss is structural and stands.)*
 
 So a `IBAPI_RECORDING_DIR` capture **cannot** reproduce a framing desync. Capturing one needs a
 byte-level tap: `tcpdump` on the gateway port, or a raw-frame tee inside
-`AsyncIo::read_message` / `Io::read_message` before unframing. Treat "add a raw-frame recording
-mode" as a precursor step, not part of the fix.
+`AsyncIo::read_message` / `Io::read_message` before unframing. **Built — step 3 below.**
+
+## F8 — a read timeout landing mid-frame desynchronizes the blocking client (found 2026-08-09)
+
+Surfaced while wiring the tap. **Blocking client only**, and it needs no corrupt bytes at all —
+only a stall.
+
+`TcpSocket` sets `SO_RCVTIMEO` to `TWS_READ_TIMEOUT` (1 s, `src/transport/sync.rs`). If bytes of
+a frame have already arrived when the timeout fires, `Read::read_exact` has **consumed** them
+and still returns `Err`; its contract discards partial progress on any non-`Interrupted` error.
+The dispatcher then treats the error as benign — `Err(ref err) if err.is_read_timeout() =>
+Ok(())` in `TcpMessageBus::dispatch` — and loops straight back into `read_header` at a shifted
+boundary. Positional framing, nothing to re-anchor on: **permanent, silent desync.**
+
+Verified against a real socket, not inferred: a peer writing `AA BB`, stalling 1.5 s, then
+writing `CC DD EE FF` makes a 4-byte `read_exact` with a 1 s timeout return
+`ErrorKind::WouldBlock`, after which the next read returns `CC DD EE FF` — `AA BB` are gone.
+(Throwaway probe; not kept, since the regression test belongs with the fix.)
+
+Why this outranks F2 as an explanation of 2026-07-07: F2 needs the gateway to emit a garbage
+length prefix, F8 needs only a >1 s pause between two TCP segments — which is what a data-farm
+transition looks like from the client side. It also explains the ~30 s lag between the farm
+notice and the first corrupt print without appealing to anything unusual on the wire.
+
+Not fixed here — it changes the read loop's error handling and wants its own PR. Sketch: read
+the prefix through a loop that retains partial progress across `WouldBlock` (or drop
+`SO_RCVTIMEO` and use the shutdown handle, which already exists for exactly this purpose), and
+make a genuinely truncated frame `Error::InvalidFrame` rather than a silent continue.
+
+**The async client is not exposed to this.** `AsyncTcpSocket` sets no read timeout, and the
+dispatcher's `tokio::select!` only cancels `read_and_route_message` on the shutdown branch,
+which breaks the loop rather than continuing it — the comment at `process_messages` is correct
+about why that ordering matters. So if the 07-07 consumer was async, F8 is not the cause.
 
 ### Recommended sequencing
 
@@ -155,9 +187,26 @@ mode" as a precursor step, not part of the fix.
    subscriber stays at `info`. Wired into both dispatchers — the blocking one at
    `process_response_with_id`'s no-recipient branch, the async one at
    `route_to_shared_channel`'s previously-empty `None` arm.
-3. **Then the raw-frame tap (F7)** if a live capture is still wanted to confirm the trigger.
-   **Next up** — and now the cheaper half of it is already done: a desync announces itself, so a
-   capture only has to catch the bytes, not detect the event.
+3. ~~**Then the raw-frame tap (F7)**~~ — **done.** `RawFrameTap` in
+   `src/transport/raw_capture.rs`, enabled by `IBAPI_RAW_CAPTURE_DIR`. Both frame readers
+   (`transport::sync::read_header`, `transport::r#async::io::read_framed_message`) record the
+   length prefix *before* `validate_frame_length` sees it, so the prefix that a desync produces
+   reaches the capture even though it never reaches a caller. A reconnect calls
+   `start_new_segment`, so no `.bin` splices two TCP streams. Sidecar `.idx` carries
+   `seq,utc_timestamp,offset,declared_length` — the `.bin` has no clock, and correlating with a
+   `[2119]` farm notice in an operator's log needs one. `examples/replay_raw_capture.rs` walks a
+   capture and names the first unreadable frame.
+
+**What a capture now settles.** Feeding a `.bin` back through the frame reader reproduces the
+run exactly, because the prefixes are the wire's own. Three outcomes, each decisive:
+   - `replay_raw_capture` reports a DESYNC → **F2 confirmed.** The offset it names is the byte
+     where framing slipped; the `.idx` row gives the wall-clock to line up against the farm
+     notice.
+   - It walks clean but the *decoded* prices are still offset → **F2 falsified**, and H2 by
+     another route (a genuine prost mis-decode of well-framed bytes) is back in play. Step 3 of
+     the investigation — decode a known-good AllLast frame, then the same bytes shifted by N —
+     becomes the next move, now against real captured frames rather than synthesized ones.
+   - It walks clean and prices are sane → the fix held; nothing further to do.
 
 ### Deferred from the F1/F2/F3 `/simplify` pass
 
@@ -200,31 +249,36 @@ Restructuring, deliberately not landed in a cleanup pass:
 - **No end-to-end test** pushes a short body through `MemoryStream` to confirm the bus takes its
   reconnect branch rather than dying; `parse_raw_message`'s guard is covered only at unit level.
 
-**Still open after step 1:** F2 is the most plausible root cause but is *not confirmed* as the
-one that fired on 2026-07-07 — no capture exists, and F7 explains why one could not have been
-taken. If the corruption recurs on a build carrying this fix, the `Error::InvalidFrame` +
-reconnect is the expected new symptom; corruption *without* an `InvalidFrame` would falsify F2
-and put H2-by-another-route back in play.
+**Still open after steps 1–3.** F2 is the most plausible root cause but is *not confirmed* as
+the one that fired on 2026-07-07. That gap is now purely empirical rather than structural: the
+instrument exists, nobody has run it across a farm reconnect yet. **Everything below the code
+line is waiting on one thing — a live capture.**
 
 ## Reproduction strategy (deterministic, offline)
 
-> **Superseded in part by F7** — the recorder-based capture below does not preserve length
-> prefixes. Steps 2 and 3 remain valid for decode-level replay; step 1 needs a raw tap.
+Two independent captures, both wanted, neither sufficient alone:
 
-The wire recorder is the backbone: `src/transport/recorder.rs` (`MessageRecorder`, enabled by
-`IBAPI_RECORDING_DIR`, writes `NNNN-response.msg` **raw wire frames**).
+- `IBAPI_RAW_CAPTURE_DIR` — the framing. Answers *did the stream slip, and where*.
+- `IBAPI_RECORDING_DIR` — the parsed messages. Answers *what did the decoder make of it*.
 
-1. **Capture live.** Run the consumer (or a minimal `tick_by_tick().all_last()` example) on the
-   Chicago paper box with `IBAPI_RECORDING_DIR` set, spanning a data-farm reconnect. The farm
-   flaps regularly (07-07 saw several in 8 min), so a multi-hour capture should catch one.
-   Correlate the corrupt-frame index with the `[2119]/[2104]` notice frames.
-2. **Replay offline.** Feed the recorded raw frames through the decode path in a unit/integration
-   test (extend `src/proto/decoders_tests.rs` / `src/transport/*_tests.rs`) — no network, fully
-   deterministic. This becomes the **regression test**: the recorded reconnect-window bytes must
-   decode to sane prices (or surface an explicit re-sync/error), never `real + 445,860,400`.
-3. If live capture is slow, **synthesize** the failure from step-2 analysis: take a good AllLast
-   frame, prepend the partial/reset frame the analysis implicates, assert the decoder either
-   re-syncs or errors instead of silently offsetting.
+1. **Capture live.** Run a minimal `tick_by_tick(&es, 0).all_last()` example on the Chicago paper
+   box with **both** variables set, spanning a data-farm reconnect. The farm flaps regularly
+   (07-07 saw several in 8 min), so a multi-hour capture should catch one. Note the wall-clock of
+   any `[2119]`/`[2104]` notice, and of the first corrupt price.
+2. **Walk the raw capture.** `cargo run --example replay_raw_capture -- <file>.bin`. A reported
+   DESYNC offset, cross-referenced against the `.idx` timestamp, is the confirmation — or its
+   absence is the falsification. See the three outcomes under sequencing step 3.
+3. **Replay offline.** The `.bin` is the wire verbatim, so it feeds straight back through the
+   frame reader; the frames around the desync offset become the **regression test** (extend
+   `src/proto/decoders_tests.rs` / `src/transport/*_tests.rs`). They must decode to sane prices
+   or surface an explicit error, never `real + 445,860,400`.
+4. If a live capture proves slow to obtain, **synthesize** from the step-2 analysis: take a good
+   AllLast frame, prepend the partial/reset frame the analysis implicates, assert the reader
+   errors instead of silently offsetting. Weaker evidence — it tests the hypothesis, not the
+   incident.
+
+**Handling note.** A `.bin` is unredacted wire bytes: account ids, positions, orders. It is not
+an attachment for a public issue without review.
 
 ## Fix direction (pending root cause)
 
