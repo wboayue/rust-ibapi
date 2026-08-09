@@ -8,7 +8,7 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
-use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
+use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::transport::sync::MemoryStream;
@@ -1772,5 +1772,49 @@ fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
 
     assert!(!bus.requests.contains(&100));
     assert!(!bus.orders.contains(&200));
+    Ok(())
+}
+
+/// A garbage length prefix must fail the read rather than size an allocation
+/// from it. Before this guard the oversized case reached `vec![0u8; 4 GiB]`,
+/// and on a live socket the subsequent `read_exact` would consume every real
+/// message until it was satisfied — permanently desynchronizing the stream.
+#[test]
+fn test_read_message_rejects_out_of_range_length_prefix() {
+    use crate::transport::common::{MAX_FRAME_LENGTH, MIN_FRAME_LENGTH};
+
+    for prefix in [0, MIN_FRAME_LENGTH as u32 - 1, MAX_FRAME_LENGTH as u32 + 1, u32::MAX] {
+        // Prefix only: a valid frame's body never arrives, so if the length were
+        // accepted this would block or allocate before noticing anything is wrong.
+        let framed = prefix.to_be_bytes().to_vec();
+
+        let err = read_message(&mut framed.as_slice()).expect_err("an out-of-range length prefix must be rejected");
+        assert!(
+            matches!(err, Error::InvalidFrame(_)),
+            "prefix {prefix} must raise InvalidFrame, got {err:?}"
+        );
+    }
+
+    // The smallest legal frame still reads: a bare message id with no payload.
+    let framed = encode_raw_length(&9_i32.to_be_bytes());
+    assert_eq!(read_message(&mut framed.as_slice()).unwrap(), 9_i32.to_be_bytes());
+}
+
+/// Blocking twin of the async unknown-message-id test. This path already had an
+/// `info!` log, which is exactly why the 2026-07-07 desync went unnoticed —
+/// nothing a consumer could act on. It now raises a notice.
+#[test]
+fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+
+    // Real type 9799 maps to no IncomingMessages variant — what a mis-framed
+    // read produces once the length prefix has slipped.
+    stream.push_inbound(crate::messages::encode_protobuf_message(9799, &[0x08, 0x64]));
+
+    bus.dispatch()?;
+
+    let notice = notice_stream.next_timeout(TICK).expect("unknown frame must raise a notice");
+    assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
     Ok(())
 }

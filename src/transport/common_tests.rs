@@ -49,6 +49,75 @@ fn test_log_unrouted_notice_traverses_all_severities() {
 }
 
 #[test]
+fn test_validate_frame_length_accepts_the_legal_range() {
+    // Boundaries derived from the constants, not restated: a body holding only
+    // the message id is the smallest legal frame, and the C#-matching cap is
+    // inclusive (`EReader` rejects on `>` MaxMsgSize).
+    for length in [MIN_FRAME_LENGTH, MIN_FRAME_LENGTH + 1, MAX_FRAME_LENGTH - 1, MAX_FRAME_LENGTH] {
+        assert_eq!(validate_frame_length(length).unwrap(), length, "length {length} should be accepted");
+    }
+}
+
+#[test]
+fn test_validate_frame_length_rejects_out_of_range_lengths() {
+    // Below: a body that cannot hold the message id. Above: the desync
+    // signature — four garbage bytes read as a length, which unbounded sizes an
+    // allocation of up to 4 GiB and then consumes every real message until it
+    // is satisfied.
+    for length in [0, MIN_FRAME_LENGTH - 1, MAX_FRAME_LENGTH + 1, u32::MAX as usize] {
+        let err = validate_frame_length(length).expect_err("an out-of-range length must be rejected");
+        assert!(
+            matches!(err, Error::InvalidFrame(_)),
+            "length {length} must raise InvalidFrame, got {err:?}"
+        );
+        assert!(err.is_connection_lost(), "a desynchronized stream must drive a reconnect");
+    }
+}
+
+/// Collects everything delivered to the notice sink.
+#[derive(Default)]
+struct CapturingSink {
+    notices: std::sync::Mutex<Vec<Notice>>,
+}
+
+impl NoticeSink for CapturingSink {
+    fn deliver(&self, notice: Notice) {
+        self.notices.lock().unwrap().push(notice);
+    }
+}
+
+#[test]
+fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
+    // Message id 9999 maps to no IncomingMessages variant, which is what a
+    // desynchronized read produces: garbage where the id should be.
+    let message = ResponseMessage::from("9999\01\0");
+    assert_eq!(message.message_type(), IncomingMessages::NotValid, "fixture must be unroutable");
+
+    let sink = CapturingSink::default();
+    report_unroutable_frame(&message, &sink);
+
+    let notices = sink.notices.lock().unwrap();
+    assert_eq!(notices.len(), 1, "an unknown kind must be observable, not just logged");
+    assert_eq!(notices[0].code, UNKNOWN_MESSAGE_TYPE_CODE);
+}
+
+#[test]
+fn test_report_unroutable_frame_stays_quiet_for_a_known_kind() {
+    // A known type with no current subscriber is ordinary steady state — it
+    // must not raise a desync notice, or the signal is worthless.
+    let message = ResponseMessage::from("15\01\0DU1234567\0");
+    assert_eq!(message.message_type(), IncomingMessages::ManagedAccounts);
+
+    let sink = CapturingSink::default();
+    report_unroutable_frame(&message, &sink);
+
+    assert!(
+        sink.notices.lock().unwrap().is_empty(),
+        "a known kind with no listener is routine and must raise no notice"
+    );
+}
+
+#[test]
 fn test_fibonacci_backoff() {
     let mut backoff = FibonacciBackoff::new(10);
 

@@ -78,7 +78,129 @@ consuming the same stream across the transition — no resubscribe, no decode-st
    shifted by N, and checking which shift reproduces `real_price + 445,860,400`.
 4. **Confirm H3** by tracing buffer/state ownership across a simulated 2100-band notice.
 
+## Framing audit (2026-08-08) — step 1 done
+
+Read: `src/connection/common.rs` (`parse_raw_message`), `src/connection/{sync,async}.rs`
+(`read_message`), `src/transport/sync.rs:849-868` (`read_header`/`read_message`),
+`src/transport/async/io.rs:56-74` (`AsyncIo for AsyncTcpSocket`), `src/transport/routing.rs`,
+`src/transport/recorder.rs`, and both dispatcher loops
+(`src/transport/sync.rs:270-313`, `src/transport/async.rs:325-391`).
+
+**F1 — `parse_raw_message` panics on a frame shorter than 4 bytes. Confirmed by test.**
+`src/connection/common.rs:391` indexes `data[0]..data[3]` with no length check. Both readers
+accept a length prefix of 0–3 (`read_exact` into a 0-length buffer succeeds), so the body
+reaches `parse_raw_message` and panics: `index out of bounds: the len is 0 but the index is 0`.
+Kills the sync dispatcher thread / async dispatcher task — not a graceful `Error`.
+
+**F2 — no `MaxMsgSize` bound on the length prefix. This is the H1 mechanism.**
+Sync `read_header` and async `read_message` accept any `u32` and immediately
+`vec![0u8; message_length]`. The C# reference guards exactly this:
+`if (msgSize > Constants.MaxMsgSize) throw new EClientException(EClientErrors.BAD_LENGTH)`
+(`EReader.cs:120`), `MaxMsgSize = 0x00FFFFFF` (16 MiB, `Constants.cs:17`). Two consequences
+from four garbage bytes: a zeroed allocation of up to 4 GiB, and — the important one — the
+subsequent `read_exact` blocks until that many bytes arrive, **consuming and destroying every
+real message in between**, then returns one giant bogus frame. The next `read_header` starts at
+another arbitrary boundary. Nothing re-anchors. **That is the "never recovered" signature.**
+Cheapest, highest-value fix; take it first.
+
+**F3 — a desynced frame is dropped in total silence.**
+Garbage `msg_id > 200` → `real_type = msg_id - 200` → `IncomingMessages::from` → `NotValid`
+(`= -1`, `src/messages.rs:33,300`) for anything unrecognised → `determine_routing` falls
+through to `ByMessageType(NotValid)` → shared channel nobody subscribed to → dropped. No log,
+no error, no counter; nothing anywhere counts unroutable frames. Matches the report exactly:
+farm notices logged, no decode error.
+
+**F4 — the corruption itself needs no separate hypothesis; H1 produces it.**
+When the garbage `msg_id` happens to land on a *valid* type, the shifted payload goes to prost,
+which is lenient: unrecognised field numbers are skipped and a `fixed64` read at a shifted
+offset yields a plausible number, so `decode` returns `Ok`. That is a wrong `price` with sane
+`size`/`time` and no error. **H2 is subsumed** — it is the same defect, not an alternative.
+
+**F5 — H3 excluded, and the reason it can't self-heal.**
+No read buffering survives anything: both readers `read_exact` into a fresh `Vec` per frame
+(sync has no `BufReader`; async reads `OwnedReadHalf` directly). No retained parser state to
+flush. But that is also *why* nothing re-syncs — the framing is purely positional, with no
+delimiter or magic to re-anchor on after a slip.
+
+**F6 — H4 excluded.** The tick path is stateless: `decode_tick_by_tick_*` reads
+`data.price.unwrap_or_default()` (`src/market_data/realtime/common/decoders/mod.rs:268,285`).
+No accumulator anywhere. The 3× ramp remains unexplained — still a note, still not a blocker.
+
+**F7 — the repro strategy below is wrong about the recorder. Read this before capturing.**
+`MessageRecorder` is **not** a raw wire tap. `record_response`
+(`src/transport/recorder.rs:70-95`) is called on the **already-parsed** `ResponseMessage` and
+re-synthesises a frame via `encode_protobuf_message(message.message_type() as i32, payload)`.
+Two losses that matter here:
+- **the 4-byte length prefix is never recorded** — and that prefix is precisely what a framing
+  desync corrupts;
+- the msg-id round-trip is lossy — an unrecognised type collapses to `NotValid = -1` and is
+  re-encoded as `199`, destroying the garbage id that would identify the shift.
+
+So a `IBAPI_RECORDING_DIR` capture **cannot** reproduce a framing desync. Capturing one needs a
+byte-level tap: `tcpdump` on the gateway port, or a raw-frame tee inside
+`AsyncIo::read_message` / `Io::read_message` before unframing. Treat "add a raw-frame recording
+mode" as a precursor step, not part of the fix.
+
+### Recommended sequencing
+
+1. ~~**Fix F1 + F2**~~ — **done.** `validate_frame_length` in `src/transport/common.rs` bounds
+   the prefix at `MAX_FRAME_LENGTH` (`0x00FFFFFF`, matching C# `Constants.MaxMsgSize`) and
+   rejects bodies below `MIN_FRAME_LENGTH`; both frame readers call it, and
+   `parse_raw_message` guards the header slice instead of indexing it. Out-of-range prefixes
+   raise the new `Error::InvalidFrame`, which `is_connection_lost` reports as true so both
+   dispatchers take their reconnect branch. Regression tests at all three seams.
+2. ~~**Then F3**~~ — **done.** `report_unroutable_frame` in `src/transport/common.rs` splits the
+   two cases the old code conflated: an unrecognized message id warns *and* publishes
+   `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`) to the notice stream, while a known kind with no
+   subscriber stays at `info`. Wired into both dispatchers — the blocking one at
+   `process_response_with_id`'s no-recipient branch, the async one at
+   `route_to_shared_channel`'s previously-empty `None` arm.
+3. **Then the raw-frame tap (F7)** if a live capture is still wanted to confirm the trigger.
+   **Next up** — and now the cheaper half of it is already done: a desync announces itself, so a
+   capture only has to catch the bytes, not detect the event.
+
+### Deferred from the F1/F2/F3 `/simplify` pass
+
+Restructuring, deliberately not landed in a cleanup pass:
+
+- **The unknown-id notice cannot name the id.** `ResponseMessage::from_protobuf` keeps only
+  `kind` and `raw_bytes`, so by the time `report_unroutable_frame` matches `NotValid` the raw
+  numeric id is gone — the notice carries a fixed string and the `warn!` prints `fields: []`.
+  During the very incident this was built for, an operator gets N byte-identical notices. Fix is
+  to preserve the id on the message (a field, or `NotValid(i32)`) and interpolate it, keeping
+  observability *policy* in transport and repairing only the information loss. The doc on
+  `UNKNOWN_MESSAGE_TYPE_CODE` was reworded to stop over-promising discrimination it cannot
+  deliver until this lands. **Highest-value of these.**
+- **`CapturingSink` is defined twice** — `connection/common_tests.rs` and
+  `transport/common_tests.rs`, same shape, both implementing `NoticeSink`. Shared home is
+  `common::test_utils::helpers`. Two consumers today; this is the second occurrence, so by the
+  rule-of-three habit the third trips it.
+- **`NoticeSink` lives in `connection/common.rs` but is transport-shaped** — both impls are
+  transport types, and `transport/common.rs` is now its second consumer. Relocating it to
+  `transport/common.rs` removes the sole `transport → connection::common` edge. Cost today nil.
+- **`MIN_FRAME_LENGTH` does double duty across a layer boundary** — "framing floor" in
+  transport, "skip the message id" in the parser, two concepts sharing the number 4. A
+  `MESSAGE_ID_LEN` in `messages.rs` (which already owns `encode_length`/`PROTOBUF_MSG_ID`) would
+  drop the new `connection → transport::common` import and let the two diverge.
+- **No `Notice` predicate for the client-synthesized codes.** `messages.rs` pairs every code
+  const with a predicate (`is_warning`, `is_system_message`, `is_handshake_synthetic`), but
+  `UNKNOWN_MESSAGE_TYPE_CODE` is `pub` with none, so consumers hand-write `notice.code == ...`.
+  A `Notice::is_client_synthesized()` (code `< 0`) is the proportionate sibling. Note also that
+  a `NotValid` frame raises `-3` during the handshake and `-5` after it — two codes for one
+  condition, split by lifecycle phase.
+- **No end-to-end test** pushes a short body through `MemoryStream` to confirm the bus takes its
+  reconnect branch rather than dying; `parse_raw_message`'s guard is covered only at unit level.
+
+**Still open after step 1:** F2 is the most plausible root cause but is *not confirmed* as the
+one that fired on 2026-07-07 — no capture exists, and F7 explains why one could not have been
+taken. If the corruption recurs on a build carrying this fix, the `Error::InvalidFrame` +
+reconnect is the expected new symptom; corruption *without* an `InvalidFrame` would falsify F2
+and put H2-by-another-route back in play.
+
 ## Reproduction strategy (deterministic, offline)
+
+> **Superseded in part by F7** — the recorder-based capture below does not preserve length
+> prefixes. Steps 2 and 3 remain valid for decode-level replay; step 1 needs a raw tap.
 
 The wire recorder is the backbone: `src/transport/recorder.rs` (`MessageRecorder`, enabled by
 `IBAPI_RECORDING_DIR`, writes `NNNN-response.msg` **raw wire frames**).

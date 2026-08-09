@@ -14,6 +14,7 @@ use crate::messages::{
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
+use crate::transport::common::MIN_FRAME_LENGTH;
 
 /// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).
@@ -387,21 +388,33 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 /// event-data come through it via tests; a TWS-emitted text frame for a type
 /// with a proto decoder raises `Error::UnexpectedWireFormat`, and one with no
 /// decoder at all falls through to the dispatcher catch-all and is skipped).
-pub fn parse_raw_message(data: &[u8]) -> (ResponseMessage, Option<String>) {
-    let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+///
+/// A body too short to hold the message id yields [`Error::InvalidFrame`]. The
+/// frame readers reject this length before allocating, so production callers
+/// never see it; the guard stays because this is also reached from in-memory
+/// stream fixtures, which supply bodies directly and skip the length prefix
+/// entirely. It used to index straight past the end and panic the dispatcher.
+pub fn parse_raw_message(data: &[u8]) -> Result<(ResponseMessage, Option<String>), Error> {
+    let Some((header, payload)) = data.split_first_chunk::<MIN_FRAME_LENGTH>() else {
+        return Err(Error::InvalidFrame(format!(
+            "frame body of {} bytes cannot hold a message id",
+            data.len()
+        )));
+    };
+    let msg_id = i32::from_be_bytes(*header);
 
     if msg_id > PROTOBUF_MSG_ID {
         let real_type = msg_id - PROTOBUF_MSG_ID;
         debug!("<- protobuf msg_id={real_type}");
-        let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec());
-        (message, None)
+        let message = ResponseMessage::from_protobuf(real_type, payload.to_vec());
+        Ok((message, None))
     } else {
         // Binary message ID, NUL-delimited text payload.
-        let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
+        let raw_string = String::from_utf8_lossy(payload).into_owned();
         debug!("<- {raw_string:?}");
         let mut fields = vec![msg_id.to_string()];
         fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
-        (ResponseMessage::from_text_fields(fields), Some(raw_string))
+        Ok((ResponseMessage::from_text_fields(fields), Some(raw_string)))
     }
 }
 

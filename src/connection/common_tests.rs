@@ -518,7 +518,7 @@ fn test_parse_raw_message_protobuf() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(&payload);
 
-    let (message, trace_str) = parse_raw_message(&data);
+    let (message, trace_str) = parse_raw_message(&data).expect("well-formed protobuf frame");
     assert!(message.raw_bytes().is_some(), "protobuf framing must populate raw_bytes");
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
     assert_eq!(message.raw_bytes(), Some(payload.as_slice()));
@@ -533,12 +533,31 @@ fn test_parse_raw_message_binary_id_text_payload() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(text_payload);
 
-    let (message, trace_str) = parse_raw_message(&data);
+    let (message, trace_str) = parse_raw_message(&data).expect("well-formed text frame");
     assert!(message.raw_bytes().is_none(), "text framing must leave raw_bytes empty");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert_eq!(message.fields[1], "1"); // version field
     assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
     assert!(trace_str.is_some());
+}
+
+/// A body too short to hold the 4-byte message id must be reported, not
+/// indexed past. This used to panic the dispatcher outright ("index out of
+/// bounds: the len is 0 but the index is 0") — in sync it killed the
+/// dispatcher thread, in async the dispatcher task.
+#[test]
+fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
+    use crate::transport::common::MIN_FRAME_LENGTH;
+
+    for length in 0..MIN_FRAME_LENGTH {
+        let data = vec![0_u8; length];
+        let err = parse_raw_message(&data).expect_err("a body too short for a message id must be rejected");
+        assert!(matches!(err, Error::InvalidFrame(_)), "short body must raise InvalidFrame, got {err:?}");
+    }
+
+    // A bare message id with no payload is the smallest legal frame.
+    let (message, _) = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
+    assert_eq!(message.message_type(), IncomingMessages::NextValidId);
 }
 
 /// Test handling of non-UTF8 encoded data from IB Gateway (issue #352)

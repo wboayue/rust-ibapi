@@ -19,7 +19,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::log_orphan;
+use super::common::{log_orphan, report_unroutable_frame};
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
 };
@@ -662,6 +662,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     warn!("error sending to shared channel for {message_type:?}: {e}");
                 }
             }
+        } else {
+            // Nothing claimed the frame. Silent until now, which is why a
+            // desynchronized stream looked identical to an idle one.
+            report_unroutable_frame(&message, &self.connection.notice_sender);
         }
 
         Ok(())

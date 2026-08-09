@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`), a synthesized notice code published to `Client::notice_stream` when a frame's message id maps to no known `IncomingMessages` kind. Joins the existing client-side sentinels (`HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`); TWS itself only uses codes 0 and up. This is the observable form of a framing desynchronization — a burst of these on a previously healthy connection means the stream slipped, not that IBKR added a message type.
+
+- `Error::InvalidFrame`, returned when a frame's 4-byte length prefix cannot describe a TWS message — shorter than the message id, or larger than the 16 MiB cap the official client enforces as `Constants.MaxMsgSize`. Classified as `Error::is_connection_lost`, so both dispatchers reconnect: the framing is positional, with no delimiter to re-anchor on, and a reconnect is the only recovery. `Error` is `#[non_exhaustive]`, so the new variant is not a breaking change.
+
 - `Error::UnexpectedWireFormat`, returned when a message arrives in the wrong wire format for the reader handling it — text framing at a proto-only decoder, or proto framing at a text-field accessor. Previously this shared `Error::UnexpectedResponse` with the unrelated "message is not for this decoder" case, which the dispatcher skips silently. `Error` is `#[non_exhaustive]`, so the new variant is not a breaking change (#731).
 
 ### Changed
@@ -27,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Client::check_server_version()` is crate-private. It was `pub` on the async client and `pub(crate)` on the blocking one — drift rather than design, since it is the internal guard every version-gated API already calls. Compare against `Client::server_version()` directly if you need to branch on gateway support (#728).
 
 ### Fixed
+
+- The frame reader now validates the 4-byte length prefix before using it, instead of trusting it to size an allocation and a `read_exact`. Nothing bounded it: four garbage bytes were read as a body length of up to 4 GiB, which allocated that much and then blocked until that many bytes arrived — consuming and destroying every real message in between, then yielding one bogus frame with the stream left permanently mis-framed. Because the framing is positional, nothing re-synchronizes it, and a mis-framed protobuf payload still decodes without error (prost skips unrecognized field numbers), so the visible symptom was plausible-looking wrong field values that never recovered. Out-of-range prefixes now raise `Error::InvalidFrame` and drive a reconnect. The cap matches the official client's `Constants.MaxMsgSize` (`EReader.readSingleMessage`, which raises `BAD_LENGTH`).
+
+- A frame that no channel claims is now reported instead of dropped. An unrecognized message id raises a `UNKNOWN_MESSAGE_TYPE_CODE` notice and a warning; a known type with no current subscriber stays at `info`, as before, since that is ordinary steady state. Previously the blocking client logged every such frame at `info` without distinguishing the two, and the async client logged nothing at all — so a desynchronized stream was indistinguishable from an idle one, which is why the incident that prompted this work surfaced data-farm notices and no decode error.
+
+- A frame whose body is too short to hold the 4-byte message id no longer panics the dispatcher. `parse_raw_message` indexed the first four bytes unguarded, so a body of 0–3 bytes aborted with `index out of bounds` — killing the dispatcher thread on the blocking client and the dispatcher task on the async one. It returns `Error::InvalidFrame` now.
 
 - `IBAPI_RECORDING_DIR` records the actual response payload again. Recording wrote a response's *parsed text fields*, and a protobuf frame has none — so since the protobuf-only transition every `NNNN-response.msg` held the bare message id and nothing else. Responses are now written as their wire frame (4-byte big-endian message id followed by the payload), matching what `record_request` already wrote for outbound messages. Text-framed responses keep their pipe-delimited form (#748).
 

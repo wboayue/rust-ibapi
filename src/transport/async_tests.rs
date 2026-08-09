@@ -924,3 +924,25 @@ async fn test_send_shared_request_unsupported_returns_error() {
         other => panic!("expected Error::InvalidArgument, got {:?}", other.err()),
     }
 }
+
+/// An unknown message id must reach the notice stream, not vanish. This is the
+/// observable form of a framing desync: before this, `route_to_shared_channel`
+/// dropped anything no channel claimed without a log or an error, so a
+/// desynchronized stream was indistinguishable from an idle one.
+#[tokio::test]
+async fn test_unknown_message_id_reaches_the_notice_stream() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+
+    // Real type 9799 maps to no IncomingMessages variant — what a mis-framed
+    // read produces once the length prefix has slipped.
+    stream.push_inbound(crate::messages::encode_protobuf_message(9799, &[0x08, 0x64]));
+
+    bus.read_and_route_message().await.unwrap();
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next())
+        .await
+        .expect("unknown frame must raise a notice")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, crate::messages::UNKNOWN_MESSAGE_TYPE_CODE);
+}
