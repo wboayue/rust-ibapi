@@ -304,10 +304,16 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
         _ => {
             // Unknown frame kind: log + emit synthesized notice. Fires
             // regardless of callback presence (no typed variant to receive).
-            warn!("unrouted handshake frame: {kind:?}");
+            //
+            // The id accompanies the kind because an *unrecognized* id renders
+            // as the bare `NotValid` — the same loss `report_unroutable_frame`
+            // repairs for steady-state frames. This is that condition during
+            // the handshake, which is the window a reconnect runs through.
+            let id = message.message_id();
+            warn!("unrouted handshake frame: {kind:?} (message id {id})");
             ctx.notice_sink.deliver(Notice::synthesized(
                 HANDSHAKE_UNKNOWN_FRAME_CODE,
-                format!("unsolicited handshake frame with no typed variant: {kind:?}"),
+                format!("unsolicited handshake frame with no typed variant: {kind:?} (message id {id})"),
             ));
         }
     }

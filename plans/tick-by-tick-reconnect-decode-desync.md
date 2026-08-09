@@ -163,14 +163,23 @@ mode" as a precursor step, not part of the fix.
 
 Restructuring, deliberately not landed in a cleanup pass:
 
-- **The unknown-id notice cannot name the id.** `ResponseMessage::from_protobuf` keeps only
-  `kind` and `raw_bytes`, so by the time `report_unroutable_frame` matches `NotValid` the raw
-  numeric id is gone — the notice carries a fixed string and the `warn!` prints `fields: []`.
-  During the very incident this was built for, an operator gets N byte-identical notices. Fix is
-  to preserve the id on the message (a field, or `NotValid(i32)`) and interpolate it, keeping
-  observability *policy* in transport and repairing only the information loss. The doc on
-  `UNKNOWN_MESSAGE_TYPE_CODE` was reworded to stop over-promising discrimination it cannot
-  deliver until this lands. **Highest-value of these.**
+- ~~**The unknown-id notice cannot name the id.**~~ **Done.** `ResponseMessage` carries a
+  `message_id` alongside `kind` — the numeric value `kind` was resolved from, retained because
+  that mapping collapses every unrecognized id to the single `NotValid` variant. Both the
+  `warn!` and the notice text interpolate it, so scattered ids (framing slipped) are
+  distinguishable from one repeated id (IBKR added a type). Observability *policy* stayed in
+  transport; only the information loss was repaired.
+- **`body()` is defined twice, byte-identical** — `transport/async_tests.rs` and
+  `transport/sync_tests.rs` both carry the same `"msg_id|f1|f2"` → wire-bytes fixture builder,
+  doc comment included, and `connection/common_tests.rs` now open-codes the same construction in
+  three places. Shared home is `common::test_utils::helpers`, beside `binary_proto` /
+  `error_frame`; the `debug_assert_ne!` against the `Error` msg id has to move with it.
+- **Two encodings of "no message id"** — `ResponseMessage::default()` yields `0`,
+  `from_text_fields` yields `-1` when `fields[0]` is missing or unparsable. Neither is a wire
+  id, and `-1` is `NotValid`'s own discriminant, so a diagnostic reading "message id -1" is
+  self-referential. The `kind == from(message_id)` invariant holds for both, and `Default` is
+  test-only, so this is cosmetic until it isn't. A named sentinel or `Option<i32>` behind the
+  accessor would settle it.
 - **`CapturingSink` is defined twice** — `connection/common_tests.rs` and
   `transport/common_tests.rs`, same shape, both implementing `NoticeSink`. Shared home is
   `common::test_utils::helpers`. Two consumers today; this is the second occurrence, so by the

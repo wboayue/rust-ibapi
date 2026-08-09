@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{proto_error_response, proto_response};
 use crate::messages::IncomingMessages;
@@ -558,6 +559,33 @@ fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
     // A bare message id with no payload is the smallest legal frame.
     let (message, _) = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
+}
+
+/// An unrecognized id survives parsing on both framings. `IncomingMessages`
+/// collapses every unknown value to the single `NotValid` variant, so without
+/// this the id an unroutable-frame diagnostic needs is gone by the time routing
+/// sees the message — and the protobuf path has no `fields[0]` to fall back on.
+#[test]
+fn test_parse_raw_message_retains_an_unrecognized_message_id() {
+    // Protobuf framing: wire id carries the PROTOBUF_MSG_ID offset, and
+    // message_id() reports the value actually looked up.
+    let (message, _) = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
+    assert_eq!(message.message_type(), IncomingMessages::NotValid);
+    assert_eq!(message.message_id(), helpers::UNKNOWN_MESSAGE_ID);
+
+    // Text framing: same accessor, id taken from fields[0]. Must be at or below
+    // PROTOBUF_MSG_ID to reach the text branch at all, so it cannot reuse
+    // UNKNOWN_MESSAGE_ID.
+    let mut text_frame = 150_i32.to_be_bytes().to_vec();
+    text_frame.extend_from_slice(b"1\0");
+    let (message, _) = parse_raw_message(&text_frame).expect("well-formed frame");
+    assert_eq!(message.message_type(), IncomingMessages::NotValid);
+    assert_eq!(message.message_id(), 150);
+
+    // A recognized id reports itself too — the accessor is not unknown-only.
+    let (message, _) = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
+    assert_eq!(message.message_type(), IncomingMessages::NextValidId);
+    assert_eq!(message.message_id(), 9);
 }
 
 /// Test handling of non-UTF8 encoded data from IB Gateway (issue #352)

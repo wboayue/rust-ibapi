@@ -87,9 +87,17 @@ impl MessageRecorder {
     /// This used to be `message.encode()` for both, which joins the parsed text
     /// fields. A protobuf frame has none, so every recorded response since the
     /// transition to protobuf-only was the bare message id and nothing else.
+    ///
+    /// The id comes from [`ResponseMessage::message_id`], not from the resolved
+    /// kind. They agree for every recognized id — `IncomingMessages::from` maps
+    /// a value to the variant with that discriminant — but an *un*recognized id
+    /// resolves to `NotValid`, whose discriminant is `-1`. Recording
+    /// `message_type() as i32` therefore fabricated an id for exactly the frames
+    /// worth replaying: an operator capturing a desync burst with
+    /// `IBAPI_RECORDING_DIR` got `-1` where the offending id should be.
     fn render(message: &ResponseMessage) -> Vec<u8> {
         match message.raw_bytes() {
-            Some(payload) => crate::messages::encode_protobuf_message(message.message_type() as i32, payload),
+            Some(payload) => crate::messages::encode_protobuf_message(message.message_id(), payload),
             None => message.encode().replace('\0', "|").into_bytes(),
         }
     }

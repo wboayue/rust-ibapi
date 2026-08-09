@@ -802,17 +802,44 @@ pub(crate) struct ResponseMessage {
     /// subscription's `RESPONSE_MESSAGE_IDS` filter, the decoder's own match —
     /// each of which used to re-run `i32::from_str` over `fields[0]`.
     kind: IncomingMessages,
+    /// The numeric id `kind` was resolved from, retained because that mapping
+    /// is lossy: every unrecognized id collapses to
+    /// [`IncomingMessages::NotValid`]. See [`UNKNOWN_MESSAGE_TYPE_CODE`] for
+    /// what the id buys a reader that the kind alone cannot.
+    message_id: i32,
 }
 
 impl ResponseMessage {
-    /// Build a protobuf response message from a binary message type and raw payload bytes.
-    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
+    /// The one construction path, so `kind` and `message_id` cannot disagree:
+    /// `kind` is always `IncomingMessages::from(message_id)`. The derived
+    /// `Default` upholds it too, by coincidence worth naming — `message_id: 0`
+    /// is unrecognized, and `NotValid` is the enum's `#[default]`.
+    fn new(message_id: i32, fields: Vec<String>, raw_bytes: Option<Vec<u8>>) -> Self {
         Self {
             i: 0,
-            fields: Vec::new(),
-            raw_bytes: Some(raw_bytes),
-            kind: IncomingMessages::from(message_type),
+            fields,
+            raw_bytes,
+            kind: IncomingMessages::from(message_id),
+            message_id,
         }
+    }
+
+    /// Build a protobuf response message from a binary message type and raw payload bytes.
+    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
+        Self::new(message_type, Vec::new(), Some(raw_bytes))
+    }
+
+    /// The numeric message id this frame arrived with, before it was resolved
+    /// to an [`IncomingMessages`] kind. For protobuf frames this is the id with
+    /// the [`PROTOBUF_MSG_ID`] offset already removed — i.e. the value that was
+    /// looked up, not the raw 4 bytes off the wire.
+    ///
+    /// Guaranteed for every message, not just unroutable ones:
+    /// `IncomingMessages::from(m.message_id()) == m.message_type()`. Callers
+    /// that need the id back out of a message — the wire recorder, diagnostics
+    /// for an unrecognized frame — depend on that holding for known kinds too.
+    pub(crate) fn message_id(&self) -> i32 {
+        self.message_id
     }
 
     /// Raw protobuf payload bytes, if this is a protobuf message.
@@ -1012,16 +1039,8 @@ impl ResponseMessage {
     /// walks the field cursor from index 0 — so `kind` is derived from it here
     /// rather than replacing it.
     pub(crate) fn from_text_fields(fields: Vec<String>) -> ResponseMessage {
-        let kind = fields
-            .first()
-            .map(|id| IncomingMessages::from(i32::from_str(id).unwrap_or(-1)))
-            .unwrap_or(IncomingMessages::NotValid);
-        ResponseMessage {
-            i: 0,
-            fields,
-            raw_bytes: None,
-            kind,
-        }
+        let message_id = fields.first().and_then(|id| i32::from_str(id).ok()).unwrap_or(-1);
+        Self::new(message_id, fields, None)
     }
 
     #[cfg(test)]
@@ -1151,10 +1170,12 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// prefix is positional, so once a read starts at the wrong offset every
 /// subsequent message id is garbage — usually unrecognized (this notice), but
 /// occasionally colliding with a real kind, in which case the payload decodes
-/// without error into plausible-looking wrong values. The notice does not name
-/// the offending id, so it cannot on its own distinguish a slipped stream from
-/// an unrecognized message type IBKR has added; correlate with
-/// [`Error::InvalidFrame`](crate::Error::InvalidFrame) and the surrounding logs.
+/// without error into plausible-looking wrong values.
+///
+/// The notice text names the offending id, which is what separates the two
+/// explanations: a slipped stream yields *scattered* ids, while a message type
+/// IBKR has added repeats one. A burst of distinct ids on a previously healthy
+/// connection means the framing slipped.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 
 /// Typed classification of a [`Notice`] by TWS error-code range.

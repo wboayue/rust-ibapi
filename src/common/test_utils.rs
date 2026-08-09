@@ -138,6 +138,19 @@ pub mod helpers {
         crate::messages::encode_protobuf_message(msg_id, &proto.encode_to_vec())
     }
 
+    /// A message id that maps to no [`IncomingMessages`](crate::messages::IncomingMessages)
+    /// variant — what a mis-framed read produces once the length prefix has
+    /// slipped. Assertions on the resulting diagnostic name this value, so it
+    /// lives here rather than being spelled at each site.
+    pub const UNKNOWN_MESSAGE_ID: i32 = 9799;
+
+    /// Proto-framed wire payload whose message id maps to no known kind, for
+    /// driving the unroutable-frame reporting. Payload is filler — nothing
+    /// decodes it, because nothing can route it.
+    pub fn unknown_message_frame() -> Vec<u8> {
+        crate::messages::encode_protobuf_message(UNKNOWN_MESSAGE_ID, &[0x08, 0x64])
+    }
+
     /// `NextValidId` proto-framed handshake frame.
     pub fn next_valid_id_frame(order_id: i32) -> Vec<u8> {
         binary_proto(
