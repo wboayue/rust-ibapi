@@ -8,9 +8,10 @@ triggers:
   - reaching for (&mut sub).filter_data()
   - iterating a Deref wrapper around Subscription
   - an unused_mut warning appears after switching stream adapters
+  - collecting a Subscription into a Vec inside a Client method
 symbols: [Subscription, filter_data, SubscriptionItem, FilterDataStream, DisplayGroupSubscription]
-related: [dual-feature-types, no-parity-wrappers]
-precedents: ["#550", "#598"]
+related: [dual-feature-types, no-parity-wrappers, exercise-production-code]
+precedents: ["#550", "#598", "#735"]
 memory: [feedback_stream_adapter_consume_form, feedback_subscription_for_yields_subscription_item, feedback_result_flatten_drops_errors]
 ---
 
@@ -55,9 +56,25 @@ Related trap: the default `IntoIterator` on the sync side yields `SubscriptionIt
 and `iter_data().flatten()` silently discards `Err` items because `Result` is itself
 `IntoIterator`. Match explicitly in anything a user will copy.
 
+## Inside a Client method, ask whether it consumes `Err`
+
+The same trap in library code is worse, because the caller has no way to see it. A method that
+collects a subscription with `while let Some(Ok(item))` or `if let Ok(item)` turns a routed
+`RoutedItem::Error` into a normal loop exit and returns an empty `Vec` — so a rejection from
+TWS is indistinguishable from "nothing matched". Blocking `matching_symbols` shipped that shape
+while its async twin had `Some(Err(e)) => return Err(e)`; `OrderBuilder::analyze` had it on both
+sides, on the one API where rejection is a routine outcome.
+
+**No shared layer answers this.** The dispatcher's job ends at producing the `Err`; whether it
+reaches the caller is decided once per public entry point, so it is a per-method review question
+and a per-method test — see
+[exercise production code](../testing/exercise-production-code.md).
+
 ## Precedents
 
 - #550 — `impl Stream for async Subscription<T>`; its `/simplify` pass (commit `3b708a7`)
   removed the re-borrow casts and named the reason.
 - #598 — canonicalized sync stream iteration on `iter_data()` plus an explicit `Result` match
   across the examples.
+- #735 — swept every `Some(Ok(..))` consumption site after finding two that dropped routed
+  errors; every other site already handled `Some(Err(e))`.

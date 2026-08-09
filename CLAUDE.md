@@ -131,8 +131,9 @@ precedents. Every rule now lives in a node; nothing is inline.
 
 Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
 an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not
-against this file — the numbering shifted at least once while it was in use. See
-[plans/claude-md-knowledge-graph.md](plans/claude-md-knowledge-graph.md).
+against this file — the numbering shifted at least once while it was in use. The mapping as of
+the final numbered revision is in
+[retired rule numbers](docs/rules/README.md#retired-rule-numbers).
 
 ## Maintaining the rule graph
 

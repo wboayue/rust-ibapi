@@ -1,35 +1,26 @@
 # Code-consistency follow-ups
 
-Remaining open items from the CLAUDE.md alignment audit (ran 2026-05-28). All other
-tracks from that audit have shipped — the [sibling test files](../docs/rules/testing/sibling-test-files.md)
-inline-test sweep (PR #657), rule 18 async `# Examples` (PRs #657/#659),
-[domain module layout](../docs/rules/style/domain-module-layout.md) (audit-time rule 2),
-`pegged_to_benchmark` builder (PR #660), and the builder-fed
-`#[allow(clippy::too_many_arguments)]` justification comments. Re-run the audit before
-starting new follow-ups to catch fresh drift.
+Open items from the CLAUDE.md alignment audit (ran 2026-05-28). Everything else that audit
+found has shipped: the inline-test sweep (#657), async `# Examples` (#657/#659), domain module
+layout, the `pegged_to_benchmark` builder (#660), the builder-fed
+`#[allow(clippy::too_many_arguments)]` justifications, the `wsh_event_data_*` builders (#752),
+and the `# Examples` backfill (#751 — every `impl Client` method that owes one has one).
+Re-run the audit before starting new follow-ups; this list dates from 2026-05-28 and only the
+items below were re-verified 2026-08-08.
 
-> **On rule numbers.** This file predates the [knowledge-graph migration](claude-md-knowledge-graph.md);
-> migrated rules are cited by node path below, and only rules still inline in `CLAUDE.md` keep
-> a number. Two audit-time numbers did not mean what they look like today: the
-> `too_many_arguments` track above was recorded as "rule 19", but rule 19 was then the proto
-> fixture sweep — that exception belongs to
-> [param budget](../docs/rules/style/param-budget.md). And the audit's "rule 20"
-> was the ratchet/cleanup split, not proto-only decoding. Resolve any number found here
-> against `git show <commit-before-2026-05-28>:CLAUDE.md`, never against the current file.
+> **On rule numbers.** This file predates the move of `CLAUDE.md`'s numbered rules into
+> [`docs/rules/`](../docs/rules/README.md) nodes.
+> Audit-time numbers do not map to today's nodes — the `too_many_arguments` exception was
+> recorded as "rule 19" but belongs to [param budget](../docs/rules/style/param-budget.md), and
+> the audit's "rule 20" was the ratchet/cleanup split. Resolve any number found here against
+> `git show <commit-before-2026-05-28>:CLAUDE.md`, never against the current file.
 
-## [Param budget](../docs/rules/style/param-budget.md) (audit-time rule 4) — functions with 4+ params
+## [Param budget](../docs/rules/style/param-budget.md) — functions with 4+ params
 
 Treat the rule as "4+ args with at least one optional / defaultable field needs a builder";
 pure-required signatures don't benefit (receiver `&self` excluded from the budget).
 
-**The public half is closed in #752.** `wsh_event_data_by_contract` (1 required + 4 `Option`) and
-`wsh_event_data_by_filter` (1 required + 2 `Option`) return `WshEventDataBuilder` /
-`WshEventFilterBuilder`. It was the clearest case in the inventory for a reason worth recording:
-**every call site in the repository — both examples, both integration tests, and the doc examples
-— passed `None` for every optional argument.** A signature nobody exercises past its first
-argument is not carrying five arguments' worth of meaning.
-
-The remaining two public sites keep their decisions from the audit:
+Two public sites keep their decisions from the audit:
 
 - `contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)` — 4
   required args, but `exchange` documents `""` as a meaningful default. **Deferred.** If
@@ -40,54 +31,23 @@ The remaining two public sites keep their decisions from the audit:
   `start_time` + `end_time` is the only remedy worth considering, and leaving it alone is
   defensible.
 
-Internal / free-function violations, unchanged — take one when you are already in the file:
+Internal / free-function violations — take one when you are already in the file:
 
-- `src/common/error_helpers.rs:31` — `require_range<T>(value, min, max, name)` — internal helper; consider `Range<T>` newtype or a builder.
-- `src/orders/builder/validation.rs:5` — `validate_bracket_prices(action, entry, take_profit, stop_loss)` — internal validation helper.
-- `src/contracts/builders.rs:550` — `iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)` — 4 leg ids; consider a struct of 4 contract ids.
-- `src/orders/common/order_builder/mod.rs:182` — `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` — 5 params; builder.
-
-## [Public API examples](../docs/rules/docs/public-api-examples.md) — `impl Client` methods with no `# Examples`
-
-**Closed in #751.** Every `impl Client` method that owes an example has one.
-
-Re-counted 2026-08-08 with a script that walks each `impl Client` block and reads each method's
-*own* doc comment (`scratchpad/examples_audit.py` in that PR's write-up; the rule is one line of
-`re.match(r'\s{4}pub (?:async )?fn')` inside a brace-tracked block):
-
-| | 2026-08-07 | 2026-08-08, before | after |
-|---|---|---|---|
-| `impl Client` methods | 152 | 154 | 154 |
-| carrying `# Examples` | 132 | 135 | 143 |
-| missing, exempt accessors | 11 | 11 | 11 |
-| missing, genuine | 9 | 8 | **0** |
-
-**The list was right and the denominator was stale**, which is the usual split — the eight
-methods named here were exactly the eight still missing a year-tick later, but "132 of 152" was
-already wrong when written down, because the method count moves with every PR that adds an API.
-A count in prose dates from the moment it was typed; only the command survives.
-
-Written in #751: `server_time_millis` (sync + async), `family_codes` (sync), `market_rule`,
-`cancel_contract_details`, `cancel_historical_ticks` (sync + async), `exercise_options` (sync).
-The three cancel examples say where the `request_id` comes from, which was the reason they had
-no example: it is not a value the method itself hands you.
-
-The remaining eleven sites are the six accessors the rule exempts — `client_id`,
-`next_request_id`, `next_order_id`, `connection_time`, `time_zone`, and async `server_version`.
-Leave them, with one caveat: `next_request_id` / `next_order_id` allocate from an atomic rather
-than reading a field, so they are exempt by size, not by category. If the manual-request-id
-workflow ever needs documenting, they are where it goes.
-
-`check_server_version` was on this list until it turned out to be `pub` on async and
-`pub(crate)` on sync — a visibility asymmetry, not a doc gap. Narrowed to `pub(crate)` on both
-in the same PR.
+- `require_range<T>(value, min, max, name)` in `src/common/error_helpers.rs` — consider a
+  `Range<T>` newtype or a builder.
+- `validate_bracket_prices(action, entry, take_profit, stop_loss)` in
+  `src/orders/builder/validation.rs`.
+- `ContractBuilder::iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)`
+  in `src/contracts/builders.rs` — consider a struct of four contract ids.
+- `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` in
+  `src/orders/common/order_builder/mod.rs`.
 
 ## `market_data` realtime seam — opened by #729's `/simplify`
 
 Both are restructuring, deferred out of #729 rather than landed in a cleanup pass.
 
 - **`MarketDataBuilder` sits a directory above its three siblings.** It lives in
-  `src/market_data/builder/` — a three-line module whose sole content is that one type — while
+  `src/market_data/builder/` — a module whose sole content is that one type — while
   `RealtimeBarsBuilder`, `MarketDepthBuilder`, and `TickByTickBuilder` live in
   `src/market_data/realtime/builder/`. After #729 moved the entry point into
   `market_data/realtime/{sync,async}.rs`, the new `impl Client` blocks have to reach *upward*
@@ -97,7 +57,7 @@ Both are restructuring, deferred out of #729 rather than landed in a cleanup pas
   a public path, referenced from `realtime/generic_tick.rs` and doc links in
   `subscriptions/{sync,async}.rs` — so it needs its own PR with a `migration-3.0.md` note.
 - **`market_data::realtime::sync::market_data` is `pub` where its siblings are `pub(crate)`.**
-  The free fn at `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
+  The free fn in `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
   `tick_by_tick` beside it are `pub(crate)`. Under `#[cfg(all(feature = "sync", not(feature =
   "async")))] pub use sync::*` that makes it reachable as
   `ibapi::market_data::realtime::market_data` in sync-only builds. Async has no public
@@ -109,15 +69,12 @@ Both are restructuring, deferred out of #729 rather than landed in a cleanup pas
 
 ## Out-of-scope on the audit pass
 
-- [Coverage floor](../docs/rules/testing/coverage-floor.md) (90% target, audit-time rule 6) — not audited; run `just cover` per PR.
-- [Integration crate builds](../docs/rules/workflow/integration-crate-builds.md) (audit-time
-  rule 11) — gates run on touch.
-- Audited clean: [narrow re-exports](../docs/rules/style/narrow-reexports.md) (audit-time
-  rule 14), [macros last resort](../docs/rules/style/macros-last-resort.md) (audit-time
-  rule 25),
-  [no parity wrappers](../docs/rules/parity/no-parity-wrappers.md) (audit-time rule 13),
-  [restrict after callers](../docs/rules/workflow/restrict-after-callers.md) (audit-time
-  rule 23), plus
-  [wire enum typing](../docs/rules/wire/enum-typing.md) (audit-time rule 16),
-  [floor-ratchet splits](../docs/rules/wire/floor-ratchet-splits.md) (audit-time rule 20), and
-  [clock seams](../docs/rules/testing/clock-seams.md) (audit-time rule 26).
+- [Coverage floor](../docs/rules/testing/coverage-floor.md) — not audited; run `just cover` per PR.
+- [Integration crate builds](../docs/rules/workflow/integration-crate-builds.md) — gates run on touch.
+- Audited clean: [narrow re-exports](../docs/rules/style/narrow-reexports.md),
+  [macros last resort](../docs/rules/style/macros-last-resort.md),
+  [no parity wrappers](../docs/rules/parity/no-parity-wrappers.md),
+  [restrict after callers](../docs/rules/workflow/restrict-after-callers.md),
+  [wire enum typing](../docs/rules/wire/enum-typing.md),
+  [floor-ratchet splits](../docs/rules/wire/floor-ratchet-splits.md), and
+  [clock seams](../docs/rules/testing/clock-seams.md).
