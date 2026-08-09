@@ -7,9 +7,11 @@ triggers:
   - building a response test fixture
   - adding a MessageBusStub test for a new message type
   - a test fails with UnexpectedWireFormat
-symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, ordered_responses, Error::UnexpectedWireFormat]
-related: [proto-only-decoding, fixture-migration]
-precedents: ["#534", "#543", "#731"]
+  - asserting that a decoder rejects text framing
+  - a test needs the connection to drop mid-request
+symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, ordered_responses, Error::UnexpectedWireFormat, assert_rejects_text_framing, with_connection_resets]
+related: [proto-only-decoding, fixture-migration, exercise-production-code]
+precedents: ["#534", "#543", "#731", "#735", "#743", "#747"]
 memory: [feedback_test_fixtures_placement, feedback_testdata_builder_no_new, feedback_no_speculative_test_infra, project_error_response_builder_gap, feedback_mirror_production_patterns]
 ---
 
@@ -51,6 +53,22 @@ and refactored them into named builders in `testdata/builders/market_data.rs`.
 A builder needs a **current test consumer**. Matching the encoder file one-to-one "for
 completeness" is not a consumer.
 
+## A fixture field no assertion reads is unverified input
+
+It will eventually be wrong, and nothing says so. `test_decode_market_rule_rejects_text_framing`
+framed itself as message id 87 (`MarketRule` is 93) and
+`test_decode_news_providers_rejects_text_framing` led with the literal `"newsProviders"`, which
+parses as no discriminant at all. Both passed for as long as they existed, because the only
+assertion was that `require_proto()` rejects text framing and `require_proto()` never reads the
+type. Two more turned up the same way in the same PR.
+
+So use `assert_rejects_text_framing(expected, text_frame, decode)`
+(`src/common/test_utils.rs`) rather than hand-rolling the `matches!` — it checks the frame's own
+leading discriminant against `expected` *before* running the decoder, which a pure
+extract-the-common-assertion refactor would have preserved the blind spot of. The one caller
+that keeps its own shape is `connection`'s handshake reader, which takes
+`&mut ResponseMessage`, so it passes a cloning closure.
+
 ## What the stub does and does not simulate
 
 `MessageBusStub` sits below the dispatcher, so a fixture reaches the subscription without
@@ -68,6 +86,12 @@ being routed. Two consequences pull in opposite directions:
   `debug_assert_request_id_routable` covers that half; see
   [proto-aware accessors](../wire/proto-aware-accessors.md).
 
+**It can drop the connection.** `with_connection_resets(n)` answers the first `n` requests with
+a bare `RoutedItem::Error(Error::ConnectionReset)` and no responses — what a dropped socket
+looks like — so a retrying request path can be asserted on by resend count. Only `server_time`
+uses it today; nothing checks that the other one-shot sites retry, so an API whose retry wiring
+matters needs its own test rather than an assumption.
+
 ## Note on `server_version`
 
 The version passed to `Client::stubbed` gates *outbound encoder* feature checks, not the
@@ -81,6 +105,10 @@ constant like `SIZE_RULES` in a stub test is correct, not a leftover.
 - #543 — /simplify caught fixture helpers misplaced under `<domain>/common/`.
 - #731 — made a mis-framed fixture fail its test instead of silently skipping.
 - #735 — taught the stub to classify `Error` frames like the dispatcher.
+- #743 — added `with_connection_resets`; a mutation (retry limit 0) reproduced red before the
+  fix, which is the evidence a test claiming to gate something owes.
+- #747 — one `assert_rejects_text_framing` replaced four spellings across 23 tests, and added
+  the discriminant check none of them had.
 
 See also [docs/testing-patterns.md](../../testing-patterns.md) for choosing between
 `MessageBusStub`, `MemoryStream`, and `spawn_handshake_listener`.

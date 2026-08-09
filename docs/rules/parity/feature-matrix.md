@@ -10,7 +10,7 @@ triggers:
   - a type or impl exists on only one of the sync/async sides
 symbols: [cfg(feature), no-default-features, just-test, default]
 related: [dual-feature-types, no-parity-wrappers]
-precedents: ["#658", "#671"]
+precedents: ["#658", "#671", "#724", "#744"]
 memory: [feedback_ci_clippy_flags, feedback_fix_workspace_red_in_scope]
 ---
 
@@ -49,6 +49,17 @@ silently depends on `sync`, sync-only catches the reverse, and `--all-features` 
 same-name collisions that neither single-feature build can see — see
 [dual-feature types](dual-feature-types.md).
 
+**Three green legs do not mean the two sides agree.** Nothing compares a sync implementation
+against its async twin; both can compile and pass while behaving differently. `historical_data`
+hand-rolled its retry on each side, and async retried the wrong case — a routed
+`ConnectionReset` returned to the caller on the first occurrence while a closed stream, which no
+retry can fix, was re-sent five times. Reading the pair side by side is the whole check.
+
+The tell is in the tests when there is one: both sides had a test called
+`test_historical_data_connection_reset_after_retries`, asserting opposite outcomes for the same
+input, each with a comment explaining why its side was right. **Two sibling tests with the same
+name and contradictory assertions are a drift report, not coverage.**
+
 ## Precedents
 
 - #658 — added a crate-level market-order doctest using `#[tokio::main]` unconditionally.
@@ -58,3 +69,5 @@ same-name collisions that neither single-feature build can see — see
 - #724 — closed the gate gap that let #658 through: three explicit legs in `just test` and
   `ci.yml`, and swept `docs/build-and-test.md`, which had taught `--features sync` as "the
   sync build" throughout.
+- #744 — moved `historical_data` onto the shared `retry_on_connection_reset`, which is what
+  removed the drifted pair. Found by reading, not by a gate.
