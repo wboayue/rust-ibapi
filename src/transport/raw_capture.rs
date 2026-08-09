@@ -39,8 +39,22 @@
 //! wire byte for byte. See F8 in
 //! `plans/tick-by-tick-reconnect-decode-desync.md`.
 //!
-//! Nothing here is on the hot path unless the environment variable is set:
-//! a disabled tap is an `Option::None` check per frame.
+//! # Cost
+//!
+//! Nothing here is on the hot path unless the environment variable is set: a
+//! disabled tap is an `Option::None` check per frame, before any formatting,
+//! allocation, or locking.
+//!
+//! When enabled it costs three unbuffered `write(2)` per frame. **The files are
+//! deliberately not `BufWriter`-wrapped.** `File::write_all` reaches the kernel
+//! page cache, so a capture survives `kill -9`; an 8 KiB user-space buffer would
+//! lose its tail — and the frames immediately before a hang or a desync are the
+//! entire evidence. Do not "optimise" this without solving that.
+//!
+//! On the async side those writes are blocking calls on a runtime worker, made
+//! while the reader mutex is held. That is a few microseconds against a local
+//! directory and unbounded against a slow or full one, which is the deal a
+//! byte-level capture makes; point `IBAPI_RAW_CAPTURE_DIR` at local disk.
 //!
 //! [`MessageRecorder`]: super::recorder::MessageRecorder
 //! [`ResponseMessage`]: crate::messages::ResponseMessage
@@ -84,8 +98,9 @@ impl RawFrameTap {
 
     /// Capture into `dir`, creating it if needed.
     ///
-    /// A directory that cannot be created downgrades to [`Self::disabled`] with
-    /// a warning: a diagnostic aid must never be the reason a connection fails.
+    /// A destination that cannot be opened downgrades to [`Self::disabled`]
+    /// with a warning: a diagnostic aid must never be the reason a connection
+    /// fails.
     pub(crate) fn capturing_to(dir: impl AsRef<Path>) -> Self {
         let dir = dir.as_ref().to_path_buf();
         if let Err(err) = fs::create_dir_all(&dir) {
@@ -99,18 +114,23 @@ impl RawFrameTap {
         let sink = Sink {
             prefix: format!("{stamp}-{}", TAP_ID.fetch_add(1, Ordering::SeqCst)),
             dir,
+            // Segment 0 is claimed below; the next rotation takes 1.
             state: Mutex::new(State {
                 segment: None,
-                next_number: 0,
-                disabled: false,
+                next_number: 1,
             }),
         };
-        {
-            let mut state = sink.lock();
-            sink.open_segment(&mut state);
-        }
 
-        Self { sink: Some(Arc::new(sink)) }
+        // Open segment 0 up front, so that "has a segment" is the single
+        // meaning of "still capturing" from here on — no separate disabled
+        // flag, and no window where the two disagree.
+        match sink.new_segment(0) {
+            Some(segment) => {
+                sink.lock().segment = Some(segment);
+                Self { sink: Some(Arc::new(sink)) }
+            }
+            None => Self::disabled(),
+        }
     }
 
     /// Record a length prefix the moment it comes off the socket — **before**
@@ -147,10 +167,18 @@ impl RawFrameTap {
     /// Begin a new file pair. Called on reconnect, so that a `.bin` is never a
     /// splice of two TCP streams — replaying such a file would show a phantom
     /// desync at the seam.
+    ///
+    /// A sink that has already given up stays given up: a failing disk should
+    /// not produce a fresh warning on every reconnect attempt.
     pub(crate) fn start_new_segment(&self) {
         let Some(sink) = &self.sink else { return };
         let mut state = sink.lock();
-        sink.open_segment(&mut state);
+        if state.segment.is_none() {
+            return;
+        }
+        let number = state.next_number;
+        state.next_number += 1;
+        state.segment = sink.new_segment(number);
     }
 }
 
@@ -168,12 +196,11 @@ struct Sink {
 
 #[derive(Debug)]
 struct State {
-    /// `None` while no segment is open — either the first open failed or a
-    /// write did.
+    /// The open capture, or `None` once an I/O error has retired this sink for
+    /// good. There is no separate disabled flag: a `Sink` only ever exists with
+    /// segment 0 already open, so `None` means exactly one thing.
     segment: Option<Segment>,
     next_number: usize,
-    /// Set by [`State::give_up`] once an I/O error has been reported.
-    disabled: bool,
 }
 
 #[derive(Debug)]
@@ -193,46 +220,37 @@ impl Sink {
         self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn open_segment(&self, state: &mut State) {
-        if state.disabled {
-            return;
-        }
-        let number = state.next_number;
-        state.next_number += 1;
-
+    /// Open the file pair for `number`, or `None` with a warning if either file
+    /// cannot be created.
+    fn new_segment(&self, number: usize) -> Option<Segment> {
         let base = self.dir.join(format!("{}-inbound-{number:03}", self.prefix));
         let frames_path = base.with_extension("bin");
         match (File::create(&frames_path), File::create(base.with_extension("idx"))) {
             (Ok(frames), Ok(index)) => {
                 info!("raw frame capture: {}", frames_path.display());
-                state.segment = Some(Segment {
+                Some(Segment {
                     frames,
                     index,
                     offset: 0,
                     next_seq: 0,
-                });
+                })
             }
-            (Err(err), _) | (_, Err(err)) => state.give_up(&format!("cannot open {}: {err}", frames_path.display())),
+            (Err(err), _) | (_, Err(err)) => {
+                warn!("raw frame capture disabled: cannot open {}: {err}", frames_path.display());
+                None
+            }
         }
     }
 
+    /// Run one record step against the open segment. An I/O failure retires the
+    /// sink — one warning for a failing disk, not one per frame.
     fn write(&self, record: impl FnOnce(&mut Segment) -> std::io::Result<()>) {
         let mut state = self.lock();
         let Some(segment) = state.segment.as_mut() else { return };
         if let Err(err) = record(segment) {
-            state.give_up(&format!("write failed: {err}"));
+            warn!("raw frame capture disabled: write failed: {err}");
+            state.segment = None;
         }
-    }
-}
-
-impl State {
-    /// Stop capturing, for good. Both I/O failures land here so a failing disk
-    /// produces one warning rather than one per frame, and so a later reconnect
-    /// does not revive a sink that has already given up.
-    fn give_up(&mut self, reason: &str) {
-        warn!("raw frame capture disabled: {reason}");
-        self.segment = None;
-        self.disabled = true;
     }
 }
 

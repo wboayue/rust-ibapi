@@ -175,3 +175,22 @@ fn test_record_response_keeps_an_unrecognized_message_id() {
         );
     });
 }
+
+/// A diagnostic aid must never be the reason a connection fails. Pointing
+/// `IBAPI_RECORDING_DIR` at a path that cannot become a directory used to
+/// panic inside `Client::connect`.
+#[test]
+fn test_unusable_recording_dir_downgrades_to_disabled() {
+    let temp_dir = TempDir::new().unwrap();
+    let occupied = temp_dir.path().join("not-a-directory");
+    fs::write(&occupied, b"occupied").unwrap();
+
+    temp_env::with_var("IBAPI_RECORDING_DIR", Some(occupied.to_str().unwrap()), || {
+        let recorder = MessageRecorder::from_env();
+
+        assert!(!recorder.enabled, "an unusable directory must disable recording, not panic");
+
+        // Still safe to drive.
+        recorder.record_request(b"request");
+    });
+}

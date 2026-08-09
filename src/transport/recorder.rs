@@ -44,7 +44,15 @@ impl MessageRecorder {
                     let instance_id = RECORDER_ID.fetch_add(1, Ordering::SeqCst);
                     let recording_dir = format!("{}/{}-{}", dir, now.format(&format).unwrap(), instance_id);
 
-                    fs::create_dir_all(&recording_dir).unwrap();
+                    // A diagnostic aid must never be the reason a connection
+                    // fails. This used to `unwrap`, so pointing
+                    // `IBAPI_RECORDING_DIR` at an unwritable path panicked
+                    // during connect — the same policy the raw-frame tap
+                    // applies in `super::raw_capture`.
+                    if let Err(err) = fs::create_dir_all(&recording_dir) {
+                        warn!("message recording disabled: cannot create {recording_dir}: {err}");
+                        return MessageRecorder::new(false, String::from(""));
+                    }
 
                     MessageRecorder::new(true, recording_dir)
                 }

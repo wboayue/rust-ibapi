@@ -114,3 +114,7 @@ impl AsyncReconnect for AsyncTcpSocket {
 }
 
 impl AsyncStream for AsyncTcpSocket {}
+
+#[cfg(test)]
+#[path = "io_tests.rs"]
+mod tests;

@@ -21,24 +21,27 @@ use std::process::ExitCode;
 
 use ibapi::IncomingMessages;
 
-/// The transport's own bounds, restated so a capture can be inspected without
-/// linking against internals. `MAX` matches the official client's
-/// `Constants.MaxMsgSize`; `MIN` is the 4-byte message id every frame carries.
+const USAGE: &str = "usage: replay_raw_capture [--frames] <capture.bin>";
+
+/// The transport's own bounds, copied because `transport::common` is
+/// `pub(crate)` and an example links as an external consumer. If the crate ever
+/// moves these, this tool will disagree with the reader it is adjudicating —
+/// keep them in step by hand.
 const MAX_FRAME_LENGTH: usize = 0x00FF_FFFF;
 const MIN_FRAME_LENGTH: usize = 4;
 
-/// TWS adds this to the message id of a protobuf-encoded frame.
+/// TWS adds this to the message id of a protobuf-encoded frame. Same story:
+/// `messages::PROTOBUF_MSG_ID` is not public.
 const PROTOBUF_MSG_ID: i32 = 200;
 
 fn main() -> ExitCode {
-    let mut args = env::args().skip(1);
     let mut path = None;
     let mut list_frames = false;
-    for arg in args.by_ref() {
+    for arg in env::args().skip(1) {
         match arg.as_str() {
             "--frames" => list_frames = true,
             "-h" | "--help" => {
-                eprintln!("usage: replay_raw_capture [--frames] <capture.bin>");
+                eprintln!("{USAGE}");
                 return ExitCode::SUCCESS;
             }
             other => path = Some(other.to_string()),
@@ -46,7 +49,7 @@ fn main() -> ExitCode {
     }
 
     let Some(path) = path else {
-        eprintln!("usage: replay_raw_capture [--frames] <capture.bin>");
+        eprintln!("{USAGE}");
         eprintln!("       capture files are written by setting IBAPI_RAW_CAPTURE_DIR");
         return ExitCode::FAILURE;
     };
@@ -61,7 +64,7 @@ fn main() -> ExitCode {
 
     println!("{path}: {} bytes", capture.len());
     let report = walk(&capture, list_frames);
-    report.print();
+    report.print(capture.len());
 
     if report.desync.is_some() {
         ExitCode::FAILURE
@@ -70,30 +73,54 @@ fn main() -> ExitCode {
     }
 }
 
+/// A frame's identity, as two `Copy` fields rather than a rendered string —
+/// captures run to millions of frames, and the label is only ever needed once
+/// per distinct kind at print time.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct FrameKind {
+    raw_id: i32,
+    encoding: &'static str,
+}
+
 struct Report {
     frames: usize,
-    by_kind: BTreeMap<String, usize>,
+    by_kind: BTreeMap<FrameKind, usize>,
     /// Byte offset and description of the first frame that could not be read.
     /// Everything after it is suspect, so the walk stops there.
     desync: Option<(usize, String)>,
-    trailing: usize,
 }
 
 impl Report {
-    fn print(&self) {
+    fn print(&self, capture_len: usize) {
         println!("{} frames read", self.frames);
         for (kind, count) in &self.by_kind {
-            println!("  {count:>7}  {kind}");
+            println!("  {count:>7}  {}", label(kind));
         }
         match &self.desync {
             Some((offset, reason)) => {
                 println!();
                 println!("DESYNC at byte {offset}: {reason}");
-                println!("{} bytes after this point were not walked.", self.trailing);
+                println!("{} bytes after this point were not walked.", capture_len - offset);
                 println!("Cross-reference the `.idx` beside this file for the wall-clock time of that frame.");
             }
             None => println!("no framing anomalies; the capture reads end to end"),
         }
+    }
+}
+
+fn label(kind: &FrameKind) -> String {
+    let resolved = IncomingMessages::from(if kind.encoding == "proto" {
+        kind.raw_id - PROTOBUF_MSG_ID
+    } else {
+        kind.raw_id
+    });
+    if resolved == IncomingMessages::NotValid {
+        // An id that resolved to nothing is the fingerprint of a slip: scattered
+        // ids mean the framing moved, one repeated id means TWS grew a message
+        // this build does not know.
+        format!("NotValid (raw id {})", kind.raw_id)
+    } else {
+        format!("{resolved:?} [{}]", kind.encoding)
     }
 }
 
@@ -102,7 +129,6 @@ fn walk(capture: &[u8], list_frames: bool) -> Report {
         frames: 0,
         by_kind: BTreeMap::new(),
         desync: None,
-        trailing: 0,
     };
 
     let mut offset = 0usize;
@@ -130,31 +156,16 @@ fn walk(capture: &[u8], list_frames: bool) -> Report {
 
         let raw_id = i32::from_be_bytes(body[..4].try_into().expect("4 bytes"));
         // Protobuf frames carry id + 200; anything else is read as-is.
-        let (message_id, encoding) = if raw_id > PROTOBUF_MSG_ID {
-            (raw_id - PROTOBUF_MSG_ID, "proto")
-        } else {
-            (raw_id, "text")
-        };
-        let kind = IncomingMessages::from(message_id);
-        let label = if kind == IncomingMessages::NotValid {
-            // The id that resolved to nothing is the fingerprint of a slip:
-            // scattered ids mean the framing moved, one repeated id means TWS
-            // grew a message this build does not know.
-            format!("NotValid (raw id {raw_id})")
-        } else {
-            format!("{kind:?} [{encoding}]")
-        };
+        let encoding = if raw_id > PROTOBUF_MSG_ID { "proto" } else { "text" };
+        let kind = FrameKind { raw_id, encoding };
 
         if list_frames {
-            println!("  #{:<6} offset {offset:<10} len {declared:<8} {label}", report.frames);
+            println!("  #{:<6} offset {offset:<10} len {declared:<8} {}", report.frames, label(&kind));
         }
-        *report.by_kind.entry(label).or_insert(0) += 1;
+        *report.by_kind.entry(kind).or_insert(0) += 1;
         report.frames += 1;
         offset = body_start + declared;
     }
 
-    if let Some((desync_offset, _)) = report.desync {
-        report.trailing = capture.len() - desync_offset;
-    }
     report
 }
