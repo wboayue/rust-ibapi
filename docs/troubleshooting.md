@@ -223,15 +223,56 @@ RUST_LOG=ibapi=debug cargo run --features sync --example your_example
 
 ### Record TWS Messages
 
-Save all TWS communication for analysis:
+Save all TWS communication for analysis. Each run writes a timestamped
+subdirectory holding one file per message, numbered in the order they crossed
+the wire:
 ```bash
 IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example your_example
 
 # View recorded messages
-ls -la /tmp/tws-messages/
-cat /tmp/tws-messages/requests.txt
-cat /tmp/tws-messages/responses.txt
+ls -la /tmp/tws-messages/*/
+xxd /tmp/tws-messages/*/0000-request.msg
 ```
+
+Responses are recorded **after parsing** and re-framed from the parsed message,
+so this is the right tool for "what did TWS say" and the wrong one for "how did
+the bytes arrive". For the latter, see below.
+
+### Capture the Raw Wire (framing problems)
+
+**Symptom:** decoded values are wrong in a structured way — one field
+consistently off, or garbage that still parses — rather than an error. Or a
+`Notice` with code `-5` ("message id … maps to no known type"), or an
+`Error::InvalidFrame`. All three point at the *framing*: a length prefix that
+does not describe the frame behind it, after which every subsequent read starts
+mid-message.
+
+`IBAPI_RECORDING_DIR` cannot diagnose this — it never sees the length prefix,
+which is the corrupted field. `IBAPI_RAW_CAPTURE_DIR` taps the socket below the
+framing instead:
+
+```bash
+IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example your_example
+```
+
+Each connection produces a pair of files (a reconnect starts a new pair):
+
+- `<stamp>-<n>-inbound-<NNN>.bin` — the inbound stream byte for byte, length
+  prefixes included.
+- `<stamp>-<n>-inbound-<NNN>.idx` — `seq,utc_timestamp,offset,declared_length`
+  per frame, for lining a frame up against timestamps in your own logs.
+
+Walk a capture with the bundled example, which reports the first frame whose
+prefix cannot describe a frame and exits non-zero if it finds one:
+
+```bash
+cargo run --example replay_raw_capture -- /tmp/tws-raw/*-inbound-000.bin
+cargo run --example replay_raw_capture -- --frames /tmp/tws-raw/*-inbound-000.bin  # list every frame
+```
+
+Captures are unredacted wire bytes: they contain your account ids, positions,
+and orders. Treat them like logs of live trading activity before attaching one
+to an issue.
 
 ### Common Debug Patterns
 

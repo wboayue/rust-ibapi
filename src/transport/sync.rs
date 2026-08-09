@@ -3,20 +3,20 @@
 //! and responses from TWS back to the Client.
 
 use std::collections::HashMap;
-use std::io::{prelude::*, Cursor};
+use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use byteorder::{BigEndian, ReadBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
+use super::raw_capture::RawFrameTap;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
 };
@@ -777,6 +777,9 @@ pub(crate) struct TcpSocket {
     shutdown_handle: Mutex<TcpStream>,
     connection_url: String,
     tcp_no_delay: bool,
+    /// Byte-level capture of the inbound stream. Disabled unless
+    /// `IBAPI_RAW_CAPTURE_DIR` is set; see [`RawFrameTap`].
+    tap: RawFrameTap,
 }
 impl TcpSocket {
     pub fn connect(address: &str, tcp_no_delay: bool) -> Result<Self, Error> {
@@ -797,6 +800,7 @@ impl TcpSocket {
             shutdown_handle: Mutex::new(shutdown_handle),
             connection_url: connection_url.to_string(),
             tcp_no_delay,
+            tap: RawFrameTap::from_env(),
         })
     }
 }
@@ -816,6 +820,10 @@ impl Reconnect for TcpSocket {
 
                 let mut shutdown_handle = self.shutdown_handle.lock()?;
                 *shutdown_handle = stream;
+
+                // One capture file per TCP stream: splicing two of them would
+                // read back as a desync at the seam that never happened.
+                self.tap.start_new_segment();
 
                 Ok(())
             }
@@ -846,25 +854,31 @@ pub(crate) trait Reconnect {
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
 impl Stream for TcpSocket {}
 
-fn read_header(reader: &mut impl Read) -> Result<usize, Error> {
-    let buffer = &mut [0_u8; 4];
-    reader.read_exact(buffer)?;
-    let mut reader = Cursor::new(buffer);
-    let count = reader.read_u32::<BigEndian>()?;
-    validate_frame_length(count as usize)
+/// Read the 4-byte big-endian length prefix, taps it, then validates it.
+///
+/// The tap runs *before* [`validate_frame_length`] on purpose — a prefix that
+/// fails validation is exactly the byte sequence a framing desync leaves
+/// behind, so it has to reach the capture even though it never reaches a
+/// caller. See [`RawFrameTap`].
+fn read_header(reader: &mut impl Read, tap: &RawFrameTap) -> Result<usize, Error> {
+    let mut buffer = [0_u8; 4];
+    reader.read_exact(&mut buffer)?;
+    tap.record_length_prefix(&buffer);
+    validate_frame_length(u32::from_be_bytes(buffer) as usize)
 }
 
-pub(crate) fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {
-    let message_size = read_header(reader)?;
+pub(crate) fn read_message(reader: &mut impl Read, tap: &RawFrameTap) -> Result<Vec<u8>, Error> {
+    let message_size = read_header(reader, tap)?;
     let mut data = vec![0_u8; message_size];
     reader.read_exact(&mut data)?;
+    tap.record_body(&data);
     Ok(data)
 }
 
 impl Io for TcpSocket {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock()?;
-        read_message(&mut *reader)
+        read_message(&mut *reader, &self.tap)
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {

@@ -69,7 +69,9 @@ clap = { version = "4.5.20", features = ["derive"] }
 env_logger = "0.11.5"
 pretty_assertions = "1.4.1"
 tempfile = "3.13"
-temp-env = "0.3.6"
+# `async_closure` powers `async_with_vars`, needed by the async twin of the
+# raw-capture env-var test; `with_var` only takes a blocking closure.
+temp-env = { version = "0.3.6", features = ["async_closure"] }
 serial_test = "4.0.1"
 toml = "1.0"
 serde_yaml = "0.9"

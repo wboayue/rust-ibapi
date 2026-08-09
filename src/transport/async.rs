@@ -1,6 +1,10 @@
 //! Asynchronous transport implementation
 
 mod io;
+/// The frame reader itself, for tests that drive it over an in-memory cursor
+/// rather than a socket. Production callers reach it through `AsyncIo`.
+#[cfg(test)]
+pub(crate) use io::read_framed_message;
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
 
 use std::collections::HashMap;

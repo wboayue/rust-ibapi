@@ -1,11 +1,14 @@
 use std::sync::{Arc, Mutex};
 
+use serial_test::serial;
+
 use super::*;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{encode_raw_length, IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::transport::r#async::test_listener::spawn_handshake_listener;
+use crate::transport::raw_capture::test_support;
 
 const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
@@ -110,6 +113,36 @@ async fn connect_handshakes_against_real_socket() {
     assert_eq!(client.server_version(), SERVER_VERSION);
     assert!(client.time_zone().is_some());
     assert_eq!(client.next_order_id(), 9000);
+}
+
+/// Async twin of `client::sync_tests::raw_capture_env_var_records_framed_wire_bytes`.
+/// `AsyncTcpSocket` builds its own tap, so the blocking test says nothing about
+/// this path.
+#[tokio::test]
+#[serial]
+async fn raw_capture_env_var_records_framed_wire_bytes() {
+    let frames = handshake_frames();
+    let (addr, _h) = spawn_handshake_listener(frames.clone()).await;
+    let dir = tempfile::TempDir::new().unwrap();
+
+    temp_env::async_with_vars([("IBAPI_RAW_CAPTURE_DIR", Some(dir.path().to_str().unwrap()))], async {
+        let client = Client::connect(&addr.to_string(), 100).await.expect("Client::connect");
+        assert_eq!(client.server_version(), SERVER_VERSION);
+
+        let capture = test_support::frames(dir.path());
+        // Anything past the handshake races the dispatcher task, so this asserts
+        // a prefix of the capture rather than the whole of it.
+        assert!(
+            capture.starts_with(&encode_raw_length(&frames[0])),
+            "capture must begin with the framed handshake response, got {:?}",
+            &capture[..capture.len().min(32)]
+        );
+        assert!(
+            capture.windows(frames[1].len()).any(|window| window == frames[1]),
+            "capture must contain the next-valid-id frame"
+        );
+    })
+    .await;
 }
 
 #[tokio::test]

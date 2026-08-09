@@ -1,11 +1,14 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use serial_test::serial;
+
 use super::*;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{encode_raw_length, IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::transport::raw_capture::test_support;
 use crate::transport::sync::test_listener::spawn_handshake_listener;
 
 const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
@@ -111,6 +114,41 @@ fn connect_handshakes_against_real_socket() {
     assert_eq!(client.server_version(), SERVER_VERSION);
     assert!(client.time_zone().is_some());
     assert_eq!(client.next_order_id(), 9000);
+}
+
+/// `IBAPI_RAW_CAPTURE_DIR` has to reach the production socket, not just the
+/// frame-reading free function, and what it writes has to be the wire bytes
+/// with their length prefixes intact. That prefix is the field
+/// `MessageRecorder` discards and the one a framing desync corrupts — see
+/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+///
+/// Serial: `temp_env` mutates the process environment, so a parallel test that
+/// opened a connection would write into this directory too.
+#[test]
+#[serial]
+fn raw_capture_env_var_records_framed_wire_bytes() {
+    let frames = handshake_frames();
+    let (addr, _h) = spawn_handshake_listener(frames.clone());
+    let dir = tempfile::TempDir::new().unwrap();
+
+    temp_env::with_var("IBAPI_RAW_CAPTURE_DIR", Some(dir.path().to_str().unwrap()), || {
+        let client = Client::connect(&addr.to_string(), 100).expect("Client::connect");
+        assert_eq!(client.server_version(), SERVER_VERSION);
+
+        let capture = test_support::frames(dir.path());
+        // The handshake response is the first thing off the socket, prefix and
+        // all. Anything after it races the dispatcher, so this asserts a prefix
+        // of the capture rather than the whole of it.
+        assert!(
+            capture.starts_with(&encode_raw_length(&frames[0])),
+            "capture must begin with the framed handshake response, got {:?}",
+            &capture[..capture.len().min(32)]
+        );
+        assert!(
+            capture.windows(frames[1].len()).any(|window| window == frames[1]),
+            "capture must contain the next-valid-id frame"
+        );
+    });
 }
 
 #[test]
