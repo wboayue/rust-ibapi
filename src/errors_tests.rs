@@ -233,6 +233,7 @@ fn clone_preserves_payloaded_variants() {
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
         Error::unexpected_wire_format(&response),
+        Error::InvalidFrame("frame length 0 is shorter than the 4-byte message id".into()),
         tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),
@@ -261,6 +262,11 @@ fn error_is_non_exhaustive() {
 #[test]
 fn is_connection_lost_true_for_connection_variants() {
     assert!(Error::ConnectionReset.is_connection_lost());
+
+    // The socket is still open, but the framing has desynchronized and there is
+    // no delimiter to re-anchor on — reconnecting is the only recovery, so the
+    // dispatchers must take their reconnect branch rather than shutting down.
+    assert!(Error::InvalidFrame("bad length".to_string()).is_connection_lost());
 
     for kind in [
         io::ErrorKind::ConnectionReset,

@@ -13,6 +13,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 
 use crate::errors::Error;
+use crate::transport::common::validate_frame_length;
 
 #[async_trait]
 pub(crate) trait AsyncIo {
@@ -59,7 +60,7 @@ impl AsyncIo for AsyncTcpSocket {
         let mut reader = self.reader.lock().await;
         let mut length_bytes = [0u8; 4];
         reader.read_exact(&mut length_bytes).await?;
-        let message_length = u32::from_be_bytes(length_bytes) as usize;
+        let message_length = validate_frame_length(u32::from_be_bytes(length_bytes) as usize)?;
         let mut data = vec![0u8; message_length];
         reader.read_exact(&mut data).await?;
         Ok(data)

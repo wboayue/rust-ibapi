@@ -49,6 +49,40 @@ fn test_log_unrouted_notice_traverses_all_severities() {
 }
 
 #[test]
+fn test_validate_frame_length_accepts_the_legal_range() {
+    // Boundaries derived from the constants, not restated: a body holding only
+    // the message id is the smallest legal frame, and the C#-matching cap is
+    // inclusive (`EReader` rejects on `>` MaxMsgSize).
+    for length in [MIN_FRAME_LENGTH, MIN_FRAME_LENGTH + 1, MAX_FRAME_LENGTH - 1, MAX_FRAME_LENGTH] {
+        assert_eq!(validate_frame_length(length).unwrap(), length, "length {length} should be accepted");
+    }
+}
+
+#[test]
+fn test_validate_frame_length_rejects_bodies_too_short_for_a_message_id() {
+    for length in 0..MIN_FRAME_LENGTH {
+        let err = validate_frame_length(length).expect_err("a body too short for a message id must be rejected");
+        assert!(matches!(err, Error::InvalidFrame(_)), "short frame must raise InvalidFrame, got {err:?}");
+        assert!(err.is_connection_lost(), "a desynchronized stream must drive a reconnect");
+    }
+}
+
+#[test]
+fn test_validate_frame_length_rejects_oversized_prefix() {
+    // The desync signature: four garbage bytes read as a length. Unbounded,
+    // this sizes an allocation of up to 4 GiB and then consumes every real
+    // message until it is satisfied.
+    for length in [MAX_FRAME_LENGTH + 1, u32::MAX as usize] {
+        let err = validate_frame_length(length).expect_err("a length past the 16 MiB cap must be rejected");
+        assert!(
+            matches!(err, Error::InvalidFrame(_)),
+            "oversized frame must raise InvalidFrame, got {err:?}"
+        );
+        assert!(err.is_connection_lost(), "a desynchronized stream must drive a reconnect");
+    }
+}
+
+#[test]
 fn test_fibonacci_backoff() {
     let mut backoff = FibonacciBackoff::new(10);
 

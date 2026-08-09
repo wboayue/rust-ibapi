@@ -1774,3 +1774,29 @@ fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
     assert!(!bus.orders.contains(&200));
     Ok(())
 }
+
+/// A garbage length prefix must fail the read rather than size an allocation
+/// from it. Before this guard the oversized case reached `vec![0u8; 4 GiB]`,
+/// and on a live socket the subsequent `read_exact` would consume every real
+/// message until it was satisfied — permanently desynchronizing the stream.
+#[test]
+fn test_read_message_rejects_out_of_range_length_prefix() {
+    use crate::transport::common::{MAX_FRAME_LENGTH, MIN_FRAME_LENGTH};
+
+    for prefix in [0_u32, 3, MAX_FRAME_LENGTH as u32 + 1, u32::MAX] {
+        // Prefix only: a valid frame's body never arrives, so if the length were
+        // accepted this would block or allocate before noticing anything is wrong.
+        let framed = prefix.to_be_bytes().to_vec();
+
+        let err = read_message(&mut framed.as_slice()).expect_err("an out-of-range length prefix must be rejected");
+        assert!(
+            matches!(err, Error::InvalidFrame(_)),
+            "prefix {prefix} must raise InvalidFrame, got {err:?}"
+        );
+    }
+
+    // The smallest legal frame still reads: a bare message id with no payload.
+    let mut framed = (MIN_FRAME_LENGTH as u32).to_be_bytes().to_vec();
+    framed.extend_from_slice(&9_i32.to_be_bytes());
+    assert_eq!(read_message(&mut framed.as_slice()).unwrap(), 9_i32.to_be_bytes());
+}

@@ -16,7 +16,7 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::common::log_orphan;
+use super::common::{log_orphan, validate_frame_length};
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
 };
@@ -851,7 +851,7 @@ fn read_header(reader: &mut impl Read) -> Result<usize, Error> {
     reader.read_exact(buffer)?;
     let mut reader = Cursor::new(buffer);
     let count = reader.read_u32::<BigEndian>()?;
-    Ok(count as usize)
+    validate_frame_length(count as usize)
 }
 
 pub(crate) fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {

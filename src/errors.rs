@@ -115,6 +115,24 @@ pub enum Error {
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
 
+    /// A frame arrived whose length prefix cannot describe a TWS message:
+    /// shorter than the 4-byte message id, or larger than the 16 MiB ceiling
+    /// (`0x00FFFFFF`) that the official client enforces as
+    /// `Constants.MaxMsgSize`.
+    ///
+    /// The length prefix is positional — there is no delimiter or magic value
+    /// to re-anchor on — so a single bad prefix desynchronizes every subsequent
+    /// read on that socket. Left unchecked, a garbage length is either a
+    /// multi-gigabyte allocation or a read that silently consumes (and
+    /// destroys) every real message until it is satisfied. Both end in
+    /// permanently mis-framed messages that still decode without error, so this
+    /// is deliberately raised as a hard framing fault rather than skipped.
+    ///
+    /// Treated as [`is_connection_lost`](Self::is_connection_lost): reconnecting
+    /// is the only way to re-anchor the stream.
+    #[error("InvalidFrame: {0}")]
+    InvalidFrame(String),
+
     /// An IB notice frame (TWS error/warning/system message) received in
     /// response to a request. Carries the full typed [`Notice`] — code,
     /// message, optional timestamp, and advanced-order-reject JSON.
@@ -191,13 +209,15 @@ impl Error {
         Error::Parse(i, String::new(), format!("expected {label} and found end of message"))
     }
 
-    /// Returns `true` if this error means the TWS/Gateway connection was lost
-    /// mid-stream and the client should reconnect, rather than retry the in-flight
+    /// Returns `true` if this error means the TWS/Gateway stream is unusable in
+    /// place and the client should reconnect, rather than retry the in-flight
     /// request.
     ///
     /// Matches [`Error::ConnectionReset`] and connection-kind [`Error::Io`] errors
     /// (broken pipe, unexpected EOF, connection reset/abort) — recoverable losses
-    /// where re-establishing the connection is the right response.
+    /// where re-establishing the connection is the right response — plus
+    /// [`Error::InvalidFrame`], where the socket is still open but the framing has
+    /// desynchronized and only a fresh connection can re-anchor it.
     ///
     /// Returns `false` for failures reconnecting cannot recover, so a read loop can
     /// branch on them separately to stop retrying: intentional teardown
@@ -234,7 +254,7 @@ impl Error {
                 io_err.kind(),
                 ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
             ),
-            Error::ConnectionReset => true,
+            Error::ConnectionReset | Error::InvalidFrame(_) => true,
             _ => false,
         }
     }
@@ -275,6 +295,7 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,
             Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),

@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use log::{error, info, warn};
 
+use crate::errors::Error;
 use crate::messages::{ConnectivityStatus, Notice, CONNECTIVITY_RESTORED_DATA_LOST_CODE, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE};
 use crate::subscriptions::common::RoutedItem;
 
@@ -49,6 +50,51 @@ pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
 
 /// Maximum number of reconnection attempts
 pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
+
+/// Largest frame body rust-ibapi will accept from a length prefix, matching the
+/// official client's `Constants.MaxMsgSize` (`0x00FFFFFF`, ~16 MiB), which
+/// `EReader.readSingleMessage` enforces with `BAD_LENGTH`.
+///
+/// Nothing about the wire format bounds the 4-byte big-endian prefix on its
+/// own, so without this a desynchronized read interprets payload bytes as a
+/// length of up to 4 GiB.
+pub(crate) const MAX_FRAME_LENGTH: usize = 0x00FF_FFFF;
+
+/// Smallest valid frame body: every TWS frame is `[4-byte BE msg_id][payload]`,
+/// so a body that cannot hold the message id is malformed by definition. An
+/// empty payload after the id is legal, hence `<` rather than `<=`.
+pub(crate) const MIN_FRAME_LENGTH: usize = 4;
+
+/// Reject a length prefix that cannot describe a TWS frame, before it is used
+/// to size an allocation or drive a `read_exact`.
+///
+/// Both failure directions desynchronize the stream permanently rather than
+/// corrupting one message, which is why this returns a hard
+/// [`Error::InvalidFrame`] instead of skipping the frame:
+///
+/// - **Too large** — `read_exact` blocks until that many bytes arrive,
+///   consuming and destroying every real message in between, then yields one
+///   bogus frame; the next read starts at an arbitrary boundary.
+/// - **Too short** — the body cannot carry a message id, so the parse would
+///   index past the end.
+///
+/// A mis-framed protobuf payload still decodes without error (prost skips
+/// unrecognized field numbers), so a silently-accepted bad length surfaces as
+/// plausible-looking wrong values rather than a failure. See
+/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+pub(crate) fn validate_frame_length(length: usize) -> Result<usize, Error> {
+    if length > MAX_FRAME_LENGTH {
+        return Err(Error::InvalidFrame(format!(
+            "frame length {length} exceeds maximum {MAX_FRAME_LENGTH}; the stream is desynchronized"
+        )));
+    }
+    if length < MIN_FRAME_LENGTH {
+        return Err(Error::InvalidFrame(format!(
+            "frame length {length} is shorter than the {MIN_FRAME_LENGTH}-byte message id; the stream is desynchronized"
+        )));
+    }
+    Ok(length)
+}
 
 /// Fibonacci backoff for reconnection attempts
 pub(crate) struct FibonacciBackoff {
