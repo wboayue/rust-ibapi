@@ -123,11 +123,20 @@ impl<S: Stream> Connection<S> {
 
             match self.socket.reconnect() {
                 Ok(_) => {
-                    info!("reconnected !!!");
                     self.reset_connection_metadata();
-                    self.establish_connection()?;
-
-                    return Ok(());
+                    match self.establish_connection() {
+                        Ok(()) => {
+                            info!("reconnected");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            info!(
+                                "reconnection attempt {}/{} failed while establishing session: {e}",
+                                i + 1,
+                                self.max_retries
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     info!("reconnection attempt {}/{} failed: {e}", i + 1, self.max_retries);

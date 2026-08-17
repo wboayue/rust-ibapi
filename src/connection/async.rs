@@ -140,10 +140,20 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
             match self.socket.reconnect().await {
                 Ok(_) => {
-                    info!("reconnected !!!");
                     self.reset_connection_metadata().await;
-                    self.establish_connection().await?;
-                    return Ok(());
+                    match self.establish_connection().await {
+                        Ok(()) => {
+                            info!("reconnected");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            info!(
+                                "reconnection attempt {}/{} failed while establishing session: {e}",
+                                i + 1,
+                                MAX_RECONNECT_ATTEMPTS
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RECONNECT_ATTEMPTS);

@@ -78,6 +78,26 @@ fn establish_connection_populates_metadata() {
 }
 
 #[test]
+fn reconnect_retries_after_transient_handshake_failure() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+
+    let too_old = server_versions::PROTOBUF_REST_MESSAGES_3 - 1;
+    stream.push_inbound(format!("{}\020240120 12:00:00 EST\0", too_old).into_bytes());
+    push_handshake(&stream);
+
+    connection.reconnect().expect("reconnect must retry a failed handshake");
+
+    assert_eq!(connection.server_version(), SERVER_VERSION);
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+}
+
+#[test]
 fn disconnect_completes() {
     let (client, stream) = make_client();
 
