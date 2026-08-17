@@ -273,6 +273,7 @@ async fn test_warning_with_request_id_delivers_notice() {
     let item = next_routed(&mut sub).await;
     match item {
         RoutedItem::Notice(notice) => {
+            assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 2104);
             assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
         }
@@ -328,6 +329,7 @@ async fn test_hard_error_with_request_id_terminates_subscription() {
     let item = next_routed(&mut sub).await;
     match item {
         RoutedItem::Error(Error::Notice(notice)) => {
+            assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 200);
             assert_eq!(notice.message, "No security definition found");
         }
@@ -384,6 +386,7 @@ async fn test_request_less_hard_error_fails_one_shot_and_spares_stream() {
     );
     // Global notice stream still observes it.
     let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.request_id, None);
     assert_eq!(notice.code, 321);
 }
 
@@ -842,6 +845,37 @@ async fn test_order_update_stream_receives_open_order() {
 
     next_message(&mut order_sub).await;
     next_message(&mut stream_sub).await;
+}
+
+/// A targeted hard error reaches the order-update stream as a notice so the
+/// stream can continue with later order updates.
+#[tokio::test]
+async fn test_order_update_stream_receives_order_error_as_notice() {
+    let (stream, bus) = make_bus();
+    let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
+
+    stream.push_inbound(error_frame(42, 201, "Order rejected"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_routed(&mut stream_sub).await {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 201);
+            assert_eq!(notice.message, "Order rejected");
+        }
+        other => panic!("expected RoutedItem::Notice, received {other:?}"),
+    }
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(matches!(next_routed(&mut stream_sub).await, RoutedItem::Response(_)));
 }
 
 /// Routed-but-orphan notice (real request_id, no matching sub) takes the

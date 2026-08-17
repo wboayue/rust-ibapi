@@ -993,6 +993,7 @@ fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
     let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
     match item {
         RoutedItem::Notice(notice) => {
+            assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 2104);
             assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
         }
@@ -1051,6 +1052,7 @@ fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error
     let item = sub.next_timeout_routed(TICK).expect("error not delivered");
     match item {
         RoutedItem::Error(Error::Notice(notice)) => {
+            assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 200);
             assert_eq!(notice.message, "No security definition found");
         }
@@ -1105,6 +1107,7 @@ fn test_request_less_hard_error_fails_one_shot_and_spares_stream() -> Result<(),
     );
     // Global notice stream still observes it.
     let notice = notice_stream.next_timeout(TICK).expect("notice stream missed hard error");
+    assert_eq!(notice.request_id, None);
     assert_eq!(notice.code, 321);
     Ok(())
 }
@@ -1608,6 +1611,41 @@ fn test_order_update_stream_receives_open_order() -> Result<(), Error> {
 
     assert!(order_sub.next_timeout(TICK).is_some(), "order sub missed open order");
     assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+    Ok(())
+}
+
+/// A targeted hard error reaches the order-update stream as a notice so the
+/// stream can continue with later order updates.
+#[test]
+fn test_order_update_stream_receives_order_error_as_notice() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let stream_sub = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(error_frame(42, 201, "Order rejected"));
+    bus.dispatch()?;
+
+    match stream_sub.next_timeout_routed(TICK).expect("update stream missed order error") {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 201);
+            assert_eq!(notice.message, "Order rejected");
+        }
+        other => panic!("expected RoutedItem::Notice, received {other:?}"),
+    }
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
+    bus.dispatch()?;
+
+    assert!(
+        matches!(stream_sub.next_timeout_routed(TICK), Some(RoutedItem::Response(_))),
+        "update stream did not remain open"
+    );
     Ok(())
 }
 

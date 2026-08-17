@@ -19,6 +19,7 @@ use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
 use super::raw_capture::RawFrameTap;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
+    UNSPECIFIED_REQUEST_ID,
 };
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -333,7 +334,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
-            RoutingDecision::Error(payload) => self.route_error_message(&message, payload),
+            RoutingDecision::Error(payload) => self.route_error_message(payload),
             RoutingDecision::ByOrderId(_) => {
                 // Order-related messages
                 self.process_orders(message);
@@ -350,8 +351,12 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// Route an error frame by severity and request id. Mirrors the async
     /// transport's `route_error_message`.
-    fn route_error_message(&self, message: &ResponseMessage, payload: DecodedError) {
-        let sent_to_update_stream = self.send_order_update(message);
+    fn route_error_message(&self, payload: DecodedError) {
+        let sent_to_update_stream = if payload.request_id == UNSPECIFIED_REQUEST_ID {
+            false
+        } else {
+            self.send_order_update_item(RoutedItem::Notice(Notice::from(payload.clone())))
+        };
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
                 super::common::log_unrouted_notice(&notice);
@@ -505,9 +510,13 @@ impl<S: Stream> TcpMessageBus<S> {
     // Sends an order update message to the order update stream if it exists.
     // Returns true if the message was sent to the order update stream.
     fn send_order_update(&self, message: &ResponseMessage) -> bool {
+        self.send_order_update_item(message.clone().into())
+    }
+
+    fn send_order_update_item(&self, item: RoutedItem) -> bool {
         if let Ok(order_update_stream) = self.order_update_stream.lock() {
             if let Some(sender) = order_update_stream.as_ref() {
-                if let Err(e) = sender.send(message.clone().into()) {
+                if let Err(e) = sender.send(item) {
                     warn!("error sending to order update stream: {e}");
                     return false;
                 }
