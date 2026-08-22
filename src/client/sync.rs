@@ -96,8 +96,16 @@ impl Client {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
+        max_reconnect_attempts: u32,
     ) -> Result<Client, Error> {
-        let connection = Connection::with_pieces(address, client_id, tcp_no_delay, startup_callback, notice_broadcaster)?;
+        let connection = Connection::with_pieces(
+            address,
+            client_id,
+            tcp_no_delay,
+            startup_callback,
+            notice_broadcaster,
+            max_reconnect_attempts,
+        )?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);

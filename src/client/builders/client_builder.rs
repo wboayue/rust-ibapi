@@ -39,6 +39,7 @@ use std::sync::Arc;
 
 use crate::connection::common::StartupMessage;
 use crate::errors::Error;
+use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 /// Configuration state shared by [`sync_impl::ClientBuilder`] and
 /// [`async_impl::ClientBuilder`]. Centralizes the field set and the
@@ -51,6 +52,8 @@ pub(super) struct BuilderState {
     pub(super) client_id: Option<i32>,
     pub(super) tcp_no_delay: bool,
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    /// `None` keeps the [`MAX_RECONNECT_ATTEMPTS`] default.
+    pub(super) max_reconnect_attempts: Option<u32>,
 }
 
 /// Output of [`BuilderState::validate`]: same fields with `address` and
@@ -61,6 +64,7 @@ pub(super) struct ValidatedPieces {
     pub(super) client_id: i32,
     pub(super) tcp_no_delay: bool,
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    pub(super) max_reconnect_attempts: u32,
 }
 
 impl BuilderState {
@@ -74,6 +78,7 @@ impl BuilderState {
                 .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
             tcp_no_delay: self.tcp_no_delay,
             startup_callback: self.startup_callback,
+            max_reconnect_attempts: self.max_reconnect_attempts.unwrap_or(MAX_RECONNECT_ATTEMPTS),
         })
     }
 }
@@ -141,6 +146,22 @@ pub mod sync_impl {
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
             self.state.tcp_no_delay = enabled;
+            self
+        }
+
+        /// Overrides the default reconnection attempt count (see
+        /// `MAX_RECONNECT_ATTEMPTS`). Useful when TWS/IB Gateway may be
+        /// unreachable for longer, such as when a scheduled nightly restart
+        /// needs a manual re-login.
+        pub fn max_reconnect_attempts(mut self, attempts: u32) -> Self {
+            self.state.max_reconnect_attempts = Some(attempts);
+            self
+        }
+
+        /// Disable the `MAX_RECONNECT_ATTEMPTS` reconnection limit. Equivalent to
+        /// [`Self::max_reconnect_attempts`] with `u32::MAX`.
+        pub fn reconnect_forever(mut self) -> Self {
+            self.state.max_reconnect_attempts = Some(u32::MAX);
             self
         }
 
@@ -225,6 +246,7 @@ pub mod sync_impl {
                 pieces.tcp_no_delay,
                 pieces.startup_callback,
                 broadcaster,
+                pieces.max_reconnect_attempts,
             )
         }
     }
@@ -302,6 +324,22 @@ pub mod async_impl {
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
             self.state.tcp_no_delay = enabled;
+            self
+        }
+
+        /// Overrides the default reconnection attempt count (see
+        /// `MAX_RECONNECT_ATTEMPTS`). Useful when TWS/IB Gateway may be
+        /// unreachable for longer, such as when a scheduled nightly restart
+        /// needs a manual re-login.
+        pub fn max_reconnect_attempts(mut self, attempts: u32) -> Self {
+            self.state.max_reconnect_attempts = Some(attempts);
+            self
+        }
+
+        /// Disable the `MAX_RECONNECT_ATTEMPTS` reconnection limit. Equivalent to
+        /// [`Self::max_reconnect_attempts`] with `u32::MAX`.
+        pub fn reconnect_forever(mut self) -> Self {
+            self.state.max_reconnect_attempts = Some(u32::MAX);
             self
         }
 
@@ -386,7 +424,15 @@ pub mod async_impl {
 
         async fn connect_with_sender(self, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
             let pieces = self.state.validate()?;
-            Client::connect_with_pieces(&pieces.address, pieces.client_id, pieces.tcp_no_delay, pieces.startup_callback, sender).await
+            Client::connect_with_pieces(
+                &pieces.address,
+                pieces.client_id,
+                pieces.tcp_no_delay,
+                pieces.startup_callback,
+                sender,
+                pieces.max_reconnect_attempts,
+            )
+            .await
         }
     }
 }

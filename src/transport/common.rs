@@ -85,8 +85,11 @@ pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &d
     }
 }
 
-/// Maximum number of reconnection attempts
-pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
+/// Default maximum number of reconnection attempts.
+///
+/// Overridable per client via `ClientBuilder::max_reconnect_attempts` /
+/// `ClientBuilder::reconnect_forever`.
+pub(crate) const MAX_RECONNECT_ATTEMPTS: u32 = 20;
 
 /// Largest frame body rust-ibapi will accept from a length prefix, matching the
 /// official client's `Constants.MaxMsgSize` (`0x00FFFFFF`, ~16 MiB), which

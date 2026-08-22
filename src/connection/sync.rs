@@ -23,7 +23,7 @@ pub struct Connection<S: Stream> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
-    pub(crate) max_retries: i32,
+    pub(crate) max_retries: u32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
     /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
@@ -58,9 +58,11 @@ impl Connection<TcpSocket> {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
+        max_reconnect_attempts: u32,
     ) -> Result<Self, Error> {
         let socket = TcpSocket::connect(address, tcp_no_delay)?;
-        let connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
+        let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
+        connection.max_retries = max_reconnect_attempts;
         connection.establish_connection()?;
         Ok(connection)
     }

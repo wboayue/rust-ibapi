@@ -104,8 +104,10 @@ impl Client {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_sender: broadcast::Sender<Notice>,
+        max_reconnect_attempts: u32,
     ) -> Result<Client, Error> {
-        let connection = AsyncConnection::with_pieces(address, client_id, tcp_no_delay, startup_callback, notice_sender).await?;
+        let connection =
+            AsyncConnection::with_pieces(address, client_id, tcp_no_delay, startup_callback, notice_sender, max_reconnect_attempts).await?;
         let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);
