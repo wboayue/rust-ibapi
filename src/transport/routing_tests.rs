@@ -282,6 +282,57 @@ fn test_classify_error_unrouted_hard_error_fails_one_shots() {
 }
 
 #[test]
+fn test_classify_error_codeless_notice_is_notice_only() {
+    // A pacing notice whose  protobuf error_code field is absent. It decodes to
+    // code 0, which is outside WARNING_CODE_RANGE. It must still classify as a
+    // warning, not fail every in-flight one-shot.
+    let envelope = crate::proto::ErrorMessage {
+        id: None,
+        error_time: None,
+        error_code: None,
+        error_msg: Some("Warning: Approaching max rate of 50 messages per second (42)".to_string()),
+        advanced_order_reject_json: None,
+    };
+    let mut raw_bytes = Vec::new();
+    prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
+    let message = proto_response(IncomingMessages::Error, raw_bytes);
+
+    let payload = match determine_routing(&message) {
+        RoutingDecision::Error(payload) => payload,
+        routing => panic!("Expected Error routing, got {routing:?}"),
+    };
+    assert_eq!(payload.request_id, UNSPECIFIED_REQUEST_ID);
+    assert_eq!(payload.error_code, 0);
+
+    match classify_error(payload) {
+        ErrorDisposition::NoticeOnly(notice) => {
+            assert_eq!(notice.code, 0);
+            assert_eq!(notice.message, "Warning: Approaching max rate of 50 messages per second (42)");
+        }
+        other => panic!("expected NoticeOnly, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_codeless_routed_is_notice() {
+    // A code-less frame carrying a request id is delivered to that
+    // subscription as a Notice, not an Error that would terminate it.
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: 0,
+        error_message: "Warning: Approaching max rate of 50 messages per second (42)".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, 0);
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_classify_error_routed_warning_is_notice() {
     let payload = DecodedError {
         request_id: 42,

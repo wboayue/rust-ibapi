@@ -1,5 +1,7 @@
 //! Common message routing logic for sync and async implementations
 
+use log::warn;
+
 use crate::errors::Error;
 use crate::messages::{is_warning_message, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES};
 
@@ -90,7 +92,16 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     }
 
     if message_type == IncomingMessages::Error {
-        let decoded = message.raw_bytes().and_then(decode_error_envelope).unwrap_or_default();
+        let raw_bytes = message.raw_bytes();
+        let decoded = raw_bytes.and_then(decode_error_envelope).unwrap_or_else(|| {
+            if let Some(bytes) = raw_bytes {
+                warn!(
+                    "error frame did not decode as an ErrorMessage proto ({} bytes); routing it with default fields",
+                    bytes.len()
+                );
+            }
+            DecodedError::default()
+        });
         return RoutingDecision::Error(decoded);
     }
 
@@ -208,7 +219,11 @@ pub(crate) enum ErrorDisposition {
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
     let request_id = payload.request_id;
-    let is_warning = is_warning_error(payload.error_code, &payload.error_message);
+    // A missing error_code decodes to 0. Such code-less frames (for example,
+    // "Warning: Approaching max rate of 50 messages per second") are
+    // informational notices. We route them as warnings, not hard errors that
+    // would fail in-flight one-shots.
+    let is_warning = payload.error_code == 0 || is_warning_error(payload.error_code, &payload.error_message);
 
     if request_id == UNSPECIFIED_REQUEST_ID {
         let notice = Notice::from(payload.clone());
