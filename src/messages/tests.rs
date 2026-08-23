@@ -1211,8 +1211,10 @@ fn test_notice_category_partition() {
         (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200
         (*ORDER_REJECTION_CODE_RANGE.start() + 1, NoticeCategory::OrderRejection), // 201 — hard rejection
         (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
-        (DATA_ADVISORY_CODES[0], NoticeCategory::DataAdvisory),
-        (DATA_ADVISORY_CODES[1], NoticeCategory::DataAdvisory),
+        (2188, NoticeCategory::DataAdvisory),
+        (10089, NoticeCategory::DataAdvisory),
+        (10090, NoticeCategory::DataAdvisory),
+        (10167, NoticeCategory::DataAdvisory),
         (100, NoticeCategory::Error),
         (502, NoticeCategory::Error),
         (10000, NoticeCategory::Error),
@@ -1288,8 +1290,12 @@ fn test_notice_data_advisory() {
         assert!(!notice.is_error(), "code {code} should not be an error");
         assert_eq!(notice.category(), NoticeCategory::DataAdvisory, "code {code} miscategorised");
 
-        // Neighboring codes are real errors, not advisories.
+        // Neighboring codes are real errors, not advisories (10089 and
+        // 10090 are adjacent, so skip neighbors that are advisories too).
         for neighbor in [code - 1, code + 1] {
+            if DATA_ADVISORY_CODES.contains(&neighbor) {
+                continue;
+            }
             let notice = notice_with_code(neighbor);
             assert!(!notice.is_data_advisory(), "code {neighbor} should not be a data advisory");
             assert!(notice.is_error(), "code {neighbor} should be an error");
