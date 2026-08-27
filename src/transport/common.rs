@@ -139,15 +139,14 @@ impl FibonacciBackoff {
     }
 
     pub(crate) fn next_delay(&mut self) -> Duration {
-        let next = self.previous + self.current;
-        self.previous = self.current;
-        self.current = next;
-
-        if next > self.max {
-            Duration::from_secs(self.max)
-        } else {
-            Duration::from_secs(next)
+        // Note: `max` must clamp `previous` and `current` (not just the return value)
+        // because u64 will overflow at approx fib(94).
+        if self.current < self.max {
+            let next = (self.previous + self.current).min(self.max);
+            self.previous = self.current;
+            self.current = next;
         }
+        Duration::from_secs(self.current)
     }
 }
 
