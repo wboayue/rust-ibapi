@@ -72,3 +72,10 @@ fn is_active_and_is_terminal_partition_eight_of_nine_variants() {
         }
     }
 }
+
+#[test]
+fn liquidity_preserves_unknown_wire_code() {
+    assert_eq!(Liquidity::from(0), Liquidity::None);
+    assert_eq!(Liquidity::from(4), Liquidity::Unknown(4));
+    assert_eq!(Liquidity::from(-1), Liquidity::Unknown(-1));
+}

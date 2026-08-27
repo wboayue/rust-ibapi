@@ -1468,6 +1468,7 @@ pub struct CommissionReport {
 
 /// Liquidity types for executions.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
     /// No liquidity information.
@@ -1479,15 +1480,18 @@ pub enum Liquidity {
     RemovedLiquidity = 2,
     /// Liquidity was routed out.
     LiquidityRoutedOut = 3,
+    /// Liquidity code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl From<i32> for Liquidity {
     fn from(val: i32) -> Self {
         match val {
+            0 => Liquidity::None,
             1 => Liquidity::AddedLiquidity,
             2 => Liquidity::RemovedLiquidity,
             3 => Liquidity::LiquidityRoutedOut,
-            _ => Liquidity::None,
+            value => Liquidity::Unknown(value),
         }
     }
 }
