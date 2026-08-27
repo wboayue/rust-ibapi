@@ -29,6 +29,7 @@ use time_tz::{self, PrimitiveDateTimeExt, Tz};
 // A request-scoped IB notice for tests (no error_time / advanced-reject payload).
 fn test_notice(code: i32, message: &str) -> Notice {
     Notice {
+        request_id: None,
         code,
         message: message.into(),
         error_time: None,

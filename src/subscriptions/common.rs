@@ -18,8 +18,10 @@ use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessag
 pub enum SubscriptionItem<T> {
     /// A successfully decoded payload from the subscription stream.
     Data(T),
-    /// A non-fatal IB notice (warning codes 2100..=2169) bound to this subscription.
-    /// Receiving a notice does not terminate the stream.
+    /// A non-fatal IB notice bound to this subscription: warnings (codes
+    /// 2100..=2169), warning-form order messages (code 399), and — on the
+    /// order-update stream — order-bound errors. Receiving a notice does not
+    /// terminate the stream.
     Notice(Notice),
 }
 

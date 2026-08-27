@@ -48,6 +48,7 @@ fn expect_data<T: std::fmt::Debug>(item: Option<Result<SubscriptionItem<T>, Erro
 /// A request-scoped IB notice for tests (no error_time / advanced-reject payload).
 fn test_notice(code: i32, message: &str) -> Notice {
     Notice {
+        request_id: None,
         code,
         message: message.into(),
         error_time: None,

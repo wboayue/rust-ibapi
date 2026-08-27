@@ -379,7 +379,12 @@ impl Client {
     /// - `OpenOrder`: Complete order details including contract and order parameters
     /// - `ExecutionData`: Details about individual trade executions
     /// - `CommissionReport`: Commission information for executed trades
-    /// - `Message`: Notices or error messages related to orders
+    ///
+    /// Order-bound TWS errors and warnings (e.g. rejections, code 399 order
+    /// messages) arrive as [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem),
+    /// not as `OrderUpdate` variants. They surface via `iter()` / `next()` as
+    /// below; `iter_data()` drops them (logging at `warn!` level), so match on
+    /// notices explicitly when monitoring fire-and-forget orders for rejection.
     ///
     /// # Errors
     ///
@@ -391,37 +396,25 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::orders::OrderUpdate;
+    /// use ibapi::subscriptions::SubscriptionItem;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// // Create order update stream
     /// let updates = client.order_update_stream().expect("failed to create stream");
     ///
-    /// // Process order updates
-    /// for update in updates.iter_data() {
-    ///     match update? {
-    ///         OrderUpdate::OrderStatus(status) => {
+    /// // `iter()` surfaces both data and notices; `iter_data()` would drop notices.
+    /// for item in updates.iter() {
+    ///     match item? {
+    ///         SubscriptionItem::Data(OrderUpdate::OrderStatus(status)) => {
     ///             println!("Order {} status: {} - filled: {}/{}",
     ///                 status.order_id, status.status, status.filled, status.remaining);
-    ///         },
-    ///         OrderUpdate::OpenOrder(order_data) => {
-    ///             println!("Open order {}: {} {} @ {}",
-    ///                 order_data.order.order_id,
-    ///                 order_data.order.action,
-    ///                 order_data.order.total_quantity,
-    ///                 order_data.order.limit_price.unwrap_or(0.0));
-    ///         },
-    ///         OrderUpdate::ExecutionData(exec) => {
-    ///             println!("Execution: {} {} @ {} on {}",
-    ///                 exec.execution.side,
-    ///                 exec.execution.shares,
-    ///                 exec.execution.price,
-    ///                 exec.execution.exchange);
-    ///         },
-    ///         OrderUpdate::CommissionReport(report) => {
-    ///             println!("Commission: ${} for execution {}",
-    ///                 report.commission, report.execution_id);
-    ///         },
+    ///         }
+    ///         SubscriptionItem::Data(update) => println!("update: {update:?}"),
+    ///         SubscriptionItem::Notice(notice) if notice.is_error() => {
+    ///             eprintln!("order {:?} rejected: {}", notice.request_id, notice.message);
+    ///         }
+    ///         SubscriptionItem::Notice(notice) => println!("notice: {}", notice.message),
     ///     }
     /// }
     /// # Ok::<(), ibapi::Error>(())

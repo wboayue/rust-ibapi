@@ -178,30 +178,64 @@ fn test_determine_routing_shared_message() {
 #[test]
 fn test_is_warning_error() {
     // Test range boundaries
-    assert!(is_warning_error(2100));
-    assert!(is_warning_error(2169));
+    assert!(is_warning_error(2100, ""));
+    assert!(is_warning_error(2169, ""));
 
     // Test some values in the middle
-    assert!(is_warning_error(2119));
-    assert!(is_warning_error(2150));
+    assert!(is_warning_error(2119, ""));
+    assert!(is_warning_error(2150, ""));
 
     // Test values outside the range
-    assert!(!is_warning_error(2099));
-    assert!(!is_warning_error(2170));
-    assert!(!is_warning_error(200));
-    assert!(!is_warning_error(2200));
+    assert!(!is_warning_error(2099, ""));
+    assert!(!is_warning_error(2170, ""));
+    assert!(!is_warning_error(200, ""));
+    assert!(!is_warning_error(2200, ""));
 }
 
 #[test]
 fn test_is_warning_error_data_advisory_codes() {
     // Delayed-data advisories: the request proceeds and data follows.
     for code in DATA_ADVISORY_CODES {
-        assert!(is_warning_error(code), "advisory code {code} should route as a warning");
+        assert!(is_warning_error(code, ""), "advisory code {code} should route as a warning");
 
         // Neighboring codes are real errors, not advisories.
-        assert!(!is_warning_error(code - 1), "code {} should not route as a warning", code - 1);
-        assert!(!is_warning_error(code + 1), "code {} should not route as a warning", code + 1);
+        assert!(!is_warning_error(code - 1, ""), "code {} should not route as a warning", code - 1);
+        assert!(!is_warning_error(code + 1, ""), "code {} should not route as a warning", code + 1);
     }
+}
+
+#[test]
+fn test_is_warning_error_classifies_order_message_from_text() {
+    assert!(is_warning_error(
+        399,
+        "Order Message:\nSELL 1 ES DEC'26\nWarning: Your order will not be placed at the exchange until 2026-08-17 08:30:00 US/Central.",
+    ));
+    assert!(!is_warning_error(399, "Order Message:\nOrder cannot be transmitted"));
+}
+
+#[test]
+fn test_order_update_notice_gating() {
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: 201,
+        error_message: "Order rejected".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    };
+
+    let notice = order_update_notice(&payload, false).expect("order-bound error should produce a notice");
+    assert_eq!(notice.request_id, Some(42));
+    assert_eq!(notice.code, 201);
+
+    // Owned by a data-request subscription: nothing for the order stream.
+    assert!(order_update_notice(&payload, true).is_none());
+
+    // Request-less: nothing for the order stream regardless of ownership.
+    let request_less = DecodedError {
+        request_id: UNSPECIFIED_REQUEST_ID,
+        ..payload
+    };
+    assert!(order_update_notice(&request_less, false).is_none());
 }
 
 #[test]
