@@ -1370,10 +1370,11 @@ impl Notice {
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
     ///
-    /// Data advisories (codes 10089, 10167) announce that a request proceeded
-    /// with a fallback — delayed market data instead of real-time — rather
-    /// than failing. The requested data still follows, so the subscription
-    /// stays open and the notice is informational, not an error.
+    /// Data advisories (codes 2188, 10089, 10167) announce that a request
+    /// proceeded with a fallback — delayed market data instead of real-time,
+    /// or historical data without its up-to-the-second tail — rather than
+    /// failing. The requested data still follows, so the subscription stays
+    /// open and the notice is informational, not an error.
     pub fn is_data_advisory(&self) -> bool {
         DATA_ADVISORY_CODES.contains(&self.code)
     }
