@@ -231,11 +231,12 @@ async fn reconnect_retries_after_transient_handshake_failure() {
 }
 
 /// When the socket refuses reconnects through every Fibonacci attempt, the
-/// loop exits with `Error::ConnectionFailed`. Pre-arming with exactly
+/// loop exits with the *last attempt's* error — not a generic
+/// `Error::ConnectionFailed` that hides the cause. Pre-arming with exactly
 /// `MAX_RECONNECT_ATTEMPTS` failures binds the test to the loop's exit
 /// condition (rather than a hardcoded count).
 #[tokio::test]
-async fn reconnect_returns_connection_failed_after_exhausting_attempts() {
+async fn reconnect_returns_last_error_after_exhausting_attempts() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
 
@@ -245,7 +246,10 @@ async fn reconnect_returns_connection_failed_after_exhausting_attempts() {
     stream.set_reconnect_failures(MAX_RECONNECT_ATTEMPTS as usize);
 
     let err = connection.reconnect().await.expect_err("must give up after MAX_RECONNECT_ATTEMPTS");
-    assert!(matches!(err, crate::errors::Error::ConnectionFailed), "got {err:?}");
+    assert!(
+        matches!(&err, crate::errors::Error::Simple(msg) if msg == "simulated reconnect failure"),
+        "got {err:?}"
+    );
 }
 
 /// During a reconnect, any caller of `connection_metadata()` must see cleared

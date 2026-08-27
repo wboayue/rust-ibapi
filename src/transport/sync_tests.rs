@@ -401,9 +401,11 @@ fn test_reconnect_failed() -> Result<(), Error> {
 
     let _ = connection.read_message();
 
+    // Exhausted attempts surface the last attempt's error, not a generic
+    // `Error::ConnectionFailed`.
     match connection.reconnect() {
-        Err(Error::ConnectionFailed) => Ok(()),
-        _ => panic!(""),
+        Err(Error::Io(e)) if e.kind() == ErrorKind::ConnectionRefused => Ok(()),
+        other => panic!("expected the last reconnect error, got {other:?}"),
     }
 }
 
