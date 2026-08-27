@@ -179,6 +179,14 @@ pub(crate) fn is_warning_error(error_code: i32, error_message: &str) -> bool {
 /// Request ID for unspecified errors
 pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
+/// Notice to copy onto the order-update stream for an error frame, or `None`
+/// when the frame is not order-bound: request-less frames and frames whose id
+/// is owned by a data-request subscription carry nothing an order consumer
+/// should see.
+pub(crate) fn order_update_notice(payload: &DecodedError, id_owned_by_data_request: bool) -> Option<Notice> {
+    (payload.request_id != UNSPECIFIED_REQUEST_ID && !id_owned_by_data_request).then(|| Notice::from(payload.clone()))
+}
+
 /// The outcome of classifying an inbound error frame.
 ///
 /// The *policy* (which arm applies) is centralised here; each transport

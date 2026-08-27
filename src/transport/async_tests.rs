@@ -878,6 +878,25 @@ async fn test_order_update_stream_receives_order_error_as_notice() {
     assert!(matches!(next_routed(&mut stream_sub).await, RoutedItem::Response(_)));
 }
 
+/// An error owned by a data-request subscription stays on that subscription:
+/// the order-update stream must not receive a copy.
+#[tokio::test]
+async fn test_order_update_stream_skips_data_request_error() {
+    let (stream, bus) = make_bus();
+    let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
+    let mut sub = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = next_routed(&mut sub).await;
+    assert!(matches!(item, RoutedItem::Error(Error::Notice(_))), "got: {item:?}");
+    assert!(
+        stream_sub.try_next_routed().is_none(),
+        "order-update stream must not receive a data-request error"
+    );
+}
+
 /// Routed-but-orphan notice (real request_id, no matching sub) takes the
 /// `log_orphan` path, NOT the global notice stream.
 #[tokio::test]

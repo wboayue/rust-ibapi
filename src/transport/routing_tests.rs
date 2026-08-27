@@ -214,6 +214,31 @@ fn test_is_warning_error_classifies_order_message_from_text() {
 }
 
 #[test]
+fn test_order_update_notice_gating() {
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: 201,
+        error_message: "Order rejected".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    };
+
+    let notice = order_update_notice(&payload, false).expect("order-bound error should produce a notice");
+    assert_eq!(notice.request_id, Some(42));
+    assert_eq!(notice.code, 201);
+
+    // Owned by a data-request subscription: nothing for the order stream.
+    assert!(order_update_notice(&payload, true).is_none());
+
+    // Request-less: nothing for the order stream regardless of ownership.
+    let request_less = DecodedError {
+        request_id: UNSPECIFIED_REQUEST_ID,
+        ..payload
+    };
+    assert!(order_update_notice(&request_less, false).is_none());
+}
+
+#[test]
 fn test_classify_error_unrouted_warning_is_notice_only() {
     let payload = DecodedError {
         error_code: 2104,

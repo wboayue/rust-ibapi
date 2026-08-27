@@ -18,8 +18,8 @@ use crate::connection::sync::Connection;
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
 use super::raw_capture::RawFrameTap;
 use super::routing::{
-    classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
-    UNSPECIFIED_REQUEST_ID,
+    classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
+    RoutingDecision,
 };
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -352,11 +352,8 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Route an error frame by severity and request id. Mirrors the async
     /// transport's `route_error_message`.
     fn route_error_message(&self, payload: DecodedError) {
-        let sent_to_update_stream = if payload.request_id == UNSPECIFIED_REQUEST_ID {
-            false
-        } else {
-            self.send_order_update_item(RoutedItem::Notice(Notice::from(payload.clone())))
-        };
+        let sent_to_update_stream = order_update_notice(&payload, self.requests.contains(&payload.request_id))
+            .is_some_and(|notice| self.send_order_update_item(RoutedItem::Notice(notice)));
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
                 super::common::log_unrouted_notice(&notice);

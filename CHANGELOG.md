@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Error::UnexpectedWireFormat`, returned when a message arrives in the wrong wire format for the reader handling it — text framing at a proto-only decoder, or proto framing at a text-field accessor. Previously this shared `Error::UnexpectedResponse` with the unrelated "message is not for this decoder" case, which the dispatcher skips silently. `Error` is `#[non_exhaustive]`, so the new variant is not a breaking change (#731).
 
+- `Notice.request_id`, the originating request or order id (`None` for request-less notices). `Notice` is not `#[non_exhaustive]`, so struct literals must add the field (#759).
+
+- `ORDER_MESSAGE_CODE` (`399`), the generic order-message code whose message text decides severity (#759).
+
 ### Changed
 
 - A text-framed message reaching a proto-only decoder now fails the subscription instead of being skipped. At `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives proto-framed, so reaching this means the gateway broke protocol — previously the message was dropped and the subscription silently yielded nothing. Wrong-message-type frames are still skipped, which is what shared channels need (#731).
@@ -27,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `head_timestamp`, `histogram_data`, `market_depth_exchanges`, and `historical_schedules(..).fetch()` retry a connection reset at most three times instead of unboundedly. The async `head_timestamp` recursed on a closed stream and the async `histogram_data`, `market_depth_exchanges`, and schedule fetch looped on one; a gateway that keeps resetting would hang the call rather than return. They also now agree with their blocking twins on what a closed stream means: `Error::UnexpectedEndOfStream` for `head_timestamp` and the schedule fetch, an empty list for `histogram_data` and `market_depth_exchanges` (#738).
 
 - `Client::wsh_event_data_by_contract` and `Client::wsh_event_data_by_filter` return builders instead of taking optional arguments positionally. The first took one required argument and four `Option`s, the second one and two; every call site in this repository passed `None` for all of them. Narrowing is now `.starting(date)` / `.ending(date)` / `.limit(n)` / `.auto_fill(spec)`, with `.fetch()` (single result) and `.subscribe()` (subscription) as the terminals. See `docs/migration-3.0.md` §37 (#752).
+
+- Code 399 order messages whose text carries a `Warning:` line now classify as warnings (`Notice::is_warning`, `NoticeCategory::Warning`) and route as non-terminal notices. TWS uses 399 for both severities — e.g. "order will not be placed at the exchange until …" for outside-RTH stops — and the warning form previously terminated the owning subscription as an order rejection (#759).
+
+- The order-update stream delivers order-bound error frames as `SubscriptionItem::Notice` (carrying `request_id`, code, and message) instead of raw error frames that `OrderUpdate` could not decode — consumers previously saw `Err(Error::UnexpectedResponse)`. Note `filter_data()` / `iter_data()` drop notices; match on `SubscriptionItem::Notice` to observe rejections of fire-and-forget orders. Request-less errors and errors owned by a data-request subscription no longer reach the stream at all (#759).
 
 ### Removed
 

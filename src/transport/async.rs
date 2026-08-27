@@ -20,13 +20,13 @@ use tokio::time::Duration;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame};
 use super::routing::{
-    classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
-    UNSPECIFIED_REQUEST_ID,
+    classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
+    RoutingDecision,
 };
 use super::RoutedItem;
 
@@ -468,10 +468,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Route error message using routing decision
     async fn route_error_message(&self, payload: DecodedError) -> Result<(), Error> {
-        let sent_to_update_stream = if payload.request_id == UNSPECIFIED_REQUEST_ID {
-            false
-        } else {
-            self.send_order_update_item(RoutedItem::Notice(Notice::from(payload.clone()))).await
+        let id_owned_by_data_request = self.request_channels.read().await.contains_key(&payload.request_id);
+        let sent_to_update_stream = match order_update_notice(&payload, id_owned_by_data_request) {
+            Some(notice) => self.send_order_update_item(RoutedItem::Notice(notice)).await,
+            None => false,
         };
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {

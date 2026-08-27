@@ -1649,6 +1649,26 @@ fn test_order_update_stream_receives_order_error_as_notice() -> Result<(), Error
     Ok(())
 }
 
+/// An error owned by a data-request subscription stays on that subscription:
+/// the order-update stream must not receive a copy.
+#[test]
+fn test_order_update_stream_skips_data_request_error() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let stream_sub = bus.create_order_update_subscription()?;
+    let sub = bus.send_request(42, &[])?;
+
+    stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    bus.dispatch()?;
+
+    let item = sub.next_timeout_routed(TICK).expect("error not delivered");
+    assert!(matches!(item, RoutedItem::Error(Error::Notice(_))), "got: {item:?}");
+    assert!(
+        stream_sub.next_timeout_routed(TICK).is_none(),
+        "order-update stream must not receive a data-request error"
+    );
+    Ok(())
+}
+
 /// Drop signals exercise `clean_request` / `clean_order` / `clear_order_update_stream`.
 /// The cleanup thread is signal-driven; we poll with a deadline rather than
 /// adding an ack channel to production code.
