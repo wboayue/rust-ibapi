@@ -128,9 +128,12 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
-    /// re-fires the persisted startup / notice callbacks.
+    /// re-fires the persisted startup / notice callbacks. When every attempt
+    /// fails, returns the last attempt's error — a permanent cause (say, an
+    /// incompatible server version) must not exit as a generic failure.
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
+        let mut last_error = None;
 
         for i in 0..MAX_RECONNECT_ATTEMPTS {
             let next_delay = backoff.next_delay();
@@ -140,18 +143,30 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
             match self.socket.reconnect().await {
                 Ok(_) => {
-                    info!("reconnected !!!");
                     self.reset_connection_metadata().await;
-                    self.establish_connection().await?;
-                    return Ok(());
+                    match self.establish_connection().await {
+                        Ok(()) => {
+                            info!("reconnected");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            info!(
+                                "reconnection attempt {}/{} failed while establishing session: {e}",
+                                i + 1,
+                                MAX_RECONNECT_ATTEMPTS
+                            );
+                            last_error = Some(e);
+                        }
+                    }
                 }
                 Err(e) => {
                     info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RECONNECT_ATTEMPTS);
+                    last_error = Some(e);
                 }
             }
         }
 
-        Err(Error::ConnectionFailed)
+        Err(last_error.unwrap_or(Error::ConnectionFailed))
     }
 
     async fn reset_connection_metadata(&self) {
