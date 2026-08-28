@@ -198,9 +198,14 @@ fn test_is_warning_error_data_advisory_codes() {
     for code in DATA_ADVISORY_CODES {
         assert!(is_warning_error(code, ""), "advisory code {code} should route as a warning");
 
-        // Neighboring codes are real errors, not advisories.
-        assert!(!is_warning_error(code - 1, ""), "code {} should not route as a warning", code - 1);
-        assert!(!is_warning_error(code + 1, ""), "code {} should not route as a warning", code + 1);
+        // Neighboring codes are real errors, not advisories (10089 and
+        // 10090 are adjacent, so skip neighbors that are advisories too).
+        for neighbor in [code - 1, code + 1] {
+            if DATA_ADVISORY_CODES.contains(&neighbor) {
+                continue;
+            }
+            assert!(!is_warning_error(neighbor, ""), "code {neighbor} should not route as a warning");
+        }
     }
 }
 

@@ -296,7 +296,7 @@ async fn test_data_advisory_with_request_id_keeps_stream_open() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request(42, vec![]).await.unwrap();
 
-    let code = crate::messages::DATA_ADVISORY_CODES[1]; // 10167
+    let code = 10167; // data advisory: "Displaying delayed market data."
     stream.push_inbound(error_frame(42, code, "Displaying delayed market data."));
     bus.read_and_route_message().await.unwrap();
 
