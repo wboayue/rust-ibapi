@@ -37,9 +37,9 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// `self.connection.notice_sender`) and any pre-bound `NoticeStream` the
     /// user obtained from `ClientBuilder::connect_with_notice_stream`.
     pub(crate) notice_sender: broadcast::Sender<Notice>,
-    /// Reconnection attempts before `reconnect` gives up. Defaults to
-    /// [`MAX_RECONNECT_ATTEMPTS`].
-    max_reconnect_attempts: u32,
+    /// Reconnection attempts before `reconnect` gives up; `None` retries
+    /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
+    max_reconnect_attempts: Option<u32>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -64,7 +64,7 @@ impl AsyncConnection<AsyncTcpSocket> {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_sender: broadcast::Sender<Notice>,
-        max_reconnect_attempts: u32,
+        max_reconnect_attempts: Option<u32>,
     ) -> Result<Self, Error> {
         let socket = AsyncTcpSocket::connect(address, tcp_no_delay).await?;
         let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_sender);
@@ -93,7 +93,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             connection_handler: ConnectionHandler::default(),
             startup_callback,
             notice_sender,
-            max_reconnect_attempts: MAX_RECONNECT_ATTEMPTS,
+            max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
         }
     }
 
@@ -138,7 +138,9 @@ impl<S: AsyncStream> AsyncConnection<S> {
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
 
-        for i in 0..self.max_reconnect_attempts {
+        let mut attempt: u32 = 0;
+        while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
+            attempt += 1;
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
@@ -151,9 +153,10 @@ impl<S: AsyncStream> AsyncConnection<S> {
                     self.establish_connection().await?;
                     return Ok(());
                 }
-                Err(e) => {
-                    info!("reconnection attempt {}/{} failed: {e}", i + 1, self.max_reconnect_attempts);
-                }
+                Err(e) => match self.max_reconnect_attempts {
+                    Some(max) => info!("reconnection attempt {attempt}/{max} failed: {e}"),
+                    None => info!("reconnection attempt {attempt} failed: {e}"),
+                },
             }
         }
 

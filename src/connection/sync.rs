@@ -23,7 +23,9 @@ pub struct Connection<S: Stream> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
-    pub(crate) max_retries: u32,
+    /// Reconnection attempts before `reconnect` gives up; `None` retries
+    /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
+    pub(crate) max_reconnect_attempts: Option<u32>,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
     /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
@@ -40,7 +42,7 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
         f.debug_struct("Connection")
             .field("client_id", &self.client_id)
             .field("connection_metadata", &self.connection_metadata)
-            .field("max_retries", &self.max_retries)
+            .field("max_reconnect_attempts", &self.max_reconnect_attempts)
             .field("startup_callback", &self.startup_callback.is_some())
             .finish()
     }
@@ -58,11 +60,11 @@ impl Connection<TcpSocket> {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
-        max_reconnect_attempts: u32,
+        max_reconnect_attempts: Option<u32>,
     ) -> Result<Self, Error> {
         let socket = TcpSocket::connect(address, tcp_no_delay)?;
         let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
-        connection.max_retries = max_reconnect_attempts;
+        connection.max_reconnect_attempts = max_reconnect_attempts;
         connection.establish_connection()?;
         Ok(connection)
     }
@@ -85,7 +87,7 @@ impl<S: Stream> Connection<S> {
                 client_id,
                 ..Default::default()
             }),
-            max_retries: MAX_RECONNECT_ATTEMPTS,
+            max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
             startup_callback,
@@ -117,7 +119,9 @@ impl<S: Stream> Connection<S> {
     pub fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
 
-        for i in 0..self.max_retries {
+        let mut attempt: u32 = 0;
+        while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
+            attempt += 1;
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
@@ -131,9 +135,10 @@ impl<S: Stream> Connection<S> {
 
                     return Ok(());
                 }
-                Err(e) => {
-                    info!("reconnection attempt {}/{} failed: {e}", i + 1, self.max_retries);
-                }
+                Err(e) => match self.max_reconnect_attempts {
+                    Some(max) => info!("reconnection attempt {attempt}/{max} failed: {e}"),
+                    None => info!("reconnection attempt {attempt} failed: {e}"),
+                },
             }
         }
 
@@ -289,7 +294,7 @@ impl<S: Stream> Connection<S> {
                 client_id,
                 ..Default::default()
             }),
-            max_retries: MAX_RECONNECT_ATTEMPTS,
+            max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             recorder: MessageRecorder::new(false, String::from("")),
             connection_handler: ConnectionHandler::default(),
             startup_callback: None,

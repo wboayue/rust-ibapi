@@ -2,6 +2,9 @@
 //! gateway. Live-handshake assertions live in `integration/{sync,async}/tests/connection.rs`.
 
 use crate::errors::Error;
+use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
+
+use super::BuilderState;
 
 fn assert_invalid_argument(err: Option<Error>, expected_substr: &str) {
     let err = err.expect("expected failure");
@@ -9,6 +12,26 @@ fn assert_invalid_argument(err: Option<Error>, expected_substr: &str) {
         matches!(&err, Error::InvalidArgument(m) if m.contains(expected_substr)),
         "expected InvalidArgument containing {expected_substr:?}, got {err:?}"
     );
+}
+
+#[test]
+fn validate_passes_reconnect_limit_through() {
+    let base = || BuilderState {
+        address: Some("127.0.0.1:4002".into()),
+        client_id: Some(100),
+        ..Default::default()
+    };
+
+    let pieces = base().validate().expect("validate");
+    assert_eq!(pieces.max_reconnect_attempts, Some(MAX_RECONNECT_ATTEMPTS));
+
+    let mut limited = base();
+    limited.max_reconnect_attempts = Some(50);
+    assert_eq!(limited.validate().expect("validate").max_reconnect_attempts, Some(50));
+
+    let mut unlimited = base();
+    unlimited.max_reconnect_attempts = None;
+    assert_eq!(unlimited.validate().expect("validate").max_reconnect_attempts, None);
 }
 
 #[cfg(feature = "sync")]
@@ -27,6 +50,16 @@ mod sync_tests {
         let result = ClientBuilder::default().address("127.0.0.1:4002").connect();
         assert_invalid_argument(result.err(), "client_id");
     }
+
+    #[test]
+    fn reconnect_limit_configurators_set_state() {
+        assert_eq!(
+            ClientBuilder::default().state.max_reconnect_attempts,
+            Some(crate::transport::common::MAX_RECONNECT_ATTEMPTS)
+        );
+        assert_eq!(ClientBuilder::default().max_reconnect_attempts(50).state.max_reconnect_attempts, Some(50));
+        assert_eq!(ClientBuilder::default().reconnect_forever().state.max_reconnect_attempts, None);
+    }
 }
 
 #[cfg(feature = "async")]
@@ -44,5 +77,15 @@ mod async_tests {
     async fn connect_without_client_id_returns_invalid_argument() {
         let result = ClientBuilder::default().address("127.0.0.1:4002").connect().await;
         assert_invalid_argument(result.err(), "client_id");
+    }
+
+    #[test]
+    fn reconnect_limit_configurators_set_state() {
+        assert_eq!(
+            ClientBuilder::default().state.max_reconnect_attempts,
+            Some(crate::transport::common::MAX_RECONNECT_ATTEMPTS)
+        );
+        assert_eq!(ClientBuilder::default().max_reconnect_attempts(50).state.max_reconnect_attempts, Some(50));
+        assert_eq!(ClientBuilder::default().reconnect_forever().state.max_reconnect_attempts, None);
     }
 }

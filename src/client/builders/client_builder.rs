@@ -46,14 +46,25 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 /// `InvalidArgument` validation messages so future configurators only need
 /// to be added in one place. Terminals call [`BuilderState::validate`] to
 /// extract the checked pieces.
-#[derive(Default)]
 pub(super) struct BuilderState {
     pub(super) address: Option<String>,
     pub(super) client_id: Option<i32>,
     pub(super) tcp_no_delay: bool,
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    /// `None` keeps the [`MAX_RECONNECT_ATTEMPTS`] default.
+    /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
+}
+
+impl Default for BuilderState {
+    fn default() -> Self {
+        Self {
+            address: None,
+            client_id: None,
+            tcp_no_delay: false,
+            startup_callback: None,
+            max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+        }
+    }
 }
 
 /// Output of [`BuilderState::validate`]: same fields with `address` and
@@ -64,7 +75,8 @@ pub(super) struct ValidatedPieces {
     pub(super) client_id: i32,
     pub(super) tcp_no_delay: bool,
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    pub(super) max_reconnect_attempts: u32,
+    /// `None` means retry forever.
+    pub(super) max_reconnect_attempts: Option<u32>,
 }
 
 impl BuilderState {
@@ -78,7 +90,7 @@ impl BuilderState {
                 .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
             tcp_no_delay: self.tcp_no_delay,
             startup_callback: self.startup_callback,
-            max_reconnect_attempts: self.max_reconnect_attempts.unwrap_or(MAX_RECONNECT_ATTEMPTS),
+            max_reconnect_attempts: self.max_reconnect_attempts,
         })
     }
 }
@@ -105,7 +117,7 @@ pub mod sync_impl {
     #[derive(Default)]
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
-        state: BuilderState,
+        pub(super) state: BuilderState,
     }
 
     impl ClientBuilder {
@@ -149,19 +161,34 @@ pub mod sync_impl {
             self
         }
 
-        /// Overrides the default reconnection attempt count (see
-        /// `MAX_RECONNECT_ATTEMPTS`). Useful when TWS/IB Gateway may be
-        /// unreachable for longer, such as when a scheduled nightly restart
-        /// needs a manual re-login.
+        /// Overrides the reconnection attempt count. Default: 20 attempts
+        /// (~7.5 minutes with the capped Fibonacci backoff). Useful when
+        /// TWS/IB Gateway may be unreachable for longer, such as when a
+        /// scheduled nightly restart needs a manual re-login. `0` disables
+        /// reconnection entirely.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # use ibapi::client::blocking::Client;
+        /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).max_reconnect_attempts(50).connect();
+        /// ```
         pub fn max_reconnect_attempts(mut self, attempts: u32) -> Self {
             self.state.max_reconnect_attempts = Some(attempts);
             self
         }
 
-        /// Disable the `MAX_RECONNECT_ATTEMPTS` reconnection limit. Equivalent to
-        /// [`Self::max_reconnect_attempts`] with `u32::MAX`.
+        /// Remove the reconnection attempt limit: keep retrying (30 s apart
+        /// once the backoff caps) until the connection is re-established.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # use ibapi::client::blocking::Client;
+        /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).reconnect_forever().connect();
+        /// ```
         pub fn reconnect_forever(mut self) -> Self {
-            self.state.max_reconnect_attempts = Some(u32::MAX);
+            self.state.max_reconnect_attempts = None;
             self
         }
 
@@ -277,7 +304,7 @@ pub mod async_impl {
     #[derive(Default)]
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
-        state: BuilderState,
+        pub(super) state: BuilderState,
     }
 
     impl ClientBuilder {
@@ -327,19 +354,38 @@ pub mod async_impl {
             self
         }
 
-        /// Overrides the default reconnection attempt count (see
-        /// `MAX_RECONNECT_ATTEMPTS`). Useful when TWS/IB Gateway may be
-        /// unreachable for longer, such as when a scheduled nightly restart
-        /// needs a manual re-login.
+        /// Overrides the reconnection attempt count. Default: 20 attempts
+        /// (~7.5 minutes with the capped Fibonacci backoff). Useful when
+        /// TWS/IB Gateway may be unreachable for longer, such as when a
+        /// scheduled nightly restart needs a manual re-login. `0` disables
+        /// reconnection entirely.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use ibapi::Client;
+        /// let _client = Client::builder().address("127.0.0.1:4002").client_id(100).max_reconnect_attempts(50).connect().await?;
+        /// # Ok(()) }
+        /// ```
         pub fn max_reconnect_attempts(mut self, attempts: u32) -> Self {
             self.state.max_reconnect_attempts = Some(attempts);
             self
         }
 
-        /// Disable the `MAX_RECONNECT_ATTEMPTS` reconnection limit. Equivalent to
-        /// [`Self::max_reconnect_attempts`] with `u32::MAX`.
+        /// Remove the reconnection attempt limit: keep retrying (30 s apart
+        /// once the backoff caps) until the connection is re-established.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use ibapi::Client;
+        /// let _client = Client::builder().address("127.0.0.1:4002").client_id(100).reconnect_forever().connect().await?;
+        /// # Ok(()) }
+        /// ```
         pub fn reconnect_forever(mut self) -> Self {
-            self.state.max_reconnect_attempts = Some(u32::MAX);
+            self.state.max_reconnect_attempts = None;
             self
         }
 

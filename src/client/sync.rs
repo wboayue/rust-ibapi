@@ -96,7 +96,7 @@ impl Client {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
-        max_reconnect_attempts: u32,
+        max_reconnect_attempts: Option<u32>,
     ) -> Result<Client, Error> {
         let connection = Connection::with_pieces(
             address,
