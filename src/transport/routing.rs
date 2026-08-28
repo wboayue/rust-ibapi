@@ -1,7 +1,7 @@
 //! Common message routing logic for sync and async implementations
 
 use crate::errors::Error;
-use crate::messages::{routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
+use crate::messages::{is_warning_message, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES};
 
 use super::RoutedItem;
 
@@ -169,16 +169,23 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
 
 /// Check if an error code is a warning.
 ///
-/// Warnings ([`WARNING_CODE_RANGE`]) and data advisories
-/// ([`DATA_ADVISORY_CODES`]) are informational — TWS proceeds with the
-/// request — so they are routed as a `Notice` rather than terminating the
-/// subscription as an `Error`.
-pub(crate) fn is_warning_error(error_code: i32) -> bool {
-    WARNING_CODE_RANGE.contains(&error_code) || DATA_ADVISORY_CODES.contains(&error_code)
+/// Warning codes, warning-form order messages, and data advisories are
+/// informational — TWS proceeds with the request — so they are routed as a
+/// `Notice` rather than terminating the subscription as an `Error`.
+pub(crate) fn is_warning_error(error_code: i32, error_message: &str) -> bool {
+    is_warning_message(error_code, error_message) || DATA_ADVISORY_CODES.contains(&error_code)
 }
 
 /// Request ID for unspecified errors
 pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
+
+/// Notice to copy onto the order-update stream for an error frame, or `None`
+/// when the frame is not order-bound: request-less frames and frames whose id
+/// is owned by a data-request subscription carry nothing an order consumer
+/// should see.
+pub(crate) fn order_update_notice(payload: &DecodedError, id_owned_by_data_request: bool) -> Option<Notice> {
+    (payload.request_id != UNSPECIFIED_REQUEST_ID && !id_owned_by_data_request).then(|| Notice::from(payload.clone()))
+}
 
 /// The outcome of classifying an inbound error frame.
 ///
@@ -201,7 +208,7 @@ pub(crate) enum ErrorDisposition {
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
     let request_id = payload.request_id;
-    let is_warning = is_warning_error(payload.error_code);
+    let is_warning = is_warning_error(payload.error_code, &payload.error_message);
 
     if request_id == UNSPECIFIED_REQUEST_ID {
         let notice = Notice::from(payload.clone());

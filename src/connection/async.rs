@@ -134,13 +134,20 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
-    /// re-fires the persisted startup / notice callbacks.
+    /// re-fires the persisted startup / notice callbacks. When every attempt
+    /// fails, returns the last attempt's error — a permanent cause (say, an
+    /// incompatible server version) must not exit as a generic failure.
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
+        let mut last_error = None;
 
         let mut attempt: u32 = 0;
         while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
             attempt += 1;
+            let attempt_label = match self.max_reconnect_attempts {
+                Some(max) => format!("{attempt}/{max}"),
+                None => attempt.to_string(),
+            };
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
@@ -148,19 +155,26 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
             match self.socket.reconnect().await {
                 Ok(_) => {
-                    info!("reconnected !!!");
                     self.reset_connection_metadata().await;
-                    self.establish_connection().await?;
-                    return Ok(());
+                    match self.establish_connection().await {
+                        Ok(()) => {
+                            info!("reconnected");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            info!("reconnection attempt {attempt_label} failed while establishing session: {e}");
+                            last_error = Some(e);
+                        }
+                    }
                 }
-                Err(e) => match self.max_reconnect_attempts {
-                    Some(max) => info!("reconnection attempt {attempt}/{max} failed: {e}"),
-                    None => info!("reconnection attempt {attempt} failed: {e}"),
-                },
+                Err(e) => {
+                    info!("reconnection attempt {attempt_label} failed: {e}");
+                    last_error = Some(e);
+                }
             }
         }
 
-        Err(Error::ConnectionFailed)
+        Err(last_error.unwrap_or(Error::ConnectionFailed))
     }
 
     async fn reset_connection_metadata(&self) {

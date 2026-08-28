@@ -59,6 +59,7 @@ fn classify_decode_failure_returns_error() {
 #[test]
 fn classify_notice_returns_notice() {
     let notice = Notice {
+        request_id: None,
         code: 2100,
         message: "some warning".into(),
         error_time: None,

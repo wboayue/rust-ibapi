@@ -4,6 +4,7 @@ use crate::messages::Notice;
 
 fn make_notice(code: i32, message: &str) -> Notice {
     Notice {
+        request_id: None,
         code,
         message: message.into(),
         error_time: None,

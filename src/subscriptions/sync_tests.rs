@@ -114,6 +114,7 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
 
     sender
         .send(RoutedItem::Notice(Notice {
+            request_id: None,
             code: 2104,
             message: "Market data farm OK".into(),
             error_time: None,
@@ -272,6 +273,7 @@ fn test_collect_for_filters_notices() {
     use crate::messages::Notice;
 
     let notice = RoutedItem::Notice(Notice {
+        request_id: None,
         code: 2104,
         message: "Market data farm OK".into(),
         error_time: None,

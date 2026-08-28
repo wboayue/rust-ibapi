@@ -29,6 +29,7 @@ use time_tz::{self, PrimitiveDateTimeExt, Tz};
 // A request-scoped IB notice for tests (no error_time / advanced-reject payload).
 fn test_notice(code: i32, message: &str) -> Notice {
     Notice {
+        request_id: None,
         code,
         message: message.into(),
         error_time: None,
@@ -506,6 +507,49 @@ fn test_historical_data_error_response() {
         .duration(duration)
         .fetch();
     assert!(result.is_err(), "Expected error due to error response from server");
+}
+
+/// TWS sends 2188 on the error callback and then delivers the bars: the account
+/// may not stream the up-to-the-second tail, but the historical data itself is
+/// served. Classified as an error it would end the request before
+/// `HistoricalData` arrived, and the caller would see no bars at all.
+#[test]
+fn test_historical_data_up_to_the_second_advisory_is_skipped() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        proto_error_response(
+            9000,
+            2188,
+            "Up-to-the-second historical data requires additional subscription for the API.",
+        ),
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(
+                    historical_data_daily_bar("20230315")
+                        .ohlc(185.75, 186.25, 185.50, 186.00)
+                        .volume(1500.0)
+                        .wap(185.85)
+                        .count(150),
+                )
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 16:00:00 UTC")
+                .encode_proto(),
+        ),
+    ]);
+
+    let result = client
+        .historical_data(&Contract::stock("SPY").build(), BarSize::Day)
+        .duration(Duration::days(1))
+        .ending(datetime!(2023-03-15 16:00:00 UTC))
+        .fetch();
+
+    let data = result.expect("advisory 2188 must not abort the request");
+    assert_eq!(data.bars.len(), 1, "bars sent after the advisory should be returned");
 }
 
 #[test]

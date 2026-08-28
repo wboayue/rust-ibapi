@@ -25,7 +25,8 @@ use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame};
 use super::routing::{
-    classify_error, determine_routing, order_routing_strategy, DecodedError, ErrorDisposition, OrderRoutingStrategy, RoutingDecision,
+    classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
+    RoutingDecision,
 };
 use super::RoutedItem;
 
@@ -385,7 +386,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::Error(payload) => self.route_error_message(message, payload).await,
+            RoutingDecision::Error(payload) => self.route_error_message(payload).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
                 self.request_shutdown().await;
@@ -466,8 +467,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Route error message using routing decision
-    async fn route_error_message(&self, message: ResponseMessage, payload: DecodedError) -> Result<(), Error> {
-        let sent_to_update_stream = self.send_order_update(&message).await;
+    async fn route_error_message(&self, payload: DecodedError) -> Result<(), Error> {
+        let id_owned_by_data_request = self.request_channels.read().await.contains_key(&payload.request_id);
+        let sent_to_update_stream = match order_update_notice(&payload, id_owned_by_data_request) {
+            Some(notice) => self.send_order_update_item(RoutedItem::Notice(notice)).await,
+            None => false,
+        };
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
                 super::common::log_unrouted_notice(&notice);
@@ -677,9 +682,13 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Send message to order update stream if it exists
     async fn send_order_update(&self, message: &ResponseMessage) -> bool {
+        self.send_order_update_item(message.clone().into()).await
+    }
+
+    async fn send_order_update_item(&self, item: RoutedItem) -> bool {
         let order_update_stream = self.order_update_stream.read().await;
         if let Some(sender) = order_update_stream.as_ref() {
-            if let Err(e) = sender.send(message.clone().into()) {
+            if let Err(e) = sender.send(item) {
                 warn!("error sending to order update stream: {e}");
                 return false;
             }

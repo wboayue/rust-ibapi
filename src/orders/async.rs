@@ -39,6 +39,12 @@ impl Client {
 
     /// Subscribes to order update events. Only one subscription can be active at a time.
     ///
+    /// Order-bound TWS errors and warnings (e.g. rejections, code 399 order
+    /// messages) arrive as [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem),
+    /// not as [`OrderUpdate`] variants. They surface via `next()` as below;
+    /// `filter_data()` drops them (logging at `warn!` level), so match on
+    /// notices explicitly when monitoring fire-and-forget orders for rejection.
+    ///
     /// To pair a [`CommissionReport`] with the
     /// [`ExecutionData`] it belongs to, join on
     /// `execution_id` — the two arrive in either order but share that key. See
@@ -52,15 +58,16 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let stream = client.order_update_stream().await.expect("failed to create stream");
-    ///     let mut updates = stream.filter_data();
-    ///     while let Some(update) = updates.next().await {
-    ///         match update {
-    ///             Ok(OrderUpdate::OrderStatus(s))      => println!("status: {s:?}"),
-    ///             Ok(OrderUpdate::OpenOrder(o))        => println!("open: {o:?}"),
-    ///             Ok(OrderUpdate::ExecutionData(e))    => println!("exec: {e:?}"),
-    ///             Ok(OrderUpdate::CommissionReport(r)) => println!("commission: {r:?}"),
-    ///             Err(e)                                => { eprintln!("err: {e:?}"); break; }
+    ///     let mut stream = client.order_update_stream().await.expect("failed to create stream");
+    ///     while let Some(item) = stream.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(OrderUpdate::OrderStatus(s))) => println!("status: {s:?}"),
+    ///             Ok(SubscriptionItem::Data(update)) => println!("update: {update:?}"),
+    ///             Ok(SubscriptionItem::Notice(notice)) if notice.is_error() => {
+    ///                 eprintln!("order {:?} rejected: {}", notice.request_id, notice.message);
+    ///             }
+    ///             Ok(SubscriptionItem::Notice(notice)) => println!("notice: {}", notice.message),
+    ///             Err(e) => { eprintln!("err: {e:?}"); break; }
     ///         }
     ///     }
     /// }

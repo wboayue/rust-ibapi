@@ -1069,6 +1069,10 @@ impl ResponseMessage {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Notice {
+    /// Request or order ID that originated the notice.
+    /// `None` for request-less notices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<i32>,
     /// Error code reported by TWS.
     pub code: i32,
     /// Human-readable error message text.
@@ -1085,8 +1089,15 @@ pub struct Notice {
 /// Error code indicating an order was cancelled (confirmation, not an error).
 pub const ORDER_CANCELLED_CODE: i32 = 202;
 
+/// Generic order-message code whose text determines whether TWS reports a warning or an error.
+pub const ORDER_MESSAGE_CODE: i32 = 399;
+
 /// Range of error codes that are considered warnings (2100-2169).
 pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
+
+pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
+    WARNING_CODE_RANGE.contains(&code) || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
+}
 
 /// Connectivity between IB and TWS has been lost.
 pub(crate) const CONNECTIVITY_LOST_CODE: i32 = 1100;
@@ -1111,12 +1122,14 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 
 /// Data-advisory codes that TWS sends on a request which then proceeds
 /// normally. The request is *not* rejected — the advisory announces a
-/// fallback (delayed market data) and the requested data follows, so these
-/// are informational notices, not errors. Classifying them as errors would
+/// fallback (delayed market data, or historical data delivered without its
+/// up-to-the-second tail) and the requested data follows, so these are
+/// informational notices, not errors. Classifying them as errors would
 /// terminate the subscription before its data arrives.
+/// - 2188: Up-to-the-second historical data requires additional subscription for the API.
 /// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
 /// - 10167: Requested market data is not subscribed. Displaying delayed market data.
-pub const DATA_ADVISORY_CODES: [i32; 2] = [10089, 10167];
+pub const DATA_ADVISORY_CODES: [i32; 3] = [2188, 10089, 10167];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
@@ -1135,12 +1148,13 @@ pub(crate) const FARM_INACTIVE_CODES: [i32; 2] = [2107, 2108];
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Connecting`].
 pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
 
-/// Range of error codes that represent order rejections from TWS (200-399).
+/// Range of error codes that can represent order rejections from TWS (200-399).
 ///
 /// Includes parameter validation, contract-not-found, margin and risk-check
 /// rejections. Note: [`ORDER_CANCELLED_CODE`] (202) is numerically inside this
-/// range but is a *confirmation*, not a rejection; see [`Notice::category`]
-/// for partition semantics.
+/// range but is a *confirmation*, not a rejection. Code [`ORDER_MESSAGE_CODE`]
+/// (399) can instead carry warning text. See [`Notice::category`] for partition
+/// semantics.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
 /// Synthesized notice code emitted when a handshake-time frame's
@@ -1181,15 +1195,14 @@ pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all
-/// possible codes; when ranges overlap on the wire (e.g. code 202 is both a
-/// cancellation and inside the order-rejection range 200-399), the classifier
+/// possible notices; when classifications overlap on the wire, the classifier
 /// resolves overlap by **precedence**:
 ///
 /// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
-/// 2. [`Warning`](Self::Warning) — 2100..=2169.
+/// 2. [`Warning`](Self::Warning) — 2100..=2169, or code 399 with a `Warning:` line.
 /// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
-/// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding 202 by precedence.
-/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (10089, 10167).
+/// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding the cases above.
+/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (2188, 10089, 10167).
 /// 6. [`Error`](Self::Error) — everything else.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
@@ -1212,14 +1225,15 @@ pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
-    /// Informational warning (codes 2100..=2169).
+    /// Informational warning (codes 2100..=2169, or code 399 with a `Warning:` line).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
-    /// Order rejection (codes 200..=399).
+    /// Order rejection (codes 200..=399, excluding informational cases by precedence).
     OrderRejection,
     /// Data advisory ([`DATA_ADVISORY_CODES`]): the request proceeded with a
-    /// fallback (delayed market data) rather than failing. Informational.
+    /// fallback (delayed market data, or historical data without its
+    /// up-to-the-second tail) rather than failing. Informational.
     DataAdvisory,
     /// Any other error code.
     Error,
@@ -1322,6 +1336,7 @@ impl Notice {
     /// [`HANDSHAKE_DECODE_FAILURE_CODE`]).
     pub(crate) fn synthesized(code: i32, message: String) -> Notice {
         Notice {
+            request_id: None,
             code,
             message,
             error_time: None,
@@ -1337,9 +1352,9 @@ impl Notice {
         self.code == ORDER_CANCELLED_CODE
     }
 
-    /// Returns `true` if this is a warning message (codes 2100-2169).
+    /// Returns `true` if this is a warning message.
     pub fn is_warning(&self) -> bool {
-        WARNING_CODE_RANGE.contains(&self.code)
+        is_warning_message(self.code, &self.message)
     }
 
     /// Returns `true` if this is a system/connectivity message (codes 1100-1102, 1300).
@@ -1355,10 +1370,11 @@ impl Notice {
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
     ///
-    /// Data advisories (codes 10089, 10167) announce that a request proceeded
-    /// with a fallback — delayed market data instead of real-time — rather
-    /// than failing. The requested data still follows, so the subscription
-    /// stays open and the notice is informational, not an error.
+    /// Data advisories (codes 2188, 10089, 10167) announce that a request
+    /// proceeded with a fallback — delayed market data instead of real-time,
+    /// or historical data without its up-to-the-second tail — rather than
+    /// failing. The requested data still follows, so the subscription stays
+    /// open and the notice is informational, not an error.
     pub fn is_data_advisory(&self) -> bool {
         DATA_ADVISORY_CODES.contains(&self.code)
     }
@@ -1381,9 +1397,9 @@ impl Notice {
 
     /// Returns `true` if this notice falls in the order-rejection range (200-399).
     ///
-    /// Code 202 (cancellation confirmation) is numerically inside this range; this
-    /// predicate returns `true` for it. For a disjoint partition that routes 202
-    /// to [`NoticeCategory::Cancellation`] instead, use [`Notice::category`].
+    /// Code 202 (cancellation confirmation) and warning-form code 399 are
+    /// numerically inside this range; this predicate returns `true` for both.
+    /// For a disjoint partition, use [`Notice::category`].
     ///
     /// # Examples
     ///
@@ -1492,6 +1508,7 @@ impl From<crate::transport::routing::DecodedError> for Notice {
             .error_time
             .and_then(|millis| OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok());
         Notice {
+            request_id: (payload.request_id != crate::transport::routing::UNSPECIFIED_REQUEST_ID).then_some(payload.request_id),
             code: payload.error_code,
             message: payload.error_message,
             error_time,
