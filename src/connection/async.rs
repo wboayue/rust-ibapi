@@ -37,6 +37,9 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// `self.connection.notice_sender`) and any pre-bound `NoticeStream` the
     /// user obtained from `ClientBuilder::connect_with_notice_stream`.
     pub(crate) notice_sender: broadcast::Sender<Notice>,
+    /// Reconnection attempts before `reconnect` gives up; `None` retries
+    /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
+    max_reconnect_attempts: Option<u32>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -61,9 +64,11 @@ impl AsyncConnection<AsyncTcpSocket> {
         tcp_no_delay: bool,
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_sender: broadcast::Sender<Notice>,
+        max_reconnect_attempts: Option<u32>,
     ) -> Result<Self, Error> {
         let socket = AsyncTcpSocket::connect(address, tcp_no_delay).await?;
-        let connection = Self::with_socket(socket, client_id, startup_callback, notice_sender);
+        let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_sender);
+        connection.max_reconnect_attempts = max_reconnect_attempts;
         connection.establish_connection().await?;
         Ok(connection)
     }
@@ -88,6 +93,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             connection_handler: ConnectionHandler::default(),
             startup_callback,
             notice_sender,
+            max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
         }
     }
 
@@ -135,7 +141,13 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let mut backoff = FibonacciBackoff::new(30);
         let mut last_error = None;
 
-        for i in 0..MAX_RECONNECT_ATTEMPTS {
+        let mut attempt: u32 = 0;
+        while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
+            attempt += 1;
+            let attempt_label = match self.max_reconnect_attempts {
+                Some(max) => format!("{attempt}/{max}"),
+                None => attempt.to_string(),
+            };
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
@@ -150,17 +162,13 @@ impl<S: AsyncStream> AsyncConnection<S> {
                             return Ok(());
                         }
                         Err(e) => {
-                            info!(
-                                "reconnection attempt {}/{} failed while establishing session: {e}",
-                                i + 1,
-                                MAX_RECONNECT_ATTEMPTS
-                            );
+                            info!("reconnection attempt {attempt_label} failed while establishing session: {e}");
                             last_error = Some(e);
                         }
                     }
                 }
                 Err(e) => {
-                    info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RECONNECT_ATTEMPTS);
+                    info!("reconnection attempt {attempt_label} failed: {e}");
                     last_error = Some(e);
                 }
             }

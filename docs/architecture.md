@@ -197,8 +197,8 @@ The `Client` can be shared between threads for concurrent operations:
 ### Reconnection Strategy
 - Automatic reconnection on connection loss
 - Fibonacci backoff (1, 2, 3, 5, 8... seconds)
-- Maximum 20 reconnection attempts
-- Configurable via `MAX_RECONNECT_ATTEMPTS`
+- Maximum 20 reconnection attempts by default
+- Configurable via `ClientBuilder::max_reconnect_attempts` / `ClientBuilder::reconnect_forever`
 
 ### Connection Monitoring
 Use `client.is_connected()` to check connection status:
