@@ -520,6 +520,29 @@ for result in subscription {
 }
 ```
 
+### Order Update Stream Across Reconnects
+
+`order_update_stream()` survives the client's automatic reconnects — the same
+subscription keeps delivering once the connection returns. Updates TWS emitted
+during the outage are **not** replayed, and no marker appears in the stream
+itself, so a quiet stream is indistinguishable from missed activity. Detect
+the gap on the notice stream and reconcile:
+
+```rust
+let notices = client.notice_stream()?;
+
+for notice in notices.iter() {
+    // 1100: connectivity lost; 1101/1102: restored (data lost / maintained);
+    // 1300: socket port reset.
+    if matches!(notice.code, 1101 | 1102) {
+        // The order update stream did not replay the outage window:
+        // rebuild open-order state and diff against your book.
+        let snapshot = client.open_orders()?;
+        reconcile(snapshot)?;
+    }
+}
+```
+
 ## Common Patterns
 
 ### Correlating Commissions with Executions
