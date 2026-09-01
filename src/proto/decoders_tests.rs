@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::OrderStatusKind;
+use crate::orders::{ExecutionSide, OrderStatusKind};
 
 // === parse_required ===
 
@@ -29,9 +29,13 @@ fn parse_required_valid_round_trips() {
 }
 
 #[test]
-fn parse_required_unknown_propagates_fromstr_err() {
+fn parse_required_defers_unknown_to_fromstr() {
+    // The helper adds no vocabulary policy of its own: a closed enum's
+    // unknown value propagates as the FromStr error. (Open-enum fallback
+    // behavior is owned by the enum and tested beside it — see
+    // order_status_kind_preserves_unknown_wire_status.)
     assert!(matches!(
-        parse_required::<OrderStatusKind>(Some("Garbage"), "OrderStatus"),
+        parse_required::<ExecutionSide>(Some("Garbage"), "side"),
         Err(Error::Parse(_, _, _))
     ));
 }
@@ -57,8 +61,9 @@ fn parse_optional_valid_round_trips() {
 }
 
 #[test]
-fn parse_optional_unknown_propagates_fromstr_err() {
-    assert!(matches!(parse_optional::<OrderStatusKind>(Some("Garbage")), Err(Error::Parse(_, _, _))));
+fn parse_optional_defers_unknown_to_fromstr() {
+    // Mirrors parse_required_defers_unknown_to_fromstr.
+    assert!(matches!(parse_optional::<ExecutionSide>(Some("Garbage")), Err(Error::Parse(_, _, _))));
 }
 
 // === parse_optional_decimal ===

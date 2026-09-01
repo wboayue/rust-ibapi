@@ -215,6 +215,36 @@ let subscription = client.market_data(&contract).generic_ticks(&["233"]).subscri
 
 The `snapshot` and `regulatory_snapshot` booleans map to the `.snapshot()` / `.regulatory_snapshot()` setters. Nothing in `examples/` or the integration crates called the free function, and the async side never had a public one.
 
+### 9. `OrderStatusKind` gains `Unknown(String)`
+
+An `OrderStatus` frame whose status string this crate did not model used to fail decoding with `Error::Parse` — which terminated the subscription delivering it, including the long-lived `order_update_stream()`. A status IBKR ships in the future would have taken down the one stream a trading application cannot afford to lose. Unrecognized statuses are now preserved (the official IB client does the same — its `OrderStatus` enum has an `Unknown` fallback):
+
+```rust,ignore
+// 3.x — exhaustive match compiled
+match status.status {
+    OrderStatusKind::Filled => {}
+    OrderStatusKind::Cancelled => {}
+    // ... the other seven
+}
+
+// 4.0 — add an arm for the new variant
+match status.status {
+    OrderStatusKind::Filled => {}
+    OrderStatusKind::Cancelled => {}
+    // ... the other seven
+    OrderStatusKind::Unknown(raw) => log::warn!("unrecognized order status {raw:?}"),
+}
+```
+
+What changes for compiling code:
+
+- **`Copy` is gone** (the variant carries a `String`); `OrderStatusKind` is still `Clone`. Code that relied on implicit copies needs `.clone()` or a borrow.
+- **`as_str()` returns `&str`**, not `&'static str` — for `Unknown` it borrows the raw value.
+- **`is_active()` / `is_terminal()` take `&self`** and both return `false` for `Unknown`, as they do for `ApiPending` — don't assume `!is_active() ⇒ is_terminal()`.
+- **Exhaustive matches need the new arm.** Like `Liquidity`, the enum is deliberately exhaustive (no `#[non_exhaustive]`), so the compiler points at every site.
+
+The nine known statuses parse exactly as before; matching stays exact and case-sensitive, so a case-variant of a known status also lands in `Unknown` rather than being coerced. Empty input is still `Error::Parse` — absence of a value remains an error. Serialization is unchanged in shape: the enum still serializes as the plain status string in both directions (`Unknown("X")` round-trips as `"X"`), and the `utoipa` schema is a plain `string` to match (hand-written, since the derive would describe the tagged `{"Unknown":"X"}` shape the serde impls avoid).
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -240,8 +270,9 @@ No code changes required, but observable at runtime:
 6. Re-point `use ibapi::market_data::builder::MarketDataBuilder` imports at `ibapi::market_data::realtime::MarketDataBuilder`.
 7. Replace direct `realtime::sync::market_data(..)` calls with the `client.market_data(&contract)` builder — see [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private).
 8. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
-9. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
-10. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+9. Add an `OrderStatusKind::Unknown(raw)` arm to exhaustive matches on order statuses, and `.clone()` (or borrow) where code relied on the removed `Copy` — see [§9](#9-orderstatuskind-gains-unknownstring).
+10. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
+11. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

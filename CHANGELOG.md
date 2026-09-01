@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `OrderStatusKind` gains an `Unknown(String)` variant preserving unrecognized status strings (see the Fixed entry below). Breaking: the enum stays deliberately exhaustive like `Liquidity::Unknown` (#760), so downstream exhaustive matches need a new arm; `Copy` is gone (still `Clone`); `as_str()` returns `&str`; `is_active()` / `is_terminal()` take `&self` and are `false` for `Unknown`. Serialization stays a plain string in both directions, and the `utoipa` schema is now a plain `string` to match. Details and examples in `docs/migration-4.0.md` §9 (#774).
+
 - `MarketDataBuilder` moved from `market_data::builder` to `market_data::realtime`, alongside the sibling builders (`RealtimeBarsBuilder`, `MarketDepthBuilder`, `TickByTickBuilder`) it always belonged with; the `market_data::builder` module is gone. `MarketDataBuilder::new` is also `pub(crate)` now, matching its siblings — construct via `client.market_data(&contract)`. Only code naming the type — imports, signatures, or a direct `new` call — breaks; `client.market_data(&contract)` call sites are unaffected. The prelude now exports all four realtime builders (`MarketDataBuilder` and `RealtimeBarsBuilder` join the two already there). See `docs/migration-4.0.md` §7 (#772).
 
 - A text-framed message reaching a proto-only decoder now fails the subscription instead of being skipped. At `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives proto-framed, so reaching this means the gateway broke protocol — previously the message was dropped and the subscription silently yielded nothing. Wrong-message-type frames are still skipped, which is what shared channels need (#731).
@@ -49,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Client::check_server_version()` is crate-private. It was `pub` on the async client and `pub(crate)` on the blocking one — drift rather than design, since it is the internal guard every version-gated API already calls. Compare against `Client::server_version()` directly if you need to branch on gateway support (#728).
 
 ### Fixed
+
+- An `OrderStatus` or `OpenOrder` frame carrying an unrecognized status string no longer terminates the subscription delivering it. Decoding failed with `Error::Parse`, which ended `place_order`, `cancel_order`, `open_orders`, and — worst — the long-lived `order_update_stream` the moment TWS shipped a status this crate had not modeled; the official IB client parses such statuses into an `Unknown` fallback instead of failing. The status now arrives as `OrderStatusKind::Unknown(raw)` and the stream continues (#774).
 
 - Async `open_orders()`, `all_open_orders()`, `completed_orders()`, and the other streaming shared-channel subscriptions (positions, account data, news bulletins) no longer hang forever when a reconnect happens mid-request. After a reconnect, `reset_channels` notified request-id and order-id subscriptions with `Error::ConnectionReset` but left shared channels untouched — and the end marker such a subscription awaits is a response to a request sent on the dead connection, so nothing ever arrived. The async reset now notifies shared-channel senders too, mirroring the sync transport (which already did this). Subscriptions created after the reset are unaffected: they subscribe at the channel's current tail and never see the injected error (#776).
 

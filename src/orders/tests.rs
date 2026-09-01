@@ -19,8 +19,42 @@ fn order_status_kind_round_trip() {
 }
 
 #[test]
-fn order_status_kind_from_str_rejects_unknown() {
-    check_wire_enum_rejects_unknown::<OrderStatusKind>(&["NotARealStatus", "", "submitted", "FILLED"]);
+fn order_status_kind_preserves_unknown_wire_status() {
+    // OrderStatusKind is an open enum (#774): an unrecognized non-empty
+    // status parses as Unknown(raw) instead of Error::Parse, so a status
+    // string this crate does not model cannot terminate the order streams.
+    // Matching stays exact and case-sensitive — case-variants land in
+    // Unknown rather than being coerced to the nearest known variant.
+    check_wire_enum_round_trip(&[
+        (OrderStatusKind::Unknown("NotARealStatus".into()), "NotARealStatus"),
+        (OrderStatusKind::Unknown("submitted".into()), "submitted"),
+        (OrderStatusKind::Unknown("FILLED".into()), "FILLED"),
+    ]);
+    let unknown = OrderStatusKind::Unknown("NotARealStatus".into());
+    assert!(!unknown.is_active(), "Unknown must not be active");
+    assert!(!unknown.is_terminal(), "Unknown must not be terminal");
+
+    // Absence of a value is still an error — only unrecognized values fall
+    // back (docs/rules/wire/enum-typing.md).
+    check_wire_enum_rejects_unknown::<OrderStatusKind>(&[""]);
+}
+
+#[test]
+fn order_status_kind_serde_round_trips_as_plain_string() {
+    // Manual serde keeps the JSON a plain string in both directions —
+    // Unknown("X") serializes as "X", not {"Unknown":"X"}.
+    let known = OrderStatusKind::Cancelled;
+    assert_eq!(serde_json::to_string(&known).unwrap(), "\"Cancelled\"");
+    assert_eq!(serde_json::from_str::<OrderStatusKind>("\"Cancelled\"").unwrap(), known);
+
+    let unknown = OrderStatusKind::Unknown("PendingReplace".to_string());
+    assert_eq!(serde_json::to_string(&unknown).unwrap(), "\"PendingReplace\"");
+    assert_eq!(serde_json::from_str::<OrderStatusKind>("\"PendingReplace\"").unwrap(), unknown);
+
+    assert!(
+        serde_json::from_str::<OrderStatusKind>("\"\"").is_err(),
+        "empty string must not deserialize"
+    );
 }
 
 #[test]
@@ -50,10 +84,9 @@ fn execution_side_from_str_rejects_unknown() {
 }
 
 #[test]
-fn is_active_and_is_terminal_partition_eight_of_nine_variants() {
-    // Exhaustive check: exactly one helper returns true for 8 variants;
-    // ApiPending is the documented gap (neither active nor terminal).
-    for &(kind, text) in ALL_KINDS {
+fn is_active_and_is_terminal_agree_on_known_variants() {
+    // ApiPending is the documented gap: neither active nor terminal.
+    for (kind, text) in ALL_KINDS {
         let active = kind.is_active();
         let terminal = kind.is_terminal();
         match kind {
@@ -69,6 +102,7 @@ fn is_active_and_is_terminal_partition_eight_of_nine_variants() {
                 assert!(!active, "ApiPending should not be active");
                 assert!(!terminal, "ApiPending should not be terminal");
             }
+            OrderStatusKind::Unknown(_) => unreachable!("ALL_KINDS lists only the known variants"),
         }
     }
 }

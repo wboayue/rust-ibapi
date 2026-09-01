@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -31,6 +31,25 @@ enum only needs `impl FromStr<Err = Error>` — no per-field wrapper.
 
 **The decoder must reject empty or missing input as `Error::Parse`, never fall back to
 `T::default()`.**
+
+An unrecognized **value** is a separate question from a missing one. On a streaming
+decode path — where a parse failure terminates the subscription — a value IBKR adds
+later must not become a client-side outage, so such enums are *open*: a non-empty
+unrecognized string parses as a value-preserving `Unknown(String)` variant via
+`impl_wire_enum!(Name, fallback Unknown)`, while empty stays `Error::Parse`. Keep
+matching exact and case-sensitive — a case-variant lands in `Unknown` where it is
+observable, never coerced to the nearest known variant. The variant costs `Copy` and
+makes `as_str` return `&str`; the enum stays deliberately exhaustive so the compiler
+points callers at the new arm. Two consequences the derive path hides: serde must be
+hand-written (the derive would emit the externally tagged `{"Unknown":"..."}` for the
+payload variant instead of the plain wire string), and so must the `utoipa` schema
+(`PartialSchema` delegating to `String`). There is deliberately no decode-time log when
+`Unknown` is constructed — callers own the signal, as migration §9's example shows.
+`OrderStatusKind` is the precedent (the official C# client's `OrderStatus` has the same
+`Unknown` fallback). The criterion for opening another enum is its decode path, not its
+vocabulary: inbound stream-parsed enums are candidates when the question arises;
+one-shot and outbound-only enums stay closed — a hard error there fails one call, not
+a stream.
 
 ## Why
 
@@ -56,6 +75,9 @@ For shape-identical enums, `impl_wire_enum!` in `src/macros.rs` generates `Displ
 - Both `None` and `Some("")` produce `Err(Error::Parse(..))` for required fields, or
   `Ok(None)` for optional ones.
 - A `Display` / `FromStr` round-trip over the full variant table.
+- For an open enum: an unrecognized string parses as `Unknown(raw)` and round-trips
+  through `Display` unchanged; empty still errors; a streaming subscription survives a
+  frame carrying the unknown value (see `order_update_stream_survives_unknown_status`).
 
 ## Precedents
 
@@ -66,4 +88,8 @@ migrations — consult it rather than re-deriving which fields were converted an
 - #556, #558 — established the generic `parse_required` / `parse_optional` shape.
 - #559 — the `right: "?"` fixture-vs-wire lesson.
 - #647 — `FundamentalReportType`: docs listed six values, TWS accepts four.
+- #774 — the closed-enum counter-example: one unrecognized `OrderStatus` string
+  terminated every order stream, including `order_update_stream`. Opened
+  `OrderStatusKind` with `Unknown(String)` via the macro's `fallback` form; the
+  missing/empty half of the directive is unchanged.
 

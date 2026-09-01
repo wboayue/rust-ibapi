@@ -37,17 +37,41 @@ macro_rules! impl_str_partial_eq {
 /// with canonical `Error::Parse`, `ToField` via `Display` — runs through the
 /// macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
 /// macro is the only viable shape.
+///
+/// The `fallback $variant` form is for open enums on inbound stream paths,
+/// where an unrecognized value must not terminate the subscription: a
+/// non-empty string that `from_wire` does not recognize parses as
+/// `$name::$variant(raw)` instead of `Error::Parse`. Empty input is still
+/// rejected — absence of a value stays an error (see
+/// `docs/rules/wire/enum-typing.md`); only an unrecognized *value* is
+/// preserved. `as_str` then borrows from `self`, so such enums implement
+/// `as_str(&self) -> &str`.
 macro_rules! impl_wire_enum {
     ($name:ident) => {
-        impl ::std::fmt::Display for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
+        impl_wire_enum!(@common $name);
         impl ::std::str::FromStr for $name {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                 Self::from_wire(s).ok_or_else(|| $crate::Error::Parse(0, s.to_string(), concat!("unknown ", stringify!($name)).into()))
+            }
+        }
+    };
+    ($name:ident, fallback $variant:ident) => {
+        impl_wire_enum!(@common $name);
+        impl ::std::str::FromStr for $name {
+            type Err = $crate::Error;
+            fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                if s.is_empty() {
+                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                }
+                Ok(Self::from_wire(s).unwrap_or_else(|| $name::$variant(s.to_string())))
+            }
+        }
+    };
+    (@common $name:ident) => {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(self.as_str())
             }
         }
         impl $crate::ToField for $name {
