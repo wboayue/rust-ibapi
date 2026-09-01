@@ -178,10 +178,10 @@ The advisory list grows from `[10089, 10167]` to `[2188, 10089, 10090, 10167]` �
 
 ```rust,ignore
 // 3.x
-let advisories: [i32; 2] = ibapi::messages::DATA_ADVISORY_CODES;
+let advisories: [i32; 2] = ibapi::DATA_ADVISORY_CODES;
 
 // 4.0 — let the type follow the const
-let advisories = ibapi::messages::DATA_ADVISORY_CODES;
+let advisories = ibapi::DATA_ADVISORY_CODES;
 ```
 
 ## Behavioral changes
@@ -195,6 +195,8 @@ No code changes required, but observable at runtime:
 - **Notices reclassified.** Codes 2188 and 10090 are data advisories (TWS keeps delivering data after sending them, but the subscription used to be torn down); code-399 order messages whose text carries a `Warning:` line classify as warnings instead of order rejections; a notice with no `error_code` field (code 0) classifies as a warning instead of failing every in-flight shared one-shot.
 - **The order-update stream delivers order-bound errors as notices.** Order-bound error frames arrive as `SubscriptionItem::Notice` (with `request_id`, code, and message) instead of raw frames that failed to decode as `OrderUpdate`. Note `filter_data()` / `iter_data()` drop notices — match on `SubscriptionItem::Notice` to observe rejections of fire-and-forget orders. Request-less errors and errors owned by a data-request subscription no longer reach the stream at all.
 - **Real errors instead of empty results.** `OrderBuilder::analyze()` returns the TWS rejection (e.g. code 201) instead of `Error::UnexpectedEndOfStream`; blocking `matching_symbols()` returns the TWS error instead of `Ok(vec![])`.
+- **Malformed decimals fail instead of decoding as `0`.** Beyond the size fields whose types changed in [§1](#1-market-data-sizes-are-optionf64), every decimal-typed wire field — order quantities, execution shares, positions, bar volume/WAP, market-depth sizes — now surfaces a malformed value as `Error::Parse` instead of silently substituting `0`. TWS's "unset" sentinels are also recognized on all of these fields (previously only a few), decoding to `None` — or `0.0` where the field stays `f64` — instead of leaking as a literal 2.1-billion value.
+- **`TickTypes::MarketDataType` actually arrives.** The variant existed but was never routed to `Client::market_data` subscriptions; TWS's market-data-type notifications (real-time / frozen / delayed / delayed-frozen, sent on subscribe and whenever the feed switches) now reach them, so a match that never saw this variant will start seeing it.
 - **Reconnection is configurable and more resilient.** `ClientBuilder::max_reconnect_attempts` / `reconnect_forever` control the retry budget (default unchanged: 20 attempts, ~7.5 minutes). A session-establishment failure (handshake, `startAPI`, account info) consumes one attempt and backs off instead of aborting the loop — common during an automated TWS restart — and when every attempt fails, `reconnect` returns the last real error instead of a generic `Error::ConnectionFailed`.
 
 ## Quick migration checklist
