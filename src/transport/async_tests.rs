@@ -1024,10 +1024,13 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
 
     let mut req = bus.send_request(100, vec![]).await.unwrap();
     let mut order = bus.send_order_request(200, vec![]).await.unwrap();
+    // Streaming shared subscription — the population that hung forever when
+    // reset skipped shared channels (#776).
+    let mut shared = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
 
     bus.reset_channels().await;
 
-    for (name, sub) in [("request", &mut req), ("order", &mut order)] {
+    for (name, sub) in [("request", &mut req), ("order", &mut order), ("shared", &mut shared)] {
         let item = tokio::time::timeout(TICK, sub.next_routed())
             .await
             .unwrap_or_else(|_| panic!("{name} got no notification"))
@@ -1038,6 +1041,11 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
     assert!(bus.request_channels.read().await.is_empty());
     assert!(bus.order_channels.read().await.is_empty());
     assert!(bus.execution_channels.read().await.is_empty());
+
+    // A shared subscription created after the reset resubscribes at the
+    // channel's current tail: it must not read the stale ConnectionReset.
+    let mut late = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    assert!(late.try_next_routed().is_none(), "post-reset shared subscription read a stale reset");
 }
 
 /// `ensure_shutdown` joins the running message-processing task and reports
