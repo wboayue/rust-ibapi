@@ -8,17 +8,20 @@ triggers:
   - changing a public field's type or a return type's shape
   - adding a builder method or feature flag a 2.x user would search for
   - about to grep for a name you just renamed
-symbols: [README.md, migration-3.0.md]
+symbols: [README.md, migration-4.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
 precedents: ["#549"]
 memory: [feedback_md_doc_snippets_rot_silently, feedback_field_removal_breaks_public_contract]
 ---
 
-Treat `README.md` and `docs/migration-3.0.md` as part of the public API. A v3.0 breaking change
-updates both in the same PR — a migration guide that tells users to adopt patterns which no
-longer compile is worse than no guide.
+Treat `README.md` and the current major's migration guide — `docs/migration-4.0.md` — as part
+of the public API. A breaking change updates both in the same PR — a migration guide that tells
+users to adopt patterns which no longer compile is worse than no guide. Earlier guides
+(`docs/migration-3.0.md`, `MIGRATION.md`) are frozen records of shipped transitions: new
+sections never go there, but a rename can still strand their prose, so they stay in the grep
+set below.
 
-Update `docs/migration-3.0.md` when the PR:
+Update `docs/migration-4.0.md` when the PR:
 
 - removes or renames a public type, struct field, enum variant, method, or re-export;
 - changes a public field's type (`String` → typed enum, `bool` → mode enum);

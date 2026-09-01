@@ -1,6 +1,6 @@
 # Migration Guide: 2.x to 3.0
 
-Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md).
+Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md). Upgrading past 3.x? The 4.0 breaking changes are covered separately in [`migration-4.0.md`](migration-4.0.md).
 
 ## Highlights
 
@@ -865,115 +865,6 @@ println!("{}", report.data);
 
 `TickType::FundamentalRatios` (tick id 47) is also removed. Match arms on it no longer compile; incoming tick id 47 now decodes to `TickType::Unknown`.
 
-### 35. Market-data sizes are `Option<f64>`
-
-IBKR models market-data sizes as decimals and ships them as strings on the wire. Historical tick and histogram sizes were typed `i32`, so a fractional wire value such as `"0.5"` failed integer parsing and silently decoded as `0` — real data loss on crypto and fractional-share feeds. Those fields, plus the `ContractDetails` size rules, are now `Option<f64>`.
-
-| Type | Field | v3 pre-change | v3 now |
-|---|---|---|---|
-| `TickMidpoint` | `size` | `i32` | `Option<f64>` |
-| `TickLast` | `size` | `i32` | `Option<f64>` |
-| `TickBidAsk` | `size_bid`, `size_ask` | `i32` | `Option<f64>` |
-| `HistogramEntry` | `size` | `i32` | `Option<f64>` |
-| `ContractDetails` | `min_size`, `size_increment`, `suggested_size_increment` | `f64` | `Option<f64>` |
-
-`None` means TWS sent no value — the field was absent, empty, or carried one of TWS's "unset" sentinels (`2147483647`, `9223372036854775807`, `-9223372036854775808`, `1.7976931348623157E308`). `Some(0.0)` is a real zero. A malformed size is no longer swallowed: it surfaces as `Error::Parse` and fails the request or subscription.
-
-**The `Ord` gotcha.** `f64` does not implement `Ord`, so `max_by_key` / `min_by_key` on a size no longer compiles. This is the most likely break in existing code:
-
-```rust,ignore
-// Before — compiled against i32
-let mode = histogram.iter().max_by_key(|e| e.size);
-
-// After — pick out the present sizes, then compare with total_cmp
-let mode = histogram
-    .iter()
-    .filter_map(|e| e.size.map(|s| (e, s)))
-    .max_by(|a, b| a.1.total_cmp(&b.1));
-```
-
-**Accumulating.** Treat "unset" as contributing nothing. Use `unwrap_or(0.0)` when you are folding one value at a time into a running total, and `filter_map` when you are reducing a collection — the latter also matters for `min`/`max`, where a substituted `0.0` would skew the result:
-
-```rust,ignore
-// Before
-let mut total_volume = 0;
-total_volume += tick.size;
-
-// After
-let mut total_volume = 0.0;
-total_volume += tick.size.unwrap_or(0.0);
-
-// Or, over a collection:
-let total: f64 = histogram.iter().filter_map(|e| e.size).sum();
-```
-
-**Displaying.** `Option<f64>` is not `Display`, so `{}` no longer works. Prefer surfacing the missing case over hiding it behind a zero:
-
-```rust,ignore
-// Before
-println!("Size: {}", tick.size);
-
-// After
-fn fmt_size(size: Option<f64>) -> String {
-    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
-}
-println!("Size: {}", fmt_size(tick.size));
-```
-
-**Serialized shape changes too.** These types derive `Serialize`/`Deserialize` (and `utoipa::ToSchema` under the `utoipa` feature), so the JSON changes in two ways beyond the compile errors: a present size now serializes as `100.0` rather than `100`, and an absent one as `null` rather than `0`. Under `utoipa` the generated schema goes from `integer` to a nullable `number`. If you publish an OpenAPI contract or have strict JSON consumers downstream, that is a breaking change with no compile-time signal.
-
-`Option<f64>` is an intermediate step. A dedicated decimal quantity type is planned, so sizes will eventually round-trip the wire's decimal representation exactly rather than through binary floating point.
-
-### 36. `Client::check_server_version` is crate-private
-
-The async `Client` exposed `check_server_version(required_version, feature)` as `pub` while the blocking `Client` kept the same method `pub(crate)`. That was drift, not design — the method is the internal guard each version-gated API calls before encoding a request, and nothing in `examples/` or the integration crates ever called it. Both are now `pub(crate)`.
-
-If you were calling it to branch on server support, compare against `Client::server_version()` directly:
-
-```rust,ignore
-// v3.x before — async only
-client.check_server_version(server_versions::SIZE_RULES, "size rules")?;
-
-// v3.0 — the constants are public; the guard is not
-if client.server_version() < server_versions::SIZE_RULES {
-    // fall back
-}
-```
-
-The version-gated methods still perform this check themselves and return `Error::ServerVersion` when the gateway is too old, so an explicit pre-check is only needed when you want to branch instead of erroring.
-
-### 37. WSH event data goes through builders
-
-`wsh_event_data_by_contract` took one required argument and four `Option`s; `wsh_event_data_by_filter` took one and two. Every call site in this repository — both examples and both integration tests — passed `None` for all of them. They now return builders, with one setter per optional value:
-
-```rust,ignore
-// v3.x before
-let events = client.wsh_event_data_by_contract(contract_id, None, None, None, None)?;
-let events = client.wsh_event_data_by_contract(
-    contract_id,
-    Some(date!(2024 - 01 - 01)),
-    Some(date!(2024 - 03 - 31)),
-    Some(50),
-    Some(auto_fill),
-)?;
-let subscription = client.wsh_event_data_by_filter(filter, None, None)?;
-
-// v3.0
-let events = client.wsh_event_data_by_contract(contract_id).fetch()?;
-let events = client
-    .wsh_event_data_by_contract(contract_id)
-    .starting(date!(2024 - 01 - 01))
-    .ending(date!(2024 - 03 - 31))
-    .limit(50)
-    .auto_fill(auto_fill)
-    .fetch()?;
-let subscription = client.wsh_event_data_by_filter(filter).subscribe()?;
-```
-
-The terminals differ because the requests do: `.fetch()` returns a single `WshEventData`, `.subscribe()` returns a `Subscription<WshEventData>`. Async is identical with `.await` on the terminal.
-
-Each setter carries its own server-version requirement — `.starting()` / `.ending()` / `.limit()` need `WSH_EVENT_DATA_FILTERS_DATE`, `.auto_fill()` needs `WSH_EVENT_DATA_FILTERS` — so a bare request still works against a gateway that supports none of them. That was true before too; the builder just makes it visible which argument costs which version.
-
 ## Before / after: common subscription patterns
 
 ### Order construction
@@ -1323,8 +1214,7 @@ Distinct from `Error::ConnectionRejected` (handshake-time refusal, above) and th
 5. Replace string compares against `OrderStatus.status` / `OrderState.status` (`== "Filled"`, `.as_str() == "Cancelled"`, etc.) with `OrderStatusKind` variants or the `is_active()` / `is_terminal()` helpers.
 6. Replace `Client::connect_with_callback` / `Client::connect_with_options` / any `ConnectionOptions::default()...` with the corresponding `Client::builder()` chain. Use `connect_with_notice_stream()` if you previously installed `startup_notice_callback`.
 7. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.
-8. Unwrap market-data sizes: historical tick / histogram sizes and the `ContractDetails` size rules are `Option<f64>`. Watch for `max_by_key` on a size (`f64` isn't `Ord`), `+=` into an integer accumulator, and `{}` formatting — see [§35](#35-market-data-sizes-are-optionf64).
-9. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+8. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

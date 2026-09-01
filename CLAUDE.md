@@ -123,7 +123,7 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Opening a PR that changes public behavior** →
   [changelog entry](docs/rules/docs/changelog-entry.md) — same PR, under `## [Unreleased]`
 - **Removing or renaming anything public** →
-  [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-3.0.md`
+  [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-4.0.md`
   ship with the change; their fenced Rust snippets are compiled by nothing
 - **Drafting GitHub release notes** → [release notes](docs/rules/docs/release-notes.md)
 - **Establishing, changing, or retiring a project convention** →
