@@ -443,6 +443,18 @@ impl Client {
     /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
     /// `execution_id` — the two arrive in either order but share that key. See
     /// the [`CommissionReport`](crate::orders::CommissionReport) docs for the idiom.
+    ///
+    /// # Reconnection
+    ///
+    /// The stream survives the client's automatic reconnects: the same
+    /// subscription keeps delivering once the connection returns. Updates TWS
+    /// emitted during the outage are **not** replayed, and no marker appears
+    /// in the stream itself, so a quiet stream is indistinguishable from
+    /// missed activity. To detect a gap, watch [`Self::notice_stream`] for
+    /// the connectivity notices (codes 1100 connectivity lost, 1101 restored
+    /// with data lost, 1102 restored with data maintained, 1300 socket reset)
+    /// and reconcile open-order state via [`Self::open_orders`] after
+    /// restoration.
     pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         let subscription = self.create_order_update_subscription()?;
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
