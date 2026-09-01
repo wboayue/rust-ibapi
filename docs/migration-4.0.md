@@ -243,7 +243,7 @@ What changes for compiling code:
 - **`is_active()` / `is_terminal()` take `&self`** and both return `false` for `Unknown`, as they do for `ApiPending` — don't assume `!is_active() ⇒ is_terminal()`.
 - **Exhaustive matches need the new arm.** Like `Liquidity`, the enum is deliberately exhaustive (no `#[non_exhaustive]`), so the compiler points at every site.
 
-The nine known statuses parse exactly as before; matching stays exact and case-sensitive, so a case-variant of a known status also lands in `Unknown` rather than being coerced. Empty input is still `Error::Parse` — absence of a value remains an error. Serialization is unchanged in shape: the enum still serializes as the plain status string in both directions (`Unknown("X")` round-trips as `"X"`).
+The nine known statuses parse exactly as before; matching stays exact and case-sensitive, so a case-variant of a known status also lands in `Unknown` rather than being coerced. Empty input is still `Error::Parse` — absence of a value remains an error. Serialization is unchanged in shape: the enum still serializes as the plain status string in both directions (`Unknown("X")` round-trips as `"X"`), and the `utoipa` schema is a plain `string` to match (hand-written, since the derive would describe the tagged `{"Unknown":"X"}` shape the serde impls avoid).
 
 ## Behavioral changes
 

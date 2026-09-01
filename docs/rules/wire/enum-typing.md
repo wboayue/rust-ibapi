@@ -40,11 +40,16 @@ unrecognized string parses as a value-preserving `Unknown(String)` variant via
 matching exact and case-sensitive — a case-variant lands in `Unknown` where it is
 observable, never coerced to the nearest known variant. The variant costs `Copy` and
 makes `as_str` return `&str`; the enum stays deliberately exhaustive so the compiler
-points callers at the new arm. `OrderStatusKind` is the precedent (the official C#
-client's `OrderStatus` has the same `Unknown` fallback); `ExecutionSide`, `OptionRight`,
-`LegAction`, and `SecurityIdType` sit on streaming paths with the closed shape and are
-candidates when their vocabularies come under the same question. One-shot and
-outbound-only enums stay closed — a hard error there fails one call, not a stream.
+points callers at the new arm. Two consequences the derive path hides: serde must be
+hand-written (the derive would emit the externally tagged `{"Unknown":"..."}` for the
+payload variant instead of the plain wire string), and so must the `utoipa` schema
+(`PartialSchema` delegating to `String`). There is deliberately no decode-time log when
+`Unknown` is constructed — callers own the signal, as migration §9's example shows.
+`OrderStatusKind` is the precedent (the official C# client's `OrderStatus` has the same
+`Unknown` fallback). The criterion for opening another enum is its decode path, not its
+vocabulary: inbound stream-parsed enums are candidates when the question arises;
+one-shot and outbound-only enums stay closed — a hard error there fails one call, not
+a stream.
 
 ## Why
 

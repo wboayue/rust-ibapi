@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::OrderStatusKind;
+use crate::orders::{ExecutionSide, OrderStatusKind};
 
 // === parse_required ===
 
@@ -29,16 +29,15 @@ fn parse_required_valid_round_trips() {
 }
 
 #[test]
-fn parse_required_unknown_propagates_fromstr_err() {
-    // A closed enum's unknown value propagates as the FromStr error…
+fn parse_required_defers_unknown_to_fromstr() {
+    // The helper adds no vocabulary policy of its own: a closed enum's
+    // unknown value propagates as the FromStr error. (Open-enum fallback
+    // behavior is owned by the enum and tested beside it — see
+    // order_status_kind_preserves_unknown_wire_status.)
     assert!(matches!(
-        parse_required::<crate::orders::ExecutionSide>(Some("Garbage"), "side"),
+        parse_required::<ExecutionSide>(Some("Garbage"), "side"),
         Err(Error::Parse(_, _, _))
     ));
-    // …while an open enum (fallback form, docs/rules/wire/enum-typing.md)
-    // flows through as its value-preserving variant.
-    let v: OrderStatusKind = parse_required(Some("Garbage"), "OrderStatus").unwrap();
-    assert_eq!(v, OrderStatusKind::Unknown("Garbage".to_string()));
 }
 
 // === parse_optional ===
@@ -62,14 +61,9 @@ fn parse_optional_valid_round_trips() {
 }
 
 #[test]
-fn parse_optional_unknown_propagates_fromstr_err() {
-    // Closed enum: propagate; open enum: preserve. Mirrors parse_required.
-    assert!(matches!(
-        parse_optional::<crate::orders::ExecutionSide>(Some("Garbage")),
-        Err(Error::Parse(_, _, _))
-    ));
-    let v: Option<OrderStatusKind> = parse_optional(Some("Garbage")).unwrap();
-    assert_eq!(v, Some(OrderStatusKind::Unknown("Garbage".to_string())));
+fn parse_optional_defers_unknown_to_fromstr() {
+    // Mirrors parse_required_defers_unknown_to_fromstr.
+    assert!(matches!(parse_optional::<ExecutionSide>(Some("Garbage")), Err(Error::Parse(_, _, _))));
 }
 
 // === parse_optional_decimal ===

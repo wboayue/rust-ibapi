@@ -25,15 +25,14 @@ fn order_status_kind_preserves_unknown_wire_status() {
     // string this crate does not model cannot terminate the order streams.
     // Matching stays exact and case-sensitive — case-variants land in
     // Unknown rather than being coerced to the nearest known variant.
-    for raw in ["NotARealStatus", "submitted", "FILLED"] {
-        let kind: OrderStatusKind = raw.parse().unwrap();
-        assert_eq!(kind, OrderStatusKind::Unknown(raw.to_string()), "{raw}");
-        assert!(!kind.is_active(), "{raw} must not be active");
-        assert!(!kind.is_terminal(), "{raw} must not be terminal");
-        // Display/ToField round-trip the raw value unchanged.
-        assert_eq!(kind.as_str(), raw);
-        assert_eq!(kind.to_string(), raw);
-    }
+    check_wire_enum_round_trip(&[
+        (OrderStatusKind::Unknown("NotARealStatus".into()), "NotARealStatus"),
+        (OrderStatusKind::Unknown("submitted".into()), "submitted"),
+        (OrderStatusKind::Unknown("FILLED".into()), "FILLED"),
+    ]);
+    let unknown = OrderStatusKind::Unknown("NotARealStatus".into());
+    assert!(!unknown.is_active(), "Unknown must not be active");
+    assert!(!unknown.is_terminal(), "Unknown must not be terminal");
 
     // Absence of a value is still an error — only unrecognized values fall
     // back (docs/rules/wire/enum-typing.md).
@@ -85,11 +84,8 @@ fn execution_side_from_str_rejects_unknown() {
 }
 
 #[test]
-fn is_active_and_is_terminal_partition_eight_of_nine_variants() {
-    // Exhaustive check: exactly one helper returns true for 8 variants;
-    // ApiPending is the documented gap (neither active nor terminal), and
-    // Unknown (covered in order_status_kind_preserves_unknown_wire_status)
-    // is neither by design.
+fn is_active_and_is_terminal_agree_on_known_variants() {
+    // ApiPending is the documented gap: neither active nor terminal.
     for (kind, text) in ALL_KINDS {
         let active = kind.is_active();
         let terminal = kind.is_terminal();

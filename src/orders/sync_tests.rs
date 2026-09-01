@@ -648,7 +648,7 @@ fn order_update_stream_survives_unknown_status() {
 
     match stream.next_data() {
         Some(Ok(OrderUpdate::OrderStatus(s))) => {
-            assert_eq!(s.status, OrderStatusKind::Unknown("PendingReplace".to_string()));
+            assert_eq!(s.status, OrderStatusKind::Unknown("PendingReplace".into()));
         }
         other => panic!("expected OrderStatus with Unknown status, got {other:?}"),
     }
