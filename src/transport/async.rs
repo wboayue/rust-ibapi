@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures::Stream;
 use log::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task;
@@ -31,10 +31,11 @@ use super::routing::{
 };
 use super::RoutedItem;
 
-/// Default capacity for broadcast channels, overridable per client via
-/// `ClientBuilder::channel_capacity`. When a consumer falls behind by more
-/// than this, the channel evicts the oldest frames and the subscription
-/// receives a `SUBSCRIPTION_LAG_CODE` notice naming the dropped count.
+/// Default capacity for broadcast channels. Subscription-data channels take
+/// the per-client override from `ClientBuilder::channel_capacity`; the notice
+/// fan-out channels always use this default. When a consumer falls behind by
+/// more than the capacity, the channel evicts the oldest frames and a data
+/// subscription receives a `SUBSCRIPTION_LAG_CODE` notice naming the count.
 pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
 
 /// Cleanup signal for removing channels when subscriptions are dropped
@@ -83,7 +84,7 @@ pub trait AsyncMessageBus: Send + Sync {
 pub struct AsyncInternalSubscription {
     /// Held only for `Clone` via `resubscribe()`. Never polled directly.
     template_receiver: broadcast::Receiver<RoutedItem>,
-    pub(crate) stream: BroadcastStream<RoutedItem>,
+    stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
 }
@@ -143,20 +144,29 @@ impl AsyncInternalSubscription {
         }
     }
 
+    /// Poll the underlying broadcast stream, converting a `Lagged` error into
+    /// an in-band [`SUBSCRIPTION_LAG_CODE`](crate::messages::SUBSCRIPTION_LAG_CODE)
+    /// notice (which also `warn!`s). The single place lag is handled — every
+    /// consumer polls through here, so none can reintroduce a silent swallow.
+    pub(crate) fn poll_next_routed(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<RoutedItem>> {
+        use std::task::Poll;
+        match std::pin::Pin::new(&mut self.stream).poll_next(cx) {
+            Poll::Ready(Some(Ok(item))) => Poll::Ready(Some(item)),
+            Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
+                Poll::Ready(Some(RoutedItem::Notice(crate::messages::subscription_lag_notice(skipped))))
+            }
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
     pub async fn next(&mut self) -> Option<Result<ResponseMessage, Error>> {
         loop {
-            match self.stream.next().await? {
-                Ok(item) => {
-                    if let Some(legacy) = item.into_legacy() {
-                        return Some(legacy);
-                    }
-                }
-                Err(BroadcastStreamRecvError::Lagged(skipped)) => {
-                    // Legacy projection has no Notice channel; the loud part
-                    // of the lag signal is all it can carry.
-                    warn!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
-                    continue;
-                }
+            let item = std::future::poll_fn(|cx| self.poll_next_routed(cx)).await?;
+            // A lag notice maps to `None` here (`into_legacy` drops notices);
+            // its `warn!` already fired inside `poll_next_routed`.
+            if let Some(legacy) = item.into_legacy() {
+                return Some(legacy);
             }
         }
     }
@@ -166,12 +176,7 @@ impl AsyncInternalSubscription {
     /// stub fixtures drive the channel directly via this helper.
     #[cfg(test)]
     pub(crate) async fn next_routed(&mut self) -> Option<RoutedItem> {
-        loop {
-            match self.stream.next().await? {
-                Ok(item) => return Some(item),
-                Err(_lagged) => continue,
-            }
-        }
+        std::future::poll_fn(|cx| self.poll_next_routed(cx)).await
     }
 
     /// Non-blocking poll for "is anything immediately available?". Returns
@@ -180,13 +185,7 @@ impl AsyncInternalSubscription {
     #[cfg(test)]
     pub(crate) fn try_next_routed(&mut self) -> Option<RoutedItem> {
         use futures::FutureExt;
-        loop {
-            match self.stream.next().now_or_never()? {
-                Some(Ok(item)) => return Some(item),
-                Some(Err(_lagged)) => continue,
-                None => return None,
-            }
-        }
+        std::future::poll_fn(|cx| self.poll_next_routed(cx)).now_or_never()?
     }
 
     /// Send the cleanup signal, detaching this subscription's receivers first.
@@ -278,6 +277,14 @@ impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
 }
 
 impl<S: AsyncStream> AsyncTcpMessageBus<S> {
+    /// Create a bus with the default channel capacity. Production goes
+    /// through `with_channel_capacity` (the builder owns the default), so
+    /// this exists for test fixtures that don't care about capacity.
+    #[cfg(test)]
+    pub fn new(connection: AsyncConnection<S>) -> Result<Self, Error> {
+        Self::with_channel_capacity(connection, BROADCAST_CHANNEL_CAPACITY)
+    }
+
     /// Create a new async TCP message bus whose broadcast channels hold up to
     /// `channel_capacity` frames per subscription before evicting the oldest.
     pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Result<Self, Error> {

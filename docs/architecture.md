@@ -199,6 +199,7 @@ The `Client` can be shared between threads for concurrent operations:
 - Fibonacci backoff (1, 2, 3, 5, 8... seconds)
 - Maximum 20 reconnection attempts by default
 - Configurable via `ClientBuilder::max_reconnect_attempts` / `ClientBuilder::reconnect_forever`
+- Async subscriptions ride bounded broadcast channels (default 1024, `ClientBuilder::channel_capacity`); a lagging consumer gets an in-band `SUBSCRIPTION_LAG_CODE` notice for the evicted frames. Sync channels are unbounded; a stalled consumer triggers queue-depth `warn!` watermarks instead
 
 ### Connection Monitoring
 Use `client.is_connected()` to check connection status:

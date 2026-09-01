@@ -53,6 +53,17 @@ async fn test_subscription_with_decoder() {
     assert_eq!(bar.high, 101.0);
 }
 
+/// A request-less notice for tests (no error_time / advanced-reject payload).
+fn test_notice(code: i32, message: &str) -> Notice {
+    Notice {
+        request_id: None,
+        code,
+        message: message.into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
 #[tokio::test]
 async fn test_subscription_lag_yields_gap_notice_then_items() {
     // Regression test for #779: falling behind the broadcast channel yields a
@@ -61,14 +72,7 @@ async fn test_subscription_lag_yields_gap_notice_then_items() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
     let (tx, rx) = broadcast::channel(2);
     for code in [2100, 2101, 2102, 2103] {
-        tx.send(RoutedItem::Notice(Notice {
-            request_id: None,
-            code,
-            message: "n".into(),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        }))
-        .unwrap();
+        tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();
     }
 
     // Capacity 2 with 4 sends: the 2 oldest frames were evicted.
@@ -84,10 +88,7 @@ async fn test_subscription_lag_yields_gap_notice_then_items() {
     );
 
     match subscription.next().await {
-        Some(Ok(SubscriptionItem::Notice(n))) => {
-            assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE);
-            assert!(n.message.contains("2 frames"), "unexpected message: {}", n.message);
-        }
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n, crate::messages::subscription_lag_notice(2)),
         other => panic!("expected gap notice, got {other:?}"),
     }
     for expected in [2102, 2103] {

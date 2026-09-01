@@ -43,7 +43,7 @@ fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, BROADCAST_CHANNEL_CAPACITY).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     (stream, bus)
 }
 

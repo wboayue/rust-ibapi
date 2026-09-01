@@ -72,7 +72,7 @@ pub mod async_impl {
     //! Async `NoticeStream` backed by a `tokio::sync::broadcast` receiver.
 
     use futures::stream::{unfold, Stream};
-    use log::debug;
+    use log::warn;
     use tokio::sync::broadcast::{self, error::RecvError};
 
     use crate::messages::Notice;
@@ -80,8 +80,9 @@ pub mod async_impl {
     /// A handle for receiving globally routed notices on the async transport.
     ///
     /// If the channel lags (broadcaster wraps around because a subscriber didn't
-    /// keep up), the missed items are skipped with a debug log and `next` resumes
-    /// from the most recent notice.
+    /// keep up), the missed items are skipped with a `warn!` and `next` resumes
+    /// from the most recent notice. (Unlike data subscriptions, no in-band gap
+    /// notice is injected here yet — see `plans/broadcast-lag-visibility.md`.)
     #[must_use = "NoticeStream must be polled (.next().await / .stream()) to receive notices; dropping it releases the dispatcher slot"]
     pub struct NoticeStream {
         receiver: broadcast::Receiver<Notice>,
@@ -99,7 +100,7 @@ pub mod async_impl {
                     Ok(notice) => return Some(notice),
                     Err(RecvError::Closed) => return None,
                     Err(RecvError::Lagged(skipped)) => {
-                        debug!("NoticeStream lagged, skipped {skipped} notices");
+                        warn!("NoticeStream lagged, skipped {skipped} notices");
                         continue;
                     }
                 }

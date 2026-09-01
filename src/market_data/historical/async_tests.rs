@@ -1179,10 +1179,7 @@ async fn test_tick_subscription_lag_yields_gap_notice_then_data() {
         TickSubscription::new(AsyncInternalSubscription::new(rx), 9300, Arc::new(MessageBusStub::default()));
 
     match subscription.next().await {
-        Some(Ok(SubscriptionItem::Notice(n))) => {
-            assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE);
-            assert!(n.message.contains("2 frames"), "unexpected message: {}", n.message);
-        }
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n, crate::messages::subscription_lag_notice(2)),
         other => panic!("expected gap notice, got {other:?}"),
     }
     match subscription.next().await {

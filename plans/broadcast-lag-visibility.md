@@ -23,23 +23,33 @@ The transports sit at opposite corners, both silent:
 
 ## Step 1 — visibility only, no semantic change (SHIPPED — see the PR that carries this file)
 
-- **Async**: at each of the three swallow sites, replace the silent
-  `Err(_lagged) => continue` with a `warn!` carrying the skipped count **and**
-  an in-band synthesized gap notice — `SubscriptionItem::Notice` with a new
-  client-side code (next in the -2..-5 series, via `Notice::synthesized()`),
-  message naming the dropped-frame count. Consumers already have Notice arms;
-  the reconcile story is the same contract #777 documented for reconnect gaps
-  (`filter_data()`/`iter_data()` drop notices — document, as with order
-  rejections).
-- **Async**: expose the broadcast capacity through `ClientBuilder` (default
-  unchanged at 1024).
-- **Sync**: watermark warnings — the dispatcher checks `len()` on its queues
-  and `warn!`s when depth crosses thresholds ("consumer stalling, queue at N
-  and growing"). Semantics untouched.
+As shipped:
+
+- **Async**: lag→notice conversion lives in one place —
+  `AsyncInternalSubscription::poll_next_routed` — so every consumer that polls
+  through the wrapper gets the in-band `SUBSCRIPTION_LAG_CODE` (`-6`) notice
+  (built + `warn!`ed by `messages::subscription_lag_notice`); no consumer can
+  reintroduce a silent swallow. The legacy `ResponseMessage` projection drops
+  the notice by construction (`into_legacy`), so that path is warn-only.
+- **Async**: `ClientBuilder::channel_capacity` — a single global per-client
+  knob (default 1024, `0` rejected). The notice fan-out channels keep the
+  default; step 2's per-class capacities would need a new setter shape.
+- **Sync**: watermark warnings on the subscription, shared-channel, and
+  order-update send paths (every 10k of queue depth). Semantics untouched.
 
 Non-terminal is deliberate: a terminal error on lag would let a transient blip
 kill market-data subscriptions. A non-terminal `Err` item was ruled out — it
 breaks the "Err is terminal" contract everywhere.
+
+Step-1 leftovers, deliberately excluded (fold into step 2 or do piecemeal):
+
+- `NoticeStream` (async) lag: upgraded `debug!`→`warn!` only; an in-band
+  `subscription_lag_notice` there is a one-liner (`next` returns
+  `Option<Notice>`) but changes the stream's contents — decide with step 2.
+- `NoticeBroadcaster` (sync notice fan-out) has no watermark.
+- Three sibling `test_notice`/`make_notice` helpers exist across test files;
+  a shared `#[cfg(test)]` constructor next to `Notice::synthesized` would
+  retire them (rule-of-three already tripped).
 
 ## Step 2 — per-class unification (deferred; needs a decision)
 

@@ -38,9 +38,18 @@ const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 const BACKLOG_WATERMARK: usize = 10_000;
 
 /// `true` exactly when `depth` sits on a watermark multiple — one warning per
-/// 10k messages of backlog, not one per message.
+/// 10k messages of backlog, not one per message. The dispatcher is the sole
+/// producer and reads the depth after each single-message send, so an upward
+/// crossing cannot skip past the multiple.
 fn backlog_watermark_crossed(depth: usize) -> bool {
     depth > 0 && depth.is_multiple_of(BACKLOG_WATERMARK)
+}
+
+/// Warn when a queue's depth crosses a watermark; `label` names the queue.
+fn warn_if_backlogged(label: std::fmt::Arguments<'_>, depth: usize) {
+    if backlog_watermark_crossed(depth) {
+        warn!("{label} at {depth} messages and growing — consumer is stalling");
+    }
 }
 
 // For requests without an identifier, shared channels are created
@@ -105,11 +114,8 @@ impl SharedChannels {
             for sender in senders.iter() {
                 if let Err(e) = sender.send(message.clone().into()) {
                     warn!("error sending message: {e}");
-                } else if backlog_watermark_crossed(sender.len()) {
-                    warn!(
-                        "shared channel for {message_type:?} at {} messages and growing — consumer is stalling",
-                        sender.len()
-                    );
+                } else {
+                    warn_if_backlogged(format_args!("shared channel for {message_type:?}"), sender.len());
                 }
             }
         }
@@ -547,9 +553,7 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("error sending to order update stream: {e}");
                     return false;
                 }
-                if backlog_watermark_crossed(sender.len()) {
-                    warn!("order update stream at {} messages and growing — consumer is stalling", sender.len());
-                }
+                warn_if_backlogged(format_args!("order update stream"), sender.len());
                 return true;
             }
         }
@@ -763,11 +767,8 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         if let Some(sender) = senders.get(id) {
             if let Err(err) = sender.send(message) {
                 warn!("error sending: {id:?}, {err}")
-            } else if backlog_watermark_crossed(sender.len()) {
-                warn!(
-                    "subscription queue for {id:?} at {} messages and growing — consumer is stalling",
-                    sender.len()
-                );
+            } else {
+                warn_if_backlogged(format_args!("subscription queue for {id:?}"), sender.len());
             }
         } else {
             warn!("no recipient found for: {id:?}, {message:?}")

@@ -53,11 +53,6 @@ pub(super) struct BuilderState {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
-    /// Async-only: broadcast channel capacity per subscription. `None` means
-    /// the transport default. The sync transport's channels are unbounded, so
-    /// it has no setter for this.
-    #[cfg(feature = "async")]
-    pub(super) channel_capacity: Option<usize>,
 }
 
 impl Default for BuilderState {
@@ -68,8 +63,6 @@ impl Default for BuilderState {
             tcp_no_delay: false,
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
-            #[cfg(feature = "async")]
-            channel_capacity: None,
         }
     }
 }
@@ -84,9 +77,6 @@ pub(super) struct ValidatedPieces {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever.
     pub(super) max_reconnect_attempts: Option<u32>,
-    /// Async-only: broadcast channel capacity; `None` means the transport default.
-    #[cfg(feature = "async")]
-    pub(super) channel_capacity: Option<usize>,
 }
 
 impl BuilderState {
@@ -101,8 +91,6 @@ impl BuilderState {
             tcp_no_delay: self.tcp_no_delay,
             startup_callback: self.startup_callback,
             max_reconnect_attempts: self.max_reconnect_attempts,
-            #[cfg(feature = "async")]
-            channel_capacity: self.channel_capacity,
         })
     }
 }
@@ -317,6 +305,7 @@ pub mod async_impl {
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
         pub(super) state: BuilderState,
+        channel_capacity: Option<usize>,
     }
 
     impl ClientBuilder {
@@ -425,7 +414,7 @@ pub mod async_impl {
         /// # Ok(()) }
         /// ```
         pub fn channel_capacity(mut self, capacity: usize) -> Self {
-            self.state.channel_capacity = Some(capacity);
+            self.channel_capacity = Some(capacity);
             self
         }
 
@@ -509,6 +498,12 @@ pub mod async_impl {
         }
 
         async fn connect_with_sender(self, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
+            if self.channel_capacity == Some(0) {
+                // tokio's broadcast::channel panics on capacity 0; fail the
+                // build instead, at the seam every other invalid input uses.
+                return Err(Error::InvalidArgument("ClientBuilder: channel_capacity must be at least 1".into()));
+            }
+            let channel_capacity = self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY);
             let pieces = self.state.validate()?;
             Client::connect_with_pieces(
                 &pieces.address,
@@ -517,7 +512,7 @@ pub mod async_impl {
                 pieces.startup_callback,
                 sender,
                 pieces.max_reconnect_attempts,
-                pieces.channel_capacity,
+                channel_capacity,
             )
             .await
         }

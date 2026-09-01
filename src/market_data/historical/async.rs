@@ -23,7 +23,6 @@ use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 // === Public API Functions ===
 
@@ -510,14 +509,10 @@ impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
                 return Poll::Ready(None);
             }
 
-            let routed = match Pin::new(&mut this.messages.stream).poll_next(cx) {
-                Poll::Ready(Some(Ok(item))) => item,
-                Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
-                    // The channel evicted `skipped` frames; surface the gap
-                    // in-band instead of silently resuming (#779).
-                    log::warn!("tick subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
-                    return Poll::Ready(Some(Ok(SubscriptionItem::Notice(crate::messages::subscription_lag_notice(skipped)))));
-                }
+            // Lag is converted to an in-band gap notice inside
+            // `poll_next_routed` (#779); the TickAction::Notice arm delivers it.
+            let routed = match this.messages.poll_next_routed(cx) {
+                Poll::Ready(Some(item)) => item,
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => return Poll::Pending,
             };

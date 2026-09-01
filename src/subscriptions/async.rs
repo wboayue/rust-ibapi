@@ -10,11 +10,10 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
-use crate::messages::{subscription_lag_notice, IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
@@ -372,14 +371,10 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                     // Drain the BroadcastStream synchronously while items are
                     // ready, so skipped frames don't re-yield to the executor
                     // between immediately-available items.
-                    let routed = match Pin::new(&mut subscription.stream).poll_next(cx) {
-                        Poll::Ready(Some(Ok(item))) => item,
-                        Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
-                            // The channel evicted `skipped` frames; surface the
-                            // gap in-band instead of silently resuming (#779).
-                            log::warn!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
-                            return Poll::Ready(Some(Ok(SubscriptionItem::Notice(subscription_lag_notice(skipped)))));
-                        }
+                    // Lag is converted to an in-band gap notice inside
+                    // `poll_next_routed` (#779); the Notice arm below delivers it.
+                    let routed = match subscription.poll_next_routed(cx) {
+                        Poll::Ready(Some(item)) => item,
                         Poll::Ready(None) => return Poll::Ready(None),
                         Poll::Pending => return Poll::Pending,
                     };

@@ -9,7 +9,7 @@
 ## What's new in 4.0
 
 - **Decimal-safe market-data sizes.** Historical tick and histogram sizes (and the `ContractDetails` size rules) are `Option<f64>` — fractional sizes on crypto and fractional-share feeds no longer truncate to `0`, and "TWS sent no value" is distinguishable from a real zero.
-- **Transport hardening.** Frame-length validation with automatic reconnect (`Error::InvalidFrame`), wrong-wire-format detection (`Error::UnexpectedWireFormat`), uniform retry-on-reset across one-shot requests, a configurable reconnect budget (`ClientBuilder::max_reconnect_attempts` / `reconnect_forever`), and byte-level stream capture via `IBAPI_RAW_CAPTURE_DIR`.
+- **Transport hardening.** Frame-length validation with automatic reconnect (`Error::InvalidFrame`), wrong-wire-format detection (`Error::UnexpectedWireFormat`), uniform retry-on-reset across one-shot requests, a configurable reconnect budget (`ClientBuilder::max_reconnect_attempts` / `reconnect_forever`), observable consumer lag (in-band `SUBSCRIPTION_LAG_CODE` notices, `ClientBuilder::channel_capacity`), and byte-level stream capture via `IBAPI_RAW_CAPTURE_DIR`.
 - **Smarter notice routing.** Data advisories (2188, 10090) and warning-text order messages no longer terminate subscriptions; order-bound rejections reach the order-update stream as `SubscriptionItem::Notice` with a `request_id`; unrecognized execution liquidity codes surface as `Liquidity::Unknown(code)` instead of collapsing to `None`.
 
 See [`docs/migration-4.0.md`](docs/migration-4.0.md) for the before/after on every breaking change.
