@@ -1168,7 +1168,8 @@ pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 /// Synthesized notice code emitted when a handshake-time frame's
 /// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
 /// (TWS uses 0+); the other client-synthesized codes are
-/// [`HANDSHAKE_DECODE_FAILURE_CODE`] and [`UNKNOWN_MESSAGE_TYPE_CODE`]. See
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`], and
+/// [`SUBSCRIPTION_LAG_CODE`]. See
 /// [`Notice::is_handshake_synthetic`].
 pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 
@@ -1185,8 +1186,8 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// id maps to no known [`IncomingMessages`] kind, so nothing can route it.
 ///
 /// Negative, like the other client-synthesized notice codes
-/// ([`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`]); TWS
-/// itself only uses codes 0 and up.
+/// ([`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`],
+/// [`SUBSCRIPTION_LAG_CODE`]); TWS itself only uses codes 0 and up.
 ///
 /// This is the observable form of a framing desynchronization: the length
 /// prefix is positional, so once a read starts at the wrong offset every
@@ -1199,6 +1200,31 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// IBKR has added repeats one. A burst of distinct ids on a previously healthy
 /// connection means the framing slipped.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
+
+/// Synthesized notice code emitted in-band on an async subscription whose
+/// consumer fell behind its broadcast channel: the channel evicted the oldest
+/// frames, and this notice — carrying the dropped count in its message — is
+/// what the consumer sees in their place.
+///
+/// Negative, like the other client-synthesized notice codes; TWS itself only
+/// uses codes 0 and up.
+///
+/// On receiving this notice the stream is still live, but frames are gone:
+/// reconcile the same way as after a reconnect gap (for order streams,
+/// `open_orders()`; for market data, the feed self-corrects with the next
+/// tick). A consumer that lags persistently should raise
+/// `ClientBuilder::channel_capacity` or consume faster.
+pub const SUBSCRIPTION_LAG_CODE: i32 = -6;
+
+/// Build the in-band notice for a subscription that fell behind its broadcast
+/// channel and had `skipped` frames evicted, and emit the matching `warn!`.
+/// The single owner of the lag wording; see [`SUBSCRIPTION_LAG_CODE`].
+#[cfg(feature = "async")]
+pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
+    let message = format!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
+    log::warn!("{message}");
+    Notice::synthesized(SUBSCRIPTION_LAG_CODE, message)
+}
 
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
@@ -1341,9 +1367,10 @@ impl From<&ResponseMessage> for Notice {
 
 impl Notice {
     /// Build a client-synthesized notice with no wire timestamp and no
-    /// advanced-order-reject JSON. Used by handshake-time observability
-    /// shims (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`] /
-    /// [`HANDSHAKE_DECODE_FAILURE_CODE`]).
+    /// advanced-order-reject JSON. Used by the client-side observability
+    /// codes (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`],
+    /// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
+    /// [`SUBSCRIPTION_LAG_CODE`]).
     pub(crate) fn synthesized(code: i32, message: String) -> Notice {
         Notice {
             request_id: None,

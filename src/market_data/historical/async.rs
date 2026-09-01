@@ -509,9 +509,10 @@ impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
                 return Poll::Ready(None);
             }
 
-            let routed = match Pin::new(&mut this.messages.stream).poll_next(cx) {
-                Poll::Ready(Some(Ok(item))) => item,
-                Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
+            // Lag is converted to an in-band gap notice inside
+            // `poll_next_routed` (#779); the TickAction::Notice arm delivers it.
+            let routed = match this.messages.poll_next_routed(cx) {
+                Poll::Ready(Some(item)) => item,
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => return Poll::Pending,
             };

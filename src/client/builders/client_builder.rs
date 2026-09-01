@@ -305,6 +305,7 @@ pub mod async_impl {
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
     pub struct ClientBuilder {
         pub(super) state: BuilderState,
+        channel_capacity: Option<usize>,
     }
 
     impl ClientBuilder {
@@ -389,6 +390,34 @@ pub mod async_impl {
             self
         }
 
+        /// Set the per-subscription broadcast channel capacity (default 1024).
+        ///
+        /// Every async subscription reads from a bounded broadcast channel; a
+        /// consumer that falls more than `capacity` frames behind has the
+        /// oldest frames evicted and receives a
+        /// [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE)
+        /// notice naming the dropped count. Raise the capacity if your
+        /// consumers legitimately fall behind during bursts; the cost is
+        /// memory per in-flight subscription.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use ibapi::Client;
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// let client = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .channel_capacity(8192)
+        ///     .connect()
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn channel_capacity(mut self, capacity: usize) -> Self {
+            self.channel_capacity = Some(capacity);
+            self
+        }
+
         /// Set a callback for unsolicited typed messages during the handshake.
         ///
         /// Fires for `OpenOrder`, `OrderStatus`, account updates, and other
@@ -469,6 +498,12 @@ pub mod async_impl {
         }
 
         async fn connect_with_sender(self, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
+            if self.channel_capacity == Some(0) {
+                // tokio's broadcast::channel panics on capacity 0; fail the
+                // build instead, at the seam every other invalid input uses.
+                return Err(Error::InvalidArgument("ClientBuilder: channel_capacity must be at least 1".into()));
+            }
+            let channel_capacity = self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY);
             let pieces = self.state.validate()?;
             Client::connect_with_pieces(
                 &pieces.address,
@@ -477,6 +512,7 @@ pub mod async_impl {
                 pieces.startup_callback,
                 sender,
                 pieces.max_reconnect_attempts,
+                channel_capacity,
             )
             .await
         }

@@ -1698,6 +1698,17 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
     Ok(())
 }
 
+/// One warning per watermark multiple — not one per message, not never.
+#[test]
+fn backlog_watermark_fires_on_multiples_only() {
+    assert!(!backlog_watermark_crossed(0));
+    assert!(!backlog_watermark_crossed(1));
+    assert!(!backlog_watermark_crossed(BACKLOG_WATERMARK - 1));
+    assert!(backlog_watermark_crossed(BACKLOG_WATERMARK));
+    assert!(!backlog_watermark_crossed(BACKLOG_WATERMARK + 1));
+    assert!(backlog_watermark_crossed(2 * BACKLOG_WATERMARK));
+}
+
 /// Queue a marker drop signal behind everything already queued and wait until
 /// the cleanup thread has processed it. Signals are handled FIFO by a single
 /// thread, so once the marker's registration is gone, every signal sent

@@ -79,6 +79,19 @@ mod async_tests {
         assert_invalid_argument(result.err(), "client_id");
     }
 
+    #[tokio::test]
+    async fn connect_with_zero_channel_capacity_returns_invalid_argument() {
+        // tokio's broadcast::channel(0) panics; the builder must reject it
+        // at the validation seam instead.
+        let result = ClientBuilder::default()
+            .address("127.0.0.1:4002")
+            .client_id(100)
+            .channel_capacity(0)
+            .connect()
+            .await;
+        assert_invalid_argument(result.err(), "channel_capacity");
+    }
+
     #[test]
     fn reconnect_limit_configurators_set_state() {
         assert_eq!(

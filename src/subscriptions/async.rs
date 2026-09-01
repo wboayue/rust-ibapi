@@ -371,9 +371,10 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                     // Drain the BroadcastStream synchronously while items are
                     // ready, so skipped frames don't re-yield to the executor
                     // between immediately-available items.
-                    let routed = match Pin::new(&mut subscription.stream).poll_next(cx) {
-                        Poll::Ready(Some(Ok(item))) => item,
-                        Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
+                    // Lag is converted to an in-band gap notice inside
+                    // `poll_next_routed` (#779); the Notice arm below delivers it.
+                    let routed = match subscription.poll_next_routed(cx) {
+                        Poll::Ready(Some(item)) => item,
                         Poll::Ready(None) => return Poll::Ready(None),
                         Poll::Pending => return Poll::Pending,
                     };

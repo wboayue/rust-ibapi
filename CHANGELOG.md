@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `SUBSCRIPTION_LAG_CODE` (`-6`), a synthesized notice code delivered **in-band** on an async subscription whose consumer fell behind its broadcast channel: the channel evicts the oldest frames, and the subscription now receives a non-terminal `SubscriptionItem::Notice` naming the dropped count (plus a `warn!`) where it previously resumed silently — the frames were simply gone with no signal at any level. Reconcile as after a reconnect gap (order streams: `open_orders()`; market data self-corrects with the next tick). Step 1 of the #779 plan (`plans/broadcast-lag-visibility.md`): loss is now observable; the bounded-lossy semantic itself is unchanged (#779).
+
+- `ClientBuilder::channel_capacity` (async only), setting the per-subscription broadcast channel capacity (default unchanged: 1024). Raise it if consumers legitimately fall behind during bursts; `0` is rejected as `Error::InvalidArgument`. The notice fan-out keeps the default (#779).
+
 - `ClientBuilder::max_reconnect_attempts` and `ClientBuilder::reconnect_forever` (sync and async), configuring how many times the automatic reconnect loop retries before giving up. The default is unchanged: 20 attempts, ~7.5 minutes with the capped Fibonacci backoff — too short to span a TWS/IB Gateway nightly restart that needs a manual re-login, which is what `reconnect_forever` (retry every 30 s until the connection returns) is for (#762, #763).
 
 - `IBAPI_RAW_CAPTURE_DIR`, a byte-level tap on the inbound stream. Set it to a directory and every connection writes `<stamp>-<n>-inbound-<NNN>.bin`, a verbatim copy of what the socket delivered — **including the 4-byte length prefix** — alongside an `.idx` of `seq,utc_timestamp,offset,declared_length` per frame. `IBAPI_RECORDING_DIR` cannot substitute: it is handed an already-parsed message and re-frames it, so the prefix it writes is one this crate computed. That makes it blind to a framing desync, where the prefix is the corrupted field. The tap sits below validation, so a prefix rejected as `Error::InvalidFrame` still reaches the capture — that prefix is the evidence. A reconnect starts a new file, so no `.bin` splices two TCP streams. Because prefixes are preserved, a capture replays through the frame reader unchanged; `cargo run --example replay_raw_capture -- <file>.bin` walks one and reports the first frame that cannot be read. Captures are unredacted wire bytes, so they carry account ids, positions, and orders.
@@ -24,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ORDER_MESSAGE_CODE` (`399`), the generic order-message code whose message text decides severity (#759).
 
 ### Changed
+
+- Sync transport: a stalled consumer now triggers `warn!` watermarks at every 10,000 queued messages on the subscription, shared-channel, and order-update send paths. Sync channels are unbounded and never drop; their failure mode — silent memory growth — is now loud. The notice fan-out (`NoticeBroadcaster`) is excluded for now; see `plans/broadcast-lag-visibility.md` (#779).
 
 - `OrderStatusKind` gains an `Unknown(String)` variant preserving unrecognized status strings (see the Fixed entry below). Breaking: the enum stays deliberately exhaustive like `Liquidity::Unknown` (#760), so downstream exhaustive matches need a new arm; `Copy` is gone (still `Clone`); `as_str()` returns `&str`; `is_active()` / `is_terminal()` take `&self` and are `false` for `Unknown`. Serialization stays a plain string in both directions, and the `utoipa` schema is now a plain `string` to match. Details and examples in `docs/migration-4.0.md` §9 (#774).
 

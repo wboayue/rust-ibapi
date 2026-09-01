@@ -53,6 +53,52 @@ async fn test_subscription_with_decoder() {
     assert_eq!(bar.high, 101.0);
 }
 
+/// A request-less notice for tests (no error_time / advanced-reject payload).
+fn test_notice(code: i32, message: &str) -> Notice {
+    Notice {
+        request_id: None,
+        code,
+        message: message.into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+#[tokio::test]
+async fn test_subscription_lag_yields_gap_notice_then_items() {
+    // Regression test for #779: falling behind the broadcast channel yields a
+    // synthesized gap notice naming the dropped count, then the retained
+    // items — not a silent resume.
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let (tx, rx) = broadcast::channel(2);
+    for code in [2100, 2101, 2102, 2103] {
+        tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();
+    }
+
+    // Capacity 2 with 4 sends: the 2 oldest frames were evicted.
+    let internal = AsyncInternalSubscription::new(rx);
+    let mut subscription: Subscription<Bar> = Subscription::with_decoder(
+        internal,
+        message_bus,
+        |_context, _msg| unreachable!("no Response frames in this test"),
+        &[IncomingMessages::TickPrice],
+        Some(9000),
+        None,
+        DecoderContext::default(),
+    );
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n, crate::messages::subscription_lag_notice(2)),
+        other => panic!("expected gap notice, got {other:?}"),
+    }
+    for expected in [2102, 2103] {
+        match subscription.next().await {
+            Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n.code, expected, "retained notice after the gap"),
+            other => panic!("expected retained notice {expected}, got {other:?}"),
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_subscription_new_from_receiver() {
     let (tx, rx) = mpsc::unbounded_channel();
