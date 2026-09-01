@@ -1200,6 +1200,34 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// connection means the framing slipped.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 
+/// Synthesized notice code emitted in-band on an async subscription whose
+/// consumer fell behind its broadcast channel: the channel evicted the oldest
+/// frames, and this notice — carrying the dropped count in its message — is
+/// what the consumer sees in their place. Previously the frames vanished with
+/// no signal at all.
+///
+/// Negative, like the other client-synthesized notice codes; TWS itself only
+/// uses codes 0 and up. Emitted by the async transport only — the sync
+/// transport's channels are unbounded and never drop (its failure mode is
+/// queue growth, reported via `warn!` watermarks instead).
+///
+/// On receiving this notice the stream is still live, but frames are gone:
+/// reconcile the same way as after a reconnect gap (for order streams,
+/// `open_orders()`; for market data, the feed self-corrects with the next
+/// tick). A consumer that lags persistently should raise
+/// `ClientBuilder::channel_capacity` or consume faster.
+pub const SUBSCRIPTION_LAG_CODE: i32 = -6;
+
+/// Build the in-band notice for a subscription that fell behind its broadcast
+/// channel and had `skipped` frames evicted. See [`SUBSCRIPTION_LAG_CODE`].
+#[cfg(feature = "async")]
+pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
+    Notice::synthesized(
+        SUBSCRIPTION_LAG_CODE,
+        format!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)"),
+    )
+}
+
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all
@@ -1341,9 +1369,10 @@ impl From<&ResponseMessage> for Notice {
 
 impl Notice {
     /// Build a client-synthesized notice with no wire timestamp and no
-    /// advanced-order-reject JSON. Used by handshake-time observability
-    /// shims (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`] /
-    /// [`HANDSHAKE_DECODE_FAILURE_CODE`]).
+    /// advanced-order-reject JSON. Used by the client-side observability
+    /// codes (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`],
+    /// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
+    /// [`SUBSCRIPTION_LAG_CODE`]).
     pub(crate) fn synthesized(code: i32, message: String) -> Notice {
         Notice {
             request_id: None,

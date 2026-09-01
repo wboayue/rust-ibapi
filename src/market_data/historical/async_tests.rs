@@ -1156,6 +1156,46 @@ async fn test_tick_subscription_error_surfaces_via_err_arm() {
 }
 
 #[tokio::test]
+async fn test_tick_subscription_lag_yields_gap_notice_then_data() {
+    // Regression test for #779: a consumer that falls behind the broadcast
+    // channel receives a synthesized gap notice naming the dropped count,
+    // then the retained frames — not a silent resume.
+    let (tx, rx) = tokio::sync::broadcast::channel(2);
+    for code in [2100, 2101, 2102] {
+        tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();
+    }
+    tx.send(RoutedItem::Response(proto_response(
+        IncomingMessages::HistoricalTickLast,
+        historical_ticks_last_response()
+            .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
+            .done(true)
+            .encode_proto(),
+    )))
+    .unwrap();
+    drop(tx);
+
+    // Capacity 2 with 4 sends: the 2 oldest frames were evicted.
+    let mut subscription: TickSubscription<TickLast> =
+        TickSubscription::new(AsyncInternalSubscription::new(rx), 9300, Arc::new(MessageBusStub::default()));
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(n))) => {
+            assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE);
+            assert!(n.message.contains("2 frames"), "unexpected message: {}", n.message);
+        }
+        other => panic!("expected gap notice, got {other:?}"),
+    }
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n.code, 2102, "retained notice after the gap"),
+        other => panic!("expected retained notice, got {other:?}"),
+    }
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(tick))) => assert_eq!(tick.price, 15.00),
+        other => panic!("expected retained tick data, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_tick_subscription_notice_passes_through_then_data() {
     // A Notice surfaces as SubscriptionItem::Notice (stream stays open); a
     // following tick batch is delivered after it. filter_data() drops the notice.

@@ -17,6 +17,7 @@ use log::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task;
 use tokio::time::Duration;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::connection::r#async::AsyncConnection;
@@ -30,8 +31,10 @@ use super::routing::{
 };
 use super::RoutedItem;
 
-/// Default capacity for broadcast channels
-/// This should be large enough to handle bursts of messages without lagging
+/// Default capacity for broadcast channels, overridable per client via
+/// `ClientBuilder::channel_capacity`. When a consumer falls behind by more
+/// than this, the channel evicts the oldest frames and the subscription
+/// receives a `SUBSCRIPTION_LAG_CODE` notice naming the dropped count.
 pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
 
 /// Cleanup signal for removing channels when subscriptions are dropped
@@ -148,7 +151,12 @@ impl AsyncInternalSubscription {
                         return Some(legacy);
                     }
                 }
-                Err(_lagged) => continue,
+                Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+                    // Legacy projection has no Notice channel; the loud part
+                    // of the lag signal is all it can carry.
+                    warn!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
+                    continue;
+                }
             }
         }
     }
@@ -246,6 +254,9 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     execution_channels: Arc<RwLock<HashMap<String, BroadcastSender>>>,
     /// Optional channel for order update stream
     order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
+    /// Capacity of every broadcast channel this bus creates. Default
+    /// `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
+    channel_capacity: usize,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
     /// Handle to the message processing task
@@ -267,8 +278,9 @@ impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
 }
 
 impl<S: AsyncStream> AsyncTcpMessageBus<S> {
-    /// Create a new async TCP message bus
-    pub fn new(connection: AsyncConnection<S>) -> Result<Self, Error> {
+    /// Create a new async TCP message bus whose broadcast channels hold up to
+    /// `channel_capacity` frames per subscription before evicting the oldest.
+    pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
         // Pre-create broadcast channels for all shared channels (like sync does)
@@ -276,7 +288,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let mut shared_channel_receivers = HashMap::new();
 
         for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+            let (sender, receiver) = broadcast::channel(channel_capacity);
             shared_channel_receivers.insert(mapping.request, receiver);
 
             // Map each response type to the sender (multiple response types can share same sender)
@@ -293,6 +305,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             order_channels: Arc::new(RwLock::new(HashMap::new())),
             execution_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
+            channel_capacity,
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
@@ -722,7 +735,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+        let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
         {
             let mut channels = self.request_channels.write().await;
@@ -739,7 +752,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+        let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
         {
             let mut channels = self.order_channels.write().await;
@@ -817,7 +830,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             return Err(Error::AlreadySubscribed);
         }
 
-        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+        let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
         *order_update_stream = Some(sender);
 

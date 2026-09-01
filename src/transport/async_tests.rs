@@ -43,11 +43,28 @@ fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, BROADCAST_CHANNEL_CAPACITY).unwrap());
     (stream, bus)
 }
 
 const TICK: Duration = Duration::from_millis(100);
+
+/// `with_channel_capacity` reaches the per-request channels: a capacity-2
+/// channel holds at most 2 queued frames, evicting the oldest (#779).
+#[tokio::test]
+async fn test_with_channel_capacity_bounds_request_channels() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2).unwrap());
+
+    let _sub = bus.send_request(1, vec![]).await.unwrap();
+    let sender = bus.request_channels.read().await.get(&1).unwrap().clone();
+    for _ in 0..3 {
+        sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
+    }
+    assert_eq!(sender.len(), 2, "capacity-2 channel retains only the newest 2 frames");
+}
 
 /// Receive next message with a deadline; panics with context if the channel
 /// times out, closes, or surfaces an error.

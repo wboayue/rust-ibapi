@@ -10,10 +10,11 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{subscription_lag_notice, IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
@@ -373,7 +374,12 @@ impl<T: Send + 'static> Stream for Subscription<T> {
                     // between immediately-available items.
                     let routed = match Pin::new(&mut subscription.stream).poll_next(cx) {
                         Poll::Ready(Some(Ok(item))) => item,
-                        Poll::Ready(Some(Err(_lagged))) => continue, // skip BroadcastStream lag
+                        Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
+                            // The channel evicted `skipped` frames; surface the
+                            // gap in-band instead of silently resuming (#779).
+                            log::warn!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
+                            return Poll::Ready(Some(Ok(SubscriptionItem::Notice(subscription_lag_notice(skipped)))));
+                        }
                         Poll::Ready(None) => return Poll::Ready(None),
                         Poll::Pending => return Poll::Pending,
                     };

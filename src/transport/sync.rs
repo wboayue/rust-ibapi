@@ -30,6 +30,19 @@ use crate::Error;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// Queue depth at which (and at every further multiple of which) a growing
+/// sync channel logs a warning. Sync channels are unbounded — they never drop,
+/// so the failure mode of a stalled consumer is silent memory growth. The
+/// watermark makes it loud without changing the lossless semantics; see
+/// `plans/broadcast-lag-visibility.md` (#779).
+const BACKLOG_WATERMARK: usize = 10_000;
+
+/// `true` exactly when `depth` sits on a watermark multiple — one warning per
+/// 10k messages of backlog, not one per message.
+fn backlog_watermark_crossed(depth: usize) -> bool {
+    depth > 0 && depth.is_multiple_of(BACKLOG_WATERMARK)
+}
+
 // For requests without an identifier, shared channels are created
 // to route request/response pairs based on message type.
 #[derive(Debug)]
@@ -92,6 +105,11 @@ impl SharedChannels {
             for sender in senders.iter() {
                 if let Err(e) = sender.send(message.clone().into()) {
                     warn!("error sending message: {e}");
+                } else if backlog_watermark_crossed(sender.len()) {
+                    warn!(
+                        "shared channel for {message_type:?} at {} messages and growing — consumer is stalling",
+                        sender.len()
+                    );
                 }
             }
         }
@@ -529,6 +547,9 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("error sending to order update stream: {e}");
                     return false;
                 }
+                if backlog_watermark_crossed(sender.len()) {
+                    warn!("order update stream at {} messages and growing — consumer is stalling", sender.len());
+                }
                 return true;
             }
         }
@@ -742,6 +763,11 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         if let Some(sender) = senders.get(id) {
             if let Err(err) = sender.send(message) {
                 warn!("error sending: {id:?}, {err}")
+            } else if backlog_watermark_crossed(sender.len()) {
+                warn!(
+                    "subscription queue for {id:?} at {} messages and growing — consumer is stalling",
+                    sender.len()
+                );
             }
         } else {
             warn!("no recipient found for: {id:?}, {message:?}")

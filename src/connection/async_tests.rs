@@ -102,7 +102,10 @@ async fn make_client() -> Client {
     connection.establish_connection().await.expect("establish_connection failed");
     let server_version = connection.server_version();
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    let bus = Arc::new(
+        AsyncTcpMessageBus::with_channel_capacity(connection, crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY)
+            .expect("AsyncTcpMessageBus::with_channel_capacity"),
+    );
     bus.clone()
         .process_messages(server_version, Duration::from_secs(0))
         .expect("process_messages");

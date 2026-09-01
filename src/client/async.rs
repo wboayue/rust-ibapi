@@ -105,12 +105,16 @@ impl Client {
         startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
         notice_sender: broadcast::Sender<Notice>,
         max_reconnect_attempts: Option<u32>,
+        channel_capacity: Option<usize>,
     ) -> Result<Client, Error> {
         let connection =
             AsyncConnection::with_pieces(address, client_id, tcp_no_delay, startup_callback, notice_sender, max_reconnect_attempts).await?;
         let connection_metadata = connection.connection_metadata().await;
 
-        let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);
+        let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(
+            connection,
+            channel_capacity.unwrap_or(crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY),
+        )?);
 
         // Start background task to read messages from TWS
         message_bus

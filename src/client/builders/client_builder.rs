@@ -53,6 +53,11 @@ pub(super) struct BuilderState {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
+    /// Async-only: broadcast channel capacity per subscription. `None` means
+    /// the transport default. The sync transport's channels are unbounded, so
+    /// it has no setter for this.
+    #[cfg(feature = "async")]
+    pub(super) channel_capacity: Option<usize>,
 }
 
 impl Default for BuilderState {
@@ -63,6 +68,8 @@ impl Default for BuilderState {
             tcp_no_delay: false,
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            #[cfg(feature = "async")]
+            channel_capacity: None,
         }
     }
 }
@@ -77,6 +84,9 @@ pub(super) struct ValidatedPieces {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever.
     pub(super) max_reconnect_attempts: Option<u32>,
+    /// Async-only: broadcast channel capacity; `None` means the transport default.
+    #[cfg(feature = "async")]
+    pub(super) channel_capacity: Option<usize>,
 }
 
 impl BuilderState {
@@ -91,6 +101,8 @@ impl BuilderState {
             tcp_no_delay: self.tcp_no_delay,
             startup_callback: self.startup_callback,
             max_reconnect_attempts: self.max_reconnect_attempts,
+            #[cfg(feature = "async")]
+            channel_capacity: self.channel_capacity,
         })
     }
 }
@@ -389,6 +401,34 @@ pub mod async_impl {
             self
         }
 
+        /// Set the per-subscription broadcast channel capacity (default 1024).
+        ///
+        /// Every async subscription reads from a bounded broadcast channel; a
+        /// consumer that falls more than `capacity` frames behind has the
+        /// oldest frames evicted and receives a
+        /// [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE)
+        /// notice naming the dropped count. Raise the capacity if your
+        /// consumers legitimately fall behind during bursts; the cost is
+        /// memory per in-flight subscription.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use ibapi::Client;
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// let client = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .channel_capacity(8192)
+        ///     .connect()
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn channel_capacity(mut self, capacity: usize) -> Self {
+            self.state.channel_capacity = Some(capacity);
+            self
+        }
+
         /// Set a callback for unsolicited typed messages during the handshake.
         ///
         /// Fires for `OpenOrder`, `OrderStatus`, account updates, and other
@@ -477,6 +517,7 @@ pub mod async_impl {
                 pieces.startup_callback,
                 sender,
                 pieces.max_reconnect_attempts,
+                pieces.channel_capacity,
             )
             .await
         }

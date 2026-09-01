@@ -34,6 +34,23 @@ fn validate_passes_reconnect_limit_through() {
     assert_eq!(unlimited.validate().expect("validate").max_reconnect_attempts, None);
 }
 
+#[cfg(feature = "async")]
+#[test]
+fn validate_passes_channel_capacity_through() {
+    let base = || BuilderState {
+        address: Some("127.0.0.1:4002".into()),
+        client_id: Some(100),
+        ..Default::default()
+    };
+
+    // Default: None, meaning the transport default.
+    assert_eq!(base().validate().expect("validate").channel_capacity, None);
+
+    let mut sized = base();
+    sized.channel_capacity = Some(8192);
+    assert_eq!(sized.validate().expect("validate").channel_capacity, Some(8192));
+}
+
 #[cfg(feature = "sync")]
 mod sync_tests {
     use super::super::sync_impl::ClientBuilder;
