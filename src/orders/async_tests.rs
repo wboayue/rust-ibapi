@@ -532,6 +532,41 @@ async fn test_order_update_stream() {
 }
 
 #[tokio::test]
+async fn test_order_update_stream_survives_unknown_status() {
+    // Regression test for #774: a status string this crate does not model
+    // must arrive as OrderStatusKind::Unknown, not terminate the stream —
+    // the frame queued behind it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status()
+                .order_id(1)
+                .status(OrderStatusKind::Unknown("PendingReplace".into()))
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().order_id(1).status(OrderStatusKind::Filled).encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OrderStatus(s)))) => {
+            assert_eq!(s.status, OrderStatusKind::Unknown("PendingReplace".to_string()));
+        }
+        other => panic!("expected OrderStatus with Unknown status, got {other:?}"),
+    }
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OrderStatus(s)))) => {
+            assert_eq!(s.status, OrderStatusKind::Filled);
+        }
+        other => panic!("stream did not survive the unknown status, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_order_update_stream_already_subscribed() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);

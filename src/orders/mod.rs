@@ -718,7 +718,7 @@ impl Action {
 /// pragmatic default; [`OrderStatus::default`] callers should overwrite it
 /// before reading.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum OrderStatusKind {
     /// Order has not yet been sent to the IB server, e.g. while waiting for a
     /// security definition lookup. Uncommon in practice.
@@ -750,11 +750,22 @@ pub enum OrderStatusKind {
     /// Order was received but is no longer active because it was rejected or
     /// cancelled. Terminal.
     Inactive,
+    /// Status string not modeled by this version of the API. Carries the raw
+    /// wire value so callers can log, store, or act on it. Neither
+    /// [`is_active`](Self::is_active) nor [`is_terminal`](Self::is_terminal).
+    ///
+    /// TWS shipping a new status must not take down the order streams (the
+    /// official IB client parses unrecognized statuses as `Unknown` too), so
+    /// this decodes instead of failing; matching is exact and case-sensitive,
+    /// so a case-variant of a known status also lands here rather than being
+    /// silently coerced.
+    Unknown(String),
 }
 
 impl OrderStatusKind {
-    /// Return the canonical wire string for this status.
-    pub fn as_str(&self) -> &'static str {
+    /// Return the canonical wire string for this status — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
         match self {
             OrderStatusKind::ApiPending => "ApiPending",
             OrderStatusKind::PendingSubmit => "PendingSubmit",
@@ -765,6 +776,7 @@ impl OrderStatusKind {
             OrderStatusKind::Cancelled => "Cancelled",
             OrderStatusKind::Filled => "Filled",
             OrderStatusKind::Inactive => "Inactive",
+            OrderStatusKind::Unknown(raw) => raw,
         }
     }
 
@@ -787,20 +799,37 @@ impl OrderStatusKind {
     /// `PendingCancel`, `Submitted`.
     ///
     /// Note that [`is_active`](Self::is_active) and
-    /// [`is_terminal`](Self::is_terminal) together cover 8 of 9 variants —
-    /// `ApiPending` is neither, so do not assume `!is_active() ⇒ is_terminal()`.
-    pub fn is_active(self) -> bool {
+    /// [`is_terminal`](Self::is_terminal) do not partition the variants —
+    /// `ApiPending` and `Unknown` are neither, so do not assume
+    /// `!is_active() ⇒ is_terminal()`.
+    pub fn is_active(&self) -> bool {
         matches!(self, Self::PreSubmitted | Self::PendingSubmit | Self::PendingCancel | Self::Submitted)
     }
 
     /// Order has reached a final state: `Filled`, `Cancelled`, `ApiCancelled`,
     /// `Inactive`.
-    pub fn is_terminal(self) -> bool {
+    pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Filled | Self::Cancelled | Self::ApiCancelled | Self::Inactive)
     }
 }
 
-impl_wire_enum!(OrderStatusKind);
+impl_wire_enum!(OrderStatusKind, fallback Unknown);
+
+// Serde as the plain wire string in both directions, so `Unknown("X")`
+// round-trips as `"X"` — not the externally tagged `{"Unknown":"X"}` a
+// derive would produce for the one payload variant.
+impl Serialize for OrderStatusKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for OrderStatusKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
 
 /// Time in force specifies how long an order remains active.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

@@ -335,12 +335,12 @@ pub mod wire_enum {
     /// derived from `as_str()`, so a typo in either direction surfaces).
     pub fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
     where
-        T: Copy + std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
+        T: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
     {
-        for &(variant, wire) in table {
-            assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
-            assert_eq!(T::from_str(wire).unwrap(), variant, "FromStr({wire})");
-            assert_eq!(variant.to_field(), wire, "ToField for {variant:?}");
+        for (variant, wire) in table {
+            assert_eq!(variant.to_string(), *wire, "Display for {variant:?}");
+            assert_eq!(T::from_str(wire).unwrap(), variant.clone(), "FromStr({wire})");
+            assert_eq!(variant.to_field(), *wire, "ToField for {variant:?}");
         }
     }
 
