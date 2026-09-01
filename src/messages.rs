@@ -1095,8 +1095,14 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// Range of error codes that are considered warnings (2100-2169).
 pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 
+/// Code 0 is a code-less frame: IB Gateway omits `error_code` on informational
+/// notices (e.g. "Warning: Approaching max rate of 50 messages per second"),
+/// and the absent field decodes to 0. An error frame that fails proto decode
+/// falls back to the same default, so code 0 never carries a hard error.
 pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
-    WARNING_CODE_RANGE.contains(&code) || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
+    code == 0
+        || WARNING_CODE_RANGE.contains(&code)
+        || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
 }
 
 /// Connectivity between IB and TWS has been lost.
@@ -1201,7 +1207,8 @@ pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 /// resolves overlap by **precedence**:
 ///
 /// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
-/// 2. [`Warning`](Self::Warning) — 2100..=2169, or code 399 with a `Warning:` line.
+/// 2. [`Warning`](Self::Warning) — 2100..=2169, code 399 with a `Warning:` line, or
+///    code 0 (a frame whose `error_code` field was absent on the wire).
 /// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding the cases above.
 /// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (2188, 10089, 10090, 10167).
@@ -1227,7 +1234,8 @@ pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
-    /// Informational warning (codes 2100..=2169, or code 399 with a `Warning:` line).
+    /// Informational warning (codes 2100..=2169, code 399 with a `Warning:` line,
+    /// or code 0 — a code-less frame).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
@@ -1355,6 +1363,10 @@ impl Notice {
     }
 
     /// Returns `true` if this is a warning message.
+    ///
+    /// Warnings are codes 2100..=2169, code 399 with a `Warning:` line, and
+    /// code 0 — a frame whose `error_code` field was absent on the wire, which
+    /// IB Gateway sends for informational notices.
     pub fn is_warning(&self) -> bool {
         is_warning_message(self.code, &self.message)
     }

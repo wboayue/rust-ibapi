@@ -1,7 +1,7 @@
 use prost::Message;
 
 use super::*;
-use crate::common::test_utils::helpers::proto_response;
+use crate::common::test_utils::helpers::{error_envelope, proto_response};
 use crate::messages::ResponseMessage;
 
 #[test]
@@ -110,17 +110,11 @@ fn test_determine_routing_by_request_id() {
 #[test]
 fn test_determine_routing_error_protobuf() {
     // Protobuf Error with id=42 and error_code=2100 — full decode populates all five fields.
-    let envelope = crate::proto::ErrorMessage {
-        id: Some(42),
-        error_time: Some(1700000000000),
-        error_code: Some(2100),
-        error_msg: Some("Market data farm connection is OK".to_string()),
-        advanced_order_reject_json: Some("{\"hint\":\"check filters\"}".to_string()),
-    };
-    let mut raw_bytes = Vec::new();
-    prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
+    let mut envelope = error_envelope(Some(42), Some(2100), "Market data farm connection is OK");
+    envelope.error_time = Some(1700000000000);
+    envelope.advanced_order_reject_json = Some("{\"hint\":\"check filters\"}".to_string());
 
-    let message = proto_response(IncomingMessages::Error, raw_bytes);
+    let message = proto_response(IncomingMessages::Error, envelope.encode_to_vec());
 
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => {
@@ -137,17 +131,8 @@ fn test_determine_routing_error_protobuf() {
 #[test]
 fn test_determine_routing_error_protobuf_unspecified_id() {
     // Protobuf Error with no id (global notice) decodes to UNSPECIFIED_REQUEST_ID.
-    let envelope = crate::proto::ErrorMessage {
-        id: None,
-        error_time: None,
-        error_code: Some(2104),
-        error_msg: Some("Market data farm connection is OK".to_string()),
-        advanced_order_reject_json: None,
-    };
-    let mut raw_bytes = Vec::new();
-    prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
-
-    let message = proto_response(IncomingMessages::Error, raw_bytes);
+    let envelope = error_envelope(None, Some(2104), "Market data farm connection is OK");
+    let message = proto_response(IncomingMessages::Error, envelope.encode_to_vec());
 
     match determine_routing(&message) {
         RoutingDecision::Error(payload) => {
@@ -190,6 +175,11 @@ fn test_is_warning_error() {
     assert!(!is_warning_error(2170, ""));
     assert!(!is_warning_error(200, ""));
     assert!(!is_warning_error(2200, ""));
+
+    // Code 0 — code-less frame (absent error_code, or undecodable-frame
+    // fallback) — is a warning regardless of message text.
+    assert!(is_warning_error(0, "Warning: Approaching max rate of 50 messages per second (42)"));
+    assert!(is_warning_error(0, ""));
 }
 
 #[test]
@@ -283,19 +273,11 @@ fn test_classify_error_unrouted_hard_error_fails_one_shots() {
 
 #[test]
 fn test_classify_error_codeless_notice_is_notice_only() {
-    // A pacing notice whose  protobuf error_code field is absent. It decodes to
+    // A pacing notice whose protobuf error_code field is absent. It decodes to
     // code 0, which is outside WARNING_CODE_RANGE. It must still classify as a
     // warning, not fail every in-flight one-shot.
-    let envelope = crate::proto::ErrorMessage {
-        id: None,
-        error_time: None,
-        error_code: None,
-        error_msg: Some("Warning: Approaching max rate of 50 messages per second (42)".to_string()),
-        advanced_order_reject_json: None,
-    };
-    let mut raw_bytes = Vec::new();
-    prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
-    let message = proto_response(IncomingMessages::Error, raw_bytes);
+    let envelope = error_envelope(None, None, "Warning: Approaching max rate of 50 messages per second (42)");
+    let message = proto_response(IncomingMessages::Error, envelope.encode_to_vec());
 
     let payload = match determine_routing(&message) {
         RoutingDecision::Error(payload) => payload,
@@ -308,6 +290,9 @@ fn test_classify_error_codeless_notice_is_notice_only() {
         ErrorDisposition::NoticeOnly(notice) => {
             assert_eq!(notice.code, 0);
             assert_eq!(notice.message, "Warning: Approaching max rate of 50 messages per second (42)");
+            // The public classification agrees with the routing decision.
+            assert!(notice.is_warning());
+            assert_eq!(notice.category(), crate::messages::NoticeCategory::Warning);
         }
         other => panic!("expected NoticeOnly, got {other:?}"),
     }

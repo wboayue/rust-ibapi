@@ -219,11 +219,9 @@ pub(crate) enum ErrorDisposition {
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
     let request_id = payload.request_id;
-    // A missing error_code decodes to 0. Such code-less frames (for example,
-    // "Warning: Approaching max rate of 50 messages per second") are
-    // informational notices. We route them as warnings, not hard errors that
-    // would fail in-flight one-shots.
-    let is_warning = payload.error_code == 0 || is_warning_error(payload.error_code, &payload.error_message);
+    // Code 0 — a code-less informational frame, or the fallback for an
+    // undecodable one — classifies as a warning; see `is_warning_message`.
+    let is_warning = is_warning_error(payload.error_code, &payload.error_message);
 
     if request_id == UNSPECIFIED_REQUEST_ID {
         let notice = Notice::from(payload.clone());
