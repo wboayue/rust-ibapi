@@ -6,7 +6,7 @@ layout, the `pegged_to_benchmark` builder (#660), the builder-fed
 `#[allow(clippy::too_many_arguments)]` justifications, the `wsh_event_data_*` builders (#752),
 the `# Examples` backfill (#751 — every `impl Client` method that owes one has one), and the
 `market_data` realtime seam opened by #729's `/simplify` (#772 relocated `MarketDataBuilder`
-beside its siblings, `migration-4.0.md` §7; #773 narrowed the `sync::market_data` free fn and
+beside its siblings, `migration-4.0.md` §7; #780 narrowed the `sync::market_data` free fn and
 unified async terminal routing through free fns, §8).
 Re-run the audit before starting new follow-ups; this list dates from 2026-05-28 and only the
 items below were re-verified 2026-08-08.
