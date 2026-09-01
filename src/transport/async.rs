@@ -83,7 +83,6 @@ pub struct AsyncInternalSubscription {
     pub(crate) stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
-    cleanup_sent: bool,
 }
 
 impl Clone for AsyncInternalSubscription {
@@ -97,8 +96,9 @@ impl Clone for AsyncInternalSubscription {
             template_receiver: new_template,
             stream: BroadcastStream::new(new_polling),
             cleanup_sender: self.cleanup_sender.clone(),
+            // Each clone sends its own cleanup signal on drop; stale ones
+            // no-op against a registration that still has live receivers.
             cleanup_signal: self.cleanup_signal.clone(),
-            cleanup_sent: false, // Each clone should handle its own cleanup
         }
     }
 }
@@ -123,7 +123,6 @@ impl AsyncInternalSubscription {
             stream: BroadcastStream::new(receiver),
             cleanup_sender: None,
             cleanup_signal: None,
-            cleanup_sent: false,
         }
     }
 
@@ -138,7 +137,6 @@ impl AsyncInternalSubscription {
             stream: BroadcastStream::new(receiver),
             cleanup_sender: Some(cleanup_sender),
             cleanup_signal: Some(cleanup_signal),
-            cleanup_sent: false,
         }
     }
 
@@ -183,14 +181,26 @@ impl AsyncInternalSubscription {
         }
     }
 
-    /// Manually send cleanup signal
+    /// Send the cleanup signal, detaching this subscription's receivers first.
     fn send_cleanup_signal(&mut self) {
-        if !self.cleanup_sent {
-            if let (Some(sender), Some(signal)) = (&self.cleanup_sender, &self.cleanup_signal) {
-                let _ = sender.send(signal.clone());
-                self.cleanup_sent = true;
-            }
-        }
+        let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), self.cleanup_signal.take()) else {
+            return;
+        };
+        self.detach_receivers();
+        let _ = sender.send(signal);
+    }
+
+    /// Drop this subscription's receivers by swapping in detached ones.
+    ///
+    /// Must run before the cleanup signal is sent: the cleanup task decides
+    /// whether a registration is dead via `Sender::receiver_count()`, and the
+    /// struct's own receivers would otherwise outlive `drop(&mut self)` just
+    /// long enough for a concurrently processed signal to count them as live
+    /// and skip the removal — leaking the registration.
+    fn detach_receivers(&mut self) {
+        let (detached_sender, detached) = broadcast::channel(1);
+        self.template_receiver = detached;
+        self.stream = BroadcastStream::new(detached_sender.subscribe());
     }
 }
 
@@ -202,6 +212,24 @@ impl Drop for AsyncInternalSubscription {
 }
 
 type BroadcastSender = broadcast::Sender<RoutedItem>;
+
+/// Remove `id`'s registration only if its channel has no receivers left —
+/// i.e. every subscription and clone feeding off it is gone. A stale drop
+/// signal that finds a live replacement under the same key is a no-op; the
+/// replacement's own drop signal performs the eventual removal. The count is
+/// authoritative because a dropping subscription detaches its receivers
+/// before signalling (`AsyncInternalSubscription::detach_receivers`).
+async fn remove_if_dead(channels: &RwLock<HashMap<i32, BroadcastSender>>, id: i32, kind: &str) {
+    let mut channels = channels.write().await;
+    let removed = match channels.entry(id) {
+        std::collections::hash_map::Entry::Occupied(entry) if entry.get().receiver_count() == 0 => {
+            entry.remove();
+            true
+        }
+        _ => false,
+    };
+    debug!("cleanup {kind} channel {id}: removed={removed}");
+}
 
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
@@ -277,20 +305,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let order_channels = message_bus.order_channels.clone();
         let order_update_stream = message_bus.order_update_stream.clone();
 
+        // A signal can be processed arbitrarily long after the drop that sent
+        // it — including after a newer subscription registered under the same
+        // key — so removal is gated on the registration being dead. See
+        // `remove_if_dead` and `AsyncInternalSubscription::detach_receivers`.
         task::spawn(async move {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
                 match signal {
-                    CleanupSignal::Request(request_id) => {
-                        let mut channels = request_channels.write().await;
-                        channels.remove(&request_id);
-                        debug!("Cleaned up request channel for ID: {request_id}");
-                    }
-                    CleanupSignal::Order(order_id) => {
-                        let mut channels = order_channels.write().await;
-                        channels.remove(&order_id);
-                        debug!("Cleaned up order channel for ID: {order_id}");
-                    }
+                    CleanupSignal::Request(request_id) => remove_if_dead(&request_channels, request_id, "request").await,
+                    CleanupSignal::Order(order_id) => remove_if_dead(&order_channels, order_id, "order").await,
                     CleanupSignal::Shared(message_type) => {
                         // Shared channels are persistent and should not be removed
                         // They are created at initialization and reused across multiple requests
@@ -298,8 +322,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     }
                     CleanupSignal::OrderUpdateStream => {
                         let mut stream = order_update_stream.write().await;
-                        *stream = None;
-                        debug!("Cleaned up order update stream ownership");
+                        let removed = stream.as_ref().is_some_and(|sender| sender.receiver_count() == 0);
+                        if removed {
+                            *stream = None;
+                        }
+                        debug!("cleanup order update stream: removed={removed}");
                     }
                 }
             }
@@ -789,7 +816,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let mut order_update_stream = self.order_update_stream.write().await;
 
-        if order_update_stream.is_some() {
+        // A registration with no receivers is a dropped stream whose cleanup
+        // signal has not been processed yet (see `remove_if_dead`); replace it
+        // rather than refusing, so drop-then-recreate never races the cleanup task.
+        if order_update_stream.as_ref().is_some_and(|sender| sender.receiver_count() > 0) {
             return Err(Error::AlreadySubscribed);
         }
 

@@ -161,30 +161,34 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
-        if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Request(request_id)) {
-                log::warn!("error sending drop signal: {e}");
-            }
-        } else if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Order(order_id)) {
-                log::warn!("error sending drop signal: {e}");
-            }
-        } else if let Some(signaler) = &self.signaler {
-            // Currently is order update stream if no request or order id.
-            if let Err(e) = signaler.send(Signal::OrderUpdateStream) {
-                log::warn!("error sending drop signal: {e}");
-            }
+        // The sender is the drop signal's identity (see `Signal`); without
+        // one there is nothing safe to send — better a leaked registration
+        // than removing a live successor.
+        let (Some(signaler), Some(sender)) = (&self.signaler, self.sender.clone()) else {
+            return;
+        };
+        let signal = match (self.request_id, self.order_id) {
+            (Some(request_id), _) => Signal::Request(request_id, sender),
+            (_, Some(order_id)) => Signal::Order(order_id, sender),
+            // No request or order id: the order update stream.
+            _ => Signal::OrderUpdateStream(sender),
+        };
+        if let Err(e) = signaler.send(signal) {
+            log::warn!("error sending drop signal: {e}");
         }
     }
 }
 
 // Signals are used to notify the backend when a subscriber is dropped.
-// This facilitates the cleanup of the SenderHashes.
+// This facilitates the cleanup of the SenderHashes. Each signal carries the
+// dropped subscription's data sender; cleanup removes a registration only
+// when it is `same_channel` with it, so a stale signal cannot remove a newer
+// registration under the same key.
 #[cfg(feature = "sync")]
 pub enum Signal {
-    Request(i32),
-    Order(i32),
-    OrderUpdateStream,
+    Request(i32, Sender<RoutedItem>),
+    Order(i32, Sender<RoutedItem>),
+    OrderUpdateStream(Sender<RoutedItem>),
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances
