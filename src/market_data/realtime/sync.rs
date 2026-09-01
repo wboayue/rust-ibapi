@@ -13,7 +13,7 @@ use super::{
 use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
 
-// Validates that server supports the given request.
+/// Validates that server supports the given request.
 pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
     check_version(client.server_version(), Features::TICK_BY_TICK)?;
 
@@ -234,8 +234,7 @@ impl Client {
     }
 }
 
-/// Subscribe to streaming level-1 market data for the given contract.
-pub fn market_data(
+pub(crate) fn market_data(
     client: &Client,
     contract: &Contract,
     generic_ticks: &[&str],

@@ -212,9 +212,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     pub async fn subscribe(self) -> Result<crate::subscriptions::Subscription<TickTypes>, Error> {
         let generic_ticks = self.generic_tick_refs();
 
-        self.client
-            .subscribe_market_data(self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
-            .await
+        crate::market_data::realtime::r#async::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot).await
     }
 
     /// Request a one-shot snapshot and collect the resulting ticks.

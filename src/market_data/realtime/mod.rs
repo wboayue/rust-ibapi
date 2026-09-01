@@ -9,12 +9,9 @@
 //! `TickByTickBuilder`, `MarketDepthBuilder`, etc.) live at
 //! `ibapi::market_data::realtime::*` and via `ibapi::prelude::*`.
 //!
-//! The `realtime::sync` and `realtime::r#async` submodules where the impls
-//! live are `#[doc(hidden)]`: still reachable as paths for crate-internal
-//! use, but intentionally absent from the docs.rs navigation. Prefer the
-//! canonical `Client` method calls and the `market_data::realtime::*` type
-//! spellings. Raw-identifier syntax (`market_data::realtime::r#async::...`)
-//! is the giveaway that the spelling is non-canonical.
+//! The `realtime::sync` and `realtime::r#async` submodules are where the
+//! impls live; they carry no public items of their own. Prefer the canonical
+//! `Client` method calls and the `market_data::realtime::*` type spellings.
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -472,13 +469,6 @@ pub struct TickRequestParameters {
     /// Snapshot permissions code.
     pub snapshot_permissions: i32,
 }
-
-// === Implementation ===
-
-#[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::*;
-
-// Async API methods are now on Client directly via realtime/async.rs
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

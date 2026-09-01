@@ -201,6 +201,20 @@ Only code that names the type breaks — imports, or a function signature taking
 
 `MarketDataBuilder::new` is `pub(crate)` in the same move — the sibling builders never exposed a public constructor, and `client.market_data(&contract)` is the supported way to obtain one.
 
+### 8. The `realtime::sync::market_data` free function is crate-private
+
+The low-level request function under the market-data builder was `pub` where its siblings (`realtime_bars`, `market_depth`, `tick_by_tick`) were already `pub(crate)` — reachable as `market_data::realtime::sync::market_data(...)`, and in sync-only builds also as `market_data::realtime::market_data(...)`. It is crate-private now. The builder takes the same inputs:
+
+```rust,ignore
+// 3.x (sync-only build)
+let subscription = ibapi::market_data::realtime::market_data(&client, &contract, &["233"], false, false)?;
+
+// 4.0
+let subscription = client.market_data(&contract).generic_ticks(&["233"]).subscribe()?;
+```
+
+The `snapshot` and `regulatory_snapshot` booleans map to the `.snapshot()` / `.regulatory_snapshot()` setters. Nothing in `examples/` or the integration crates called the free function, and the async side never had a public one.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -224,9 +238,10 @@ No code changes required, but observable at runtime:
 4. Replace `client.check_server_version(..)` with a comparison against `client.server_version()`.
 5. Add `request_id: None` (or a real id) to any `Notice` struct literals.
 6. Re-point `use ibapi::market_data::builder::MarketDataBuilder` imports at `ibapi::market_data::realtime::MarketDataBuilder`.
-7. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
-8. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
-9. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+7. Replace direct `realtime::sync::market_data(..)` calls with the `client.market_data(&contract)` builder — see [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private).
+8. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
+9. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
+10. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

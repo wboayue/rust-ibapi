@@ -4,7 +4,10 @@ Open items from the CLAUDE.md alignment audit (ran 2026-05-28). Everything else 
 found has shipped: the inline-test sweep (#657), async `# Examples` (#657/#659), domain module
 layout, the `pegged_to_benchmark` builder (#660), the builder-fed
 `#[allow(clippy::too_many_arguments)]` justifications, the `wsh_event_data_*` builders (#752),
-and the `# Examples` backfill (#751 — every `impl Client` method that owes one has one).
+the `# Examples` backfill (#751 — every `impl Client` method that owes one has one), and the
+`market_data` realtime seam opened by #729's `/simplify` (#772 relocated `MarketDataBuilder`
+beside its siblings, `migration-4.0.md` §7; #780 narrowed the `sync::market_data` free fn and
+unified async terminal routing through free fns, §8).
 Re-run the audit before starting new follow-ups; this list dates from 2026-05-28 and only the
 items below were re-verified 2026-08-08.
 
@@ -41,27 +44,6 @@ Internal / free-function violations — take one when you are already in the fil
   in `src/contracts/builders.rs` — consider a struct of four contract ids.
 - `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` in
   `src/orders/common/order_builder/mod.rs`.
-
-## `market_data` realtime seam — opened by #729's `/simplify`
-
-Restructuring, deferred out of #729 rather than landed in a cleanup pass. The
-`MarketDataBuilder` relocation shipped in #772 (moved to `realtime/builder/market_data.rs`,
-old `market_data::builder` module deleted, `new` narrowed to `pub(crate)`, clean break with
-`migration-4.0.md` §7); one item remains:
-
-- **`market_data::realtime::sync::market_data` is `pub` where its siblings are `pub(crate)`.**
-  The free fn in `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
-  `tick_by_tick` beside it are `pub(crate)`. Under `#[cfg(all(feature = "sync", not(feature =
-  "async")))] pub use sync::*` that makes it reachable as
-  `ibapi::market_data::realtime::market_data` in sync-only builds. Async has no public
-  counterpart at all — `subscribe_market_data` is `pub(crate)` on `impl Client`. Pre-existing,
-  but co-locating the builder entry point in #729 turned it into a same-file inconsistency.
-  Narrowing is a public-API change: audit callers first per
-  [restrict after callers](../docs/rules/workflow/restrict-after-callers.md), and it needs a
-  `CHANGELOG.md` entry. Same seam, noted in #772's `/simplify`: the async
-  `MarketDataBuilder::subscribe` goes through `Client::subscribe_market_data` while the sync
-  side calls the free fn — whoever unifies the visibility should route both sides the same
-  way in the same PR.
 
 ## Out-of-scope on the audit pass
 
