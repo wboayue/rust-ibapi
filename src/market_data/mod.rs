@@ -1,7 +1,5 @@
 //! Market data types and functionality
 
-/// Request builders shared by market data workflows.
-pub mod builder;
 /// Historical market data models and client APIs.
 pub mod historical;
 /// Real-time streaming market data helpers.

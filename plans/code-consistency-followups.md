@@ -46,16 +46,11 @@ Internal / free-function violations — take one when you are already in the fil
 
 Both are restructuring, deferred out of #729 rather than landed in a cleanup pass.
 
-- **`MarketDataBuilder` sits a directory above its three siblings.** It lives in
-  `src/market_data/builder/` — a module whose sole content is that one type — while
-  `RealtimeBarsBuilder`, `MarketDepthBuilder`, and `TickByTickBuilder` live in
-  `src/market_data/realtime/builder/`. After #729 moved the entry point into
-  `market_data/realtime/{sync,async}.rs`, the new `impl Client` blocks have to reach *upward*
-  out of `realtime/` for it, on lines adjacent to siblings that resolve via `super::`. Its only
-  consumers in the tree are realtime. Fix: move it to `realtime/builder/market_data.rs` and add
-  it to that module's `pub use`. Breaking — `crate::market_data::builder::MarketDataBuilder` is
-  a public path, referenced from `realtime/generic_tick.rs` and doc links in
-  `subscriptions/{sync,async}.rs` — so it needs its own PR with a `migration-3.0.md` note.
+- ~~**`MarketDataBuilder` sits a directory above its three siblings.**~~ **Done** in the 4.0
+  window: moved to `realtime/builder/market_data.rs`, re-exported as
+  `market_data::realtime::MarketDataBuilder` beside its siblings, old `market_data::builder`
+  module deleted. Clean break (no deprecated alias — 4.0 is a breaking release), with
+  changelog entry and `migration-4.0.md` §7.
 - **`market_data::realtime::sync::market_data` is `pub` where its siblings are `pub(crate)`.**
   The free fn in `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
   `tick_by_tick` beside it are `pub(crate)`. Under `#[cfg(all(feature = "sync", not(feature =

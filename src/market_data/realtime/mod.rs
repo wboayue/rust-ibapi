@@ -28,7 +28,7 @@ use crate::Error;
 pub(crate) mod common;
 
 mod builder;
-pub use builder::{MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
+pub use builder::{MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
 
 pub mod generic_tick;
 

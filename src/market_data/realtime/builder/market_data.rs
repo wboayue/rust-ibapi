@@ -5,6 +5,7 @@ use crate::market_data::realtime::TickTypes;
 use crate::Error;
 
 #[cfg(test)]
+#[path = "market_data_tests.rs"]
 mod tests;
 
 /// Builder for creating market data subscriptions with a fluent interface

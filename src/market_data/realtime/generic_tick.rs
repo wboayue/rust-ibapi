@@ -43,8 +43,8 @@
 //! - IB docs: <https://interactivebrokers.github.io/tws-api/tick_types.html>
 //!   (see the *Generic Tick Required* column).
 //!
-//! [`MarketDataBuilder::generic_ticks`]: crate::market_data::builder::MarketDataBuilder::generic_ticks
-//! [`MarketDataBuilder::add_generic_tick`]: crate::market_data::builder::MarketDataBuilder::add_generic_tick
+//! [`MarketDataBuilder::generic_ticks`]: crate::market_data::realtime::MarketDataBuilder::generic_ticks
+//! [`MarketDataBuilder::add_generic_tick`]: crate::market_data::realtime::MarketDataBuilder::add_generic_tick
 
 /// `100` — Daily call/put option volume (currently for stocks).
 ///

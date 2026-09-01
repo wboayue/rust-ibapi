@@ -293,7 +293,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// `warn!`).
     ///
     /// This is the one-shot snapshot terminal: combined with
-    /// [`MarketDataBuilder::snapshot`](crate::market_data::builder::MarketDataBuilder::snapshot),
+    /// [`MarketDataBuilder::snapshot`](crate::market_data::realtime::MarketDataBuilder::snapshot),
     /// the request returns one round of data ending in a snapshot sentinel, so
     /// `timeout` acts only as a safety bound. Equivalent to
     /// [`collect_until`](Self::collect_until) with a predicate that never fires.
