@@ -208,6 +208,37 @@ fn cancel_order() {
 }
 
 #[test]
+fn cancel_order_delivers_202_as_non_terminal_notice() {
+    // The cancellation confirmation (202) must arrive as a Notice and leave
+    // the stream open: the OrderStatus frame queued behind it still arrives.
+    let order_id = 41;
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_error_response(order_id, crate::messages::ORDER_CANCELLED_CODE, "Order Canceled - reason:"),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().order_id(order_id).status(OrderStatusKind::Cancelled).encode_proto(),
+        ),
+    ]));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let subscription = client.cancel_order(order_id, "").expect("cancel_order failed");
+
+    match subscription.next() {
+        Some(Ok(crate::subscriptions::SubscriptionItem::Notice(notice))) => {
+            assert!(notice.is_cancellation(), "expected cancellation notice, got {notice:?}");
+        }
+        other => panic!("expected non-terminal cancellation Notice, got {other:?}"),
+    }
+
+    match subscription.next() {
+        Some(Ok(crate::subscriptions::SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
+            assert_eq!(status.status, OrderStatusKind::Cancelled);
+        }
+        other => panic!("expected OrderStatus after the 202 notice, got {other:?}"),
+    }
+}
+
+#[test]
 fn global_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

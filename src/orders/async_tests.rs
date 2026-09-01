@@ -189,6 +189,37 @@ async fn test_cancel_order() {
 }
 
 #[tokio::test]
+async fn test_cancel_order_delivers_202_as_non_terminal_notice() {
+    // The cancellation confirmation (202) must arrive as a Notice and leave
+    // the stream open: the OrderStatus frame queued behind it still arrives.
+    let order_id = 1;
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_error_response(order_id, crate::messages::ORDER_CANCELLED_CODE, "Order Canceled - reason:"),
+        proto_response(
+            IncomingMessages::OrderStatus,
+            order_status().order_id(order_id).status(OrderStatusKind::Cancelled).encode_proto(),
+        ),
+    ]));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut subscription = client.cancel_order(order_id, "").await.expect("cancel_order failed");
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert!(notice.is_cancellation(), "expected cancellation notice, got {notice:?}");
+        }
+        other => panic!("expected non-terminal cancellation Notice, got {other:?}"),
+    }
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
+            assert_eq!(status.status, OrderStatusKind::Cancelled);
+        }
+        other => panic!("expected OrderStatus after the 202 notice, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_open_orders() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(

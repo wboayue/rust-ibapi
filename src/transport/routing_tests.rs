@@ -209,6 +209,41 @@ fn test_is_warning_error_classifies_order_message_from_text() {
 }
 
 #[test]
+fn test_is_warning_error_order_cancelled_code() {
+    // 202 confirms a requested cancellation; it must route as a Notice, not
+    // terminate the cancel_order / place_order subscription as an Error.
+    assert!(is_warning_error(crate::messages::ORDER_CANCELLED_CODE, ""));
+
+    // Neighbors stay hard order rejections.
+    assert!(!is_warning_error(201, ""));
+    assert!(!is_warning_error(203, ""));
+
+    // Only the routing disposition changes: 202 is a cancellation, not a
+    // warning, so the notice taxonomy is untouched.
+    assert!(!crate::messages::is_warning_message(crate::messages::ORDER_CANCELLED_CODE, ""));
+}
+
+#[test]
+fn test_classify_error_order_cancelled_routed_is_notice() {
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: crate::messages::ORDER_CANCELLED_CODE,
+        error_message: "Order Canceled - reason:".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, crate::messages::ORDER_CANCELLED_CODE);
+            assert!(notice.is_cancellation());
+            assert!(notice.is_informational());
+            assert_eq!(notice.category(), crate::messages::NoticeCategory::Cancellation);
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_order_update_notice_gating() {
     let payload = DecodedError {
         request_id: 42,
