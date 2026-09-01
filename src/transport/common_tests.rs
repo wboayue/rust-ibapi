@@ -137,3 +137,38 @@ fn test_fibonacci_backoff() {
     assert_eq!(backoff.next_delay(), Duration::from_secs(10)); // capped at max
     assert_eq!(backoff.next_delay(), Duration::from_secs(10)); // stays at max
 }
+
+/// The raw Fibonacci sequence overflows u64 after ~93 steps, which can be
+/// reached during a long outage with a large `max_reconnect_attempts`. The
+/// internal steps must be clamped at `max` to avoid u64 overflow regardless of
+/// the number of calls. Without that, this test will fail in debug builds with
+/// `attempt to add with overflow` at call 93.
+#[test]
+fn test_fibonacci_backoff_never_overflows() {
+    let mut backoff = FibonacciBackoff::new(30);
+    for _ in 0..100 {
+        assert!(backoff.next_delay() <= Duration::from_secs(30));
+    }
+    assert_eq!(backoff.next_delay(), Duration::from_secs(30));
+}
+
+/// A `max` above fib(93) lets the raw sum overflow before the clamp can
+/// engage; `saturating_add` must cover that. Without it, call ~93 panics with
+/// `attempt to add with overflow` in debug builds.
+#[test]
+fn test_fibonacci_backoff_never_overflows_with_huge_max() {
+    let mut backoff = FibonacciBackoff::new(u64::MAX);
+    for _ in 0..100 {
+        backoff.next_delay();
+    }
+    assert_eq!(backoff.next_delay(), Duration::from_secs(u64::MAX));
+}
+
+/// `max: 0` means no delay, not a fixed 1s: `current` starts clamped at
+/// `max`, so the delay must respect `max` from the first call.
+#[test]
+fn test_fibonacci_backoff_zero_max() {
+    let mut backoff = FibonacciBackoff::new(0);
+    assert_eq!(backoff.next_delay(), Duration::ZERO);
+    assert_eq!(backoff.next_delay(), Duration::ZERO);
+}

@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `FibonacciBackoff` no longer overflows `u64` on the 93rd consecutive `next_delay()` call. The backoff state kept growing past `max` (only the returned delay was capped), so a reconnect loop with a large `max_reconnect_attempts` or `reconnect_forever` would panic with `attempt to add with overflow` in debug builds, or wrap to nonsense delays in release, once an outage outlasted ~92 attempts. The state is now clamped at `max`. Returned delays are unchanged.
+
 - Notice 2188 ("Up-to-the-second historical data requires additional subscription for the API.") is classified as a data advisory instead of a hard error. TWS sends it and then delivers the historical bars anyway — the account merely lacks the up-to-the-second tail — but `historical_data()` returned `Err` on the notice and discarded the bars that followed, so accounts without the real-time entitlement for a listing got no history at all for those symbols. `DATA_ADVISORY_CODES` widens from `[i32; 2]` to `[i32; 3]`, which is breaking only for code binding the const with an explicit array type (#765).
 
 - Error 10090 ("Part of requested market data is not subscribed. Subscription-independent ticks are still active") is classified as a data advisory like 10089 and 10167: it is published as a non-terminal notice instead of ending the market-data subscription. TWS sends it on partial entitlement — commonly an options subscription without the underlying — and keeps delivering the ticks the account is entitled to, but the subscription was torn down before they could arrive. `DATA_ADVISORY_CODES` widens again to `[i32; 4]` (#768).
