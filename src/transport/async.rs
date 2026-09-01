@@ -440,6 +440,22 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         }
 
+        // Shared channels too, mirroring the sync transport's `notify_all`:
+        // an in-flight open_orders/completed_orders/positions subscription is
+        // waiting for an end marker only the pre-reconnect request could
+        // produce, so without this it hangs forever. The senders themselves
+        // are persistent (never cleared); a later `send_shared_request`
+        // resubscribes at the channel's current tail and never sees this
+        // error, so only in-flight consumers are affected.
+        {
+            let channels = self.shared_channel_senders.read().await;
+            for senders in channels.values() {
+                for sender in senders {
+                    let _ = sender.send(Error::ConnectionReset.into());
+                }
+            }
+        }
+
         {
             let mut channels = self.request_channels.write().await;
             channels.clear();
