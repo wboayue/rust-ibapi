@@ -250,19 +250,16 @@ impl<S: Stream> TcpMessageBus<S> {
     // id, or an order update stream recreated after a reconnect reset).
 
     fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
-        if self.requests.remove_if_same(&request_id, sender) {
-            debug!("released request_id {}, requests.len()={}", request_id, self.requests.len());
-        } else {
-            debug!("skipped stale cleanup for request_id {request_id}: registration replaced or already gone");
-        }
+        let removed = self.requests.remove_if_same(&request_id, sender);
+        debug!(
+            "cleanup request_id {request_id}: removed={removed}, requests.len()={}",
+            self.requests.len()
+        );
     }
 
     fn clean_order(&self, order_id: i32, sender: &Sender<RoutedItem>) {
-        if self.orders.remove_if_same(&order_id, sender) {
-            debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
-        } else {
-            debug!("skipped stale cleanup for order_id {order_id}: registration replaced or already gone");
-        }
+        let removed = self.orders.remove_if_same(&order_id, sender);
+        debug!("cleanup order_id {order_id}: removed={removed}, orders.len()={}", self.orders.len());
     }
 
     fn clear_order_update_stream(&self, sender: &Sender<RoutedItem>) {
@@ -273,12 +270,11 @@ impl<S: Stream> TcpMessageBus<S> {
             return;
         };
 
-        if stream.as_ref().is_some_and(|registered| registered.same_channel(sender)) {
+        let removed = stream.as_ref().is_some_and(|registered| registered.same_channel(sender));
+        if removed {
             *stream = None;
-            debug!("released order_update_stream");
-        } else {
-            debug!("skipped stale order_update_stream cleanup: registration replaced or already gone");
         }
+        debug!("cleanup order_update_stream: removed={removed}");
     }
 
     fn read_message(&self) -> Response {

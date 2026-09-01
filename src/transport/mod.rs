@@ -161,32 +161,20 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
-        // Every signalled subscription carries its own data sender so cleanup
-        // can verify it is removing *this* registration, not a replacement
-        // registered under the same key after the drop (the signal crosses a
-        // channel to the cleanup thread, so it can be processed arbitrarily
-        // late). A signalled subscription without a sender has no identity to
-        // check against, so it sends nothing — better a leaked registration
+        // The sender is the drop signal's identity (see `Signal`); without
+        // one there is nothing safe to send — better a leaked registration
         // than removing a live successor.
-        let Some(sender) = self.sender.clone() else {
-            if self.signaler.is_some() {
-                log::warn!("subscription dropped without a data sender; skipping cleanup signal");
-            }
+        let (Some(signaler), Some(sender)) = (&self.signaler, self.sender.clone()) else {
             return;
         };
-        if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Request(request_id, sender)) {
-                log::warn!("error sending drop signal: {e}");
-            }
-        } else if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Order(order_id, sender)) {
-                log::warn!("error sending drop signal: {e}");
-            }
-        } else if let Some(signaler) = &self.signaler {
-            // Currently is order update stream if no request or order id.
-            if let Err(e) = signaler.send(Signal::OrderUpdateStream(sender)) {
-                log::warn!("error sending drop signal: {e}");
-            }
+        let signal = match (self.request_id, self.order_id) {
+            (Some(request_id), _) => Signal::Request(request_id, sender),
+            (_, Some(order_id)) => Signal::Order(order_id, sender),
+            // No request or order id: the order update stream.
+            _ => Signal::OrderUpdateStream(sender),
+        };
+        if let Err(e) = signaler.send(signal) {
+            log::warn!("error sending drop signal: {e}");
         }
     }
 }

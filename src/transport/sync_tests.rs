@@ -1672,8 +1672,8 @@ fn test_order_update_stream_skips_data_request_error() -> Result<(), Error> {
 }
 
 /// Drop signals exercise `clean_request` / `clean_order` / `clear_order_update_stream`.
-/// The cleanup thread is signal-driven; we poll with a deadline rather than
-/// adding an ack channel to production code.
+/// The cleanup thread is signal-driven; `drain_cleanup_signals` bounds the
+/// wait without adding an ack channel to production code.
 #[test]
 fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
     let (_, bus) = make_bus();
@@ -1687,10 +1687,7 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
     drop(order);
     drop(stream_sub);
 
-    let deadline = Instant::now() + Duration::from_millis(500);
-    while Instant::now() < deadline && (bus.requests.contains(&42) || bus.orders.contains(&99) || bus.order_update_stream.lock().unwrap().is_some()) {
-        std::thread::sleep(Duration::from_millis(2));
-    }
+    drain_cleanup_signals(&bus);
 
     assert!(!bus.requests.contains(&42), "request 42 not cleaned");
     assert!(!bus.orders.contains(&99), "order 99 not cleaned");

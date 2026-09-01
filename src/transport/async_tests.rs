@@ -927,7 +927,7 @@ async fn drain_cleanup_signals(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) {
         if !bus.request_channels.read().await.contains_key(&MARKER_REQUEST_ID) {
             return;
         }
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(1)).await;
     }
     panic!("cleanup task did not process the marker signal");
 }
