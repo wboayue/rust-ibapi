@@ -25,7 +25,7 @@ stale README does.
   `- Delayed-data advisories (codes 10089/10167) no longer terminate a market-data subscription before its data arrives (#677).`
   Note what it leads with — the effect a user would notice, not the mechanism that produced it.
 - Breaking changes go under `Changed` or `Removed` **and** get a section in
-  `docs/migration-3.0.md` — see [user docs sync](user-docs-sync.md).
+  `docs/migration-4.0.md` — see [user docs sync](user-docs-sync.md).
 
 Internal-only work needs no entry: refactors, tests, CI, doc-only edits, dependency bumps with
 no behavior change. The test is "would a downstream user notice?" If no, skip it.
