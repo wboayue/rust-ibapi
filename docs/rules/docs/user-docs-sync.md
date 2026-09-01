@@ -10,7 +10,7 @@ triggers:
   - about to grep for a name you just renamed
 symbols: [README.md, migration-4.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
-precedents: ["#549"]
+precedents: ["#549", "#771"]
 memory: [feedback_md_doc_snippets_rot_silently, feedback_field_removal_breaks_public_contract]
 ---
 
@@ -58,3 +58,7 @@ field — `examples/` and `docs/` are where that surfaces.
   `OrderBuilder` does) and `Order { lmt_price: ..., tif: "GTC".to_string() }` blocks in
   `docs/order-types.md` (the real fields are `limit_price` and `tif: TimeInForce`). Both had
   been wrong for months because nothing compiles them.
+- #771 — 4.0 release prep: the live guide moved to `docs/migration-4.0.md`. Three unreleased
+  sections had accumulated in the 3.0 guide (§35–37) and three breaking changes had changelog
+  entries but no guide section at all (`Liquidity::Unknown`, `Notice.request_id`,
+  `DATA_ADVISORY_CODES`) — per-PR sync had been targeting the wrong file since 3.3.0 shipped.
