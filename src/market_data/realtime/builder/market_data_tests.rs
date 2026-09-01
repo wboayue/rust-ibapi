@@ -1,34 +1,31 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
-    use crate::client::sync::Client;
-    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, proto_response, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{
+        assert_request, assert_request_msg_id, create_blocking_test_client, create_blocking_test_client_with_ordered_proto_responses,
+        create_blocking_test_client_with_version, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    };
     use crate::contracts::Contract;
     use crate::market_data::realtime::TickTypes;
     use crate::messages::{IncomingMessages, OutgoingMessages};
     use crate::server_versions;
-    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
     use crate::testdata::builders::ResponseProtoEncoder;
-    use std::sync::Arc;
     use std::time::Duration;
 
     #[test]
     fn test_market_data_builder_default() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client.market_data(&contract).subscribe().expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_market_data_builder_with_generic_ticks() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -37,15 +34,13 @@ mod sync_tests {
             .subscribe()
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_market_data_builder_add_generic_tick_appends() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -56,7 +51,7 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         assert_request(
-            &message_bus,
+            &bus,
             0,
             &market_data_request()
                 .request_id(TEST_REQ_ID_FIRST)
@@ -67,8 +62,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_add_generic_tick_after_bulk() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -79,7 +73,7 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         assert_request(
-            &message_bus,
+            &bus,
             0,
             &market_data_request()
                 .request_id(TEST_REQ_ID_FIRST)
@@ -90,8 +84,7 @@ mod sync_tests {
 
     #[test]
     fn test_market_data_builder_snapshot() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -100,15 +93,13 @@ mod sync_tests {
             .subscribe()
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_market_data_builder_regulatory_snapshot() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -117,15 +108,13 @@ mod sync_tests {
             .subscribe()
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_market_data_builder_streaming_after_snapshot() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -135,15 +124,13 @@ mod sync_tests {
             .subscribe()
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_market_data_builder_full_configuration() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -154,19 +141,17 @@ mod sync_tests {
             .subscribe()
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[test]
     fn test_snapshot_once_collects_until_snapshot_end() {
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
             proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
             proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
             proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
-        ]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        ]);
         let contract = Contract::stock("AAPL").build();
 
         let ticks = client
@@ -180,30 +165,28 @@ mod sync_tests {
         assert!(matches!(ticks[1], TickTypes::Size(_)));
 
         // snapshot_once forces snapshot mode regardless of prior builder state.
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 }
 
 #[cfg(feature = "async")]
 mod async_tests {
-    use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, proto_response, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{
+        assert_request, assert_request_msg_id, create_test_client, create_test_client_with_ordered_proto_responses, create_test_client_with_version,
+        proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    };
     use crate::contracts::Contract;
     use crate::market_data::realtime::TickTypes;
     use crate::messages::{IncomingMessages, OutgoingMessages};
     use crate::server_versions;
-    use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
     use crate::testdata::builders::ResponseProtoEncoder;
-    use std::sync::Arc;
     use std::time::Duration;
 
     #[tokio::test]
     async fn test_market_data_builder_async() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -214,15 +197,13 @@ mod async_tests {
             .await
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
     async fn test_market_data_builder_add_generic_tick_async() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -234,7 +215,7 @@ mod async_tests {
             .expect("Failed to create subscription");
 
         assert_request(
-            &message_bus,
+            &bus,
             0,
             &market_data_request()
                 .request_id(TEST_REQ_ID_FIRST)
@@ -245,8 +226,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn test_market_data_builder_regulatory_snapshot_async() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
+        let (client, bus) = create_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
         let _subscription = client
@@ -256,19 +236,17 @@ mod async_tests {
             .await
             .expect("Failed to create subscription");
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
     async fn test_snapshot_once_collects_until_snapshot_end() {
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![
             proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
             proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
             proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
-        ]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        ]);
         let contract = Contract::stock("AAPL").build();
 
         let ticks = client
@@ -282,9 +260,8 @@ mod async_tests {
         assert!(matches!(ticks[0], TickTypes::Price(_)));
         assert!(matches!(ticks[1], TickTypes::Size(_)));
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Should send one request message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
@@ -292,11 +269,10 @@ mod async_tests {
         // A completed snapshot must not emit a cancel on drop. The async drop
         // spawns the cancel send, so yield long enough for any spawned task to
         // run before asserting only the original request was sent.
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![
             proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
             proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
-        ]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        ]);
         let contract = Contract::stock("AAPL").build();
 
         let ticks = client
@@ -309,8 +285,7 @@ mod async_tests {
         // Give a spawned cancel (if any) time to land.
         tokio::time::sleep(Duration::from_millis(20)).await;
 
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Completed snapshot must not send a cancel message");
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+        assert_eq!(request_message_count(&bus), 1, "Completed snapshot must not send a cancel message");
+        assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
     }
 }

@@ -197,7 +197,9 @@ use ibapi::market_data::builder::MarketDataBuilder;
 use ibapi::market_data::realtime::MarketDataBuilder;
 ```
 
-Only code that names the type breaks — imports, or a function signature taking/returning the builder. The usual form, `client.market_data(&contract).subscribe()`, never names it and is unaffected.
+Only code that names the type breaks — imports, or a function signature taking/returning the builder. The usual form, `client.market_data(&contract).subscribe()`, never names it and is unaffected. It is also in `ibapi::prelude` now, along with the other three realtime builders.
+
+`MarketDataBuilder::new` is `pub(crate)` in the same move — the sibling builders never exposed a public constructor, and `client.market_data(&contract)` is the supported way to obtain one.
 
 ## Behavioral changes
 

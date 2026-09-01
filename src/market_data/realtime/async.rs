@@ -3,7 +3,6 @@ use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto}
 use crate::contracts::{Contract, TagValue};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
 use super::common::{decoders, encoders};
@@ -12,7 +11,7 @@ use super::{
     WhatToShow,
 };
 use crate::market_data::{SmartDepth, TradingHours};
-use crate::subscriptions::StreamDecoder;
+use crate::subscriptions::{StreamDecoder, Subscription};
 
 impl Client {
     /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
