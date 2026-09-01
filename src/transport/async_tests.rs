@@ -913,6 +913,108 @@ async fn test_warning_with_orphan_request_id_logs() {
     assert!(leaked.is_err(), "global notice stream got a routed-but-orphan notice");
 }
 
+/// Queue a marker cleanup signal behind everything already queued and wait
+/// until the cleanup task has processed it. Signals are processed FIFO by a
+/// single task, so once the marker's registration is gone, every signal sent
+/// before it has been handled too.
+async fn drain_cleanup_signals(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) {
+    const MARKER_REQUEST_ID: i32 = 987_654;
+    let marker = bus.send_request(MARKER_REQUEST_ID, vec![]).await.unwrap();
+    drop(marker);
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
+        if !bus.request_channels.read().await.contains_key(&MARKER_REQUEST_ID) {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+    panic!("cleanup task did not process the marker signal");
+}
+
+/// Regression test for #773: dropping an old order subscription must not
+/// unregister a newer subscription under the same order id (place then cancel
+/// on one id). The stale signal has to find the replacement live and skip it.
+#[tokio::test]
+async fn test_stale_order_cleanup_preserves_newer_subscription() {
+    let (_, bus) = make_bus();
+
+    let sub_a = bus.send_order_request(42, vec![]).await.unwrap();
+    let mut sub_b = bus.send_order_request(42, vec![]).await.unwrap();
+    drop(sub_a);
+
+    drain_cleanup_signals(&bus).await;
+
+    let sender = {
+        let channels = bus.order_channels.read().await;
+        channels.get(&42).expect("stale cleanup removed the newer subscription").clone()
+    };
+    sender
+        .send(RoutedItem::Error(Error::Cancelled))
+        .expect("registered channel has no receivers");
+    let item = tokio::time::timeout(TICK, sub_b.next_routed()).await.expect("sub_b got nothing");
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Cancelled))), "{item:?}");
+    drop(sender);
+
+    // The replacement's own drop still cleans up.
+    drop(sub_b);
+    drain_cleanup_signals(&bus).await;
+    assert!(!bus.order_channels.read().await.contains_key(&42), "order channel leaked");
+}
+
+/// Dropping a clone must not unregister the channel while a sibling is still
+/// consuming it; the registration goes away with the last holder.
+#[tokio::test]
+async fn test_dropping_clone_keeps_order_channel_registered() {
+    let (_, bus) = make_bus();
+
+    let sub = bus.send_order_request(7, vec![]).await.unwrap();
+    let clone = sub.clone();
+    drop(clone);
+
+    drain_cleanup_signals(&bus).await;
+    assert!(
+        bus.order_channels.read().await.contains_key(&7),
+        "clone drop unregistered a live subscription"
+    );
+
+    drop(sub);
+    drain_cleanup_signals(&bus).await;
+    assert!(!bus.order_channels.read().await.contains_key(&7), "order channel leaked");
+}
+
+/// Regression test for #778: drop then immediately recreate the order update
+/// stream. The dead registration is replaced without waiting for the cleanup
+/// task, and the old stream's stale signal must not clear the replacement.
+#[tokio::test]
+async fn test_drop_then_recreate_order_update_stream() {
+    let (_, bus) = make_bus();
+
+    let s1 = bus.create_order_update_subscription().await.unwrap();
+    drop(s1);
+
+    // No yielding: recreation must succeed even before the stale signal is
+    // processed.
+    let mut s2 = bus.create_order_update_subscription().await.expect("immediate recreation failed");
+
+    // Process s1's stale OrderUpdateStream signal; s2's registration survives.
+    drain_cleanup_signals(&bus).await;
+    let sender = {
+        let stream = bus.order_update_stream.read().await;
+        stream.as_ref().expect("stale cleanup cleared the replacement stream").clone()
+    };
+    sender
+        .send(RoutedItem::Error(Error::Cancelled))
+        .expect("replacement stream has no receivers");
+    let item = tokio::time::timeout(TICK, s2.next_routed()).await.expect("s2 got nothing");
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Cancelled))), "{item:?}");
+    drop(sender);
+
+    drop(s2);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.order_update_stream.read().await.is_none(), "order update stream leaked");
+}
+
 /// `reset_channels` after reconnect: every in-flight request and order
 /// subscription receives `Error::ConnectionReset`, then the channel maps are
 /// cleared.

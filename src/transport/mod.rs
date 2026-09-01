@@ -161,17 +161,30 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
+        // Every signalled subscription carries its own data sender so cleanup
+        // can verify it is removing *this* registration, not a replacement
+        // registered under the same key after the drop (the signal crosses a
+        // channel to the cleanup thread, so it can be processed arbitrarily
+        // late). A signalled subscription without a sender has no identity to
+        // check against, so it sends nothing — better a leaked registration
+        // than removing a live successor.
+        let Some(sender) = self.sender.clone() else {
+            if self.signaler.is_some() {
+                log::warn!("subscription dropped without a data sender; skipping cleanup signal");
+            }
+            return;
+        };
         if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Request(request_id)) {
+            if let Err(e) = signaler.send(Signal::Request(request_id, sender)) {
                 log::warn!("error sending drop signal: {e}");
             }
         } else if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-            if let Err(e) = signaler.send(Signal::Order(order_id)) {
+            if let Err(e) = signaler.send(Signal::Order(order_id, sender)) {
                 log::warn!("error sending drop signal: {e}");
             }
         } else if let Some(signaler) = &self.signaler {
             // Currently is order update stream if no request or order id.
-            if let Err(e) = signaler.send(Signal::OrderUpdateStream) {
+            if let Err(e) = signaler.send(Signal::OrderUpdateStream(sender)) {
                 log::warn!("error sending drop signal: {e}");
             }
         }
@@ -179,12 +192,15 @@ impl Drop for InternalSubscription {
 }
 
 // Signals are used to notify the backend when a subscriber is dropped.
-// This facilitates the cleanup of the SenderHashes.
+// This facilitates the cleanup of the SenderHashes. Each signal carries the
+// dropped subscription's data sender; cleanup removes a registration only
+// when it is `same_channel` with it, so a stale signal cannot remove a newer
+// registration under the same key.
 #[cfg(feature = "sync")]
 pub enum Signal {
-    Request(i32),
-    Order(i32),
-    OrderUpdateStream,
+    Request(i32, Sender<RoutedItem>),
+    Order(i32, Sender<RoutedItem>),
+    OrderUpdateStream(Sender<RoutedItem>),
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances

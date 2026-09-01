@@ -1701,6 +1701,85 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
     Ok(())
 }
 
+/// Queue a marker drop signal behind everything already queued and wait until
+/// the cleanup thread has processed it. Signals are handled FIFO by a single
+/// thread, so once the marker's registration is gone, every signal sent
+/// before it has been handled too.
+fn drain_cleanup_signals(bus: &Arc<TcpMessageBus<MemoryStream>>) {
+    const MARKER_REQUEST_ID: i32 = 987_654;
+    let marker = bus.send_request(MARKER_REQUEST_ID, &[]).expect("marker request failed");
+    drop(marker);
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        if !bus.requests.contains(&MARKER_REQUEST_ID) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    panic!("cleanup thread did not process the marker signal");
+}
+
+/// Regression test for #773: dropping an old order subscription must not
+/// unregister a newer subscription under the same order id (place then cancel
+/// on one id). The stale signal carries the old sender's identity and skips
+/// the replacement.
+#[test]
+fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let sub_a = bus.send_order_request(42, &[])?;
+    let sub_b = bus.send_order_request(42, &[])?;
+    drop(sub_a);
+
+    drain_cleanup_signals(&bus);
+
+    let sender = bus.orders.copy_sender(42).expect("stale cleanup removed the newer subscription");
+    sender
+        .send(RoutedItem::Error(Error::Cancelled))
+        .expect("send to registered channel failed");
+    let item = sub_b.next_timeout_routed(TICK);
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Cancelled))), "{item:?}");
+    drop(sender);
+
+    // The replacement's own drop still cleans up.
+    drop(sub_b);
+    drain_cleanup_signals(&bus);
+    assert!(!bus.orders.contains(&42), "order channel leaked");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// The identity guards directly: a cleanup carrying a foreign sender must not
+/// remove a live registration, and one carrying the registered sender must.
+#[test]
+fn test_cleanup_identity_guards() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+
+    let _order_sub = bus.send_order_request(7, &[])?;
+    let (foreign, _foreign_rx) = crossbeam::channel::unbounded();
+    bus.clean_order(7, &foreign);
+    assert!(bus.orders.contains(&7), "foreign sender removed a live order registration");
+    let registered = bus.orders.copy_sender(7).unwrap();
+    bus.clean_order(7, &registered);
+    assert!(!bus.orders.contains(&7), "matching sender failed to remove the registration");
+
+    let _stream_sub = bus.create_order_update_subscription()?;
+    bus.clear_order_update_stream(&foreign);
+    assert!(
+        bus.order_update_stream.lock().unwrap().is_some(),
+        "foreign sender cleared a live order update stream"
+    );
+    let registered = bus.order_update_stream.lock().unwrap().clone().unwrap();
+    bus.clear_order_update_stream(&registered);
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "matching sender failed to clear");
+
+    Ok(())
+}
+
 /// Routed-but-orphan notice (real request_id, no matching sub) takes the
 /// `log_orphan` path, NOT the global notice stream.
 #[test]

@@ -243,17 +243,29 @@ impl<S: Stream> TcpMessageBus<S> {
         self.executions.clear();
     }
 
-    fn clean_request(&self, request_id: i32) {
-        self.requests.remove(&request_id);
-        debug!("released request_id {}, requests.len()={}", request_id, self.requests.len());
+    // The three cleanup handlers below remove a registration only when it is
+    // `same_channel` with the dropped subscription's sender: a drop signal can
+    // be processed arbitrarily late, and unconditional removal would take out
+    // a newer registration under the same key (place then cancel on one order
+    // id, or an order update stream recreated after a reconnect reset).
+
+    fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
+        if self.requests.remove_if_same(&request_id, sender) {
+            debug!("released request_id {}, requests.len()={}", request_id, self.requests.len());
+        } else {
+            debug!("skipped stale cleanup for request_id {request_id}: registration replaced or already gone");
+        }
     }
 
-    fn clean_order(&self, order_id: i32) {
-        self.orders.remove(&order_id);
-        debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
+    fn clean_order(&self, order_id: i32, sender: &Sender<RoutedItem>) {
+        if self.orders.remove_if_same(&order_id, sender) {
+            debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
+        } else {
+            debug!("skipped stale cleanup for order_id {order_id}: registration replaced or already gone");
+        }
     }
 
-    fn clear_order_update_stream(&self) {
+    fn clear_order_update_stream(&self, sender: &Sender<RoutedItem>) {
         let mut stream = if let Ok(stream) = self.order_update_stream.lock() {
             stream
         } else {
@@ -261,8 +273,12 @@ impl<S: Stream> TcpMessageBus<S> {
             return;
         };
 
-        *stream = None;
-        debug!("released order_update_stream");
+        if stream.as_ref().is_some_and(|registered| registered.same_channel(sender)) {
+            *stream = None;
+            debug!("released order_update_stream");
+        } else {
+            debug!("skipped stale order_update_stream cleanup: registration replaced or already gone");
+        }
     }
 
     fn read_message(&self) -> Response {
@@ -536,9 +552,9 @@ impl<S: Stream> TcpMessageBus<S> {
             loop {
                 crossbeam::select! {
                     recv(signal_recv) -> signal => match signal {
-                        Ok(Signal::Request(request_id)) => message_bus.clean_request(request_id),
-                        Ok(Signal::Order(order_id)) => message_bus.clean_order(order_id),
-                        Ok(Signal::OrderUpdateStream) => message_bus.clear_order_update_stream(),
+                        Ok(Signal::Request(request_id, sender)) => message_bus.clean_request(request_id, &sender),
+                        Ok(Signal::Order(order_id, sender)) => message_bus.clean_order(order_id, &sender),
+                        Ok(Signal::OrderUpdateStream(sender)) => message_bus.clear_order_update_stream(&sender),
                         Err(_) => {
                             debug!("cleanup signal channel closed");
                             return;
@@ -643,9 +659,15 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
         let (sender, receiver) = channel::unbounded();
 
-        *order_update_stream = Some(sender);
+        *order_update_stream = Some(sender.clone());
 
-        let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(self.signals_send.clone()).build();
+        // The sender gives the subscription's drop signal its identity — see
+        // `clear_order_update_stream`.
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals_send.clone())
+            .build();
 
         Ok(subscription)
     }
@@ -744,6 +766,19 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
         let mut senders = self.senders.write().unwrap();
         senders.remove(id)
+    }
+
+    /// Remove the entry for `id` only if it is the same channel as `sender`.
+    /// Returns whether an entry was removed. Used by drop-signal cleanup so a
+    /// stale signal cannot remove a newer registration under the same key.
+    pub fn remove_if_same(&self, id: &K, sender: &Sender<V>) -> bool {
+        let mut senders = self.senders.write().unwrap();
+        if senders.get(id).is_some_and(|registered| registered.same_channel(sender)) {
+            senders.remove(id);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn contains(&self, id: &K) -> bool {
