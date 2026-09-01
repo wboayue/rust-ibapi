@@ -153,6 +153,11 @@ impl Client {
 
     /// Cancels an open [Order].
     ///
+    /// The confirmation (TWS code 202) arrives as a non-terminal
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem);
+    /// the subscription stays open until dropped, so break once cancellation
+    /// is observed.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -162,13 +167,16 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     // `""` selects immediate cancel (no manual order time).
-    ///     let subscription = client.cancel_order(42, "").await.expect("cancel failed");
-    ///     // Consume the subscription so cancel confirmations and errors surface.
-    ///     let mut updates = subscription.filter_data();
-    ///     while let Some(update) = updates.next().await {
-    ///         match update {
-    ///             Ok(event) => println!("cancel event: {event:?}"),
-    ///             Err(e)    => { eprintln!("cancel err: {e:?}"); break; }
+    ///     let mut subscription = client.cancel_order(42, "").await.expect("cancel failed");
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Data(event)) => println!("status: {event:?}"),
+    ///             Ok(SubscriptionItem::Notice(n)) if n.is_cancellation() => {
+    ///                 println!("cancelled: {n}");
+    ///                 break;
+    ///             }
+    ///             Ok(SubscriptionItem::Notice(n)) => println!("notice: {n}"),
+    ///             Err(e) => { eprintln!("cancel err: {e:?}"); break; }
     ///         }
     ///     }
     /// }

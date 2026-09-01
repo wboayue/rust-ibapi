@@ -3,7 +3,9 @@
 use log::warn;
 
 use crate::errors::Error;
-use crate::messages::{is_warning_message, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES};
+use crate::messages::{
+    is_warning_message, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE,
+};
 
 use super::RoutedItem;
 
@@ -180,11 +182,16 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
 
 /// Check if an error code is a warning.
 ///
-/// Warning codes, warning-form order messages, and data advisories are
-/// informational — TWS proceeds with the request — so they are routed as a
-/// `Notice` rather than terminating the subscription as an `Error`.
+/// Warning codes, warning-form order messages, data advisories, and the order
+/// cancellation confirmation (202) are informational — TWS proceeds with the
+/// request, or the frame confirms an outcome the caller asked for — so they
+/// are routed as a `Notice` rather than terminating the subscription as an
+/// `Error`. Note 202 is deliberately *not* in [`is_warning_message`]:
+/// `Notice::is_warning()` stays false for it (it is a cancellation, not a
+/// warning — see `Notice::category`); only the routing disposition treats the
+/// two alike.
 pub(crate) fn is_warning_error(error_code: i32, error_message: &str) -> bool {
-    is_warning_message(error_code, error_message) || DATA_ADVISORY_CODES.contains(&error_code)
+    is_warning_message(error_code, error_message) || DATA_ADVISORY_CODES.contains(&error_code) || error_code == ORDER_CANCELLED_CODE
 }
 
 /// Request ID for unspecified errors

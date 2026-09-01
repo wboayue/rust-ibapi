@@ -80,6 +80,11 @@ impl Client {
 
     /// Cancels an active [`crate::orders::Order`] placed by the same API client ID.
     ///
+    /// The confirmation (TWS code 202) arrives as a non-terminal
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem);
+    /// the subscription stays open until dropped, so break once cancellation
+    /// is observed.
+    ///
     /// # Arguments
     /// * `order_id` - ID of the [`crate::orders::Order`] to cancel.
     /// * `manual_order_cancel_time` - Optional timestamp to specify the cancellation time. Use an empty string to use the current time.
@@ -88,13 +93,22 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
+    /// use ibapi::subscriptions::SubscriptionItem;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let order_id = 15;
     /// let subscription = client.cancel_order(order_id, "").expect("request failed");
-    /// for result in subscription {
-    ///    println!("{result:?}");
+    /// for item in &subscription {
+    ///     match item {
+    ///         Ok(SubscriptionItem::Data(status)) => println!("status: {status:?}"),
+    ///         Ok(SubscriptionItem::Notice(n)) if n.is_cancellation() => {
+    ///             println!("cancelled: {n}");
+    ///             break;
+    ///         }
+    ///         Ok(SubscriptionItem::Notice(n)) => println!("notice: {n}"),
+    ///         Err(e) => { eprintln!("cancel err: {e:?}"); break; }
+    ///     }
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
