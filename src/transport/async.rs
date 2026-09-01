@@ -426,50 +426,26 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
 
-        {
-            let channels = self.request_channels.read().await;
-            for (_, sender) in channels.iter() {
-                let _ = sender.send(Error::ConnectionReset.into());
-            }
+        for sender in self.request_channels.read().await.values() {
+            let _ = sender.send(Error::ConnectionReset.into());
+        }
+        for sender in self.order_channels.read().await.values() {
+            let _ = sender.send(Error::ConnectionReset.into());
+        }
+        // Shared channels too, mirroring sync's `notify_all`: an in-flight
+        // open_orders/positions subscription awaits an end marker only the
+        // pre-reconnect request could produce, so it would hang forever.
+        // Unfiltered on purpose — `fail_one_shot_channels`' one-shot filter
+        // protects live streams from *unrelated* errors, but a reset
+        // terminates every stream by definition. The senders are not cleared
+        // here, unlike the maps below.
+        for sender in self.shared_channel_senders.read().await.values().flatten() {
+            let _ = sender.send(Error::ConnectionReset.into());
         }
 
-        {
-            let channels = self.order_channels.read().await;
-            for (_, sender) in channels.iter() {
-                let _ = sender.send(Error::ConnectionReset.into());
-            }
-        }
-
-        // Shared channels too, mirroring the sync transport's `notify_all`:
-        // an in-flight open_orders/completed_orders/positions subscription is
-        // waiting for an end marker only the pre-reconnect request could
-        // produce, so without this it hangs forever. The senders themselves
-        // are persistent (never cleared); a later `send_shared_request`
-        // resubscribes at the channel's current tail and never sees this
-        // error, so only in-flight consumers are affected.
-        {
-            let channels = self.shared_channel_senders.read().await;
-            for senders in channels.values() {
-                for sender in senders {
-                    let _ = sender.send(Error::ConnectionReset.into());
-                }
-            }
-        }
-
-        {
-            let mut channels = self.request_channels.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut channels = self.order_channels.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut channels = self.execution_channels.write().await;
-            channels.clear();
-        }
+        self.request_channels.write().await.clear();
+        self.order_channels.write().await.clear();
+        self.execution_channels.write().await.clear();
     }
 
     /// Notify all waiting subscriptions about shutdown
@@ -482,7 +458,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.shutdown_notify.notify_waiters();
 
         // Clear all channels - dropping the senders will close the channels
-        // and cause all receivers to get RecvError::Closed
+        // and cause all receivers to get RecvError::Closed. This diverges
+        // from sync's shutdown, which sends Error::Shutdown before clearing:
+        // async consumers see end-of-stream, sync consumers see the error.
         {
             let mut channels = self.request_channels.write().await;
             channels.clear();

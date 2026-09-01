@@ -69,3 +69,19 @@ on subscribe is not safe as-is — the drain could discard messages buffered for
 a concurrent live subscription of the same type (see the comment in sync
 `send_shared_request`). Needs either per-subscription sync shared channels
 (the async model) or reset-generation tagging.
+
+## 5. Async shutdown/reset shape
+
+Two related /simplify flags from PR #783:
+
+- Async `request_shutdown` notifies nothing (relies on sender-drop →
+  end-of-stream) while sync sends `Error::Shutdown` before clearing — now the
+  one remaining sync/async divergence in teardown signalling, noted in a
+  comment at the site. Aligning means deciding what the public `Subscription`
+  should surface at shutdown.
+- The async bus keeps five bare `Arc<RwLock<HashMap<..>>>` fields where sync
+  has registry types (`SenderHash`, `SharedChannels` with `notify_all`), so
+  every teardown behavior is open-coded per map; shared-sender fan-out exists
+  at three sites (`route_to_shared_channel`, `fail_one_shot_channels`,
+  `reset_channels`). Async registry types mirroring sync's would collapse
+  `reset_channels` and `request_shutdown` both.
