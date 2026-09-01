@@ -44,18 +44,11 @@ Internal / free-function violations — take one when you are already in the fil
 
 ## `market_data` realtime seam — opened by #729's `/simplify`
 
-Both are restructuring, deferred out of #729 rather than landed in a cleanup pass.
+Restructuring, deferred out of #729 rather than landed in a cleanup pass. The
+`MarketDataBuilder` relocation shipped in #772 (moved to `realtime/builder/market_data.rs`,
+old `market_data::builder` module deleted, `new` narrowed to `pub(crate)`, clean break with
+`migration-4.0.md` §7); one item remains:
 
-- **`MarketDataBuilder` sits a directory above its three siblings.** It lives in
-  `src/market_data/builder/` — a module whose sole content is that one type — while
-  `RealtimeBarsBuilder`, `MarketDepthBuilder`, and `TickByTickBuilder` live in
-  `src/market_data/realtime/builder/`. After #729 moved the entry point into
-  `market_data/realtime/{sync,async}.rs`, the new `impl Client` blocks have to reach *upward*
-  out of `realtime/` for it, on lines adjacent to siblings that resolve via `super::`. Its only
-  consumers in the tree are realtime. Fix: move it to `realtime/builder/market_data.rs` and add
-  it to that module's `pub use`. Breaking — `crate::market_data::builder::MarketDataBuilder` is
-  a public path, referenced from `realtime/generic_tick.rs` and doc links in
-  `subscriptions/{sync,async}.rs` — so it needs its own PR with a `migration-3.0.md` note.
 - **`market_data::realtime::sync::market_data` is `pub` where its siblings are `pub(crate)`.**
   The free fn in `realtime/sync.rs` is public; `realtime_bars`, `market_depth`, and
   `tick_by_tick` beside it are `pub(crate)`. Under `#[cfg(all(feature = "sync", not(feature =
@@ -65,7 +58,10 @@ Both are restructuring, deferred out of #729 rather than landed in a cleanup pas
   but co-locating the builder entry point in #729 turned it into a same-file inconsistency.
   Narrowing is a public-API change: audit callers first per
   [restrict after callers](../docs/rules/workflow/restrict-after-callers.md), and it needs a
-  `CHANGELOG.md` entry.
+  `CHANGELOG.md` entry. Same seam, noted in #772's `/simplify`: the async
+  `MarketDataBuilder::subscribe` goes through `Client::subscribe_market_data` while the sync
+  side calls the free fn — whoever unifies the visibility should route both sides the same
+  way in the same PR.
 
 ## Out-of-scope on the audit pass
 

@@ -9,6 +9,7 @@ Version 4.0 is a breaking release. This guide walks through the changes required
 - `Client::wsh_event_data_by_contract` / `wsh_event_data_by_filter` return builders instead of taking positional `Option` arguments.
 - `Client::check_server_version` is crate-private; compare against `Client::server_version()` directly.
 - `Notice` gains a `request_id` field — the originating request or order id, `None` for request-less notices.
+- `MarketDataBuilder` moves from `market_data::builder` to `market_data::realtime`, beside its sibling builders.
 - Transport hardening (behavioral, not API-breaking): frame-length validation with automatic reconnect, wrong-wire-format detection, unified retry-on-reset across one-shot requests, a configurable reconnect attempt limit (`ClientBuilder::max_reconnect_attempts` / `reconnect_forever`), and byte-level stream capture via `IBAPI_RAW_CAPTURE_DIR`.
 
 ## Breaking changes
@@ -184,6 +185,22 @@ let advisories: [i32; 2] = ibapi::DATA_ADVISORY_CODES;
 let advisories = ibapi::DATA_ADVISORY_CODES;
 ```
 
+### 7. `MarketDataBuilder` moves to `market_data::realtime`
+
+`MarketDataBuilder` lived at `market_data::builder` — a module whose only content was that one type — while its three siblings (`RealtimeBarsBuilder`, `MarketDepthBuilder`, `TickByTickBuilder`) lived under `market_data::realtime`. It now lives beside them, and the `market_data::builder` module is gone:
+
+```rust,ignore
+// 3.x
+use ibapi::market_data::builder::MarketDataBuilder;
+
+// 4.0
+use ibapi::market_data::realtime::MarketDataBuilder;
+```
+
+Only code that names the type breaks — imports, or a function signature taking/returning the builder. The usual form, `client.market_data(&contract).subscribe()`, never names it and is unaffected. It is also in `ibapi::prelude` now, along with the other three realtime builders.
+
+`MarketDataBuilder::new` is `pub(crate)` in the same move — the sibling builders never exposed a public constructor, and `client.market_data(&contract)` is the supported way to obtain one.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -206,9 +223,10 @@ No code changes required, but observable at runtime:
 3. Rewrite `wsh_event_data_by_contract` / `wsh_event_data_by_filter` calls as builder chains ending in `.fetch()` / `.subscribe()`.
 4. Replace `client.check_server_version(..)` with a comparison against `client.server_version()`.
 5. Add `request_id: None` (or a real id) to any `Notice` struct literals.
-6. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
-7. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
-8. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+6. Re-point `use ibapi::market_data::builder::MarketDataBuilder` imports at `ibapi::market_data::realtime::MarketDataBuilder`.
+7. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
+8. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
+9. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

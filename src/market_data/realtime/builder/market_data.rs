@@ -5,9 +5,14 @@ use crate::market_data::realtime::TickTypes;
 use crate::Error;
 
 #[cfg(test)]
+#[path = "market_data_tests.rs"]
 mod tests;
 
-/// Builder for creating market data subscriptions with a fluent interface
+/// Builder for creating market data subscriptions with a fluent interface.
+///
+/// Defaults: no generic ticks, streaming (not snapshot), no regulatory
+/// snapshot. Terminals: `.subscribe()`, or `.snapshot_once(timeout)` for a
+/// collected one-shot snapshot.
 #[must_use = "MarketDataBuilder does nothing until you call .subscribe()"]
 pub struct MarketDataBuilder<'a, C> {
     client: &'a C,
@@ -18,8 +23,7 @@ pub struct MarketDataBuilder<'a, C> {
 }
 
 impl<'a, C> MarketDataBuilder<'a, C> {
-    /// Creates a new MarketDataBuilder
-    pub fn new(client: &'a C, contract: &'a Contract) -> Self {
+    pub(crate) fn new(client: &'a C, contract: &'a Contract) -> Self {
         Self {
             client,
             contract,
@@ -109,9 +113,12 @@ impl<'a, C> MarketDataBuilder<'a, C> {
         self.snapshot = false;
         self
     }
+
+    fn generic_tick_refs(&self) -> Vec<&str> {
+        self.generic_ticks.iter().map(|s| s.as_str()).collect()
+    }
 }
 
-// Sync implementation
 #[cfg(feature = "sync")]
 impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// Subscribe to market data
@@ -139,7 +146,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<TickTypes>, Error> {
-        let generic_ticks: Vec<&str> = self.generic_ticks.iter().map(|s| s.as_str()).collect();
+        let generic_ticks = self.generic_tick_refs();
 
         crate::market_data::realtime::sync::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
     }
@@ -173,7 +180,6 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     }
 }
 
-// Async implementation
 #[cfg(feature = "async")]
 impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     /// Subscribe to market data
@@ -204,7 +210,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::Subscription<TickTypes>, Error> {
-        let generic_ticks: Vec<&str> = self.generic_ticks.iter().map(|s| s.as_str()).collect();
+        let generic_ticks = self.generic_tick_refs();
 
         self.client
             .subscribe_market_data(self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)

@@ -6,8 +6,10 @@ use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
-use super::{Bar, DepthMarketDataDescription, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow};
-use crate::market_data::builder::MarketDataBuilder;
+use super::{
+    Bar, DepthMarketDataDescription, MarketDataBuilder, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes,
+    WhatToShow,
+};
 use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
 
