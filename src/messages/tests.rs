@@ -1023,6 +1023,22 @@ fn test_notice_is_warning() {
         assert!(!notice.is_error());
     }
 
+    // Code 0 — a frame whose error_code field was absent on the wire — is a
+    // warning even without a "Warning:" line (the undecodable-frame fallback
+    // has an empty message).
+    for msg in ["Warning: Approaching max rate of 50 messages per second (42)", ""] {
+        let notice = Notice {
+            request_id: None,
+            code: 0,
+            message: msg.to_string(),
+            error_time: None,
+            advanced_order_reject_json: String::new(),
+        };
+        assert!(notice.is_warning(), "code 0 with message {msg:?} should be a warning");
+        assert!(notice.is_informational());
+        assert!(!notice.is_error());
+    }
+
     // Codes outside 2100-2169 are not warnings
     let non_warning_codes = [2099, 2170, 200, 202, 1000];
     for code in non_warning_codes {
@@ -1204,6 +1220,7 @@ fn test_notice_is_order_rejection() {
 fn test_notice_category_partition() {
     let cases: &[(i32, NoticeCategory)] = &[
         (ORDER_CANCELLED_CODE, NoticeCategory::Cancellation), // 202 — precedence over OrderRejection
+        (0, NoticeCategory::Warning),                         // code-less frame: error_code absent on the wire
         (*WARNING_CODE_RANGE.start(), NoticeCategory::Warning),
         (*WARNING_CODE_RANGE.end(), NoticeCategory::Warning),
         (SYSTEM_MESSAGE_CODES[0], NoticeCategory::SystemMessage),
