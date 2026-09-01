@@ -559,12 +559,12 @@ async fn test_basic_market_data() {
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
     let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
-    let snapshot = false;
-    let regulatory_snapshot = false;
 
     // Test subscription creation
     let mut subscription = client
-        .subscribe_market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+        .market_data(&contract)
+        .generic_ticks(generic_ticks)
+        .subscribe()
         .await
         .expect("Failed to create market data subscription");
 
@@ -615,9 +615,7 @@ async fn test_basic_market_data() {
         &market_data_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .generic_ticks(generic_ticks)
-            .snapshot(snapshot)
-            .regulatory_snapshot(regulatory_snapshot),
+            .generic_ticks(generic_ticks),
     );
 }
 
@@ -636,13 +634,9 @@ async fn test_market_data_with_combo_legs() {
         ..ComboLeg::default()
     }];
     let generic_ticks: Vec<&str> = vec!["233", "456"];
-    let snapshot = false;
-    let regulatory_snapshot = false;
 
     // Test subscription creation
-    let result = client
-        .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
-        .await;
+    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe().await;
     assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -652,9 +646,7 @@ async fn test_market_data_with_combo_legs() {
         &market_data_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .generic_ticks(&generic_ticks)
-            .snapshot(snapshot)
-            .regulatory_snapshot(regulatory_snapshot),
+            .generic_ticks(&generic_ticks),
     );
 }
 
@@ -670,13 +662,9 @@ async fn test_market_data_with_delta_neutral() {
         price: 100.0,
     });
     let generic_ticks: Vec<&str> = vec![];
-    let snapshot = false;
-    let regulatory_snapshot = false;
 
     // Test subscription creation
-    let result = client
-        .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
-        .await;
+    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe().await;
     assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -686,9 +674,7 @@ async fn test_market_data_with_delta_neutral() {
         &market_data_request()
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
-            .generic_ticks(&generic_ticks)
-            .snapshot(snapshot)
-            .regulatory_snapshot(regulatory_snapshot),
+            .generic_ticks(&generic_ticks),
     );
 }
 
@@ -706,12 +692,14 @@ async fn test_market_data_regulatory_snapshot() {
         ..Contract::default()
     };
     let generic_ticks: Vec<&str> = vec![];
-    let snapshot = true;
-    let regulatory_snapshot = true;
 
     // Test subscription creation
     let result = client
-        .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+        .market_data(&contract)
+        .generic_ticks(&generic_ticks)
+        .snapshot()
+        .regulatory_snapshot()
+        .subscribe()
         .await;
     assert!(result.is_ok(), "Failed to create regulatory snapshot market data subscription");
 
@@ -723,8 +711,8 @@ async fn test_market_data_regulatory_snapshot() {
             .request_id(TEST_REQ_ID_FIRST)
             .contract(&contract)
             .generic_ticks(&generic_ticks)
-            .snapshot(snapshot)
-            .regulatory_snapshot(regulatory_snapshot),
+            .snapshot(true)
+            .regulatory_snapshot(true),
     );
 }
 

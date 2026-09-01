@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The free function `market_data::realtime::sync::market_data()` is crate-private, matching the `realtime_bars` / `market_depth` / `tick_by_tick` free functions beside it (in sync-only builds it was also reachable as `market_data::realtime::market_data` through the glob re-export). It was the low-level request under the `client.market_data(&contract)` builder, which is the supported path and takes the same inputs via setters; no call site in `examples/` or the integration crates used the free function. See `docs/migration-4.0.md` §8 (#773).
+
 - `Client::check_server_version()` is crate-private. It was `pub` on the async client and `pub(crate)` on the blocking one — drift rather than design, since it is the internal guard every version-gated API already calls. Compare against `Client::server_version()` directly if you need to branch on gateway support (#728).
 
 ### Fixed

@@ -143,19 +143,6 @@ impl Client {
         RealtimeBarsBuilder::new(self, contract)
     }
 
-    pub(crate) async fn subscribe_realtime_bars(
-        &self,
-        contract: &Contract,
-        what_to_show: &WhatToShow,
-        trading_hours: TradingHours,
-        options: &[TagValue],
-    ) -> Result<Subscription<Bar>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
-
-        builder.send::<Bar>(request).await
-    }
-
     /// Returns a builder for a tick-by-tick real-time subscription.
     ///
     /// Pick the tick stream with the terminal — `.last()` / `.all_last()` /
@@ -253,20 +240,6 @@ impl Client {
         .await
         .or_else(empty_on_end_of_stream)
     }
-
-    /// Requests real time market data (low-level).
-    pub(crate) async fn subscribe_market_data(
-        &self,
-        contract: &Contract,
-        generic_ticks: &[&str],
-        snapshot: bool,
-        regulatory_snapshot: bool,
-    ) -> Result<Subscription<TickTypes>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_market_data(builder.request_id(), contract, generic_ticks, snapshot, regulatory_snapshot)?;
-
-        builder.send::<TickTypes>(request).await
-    }
 }
 
 /// Validates that server supports the given request.
@@ -278,6 +251,32 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
     }
 
     Ok(())
+}
+
+pub(crate) async fn market_data(
+    client: &Client,
+    contract: &Contract,
+    generic_ticks: &[&str],
+    snapshot: bool,
+    regulatory_snapshot: bool,
+) -> Result<Subscription<TickTypes>, Error> {
+    let builder = client.request();
+    let request = encoders::encode_request_market_data(builder.request_id(), contract, generic_ticks, snapshot, regulatory_snapshot)?;
+
+    builder.send::<TickTypes>(request).await
+}
+
+pub(crate) async fn realtime_bars(
+    client: &Client,
+    contract: &Contract,
+    what_to_show: &WhatToShow,
+    trading_hours: TradingHours,
+    options: &[TagValue],
+) -> Result<Subscription<Bar>, Error> {
+    let builder = client.request();
+    let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), options)?;
+
+    builder.send::<Bar>(request).await
 }
 
 pub(crate) async fn market_depth(

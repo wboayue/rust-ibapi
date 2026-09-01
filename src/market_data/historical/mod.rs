@@ -725,11 +725,6 @@ impl ToField for Option<WhatToShow> {
     }
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
-#[allow(unused_imports)]
-pub use sync::*;
-
-// Async API methods are now on Client directly via historical/async.rs
 // Re-export non-function items
 #[cfg(feature = "async")]
 pub use r#async::TickSubscription;
