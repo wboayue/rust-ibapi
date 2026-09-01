@@ -133,16 +133,19 @@ impl FibonacciBackoff {
     pub(crate) fn new(max: u64) -> Self {
         FibonacciBackoff {
             previous: 0,
-            current: 1,
+            // Clamped so `current <= max` holds from construction on; keeps
+            // `max: 0` meaning "no delay" rather than a fixed 1s.
+            current: 1.min(max),
             max,
         }
     }
 
     pub(crate) fn next_delay(&mut self) -> Duration {
         // Note: `max` must clamp `previous` and `current` (not just the return value)
-        // because u64 will overflow at approx fib(94).
+        // because u64 overflows at fib(94). The saturating_add covers `max` values
+        // large enough that the sum overflows before the clamp can engage.
         if self.current < self.max {
-            let next = (self.previous + self.current).min(self.max);
+            let next = self.previous.saturating_add(self.current).min(self.max);
             self.previous = self.current;
             self.current = next;
         }
