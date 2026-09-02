@@ -4,21 +4,6 @@
 [![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
 [![Coverage Status](https://coveralls.io/repos/github/wboayue/rust-ibapi/badge.png?branch=main)](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
 
-> **Branch notice:** The `main` branch is the **v4.x** release line. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
-
-## What's new in 4.0
-
-- **Decimal-safe market-data sizes.** Historical tick and histogram sizes (and the `ContractDetails` size rules) are `Option<f64>` — fractional sizes on crypto and fractional-share feeds no longer truncate to `0`, and "TWS sent no value" is distinguishable from a real zero.
-- **Transport hardening.** Frame-length validation with automatic reconnect (`Error::InvalidFrame`), wrong-wire-format detection (`Error::UnexpectedWireFormat`), uniform retry-on-reset across one-shot requests, a configurable reconnect budget (`ClientBuilder::max_reconnect_attempts` / `reconnect_forever`), observable consumer lag (in-band `SUBSCRIPTION_LAG_CODE` notices, `ClientBuilder::channel_capacity`), and byte-level stream capture via `IBAPI_RAW_CAPTURE_DIR`.
-- **Smarter notice routing.** Data advisories (2188, 10090) and warning-text order messages no longer terminate subscriptions; order-bound rejections reach the order-update stream as `SubscriptionItem::Notice` with a `request_id`; unrecognized execution liquidity codes surface as `Liquidity::Unknown(code)` instead of collapsing to `None`.
-
-See [`docs/migration-4.0.md`](docs/migration-4.0.md) for the before/after on every breaking change.
-
-## What's new in 3.0
-
-- **Protobuf-only wire format.** v3.0 drops the legacy text protocol and speaks only TWS protobuf. Requires TWS / IB Gateway server version **213 or newer**. Smaller, faster, and version-gated by IB itself — see [`docs/migration-3.0.md`](docs/migration-3.0.md) for the cutover.
-- **API ergonomics overhaul.** Builders for multi-arg subscriptions (`market_data(&contract).subscribe()`, `realtime_bars(&contract).subscribe()`), unified `Subscription<T>` shape with `SubscriptionItem::{Data, Notice}`, typed `OrderStatusKind` (was magic-string `String`), globally-routed `Client::notice_stream()` for unsolicited notices, and consistent sync/async surfaces. See the [migration guide](docs/migration-3.0.md) for the before/after on every breaking change.
-
 ## Introduction
 
 This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
@@ -74,9 +59,7 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Install
 
-**v4.x (this branch):** [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
-
-**v2.x (stable):** earlier `2.x` releases are still on [crates.io/crates/ibapi](https://crates.io/crates/ibapi). Maintenance lives on the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
+Available on [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
 
 ## Examples
 
