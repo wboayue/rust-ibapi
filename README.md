@@ -8,7 +8,9 @@
 
 This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
 
-With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
+With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data.
+
+> **📚 Migrating?** See the [v3.x → v4.0 guide](docs/migration-4.0.md) for the latest breaking changes, the [v2.x → v3.0 guide](docs/migration-3.0.md) for the `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
 
 ## Sync/Async Architecture
 
@@ -49,17 +51,9 @@ use ibapi::Client;                    // async client
 use ibapi::client::blocking::Client;  // blocking client
 ```
 
-> **📚 Migrating?** See the [v3.x → v4.0 guide](docs/migration-4.0.md) for the latest breaking changes, the [v2.x → v3.0 guide](docs/migration-3.0.md) for the `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
-
-If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
-
 ## Available APIs
 
 The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
-
-## Install
-
-Available on [crates.io/crates/ibapi](https://crates.io/crates/ibapi) — see the [Sync/Async Architecture](#syncasync-architecture) section above for the Cargo.toml snippets.
 
 ## Examples
 
@@ -145,6 +139,7 @@ For a complete list of contract attributes, explore the [Contract documentation]
 
 ```rust
 use time::macros::datetime;
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
@@ -262,9 +257,11 @@ async fn main() {
 }
 ```
 
-In both examples, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) that can be used as an iterator (sync) or stream (async). The subscription is automatically cancelled when it goes out of scope.
+In both examples, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) that can be used as an iterator (sync) or stream (async). The subscription is automatically cancelled when it goes out of scope.
 
 #### Non-blocking Iteration (Sync)
+
+Continuing from the sync example above, `try_iter_data()` polls without blocking:
 
 ```rust
 use std::time::Duration;
@@ -282,7 +279,7 @@ loop {
 }
 ```
 
-Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) for more details.
 
 #### One-Shot Snapshot
 
@@ -352,6 +349,7 @@ For a comprehensive guide on all supported order types and their usage, see the 
 #### Sync Example
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 pub fn main() {
@@ -427,6 +425,7 @@ For real-time monitoring of order status, executions, and commissions, set up an
 ##### Sync Example
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 use std::thread;
 use std::sync::Arc;
@@ -648,32 +647,9 @@ want `iter_data()` / `filter_data()` — notices are observability concerns and
 already log at `warn!`. UI status indicators, custom logging, and audit pipelines
 match on `SubscriptionItem::Data` vs `SubscriptionItem::Notice` directly.
 
-Sync data-only example:
-
-```rust
-use ibapi::client::blocking::Client;
-use ibapi::prelude::*;
-
-fn main() {
-    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    let contract = Contract::stock("AAPL").build();
-    let subscription = client
-        .realtime_bars(&contract)
-        .trading_hours(TradingHours::Extended)
-        .subscribe()
-        .expect("realtime bars request failed");
-
-    for bar in subscription.iter_data() {
-        match bar {
-            Ok(bar) => println!("bar: {bar:?}"),
-            Err(e) => {
-                eprintln!("error: {e:?}");
-                break;
-            }
-        }
-    }
-}
-```
+For a complete data-only example, see the sync example under
+[Requesting Realtime Market Data](#requesting-realtime-market-data) above — its
+`iter_data()` loop is exactly this shape.
 
 ### Handshake-time notices
 
@@ -722,6 +698,7 @@ The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be share
 ```rust
 use std::sync::Arc;
 use std::thread;
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
@@ -758,12 +735,13 @@ fn main() {
 }
 ```
 
-Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same message type (if not synchronized by the application) may receive responses for other requests of the same message type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html) using shared channels are tagged with the [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/trait.SharesChannel.html) trait to highlight areas that the application may need to synchronize.
+Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same message type (if not synchronized by the application) may receive responses for other requests of the same message type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) using shared channels are tagged with the blocking client's [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/blocking/trait.SharesChannel.html) trait to highlight areas that the application may need to synchronize.
 
 To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
 
 ```rust
 use std::thread;
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
@@ -844,5 +822,7 @@ fn main() {
 ## Contributions
 
 We welcome contributions of all kinds. Feel free to propose new ideas, share bug fixes, or enhance the documentation. If you'd like to contribute, please start by reviewing our [contributor documentation](https://github.com/wboayue/rust-ibapi/blob/main/CONTRIBUTING.md).
+
+If you encounter a bug or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
 For questions or discussions about contributions, feel free to open an issue or reach out via our [GitHub discussions page](https://github.com/wboayue/rust-ibapi/discussions).
