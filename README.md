@@ -1,4 +1,4 @@
-[![Build](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
+[![Build](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
 [![License:MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![crates.io](https://img.shields.io/crates/v/ibapi.svg)](https://crates.io/crates/ibapi)
 [![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
