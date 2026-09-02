@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The prelude now re-exports the account-parameter newtypes `AccountGroup`, `AccountId`, `ContractId`, and `ModelCode` (from `ibapi::accounts::types`). These are required arguments of `account_summary`, `account_updates`, `pnl`, `pnl_single`, and `positions_multi`, but were the only such parameter types missing from `ibapi::prelude` — the quick-start example could not be written with prelude-only imports.
+
 - `SUBSCRIPTION_LAG_CODE` (`-6`), a synthesized notice code delivered **in-band** on an async subscription whose consumer fell behind its broadcast channel: the channel evicts the oldest frames, and the subscription now receives a non-terminal `SubscriptionItem::Notice` naming the dropped count (plus a `warn!`) where it previously resumed silently — the frames were simply gone with no signal at any level. Reconcile as after a reconnect gap (order streams: `open_orders()`; market data self-corrects with the next tick). Step 1 of the #779 plan (`plans/broadcast-lag-visibility.md`): loss is now observable; the bounded-lossy semantic itself is unchanged (#779).
 
 - `ClientBuilder::channel_capacity` (async only), setting the per-subscription broadcast channel capacity (default unchanged: 1024). Raise it if consumers legitimately fall behind during bursts; `0` is rejected as `Error::InvalidArgument`. The notice fan-out keeps the default (#779).
