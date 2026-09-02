@@ -600,7 +600,7 @@ let mids   = client.historical_ticks(&contract, 100).starting(start).mid_point()
 let quotes = client.historical_ticks(&contract, 100).starting(start).bid_ask(IgnoreSize::No)?;
 ```
 
-The `ignore_size: bool` parameter (previously only valid for the bid/ask variant) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/historical/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it. Other setters: `.ending(end)` to anchor at an end date, `.trading_hours(TradingHours)` to override the default `Regular`.
+The `ignore_size: bool` parameter (previously only valid for the bid/ask variant) is now an [`IgnoreSize`](https://docs.rs/ibapi/latest/ibapi/market_data/enum.IgnoreSize.html) enum (`Yes` / `No`) and lives only on the `.bid_ask(...)` terminal where IBKR honors it. Other setters: `.ending(end)` to anchor at an end date, `.trading_hours(TradingHours)` to override the default `Regular`.
 
 **Consuming the result changed too.** In 2.x the returned `TickSubscription<T>` yielded bare `T` and stashed any error in a private field with no accessor, so a short batch from a decode/transport error was indistinguishable from a normal end-of-data. In 3.0 it carries the same [`SubscriptionItem<T>`](#notification-handling-the-new-shape) envelope as `Subscription<T>`, so errors surface explicitly:
 

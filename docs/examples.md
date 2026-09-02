@@ -50,7 +50,7 @@ cargo run --features async --example async_positions
 
 ### Basic Structure (Sync)
 ```rust
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect

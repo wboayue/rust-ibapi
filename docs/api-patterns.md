@@ -16,8 +16,9 @@ Use the prelude in examples, integration tests, and idiomatic user code:
 ```rust
 use ibapi::prelude::*;
 
-fn main() {
-    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     let contract = Contract::stock("AAPL").build();
     // ...
 }
