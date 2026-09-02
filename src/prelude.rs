@@ -64,6 +64,7 @@ pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHour
 pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
+pub use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 pub use crate::accounts::{
     AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
 };

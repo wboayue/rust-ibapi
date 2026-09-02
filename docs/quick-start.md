@@ -81,7 +81,6 @@ Ensure your IB Gateway or TWS is running with API connections enabled:
 Create `src/main.rs`:
 
 ```rust
-use ibapi::accounts::types::AccountGroup;
 use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
@@ -123,7 +122,6 @@ above already selects the blocking client; no extra flags needed.)
 Create `src/main.rs`:
 
 ```rust
-use ibapi::accounts::types::AccountGroup;
 use ibapi::prelude::*;
 
 #[tokio::main]
