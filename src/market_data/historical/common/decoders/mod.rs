@@ -1,6 +1,6 @@
 use time::macros::format_description;
-use time::{Date, OffsetDateTime, PrimitiveDateTime};
-use time_tz::{PrimitiveDateTimeExt, Tz};
+use time::{Date, Duration, OffsetDateTime, PrimitiveDateTime};
+use time_tz::{OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::common::timezone::find_timezone;
 use crate::messages::ResponseMessage;
@@ -58,10 +58,43 @@ fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
     Ok(zones[0])
 }
 
+/// Resolve a wall-clock time in timezone `tz` without panicking.
+///
+/// `assume_timezone` has three outcomes:
+///
+/// - A unique time resolves normally.
+/// - A time that falls inside a repeated hour takes the earlier occurrence.
+/// - A time inside a DST gap (the hour that never occurs) is a decode error,
+///   except the gap's leading endpoint: if 02:00:00 on a spring-forward day
+///   is the transition instant, it resolves to that instant, rendered post-
+///   transition (03:00:00 EDT).
+fn resolve_local_with_dst_safety(dt: PrimitiveDateTime, tz: &Tz, text: &str) -> Result<OffsetDateTime, Error> {
+    match dt.assume_timezone(tz) {
+        OffsetResult::Some(v) => Ok(v),
+        OffsetResult::Ambiguous(first, second) => {
+            log::debug!("ambiguous local time {text:?}: taking the earlier occurrence ({first} over {second})");
+            Ok(first)
+        }
+        OffsetResult::None => {
+            // If the reading one second earlier resolves, it means `dt` is the
+            // exact start of the gap: the transition instant, which a clock
+            // shows as the post-transition reading (02:00:00 EST == 03:00:00
+            // EDT). We special case that since requests landing on an hour are
+            // expected. Every later reading inside the gap never displayed on
+            // a clock so we leave that as an error. Maybe we should also just
+            // push that forward too?
+            if let OffsetResult::Some(before) = (dt - Duration::SECOND).assume_timezone(tz) {
+                return Ok((before + Duration::SECOND).to_timezone(tz));
+            }
+            Err(Error::parse_field(text, "local time does not exist in this time zone (DST gap)"))
+        }
+    }
+}
+
 fn parse_schedule_date_time(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     let schedule_date_time_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
     let schedule_date_time = PrimitiveDateTime::parse(text, schedule_date_time_format)?;
-    Ok(schedule_date_time.assume_timezone(time_zone).unwrap())
+    resolve_local_with_dst_safety(schedule_date_time, time_zone, text)
 }
 
 fn parse_schedule_date(text: &str) -> Result<Date, Error> {
@@ -79,7 +112,7 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
         .ok_or_else(|| Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS TZ'"))?;
     let tz = parse_time_zone(tz_name.trim())?;
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
-    Ok(dt.assume_timezone(tz).unwrap())
+    resolve_local_with_dst_safety(dt, tz, text)
 }
 
 // === Protobuf decoders ===

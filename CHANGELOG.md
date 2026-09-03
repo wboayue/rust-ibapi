@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `HistoricalDataEnd` and historical-schedule decoding no longer panics when the wall-clock time provided by IB falls in a DST fold or gap. A fold reading resolves to its earlier occurrence (the pre-transition offset); a gap reading is a decode error, except the gap's leading endpoint, which is the transition instant and resolves to it.
+
 - An `OrderStatus` or `OpenOrder` frame carrying an unrecognized status string no longer terminates the subscription delivering it. Decoding failed with `Error::Parse`, which ended `place_order`, `cancel_order`, `open_orders`, and — worst — the long-lived `order_update_stream` the moment TWS shipped a status this crate had not modeled; the official IB client parses such statuses into an `Unknown` fallback instead of failing. The status now arrives as `OrderStatusKind::Unknown(raw)` and the stream continues (#774).
 
 - Async `open_orders()`, `all_open_orders()`, `completed_orders()`, and the other streaming shared-channel subscriptions (positions, account data, news bulletins) no longer hang forever when a reconnect happens mid-request. After a reconnect, `reset_channels` notified request-id and order-id subscriptions with `Error::ConnectionReset` but left shared channels untouched — and the end marker such a subscription awaits is a response to a request sent on the dead connection, so nothing ever arrived. The async reset now notifies shared-channel senders too, mirroring the sync transport (which already did this). Subscriptions created after the reset are unaffected: they subscribe at the channel's current tail and never see the injected error (#776).
