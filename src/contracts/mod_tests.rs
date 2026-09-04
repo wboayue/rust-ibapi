@@ -197,9 +197,10 @@ fn test_combo_leg_open_close() {
 }
 
 #[test]
-#[should_panic(expected = "unsupported value")]
-fn test_combo_leg_open_close_panic() {
-    let _ = ComboLegOpenClose::from(4);
+fn test_combo_leg_open_close_unknown_value() {
+    // Values outside the documented 0..=3 range decode to Unknown rather than panicking
+    assert_eq!(ComboLegOpenClose::from(4), ComboLegOpenClose::Unknown);
+    assert_eq!(ComboLegOpenClose::from(-1), ComboLegOpenClose::Unknown);
 }
 
 #[test]

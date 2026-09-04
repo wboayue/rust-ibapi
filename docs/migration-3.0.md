@@ -678,10 +678,10 @@ The `historical_data_streaming` method's `keep_up_to_date: bool` parameter is go
 `IgnoreSize` (introduced in PR #613 as part of the historical-ticks builder) was scoped to `ibapi::market_data::historical::IgnoreSize`. The same wire flag applies to realtime tick-by-tick subscriptions, so the enum was lifted to `ibapi::market_data::IgnoreSize` to share between both submodules.
 
 ```rust,ignore
-// v3 pre-#XXX
+// v3 pre-#617
 use ibapi::market_data::historical::IgnoreSize;
 
-// v3 ≥ #XXX
+// v3 ≥ #617
 use ibapi::market_data::IgnoreSize;
 ```
 
