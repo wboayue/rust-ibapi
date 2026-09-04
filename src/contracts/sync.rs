@@ -237,13 +237,17 @@ impl Client {
         )
     }
 
-    /// Requests security definition option parameters for viewing a contract's option chain.
+    /// Build a request for an underlying's option chain: one [`OptionChain`] per
+    /// exchange the options trade on.
+    ///
+    /// Terminal: [`OptionChainBuilder::subscribe`]. Setter: [`OptionChainBuilder::exchange`],
+    /// for futures options only — a stock underlying takes no exchange.
     ///
     /// # Arguments
-    /// `symbol`   - Contract symbol of the underlying.
-    /// `exchange` - The exchange on which the returned options are trading. Can be set to the empty string for all exchanges.
-    /// `security_type` - The type of the underlying security, i.e. STK
-    /// `contract_id`   - The contract ID of the underlying security.
+    /// * `symbol` - Symbol of the underlying.
+    /// * `security_type` - Security type of the underlying, e.g. `SecurityType::Stock`.
+    /// * `contract_id` - Contract id of the underlying. Required; TWS rejects `0` with
+    ///   code 321 "Invalid contract id".
     ///
     /// # Examples
     ///
@@ -253,30 +257,33 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let symbol = "AAPL";
-    /// let exchange = ""; // all exchanges
-    /// let security_type = SecurityType::Stock;
-    /// let contract_id = 265598;
-    ///
     /// let subscription = client
-    ///     .option_chain(symbol, exchange, security_type, contract_id)
-    ///     .expect("request option chain failed!");
+    ///     .option_chain("AAPL", SecurityType::Stock, 265598)
+    ///     .subscribe()
+    ///     .expect("request option chain failed");
     ///
-    /// for option_chain in &subscription {
-    ///     println!("{option_chain:?}")
+    /// for chain in subscription.iter_data() {
+    ///     let chain = chain.expect("decode error");
+    ///     println!("{}: {} expirations, {} strikes", chain.exchange, chain.expirations.len(), chain.strikes.len());
     /// }
     /// ```
-    pub fn option_chain(
-        &self,
-        symbol: &str,
-        exchange: &str,
-        security_type: SecurityType,
-        contract_id: i32,
-    ) -> Result<Subscription<OptionChain>, Error> {
-        request_helpers::blocking::request_with_id(self, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
-            encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
-        })
+    pub fn option_chain<'a>(&'a self, symbol: &'a str, security_type: SecurityType, contract_id: i32) -> OptionChainBuilder<'a, Self> {
+        OptionChainBuilder::new(self, symbol, security_type, contract_id)
     }
+}
+
+// Builder-fed seam to the encoder; the public surface is `OptionChainBuilder`.
+// Five flat arguments here is the documented param-budget exception.
+pub(in crate::contracts) fn option_chain(
+    client: &Client,
+    symbol: &str,
+    exchange: Option<&str>,
+    security_type: SecurityType,
+    contract_id: i32,
+) -> Result<Subscription<OptionChain>, Error> {
+    request_helpers::blocking::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
+        encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
+    })
 }
 
 #[cfg(test)]

@@ -263,7 +263,8 @@ single_req_id_request_builder!(CancelContractDataRequestBuilder, CancelContractD
 pub struct OptionChainRequestBuilder {
     pub request_id: i32,
     pub symbol: String,
-    pub exchange: String,
+    /// `None` is the wire default: absent field, all exchanges.
+    pub exchange: Option<String>,
     pub security_type: SecurityType,
     pub contract_id: i32,
 }
@@ -273,7 +274,7 @@ impl Default for OptionChainRequestBuilder {
         Self {
             request_id: TEST_REQ_ID_FIRST,
             symbol: String::new(),
-            exchange: String::new(),
+            exchange: None,
             security_type: SecurityType::Stock,
             contract_id: 0,
         }
@@ -289,8 +290,8 @@ impl OptionChainRequestBuilder {
         self.symbol = v.into();
         self
     }
-    pub fn exchange(mut self, v: impl Into<String>) -> Self {
-        self.exchange = v.into();
+    pub fn exchange(mut self, v: Option<&str>) -> Self {
+        self.exchange = v.map(str::to_string);
         self
     }
     pub fn security_type(mut self, v: SecurityType) -> Self {
@@ -311,7 +312,7 @@ impl RequestEncoder for OptionChainRequestBuilder {
         proto::SecDefOptParamsRequest {
             req_id: Some(self.request_id),
             underlying_symbol: Some(self.symbol.clone()),
-            fut_fop_exchange: Some(self.exchange.clone()),
+            fut_fop_exchange: self.exchange.clone(),
             underlying_sec_type: Some(self.security_type.to_string()),
             underlying_con_id: Some(self.contract_id),
         }

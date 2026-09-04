@@ -70,7 +70,7 @@ pub struct OptionCalculationTestCase {
 pub struct OptionChainTestCase {
     pub name: &'static str,
     pub symbol: &'static str,
-    pub exchange: &'static str,
+    pub exchange: Option<&'static str>,
     pub security_type: SecurityType,
     pub contract_id: i32,
     pub ordered_responses: Vec<ResponseMessage>,
@@ -623,9 +623,9 @@ pub fn option_chain_test_cases() -> Vec<OptionChainTestCase> {
     vec![OptionChainTestCase {
         name: "stock option chain",
         symbol: "AAPL",
-        exchange: "SMART",
+        exchange: None,
         security_type: SecurityType::Stock,
-        contract_id: 0,
+        contract_id: 265598,
         ordered_responses: vec![
             proto_response(
                 IncomingMessages::SecurityDefinitionOptionParameter,
