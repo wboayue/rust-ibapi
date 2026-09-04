@@ -62,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ComboLegOpenClose::from(i32)` no longer panics on a value outside `0..=3`; unrecognised values decode to `ComboLegOpenClose::Unknown`. The `From<i32>` impl runs inside contract-details decoding, so an unexpected `openClose` from TWS took the dispatcher down instead of surfacing as an `Unknown` leg.
+
 - `HistoricalDataEnd` and historical-schedule decoding no longer panics when a wall-clock time from TWS falls in a DST fold or gap, and the connection time reported at handshake is no longer dropped for a fold. A reading in a repeated hour resolves to its earlier occurrence (the pre-transition offset). A reading in a skipped hour never showed on a clock, so it can only come from TWS doing date arithmetic on wall-clock time — a window start computed as "end minus 300 days", say — and is pushed forward by the gap: 02:30 on a US spring-forward day becomes 03:30 EDT. Previously a 300-day `historical_data()` request whose start edge landed on a fall-back night panicked with `OffsetResult::unwrap` (#790).
 
 - An `OrderStatus` or `OpenOrder` frame carrying an unrecognized status string no longer terminates the subscription delivering it. Decoding failed with `Error::Parse`, which ended `place_order`, `cancel_order`, `open_orders`, and — worst — the long-lived `order_update_stream` the moment TWS shipped a status this crate had not modeled; the official IB client parses such statuses into an `Unknown` fallback instead of failing. The status now arrives as `OrderStatusKind::Unknown(raw)` and the stream continues (#774).

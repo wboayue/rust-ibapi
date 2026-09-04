@@ -612,14 +612,12 @@ impl ToField for ComboLegOpenClose {
 }
 
 impl From<i32> for ComboLegOpenClose {
-    // TODO - verify these values
     fn from(val: i32) -> Self {
         match val {
             0 => Self::Same,
             1 => Self::Open,
             2 => Self::Close,
-            3 => Self::Unknown,
-            _ => panic!("unsupported value: {val}"),
+            _ => Self::Unknown,
         }
     }
 }
