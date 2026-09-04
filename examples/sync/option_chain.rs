@@ -16,13 +16,11 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let symbol = "AAPL";
-    let exchange = ""; // all exchanges
-    let security_type = SecurityType::Stock;
-    let contract_id = 265598;
-
+    // One OptionChain per exchange listing AAPL options. The contract id is the
+    // underlying's and is required; `.exchange(..)` exists for futures options only.
     let subscription = client
-        .option_chain(symbol, exchange, security_type, contract_id)
+        .option_chain("AAPL", SecurityType::Stock, 265598)
+        .subscribe()
         .expect("request option chain failed!");
 
     for option_chain in &subscription {

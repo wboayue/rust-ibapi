@@ -123,7 +123,10 @@ fn option_chain_returns_data() {
     let con_id = details[0].contract.contract_id;
 
     rate_limit();
-    let subscription = client.option_chain("AAPL", "", SecurityType::Stock, con_id).expect("option_chain failed");
+    let subscription = client
+        .option_chain("AAPL", SecurityType::Stock, con_id)
+        .subscribe()
+        .expect("option_chain failed");
 
     let chain = subscription
         .iter_data()

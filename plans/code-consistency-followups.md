@@ -23,12 +23,16 @@ items below were re-verified 2026-08-08.
 Treat the rule as "4+ args with at least one optional / defaultable field needs a builder";
 pure-required signatures don't benefit (receiver `&self` excluded from the budget).
 
-Two public sites keep their decisions from the audit:
+One public site keeps its decision from the audit; the other shipped:
 
-- `contracts::Client::option_chain(&self, symbol, exchange, security_type, contract_id)` — 4
-  required args, but `exchange` documents `""` as a meaningful default. **Deferred.** If
-  revisited, type `exchange` as `Option<Exchange>` and drop the magic empty string; the builder
-  is not the interesting part.
+- `contracts::Client::option_chain` — **shipped as a builder** (`option_chain(symbol,
+  security_type, contract_id).exchange(..).subscribe()`, `migration-4.0.md` §10). The audit's
+  "type `exchange` as `Option<Exchange>`" verdict was too small: a live probe showed the field
+  is TWS's `futFopExchange`, which returns an empty chain for any named exchange on a stock
+  underlying, and that `contract_id = 0` — passed by two examples — is a hard rejection. The
+  builder made the default the only thing a stock caller can express; the probe is the part
+  worth repeating before typing a "meaningful default" (see
+  [verify wire before typing](../docs/rules/wire/enum-typing.md)).
 - `news::Client::historical_news(&self, contract_id, provider_codes, start_time, end_time,
   total_results)` — 5 args, none optional. **Skip the builder.** A `DateRange` newtype over
   `start_time` + `end_time` is the only remedy worth considering, and leaving it alone is

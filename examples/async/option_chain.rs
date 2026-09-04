@@ -11,15 +11,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to IB Gateway or TWS
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
-    // Request option chain for a stock
+    // Request option chain for a stock. The contract id is the underlying's and is
+    // required; leaving the exchange unset returns one chain per listing exchange.
     let symbol = "AAPL";
-    let exchange = "SMART";
-    let security_type = SecurityType::Stock;
-    let contract_id = 0; // 0 for underlying
+    let contract_id = 265598;
 
     println!("=== Requesting Option Chain for {symbol} ===");
 
-    let option_chain_stream = client.option_chain(symbol, exchange, security_type, contract_id).await?;
+    let option_chain_stream = client.option_chain(symbol, SecurityType::Stock, contract_id).subscribe().await?;
 
     let mut chain_count = 0;
     let mut option_chain_stream = option_chain_stream.filter_data();

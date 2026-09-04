@@ -245,6 +245,27 @@ What changes for compiling code:
 
 The nine known statuses parse exactly as before; matching stays exact and case-sensitive, so a case-variant of a known status also lands in `Unknown` rather than being coerced. Empty input is still `Error::Parse` — absence of a value remains an error. Serialization is unchanged in shape: the enum still serializes as the plain status string in both directions (`Unknown("X")` round-trips as `"X"`), and the `utoipa` schema is a plain `string` to match (hand-written, since the derive would describe the tagged `{"Unknown":"X"}` shape the serde impls avoid).
 
+### 10. `option_chain` goes through a builder
+
+`option_chain` took four positional arguments. `exchange` documented `""` as "all exchanges" and was the one with a default; it is now a setter, and the three required arguments stay positional:
+
+```rust,ignore
+// 3.x
+let subscription = client.option_chain("AAPL", "", SecurityType::Stock, 265598)?;
+
+// 4.0
+let subscription = client.option_chain("AAPL", SecurityType::Stock, 265598).subscribe()?;
+```
+
+Async is identical with `.await` on `.subscribe()`.
+
+Two things the old signature let callers get wrong, both verified against a live paper gateway while making this change:
+
+- **`exchange` is TWS's `futFopExchange`** — a filter for *futures* options. For a stock underlying, leave it unset: TWS returns one `OptionChain` per listing exchange (twenty for AAPL). Naming any exchange, `"SMART"` included, returns an empty chain. Only call `.exchange("CME")` for a futures underlying.
+- **`contract_id` is required.** `0` is rejected with code 321 "Invalid contract id". The crate's own async example passed `0` (and `"SMART"`), so it had been receiving nothing.
+
+An unset exchange is now absent from the request rather than sent as `""`; TWS treats the two identically.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -265,7 +286,7 @@ No code changes required, but observable at runtime:
 
 1. Add a `Liquidity::Unknown(code)` arm to exhaustive matches on `Execution.last_liquidity` — the compiler finds them for you.
 2. Unwrap market-data sizes: historical tick / histogram sizes and the `ContractDetails` size rules are `Option<f64>`. Watch for `max_by_key` on a size (`f64` isn't `Ord`), `+=` into an integer accumulator, and `{}` formatting — see [§1](#1-market-data-sizes-are-optionf64).
-3. Rewrite `wsh_event_data_by_contract` / `wsh_event_data_by_filter` calls as builder chains ending in `.fetch()` / `.subscribe()`.
+3. Rewrite `wsh_event_data_by_contract` / `wsh_event_data_by_filter` calls as builder chains ending in `.fetch()` / `.subscribe()`, and `option_chain(symbol, exchange, security_type, contract_id)` as `option_chain(symbol, security_type, contract_id).subscribe()` — drop the exchange unless the underlying is a future; see [§10](#10-option_chain-goes-through-a-builder).
 4. Replace `client.check_server_version(..)` with a comparison against `client.server_version()`.
 5. Add `request_id: None` (or a real id) to any `Notice` struct literals.
 6. Re-point `use ibapi::market_data::builder::MarketDataBuilder` imports at `ibapi::market_data::realtime::MarketDataBuilder`.

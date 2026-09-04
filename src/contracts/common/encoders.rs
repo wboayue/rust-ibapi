@@ -121,7 +121,7 @@ pub(crate) fn encode_cancel_contract_data(request_id: i32) -> Result<Vec<u8>, Er
 pub(in crate::contracts) fn encode_request_option_chain(
     request_id: i32,
     symbol: &str,
-    exchange: &str,
+    exchange: Option<&str>,
     security_type: SecurityType,
     contract_id: i32,
 ) -> Result<Vec<u8>, Error> {
@@ -130,7 +130,7 @@ pub(in crate::contracts) fn encode_request_option_chain(
     let request = crate::proto::SecDefOptParamsRequest {
         req_id: Some(request_id),
         underlying_symbol: Some(symbol.to_string()),
-        fut_fop_exchange: Some(exchange.to_string()),
+        fut_fop_exchange: exchange.map(str::to_string),
         underlying_sec_type: Some(security_type.to_string()),
         underlying_con_id: Some(contract_id),
     };

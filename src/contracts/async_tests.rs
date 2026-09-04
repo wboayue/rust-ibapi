@@ -176,14 +176,11 @@ async fn test_option_chain() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
-        let result = client
-            .option_chain(
-                test_case.symbol,
-                test_case.exchange,
-                test_case.security_type.clone(),
-                test_case.contract_id,
-            )
-            .await;
+        let mut builder = client.option_chain(test_case.symbol, test_case.security_type.clone(), test_case.contract_id);
+        if let Some(exchange) = test_case.exchange {
+            builder = builder.exchange(exchange);
+        }
+        let result = builder.subscribe().await;
 
         assert_eq!(request_message_count(&message_bus), 1);
         assert_request(

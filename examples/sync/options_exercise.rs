@@ -19,7 +19,7 @@ fn main() {
 
     // Try to get option chain first
     println!("Attempting to get SPY option chain...");
-    let option_chain_result = client.option_chain("SPY", "", SecurityType::Stock, 0);
+    let option_chain_result = client.option_chain("SPY", SecurityType::Stock, 756733).subscribe();
 
     let mut option_contract = if let Ok(subscription) = option_chain_result {
         let mut chains = Vec::new();
