@@ -15,7 +15,7 @@ use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncStream, AsyncTcpSocket};
+use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -40,6 +40,9 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
     max_reconnect_attempts: Option<u32>,
+    /// Shared with the bus so `reconnect` can abandon its backoff as soon as
+    /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
+    shutdown: Arc<ShutdownSignal>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -94,7 +97,14 @@ impl<S: AsyncStream> AsyncConnection<S> {
             startup_callback,
             notice_sender,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            shutdown: Arc::new(ShutdownSignal::default()),
         }
+    }
+
+    /// Handle on the shutdown flag `reconnect` observes. The bus takes a
+    /// clone and requests shutdown through it.
+    pub(crate) fn shutdown_signal(&self) -> Arc<ShutdownSignal> {
+        Arc::clone(&self.shutdown)
     }
 
     /// Build a connection over an arbitrary `AsyncStream` without performing
@@ -137,12 +147,20 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// re-fires the persisted startup / notice callbacks. When every attempt
     /// fails, returns the last attempt's error — a permanent cause (say, an
     /// incompatible server version) must not exit as a generic failure.
+    ///
+    /// Returns [`Error::Shutdown`] once shutdown is requested. The backoff
+    /// wait ends immediately on the request; a connect already in flight is
+    /// not interrupted, so the check runs again as soon as it returns.
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
         let mut last_error = None;
 
         let mut attempt: u32 = 0;
         while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
+            if self.shutdown.is_requested() {
+                return Err(Error::Shutdown);
+            }
+
             attempt += 1;
             let attempt_label = match self.max_reconnect_attempts {
                 Some(max) => format!("{attempt}/{max}"),
@@ -151,7 +169,11 @@ impl<S: AsyncStream> AsyncConnection<S> {
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
-            self.socket.sleep(next_delay).await;
+            self.socket.sleep(next_delay, &self.shutdown).await;
+
+            if self.shutdown.is_requested() {
+                return Err(Error::Shutdown);
+            }
 
             match self.socket.reconnect().await {
                 Ok(_) => {
