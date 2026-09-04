@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -9,7 +10,8 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
-use crate::transport::sync::{MemoryStream, TcpMessageBus};
+use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus};
+use crate::transport::MessageBus;
 
 const CLIENT_ID: i32 = 100;
 const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
@@ -253,4 +255,229 @@ fn handshake_unexpected_eof_returns_connection_rejected() {
         }
         other => panic!("expected Error::ConnectionRejected, got {other:?}"),
     }
+}
+
+/// Socket for the shutdown-during-reconnect tests. Reads and writes delegate
+/// to a `MemoryStream` and the backoff wait goes through the production
+/// `ShutdownSignal`, so the loop spends its time exactly where the shutdown
+/// has to be observed. `reconnect` either fails immediately (TWS stays down)
+/// or waits for the test to open the gate and then succeeds.
+///
+/// Cloning yields another handle to the same state, so the test keeps one
+/// while the connection owns the other.
+#[derive(Clone, Debug)]
+struct TestSocket {
+    stream: MemoryStream,
+    state: Arc<SocketState>,
+}
+
+#[derive(Debug)]
+struct SocketState {
+    sleep_started: AtomicBool,
+    reconnect_started: AtomicBool,
+    /// `Some`: `reconnect` waits on the gate, then succeeds. `None`: it fails
+    /// immediately.
+    gate: Option<(Mutex<bool>, Condvar)>,
+}
+
+impl TestSocket {
+    fn unreachable(stream: MemoryStream) -> Self {
+        Self::new(stream, None)
+    }
+
+    fn gated(stream: MemoryStream) -> Self {
+        Self::new(stream, Some((Mutex::new(false), Condvar::new())))
+    }
+
+    fn new(stream: MemoryStream, gate: Option<(Mutex<bool>, Condvar)>) -> Self {
+        Self {
+            stream,
+            state: Arc::new(SocketState {
+                sleep_started: AtomicBool::new(false),
+                reconnect_started: AtomicBool::new(false),
+                gate,
+            }),
+        }
+    }
+
+    /// Let the pending `reconnect` complete.
+    fn release(&self) {
+        let (open, opened) = self.state.gate.as_ref().expect("socket has no gate");
+        *open.lock().unwrap() = true;
+        opened.notify_all();
+    }
+
+    fn sleep_started(&self) -> bool {
+        self.state.sleep_started.load(Ordering::SeqCst)
+    }
+
+    fn reconnect_started(&self) -> bool {
+        self.state.reconnect_started.load(Ordering::SeqCst)
+    }
+}
+
+impl Io for TestSocket {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.stream.read_message()
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        self.stream.write_all(buf)
+    }
+}
+
+impl Reconnect for TestSocket {
+    fn reconnect(&self) -> Result<(), Error> {
+        self.state.reconnect_started.store(true, Ordering::SeqCst);
+        let Some((open, opened)) = self.state.gate.as_ref() else {
+            return Err(Error::Simple("simulated connect failure".into()));
+        };
+        let mut open = open.lock().unwrap();
+        while !*open {
+            open = opened.wait(open).unwrap();
+        }
+        Ok(())
+    }
+
+    fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
+        self.state.sleep_started.store(true, Ordering::SeqCst);
+        shutdown.wait_timeout(duration)
+    }
+
+    fn shutdown_read(&self) -> Result<(), Error> {
+        self.stream.shutdown_read()
+    }
+}
+
+impl Stream for TestSocket {}
+
+/// Poll `condition` until it holds, failing rather than hanging.
+fn wait_for(label: &str, condition: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !condition() {
+        assert!(Instant::now() < deadline, "timed out waiting for {label}");
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// A shutdown requested while `reconnect` is waiting out its backoff must end
+/// the wait and return `Error::Shutdown`, not run the whole Fibonacci
+/// schedule. With `max_reconnect_attempts = None` the pre-fix loop never
+/// returned at all, so the receive timeout is what fails a regression.
+#[test]
+fn reconnect_returns_shutdown_while_waiting_out_backoff() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::unreachable(stream);
+    let mut connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+    connection.max_reconnect_attempts = None;
+
+    let connection = Arc::new(connection);
+    let shutdown = connection.shutdown_signal();
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let conn_for_thread = Arc::clone(&connection);
+    thread::spawn(move || {
+        let _ = sender.send(conn_for_thread.reconnect());
+    });
+
+    // The first backoff delay is a second; request shutdown well inside it.
+    thread::sleep(Duration::from_millis(50));
+    let requested_at = Instant::now();
+    shutdown.request();
+
+    let result = receiver.recv_timeout(Duration::from_secs(5)).expect("reconnect did not return");
+    assert!(matches!(result, Err(Error::Shutdown)), "expected Error::Shutdown, got {result:?}");
+    // The wait is against a 1 s backoff, so a few hundred milliseconds is
+    // slack enough under load while still failing a non-interruptible wait.
+    assert!(
+        requested_at.elapsed() < Duration::from_millis(250),
+        "reconnect waited out the backoff: {:?}",
+        requested_at.elapsed()
+    );
+    assert!(!socket.reconnect_started(), "reconnect must not attempt a connect after shutdown");
+}
+
+/// The dispatcher must stop promptly when shutdown is requested while it is
+/// inside `reconnect`, instead of blocking `ensure_shutdown` (and so
+/// `Client::drop`) until every backoff attempt is exhausted.
+#[test]
+fn dispatcher_exits_when_shutdown_requested_during_reconnect() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::unreachable(stream.clone());
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("establish_connection failed");
+    let server_version = connection.server_version();
+
+    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    bus.process_messages(server_version).expect("process_messages");
+
+    // Break the read: the dispatcher enters reconnect and waits out its
+    // backoff between failing connects.
+    stream.close();
+    wait_for("reconnect backoff to start", || socket.sleep_started());
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let bus_for_thread = Arc::clone(&bus);
+    let requested_at = Instant::now();
+    thread::spawn(move || {
+        MessageBus::ensure_shutdown(&*bus_for_thread);
+        let _ = sender.send(());
+    });
+
+    receiver.recv_timeout(Duration::from_secs(5)).expect("ensure_shutdown did not return");
+    // The wait is against a 1 s backoff, so a few hundred milliseconds is
+    // slack enough under load while still failing a non-interruptible wait.
+    assert!(
+        requested_at.elapsed() < Duration::from_millis(250),
+        "ensure_shutdown waited out the backoff: {:?}",
+        requested_at.elapsed()
+    );
+    assert!(!socket.reconnect_started(), "reconnect must not attempt a connect after shutdown");
+    assert!(!MessageBus::is_connected(&*bus));
+}
+
+/// Sync mirror of the async dispatcher test: a shutdown requested while a
+/// connect is in flight must still stop the dispatcher, even though that
+/// connect - and the handshake replay behind it - then succeeds.
+///
+/// Covers the path rather than the early-exit check itself: without the check
+/// the dispatcher still exits, one read later, when the next read finds the
+/// stream closed and the shutdown flag set.
+#[test]
+fn dispatcher_exits_when_shutdown_requested_during_a_successful_reconnect() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::gated(stream.clone());
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("establish_connection failed");
+    let server_version = connection.server_version();
+    let shutdown = connection.shutdown_signal();
+
+    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    bus.process_messages(server_version).expect("process_messages");
+
+    // Break the read: the dispatcher enters reconnect, waits out its backoff
+    // and blocks on the gated connect.
+    stream.close();
+    wait_for("reconnect to start", || socket.reconnect_started());
+
+    // Queue the handshake the post-reconnect session replays, then request
+    // shutdown (ensure_shutdown joins the dispatcher, so it runs on its own
+    // thread) and only then let the connect succeed.
+    push_handshake(&stream);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let bus_for_thread = Arc::clone(&bus);
+    thread::spawn(move || {
+        MessageBus::ensure_shutdown(&*bus_for_thread);
+        let _ = sender.send(());
+    });
+
+    wait_for("shutdown to be requested", || shutdown.is_requested());
+    socket.release();
+
+    receiver.recv_timeout(Duration::from_secs(5)).expect("ensure_shutdown did not return");
+    assert!(!MessageBus::is_connected(&*bus));
 }

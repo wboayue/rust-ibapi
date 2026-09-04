@@ -79,7 +79,7 @@ impl Reconnect for MemoryStream {
     fn reconnect(&self) -> Result<(), Error> {
         Ok(())
     }
-    fn sleep(&self, _duration: std::time::Duration) {}
+    fn sleep(&self, _duration: std::time::Duration, _shutdown: &super::ShutdownSignal) {}
     fn shutdown_read(&self) -> Result<(), Error> {
         self.close();
         Ok(())
