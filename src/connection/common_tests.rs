@@ -450,6 +450,16 @@ fn test_parse_connection_time_unknown_timezone_errors() {
 }
 
 #[test]
+fn test_parse_connection_time_in_dst_fold_resolves() {
+    // Connecting during a fall-back hour: the reading is ambiguous. It used to
+    // log "Error setting timezone" and yield None; it now takes the earlier
+    // occurrence like every other wall-clock reading from TWS.
+    let (time, tz) = parse_connection_time("20251102 01:30:00 US/Eastern").unwrap();
+    assert_eq!(time, Some(datetime!(2025-11-02 05:30:00 UTC)));
+    assert!(tz.is_some());
+}
+
+#[test]
 fn test_parse_connection_time_short_input_still_ok() {
     // Truncated wire data — preserve current tolerance, no error.
     let (time, tz) = parse_connection_time("20230405").unwrap();

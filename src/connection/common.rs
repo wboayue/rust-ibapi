@@ -3,10 +3,10 @@
 use log::{debug, error, info, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
-use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
+use time_tz::Tz;
 
 use crate::accounts::AccountUpdate;
-use crate::common::timezone::find_timezone;
+use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
 use crate::messages::{
     encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE,
@@ -371,13 +371,7 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
     let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
 
     match date {
-        Ok(connected_at) => match connected_at.assume_timezone(timezone) {
-            OffsetResult::Some(date) => Ok((Some(date), Some(timezone))),
-            _ => {
-                log::warn!("Error setting timezone");
-                Ok((None, Some(timezone)))
-            }
-        },
+        Ok(connected_at) => Ok((Some(resolve_local(connected_at, timezone)), Some(timezone))),
         Err(err) => {
             log::warn!("Could not parse connection time from {date_str}: {err}");
             Ok((None, Some(timezone)))
