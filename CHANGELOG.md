@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-03
+
 ### Added
 
 - The prelude now re-exports the account-parameter newtypes `AccountGroup`, `AccountId`, `ContractId`, and `ModelCode` (from `ibapi::accounts::types`). These are required arguments of `account_summary`, `account_updates`, `pnl`, `pnl_single`, and `positions_multi`, but were the only such parameter types missing from `ibapi::prelude` — the quick-start example could not be written with prelude-only imports.
@@ -166,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/wboayue/rust-ibapi/compare/v3.3.0...v4.0.0
 [3.3.0]: https://github.com/wboayue/rust-ibapi/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/wboayue/rust-ibapi/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/wboayue/rust-ibapi/compare/v3.1.0...v3.2.0
