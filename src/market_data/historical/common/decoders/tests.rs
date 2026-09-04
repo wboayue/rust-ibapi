@@ -485,3 +485,32 @@ fn test_decode_historical_ticks_proto_rejects_malformed_size() {
 
     assert_decimal_parse_error(super::decode_historical_ticks_proto(&bytes), "abc");
 }
+
+/// `HistoricalDataEnd` echoes the requested window, and the schedule decoder
+/// carries the same wall-clock shape; an edge inside a DST fold or gap used to
+/// panic in `OffsetResult::unwrap`. The fold/gap policy itself is pinned in
+/// `common::timezone` tests; this checks both entry points reach it.
+#[test]
+fn test_window_edge_in_dst_fold_or_gap_decodes() {
+    // The live input from #790 (2026-08-29 04:40Z, NVDA daily bars, 300 days,
+    // keepUpToDate): IB echoed the window start 300 days back, inside the
+    // 2025-11-02 fold hour.
+    let proto_msg = crate::proto::HistoricalDataEnd {
+        req_id: Some(1),
+        start_date_str: Some("20251102 01:40:26 US/Eastern".into()),
+        end_date_str: Some("20260829 04:33:35 US/Eastern".into()),
+    };
+    let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).expect("fold resolves");
+    assert_eq!(start, datetime!(2025-11-02 05:40:26 UTC), "fold takes the earlier (EDT) offset");
+    assert_eq!(end, datetime!(2026-08-29 08:33:35 UTC));
+
+    // A gap reading is pushed forward, not rejected — rejecting it discarded the bars.
+    let gap = super::parse_date_with_tz("20260308 02:30:00 US/Eastern").expect("gap resolves");
+    assert_eq!(gap, datetime!(2026-03-08 07:30:00 UTC));
+
+    let tz = time_tz::timezones::get_by_name("US/Eastern").expect("tz");
+    let fold = super::parse_schedule_date_time("20251102-01:30:00", tz).expect("fold resolves");
+    assert_eq!(fold, datetime!(2025-11-02 05:30:00 UTC));
+    let gap = super::parse_schedule_date_time("20260308-02:30:00", tz).expect("gap resolves");
+    assert_eq!(gap, datetime!(2026-03-08 07:30:00 UTC));
+}

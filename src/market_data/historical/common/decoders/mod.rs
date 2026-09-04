@@ -1,8 +1,8 @@
 use time::macros::format_description;
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
-use time_tz::{PrimitiveDateTimeExt, Tz};
+use time_tz::Tz;
 
-use crate::common::timezone::find_timezone;
+use crate::common::timezone::{find_timezone, resolve_local};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
@@ -61,7 +61,7 @@ fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
 fn parse_schedule_date_time(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     let schedule_date_time_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
     let schedule_date_time = PrimitiveDateTime::parse(text, schedule_date_time_format)?;
-    Ok(schedule_date_time.assume_timezone(time_zone).unwrap())
+    Ok(resolve_local(schedule_date_time, time_zone))
 }
 
 fn parse_schedule_date(text: &str) -> Result<Date, Error> {
@@ -79,7 +79,7 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
         .ok_or_else(|| Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS TZ'"))?;
     let tz = parse_time_zone(tz_name.trim())?;
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
-    Ok(dt.assume_timezone(tz).unwrap())
+    Ok(resolve_local(dt, tz))
 }
 
 // === Protobuf decoders ===
