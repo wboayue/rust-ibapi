@@ -240,8 +240,7 @@ impl Client {
     /// Build a request for an underlying's option chain: one [`OptionChain`] per
     /// exchange the options trade on.
     ///
-    /// Terminal: [`OptionChainBuilder::subscribe`]. Setter: [`OptionChainBuilder::exchange`],
-    /// for futures options only — a stock underlying takes no exchange.
+    /// Terminal: [`OptionChainBuilder::subscribe`]. Optional narrowing via [`OptionChainBuilder::exchange`].
     ///
     /// # Arguments
     /// * `symbol` - Symbol of the underlying.
@@ -272,8 +271,9 @@ impl Client {
     }
 }
 
-// Builder-fed seam to the encoder; the public surface is `OptionChainBuilder`.
-// Five flat arguments here is the documented param-budget exception.
+/// Request an underlying's option chain. Reached through
+/// [`OptionChainBuilder::subscribe`]; the flat arguments are the builder-fed
+/// param-budget exception.
 pub(in crate::contracts) fn option_chain(
     client: &Client,
     symbol: &str,

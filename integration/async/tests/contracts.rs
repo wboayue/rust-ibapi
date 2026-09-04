@@ -126,7 +126,8 @@ async fn option_chain_returns_data() {
 
     rate_limit();
     let mut subscription = client
-        .option_chain("AAPL", "", SecurityType::Stock, con_id)
+        .option_chain("AAPL", SecurityType::Stock, con_id)
+        .subscribe()
         .await
         .expect("option_chain failed");
 

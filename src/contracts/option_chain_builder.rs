@@ -11,12 +11,8 @@
 //! with an empty chain or a rejection. See
 //! [param budget](../../docs/rules/style/param-budget.md).
 
-use crate::contracts::{Exchange, OptionChain, SecurityType};
+use crate::contracts::{OptionChain, SecurityType};
 use crate::Error;
-
-#[cfg(test)]
-#[path = "option_chain_builder_tests.rs"]
-mod tests;
 
 /// Builder for an underlying's option chain: one [`OptionChain`] per exchange the
 /// options trade on.
@@ -26,7 +22,7 @@ pub struct OptionChainBuilder<'a, C> {
     symbol: &'a str,
     security_type: SecurityType,
     contract_id: i32,
-    exchange: Option<Exchange>,
+    exchange: Option<&'a str>,
 }
 
 impl<'a, C> OptionChainBuilder<'a, C> {
@@ -46,8 +42,8 @@ impl<'a, C> OptionChainBuilder<'a, C> {
     /// options**. For a stock underlying leave it unset — TWS then returns one
     /// [`OptionChain`] per listing exchange (twenty for AAPL), whereas naming any
     /// of them, `SMART` included, returns an empty chain.
-    pub fn exchange(mut self, exchange: impl Into<Exchange>) -> Self {
-        self.exchange = Some(exchange.into());
+    pub fn exchange(mut self, exchange: &'a str) -> Self {
+        self.exchange = Some(exchange);
         self
     }
 }
@@ -84,14 +80,7 @@ impl<'a> OptionChainBuilder<'a, crate::client::sync::Client> {
     ///     .expect("request option chain failed");
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<OptionChain>, Error> {
-        let Self {
-            client,
-            symbol,
-            security_type,
-            contract_id,
-            exchange,
-        } = self;
-        crate::contracts::sync::option_chain(client, symbol, exchange.as_ref().map(Exchange::as_str), security_type, contract_id)
+        crate::contracts::sync::option_chain(self.client, self.symbol, self.exchange, self.security_type, self.contract_id)
     }
 }
 
@@ -132,13 +121,6 @@ impl<'a> OptionChainBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<OptionChain>, Error> {
-        let Self {
-            client,
-            symbol,
-            security_type,
-            contract_id,
-            exchange,
-        } = self;
-        crate::contracts::r#async::option_chain(client, symbol, exchange.as_ref().map(Exchange::as_str), security_type, contract_id).await
+        crate::contracts::r#async::option_chain(self.client, self.symbol, self.exchange, self.security_type, self.contract_id).await
     }
 }

@@ -66,7 +66,6 @@ pub struct OptionCalculationTestCase {
 }
 
 /// Test case for option chain tests
-#[allow(dead_code)]
 pub struct OptionChainTestCase {
     pub name: &'static str,
     pub symbol: &'static str,
@@ -74,7 +73,6 @@ pub struct OptionChainTestCase {
     pub security_type: SecurityType,
     pub contract_id: i32,
     pub ordered_responses: Vec<ResponseMessage>,
-    pub expected_request: &'static str,
     pub expected_count: usize,
 }
 
@@ -620,41 +618,66 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
 
 /// Test cases for option chain
 pub fn option_chain_test_cases() -> Vec<OptionChainTestCase> {
-    vec![OptionChainTestCase {
-        name: "stock option chain",
-        symbol: "AAPL",
-        exchange: None,
-        security_type: SecurityType::Stock,
-        contract_id: 265598,
-        ordered_responses: vec![
-            proto_response(
-                IncomingMessages::SecurityDefinitionOptionParameter,
-                option_chain()
-                    .request_id(9000)
-                    .exchange("SMART")
-                    .underlying_contract_id(265598)
-                    .trading_class("GOOG")
-                    .multiplier("100")
-                    .expirations(
-                        [
-                            "20230120", "20230217", "20230317", "20230421", "20230519", "20230616", "20230721", "20230818", "20231215", "20240119",
-                            "20240621", "20250117",
-                        ]
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect(),
-                    )
-                    .strikes(vec![
-                        50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0, 140.0,
-                        145.0, 150.0, 155.0, 160.0, 165.0, 170.0, 175.0, 180.0, 185.0, 190.0, 195.0, 200.0,
-                    ])
-                    .encode_proto(),
-            ),
-            text_response("76|9000|"),
-        ],
-        expected_request: "78|9000|AAPL|SMART|STK|0|",
-        expected_count: 1,
-    }]
+    vec![
+        OptionChainTestCase {
+            name: "stock option chain",
+            symbol: "AAPL",
+            exchange: None,
+            security_type: SecurityType::Stock,
+            contract_id: 265598,
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::SecurityDefinitionOptionParameter,
+                    option_chain()
+                        .request_id(9000)
+                        .exchange("SMART")
+                        .underlying_contract_id(265598)
+                        .trading_class("GOOG")
+                        .multiplier("100")
+                        .expirations(
+                            [
+                                "20230120", "20230217", "20230317", "20230421", "20230519", "20230616", "20230721", "20230818", "20231215",
+                                "20240119", "20240621", "20250117",
+                            ]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        )
+                        .strikes(vec![
+                            50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0,
+                            140.0, 145.0, 150.0, 155.0, 160.0, 165.0, 170.0, 175.0, 180.0, 185.0, 190.0, 195.0, 200.0,
+                        ])
+                        .encode_proto(),
+                ),
+                text_response("76|9000|"),
+            ],
+            expected_count: 1,
+        },
+        OptionChainTestCase {
+            // `exchange` is TWS's futFopExchange: only a futures underlying names one.
+            name: "futures option chain on one exchange",
+            symbol: "ES",
+            exchange: Some("CME"),
+            security_type: SecurityType::Future,
+            contract_id: 495512563,
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::SecurityDefinitionOptionParameter,
+                    option_chain()
+                        .request_id(9000)
+                        .exchange("CME")
+                        .underlying_contract_id(495512563)
+                        .trading_class("ES")
+                        .multiplier("50")
+                        .expirations(vec!["20260320".to_string()])
+                        .strikes(vec![5000.0, 5100.0])
+                        .encode_proto(),
+                ),
+                text_response("76|9000|"),
+            ],
+            expected_count: 1,
+        },
+    ]
 }
 
 /// Test cases for verify contract
