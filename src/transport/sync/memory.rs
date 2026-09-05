@@ -51,6 +51,13 @@ impl MemoryStream {
         mutex.lock().unwrap().closed = true;
         cv.notify_all();
     }
+
+    /// Undo a `close`, so a stream broken to trigger a reconnect can serve
+    /// the replayed handshake and stay readable afterwards.
+    pub fn reopen(&self) {
+        let (mutex, _) = &*self.inner;
+        mutex.lock().unwrap().closed = false;
+    }
 }
 
 impl Io for MemoryStream {

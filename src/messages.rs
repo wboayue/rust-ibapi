@@ -1342,8 +1342,9 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 /// the fresh-connection baseline a new client starts from, then let the new
 /// connection's own notices re-derive the link state.
 ///
-/// Published after the reconnect's channel reset completes, so a consumer may
-/// resubscribe from inside its handler without racing that reset. Like the
+/// Published once the reconnected session is live: the channel reset runs
+/// before the reconnect, so a consumer may resubscribe from inside its handler
+/// and land on the new session without racing either. Like the
 /// other client-synthesized codes this classifies as
 /// [`NoticeCategory::Error`] ("everything else"); consumers match the constant
 /// itself rather than the category.

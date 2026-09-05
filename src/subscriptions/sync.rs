@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{debug_assert_request_id_routable, filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
-use super::StreamDecoder;
+use super::{log_cancel_error, StreamDecoder};
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
 use crate::transport::{InternalSubscription, MessageBus};
@@ -93,21 +93,21 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_subscription(request_id, &message) {
-                    warn!("error cancelling subscription: {e}")
+                    log_cancel_error("subscription", &e);
                 }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_order_subscription(order_id, &message) {
-                    warn!("error cancelling order subscription: {e}")
+                    log_cancel_error("order subscription", &e);
                 }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_shared_subscription(message_type, &message) {
-                    warn!("error cancelling shared subscription: {e}")
+                    log_cancel_error("shared subscription", &e);
                 }
                 self.subscription.cancel();
             }

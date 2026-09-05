@@ -158,7 +158,7 @@ mod sync_helpers {
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::blocking::retry_on_connection_reset(|| {
+        crate::common::retry::blocking::retry_on_connection_reset(client, || {
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
@@ -172,7 +172,7 @@ mod sync_helpers {
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::blocking::retry_on_connection_reset(|| {
+        crate::common::retry::blocking::retry_on_connection_reset(client, || {
             let request_id = client.next_request_id();
             let request = encoder(request_id)?;
             let subscription = client.send_request(request_id, request)?;
@@ -241,7 +241,7 @@ mod async_helpers {
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::retry_on_connection_reset(|| async {
+        crate::common::retry::retry_on_connection_reset(client, || async {
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
@@ -256,7 +256,7 @@ mod async_helpers {
         encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::retry_on_connection_reset(|| async {
+        crate::common::retry::retry_on_connection_reset(client, || async {
             let request_id = client.next_request_id();
             let request = encoder(request_id)?;
             let mut subscription = client.send_request(request_id, request).await?;

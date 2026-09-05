@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use log::{error, warn};
+use log::error;
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
@@ -12,6 +12,7 @@ use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
+use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
 use crate::transport::{InternalSubscription, MessageBus};
 use crate::{client::sync::Client, Error};
@@ -260,7 +261,7 @@ pub(crate) fn historical_data(
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(client.server_version(), contract, end_date, Some(what_to_show))?;
 
-    retry_on_connection_reset(|| {
+    retry_on_connection_reset(client, || {
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -452,7 +453,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         match encoders::encode_cancel_historical_ticks(self.request_id) {
             Ok(message) => {
                 if let Err(e) = self.message_bus.cancel_subscription(self.request_id, &message) {
-                    warn!("error cancelling historical ticks subscription: {e}");
+                    log_cancel_error("historical ticks subscription", &e);
                 }
                 self.messages.cancel();
             }
