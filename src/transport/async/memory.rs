@@ -111,7 +111,7 @@ impl AsyncReconnect for MemoryStream {
             Ok(())
         }
     }
-    async fn sleep(&self, _duration: Duration) {}
+    async fn sleep(&self, _duration: Duration, _shutdown: &crate::transport::r#async::ShutdownSignal) {}
 }
 
 impl AsyncStream for MemoryStream {}

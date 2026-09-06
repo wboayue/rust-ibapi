@@ -197,7 +197,8 @@ pub struct TcpMessageBus<S: Stream> {
     signals_recv: Receiver<Signal>,
     shutdown_send: Sender<()>,
     shutdown_recv: Receiver<()>,
-    shutdown_requested: AtomicBool,
+    /// Shared with the connection so a reconnect in progress sees the request.
+    shutdown: Arc<ShutdownSignal>,
     order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
     connected: AtomicBool,
 }
@@ -206,6 +207,7 @@ impl<S: Stream> TcpMessageBus<S> {
     pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
         let (signals_send, signals_recv) = channel::unbounded();
         let (shutdown_send, shutdown_recv) = channel::bounded(1);
+        let shutdown = connection.shutdown_signal();
 
         Ok(TcpMessageBus {
             connection,
@@ -218,14 +220,14 @@ impl<S: Stream> TcpMessageBus<S> {
             signals_recv,
             shutdown_send,
             shutdown_recv,
-            shutdown_requested: AtomicBool::new(false),
+            shutdown,
             order_update_stream: Mutex::new(None),
             connected: AtomicBool::new(true),
         })
     }
 
     fn is_shutting_down(&self) -> bool {
-        self.shutdown_requested.load(Ordering::SeqCst)
+        self.shutdown.is_requested()
     }
 
     fn request_shutdown(&self) {
@@ -241,7 +243,8 @@ impl<S: Stream> TcpMessageBus<S> {
         self.connection.notice_broadcaster.close();
 
         self.connected.store(false, Ordering::Relaxed);
-        self.shutdown_requested.store(true, Ordering::Relaxed);
+        // Latches, and ends any backoff wait `Connection::reconnect` is in.
+        self.shutdown.request();
 
         // bounded(1) + try_send: if a shutdown is already pending,
         // Err(Full) is the desired no-op (idempotent across duplicate calls).
@@ -330,10 +333,27 @@ impl<S: Stream> TcpMessageBus<S> {
                 error!("error reading next message (will attempt reconnect): {err:?}");
                 self.connected.store(false, Ordering::Relaxed);
 
-                if let Err(reconnect_err) = self.connection.reconnect() {
-                    error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
-                    self.request_shutdown();
-                    return Err(Error::ConnectionFailed);
+                match self.connection.reconnect() {
+                    Ok(()) => {}
+                    // Shutdown was requested while reconnecting: not a failure,
+                    // and the flag is already set, so just exit the dispatcher.
+                    Err(Error::Shutdown) => {
+                        debug!("shutdown requested during reconnect; dispatcher thread exiting");
+                        return Err(Error::Shutdown);
+                    }
+                    Err(reconnect_err) => {
+                        error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
+                        self.request_shutdown();
+                        return Err(Error::ConnectionFailed);
+                    }
+                }
+
+                // Shutdown may have been requested while the connect was in
+                // flight; the reconnect succeeded anyway, so check before
+                // reporting the session as live.
+                if self.is_shutting_down() {
+                    debug!("shutdown requested during reconnect; dispatcher thread exiting");
+                    return Err(Error::Shutdown);
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
@@ -894,8 +914,8 @@ impl Reconnect for TcpSocket {
             Err(e) => Err(e.into()),
         }
     }
-    fn sleep(&self, duration: std::time::Duration) {
-        thread::sleep(duration)
+    fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal) {
+        shutdown.wait_timeout(duration)
     }
     fn shutdown_read(&self) -> Result<(), Error> {
         let handle = self.shutdown_handle.lock()?;
@@ -908,7 +928,9 @@ impl Reconnect for TcpSocket {
 
 pub(crate) trait Reconnect {
     fn reconnect(&self) -> Result<(), Error>;
-    fn sleep(&self, duration: std::time::Duration);
+    /// Wait out the reconnect backoff, returning early once `shutdown` is
+    /// requested. In-memory test streams return immediately.
+    fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal);
     /// Interrupt any in-flight blocking read so the dispatcher exits promptly
     /// on shutdown. For `TcpSocket` this shuts down the read half; for the
     /// in-memory test fixtures it closes their inbound queue.
@@ -956,6 +978,9 @@ pub(crate) trait Io {
     fn read_message(&self) -> Result<Vec<u8>, Error>;
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
+
+mod shutdown;
+pub(crate) use shutdown::ShutdownSignal;
 
 #[cfg(test)]
 mod memory;

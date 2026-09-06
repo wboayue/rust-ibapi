@@ -1,11 +1,16 @@
 //! Asynchronous transport implementation
 
 mod io;
+mod shutdown;
 /// The frame reader itself, for tests that drive it over an in-memory cursor
 /// rather than a socket. Production callers reach it through `AsyncIo`.
 #[cfg(test)]
 pub(crate) use io::read_framed_message;
+/// The stream traits, for test fixtures that stand in for a socket.
+#[cfg(test)]
+pub(crate) use io::{AsyncIo, AsyncReconnect};
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+pub(crate) use shutdown::ShutdownSignal;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +19,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 use log::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc, Notify, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
 use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -260,19 +265,18 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
     /// Handle to the message processing task
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
-    /// Shutdown flag
-    shutdown_requested: Arc<AtomicBool>,
-    /// Notification to wake the message loop on shutdown
-    shutdown_notify: Arc<Notify>,
+    /// Latching shutdown flag, shared with the connection so a reconnect in
+    /// progress sees the request.
+    shutdown: Arc<ShutdownSignal>,
     connected: Arc<AtomicBool>,
 }
 
 impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
     fn drop(&mut self) {
         debug!("dropping async tcp message bus");
-        // Set the shutdown flag and notify the message loop to exit
-        self.shutdown_requested.store(true, Ordering::Relaxed);
-        self.shutdown_notify.notify_waiters();
+        // Latch the shutdown flag; the message loop and any reconnect in
+        // progress observe it on their next check.
+        self.shutdown.request();
     }
 }
 
@@ -304,6 +308,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         }
 
+        let shutdown = connection.shutdown_signal();
+
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
@@ -315,8 +321,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             channel_capacity,
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
-            shutdown_requested: Arc::new(AtomicBool::new(false)),
-            shutdown_notify: Arc::new(Notify::new()),
+            shutdown,
             connected: Arc::new(AtomicBool::new(true)),
         };
 
@@ -358,15 +363,22 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Start processing messages from TWS
     pub fn process_messages(self: Arc<Self>, _server_version: i32, _reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
-        let shutdown_notify = self.shutdown_notify.clone();
+        let shutdown = self.shutdown.clone();
 
         let handle = task::spawn(async move {
             loop {
+                // The flag latches, so a request made while the loop was off
+                // in `reconnect()` is still seen here.
+                if shutdown.is_requested() {
+                    debug!("Shutdown requested, stopping message processing");
+                    break;
+                }
+
                 // Use select with shutdown notification instead of a polling sleep.
                 // This prevents cancelling read_and_route_message mid-read, which
                 // would corrupt the TCP stream (read_exact is not cancellation-safe).
                 tokio::select! {
-                    _ = shutdown_notify.notified() => {
+                    _ = shutdown.wait() => {
                         debug!("Shutdown notification received, stopping message processing");
                         break;
                     }
@@ -374,7 +386,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                         match result {
                             Ok(_) => continue,
                             Err(ref err) if err.is_read_timeout() => {
-                                if message_bus.shutdown_requested.load(Ordering::Relaxed) {
+                                if message_bus.shutdown.is_requested() {
                                     debug!("dispatcher task exiting");
                                     break;
                                 }
@@ -386,9 +398,25 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
+                                        // Shutdown may have been requested while the
+                                        // connect was in flight; the reconnect
+                                        // succeeded anyway, so check before reporting
+                                        // the session as live and resetting channels.
+                                        if message_bus.shutdown.is_requested() {
+                                            debug!("shutdown requested during reconnect; dispatcher task exiting");
+                                            break;
+                                        }
+
                                         info!("Successfully reconnected to TWS/Gateway");
                                         message_bus.connected.store(true, Ordering::Relaxed);
                                         message_bus.reset_channels().await;
+                                    }
+                                    // Shutdown was requested while reconnecting:
+                                    // not a failure, and the flag is already
+                                    // set, so just exit the task.
+                                    Err(Error::Shutdown) => {
+                                        debug!("shutdown requested during reconnect; dispatcher task exiting");
+                                        break;
                                     }
                                     Err(e) => {
                                         error!("Failed to reconnect to TWS/Gateway: {e:?}");
@@ -474,8 +502,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         // Set the shutdown flag and mark as disconnected
         self.connected.store(false, Ordering::Relaxed);
-        self.shutdown_requested.store(true, Ordering::Relaxed);
-        self.shutdown_notify.notify_waiters();
+        self.shutdown.request();
 
         // Clear all channels - dropping the senders will close the channels
         // and cause all receivers to get RecvError::Closed. This diverges
@@ -876,12 +903,12 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
         self.connected.store(false, Ordering::Relaxed);
-        self.shutdown_requested.store(true, Ordering::Relaxed);
-        self.shutdown_notify.notify_waiters();
+        // Latching and runtime-free: safe from `Drop`.
+        self.shutdown.request();
     }
 
     fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
+        self.connected.load(Ordering::Relaxed) && !self.shutdown.is_requested()
     }
 }
 

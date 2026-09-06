@@ -14,7 +14,7 @@ use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::{NoticeBroadcaster, Stream, TcpSocket};
+use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket};
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -35,6 +35,9 @@ pub struct Connection<S: Stream> {
     /// `self.connection.notice_broadcaster`) and any pre-bound `NoticeStream`
     /// the user obtained from `ClientBuilder::connect_with_notice_stream`.
     pub(crate) notice_broadcaster: Arc<NoticeBroadcaster>,
+    /// Shared with the bus so `reconnect` can abandon its backoff as soon as
+    /// shutdown is requested. See [`Connection::shutdown_signal`].
+    shutdown: Arc<ShutdownSignal>,
 }
 
 impl<S: Stream> std::fmt::Debug for Connection<S> {
@@ -92,7 +95,14 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
             startup_callback,
             notice_broadcaster,
+            shutdown: Arc::new(ShutdownSignal::default()),
         }
+    }
+
+    /// Handle on the shutdown flag `reconnect` observes. The bus takes a
+    /// clone and requests shutdown through it.
+    pub(crate) fn shutdown_signal(&self) -> Arc<ShutdownSignal> {
+        Arc::clone(&self.shutdown)
     }
 
     fn handshake_context(&self) -> StartupHandshakeContext<'_> {
@@ -118,12 +128,20 @@ impl<S: Stream> Connection<S> {
     /// re-fires the persisted startup / notice callbacks. When every attempt
     /// fails, returns the last attempt's error — a permanent cause (say, an
     /// incompatible server version) must not exit as a generic failure.
+    ///
+    /// Returns [`Error::Shutdown`] once shutdown is requested. The backoff
+    /// wait ends immediately on the request; a connect already in flight is
+    /// not interrupted, so the check runs again as soon as it returns.
     pub fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
         let mut last_error = None;
 
         let mut attempt: u32 = 0;
         while self.max_reconnect_attempts.is_none_or(|max| attempt < max) {
+            if self.shutdown.is_requested() {
+                return Err(Error::Shutdown);
+            }
+
             attempt += 1;
             let attempt_label = match self.max_reconnect_attempts {
                 Some(max) => format!("{attempt}/{max}"),
@@ -132,7 +150,11 @@ impl<S: Stream> Connection<S> {
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
-            self.socket.sleep(next_delay);
+            self.socket.sleep(next_delay, &self.shutdown);
+
+            if self.shutdown.is_requested() {
+                return Err(Error::Shutdown);
+            }
 
             match self.socket.reconnect() {
                 Ok(_) => {
@@ -312,6 +334,7 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
             startup_callback: None,
             notice_broadcaster: Arc::new(NoticeBroadcaster::new()),
+            shutdown: Arc::new(ShutdownSignal::default()),
         }
     }
 

@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
+use crate::transport::r#async::ShutdownSignal;
 use crate::transport::raw_capture::RawFrameTap;
 
 #[async_trait]
@@ -25,7 +26,9 @@ pub(crate) trait AsyncIo {
 #[async_trait]
 pub(crate) trait AsyncReconnect {
     async fn reconnect(&self) -> Result<(), Error>;
-    async fn sleep(&self, duration: Duration);
+    /// Wait out the reconnect backoff, returning early once `shutdown` is
+    /// requested. In-memory test streams return immediately.
+    async fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal);
 }
 
 pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
@@ -108,8 +111,8 @@ impl AsyncReconnect for AsyncTcpSocket {
         Ok(())
     }
 
-    async fn sleep(&self, duration: Duration) {
-        tokio::time::sleep(duration).await
+    async fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
+        shutdown.sleep(duration).await
     }
 }
 
