@@ -620,3 +620,35 @@ fn test_unknown_message_type_routes_by_message_type() {
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(determine_routing(&message), RoutingDecision::ByMessageType(IncomingMessages::NotValid));
 }
+#[test]
+fn test_is_informational_code_ev_warning_codes() {
+    for code in crate::messages::EV_WARNING_CODES {
+        assert!(is_informational_code(code, ""), "EV warning code {code} should route as a notice");
+
+        // Category Warning by exact code; the band predicate stays false.
+        let notice = Notice::synthesized(code, String::new());
+        assert_eq!(notice.category(), crate::messages::NoticeCategory::Warning);
+        assert!(!notice.is_warning());
+    }
+
+    for code in [10017, 10020] {
+        assert!(!is_informational_code(code, ""), "code {code} should stay terminating");
+    }
+}
+
+#[test]
+fn test_classify_error_routed_ev_warning_is_notice() {
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: crate::messages::EV_WARNING_CODES[0],
+        error_message: "Warning: your order will be placed for a product trading on the basis of currency price".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, crate::messages::EV_WARNING_CODES[0]);
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
