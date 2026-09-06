@@ -1105,6 +1105,20 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
 }
 
+/// Check if an error code is informational.
+///
+/// Warning codes, warning-form order messages, data advisories, and the order
+/// cancellation confirmation (202) are informational — TWS proceeds with the
+/// request, or the frame confirms an outcome the caller asked for — so they
+/// are routed as a `Notice` rather than terminating the subscription as an
+/// `Error`. Note 202 is deliberately *not* in [`is_warning_message`]:
+/// `Notice::is_warning()` stays false for it (it is a cancellation, not a
+/// warning — see `Notice::category`); only the routing disposition treats the
+/// two alike.
+pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
+    code == ORDER_CANCELLED_CODE || is_warning_message(code, message) || SYSTEM_MESSAGE_CODES.contains(&code) || DATA_ADVISORY_CODES.contains(&code)
+}
+
 /// Connectivity between IB and TWS has been lost.
 pub(crate) const CONNECTIVITY_LOST_CODE: i32 = 1100;
 /// Connectivity restored, but market data was lost; resubscription is required.
@@ -1430,7 +1444,7 @@ impl Notice {
     /// Informational notices include cancellation confirmations, warnings,
     /// system/connectivity messages, and data advisories.
     pub fn is_informational(&self) -> bool {
-        self.is_cancellation() || self.is_warning() || self.is_system_message() || self.is_data_advisory()
+        is_informational_code(self.code, &self.message)
     }
 
     /// Returns `true` if this is an error requiring attention.
