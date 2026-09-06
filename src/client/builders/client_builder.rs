@@ -60,7 +60,7 @@ impl Default for BuilderState {
         Self {
             address: None,
             client_id: None,
-            tcp_no_delay: false,
+            tcp_no_delay: true,
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
         }
@@ -147,14 +147,21 @@ pub mod sync_impl {
             self
         }
 
-        /// Enable `TCP_NODELAY` on the socket (disables Nagle, lower latency).
-        /// Default: `false`.
+        /// Set `TCP_NODELAY` on the socket. Default: `true`, matching the
+        /// official IB clients.
+        ///
+        /// With Nagle's algorithm on, a small write issued while the previous
+        /// segment is still unacknowledged is held back until that ACK arrives —
+        /// up to ~40 ms (Linux) or ~200 ms (macOS) against TWS's delayed ACK.
+        /// A single request never notices; a burst of orders does, because each
+        /// one queues behind the ACK of the one before. Pass `false` only if you
+        /// want Nagle's coalescing back.
         ///
         /// # Examples
         ///
         /// ```no_run
         /// # use ibapi::client::blocking::Client;
-        /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).tcp_no_delay(true).connect();
+        /// let _ = Client::builder().address("127.0.0.1:4002").client_id(100).tcp_no_delay(false).connect();
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
             self.state.tcp_no_delay = enabled;
@@ -339,15 +346,22 @@ pub mod async_impl {
             self
         }
 
-        /// Enable `TCP_NODELAY` on the socket (disables Nagle, lower latency).
-        /// Default: `false`.
+        /// Set `TCP_NODELAY` on the socket. Default: `true`, matching the
+        /// official IB clients.
+        ///
+        /// With Nagle's algorithm on, a small write issued while the previous
+        /// segment is still unacknowledged is held back until that ACK arrives —
+        /// up to ~40 ms (Linux) or ~200 ms (macOS) against TWS's delayed ACK.
+        /// A single request never notices; a burst of orders does, because each
+        /// one queues behind the ACK of the one before. Pass `false` only if you
+        /// want Nagle's coalescing back.
         ///
         /// # Examples
         ///
         /// ```no_run
         /// # async fn run() -> Result<(), ibapi::Error> {
         /// use ibapi::Client;
-        /// let _client = Client::builder().address("127.0.0.1:4002").client_id(100).tcp_no_delay(true).connect().await?;
+        /// let _client = Client::builder().address("127.0.0.1:4002").client_id(100).tcp_no_delay(false).connect().await?;
         /// # Ok(()) }
         /// ```
         pub fn tcp_no_delay(mut self, enabled: bool) -> Self {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `TCP_NODELAY` is now on by default (`ClientBuilder::tcp_no_delay` defaults to `true`), matching the official IB clients. With Nagle's algorithm on, a request written while the previous one is still unacknowledged waits for that ACK — up to ~40 ms on Linux and ~200 ms on macOS against TWS's delayed ACK — so a burst of orders placed in quick succession was serialised on the ACK of each preceding one. A single request was never affected. Pass `.tcp_no_delay(false)` to restore the old behaviour.
+
 ## [4.0.0] - 2026-09-03
 
 ### Added
