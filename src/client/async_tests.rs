@@ -185,7 +185,7 @@ async fn builder_tcp_no_delay_round_trips() {
     let client = Client::builder()
         .address(addr.to_string())
         .client_id(100)
-        .tcp_no_delay(true)
+        .tcp_no_delay(false)
         .connect()
         .await
         .expect("ClientBuilder::connect");
