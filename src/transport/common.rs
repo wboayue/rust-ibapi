@@ -2,13 +2,13 @@
 
 use std::time::Duration;
 
-use log::{error, info, warn};
+use log::{error, info, warn, Level};
 
 use crate::connection::common::NoticeSink;
 use crate::errors::Error;
 use crate::messages::{
-    ConnectivityStatus, IncomingMessages, Notice, ResponseMessage, CONNECTIVITY_RESTORED_DATA_LOST_CODE, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
-    UNKNOWN_MESSAGE_TYPE_CODE,
+    ConnectivityStatus, IncomingMessages, Notice, NoticeCategory, ResponseMessage, CONNECTIVITY_RESTORED_DATA_LOST_CODE,
+    CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, UNKNOWN_MESSAGE_TYPE_CODE,
 };
 use crate::subscriptions::common::RoutedItem;
 
@@ -25,19 +25,36 @@ fn is_benign_connectivity_notice(notice: &Notice) -> bool {
     notice.connectivity_status() == Some(ConnectivityStatus::Ok) || notice.code == CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE
 }
 
-/// Log an unrouted notice (no subscription owner) at the appropriate severity.
+/// Log severity for a notice that has no request or subscription to answer
+/// to, derived from [`Notice::category`] so that every code in a category
+/// logs alike regardless of which numeric band it sits in.
 ///
+/// Informational categories log at `warn` (the caller may want to act:
+/// a fallback engaged, a book must be cleared), except the benign data-farm
+/// confirmations and the cancellation confirmation, which log at `info`.
 /// System connectivity codes are graded by how much they matter: 1102
 /// (restored, data maintained) is benign → info; 1101 (restored, data lost —
-/// resubscribe required) is a warning; 1100 (connectivity lost) and everything
-/// else fall through to error.
-pub(crate) fn log_unrouted_notice(notice: &Notice) {
+/// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
+/// reset) → error. Order rejections and errors log at `error`.
+pub(crate) fn notice_log_level(notice: &Notice) -> Level {
     if is_benign_connectivity_notice(notice) {
-        info!("connectivity: {notice}");
-    } else if notice.code == CONNECTIVITY_RESTORED_DATA_LOST_CODE || notice.is_warning() {
-        warn!("warning: {notice}");
-    } else {
-        error!("error: {notice}");
+        return Level::Info;
+    }
+    match notice.category() {
+        NoticeCategory::Cancellation => Level::Info,
+        NoticeCategory::Warning | NoticeCategory::DataAdvisory => Level::Warn,
+        NoticeCategory::SystemMessage if notice.code == CONNECTIVITY_RESTORED_DATA_LOST_CODE => Level::Warn,
+        NoticeCategory::SystemMessage | NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
+    }
+}
+
+/// Log an unrouted notice (no subscription owner) at [`notice_log_level`].
+pub(crate) fn log_unrouted_notice(notice: &Notice) {
+    match notice_log_level(notice) {
+        Level::Info if is_benign_connectivity_notice(notice) => info!("connectivity: {notice}"),
+        Level::Info => info!("notice: {notice}"),
+        Level::Warn => warn!("warning: {notice}"),
+        _ => error!("error: {notice}"),
     }
 }
 
