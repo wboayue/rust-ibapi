@@ -1633,9 +1633,9 @@ impl Notice {
     /// use ibapi::{Notice, NoticeCategory};
     /// # let notice: Notice = unimplemented!();
     /// let level = match notice.category() {
-    ///     NoticeCategory::Cancellation
-    ///     | NoticeCategory::Warning
-    ///     | NoticeCategory::SystemMessage => "info",
+    ///     NoticeCategory::Cancellation => "info",
+    ///     NoticeCategory::Warning | NoticeCategory::DataAdvisory => "warn",
+    ///     NoticeCategory::SystemMessage => "warn or error, by code",
     ///     NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
     ///     _ => "unknown",
     /// };

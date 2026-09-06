@@ -282,10 +282,10 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
     match kind {
         IncomingMessages::Error => {
             let notice = Notice::from(&*message);
-            if notice.is_warning() || notice.is_system_message() {
-                info!("{notice}");
-            } else {
-                error!("Error during account info: {notice}");
+            match crate::transport::common::notice_log_level(&notice) {
+                log::Level::Error => error!("Error during account info: {notice}"),
+                log::Level::Warn => warn!("{notice}"),
+                _ => info!("{notice}"),
             }
             ctx.notice_sink.deliver(notice);
         }
