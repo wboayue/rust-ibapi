@@ -381,7 +381,7 @@ fn reconnect_returns_shutdown_while_waiting_out_backoff() {
     });
 
     // The first backoff delay is a second; request shutdown well inside it.
-    thread::sleep(Duration::from_millis(50));
+    wait_for("reconnect backoff to start", || socket.sleep_started());
     let requested_at = Instant::now();
     shutdown.request();
 

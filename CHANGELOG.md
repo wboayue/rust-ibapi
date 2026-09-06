@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Disconnecting while the client is reconnecting no longer hangs. The reconnect loop now observes the shutdown request in its backoff wait and returns `Error::Shutdown`, so the dispatcher stops. Previously `Client::drop` / `disconnect()` blocked in the sync client until every reconnect attempt was exhausted (about 7.5 minutes by default, forever with `reconnect_forever`), and in the async client the shutdown wake-up was lost while the dispatcher was inside `reconnect()`, leaking the dispatcher task, the message bus and the TWS session.
+- Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
 
 ## [4.0.1] - 2026-09-06
 
