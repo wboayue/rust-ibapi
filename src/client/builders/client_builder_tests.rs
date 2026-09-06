@@ -60,6 +60,12 @@ mod sync_tests {
         assert_eq!(ClientBuilder::default().max_reconnect_attempts(50).state.max_reconnect_attempts, Some(50));
         assert_eq!(ClientBuilder::default().reconnect_forever().state.max_reconnect_attempts, None);
     }
+
+    #[test]
+    fn tcp_no_delay_defaults_on() {
+        assert!(ClientBuilder::default().state.tcp_no_delay);
+        assert!(!ClientBuilder::default().tcp_no_delay(false).state.tcp_no_delay);
+    }
 }
 
 #[cfg(feature = "async")]
@@ -100,5 +106,11 @@ mod async_tests {
         );
         assert_eq!(ClientBuilder::default().max_reconnect_attempts(50).state.max_reconnect_attempts, Some(50));
         assert_eq!(ClientBuilder::default().reconnect_forever().state.max_reconnect_attempts, None);
+    }
+
+    #[test]
+    fn tcp_no_delay_defaults_on() {
+        assert!(ClientBuilder::default().state.tcp_no_delay);
+        assert!(!ClientBuilder::default().tcp_no_delay(false).state.tcp_no_delay);
     }
 }
