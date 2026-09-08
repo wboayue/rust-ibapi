@@ -113,12 +113,18 @@ impl Client {
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity)?);
 
-        // Start background task to read messages from TWS
-        message_bus
-            .clone()
-            .process_messages(connection_metadata.server_version, Duration::from_secs(1))?;
+        let server_version = connection_metadata.server_version;
+        let client = Client::new(connection_metadata, message_bus.clone())?;
 
-        Client::new(connection_metadata, message_bus)
+        // Share the order-ID generator with the bus so a successful reconnect
+        // re-seeds it from the handshake's NextValidId; must be installed
+        // before the processing task starts.
+        message_bus.set_order_ids(client.id_manager.clone());
+
+        // Start background task to read messages from TWS
+        message_bus.clone().process_messages(server_version, Duration::from_secs(1))?;
+
+        Ok(client)
     }
 
     fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn AsyncMessageBus>) -> Result<Client, Error> {
