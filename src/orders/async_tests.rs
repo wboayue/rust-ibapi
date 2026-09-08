@@ -454,7 +454,7 @@ async fn test_exercise_options() {
 
 #[tokio::test]
 async fn test_next_valid_order_id() {
-    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(123) };
+    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(9123) };
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NextValidId,
         prost::Message::encode_to_vec(&next_valid_id_proto),
@@ -465,8 +465,8 @@ async fn test_next_valid_order_id() {
 
     let order_id = client.next_valid_order_id().await.expect("failed to get next valid order id");
 
-    assert_eq!(order_id, 123, "Expected order ID 123");
-    assert_eq!(client.next_order_id(), 123, "Client's order ID should be updated to 123");
+    assert_eq!(order_id, 9123, "Expected order ID 9123");
+    assert_eq!(client.next_order_id(), 9123, "Client's order ID should be raised to 9123");
     assert_ne!(client.next_order_id(), initial_order_id, "Client's order ID should have changed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -645,9 +645,9 @@ async fn analyze_surfaces_rejected_what_if_order() {
 async fn analyze_returns_order_state_for_the_matching_order() {
     let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::OpenOrder,
-        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+        open_order().order_id(9090).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.set_next_order_id(90);
+    client.raise_next_order_id(9090);
     let contract = Contract::stock("AAPL").build();
 
     let state = client
@@ -680,7 +680,7 @@ async fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[tokio::test]
 async fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(100);
+    client.raise_next_order_id(9100);
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client
@@ -690,11 +690,11 @@ async fn submit_assigns_the_next_order_id_and_sends_the_order() {
         .submit()
         .await
         .expect("submit should succeed");
-    assert_eq!(order_id.value(), 100);
+    assert_eq!(order_id.value(), 9100);
 
     assert_eq!(request_message_count(&bus), 1);
     let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
-    assert_eq!(request.order_id, Some(100));
+    assert_eq!(request.order_id, Some(9100));
     let order = request.order.expect("request carries an order");
     assert_eq!(order.action.as_deref(), Some("BUY"));
     assert_eq!(order.order_type.as_deref(), Some("LMT"));
@@ -721,7 +721,7 @@ async fn submit_rejects_an_invalid_order_before_sending() {
 #[tokio::test]
 async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(200);
+    client.raise_next_order_id(9200);
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -736,7 +736,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
         .await
         .expect("bracket submission should succeed");
 
-    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (200, 201, 202));
+    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (9200, 9201, 9202));
     assert_eq!(request_message_count(&bus), 3);
 
     let orders: Vec<crate::proto::Order> = (0..3)
@@ -751,7 +751,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     // at its default is omitted on the wire, so read them through unwrap_or_default.
     assert_eq!(
         orders.iter().map(|o| o.parent_id.unwrap_or_default()).collect::<Vec<_>>(),
-        vec![0, 200, 200]
+        vec![0, 9200, 9200]
     );
 
     // Only the last order transmits, so TWS receives the trio atomically.
@@ -774,7 +774,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[tokio::test]
 async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(300);
+    client.raise_next_order_id(9300);
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
@@ -798,7 +798,7 @@ async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
         .await
         .expect("OCA submission should succeed");
 
-    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![300, 301]);
+    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
     for i in 0..2 {

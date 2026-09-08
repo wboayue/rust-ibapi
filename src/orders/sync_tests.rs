@@ -724,7 +724,7 @@ fn analyze_returns_order_state_for_the_matching_order() {
         IncomingMessages::OpenOrder,
         open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.set_next_order_id(90);
+    client.raise_next_order_id(90);
     let contract = Contract::stock("AAPL").build();
 
     let state = client.order(&contract).buy(100).limit(50.0).analyze().expect("analyze should succeed");
@@ -751,7 +751,7 @@ fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[test]
 fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(100);
+    client.raise_next_order_id(100);
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client.order(&contract).buy(100).limit(50.0).submit().expect("submit should succeed");
@@ -785,7 +785,7 @@ fn submit_rejects_an_invalid_order_before_sending() {
 #[test]
 fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(200);
+    client.raise_next_order_id(200);
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -837,7 +837,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[test]
 fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(300);
+    client.raise_next_order_id(300);
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
