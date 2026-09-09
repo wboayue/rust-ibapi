@@ -1283,12 +1283,61 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
     Ok(())
 }
 
+/// Partial entitlement can precede delayed Greeks on the same request.
+#[test]
+fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Error> {
+    use crate::contracts::tick_types::TickType;
+    use crate::market_data::realtime::TickTypes;
+    use crate::messages::IncomingMessages;
+    use crate::subscriptions::{sync::Subscription, DecoderContext, SubscriptionItem};
+    use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, &[])?;
+    let subscription = Subscription::<TickTypes>::new(bus.clone(), internal, DecoderContext::default());
+    let computation = tick_option_computation()
+        .request_id(42)
+        .tick_type(TickType::DelayedModelOption as i32)
+        .tick_attrib(0)
+        .delta(0.5)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the error must not hide
+    // an already-queued computation on the same request.
+    stream.push_inbound(error_frame(42, 10091, "Synthetic partial-entitlement advisory"));
+    stream.push_inbound(binary_proto(IncomingMessages::TickOptionComputation as i32, &computation));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 10091);
+            assert_eq!(notice.message, "Synthetic partial-entitlement advisory");
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 10091 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
+            assert_eq!(greeks.field, TickType::DelayedModelOption);
+            assert_eq!(greeks.tick_attribute, Some(0));
+            assert_eq!(greeks.delta, Some(0.5));
+            assert_eq!(greeks.implied_volatility, None);
+        }
+        other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+    Ok(())
+}
+
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[test]
 fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
     stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    stream.push_inbound(body("89|42|payload|"));
+    bus.dispatch()?;
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
@@ -1299,7 +1348,7 @@ fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
         other => panic!("expected Some(Err(Error::Notice)), got {other:?}"),
     }
 
-    assert!(subscription.next_timeout(TICK).is_none(), "stream must end after terminal error");
+    assert!(subscription.next_timeout(TICK).is_none(), "terminal error must hide even queued data");
     Ok(())
 }
 

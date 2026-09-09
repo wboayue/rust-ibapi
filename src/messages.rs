@@ -1126,18 +1126,20 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
     SOCKET_PORT_RESET_CODE,
 ];
 
-/// Data-advisory codes that TWS sends on a request which then proceeds
-/// normally. The request is *not* rejected — the advisory announces a
+/// Data-advisory codes that do not reject the entire request.
+///
+/// These codes do not reject the entire request — the advisory announces a
 /// fallback (delayed market data, historical data delivered without its
 /// up-to-the-second tail, or only the ticks the account is entitled to) and
-/// the requested data follows, so these are informational notices, not
+/// available data can follow, so these are informational notices, not
 /// errors. Classifying them as errors would terminate the subscription
 /// before its data arrives.
 /// - 2188: Up-to-the-second historical data requires additional subscription for the API.
 /// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
 /// - 10090: Part of requested market data is not subscribed. Subscription-independent ticks are still active.
+/// - 10091: Part of requested market data requires additional subscription for API.
 /// - 10167: Requested market data is not subscribed. Displaying delayed market data.
-pub const DATA_ADVISORY_CODES: [i32; 4] = [2188, 10089, 10090, 10167];
+pub const DATA_ADVISORY_CODES: [i32; 5] = [2188, 10089, 10090, 10091, 10167];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
@@ -1237,7 +1239,7 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 ///    code 0 (a frame whose `error_code` field was absent on the wire).
 /// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding the cases above.
-/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (2188, 10089, 10090, 10167).
+/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (2188, 10089, 10090, 10091, 10167).
 /// 6. [`Error`](Self::Error) — everything else.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
@@ -1267,7 +1269,7 @@ pub enum NoticeCategory {
     SystemMessage,
     /// Order rejection (codes 200..=399, excluding informational cases by precedence).
     OrderRejection,
-    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request proceeded with a
+    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request can proceed with a
     /// fallback (delayed market data, or historical data without its
     /// up-to-the-second tail) rather than failing. Informational.
     DataAdvisory,
@@ -1411,12 +1413,13 @@ impl Notice {
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
     ///
-    /// Data advisories (codes 2188, 10089, 10090, 10167) announce that a
-    /// request proceeded with a fallback — delayed market data instead of
+    /// Data advisories (codes 2188, 10089, 10090, 10091, 10167) announce that a
+    /// request can proceed with a fallback — delayed market data instead of
     /// real-time, historical data without its up-to-the-second tail, or only
     /// the ticks the account is entitled to — rather than failing. The
-    /// requested data still follows, so the subscription stays open and the
-    /// notice is informational, not an error.
+    /// available data can still follow, so the subscription stays open and
+    /// the notice is informational, not an error. This does not guarantee
+    /// that every requested field will arrive.
     pub fn is_data_advisory(&self) -> bool {
         DATA_ADVISORY_CODES.contains(&self.code)
     }

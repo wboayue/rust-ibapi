@@ -1231,6 +1231,7 @@ fn test_notice_category_partition() {
         (2188, NoticeCategory::DataAdvisory),
         (10089, NoticeCategory::DataAdvisory),
         (10090, NoticeCategory::DataAdvisory),
+        (10091, NoticeCategory::DataAdvisory),
         (10167, NoticeCategory::DataAdvisory),
         (100, NoticeCategory::Error),
         (502, NoticeCategory::Error),
@@ -1307,8 +1308,7 @@ fn test_notice_data_advisory() {
         assert!(!notice.is_error(), "code {code} should not be an error");
         assert_eq!(notice.category(), NoticeCategory::DataAdvisory, "code {code} miscategorised");
 
-        // Neighboring codes are real errors, not advisories (10089 and
-        // 10090 are adjacent, so skip neighbors that are advisories too).
+        // Skip adjacent advisories; this must not classify a whole range.
         for neighbor in [code - 1, code + 1] {
             if DATA_ADVISORY_CODES.contains(&neighbor) {
                 continue;
@@ -1318,6 +1318,12 @@ fn test_notice_data_advisory() {
             assert!(notice.is_error(), "code {neighbor} should be an error");
         }
     }
+}
+
+#[test]
+fn test_data_advisory_codes_includes_partial_api_entitlement() {
+    let codes: [i32; 5] = crate::DATA_ADVISORY_CODES;
+    assert_eq!(codes, [2188, 10089, 10090, 10091, 10167]);
 }
 
 #[test]
