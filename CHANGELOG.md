@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A successful automatic reconnect now re-seeds the client's order-id generator from the `NextValidId` frame the reconnect handshake re-receives. Previously only the initial connection seeded the generator: every reconnect stored the fresh server floor in `ConnectionMetadata` and then discarded it, so after a TWS/IB Gateway restart the client could resume allocating below the server's counter and hit error 103. The re-seed is a monotonic raise and never lowers the generator below IDs allocated before the disconnect (#803).
+
 - `next_valid_order_id()` no longer rewinds the order-id generator: the server's value is applied as a lower bound (`fetch_max`) instead of an overwrite, so an ID already allocated locally — including one whose order has not reached the server yet — is never reissued. Previously a response at or below the local counter, which is what the server returns whenever it has not yet seen the allocated IDs, made the next `next_order_id()` hand out a duplicate and TWS rejected the second order with error 103 (#802).
 
 - Error 317 ("Market depth data has been RESET. Please empty deep book contents before applying any new entries.") is a data advisory: it is published as a non-terminal `SubscriptionItem::Notice` on the market-depth subscription instead of ending it, so the rows that rebuild the book still arrive. Consumers discard their book on this notice and apply the updates that follow. Its sibling 316 (market depth HALTED) remains terminal (#806).

@@ -370,17 +370,19 @@ impl<S: Stream> TcpMessageBus<S> {
                     return Err(Error::Shutdown);
                 }
 
-                info!("successfully reconnected to TWS/Gateway");
-                self.connected.store(true, Ordering::Relaxed);
-                self.reset();
-
                 // The handshake re-received NextValidId; raise the client's
                 // generator from the server's floor so allocation never
                 // resumes below it. Only the initial connection seeded the
-                // generator before this.
+                // generator before this. Do it before reporting the session
+                // as live so a caller gating on `is_connected()` cannot
+                // allocate below the new floor.
                 if let Some(order_ids) = self.order_ids.get() {
                     order_ids.raise_order_id(self.connection.connection_metadata().next_order_id);
                 }
+
+                info!("successfully reconnected to TWS/Gateway");
+                self.connected.store(true, Ordering::Relaxed);
+                self.reset();
                 Ok(())
             }
             Err(err) => {

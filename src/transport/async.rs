@@ -421,18 +421,21 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                             break;
                                         }
 
-                                        info!("Successfully reconnected to TWS/Gateway");
-                                        message_bus.connected.store(true, Ordering::Relaxed);
-                                        message_bus.reset_channels().await;
-
                                         // The handshake re-received NextValidId; raise
                                         // the client's generator from the server's floor so
                                         // allocation never resumes below it. Only the initial
-                                        // connection seeded the generator before this.
+                                        // connection seeded the generator before this. Do it
+                                        // before reporting the session as live so a caller
+                                        // gating on `is_connected()` cannot allocate below
+                                        // the new floor.
                                         if let Some(order_ids) = message_bus.order_ids.get() {
                                             let metadata = message_bus.connection.connection_metadata().await;
                                             order_ids.raise_order_id(metadata.next_order_id);
                                         }
+
+                                        info!("Successfully reconnected to TWS/Gateway");
+                                        message_bus.connected.store(true, Ordering::Relaxed);
+                                        message_bus.reset_channels().await;
                                     }
                                     // Shutdown was requested while reconnecting:
                                     // not a failure, and the flag is already
