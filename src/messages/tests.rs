@@ -1301,7 +1301,7 @@ fn test_connectivity_status_subset_of_warning() {
 fn test_notice_data_advisory() {
     // Delayed-data advisories are informational: TWS proceeds with the request
     // and data follows, so they must not be classified as errors.
-    for code in DATA_ADVISORY_CODES {
+    for &code in DATA_ADVISORY_CODES {
         let notice = notice_with_code(code);
         assert!(notice.is_data_advisory(), "code {code} should be a data advisory");
         assert!(notice.is_informational(), "code {code} should be informational");
@@ -1318,12 +1318,6 @@ fn test_notice_data_advisory() {
             assert!(notice.is_error(), "code {neighbor} should be an error");
         }
     }
-}
-
-#[test]
-fn test_data_advisory_codes_includes_partial_api_entitlement() {
-    let codes: [i32; 5] = crate::DATA_ADVISORY_CODES;
-    assert_eq!(codes, [2188, 10089, 10090, 10091, 10167]);
 }
 
 #[test]

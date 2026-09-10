@@ -173,23 +173,19 @@ let notice = Notice {
 
 Consumers are unaffected at compile time but gain information: a notice delivered to a subscription or the order-update stream now names the request or order it belongs to. The serde shape is backward compatible — `request_id` is `#[serde(default, skip_serializing_if = "Option::is_none")]`, so 3.x JSON still deserializes and the field only appears in output when present.
 
-### 6. `DATA_ADVISORY_CODES` widens to `[i32; 4]`
+### 6. `DATA_ADVISORY_CODES` is a `&[i32]` slice
 
-The advisory list grows from `[10089, 10167]` to `[2188, 10089, 10090, 10167]` — see the notice-classification changes under [Behavioral changes](#behavioral-changes). This is breaking only for code binding the const with an explicit array type:
+The advisory list grew from `[10089, 10167]` in 3.x to `[2188, 10089, 10090, 10167]` in 4.0.0 and `[2188, 10089, 10090, 10091, 10167]` after — see the notice-classification changes under [Behavioral changes](#behavioral-changes). Each addition changed the array type, so the constant is now a slice and future additions are value changes only. This is breaking only for code binding the const with an explicit type:
 
 ```rust,ignore
 // 3.x
 let advisories: [i32; 2] = ibapi::DATA_ADVISORY_CODES;
 
-// 4.0 — let the type follow the const
+// 4.x — let the type follow the const
 let advisories = ibapi::DATA_ADVISORY_CODES;
 ```
 
-**Unreleased follow-up:** adding partial API-entitlement advisory 10091 widens
-the constant again, from `[i32; 4]` to `[i32; 5]`. Its contents are now
-`[2188, 10089, 10090, 10091, 10167]`. Remove an explicit `[i32; 4]` annotation
-as above, or update it to `[i32; 5]`. `Notice::is_data_advisory()` and routing
-both use this same list; 10091 remains visible without ending the subscription.
+Iteration yields `&i32`: write `for &code in ibapi::DATA_ADVISORY_CODES` where 3.x wrote `for code in ...`.
 
 ### 7. `MarketDataBuilder` moves to `market_data::realtime`
 

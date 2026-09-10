@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `DATA_ADVISORY_CODES` includes 10091 and widens from `[i32; 4]` to `[i32; 5]`. Code explicitly binding the previous array type must change; see `docs/migration-4.0.md` §6.
+- `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6.
 
 ### Fixed
 
-- Preserve available market-data ticks after partial API-entitlement advisory 10091, including delayed option computations. Both clients deliver it as a nonterminal notice instead of ending the subscription.
+- Error 10091 ("Part of requested market data requires additional subscription for API") is classified as a data advisory like 10089, 10090, and 10167: it is published as a non-terminal notice instead of ending the market-data subscription, so ticks that follow it — including delayed option computations — still arrive (#804).
 
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
 
