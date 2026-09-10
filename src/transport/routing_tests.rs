@@ -243,6 +243,64 @@ fn test_classify_error_order_cancelled_routed_is_notice() {
 }
 
 #[test]
+fn test_is_informational_code_system_message_codes() {
+    // System messages report a connection-wide state change, never a failed
+    // request, so they route as notices.
+    for code in crate::messages::SYSTEM_MESSAGE_CODES {
+        assert!(is_informational_code(code, ""), "system code {code} should route as a notice");
+
+        // Only the routing disposition changes: the notice taxonomy keeps them
+        // out of `is_warning` and in `NoticeCategory::SystemMessage`.
+        assert!(!crate::messages::is_warning_message(code, ""));
+    }
+
+    // Neighbors of the connectivity codes stay hard errors.
+    for code in [1099, 1103, 1299, 1301] {
+        assert!(!is_informational_code(code, ""), "code {code} should not route as a notice");
+    }
+}
+
+#[test]
+fn test_classify_error_unrouted_system_message_is_notice_only() {
+    // 1102 arrives request-less. It must not fail in-flight one-shot shared
+    // requests (`managed_accounts`, `server_time`, `next_valid_order_id`).
+    let payload = DecodedError {
+        error_code: crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
+        error_message: "Connectivity between IB and TWS has been restored - data maintained.".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::NoticeOnly(notice) => {
+            assert!(notice.is_system_message());
+            assert!(!notice.is_warning());
+            assert_eq!(notice.category(), crate::messages::NoticeCategory::SystemMessage);
+        }
+        other => panic!("expected NoticeOnly, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_routed_system_message_is_notice() {
+    // TWS binds a request id to a system message only rarely, but when it does
+    // the frame must not terminate the subscription that owns the id.
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: crate::messages::CONNECTIVITY_LOST_CODE,
+        error_message: "Connectivity between IB and TWS has been lost.".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, crate::messages::CONNECTIVITY_LOST_CODE);
+            assert!(notice.is_system_message());
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_order_update_notice_gating() {
     let payload = DecodedError {
         request_id: 42,
@@ -567,62 +625,4 @@ fn test_unknown_message_type_routes_by_message_type() {
     let message = ResponseMessage::from("9999\01\0");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(determine_routing(&message), RoutingDecision::ByMessageType(IncomingMessages::NotValid));
-}
-
-#[test]
-fn test_is_informational_code_system_message_codes() {
-    // System messages report a connection-wide state change, never a failed
-    // request, so they route as notices.
-    for code in crate::messages::SYSTEM_MESSAGE_CODES {
-        assert!(is_informational_code(code, ""), "system code {code} should route as a notice");
-
-        // Only the routing disposition changes: the notice taxonomy keeps them
-        // out of `is_warning` and in `NoticeCategory::SystemMessage`.
-        assert!(!crate::messages::is_warning_message(code, ""));
-    }
-
-    // Neighbors of the connectivity codes stay hard errors.
-    for code in [1099, 1103, 1299, 1301] {
-        assert!(!is_informational_code(code, ""), "code {code} should not route as a notice");
-    }
-}
-
-#[test]
-fn test_classify_error_unrouted_system_message_is_notice_only() {
-    // 1102 arrives request-less. It must not fail in-flight one-shot shared
-    // requests (`managed_accounts`, `server_time`, `next_valid_order_id`).
-    let payload = DecodedError {
-        error_code: crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
-        error_message: "Connectivity between IB and TWS has been restored - data maintained.".into(),
-        ..Default::default()
-    };
-
-    match classify_error(payload) {
-        ErrorDisposition::NoticeOnly(notice) => {
-            assert!(notice.is_system_message());
-            assert!(!notice.is_warning());
-            assert_eq!(notice.category(), crate::messages::NoticeCategory::SystemMessage);
-        }
-        other => panic!("expected NoticeOnly, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_classify_error_routed_system_message_is_notice() {
-    // TWS binds a request id to a system message only rarely, but when it does
-    // the frame must not terminate the subscription that owns the id.
-    let payload = DecodedError {
-        request_id: 42,
-        error_code: crate::messages::SYSTEM_MESSAGE_CODES[0],
-        error_message: "Connectivity between IB and TWS has been lost.".into(),
-        ..Default::default()
-    };
-
-    match classify_error(payload) {
-        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
-            assert_eq!(notice.code, crate::messages::SYSTEM_MESSAGE_CODES[0]);
-            assert!(notice.is_system_message());
-        }
-        other => panic!("expected routed Notice, got {other:?}"),
-    }
 }

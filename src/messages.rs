@@ -1107,14 +1107,22 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 
 /// Check if an error code is informational.
 ///
-/// Warning codes, warning-form order messages, data advisories, and the order
-/// cancellation confirmation (202) are informational — TWS proceeds with the
-/// request, or the frame confirms an outcome the caller asked for — so they
-/// are routed as a `Notice` rather than terminating the subscription as an
-/// `Error`. Note 202 is deliberately *not* in [`is_warning_message`]:
-/// `Notice::is_warning()` stays false for it (it is a cancellation, not a
-/// warning — see `Notice::category`); only the routing disposition treats the
-/// two alike.
+/// Warning codes, warning-form order messages, data advisories, the order
+/// cancellation confirmation (202), and the system messages
+/// ([`SYSTEM_MESSAGE_CODES`]) are informational — TWS proceeds with the
+/// request, the frame confirms an outcome the caller asked for, or the frame
+/// reports a connection-wide state change rather than a failed request — so
+/// they are routed as a `Notice` rather than terminating the subscription as
+/// an `Error`, and, when request-less, they do not fail the pending one-shots.
+///
+/// System messages never stand in for a per-request answer: after 1100 TWS
+/// still answers or rejects each request itself, and after 1300 the socket is
+/// dropped, so pending one-shots see `Error::ConnectionReset` from the
+/// transport reset and retry. Note 202 and the system codes are deliberately
+/// *not* in [`is_warning_message`]: `Notice::is_warning()` stays false for
+/// them (see `Notice::category`); only the routing disposition treats them
+/// like warnings. This is the single source for both routing and
+/// `Notice::is_informational`, so the two cannot disagree.
 pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
     code == ORDER_CANCELLED_CODE || is_warning_message(code, message) || SYSTEM_MESSAGE_CODES.contains(&code) || DATA_ADVISORY_CODES.contains(&code)
 }
