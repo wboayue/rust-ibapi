@@ -473,6 +473,23 @@ async fn test_next_valid_order_id() {
     assert_request(&message_bus, 0, &next_valid_order_id_request());
 }
 
+// The server only knows about IDs it has seen: an ID allocated locally but not
+// yet transmitted is invisible to it, so its answer can sit at or below the
+// local counter. That answer must not rewind the generator.
+#[tokio::test]
+async fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        prost::Message::encode_to_vec(&crate::proto::NextValidId { order_id: Some(5) }),
+    )]);
+
+    let allocated = client.next_order_id();
+    let server_value = client.next_valid_order_id().await.expect("next_valid_order_id");
+
+    assert_eq!(server_value, 5, "the server's value is still returned verbatim");
+    assert_eq!(client.next_order_id(), allocated + 1, "generator must not rewind below an allocated ID");
+}
+
 #[tokio::test]
 async fn test_order_update_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![

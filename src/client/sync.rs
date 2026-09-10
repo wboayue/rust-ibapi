@@ -282,7 +282,7 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            id_manager: ClientIdManager::new(-1),
+            id_manager: ClientIdManager::new(9000),
         }
     }
 
