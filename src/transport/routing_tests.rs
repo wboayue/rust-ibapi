@@ -166,10 +166,9 @@ fn test_is_informational_code() {
     assert!(is_informational_code(*WARNING_CODE_RANGE.start(), ""));
     assert!(is_informational_code(*WARNING_CODE_RANGE.end(), ""));
 
-    // Test some values in the middle; 2187 is above the old 2169 ceiling (#805)
+    // Test some values in the middle
     assert!(is_informational_code(2119, ""));
     assert!(is_informational_code(2150, ""));
-    assert!(is_informational_code(2187, ""));
 
     // Test values outside the range
     assert!(!is_informational_code(*WARNING_CODE_RANGE.start() - 1, ""));

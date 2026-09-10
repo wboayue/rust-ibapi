@@ -1098,9 +1098,7 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// it (2176, the fractional-share size-rule warning; 2187, generic ticks
 /// unavailable on delayed-data fallback), and a ceiling of 2169 turned each new
 /// one into a hard error that failed in-flight one-shots and ended
-/// subscriptions. 2188 sits inside the band
-/// but is a [`DATA_ADVISORY_CODES`] entry, which takes precedence in
-/// [`Notice::category`].
+/// subscriptions.
 pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 
 /// Code 0 is a code-less frame: IB Gateway omits `error_code` on informational
@@ -1115,12 +1113,9 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 
 /// Classify a raw error frame into a disjoint [`NoticeCategory`].
 ///
-/// The single owner of the precedence chain: exact-code lists first
-/// ([`ORDER_CANCELLED_CODE`], then [`DATA_ADVISORY_CODES`]), then the ranges.
-/// Both [`Notice::category`] and [`is_informational_code`] derive from it, so
-/// routing and the public partition cannot disagree. Ordering matters where
-/// the vocabularies overlap on the wire: 202 and 317 sit inside
-/// [`ORDER_REJECTION_CODE_RANGE`], 2188 inside [`WARNING_CODE_RANGE`].
+/// The single owner of the precedence chain documented on [`NoticeCategory`];
+/// [`Notice::category`] and [`is_informational_code`] both derive from it, so
+/// routing and the public partition cannot disagree.
 pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
     if code == ORDER_CANCELLED_CODE {
         NoticeCategory::Cancellation
@@ -1137,24 +1132,21 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
     }
 }
 
-/// Check if an error code is informational.
+/// Check if an error code is informational: every [`NoticeCategory`] except
+/// `OrderRejection` and `Error`.
 ///
-/// Every [`NoticeCategory`] except `OrderRejection` and `Error` is
-/// informational: warnings, warning-form order messages, data advisories, the
-/// order cancellation confirmation (202), and the system messages
-/// ([`SYSTEM_MESSAGE_CODES`]). TWS proceeds with the request, the frame confirms
-/// an outcome the caller asked for, or the frame reports a connection-wide
-/// state change rather than a failed request — so they are routed as a
-/// `Notice` rather than terminating the subscription as an `Error`, and, when
-/// request-less, they do not fail the pending one-shots.
+/// For these TWS proceeds with the request, the frame confirms an outcome the
+/// caller asked for, or the frame reports a connection-wide state change
+/// rather than a failed request — so they are routed as a `Notice` rather
+/// than terminating the subscription as an `Error`, and, when request-less,
+/// they do not fail the pending one-shots.
 ///
 /// System messages never stand in for a per-request answer: after 1100 TWS
 /// still answers or rejects each request itself, and after 1300 the socket is
 /// dropped, so pending one-shots see `Error::ConnectionReset` from the
 /// transport reset and retry. Note 202 and the system codes are deliberately
 /// *not* in [`is_warning_message`]: `Notice::is_warning()` stays false for
-/// them; only the routing disposition treats them like warnings. Derived from
-/// [`classify`], the same chain behind `Notice::category`.
+/// them; only the routing disposition treats them like warnings.
 pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
     // Exhaustive on purpose: a new `NoticeCategory` variant must decide its
     // routing disposition here, not inherit one from a wildcard.
@@ -1191,18 +1183,13 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 /// delivered), so they are informational notices, not errors. Classifying them
 /// as errors would terminate the subscription before its data arrives.
 /// - 317: Market depth data has been RESET. Please empty deep book contents
-///   before applying any new entries. The depth stream stays open; discard
-///   every row held and rebuild from the updates that follow. Its sibling 316
-///   (market depth HALTED, re-subscribe) is terminal and stays an error.
+///   before applying any new entries. (Consumer contract on
+///   [`MarketDepths`](crate::market_data::realtime::MarketDepths).)
 /// - 2188: Up-to-the-second historical data requires additional subscription for the API.
 /// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
 /// - 10090: Part of requested market data is not subscribed. Subscription-independent ticks are still active.
 /// - 10091: Part of requested market data requires additional subscription for API.
 /// - 10167: Requested market data is not subscribed. Displaying delayed market data.
-///
-/// 317 is numerically inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
-/// [`WARNING_CODE_RANGE`]; [`Notice::category`] resolves this list before
-/// either range.
 ///
 /// A slice rather than an array so that adding a code is not a type change
 /// for callers that bind the constant explicitly.
@@ -1303,9 +1290,9 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 /// resolves overlap by **precedence**:
 ///
 /// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
-/// 2. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (317, 2188,
-///    10089, 10090, 10091, 10167). Ahead of the ranges: 317 is inside
-///    [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside [`WARNING_CODE_RANGE`].
+/// 2. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`]. Ahead of
+///    the ranges: 317 is inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
+///    [`WARNING_CODE_RANGE`].
 /// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
 ///    line, or code 0 (a frame whose `error_code` field was absent on the wire).
 /// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
@@ -1487,14 +1474,10 @@ impl Notice {
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
     ///
-    /// Data advisories (codes 317, 2188, 10089, 10090, 10091, 10167) reject
-    /// nothing: the request stands and data follows. Most announce a fallback —
-    /// delayed market data instead of real-time, historical data without its
-    /// up-to-the-second tail, or only the ticks the account is entitled to;
-    /// 317 announces a market-depth reset, after which the consumer discards
-    /// its book and rebuilds from the updates that follow. The subscription
-    /// stays open and the notice is informational, not an error. This does not
-    /// guarantee that every requested field will arrive.
+    /// Data advisories reject nothing: the request stands and data follows —
+    /// a fallback, a partial entitlement, or a depth-book reset. The
+    /// subscription stays open and the notice is informational, not an error.
+    /// This does not guarantee that every requested field will arrive.
     pub fn is_data_advisory(&self) -> bool {
         DATA_ADVISORY_CODES.contains(&self.code)
     }

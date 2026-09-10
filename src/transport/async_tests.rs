@@ -515,7 +515,7 @@ async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMe
 
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
-async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+async fn next_item<T: Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
     tokio::time::timeout(TICK, sub.next())
         .await
         .expect("subscription got no item before timeout")
@@ -570,7 +570,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 10091);
@@ -579,7 +579,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
         }
         other => panic!("expected nonterminal 10091 notice, got {other:?}"),
     }
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
             assert_eq!(greeks.field, TickType::DelayedModelOption);
             assert_eq!(greeks.tick_attribute, Some(0));
@@ -620,7 +620,7 @@ async fn test_subscription_317_preserves_later_market_depth() {
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 317);
@@ -628,7 +628,7 @@ async fn test_subscription_317_preserves_later_market_depth() {
         }
         other => panic!("expected nonterminal 317 notice, got {other:?}"),
     }
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
             assert_eq!(depth.position, 0);
             assert_eq!(depth.operation, 0);

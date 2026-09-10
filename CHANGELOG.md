@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `WARNING_CODE_RANGE` widens from `2100..=2169` to `2100..=2199`: IB keeps adding warnings above the old ceiling (2176, 2187), and each one was a hard error that failed in-flight one-shots and ended subscriptions. Codes 2170–2199 now route as non-terminal notices and `Notice::category()` reports them as `Warning` (#805).
 
-- `Notice::category()` resolves `DATA_ADVISORY_CODES` ahead of the warning and order-rejection bands instead of after them, so 2188 stays `DataAdvisory` inside the widened warning band and 317 reports `DataAdvisory` rather than `OrderRejection`. The range predicates are unchanged: `Notice::is_warning()` is now true for 2188 and `Notice::is_order_rejection()` remains true for 317 (#806).
+- `Notice::category()` resolves `DATA_ADVISORY_CODES` ahead of the warning and order-rejection bands instead of after them, so 2188 stays `DataAdvisory` inside the widened warning band (and 317 below categorises the same way). The range predicates are unchanged: `Notice::is_warning()` is now true for 2188 and `Notice::is_order_rejection()` remains true for 317 (#806).
 
 ### Fixed
 

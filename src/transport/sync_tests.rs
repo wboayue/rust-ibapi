@@ -1254,10 +1254,10 @@ impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     }
 }
 
-fn wrap_subscription(
+fn wrap_subscription<T: crate::subscriptions::StreamDecoder<T>>(
     bus: Arc<TcpMessageBus<MemoryStream>>,
     internal: InternalSubscription,
-) -> crate::subscriptions::sync::Subscription<NoticeTestData> {
+) -> crate::subscriptions::sync::Subscription<T> {
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
@@ -1315,12 +1315,12 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
     use crate::contracts::tick_types::TickType;
     use crate::market_data::realtime::TickTypes;
     use crate::messages::IncomingMessages;
-    use crate::subscriptions::{sync::Subscription, DecoderContext, SubscriptionItem};
+    use crate::subscriptions::SubscriptionItem;
     use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, &[])?;
-    let subscription = Subscription::<TickTypes>::new(bus.clone(), internal, DecoderContext::default());
+    let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
     let computation = tick_option_computation()
         .request_id(42)
         .tick_type(TickType::DelayedModelOption as i32)
@@ -1362,12 +1362,12 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
 fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
     use crate::market_data::realtime::MarketDepths;
     use crate::messages::IncomingMessages;
-    use crate::subscriptions::{sync::Subscription, DecoderContext, SubscriptionItem};
+    use crate::subscriptions::SubscriptionItem;
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, &[])?;
-    let subscription = Subscription::<MarketDepths>::new(bus.clone(), internal, DecoderContext::default());
+    let subscription = wrap_subscription::<MarketDepths>(bus.clone(), internal);
     let row = market_depth_response()
         .request_id(42)
         .position(0)
