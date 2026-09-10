@@ -336,7 +336,7 @@ fn routed_items_classifies_dispatcher_intercepted_types() {
         proto_response(IncomingMessages::TickPrice, vec![]),
         // Request-scoped hard error -> the owning subscription's Err.
         proto_error_response(9000, 201, "rejected"),
-        // Warning range 2100..=2169 -> a non-terminal Notice.
+        // WARNING_CODE_RANGE -> a non-terminal Notice.
         proto_error_response(9000, 2104, "market data farm ok"),
         crate::messages::ResponseMessage::from("-2\0"),
     ]);

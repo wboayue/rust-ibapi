@@ -420,6 +420,30 @@ async fn test_request_less_warning_does_not_fail_one_shot() {
     assert!(one_shot.try_next_routed().is_none(), "warning must not fail a one-shot shared request");
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[tokio::test]
+async fn test_request_less_system_message_does_not_fail_one_shot() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+}
+
 /// Order-channel fallback: a notice arrives bound to an `order_id` matching
 /// an order subscription. The dispatcher's `deliver_to_request_id` helper
 /// falls back to the order channel when no request channel matches.
@@ -453,6 +477,7 @@ use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, Subs
 use futures::StreamExt;
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
@@ -490,7 +515,7 @@ async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMe
 
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
-async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+async fn next_item<T: Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
     tokio::time::timeout(TICK, sub.next())
         .await
         .expect("subscription got no item before timeout")
@@ -521,12 +546,108 @@ async fn test_subscription_notice_delivery_request_keyed() {
     }
 }
 
+/// Partial entitlement can precede delayed Greeks on the same request.
+#[tokio::test]
+async fn test_subscription_10091_preserves_later_option_computation() {
+    use crate::contracts::tick_types::TickType;
+    use crate::market_data::realtime::TickTypes;
+    use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = Subscription::new_from_internal::<TickTypes>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let computation = tick_option_computation()
+        .request_id(42)
+        .tick_type(TickType::DelayedModelOption as i32)
+        .tick_attrib(0)
+        .delta(0.5)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the error must not hide
+    // an already-queued computation on the same request.
+    stream.push_inbound(error_frame(42, 10091, "Synthetic partial-entitlement advisory"));
+    stream.push_inbound(binary_proto(IncomingMessages::TickOptionComputation as i32, &computation));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 10091);
+            assert_eq!(notice.message, "Synthetic partial-entitlement advisory");
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 10091 notice, got {other:?}"),
+    }
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
+            assert_eq!(greeks.field, TickType::DelayedModelOption);
+            assert_eq!(greeks.tick_attribute, Some(0));
+            assert_eq!(greeks.delta, Some(0.5));
+            assert_eq!(greeks.implied_volatility, None);
+        }
+        other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[tokio::test]
+async fn test_subscription_317_preserves_later_market_depth() {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = Subscription::new_from_internal::<MarketDepths>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
+    }
+}
+
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[tokio::test]
 async fn test_subscription_hard_error_terminates_stream() {
     let (stream, bus, mut subscription) = make_request_subscription(42).await;
 
     stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    stream.push_inbound(body("89|42|payload|"));
+    bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
     match next_item(&mut subscription).await {
@@ -537,7 +658,7 @@ async fn test_subscription_hard_error_terminates_stream() {
         other => panic!("expected Some(Err(Error::Notice)), got {other:?}"),
     }
 
-    assert!(next_item(&mut subscription).await.is_none(), "stream must end after terminal error");
+    assert!(next_item(&mut subscription).await.is_none(), "terminal error must hide even queued data");
 }
 
 /// Order-keyed notice via `deliver_to_request_id`'s order-channel fallback.

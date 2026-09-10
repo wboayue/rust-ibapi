@@ -569,7 +569,7 @@ Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flo
 
 TWS emits two flavors of notification alongside subscription data:
 
-- **Per-subscription notices** — warning codes 2100..=2169 and order-cancel code
+- **Per-subscription notices** — warning codes 2100..=2199 and order-cancel code
   202 carry a `request_id` that maps back to a specific subscription. They arrive
   on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
 - **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status
@@ -672,7 +672,7 @@ fn main() {
 
     for n in notices.iter() {
         match n.connectivity_status() {
-            // Data-farm sub-state, refined from the 2100..=2169 warning band.
+            // Data-farm sub-state, refined from the 2100..=2199 warning band.
             Some(ConnectivityStatus::Ok) => println!("farm online: {n}"),
             Some(ConnectivityStatus::Broken) => println!("farm down: {n}"),
             Some(ConnectivityStatus::Inactive | ConnectivityStatus::Connecting) => println!("farm idle: {n}"),

@@ -1128,6 +1128,31 @@ fn test_request_less_warning_does_not_fail_one_shot() -> Result<(), Error> {
     Ok(())
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[test]
+fn test_request_less_system_message_does_not_fail_one_shot() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.dispatch()?;
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed system message");
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+    Ok(())
+}
+
 /// A one-shot `send_shared_request` drains the shared queue before writing:
 /// a request-less error buffered while no request was in flight must not
 /// poison the next call, which reads only its own response.
@@ -1207,6 +1232,7 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
 // `Err(_)` / `None` as expected.
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
@@ -1228,10 +1254,10 @@ impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     }
 }
 
-fn wrap_subscription(
+fn wrap_subscription<T: crate::subscriptions::StreamDecoder<T>>(
     bus: Arc<TcpMessageBus<MemoryStream>>,
     internal: InternalSubscription,
-) -> crate::subscriptions::sync::Subscription<NoticeTestData> {
+) -> crate::subscriptions::sync::Subscription<T> {
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
@@ -1283,12 +1309,114 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
     Ok(())
 }
 
+/// Partial entitlement can precede delayed Greeks on the same request.
+#[test]
+fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Error> {
+    use crate::contracts::tick_types::TickType;
+    use crate::market_data::realtime::TickTypes;
+    use crate::messages::IncomingMessages;
+    use crate::subscriptions::SubscriptionItem;
+    use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, &[])?;
+    let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
+    let computation = tick_option_computation()
+        .request_id(42)
+        .tick_type(TickType::DelayedModelOption as i32)
+        .tick_attrib(0)
+        .delta(0.5)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the error must not hide
+    // an already-queued computation on the same request.
+    stream.push_inbound(error_frame(42, 10091, "Synthetic partial-entitlement advisory"));
+    stream.push_inbound(binary_proto(IncomingMessages::TickOptionComputation as i32, &computation));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 10091);
+            assert_eq!(notice.message, "Synthetic partial-entitlement advisory");
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 10091 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
+            assert_eq!(greeks.field, TickType::DelayedModelOption);
+            assert_eq!(greeks.tick_attribute, Some(0));
+            assert_eq!(greeks.delta, Some(0.5));
+            assert_eq!(greeks.implied_volatility, None);
+        }
+        other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+    Ok(())
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[test]
+fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::messages::IncomingMessages;
+    use crate::subscriptions::SubscriptionItem;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, &[])?;
+    let subscription = wrap_subscription::<MarketDepths>(bus.clone(), internal);
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
+    }
+    Ok(())
+}
+
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[test]
 fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
     let (stream, bus, subscription) = make_request_subscription(42)?;
 
     stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    stream.push_inbound(body("89|42|payload|"));
+    bus.dispatch()?;
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
@@ -1299,7 +1427,7 @@ fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
         other => panic!("expected Some(Err(Error::Notice)), got {other:?}"),
     }
 
-    assert!(subscription.next_timeout(TICK).is_none(), "stream must end after terminal error");
+    assert!(subscription.next_timeout(TICK).is_none(), "terminal error must hide even queued data");
     Ok(())
 }
 

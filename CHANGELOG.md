@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).
+
+- `WARNING_CODE_RANGE` widens from `2100..=2169` to `2100..=2199`: IB keeps adding warnings above the old ceiling (2176, 2187), and each one was a hard error that failed in-flight one-shots and ended subscriptions. Codes 2170–2199 now route as non-terminal notices and `Notice::category()` reports them as `Warning` (#805).
+
+- `Notice::category()` resolves `DATA_ADVISORY_CODES` ahead of the warning and order-rejection bands instead of after them, so 2188 stays `DataAdvisory` inside the widened warning band (and 317 below categorises the same way). The range predicates are unchanged: `Notice::is_warning()` is now true for 2188 and `Notice::is_order_rejection()` remains true for 317 (#806).
+
 ### Fixed
 
+- Error 317 ("Market depth data has been RESET. Please empty deep book contents before applying any new entries.") is a data advisory: it is published as a non-terminal `SubscriptionItem::Notice` on the market-depth subscription instead of ending it, so the rows that rebuild the book still arrive. Consumers discard their book on this notice and apply the updates that follow. Its sibling 316 (market depth HALTED) remains terminal (#806).
+
+- Error 10091 ("Part of requested market data requires additional subscription for API") is classified as a data advisory like 10089, 10090, and 10167: it is published as a non-terminal notice instead of ending the market-data subscription, so ticks that follow it — including delayed option computations — still arrive (#804).
+
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
+
+- System messages (codes 1100, 1101, 1102, 1300) no longer fail every in-flight one-shot request. They are routed as non-terminal notices, like the order-cancellation confirmation (202); `Notice::is_warning()` and `Notice::category()` are unchanged for these codes (#800).
 
 ## [4.0.1] - 2026-09-06
 

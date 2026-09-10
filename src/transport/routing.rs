@@ -3,9 +3,7 @@
 use log::warn;
 
 use crate::errors::Error;
-use crate::messages::{
-    is_warning_message, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE,
-};
+use crate::messages::{is_informational_code, routes_by_request_id, IncomingMessages, Notice, ResponseMessage};
 
 use super::RoutedItem;
 
@@ -27,7 +25,8 @@ pub(crate) enum RoutingDecision {
 }
 
 /// Decoded contents of an Error wire message (type 4), populated regardless of
-/// wire format. Carries both warnings (codes 2100..=2169) and hard errors.
+/// wire format. Carries both warnings ([`crate::messages::WARNING_CODE_RANGE`])
+/// and hard errors.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct DecodedError {
     pub request_id: i32,
@@ -180,20 +179,6 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
     }
 }
 
-/// Check if an error code is a warning.
-///
-/// Warning codes, warning-form order messages, data advisories, and the order
-/// cancellation confirmation (202) are informational — TWS proceeds with the
-/// request, or the frame confirms an outcome the caller asked for — so they
-/// are routed as a `Notice` rather than terminating the subscription as an
-/// `Error`. Note 202 is deliberately *not* in [`is_warning_message`]:
-/// `Notice::is_warning()` stays false for it (it is a cancellation, not a
-/// warning — see `Notice::category`); only the routing disposition treats the
-/// two alike.
-pub(crate) fn is_warning_error(error_code: i32, error_message: &str) -> bool {
-    is_warning_message(error_code, error_message) || DATA_ADVISORY_CODES.contains(&error_code) || error_code == ORDER_CANCELLED_CODE
-}
-
 /// Request ID for unspecified errors
 pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
@@ -226,19 +211,21 @@ pub(crate) enum ErrorDisposition {
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
     let request_id = payload.request_id;
-    // Code 0 — a code-less informational frame, or the fallback for an
-    // undecodable one — classifies as a warning; see `is_warning_message`.
-    let is_warning = is_warning_error(payload.error_code, &payload.error_message);
+    // Informational frames (the same rule as `Notice::is_informational`) are
+    // delivered as a `Notice`: they neither terminate the subscription nor,
+    // when request-less, fail the pending one-shots. Code 0 - a code-less
+    // frame, or the fallback for an undecodable one - is informational.
+    let is_informational = is_informational_code(payload.error_code, &payload.error_message);
 
     if request_id == UNSPECIFIED_REQUEST_ID {
         let notice = Notice::from(payload.clone());
-        if is_warning {
+        if is_informational {
             ErrorDisposition::NoticeOnly(notice)
         } else {
             ErrorDisposition::NoticeAndFailOneShots(notice, Error::from(payload))
         }
     } else {
-        let item = if is_warning {
+        let item = if is_informational {
             RoutedItem::Notice(Notice::from(payload))
         } else {
             RoutedItem::Error(Error::from(payload))

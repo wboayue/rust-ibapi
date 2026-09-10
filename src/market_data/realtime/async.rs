@@ -180,7 +180,8 @@ impl Client {
     /// Returns a builder for a level-2 market-depth (order book) subscription.
     ///
     /// Defaults to `SmartDepth::No`. See [`MarketDepthBuilder`] for the chained
-    /// methods.
+    /// methods, and [`MarketDepths`] for the book-reset (317) and halt (316)
+    /// notices the subscription can carry.
     ///
     /// # Examples
     ///
