@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6.
+- `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).
 
 ### Fixed
 
