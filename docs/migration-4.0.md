@@ -185,6 +185,12 @@ let advisories: [i32; 2] = ibapi::DATA_ADVISORY_CODES;
 let advisories = ibapi::DATA_ADVISORY_CODES;
 ```
 
+**Unreleased follow-up:** adding partial API-entitlement advisory 10091 widens
+the constant again, from `[i32; 4]` to `[i32; 5]`. Its contents are now
+`[2188, 10089, 10090, 10091, 10167]`. Remove an explicit `[i32; 4]` annotation
+as above, or update it to `[i32; 5]`. `Notice::is_data_advisory()` and routing
+both use this same list; 10091 remains visible without ending the subscription.
+
 ### 7. `MarketDataBuilder` moves to `market_data::realtime`
 
 `MarketDataBuilder` lived at `market_data::builder` — a module whose only content was that one type — while its three siblings (`RealtimeBarsBuilder`, `MarketDepthBuilder`, `TickByTickBuilder`) lived under `market_data::realtime`. It now lives beside them, and the `market_data::builder` module is gone:

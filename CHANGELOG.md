@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `DATA_ADVISORY_CODES` includes 10091 and widens from `[i32; 4]` to `[i32; 5]`. Code explicitly binding the previous array type must change; see `docs/migration-4.0.md` §6.
+
 ### Fixed
+
+- Preserve available market-data ticks after partial API-entitlement advisory 10091, including delayed option computations. Both clients deliver it as a nonterminal notice instead of ending the subscription.
 
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
 
