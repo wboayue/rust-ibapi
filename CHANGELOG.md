@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
 
+- `HistoricalDataEnd` start/end decoding accepts every rendering a gateway sends, not just `YYYYMMDD HH:MM:SS TZ`: the zone-less UTC format documented since TWS 10.17 (`YYYYMMDD-HH:MM:SS`), dashed dates with or without a zone name or fractional seconds (`YYYY-MM-DD HH:MM:SS[.f][ UTC]`), and zone-less or space-padded classic layouts. Previously those strings failed decoding (as `UnsupportedTimeZone` or a parse error) and ended the historical-data subscription; zone-less shapes resolve as UTC, the documented meaning of the UTC format and the treatment the news decoder already gives the same rendering.
+
 ## [4.0.1] - 2026-09-06
 
 ### Changed

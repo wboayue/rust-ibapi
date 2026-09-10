@@ -207,7 +207,7 @@ fn test_decode_histogram_data_proto() {
 
 #[test]
 fn test_decode_historical_data_end_proto() {
-    // Wire format for start/end uses "YYYYMMDD HH:MM:SS TZ".
+    // Classic timezone-qualified rendering.
     let proto_msg = crate::proto::HistoricalDataEnd {
         req_id: Some(1),
         start_date_str: Some("20260101 09:30:00 US/Eastern".into()),
@@ -218,6 +218,34 @@ fn test_decode_historical_data_end_proto() {
     assert!(start < end);
     assert_eq!(start.year(), 2026);
     assert_eq!(end.year(), 2026);
+}
+
+#[test]
+fn test_decode_historical_data_end_utc_renderings() {
+    // Every rendering of 2026-01-01 09:30:00 UTC a gateway sends — the zone-less UTC
+    // format documented since TWS 10.17, dashed dates with or without a zone or
+    // fractional seconds, and the zone-less classic layout — decodes to the same
+    // instant instead of failing.
+    let renderings = [
+        "20260101-09:30:00",
+        "20260101 09:30:00",
+        "20260101  09:30:00",
+        "2026-01-01 09:30:00 UTC",
+        "2026-01-01 09:30:00",
+        "2026-01-01 09:30:00.0",
+    ];
+
+    for &rendering in &renderings {
+        let proto_msg = crate::proto::HistoricalDataEnd {
+            req_id: Some(1),
+            start_date_str: Some(rendering.into()),
+            end_date_str: Some(rendering.into()),
+        };
+
+        let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).unwrap();
+        assert_eq!(start, datetime!(2026-01-01 09:30:00 UTC), "rendering: {rendering}");
+        assert_eq!(end, start, "rendering: {rendering}");
+    }
 }
 
 #[test]
@@ -505,7 +533,7 @@ fn test_window_edge_in_dst_fold_or_gap_decodes() {
     assert_eq!(end, datetime!(2026-08-29 08:33:35 UTC));
 
     // A gap reading is pushed forward, not rejected — rejecting it discarded the bars.
-    let gap = super::parse_date_with_tz("20260308 02:30:00 US/Eastern").expect("gap resolves");
+    let gap = super::parse_historical_data_end_timestamp("20260308 02:30:00 US/Eastern").expect("gap resolves");
     assert_eq!(gap, datetime!(2026-03-08 07:30:00 UTC));
 
     let tz = time_tz::timezones::get_by_name("US/Eastern").expect("tz");
