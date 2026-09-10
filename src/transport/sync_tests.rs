@@ -1254,10 +1254,10 @@ impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     }
 }
 
-fn wrap_subscription(
+fn wrap_subscription<T: crate::subscriptions::StreamDecoder<T>>(
     bus: Arc<TcpMessageBus<MemoryStream>>,
     internal: InternalSubscription,
-) -> crate::subscriptions::sync::Subscription<NoticeTestData> {
+) -> crate::subscriptions::sync::Subscription<T> {
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
@@ -1315,12 +1315,12 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
     use crate::contracts::tick_types::TickType;
     use crate::market_data::realtime::TickTypes;
     use crate::messages::IncomingMessages;
-    use crate::subscriptions::{sync::Subscription, DecoderContext, SubscriptionItem};
+    use crate::subscriptions::SubscriptionItem;
     use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, &[])?;
-    let subscription = Subscription::<TickTypes>::new(bus.clone(), internal, DecoderContext::default());
+    let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
     let computation = tick_option_computation()
         .request_id(42)
         .tick_type(TickType::DelayedModelOption as i32)
@@ -1352,6 +1352,59 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
             assert_eq!(greeks.implied_volatility, None);
         }
         other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+    Ok(())
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[test]
+fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::messages::IncomingMessages;
+    use crate::subscriptions::SubscriptionItem;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, &[])?;
+    let subscription = wrap_subscription::<MarketDepths>(bus.clone(), internal);
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
     }
     Ok(())
 }

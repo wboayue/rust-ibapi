@@ -515,7 +515,7 @@ async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMe
 
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
-async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+async fn next_item<T: Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
     tokio::time::timeout(TICK, sub.next())
         .await
         .expect("subscription got no item before timeout")
@@ -570,7 +570,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 10091);
@@ -579,7 +579,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
         }
         other => panic!("expected nonterminal 10091 notice, got {other:?}"),
     }
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
             assert_eq!(greeks.field, TickType::DelayedModelOption);
             assert_eq!(greeks.tick_attribute, Some(0));
@@ -587,6 +587,56 @@ async fn test_subscription_10091_preserves_later_option_computation() {
             assert_eq!(greeks.implied_volatility, None);
         }
         other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[tokio::test]
+async fn test_subscription_317_preserves_later_market_depth() {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = Subscription::new_from_internal::<MarketDepths>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
     }
 }
 

@@ -2,7 +2,7 @@ use prost::Message;
 
 use super::*;
 use crate::common::test_utils::helpers::{error_envelope, proto_response};
-use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES};
+use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
 
 #[test]
 fn test_decoded_error_default() {
@@ -163,18 +163,18 @@ fn test_determine_routing_shared_message() {
 #[test]
 fn test_is_informational_code() {
     // Test range boundaries
-    assert!(is_informational_code(2100, ""));
-    assert!(is_informational_code(2169, ""));
+    assert!(is_informational_code(*WARNING_CODE_RANGE.start(), ""));
+    assert!(is_informational_code(*WARNING_CODE_RANGE.end(), ""));
 
     // Test some values in the middle
     assert!(is_informational_code(2119, ""));
     assert!(is_informational_code(2150, ""));
 
     // Test values outside the range
-    assert!(!is_informational_code(2099, ""));
-    assert!(!is_informational_code(2170, ""));
+    assert!(!is_informational_code(*WARNING_CODE_RANGE.start() - 1, ""));
+    assert!(!is_informational_code(*WARNING_CODE_RANGE.end() + 1, ""));
     assert!(!is_informational_code(200, ""));
-    assert!(!is_informational_code(2200, ""));
+    assert!(!is_informational_code(2300, ""));
 
     // Code 0 — code-less frame (absent error_code, or undecodable-frame
     // fallback) — is informational regardless of message text.
@@ -184,18 +184,12 @@ fn test_is_informational_code() {
 
 #[test]
 fn test_is_informational_code_data_advisory_codes() {
-    // Delayed-data advisories: the request proceeds and data follows.
+    // Routing disposition only; the advisory list, its precedence, and the
+    // neighbour precision live in messages::tests::test_notice_data_advisory.
     for &code in DATA_ADVISORY_CODES {
         assert!(is_informational_code(code, ""), "advisory code {code} should route as a notice");
-
-        // Skip adjacent advisories; this must not classify a whole range.
-        for neighbor in [code - 1, code + 1] {
-            if DATA_ADVISORY_CODES.contains(&neighbor) {
-                continue;
-            }
-            assert!(!is_informational_code(neighbor, ""), "code {neighbor} should not route as a notice");
-        }
     }
+    assert!(!is_informational_code(316, ""), "depth HALTED must stay terminal");
 }
 
 #[test]

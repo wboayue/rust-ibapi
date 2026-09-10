@@ -21,9 +21,10 @@ use crate::transport::{InternalSubscription, MessageBus};
 ///
 /// * `None` — the stream has ended.
 /// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
-/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice (warning code
-///   2100..=2169 or order-cancel code 202) carried on this subscription's
-///   `request_id`; the stream stays open.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice (a warning
+///   code in [`WARNING_CODE_RANGE`](crate::messages::WARNING_CODE_RANGE) or
+///   order-cancel code 202) carried on this subscription's `request_id`; the
+///   stream stays open.
 /// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
 ///
 /// When you only care about data, use [`iter_data`](Subscription::iter_data) (or
