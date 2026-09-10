@@ -232,6 +232,11 @@ impl Client {
 
     /// Gets next valid order id
     ///
+    /// The returned value also raises the client's order-ID generator to at
+    /// least that value — monotonically, never lowering it below locally
+    /// allocated order IDs, including IDs whose order has not yet reached the
+    /// server.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -253,7 +258,7 @@ impl Client {
         )
         .await?;
 
-        self.set_next_order_id(next_order_id);
+        self.raise_next_order_id(next_order_id);
         Ok(next_order_id)
     }
 

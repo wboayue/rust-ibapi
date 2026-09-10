@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `next_valid_order_id()` no longer rewinds the order-id generator: the server's value is applied as a lower bound (`fetch_max`) instead of an overwrite, so an ID already allocated locally — including one whose order has not reached the server yet — is never reissued. Previously a response at or below the local counter, which is what the server returns whenever it has not yet seen the allocated IDs, made the next `next_order_id()` hand out a duplicate and TWS rejected the second order with error 103 (#802).
+
 - Error 317 ("Market depth data has been RESET. Please empty deep book contents before applying any new entries.") is a data advisory: it is published as a non-terminal `SubscriptionItem::Notice` on the market-depth subscription instead of ending it, so the rows that rebuild the book still arrive. Consumers discard their book on this notice and apply the updates that follow. Its sibling 316 (market depth HALTED) remains terminal (#806).
 
 - Error 10091 ("Part of requested market data requires additional subscription for API") is classified as a data advisory like 10089, 10090, and 10167: it is published as a non-terminal notice instead of ending the market-data subscription, so ticks that follow it — including delayed option computations — still arrive (#804).

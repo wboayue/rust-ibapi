@@ -146,9 +146,10 @@ impl Client {
         self.id_manager.next_order_id()
     }
 
-    /// Sets the current value of order ID.
-    pub(crate) fn set_next_order_id(&self, order_id: i32) {
-        self.id_manager.set_order_id(order_id);
+    /// Raises the order-ID generator to at least the given value; never
+    /// lowers it below locally allocated order IDs.
+    pub(crate) fn raise_next_order_id(&self, order_id: i32) {
+        self.id_manager.raise_order_id(order_id);
     }
 
     /// Returns the version of the TWS API server to which the client is connected.
@@ -281,7 +282,7 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            id_manager: ClientIdManager::new(-1),
+            id_manager: ClientIdManager::new(9000),
         }
     }
 

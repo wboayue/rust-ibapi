@@ -211,8 +211,13 @@ impl Client {
 
     /// Gets the next valid order ID from the TWS server.
     ///
-    /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server and updates the client's internal order ID sequence.
+    /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server.
     /// This can be for ensuring that order IDs are unique across multiple clients.
+    ///
+    /// The returned value also raises the client's order-ID generator to at
+    /// least that value — monotonically, never lowering it below locally
+    /// allocated order IDs, including IDs whose order has not yet reached the
+    /// server.
     ///
     /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
     ///
@@ -236,7 +241,7 @@ impl Client {
             expect_proto(decoders::decode_next_valid_id_proto),
         )?;
 
-        self.set_next_order_id(next_order_id);
+        self.raise_next_order_id(next_order_id);
         Ok(next_order_id)
     }
 

@@ -299,6 +299,23 @@ fn next_valid_order_id() {
     assert_eq!(43, results.unwrap(), "next order id");
 }
 
+// The server only knows about IDs it has seen: an ID allocated locally but not
+// yet transmitted is invisible to it, so its answer can sit at or below the
+// local counter. That answer must not rewind the generator.
+#[test]
+fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        prost::Message::encode_to_vec(&crate::proto::NextValidId { order_id: Some(5) }),
+    )]);
+
+    let allocated = client.next_order_id();
+    let server_value = client.next_valid_order_id().expect("next_valid_order_id");
+
+    assert_eq!(server_value, 5, "the server's value is still returned verbatim");
+    assert_eq!(client.next_order_id(), allocated + 1, "generator must not rewind below an allocated ID");
+}
+
 #[test]
 fn completed_orders() {
     let _ = env_logger::try_init();
@@ -722,9 +739,9 @@ fn analyze_surfaces_rejected_what_if_order() {
 fn analyze_returns_order_state_for_the_matching_order() {
     let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::OpenOrder,
-        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+        open_order().order_id(9090).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.set_next_order_id(90);
+    client.raise_next_order_id(9090);
     let contract = Contract::stock("AAPL").build();
 
     let state = client.order(&contract).buy(100).limit(50.0).analyze().expect("analyze should succeed");
@@ -751,15 +768,15 @@ fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[test]
 fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(100);
+    client.raise_next_order_id(9100);
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client.order(&contract).buy(100).limit(50.0).submit().expect("submit should succeed");
-    assert_eq!(order_id.value(), 100);
+    assert_eq!(order_id.value(), 9100);
 
     assert_eq!(request_message_count(&bus), 1);
     let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
-    assert_eq!(request.order_id, Some(100));
+    assert_eq!(request.order_id, Some(9100));
     let order = request.order.expect("request carries an order");
     assert_eq!(order.action.as_deref(), Some("BUY"));
     assert_eq!(order.order_type.as_deref(), Some("LMT"));
@@ -785,7 +802,7 @@ fn submit_rejects_an_invalid_order_before_sending() {
 #[test]
 fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(200);
+    client.raise_next_order_id(9200);
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -799,7 +816,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
         .submit_all()
         .expect("bracket submission should succeed");
 
-    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (200, 201, 202));
+    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (9200, 9201, 9202));
     assert_eq!(request_message_count(&bus), 3);
 
     let orders: Vec<crate::proto::Order> = (0..3)
@@ -814,7 +831,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     // at its default is omitted on the wire, so read them through unwrap_or_default.
     assert_eq!(
         orders.iter().map(|o| o.parent_id.unwrap_or_default()).collect::<Vec<_>>(),
-        vec![0, 200, 200]
+        vec![0, 9200, 9200]
     );
 
     // Only the last order transmits, so TWS receives the trio atomically.
@@ -837,7 +854,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[test]
 fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_blocking_test_client();
-    client.set_next_order_id(300);
+    client.raise_next_order_id(9300);
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
@@ -860,7 +877,7 @@ fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
         .submit_oca_orders(vec![(apple, first), (microsoft, second)])
         .expect("OCA submission should succeed");
 
-    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![300, 301]);
+    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
     for i in 0..2 {
