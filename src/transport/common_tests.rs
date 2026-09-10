@@ -1,5 +1,5 @@
 use super::*;
-use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_OK_CODES};
+use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_OK_CODES, WARNING_CODE_RANGE};
 
 #[test]
 fn test_is_benign_connectivity_notice() {
@@ -25,7 +25,7 @@ fn test_is_benign_connectivity_notice() {
         2107,
         2108, // inactive but available on demand — not benign
         2119, // connecting — not benign
-        2169,
+        *WARNING_CODE_RANGE.end(),
         200,                                  // outside / boundary
         CONNECTIVITY_LOST_CODE,               // 1100 — hard error
         CONNECTIVITY_RESTORED_DATA_LOST_CODE, // 1101 — warn (resubscribe)

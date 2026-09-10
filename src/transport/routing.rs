@@ -25,7 +25,8 @@ pub(crate) enum RoutingDecision {
 }
 
 /// Decoded contents of an Error wire message (type 4), populated regardless of
-/// wire format. Carries both warnings (codes 2100..=2169) and hard errors.
+/// wire format. Carries both warnings ([`crate::messages::WARNING_CODE_RANGE`])
+/// and hard errors.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct DecodedError {
     pub request_id: i32,

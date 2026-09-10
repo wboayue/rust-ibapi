@@ -590,6 +590,55 @@ async fn test_subscription_10091_preserves_later_option_computation() {
     }
 }
 
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[tokio::test]
+async fn test_subscription_317_preserves_later_market_depth() {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = Subscription::new_from_internal::<MarketDepths>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
+    }
+}
+
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[tokio::test]
 async fn test_subscription_hard_error_terminates_stream() {

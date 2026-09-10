@@ -1004,18 +1004,24 @@ fn test_notice_is_cancellation() {
     assert!(!error.is_cancellation());
 }
 
+fn notice_with_code(code: i32) -> Notice {
+    Notice {
+        request_id: None,
+        code,
+        message: String::new(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
 #[test]
 fn test_notice_is_warning() {
     // Codes 2100-2169 are warnings
-    let warning_codes = [2100, 2107, 2119, 2150, 2169];
+    // Boundaries from the constant; 2176 and 2187 are the post-2169 codes IB
+    // shipped that motivated widening the band (#805).
+    let warning_codes = [*WARNING_CODE_RANGE.start(), 2107, 2119, 2150, 2176, 2187, *WARNING_CODE_RANGE.end()];
     for code in warning_codes {
-        let notice = Notice {
-            request_id: None,
-            code,
-            message: format!("Warning with code {}", code),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
+        let notice = notice_with_code(code);
         assert!(notice.is_warning(), "Code {} should be a warning", code);
         assert!(!notice.is_cancellation());
         assert!(!notice.is_system_message());
@@ -1039,16 +1045,10 @@ fn test_notice_is_warning() {
         assert!(!notice.is_error());
     }
 
-    // Codes outside 2100-2169 are not warnings
-    let non_warning_codes = [2099, 2170, 200, 202, 1000];
+    // Codes outside WARNING_CODE_RANGE are not warnings
+    let non_warning_codes = [*WARNING_CODE_RANGE.start() - 1, *WARNING_CODE_RANGE.end() + 1, 200, 202, 1000];
     for code in non_warning_codes {
-        let notice = Notice {
-            request_id: None,
-            code,
-            message: format!("Non-warning with code {}", code),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
+        let notice = notice_with_code(code);
         assert!(!notice.is_warning(), "Code {} should not be a warning", code);
     }
 }
@@ -1116,30 +1116,18 @@ fn test_notice_is_system_message() {
 
 #[test]
 fn test_notice_is_informational() {
-    // Informational includes cancellations, warnings, and system messages
-    let informational_codes = [202, 1100, 1101, 1102, 1300, 2100, 2107, 2169];
+    // Informational includes cancellations, advisories, warnings, and system messages
+    let informational_codes = [202, 317, 1100, 1101, 1102, 1300, 2100, 2107, 2187];
     for code in informational_codes {
-        let notice = Notice {
-            request_id: None,
-            code,
-            message: format!("Informational code {}", code),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
+        let notice = notice_with_code(code);
         assert!(notice.is_informational(), "Code {} should be informational", code);
         assert!(!notice.is_error(), "Code {} should not be an error", code);
     }
 
-    // Non-informational (actual errors)
-    let error_codes = [100, 200, 201, 321, 502, 10000];
+    // Non-informational (actual errors); 316 is 317's terminal sibling.
+    let error_codes = [100, 200, 201, 316, 321, 502, 10000];
     for code in error_codes {
-        let notice = Notice {
-            request_id: None,
-            code,
-            message: format!("Error code {}", code),
-            error_time: None,
-            advanced_order_reject_json: String::new(),
-        };
+        let notice = notice_with_code(code);
         assert!(!notice.is_informational(), "Code {} should not be informational", code);
         assert!(notice.is_error(), "Code {} should be an error", code);
     }
@@ -1192,22 +1180,13 @@ fn test_notice_is_error() {
     assert!(warning.is_informational());
 }
 
-fn notice_with_code(code: i32) -> Notice {
-    Notice {
-        request_id: None,
-        code,
-        message: String::new(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
-
 #[test]
 fn test_notice_is_order_rejection() {
     let start = *ORDER_REJECTION_CODE_RANGE.start();
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
-    for code in [start, start + 1, ORDER_CANCELLED_CODE, end - 1, end] {
+    // 202 and 317 are numerically inside; category() resolves them.
+    for code in [start, start + 1, ORDER_CANCELLED_CODE, 317, end - 1, end] {
         assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
     }
 
@@ -1225,10 +1204,15 @@ fn test_notice_category_partition() {
         (*WARNING_CODE_RANGE.end(), NoticeCategory::Warning),
         (SYSTEM_MESSAGE_CODES[0], NoticeCategory::SystemMessage),
         (SYSTEM_MESSAGE_CODES[3], NoticeCategory::SystemMessage),
+        (2176, NoticeCategory::Warning), // above the old 2169 ceiling (#805)
+        (2187, NoticeCategory::Warning),
+        (*WARNING_CODE_RANGE.end() + 1, NoticeCategory::Error),
         (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200
         (*ORDER_REJECTION_CODE_RANGE.start() + 1, NoticeCategory::OrderRejection), // 201 — hard rejection
+        (316, NoticeCategory::OrderRejection),                                 // depth HALTED — terminal sibling of 317
         (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
-        (2188, NoticeCategory::DataAdvisory),
+        (317, NoticeCategory::DataAdvisory),                                   // precedence over the 200..=399 band (#806)
+        (2188, NoticeCategory::DataAdvisory),                                  // precedence over the 21xx band
         (10089, NoticeCategory::DataAdvisory),
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),
@@ -1299,8 +1283,10 @@ fn test_connectivity_status_subset_of_warning() {
 
 #[test]
 fn test_notice_data_advisory() {
-    // Delayed-data advisories are informational: TWS proceeds with the request
-    // and data follows, so they must not be classified as errors.
+    // Data advisories are informational: TWS proceeds with the request and
+    // data follows, so they must not be classified as errors. Exact lists win
+    // over ranges: every advisory categorises as DataAdvisory whatever band it
+    // is numerically inside (317 in 200..=399, 2188 in the 21xx band).
     for &code in DATA_ADVISORY_CODES {
         let notice = notice_with_code(code);
         assert!(notice.is_data_advisory(), "code {code} should be a data advisory");
@@ -1308,14 +1294,17 @@ fn test_notice_data_advisory() {
         assert!(!notice.is_error(), "code {code} should not be an error");
         assert_eq!(notice.category(), NoticeCategory::DataAdvisory, "code {code} miscategorised");
 
-        // Skip adjacent advisories; this must not classify a whole range.
+        // Adding an advisory must not classify a whole band: a neighbour is an
+        // error unless it is an advisory itself or a warning by range.
         for neighbor in [code - 1, code + 1] {
             if DATA_ADVISORY_CODES.contains(&neighbor) {
                 continue;
             }
             let notice = notice_with_code(neighbor);
             assert!(!notice.is_data_advisory(), "code {neighbor} should not be a data advisory");
-            assert!(notice.is_error(), "code {neighbor} should be an error");
+            if !WARNING_CODE_RANGE.contains(&neighbor) {
+                assert!(notice.is_error(), "code {neighbor} should be an error");
+            }
         }
     }
 }
