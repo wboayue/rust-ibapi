@@ -1095,10 +1095,10 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// Range of error codes that are considered warnings: the whole `21xx` band.
 ///
 /// IB's published table stops at 2169, but the gateway keeps adding codes above
-/// it (2176 "API version does not support fractional share size rules", 2187
-/// "Generic tick data is not available when using delayed market data
-/// fallback"), and a ceiling of 2169 turned each new one into a hard error that
-/// failed in-flight one-shots and ended subscriptions. 2188 sits inside the band
+/// it (2176, the fractional-share size-rule warning; 2187, generic ticks
+/// unavailable on delayed-data fallback), and a ceiling of 2169 turned each new
+/// one into a hard error that failed in-flight one-shots and ended
+/// subscriptions. 2188 sits inside the band
 /// but is a [`DATA_ADVISORY_CODES`] entry, which takes precedence in
 /// [`Notice::category`].
 pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
@@ -1156,7 +1156,12 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
 /// them; only the routing disposition treats them like warnings. Derived from
 /// [`classify`], the same chain behind `Notice::category`.
 pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
-    !matches!(classify(code, message), NoticeCategory::OrderRejection | NoticeCategory::Error)
+    // Exhaustive on purpose: a new `NoticeCategory` variant must decide its
+    // routing disposition here, not inherit one from a wildcard.
+    match classify(code, message) {
+        NoticeCategory::Cancellation | NoticeCategory::DataAdvisory | NoticeCategory::Warning | NoticeCategory::SystemMessage => true,
+        NoticeCategory::OrderRejection | NoticeCategory::Error => false,
+    }
 }
 
 /// Connectivity between IB and TWS has been lost.

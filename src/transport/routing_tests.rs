@@ -185,20 +185,10 @@ fn test_is_informational_code() {
 
 #[test]
 fn test_is_informational_code_data_advisory_codes() {
-    // Data advisories: the request proceeds and data follows.
+    // Routing disposition only; the advisory list, its precedence, and the
+    // neighbour precision live in messages::tests::test_notice_data_advisory.
     for &code in DATA_ADVISORY_CODES {
         assert!(is_informational_code(code, ""), "advisory code {code} should route as a notice");
-
-        // Adding an advisory must not classify a whole band: its neighbours
-        // stay hard errors unless they are advisories themselves or already
-        // warnings by range (2188's neighbours sit inside WARNING_CODE_RANGE).
-        // 316 and 318 around the depth RESET (317) are the #806 precision check.
-        for neighbor in [code - 1, code + 1] {
-            if DATA_ADVISORY_CODES.contains(&neighbor) || WARNING_CODE_RANGE.contains(&neighbor) {
-                continue;
-            }
-            assert!(!is_informational_code(neighbor, ""), "code {neighbor} should not route as a notice");
-        }
     }
     assert!(!is_informational_code(316, ""), "depth HALTED must stay terminal");
 }

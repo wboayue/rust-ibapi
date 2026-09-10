@@ -1399,6 +1399,7 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
     match subscription.next_timeout(TICK) {
         Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
             assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
             assert_eq!(depth.side, 1);
             assert_eq!(depth.price, 101.5);
             assert_eq!(depth.size, 3.0);
