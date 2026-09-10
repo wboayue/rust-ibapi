@@ -185,7 +185,7 @@ fn test_is_warning_error() {
 #[test]
 fn test_is_warning_error_data_advisory_codes() {
     // Delayed-data advisories: the request proceeds and data follows.
-    for code in DATA_ADVISORY_CODES {
+    for &code in DATA_ADVISORY_CODES {
         assert!(is_warning_error(code, ""), "advisory code {code} should route as a warning");
 
         // Skip adjacent advisories; this must not classify a whole range.

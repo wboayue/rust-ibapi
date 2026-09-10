@@ -1126,9 +1126,7 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
     SOCKET_PORT_RESET_CODE,
 ];
 
-/// Data-advisory codes that do not reject the entire request.
-///
-/// These codes do not reject the entire request — the advisory announces a
+/// Data-advisory codes: the request is *not* rejected — the advisory announces a
 /// fallback (delayed market data, historical data delivered without its
 /// up-to-the-second tail, or only the ticks the account is entitled to) and
 /// available data can follow, so these are informational notices, not
@@ -1139,7 +1137,10 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 /// - 10090: Part of requested market data is not subscribed. Subscription-independent ticks are still active.
 /// - 10091: Part of requested market data requires additional subscription for API.
 /// - 10167: Requested market data is not subscribed. Displaying delayed market data.
-pub const DATA_ADVISORY_CODES: [i32; 5] = [2188, 10089, 10090, 10091, 10167];
+///
+/// A slice rather than an array so that adding a code is not a type change
+/// for callers that bind the constant explicitly.
+pub const DATA_ADVISORY_CODES: &[i32] = &[2188, 10089, 10090, 10091, 10167];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
