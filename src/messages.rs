@@ -1105,6 +1105,28 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
 }
 
+/// Check if an error code is informational.
+///
+/// Warning codes, warning-form order messages, data advisories, the order
+/// cancellation confirmation (202), and the system messages
+/// ([`SYSTEM_MESSAGE_CODES`]) are informational — TWS proceeds with the
+/// request, the frame confirms an outcome the caller asked for, or the frame
+/// reports a connection-wide state change rather than a failed request — so
+/// they are routed as a `Notice` rather than terminating the subscription as
+/// an `Error`, and, when request-less, they do not fail the pending one-shots.
+///
+/// System messages never stand in for a per-request answer: after 1100 TWS
+/// still answers or rejects each request itself, and after 1300 the socket is
+/// dropped, so pending one-shots see `Error::ConnectionReset` from the
+/// transport reset and retry. Note 202 and the system codes are deliberately
+/// *not* in [`is_warning_message`]: `Notice::is_warning()` stays false for
+/// them (see `Notice::category`); only the routing disposition treats them
+/// like warnings. This is the single source for both routing and
+/// `Notice::is_informational`, so the two cannot disagree.
+pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
+    code == ORDER_CANCELLED_CODE || is_warning_message(code, message) || SYSTEM_MESSAGE_CODES.contains(&code) || DATA_ADVISORY_CODES.contains(&code)
+}
+
 /// Connectivity between IB and TWS has been lost.
 pub(crate) const CONNECTIVITY_LOST_CODE: i32 = 1100;
 /// Connectivity restored, but market data was lost; resubscription is required.
@@ -1430,7 +1452,7 @@ impl Notice {
     /// Informational notices include cancellation confirmations, warnings,
     /// system/connectivity messages, and data advisories.
     pub fn is_informational(&self) -> bool {
-        self.is_cancellation() || self.is_warning() || self.is_system_message() || self.is_data_advisory()
+        is_informational_code(self.code, &self.message)
     }
 
     /// Returns `true` if this is an error requiring attention.

@@ -1128,6 +1128,31 @@ fn test_request_less_warning_does_not_fail_one_shot() -> Result<(), Error> {
     Ok(())
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[test]
+fn test_request_less_system_message_does_not_fail_one_shot() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.dispatch()?;
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed system message");
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+    Ok(())
+}
+
 /// A one-shot `send_shared_request` drains the shared queue before writing:
 /// a request-less error buffered while no request was in flight must not
 /// poison the next call, which reads only its own response.
@@ -1207,6 +1232,7 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
 // `Err(_)` / `None` as expected.
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {

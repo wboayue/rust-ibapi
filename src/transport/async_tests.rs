@@ -420,6 +420,30 @@ async fn test_request_less_warning_does_not_fail_one_shot() {
     assert!(one_shot.try_next_routed().is_none(), "warning must not fail a one-shot shared request");
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[tokio::test]
+async fn test_request_less_system_message_does_not_fail_one_shot() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+}
+
 /// Order-channel fallback: a notice arrives bound to an `order_id` matching
 /// an order subscription. The dispatcher's `deliver_to_request_id` helper
 /// falls back to the order channel when no request channel matches.
@@ -453,6 +477,7 @@ use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, Subs
 use futures::StreamExt;
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {

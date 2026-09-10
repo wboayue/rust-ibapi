@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
 
+- System messages (codes 1100, 1101, 1102, 1300) no longer fail every in-flight one-shot request. They are routed as non-terminal notices, like the order-cancellation confirmation (202); `Notice::is_warning()` and `Notice::category()` are unchanged for these codes (#800).
+
 ## [4.0.1] - 2026-09-06
 
 ### Changed

@@ -2,7 +2,7 @@ use prost::Message;
 
 use super::*;
 use crate::common::test_utils::helpers::{error_envelope, proto_response};
-use crate::messages::ResponseMessage;
+use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES};
 
 #[test]
 fn test_decoded_error_default() {
@@ -161,61 +161,61 @@ fn test_determine_routing_shared_message() {
 }
 
 #[test]
-fn test_is_warning_error() {
+fn test_is_informational_code() {
     // Test range boundaries
-    assert!(is_warning_error(2100, ""));
-    assert!(is_warning_error(2169, ""));
+    assert!(is_informational_code(2100, ""));
+    assert!(is_informational_code(2169, ""));
 
     // Test some values in the middle
-    assert!(is_warning_error(2119, ""));
-    assert!(is_warning_error(2150, ""));
+    assert!(is_informational_code(2119, ""));
+    assert!(is_informational_code(2150, ""));
 
     // Test values outside the range
-    assert!(!is_warning_error(2099, ""));
-    assert!(!is_warning_error(2170, ""));
-    assert!(!is_warning_error(200, ""));
-    assert!(!is_warning_error(2200, ""));
+    assert!(!is_informational_code(2099, ""));
+    assert!(!is_informational_code(2170, ""));
+    assert!(!is_informational_code(200, ""));
+    assert!(!is_informational_code(2200, ""));
 
     // Code 0 — code-less frame (absent error_code, or undecodable-frame
-    // fallback) — is a warning regardless of message text.
-    assert!(is_warning_error(0, "Warning: Approaching max rate of 50 messages per second (42)"));
-    assert!(is_warning_error(0, ""));
+    // fallback) — is informational regardless of message text.
+    assert!(is_informational_code(0, "Warning: Approaching max rate of 50 messages per second (42)"));
+    assert!(is_informational_code(0, ""));
 }
 
 #[test]
-fn test_is_warning_error_data_advisory_codes() {
+fn test_is_informational_code_data_advisory_codes() {
     // Delayed-data advisories: the request proceeds and data follows.
     for &code in DATA_ADVISORY_CODES {
-        assert!(is_warning_error(code, ""), "advisory code {code} should route as a warning");
+        assert!(is_informational_code(code, ""), "advisory code {code} should route as a notice");
 
         // Skip adjacent advisories; this must not classify a whole range.
         for neighbor in [code - 1, code + 1] {
             if DATA_ADVISORY_CODES.contains(&neighbor) {
                 continue;
             }
-            assert!(!is_warning_error(neighbor, ""), "code {neighbor} should not route as a warning");
+            assert!(!is_informational_code(neighbor, ""), "code {neighbor} should not route as a notice");
         }
     }
 }
 
 #[test]
-fn test_is_warning_error_classifies_order_message_from_text() {
-    assert!(is_warning_error(
+fn test_is_informational_code_classifies_order_message_from_text() {
+    assert!(is_informational_code(
         399,
         "Order Message:\nSELL 1 ES DEC'26\nWarning: Your order will not be placed at the exchange until 2026-08-17 08:30:00 US/Central.",
     ));
-    assert!(!is_warning_error(399, "Order Message:\nOrder cannot be transmitted"));
+    assert!(!is_informational_code(399, "Order Message:\nOrder cannot be transmitted"));
 }
 
 #[test]
-fn test_is_warning_error_order_cancelled_code() {
+fn test_is_informational_code_order_cancelled_code() {
     // 202 confirms a requested cancellation; it must route as a Notice, not
     // terminate the cancel_order / place_order subscription as an Error.
-    assert!(is_warning_error(crate::messages::ORDER_CANCELLED_CODE, ""));
+    assert!(is_informational_code(crate::messages::ORDER_CANCELLED_CODE, ""));
 
     // Neighbors stay hard order rejections.
-    assert!(!is_warning_error(201, ""));
-    assert!(!is_warning_error(203, ""));
+    assert!(!is_informational_code(201, ""));
+    assert!(!is_informational_code(203, ""));
 
     // Only the routing disposition changes: 202 is a cancellation, not a
     // warning, so the notice taxonomy is untouched.
@@ -237,6 +237,64 @@ fn test_classify_error_order_cancelled_routed_is_notice() {
             assert!(notice.is_cancellation());
             assert!(notice.is_informational());
             assert_eq!(notice.category(), crate::messages::NoticeCategory::Cancellation);
+        }
+        other => panic!("expected routed Notice, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_is_informational_code_system_message_codes() {
+    // System messages report a connection-wide state change, never a failed
+    // request, so they route as notices.
+    for code in crate::messages::SYSTEM_MESSAGE_CODES {
+        assert!(is_informational_code(code, ""), "system code {code} should route as a notice");
+
+        // Only the routing disposition changes: the notice taxonomy keeps them
+        // out of `is_warning` and in `NoticeCategory::SystemMessage`.
+        assert!(!crate::messages::is_warning_message(code, ""));
+    }
+
+    // Neighbors of the connectivity codes stay hard errors.
+    for code in [1099, 1103, 1299, 1301] {
+        assert!(!is_informational_code(code, ""), "code {code} should not route as a notice");
+    }
+}
+
+#[test]
+fn test_classify_error_unrouted_system_message_is_notice_only() {
+    // 1102 arrives request-less. It must not fail in-flight one-shot shared
+    // requests (`managed_accounts`, `server_time`, `next_valid_order_id`).
+    let payload = DecodedError {
+        error_code: crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
+        error_message: "Connectivity between IB and TWS has been restored - data maintained.".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::NoticeOnly(notice) => {
+            assert!(notice.is_system_message());
+            assert!(!notice.is_warning());
+            assert_eq!(notice.category(), crate::messages::NoticeCategory::SystemMessage);
+        }
+        other => panic!("expected NoticeOnly, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_error_routed_system_message_is_notice() {
+    // TWS binds a request id to a system message only rarely, but when it does
+    // the frame must not terminate the subscription that owns the id.
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: crate::messages::CONNECTIVITY_LOST_CODE,
+        error_message: "Connectivity between IB and TWS has been lost.".into(),
+        ..Default::default()
+    };
+
+    match classify_error(payload) {
+        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, crate::messages::CONNECTIVITY_LOST_CODE);
+            assert!(notice.is_system_message());
         }
         other => panic!("expected routed Notice, got {other:?}"),
     }
