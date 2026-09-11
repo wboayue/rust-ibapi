@@ -14,7 +14,7 @@ pub(crate) use shutdown::ShutdownSignal;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -25,6 +25,7 @@ use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
+use crate::client::id_generator::ClientIdManager;
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
@@ -268,6 +269,11 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// Latching shutdown flag, shared with the connection so a reconnect in
     /// progress sees the request.
     shutdown: Arc<ShutdownSignal>,
+    /// The client's order-ID generator, raised from the NextValidId frame the
+    /// reconnect handshake re-receives. Installed once via
+    /// [`Self::set_order_ids`] before the processing task starts; absent in
+    /// bus-only test fixtures, which never reconnect a client.
+    order_ids: OnceLock<Arc<ClientIdManager>>,
     connected: Arc<AtomicBool>,
 }
 
@@ -322,6 +328,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown,
+            order_ids: OnceLock::new(),
             connected: Arc::new(AtomicBool::new(true)),
         };
 
@@ -358,6 +365,13 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         });
 
         Ok(message_bus)
+    }
+
+    /// Installs the client's order-ID generator so a successful reconnect
+    /// re-seeds it from the handshake's NextValidId. Called exactly once,
+    /// before [`Self::process_messages`] starts the processing task.
+    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
+        self.order_ids.set(order_ids).expect("order-id generator installed twice");
     }
 
     /// Start processing messages from TWS
@@ -405,6 +419,18 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         if message_bus.shutdown.is_requested() {
                                             debug!("shutdown requested during reconnect; dispatcher task exiting");
                                             break;
+                                        }
+
+                                        // The handshake re-received NextValidId; raise
+                                        // the client's generator from the server's floor so
+                                        // allocation never resumes below it. Only the initial
+                                        // connection seeded the generator before this. Do it
+                                        // before reporting the session as live so a caller
+                                        // gating on `is_connected()` cannot allocate below
+                                        // the new floor.
+                                        if let Some(order_ids) = message_bus.order_ids.get() {
+                                            let metadata = message_bus.connection.connection_metadata().await;
+                                            order_ids.raise_order_id(metadata.next_order_id);
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");

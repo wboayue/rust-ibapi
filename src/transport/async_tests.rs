@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::common::test_utils::helpers;
-use crate::common::test_utils::helpers::{binary_proto, error_frame};
+use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -1203,6 +1203,42 @@ async fn test_ensure_shutdown_joins_processing_task() {
 
     mb.ensure_shutdown().await;
     assert!(!mb.is_connected());
+}
+
+/// A successful automatic reconnect replays the handshake, whose
+/// `NextValidId` is a fresh server floor for order IDs. The bus must raise
+/// the client's generator from it: before this, only the initial connection
+/// seeded the generator and every reconnect silently discarded the value,
+/// leaving allocation stale against the server.
+#[tokio::test]
+async fn test_reconnect_raises_order_ids_from_handshake() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    // First read fails as InvalidFrame (a body too short to hold a message
+    // id), which the processing loop classifies as connection lost.
+    stream.push_inbound(b"xx".to_vec());
+    // Frames the reconnect handshake consumes, in order.
+    let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
+    stream.push_inbound(handshake.into_bytes());
+    stream.push_inbound(next_valid_id_frame(5000));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100));
+    bus.set_order_ids(order_ids.clone());
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while order_ids.current_order_id() < 5000 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "order-id generator was never raised from the reconnect handshake"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
 }
 
 #[tokio::test]
