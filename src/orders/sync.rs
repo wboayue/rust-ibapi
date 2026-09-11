@@ -155,8 +155,8 @@ impl Client {
     ///
     /// Only the current day's executions can be retrieved.
     /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionReport`] will also be returned.
-    /// Join a commission to its execution deterministically by `execution_id` (see the
-    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the two may arrive in either order.
+    /// Join a commission to its execution by `execution_id` (see the
+    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the commission follows its execution.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -446,7 +446,7 @@ impl Client {
     ///
     /// To pair a [`CommissionReport`](crate::orders::CommissionReport) with the
     /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
-    /// `execution_id` — the two arrive in either order but share that key. See
+    /// `execution_id` — the commission follows its execution and shares that key. See
     /// the [`CommissionReport`](crate::orders::CommissionReport) docs for the idiom.
     ///
     /// # Reconnection

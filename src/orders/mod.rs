@@ -1457,15 +1457,16 @@ impl OrderOpenClose {
 ///
 /// # Correlating commissions with executions
 ///
-/// A `CommissionReport` joins to its [`Execution`] deterministically by
+/// A `CommissionReport` joins to its [`Execution`] by
 /// [`execution_id`](CommissionReport::execution_id) — the same value carried on
-/// [`Execution::execution_id`]. There is **no** temporal pairing to reason about:
-/// IBKR may deliver the [`ExecutionData`] and the matching `CommissionReport` in
-/// either order, but the `execution_id` is the stable key linking them. Both
-/// values arrive on the same streams ([`executions`](crate::Client::executions),
+/// [`Execution::execution_id`]. TWS sends the [`ExecutionData`] first and the
+/// matching `CommissionReport` shortly after, with unrelated frames (order
+/// status, open-order updates) possibly in between, so the two are not
+/// adjacent. Both arrive on the same streams
+/// ([`executions`](crate::Client::executions),
 /// [`place_order`](crate::Client::place_order), and
-/// [`order_update_stream`](crate::Client::order_update_stream)), so a wrapper
-/// should index commissions by `execution_id` rather than guessing at arrival order.
+/// [`order_update_stream`](crate::Client::order_update_stream)); index
+/// commissions by `execution_id` rather than by position in the stream.
 ///
 /// # Examples
 ///

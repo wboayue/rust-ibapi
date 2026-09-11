@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `CommissionReport` docs no longer claim it "may arrive in either order" relative to its `ExecutionData`. A live ES fill shows TWS sends the execution first and the commission a few frames later; the routing that keys commissions off the execution's `execution_id` mapping relies on exactly that order. The `Orders` stream decoder also dropped a dead arm that would have decoded a `CommissionsReport` frame as an open order (#788).
+
 - A successful automatic reconnect now re-seeds the client's order-id generator from the `NextValidId` frame the reconnect handshake re-receives. Previously only the initial connection seeded the generator: every reconnect stored the fresh server floor in `ConnectionMetadata` and then discarded it, so after a TWS/IB Gateway restart the client could resume allocating below the server's counter and hit error 103. The re-seed is a monotonic raise and never lowers the generator below IDs allocated before the disconnect (#803).
 
 - `next_valid_order_id()` no longer rewinds the order-id generator: the server's value is applied as a lower bound (`fetch_max`) instead of an overwrite, so an ID already allocated locally — including one whose order has not reached the server yet — is never reissued. Previously a response at or below the local counter, which is what the server returns whenever it has not yet seen the allocated IDs, made the next `next_order_id()` hand out a duplicate and TWS rejected the second order with error 103 (#802).

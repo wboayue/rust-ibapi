@@ -47,7 +47,7 @@ impl Client {
     ///
     /// To pair a [`CommissionReport`] with the
     /// [`ExecutionData`] it belongs to, join on
-    /// `execution_id` — the two arrive in either order but share that key. See
+    /// `execution_id` — the commission follows its execution and shares that key. See
     /// the [`CommissionReport`] docs for the idiom.
     ///
     /// # Reconnection
@@ -380,9 +380,8 @@ impl Client {
     ///
     /// Both [`ExecutionData`] and
     /// [`CommissionReport`] are delivered on this
-    /// stream. Join a commission to its execution deterministically by `execution_id`
-    /// (see the [`CommissionReport`] docs) — the two
-    /// may arrive in either order.
+    /// stream. Join a commission to its execution by `execution_id`
+    /// (see the [`CommissionReport`] docs) — the commission follows its execution.
     ///
     /// # Examples
     ///

@@ -548,11 +548,11 @@ for notice in notices.iter() {
 
 ### Correlating Commissions with Executions
 
-`CommissionReport` joins to its `ExecutionData` deterministically by `execution_id` —
-the same value carried on `Execution::execution_id`. Both arrive on the same streams
-(`executions`, `place_order`, `order_update_stream`), and IBKR may deliver them in
-either order, so index commissions by `execution_id` rather than guessing at arrival
-order. There is no temporal pairing to reason about.
+`CommissionReport` joins to its `ExecutionData` by `execution_id` — the same value
+carried on `Execution::execution_id`. TWS sends the execution first and the commission
+shortly after, but order-status and open-order frames can land between them, so index
+commissions by `execution_id` rather than assuming the two are adjacent. Both arrive on
+the same streams (`executions`, `place_order`, `order_update_stream`).
 
 ```rust
 use ibapi::orders::{CommissionReport, OrderUpdate};
