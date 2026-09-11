@@ -448,3 +448,28 @@ fn test_decode_order_status_proto_rejects_malformed_remaining() {
 
     assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
 }
+
+#[test]
+fn order_binding_requires_complete_identity() {
+    for (perm_id, client_id, order_id, missing) in [
+        (None, Some(0), Some(42), "perm_id"),
+        (Some(9_876_543_210), None, Some(42), "client_id"),
+        (Some(9_876_543_210), Some(0), None, "order_id"),
+    ] {
+        let bytes = prost::Message::encode_to_vec(&crate::proto::OrderBound {
+            perm_id,
+            client_id,
+            order_id,
+        });
+        let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::OrderBound, bytes);
+        assert_eq!(
+            decode_order_bound(&message).unwrap_err().to_string(),
+            format!("error occurred: OrderBound is missing {missing}")
+        );
+    }
+}
+
+#[test]
+fn order_binding_rejects_text_framing() {
+    assert_rejects_text_framing(IncomingMessages::OrderBound, "100\0", decode_order_bound);
+}

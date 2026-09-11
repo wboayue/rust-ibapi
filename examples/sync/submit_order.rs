@@ -63,6 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 execution.execution.side, execution.execution.shares, execution.execution.price, execution.execution.exchange
                             );
                         }
+                        OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
                         OrderUpdate::CommissionReport(report) => {
                             println!("[Monitor] Commission: ${} for execution {}", report.commission, report.execution_id);
                         }

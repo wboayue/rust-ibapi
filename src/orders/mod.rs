@@ -1632,10 +1632,27 @@ pub enum OrderUpdate {
     OrderStatus(OrderStatus),
     /// Open order information.
     OpenOrder(OrderData),
+    /// Mapping from a permanent order ID to an API client's order ID.
+    OrderBound(OrderBound),
     /// Execution data.
     ExecutionData(ExecutionData),
     /// Commission report.
     CommissionReport(CommissionReport),
+}
+
+/// An account-wide permanent order identity bound to an API client's order ID.
+///
+/// API order IDs are scoped to `client_id`. This notification does not grant
+/// another API client permission to modify or cancel the order.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrderBound {
+    /// Permanent order ID assigned by TWS.
+    pub perm_id: i64,
+    /// API client to which the order is bound.
+    pub client_id: i32,
+    /// Order ID in that API client's namespace.
+    pub order_id: i32,
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).

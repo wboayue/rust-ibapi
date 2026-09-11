@@ -1288,3 +1288,22 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
         notice.message
     );
 }
+
+#[tokio::test]
+async fn order_binding_reaches_updates_without_using_raw_order_id() {
+    let (stream, bus) = make_bus();
+    let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
+    let mut update_sub = bus.create_order_update_subscription().await.unwrap();
+    stream.push_inbound(binary_proto(
+        IncomingMessages::OrderBound as i32,
+        &crate::proto::OrderBound {
+            perm_id: Some(9_876_543_210),
+            client_id: Some(73),
+            order_id: Some(42),
+        },
+    ));
+    bus.read_and_route_message().await.unwrap();
+    let message = next_message(&mut update_sub).await;
+    assert_eq!(message.message_type(), IncomingMessages::OrderBound);
+    assert!(tokio::time::timeout(TICK, order_sub.next()).await.is_err());
+}

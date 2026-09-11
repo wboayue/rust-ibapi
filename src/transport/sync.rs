@@ -484,6 +484,9 @@ impl<S: Stream> TcpMessageBus<S> {
         let strategy = order_routing_strategy(message.message_type());
 
         match strategy {
+            OrderRoutingStrategy::OrderUpdateOnly => {
+                self.send_order_update(&message);
+            }
             OrderRoutingStrategy::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
 

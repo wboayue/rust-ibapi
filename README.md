@@ -459,6 +459,7 @@ fn main() {
                     println!("Execution: {} shares @ {}",
                              exec.execution.shares, exec.execution.price);
                 }
+                Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
                 Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission: ${}", report.commission);
                 }
@@ -524,6 +525,7 @@ async fn main() {
                     println!("Execution: {} shares @ {}",
                              exec.execution.shares, exec.execution.price);
                 }
+                Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
                 Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission: ${}", report.commission);
                 }

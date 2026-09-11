@@ -67,6 +67,7 @@ fn is_order_message(message_type: IncomingMessages) -> bool {
     matches!(
         message_type,
         IncomingMessages::OrderStatus
+            | IncomingMessages::OrderBound
             | IncomingMessages::OpenOrder
             | IncomingMessages::OpenOrderEnd
             | IncomingMessages::CompletedOrder
@@ -153,6 +154,8 @@ pub(crate) fn first_unroutable_by_request_id(message_types: &[IncomingMessages])
 /// Describes which channel keys to try and in what order.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum OrderRoutingStrategy {
+    /// Deliver only to the order-update stream, never a client-scoped raw order channel.
+    OrderUpdateOnly,
     /// Try order_id channel, then request_id channel. Store execution_id mapping.
     ExecutionData,
     /// Try order_id channel, then request_id channel.
@@ -170,6 +173,7 @@ pub(crate) enum OrderRoutingStrategy {
 /// Determine the routing strategy for an order-related message type.
 pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStrategy {
     match message_type {
+        IncomingMessages::OrderBound => OrderRoutingStrategy::OrderUpdateOnly,
         IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
         IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => OrderRoutingStrategy::OrderOrShared,

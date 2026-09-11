@@ -1,5 +1,5 @@
 use crate::messages::ResponseMessage;
-use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
+use crate::orders::{CommissionReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::Error;
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
@@ -14,6 +14,15 @@ pub(crate) fn decode_open_order(message: &ResponseMessage) -> Result<OrderData, 
 
 pub(crate) fn decode_order_status(message: &ResponseMessage) -> Result<OrderStatus, Error> {
     decode_order_status_proto(message.require_proto()?)
+}
+
+pub(crate) fn decode_order_bound(message: &ResponseMessage) -> Result<OrderBound, Error> {
+    let p: crate::proto::OrderBound = prost::Message::decode(message.require_proto()?)?;
+    Ok(OrderBound {
+        perm_id: p.perm_id.ok_or_else(|| Error::Simple("OrderBound is missing perm_id".into()))?,
+        client_id: p.client_id.ok_or_else(|| Error::Simple("OrderBound is missing client_id".into()))?,
+        order_id: p.order_id.ok_or_else(|| Error::Simple("OrderBound is missing order_id".into()))?,
+    })
 }
 
 pub(crate) fn decode_execution_data(message: &ResponseMessage) -> Result<ExecutionData, Error> {

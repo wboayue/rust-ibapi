@@ -940,3 +940,28 @@ fn submit_rejects_a_non_finite_price_before_sending() {
     assert!(err.to_string().contains("Invalid price"), "got {err}");
     assert_eq!(request_message_count(&bus), 0);
 }
+
+#[test]
+fn order_update_stream_delivers_order_binding() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderBound,
+        prost::Message::encode_to_vec(&crate::proto::OrderBound {
+            perm_id: Some(9_876_543_210),
+            client_id: Some(0),
+            order_id: Some(42),
+        }),
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+    let stream = client.order_update_stream().unwrap();
+    let Some(Ok(OrderUpdate::OrderBound(bound))) = stream.next_data() else {
+        panic!("expected an order binding notification");
+    };
+    assert_eq!(
+        bound,
+        crate::orders::OrderBound {
+            perm_id: 9_876_543_210,
+            client_id: 0,
+            order_id: 42
+        }
+    );
+}
