@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `NOTICE_STREAM_LAG_CODE` (`-8`), a synthesized notice code delivered in-band on the notice stream (async) when its consumer fell behind the notice fan-out: the broadcast channel (default capacity 1024, unaffected by `ClientBuilder::channel_capacity`) evicted the oldest notices, and this notice — naming the dropped count in its message — is what the consumer sees in their place, where the missed notices were previously skipped with only a `warn!` and the stream resumed from the most recent notice. The notice stream is how a stateful consumer receives the unrouted connection-status notices (1100 lost, 1101/1102 restored) it derives durable conclusions from, so a silent skip was not survivable: losing a 1101 voids every market-data request server-side yet leaves the client's subscriptions looking healthy forever, and losing a restoration notice after a recorded 1100 holds every pending reopen forever. On receiving this notice the consumer must resynchronize rather than resume — any conclusion derived from the stream may rest on dropped notices (a connection-state authority re-baselines its link state and re-establishes subscriptions). The notice-stream instance of `SUBSCRIPTION_LAG_CODE`, closing the step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync notice fan-out is unbounded and cannot lag.
+
 ### Changed
 
 - `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).

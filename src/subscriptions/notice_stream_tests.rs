@@ -111,17 +111,23 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn lag_is_skipped() {
+    async fn lag_delivers_gap_notice_then_retained_notices() {
         let (sender, receiver) = broadcast::channel(2);
         let mut stream = NoticeStream::new(receiver);
 
-        // Overflow the channel; receiver lags.
+        // Overflow the channel; the two oldest notices are evicted.
         for code in 1..=4 {
             sender.send(make_notice(code, "")).unwrap();
         }
-        // First recv lags; loop in `next` skips the lag and returns the most recent.
-        let n = stream.next().await.expect("notice");
-        assert!(n.code >= 3, "expected most recent post-lag notice, got {}", n.code);
+
+        // The lag surfaces in-band: a gap notice naming the dropped count...
+        let gap = stream.next().await.expect("gap notice");
+        assert_eq!(gap.code, crate::NOTICE_STREAM_LAG_CODE, "{gap}");
+        assert!(gap.message.contains("2 notices"), "gap notice should name the dropped count: {gap}");
+
+        // ...and the retained notices follow.
+        let retained = stream.next().await.expect("retained notice");
+        assert!(retained.code >= 3, "expected a retained post-lag notice, got {retained}");
     }
 
     #[tokio::test]
