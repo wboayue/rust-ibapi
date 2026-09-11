@@ -555,22 +555,23 @@ commissions by `execution_id` rather than assuming the two are adjacent. Both ar
 the same streams (`executions`, `place_order`, `order_update_stream`).
 
 ```rust
-use ibapi::orders::{CommissionReport, OrderUpdate};
+use ibapi::orders::{ExecutionData, OrderUpdate};
 use std::collections::HashMap;
 
-let mut commissions: HashMap<String, CommissionReport> = HashMap::new();
+let mut executions: HashMap<String, ExecutionData> = HashMap::new();
 
 let updates = client.order_update_stream()?;
 for update in updates.iter_data() {
     match update? {
-        OrderUpdate::CommissionReport(report) => {
-            // Index each commission by its execution_id.
-            commissions.insert(report.execution_id.clone(), report);
-        }
         OrderUpdate::ExecutionData(exec) => {
-            // Look up the matching commission deterministically.
-            let commission = commissions.get(&exec.execution.execution_id);
-            println!("execution {} commission: {commission:?}", exec.execution.execution_id);
+            // The execution arrives first: index it by execution_id.
+            executions.insert(exec.execution.execution_id.clone(), exec);
+        }
+        OrderUpdate::CommissionReport(report) => {
+            // The commission follows: join it to the execution it belongs to.
+            if let Some(exec) = executions.remove(&report.execution_id) {
+                println!("{} x {} commission {}", exec.execution.shares, exec.contract.symbol, report.commission);
+            }
         }
         _ => {}
     }

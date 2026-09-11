@@ -1471,22 +1471,26 @@ impl OrderOpenClose {
 /// # Examples
 ///
 /// ```
-/// use ibapi::orders::CommissionReport;
+/// use ibapi::orders::{CommissionReport, Execution};
 /// use std::collections::HashMap;
 ///
-/// // Index each CommissionReport by its execution_id as it arrives.
-/// let mut commissions: HashMap<String, CommissionReport> = HashMap::new();
+/// // The execution arrives first: index it by execution_id.
+/// let mut executions: HashMap<String, Execution> = HashMap::new();
+/// let execution = Execution {
+///     execution_id: "0000e1a7.0001.01".to_string(),
+///     shares: 100.0,
+///     ..Default::default()
+/// };
+/// executions.insert(execution.execution_id.clone(), execution);
+///
+/// // The commission follows: join it to its execution by execution_id.
 /// let report = CommissionReport {
 ///     execution_id: "0000e1a7.0001.01".to_string(),
 ///     commission: 1.25,
 ///     ..Default::default()
 /// };
-/// commissions.insert(report.execution_id.clone(), report);
-///
-/// // On each ExecutionData, look up its commission deterministically by execution_id.
-/// let exec_id = "0000e1a7.0001.01";
-/// if let Some(commission) = commissions.get(exec_id) {
-///     println!("commission for {exec_id}: {}", commission.commission);
+/// if let Some(execution) = executions.remove(&report.execution_id) {
+///     println!("{} shares, commission {}", execution.shares, report.commission);
 /// }
 /// ```
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

@@ -4,7 +4,7 @@ use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::order_builder::PeggedToBenchmark;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, PlaceOrder};
-use ibapi::subscriptions::SubscriptionItem;
+use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
 use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
 use serial_test::serial;
@@ -357,10 +357,62 @@ async fn front_month_es(client: &Client) -> Contract {
         .expect("no ES listing beyond the cutoff")
 }
 
+/// Drain `sub` until both the `ExecutionData` and its `CommissionReport` have
+/// arrived, and check they share an `execution_id`. Returns `Err` instead of
+/// panicking so the caller can flatten the position before failing.
+async fn observe_execution_then_commission(sub: &mut Subscription<PlaceOrder>) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut execution_id: Option<String> = None;
+    let mut commission_id: Option<String> = None;
+    while execution_id.is_none() || commission_id.is_none() {
+        match timeout(deadline.saturating_duration_since(Instant::now()), sub.next()).await {
+            Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec))))) => execution_id = Some(exec.execution.execution_id),
+            Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report))))) => commission_id = Some(report.execution_id),
+            Ok(Some(Ok(SubscriptionItem::Notice(notice)))) if notice.is_order_rejection() => return Err(format!("order rejected: {notice}")),
+            Ok(Some(Ok(_))) => continue,
+            Ok(Some(Err(e))) => return Err(format!("subscription error: {e}")),
+            Ok(None) => return Err(format!("subscription ended: execution={execution_id:?} commission={commission_id:?}")),
+            // A commission that reached TWS's wire before its execution is dropped
+            // by routing (#788), so that ordering shows up here as a missing commission.
+            Err(_) => {
+                return Err(format!(
+                    "fill incomplete after 15s: execution={execution_id:?} commission={commission_id:?}"
+                ))
+            }
+        }
+    }
+    if execution_id != commission_id {
+        return Err(format!(
+            "commission keyed to a different execution: {execution_id:?} vs {commission_id:?}"
+        ));
+    }
+    Ok(())
+}
+
+/// Sell one contract at market and wait for the fill, so a failing assertion
+/// never leaves the paper account long ES.
+async fn flatten(client: &Client, contract: &Contract) {
+    rate_limit();
+    let sell_id = client.next_order_id();
+    let mut sell = client
+        .place_order(sell_id, contract, &market_order(Action::Sell, 1.0))
+        .await
+        .expect("sell failed");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while let Ok(Some(item)) = timeout(deadline.saturating_duration_since(Instant::now()), sell.next()).await {
+        if let Ok(SubscriptionItem::Data(PlaceOrder::OrderStatus(status))) = item {
+            if status.status == OrderStatusKind::Filled {
+                return;
+            }
+        }
+    }
+    eprintln!("warning: ES sell did not report Filled within 15s; check the paper account");
+}
+
 /// A live fill delivers `ExecutionData` and then its `CommissionReport` on the
-/// `place_order` subscription, in that order. The commission is routed by the
-/// `execution_id` mapping the execution establishes, so a commission-first wire
-/// order would surface here as a missing commission (#788).
+/// `place_order` subscription. The commission is routed by the `execution_id`
+/// mapping the execution establishes, so this also guards against the
+/// commission-first wire order described in #788.
 #[tokio::test]
 #[serial(orders)]
 async fn es_fill_delivers_execution_then_commission() {
@@ -375,35 +427,9 @@ async fn es_fill_delivers_execution_then_commission() {
         .await
         .expect("buy failed");
 
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let mut execution_id: Option<String> = None;
-    let mut commission_id: Option<String> = None;
-    while execution_id.is_none() || commission_id.is_none() {
-        match timeout(deadline.saturating_duration_since(Instant::now()), sub.next()).await {
-            Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec))))) => {
-                assert!(commission_id.is_none(), "commission report arrived before its execution");
-                execution_id = Some(exec.execution.execution_id);
-            }
-            Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report))))) => commission_id = Some(report.execution_id),
-            Ok(Some(_)) => continue,
-            Ok(None) | Err(_) => panic!("fill incomplete after 15s: execution={execution_id:?} commission={commission_id:?}"),
-        }
-    }
-    assert_eq!(execution_id, commission_id, "commission report keyed to a different execution");
-
-    // Flatten the position.
-    rate_limit();
-    let sell_id = client.next_order_id();
-    let mut sell = client
-        .place_order(sell_id, &contract, &market_order(Action::Sell, 1.0))
-        .await
-        .expect("sell failed");
-    let deadline = Instant::now() + Duration::from_secs(15);
-    while let Ok(Some(item)) = timeout(deadline.saturating_duration_since(Instant::now()), sell.next()).await {
-        if let Ok(SubscriptionItem::Data(PlaceOrder::OrderStatus(status))) = item {
-            if status.status == OrderStatusKind::Filled {
-                break;
-            }
-        }
+    let outcome = observe_execution_then_commission(&mut sub).await;
+    flatten(&client, &contract).await;
+    if let Err(reason) = outcome {
+        panic!("{reason}");
     }
 }
