@@ -56,7 +56,6 @@ impl StreamDecoder<CancelOrder> for CancelOrder {
 impl StreamDecoder<Orders> for Orders {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::CompletedOrder,
-        IncomingMessages::CommissionsReport,
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
         IncomingMessages::OpenOrderEnd,
@@ -66,7 +65,6 @@ impl StreamDecoder<Orders> for Orders {
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
             IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(message)?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
             IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),

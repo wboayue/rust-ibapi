@@ -4,9 +4,10 @@ use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::order_builder::PeggedToBenchmark;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, PlaceOrder};
+use ibapi::subscriptions::sync::Subscription;
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Error, NoticeCategory};
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
 use serial_test::serial;
 
 fn connect() -> (Client, ClientId) {
@@ -325,4 +326,102 @@ fn place_pegged_to_benchmark() {
 
     rate_limit();
     let _ = client.cancel_order(order_id, "");
+}
+
+fn market_order(action: Action, quantity: f64) -> Order {
+    Order {
+        action,
+        total_quantity: quantity,
+        order_type: "MKT".to_string(),
+        ..Default::default()
+    }
+}
+
+/// Front-month ES: the CME listing with the earliest last-trade date that is
+/// still more than a week out, so a test never trades into expiry.
+fn front_month_es(client: &Client) -> Contract {
+    let query = Contract::futures("ES").on_exchange("CME").any_month().build();
+    rate_limit();
+    let details = client.contract_details(&query).expect("contract_details failed");
+    let cutoff = yyyymmdd_from_now(7);
+    details
+        .into_iter()
+        .map(|d| d.contract)
+        .filter(|c| c.last_trade_date_or_contract_month > cutoff)
+        .min_by(|a, b| a.last_trade_date_or_contract_month.cmp(&b.last_trade_date_or_contract_month))
+        .expect("no ES listing beyond the cutoff")
+}
+
+/// Drain `sub` until both the `ExecutionData` and its `CommissionReport` have
+/// arrived, and check they share an `execution_id`. Returns `Err` instead of
+/// panicking so the caller can flatten the position before failing.
+fn observe_execution_then_commission(sub: &Subscription<PlaceOrder>) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut execution_id: Option<String> = None;
+    let mut commission_id: Option<String> = None;
+    while execution_id.is_none() || commission_id.is_none() {
+        match sub.next_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec)))) => execution_id = Some(exec.execution.execution_id),
+            Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report)))) => commission_id = Some(report.execution_id),
+            Some(Ok(SubscriptionItem::Notice(notice))) if notice.is_order_rejection() => return Err(format!("order rejected: {notice}")),
+            Some(Ok(_)) => continue,
+            Some(Err(e)) => return Err(format!("subscription error: {e}")),
+            // A commission that reached TWS's wire before its execution is dropped
+            // by routing (#788), so that ordering shows up here as a missing commission.
+            None => {
+                return Err(format!(
+                    "fill incomplete after 15s: execution={execution_id:?} commission={commission_id:?}"
+                ))
+            }
+        }
+    }
+    if execution_id != commission_id {
+        return Err(format!(
+            "commission keyed to a different execution: {execution_id:?} vs {commission_id:?}"
+        ));
+    }
+    Ok(())
+}
+
+/// Sell one contract at market and wait for the fill, so a failing assertion
+/// never leaves the paper account long ES.
+fn flatten(client: &Client, contract: &Contract) {
+    rate_limit();
+    let sell_id = client.next_order_id();
+    let sell = client
+        .place_order(sell_id, contract, &market_order(Action::Sell, 1.0))
+        .expect("sell failed");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while let Some(item) = sell.next_timeout(deadline.saturating_duration_since(Instant::now())) {
+        if let Ok(SubscriptionItem::Data(PlaceOrder::OrderStatus(status))) = item {
+            if status.status == OrderStatusKind::Filled {
+                return;
+            }
+        }
+    }
+    eprintln!("warning: ES sell did not report Filled within 15s; check the paper account");
+}
+
+/// A live fill delivers `ExecutionData` and then its `CommissionReport` on the
+/// `place_order` subscription. The commission is routed by the `execution_id`
+/// mapping the execution establishes, so this also guards against the
+/// commission-first wire order described in #788.
+#[test]
+#[serial(orders)]
+fn es_fill_delivers_execution_then_commission() {
+    require_globex_open();
+    let (client, _client_id) = connect();
+    let contract = front_month_es(&client);
+
+    rate_limit();
+    let order_id = client.next_order_id();
+    let sub = client
+        .place_order(order_id, &contract, &market_order(Action::Buy, 1.0))
+        .expect("buy failed");
+
+    let outcome = observe_execution_then_commission(&sub);
+    flatten(&client, &contract);
+    if let Err(reason) = outcome {
+        panic!("{reason}");
+    }
 }
