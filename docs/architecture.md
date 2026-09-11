@@ -200,6 +200,7 @@ The `Client` can be shared between threads for concurrent operations:
 - Maximum 20 reconnection attempts by default
 - Configurable via `ClientBuilder::max_reconnect_attempts` / `ClientBuilder::reconnect_forever`
 - Async subscriptions ride bounded broadcast channels (default 1024, `ClientBuilder::channel_capacity`); a lagging consumer gets an in-band `SUBSCRIPTION_LAG_CODE` notice for the evicted frames. Sync channels are unbounded; a stalled consumer triggers queue-depth `warn!` watermarks instead
+- A finished reconnect publishes a `TRANSPORT_RECONNECT_CODE` notice to the notice stream (in addition to `Error::ConnectionReset` on every live subscription): TWS never frames the reconnect itself and does not replay 1101/1102 on the new connection, so the notice stream is otherwise blind to the socket generation change
 
 ### Connection Monitoring
 Use `client.is_connected()` to check connection status:

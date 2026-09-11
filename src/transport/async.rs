@@ -26,7 +26,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame};
@@ -490,6 +490,15 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         for sender in self.shared_channel_senders.read().await.values().flatten() {
             let _ = sender.send(Error::ConnectionReset.into());
         }
+
+        // The notice stream is the central carrier of connection-status
+        // information (1100/1101/1102 land there), but TWS never frames the
+        // socket reconnect itself and does not replay restoration notices on
+        // the new connection — so publish the reconnect there the same way
+        // `report_unroutable_frame` publishes decode failures: as a
+        // synthesized notice. A connection-state consumer that recorded 1100
+        // before the drop reconciles on this instead of stranding on it.
+        let _ = self.connection.notice_sender.send(transport_reconnect_notice());
 
         self.request_channels.write().await.clear();
         self.order_channels.write().await.clear();

@@ -13,7 +13,7 @@ use super::*;
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{binary_proto, error_frame};
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::OutgoingMessages;
+use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
 
 /// Build a binary-text-payload response body from a pipe-delimited test input.
@@ -1109,6 +1109,26 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
     // channel's current tail: it must not read the stale ConnectionReset.
     let mut late = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
     assert!(late.try_next_routed().is_none(), "post-reset shared subscription read a stale reset");
+}
+
+/// `reset_channels` also publishes the reconnect notice to the notice stream:
+/// a connection-state consumer subscribed there learns the socket generation
+/// changed even with no live subscription to carry a `ConnectionReset`. TWS
+/// never replays 1101/1102 on the new connection, so this notice is the only
+/// signal that un-strands state recorded from the previous one (a held 1100).
+#[tokio::test]
+async fn test_reset_channels_publishes_reconnect_notice_to_notice_stream() {
+    let (_, bus) = make_bus();
+
+    let mut notices = bus.connection.notice_sender.subscribe();
+
+    bus.reset_channels().await;
+
+    let notice = tokio::time::timeout(TICK, notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
 }
 
 /// `ensure_shutdown` joins the running message-processing task and reports

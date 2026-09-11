@@ -1171,8 +1171,8 @@ pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 /// Synthesized notice code emitted when a handshake-time frame's
 /// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
 /// (TWS uses 0+); the other client-synthesized codes are
-/// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`], and
-/// [`SUBSCRIPTION_LAG_CODE`]. See
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
+/// [`SUBSCRIPTION_LAG_CODE`], and [`TRANSPORT_RECONNECT_CODE`]. See
 /// [`Notice::is_handshake_synthetic`].
 pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 
@@ -1190,7 +1190,8 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 ///
 /// Negative, like the other client-synthesized notice codes
 /// ([`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`],
-/// [`SUBSCRIPTION_LAG_CODE`]); TWS itself only uses codes 0 and up.
+/// [`SUBSCRIPTION_LAG_CODE`], [`TRANSPORT_RECONNECT_CODE`]); TWS itself only
+/// uses codes 0 and up.
 ///
 /// This is the observable form of a framing desynchronization: the length
 /// prefix is positional, so once a read starts at the wrong offset every
@@ -1227,6 +1228,43 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
     let message = format!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
     log::warn!("{message}");
     Notice::synthesized(SUBSCRIPTION_LAG_CODE, message)
+}
+
+/// Synthesized notice code published to the notice stream (sync and async)
+/// whenever the transport finishes reconnecting its socket to TWS/Gateway: a
+/// new connection whose server-side state starts empty, so every request
+/// subscription made on the previous connection is gone, and unrouted-notice
+/// state — notably the 1100/1101/1102 connection-status sequence — describes
+/// the previous connection only.
+///
+/// Negative, like the other client-synthesized notice codes; TWS itself only
+/// uses codes 0 and up.
+///
+/// TWS never frames this event itself: 1101/1102 announce the restoration
+/// *transition* to clients connected at that moment and are not replayed to a
+/// client that connects afterwards, so a consumer that recorded 1100 ("TWS
+/// lost its IB-server link") before a socket drop cannot learn from the new
+/// connection that the link is back. On receiving this notice, treat every
+/// fact gathered from the previous connection as describing that connection
+/// alone: re-establish what the new session must provide (resubscribe
+/// requests), and reset connection-state conclusions — a recorded 1100 — to
+/// the fresh-connection baseline, the same baseline a new client starts from,
+/// where a still-broken link announces itself with a prompt 1100.
+///
+/// Like the other client-synthesized codes this classifies as
+/// [`NoticeCategory::Error`] ("everything else"); consumers match the constant
+/// itself rather than the category.
+pub const TRANSPORT_RECONNECT_CODE: i32 = -7;
+
+/// Build the notice published to the notice stream after the transport
+/// reconnects its socket; see [`TRANSPORT_RECONNECT_CODE`]. The transport
+/// already logs the reconnect itself, so this emits no log line. The single
+/// owner of the reconnect wording.
+pub(crate) fn transport_reconnect_notice() -> Notice {
+    Notice::synthesized(
+        TRANSPORT_RECONNECT_CODE,
+        "transport reconnected to TWS/Gateway; this is a new connection whose server-side state starts empty, so every request subscription from the previous connection is gone".to_string(),
+    )
 }
 
 /// Typed classification of a [`Notice`] by TWS error-code range.
@@ -1373,7 +1411,7 @@ impl Notice {
     /// advanced-order-reject JSON. Used by the client-side observability
     /// codes (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`],
     /// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
-    /// [`SUBSCRIPTION_LAG_CODE`]).
+    /// [`SUBSCRIPTION_LAG_CODE`], [`TRANSPORT_RECONNECT_CODE`]).
     pub(crate) fn synthesized(code: i32, message: String) -> Notice {
         Notice {
             request_id: None,

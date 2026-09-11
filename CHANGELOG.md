@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `TRANSPORT_RECONNECT_CODE` (`-7`), a synthesized notice code published to the notice stream (sync and async) whenever the transport finishes reconnecting its socket to TWS/Gateway. The reconnect previously reached only request/order/shared subscription channels (as `Error::ConnectionReset`): a consumer watching the notice stream for connection status (1100 lost, 1101/1102 restored) had no way to learn the socket generation changed — TWS never frames the reconnect itself, and 1101/1102 announce the restoration transition to clients connected at that moment, so they are not replayed on the new connection. A consumer that recorded 1100 before the socket drop could therefore strand on it indefinitely after a successful reconnect. On receiving this notice, treat every fact gathered from the previous connection as describing that connection alone: re-establish what the new session must provide (resubscribe requests) and reset connection-state conclusions to the fresh-connection baseline — the same baseline a new client starts from, where a still-broken link announces itself with a prompt 1100. Like the other client-synthesized codes it classifies as `NoticeCategory::Error`; consumers match the constant itself.
+
 ### Changed
 
 - `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).

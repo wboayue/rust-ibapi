@@ -22,7 +22,7 @@ use super::routing::{
     RoutingDecision,
 };
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
-use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
 
@@ -264,6 +264,12 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.notify_all(|| Error::ConnectionReset.into());
         self.orders.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        // TWS never frames the socket reconnect itself and does not replay
+        // restoration notices on the new connection, so the notice fan-out —
+        // the carrier 1100/1101/1102 arrive on — learns the socket generation
+        // changed from this synthesized notice alone; see
+        // `TRANSPORT_RECONNECT_CODE`.
+        self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
 
         self.requests.clear();
         self.orders.clear();
