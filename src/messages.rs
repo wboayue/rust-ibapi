@@ -1092,8 +1092,14 @@ pub const ORDER_CANCELLED_CODE: i32 = 202;
 /// Generic order-message code whose text determines whether TWS reports a warning or an error.
 pub const ORDER_MESSAGE_CODE: i32 = 399;
 
-/// Range of error codes that are considered warnings (2100-2169).
-pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
+/// Range of error codes that are considered warnings: the whole `21xx` band.
+///
+/// IB's published table stops at 2169, but the gateway keeps adding codes above
+/// it (2176, the fractional-share size-rule warning; 2187, generic ticks
+/// unavailable on delayed-data fallback), and a ceiling of 2169 turned each new
+/// one into a hard error that failed in-flight one-shots and ended
+/// subscriptions.
+pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 
 /// Code 0 is a code-less frame: IB Gateway omits `error_code` on informational
 /// notices (e.g. "Warning: Approaching max rate of 50 messages per second"),
@@ -1103,6 +1109,51 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
     code == 0
         || WARNING_CODE_RANGE.contains(&code)
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
+}
+
+/// Classify a raw error frame into a disjoint [`NoticeCategory`].
+///
+/// The single owner of the precedence chain documented on [`NoticeCategory`];
+/// [`Notice::category`] and [`is_informational_code`] both derive from it, so
+/// routing and the public partition cannot disagree.
+pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
+    if code == ORDER_CANCELLED_CODE {
+        NoticeCategory::Cancellation
+    } else if DATA_ADVISORY_CODES.contains(&code) {
+        NoticeCategory::DataAdvisory
+    } else if is_warning_message(code, message) {
+        NoticeCategory::Warning
+    } else if SYSTEM_MESSAGE_CODES.contains(&code) {
+        NoticeCategory::SystemMessage
+    } else if ORDER_REJECTION_CODE_RANGE.contains(&code) {
+        NoticeCategory::OrderRejection
+    } else {
+        NoticeCategory::Error
+    }
+}
+
+/// Check if an error code is informational: every [`NoticeCategory`] except
+/// `OrderRejection` and `Error`.
+///
+/// For these TWS proceeds with the request, the frame confirms an outcome the
+/// caller asked for, or the frame reports a connection-wide state change
+/// rather than a failed request — so they are routed as a `Notice` rather
+/// than terminating the subscription as an `Error`, and, when request-less,
+/// they do not fail the pending one-shots.
+///
+/// System messages never stand in for a per-request answer: after 1100 TWS
+/// still answers or rejects each request itself, and after 1300 the socket is
+/// dropped, so pending one-shots see `Error::ConnectionReset` from the
+/// transport reset and retry. Note 202 and the system codes are deliberately
+/// *not* in [`is_warning_message`]: `Notice::is_warning()` stays false for
+/// them; only the routing disposition treats them like warnings.
+pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
+    // Exhaustive on purpose: a new `NoticeCategory` variant must decide its
+    // routing disposition here, not inherit one from a wildcard.
+    match classify(code, message) {
+        NoticeCategory::Cancellation | NoticeCategory::DataAdvisory | NoticeCategory::Warning | NoticeCategory::SystemMessage => true,
+        NoticeCategory::OrderRejection | NoticeCategory::Error => false,
+    }
 }
 
 /// Connectivity between IB and TWS has been lost.
@@ -1126,12 +1177,14 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
     SOCKET_PORT_RESET_CODE,
 ];
 
-/// Data-advisory codes: the request is *not* rejected — the advisory announces a
-/// fallback (delayed market data, historical data delivered without its
-/// up-to-the-second tail, or only the ticks the account is entitled to) and
-/// available data can follow, so these are informational notices, not
-/// errors. Classifying them as errors would terminate the subscription
-/// before its data arrives.
+/// Data-advisory codes: frames that look like errors but reject nothing — the
+/// request stands and data keeps flowing. Each one describes what will arrive
+/// (a fallback, a partial entitlement, or a reset of what was already
+/// delivered), so they are informational notices, not errors. Classifying them
+/// as errors would terminate the subscription before its data arrives.
+/// - 317: Market depth data has been RESET. Please empty deep book contents
+///   before applying any new entries. (Consumer contract on
+///   [`MarketDepths`](crate::market_data::realtime::MarketDepths).)
 /// - 2188: Up-to-the-second historical data requires additional subscription for the API.
 /// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
 /// - 10090: Part of requested market data is not subscribed. Subscription-independent ticks are still active.
@@ -1140,7 +1193,7 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 ///
 /// A slice rather than an array so that adding a code is not a type change
 /// for callers that bind the constant explicitly.
-pub const DATA_ADVISORY_CODES: &[i32] = &[2188, 10089, 10090, 10091, 10167];
+pub const DATA_ADVISORY_CODES: &[i32] = &[317, 2188, 10089, 10090, 10091, 10167];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
@@ -1163,16 +1216,18 @@ pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
 ///
 /// Includes parameter validation, contract-not-found, margin and risk-check
 /// rejections. Note: [`ORDER_CANCELLED_CODE`] (202) is numerically inside this
-/// range but is a *confirmation*, not a rejection. Code [`ORDER_MESSAGE_CODE`]
-/// (399) can instead carry warning text. See [`Notice::category`] for partition
+/// range but is a *confirmation*, not a rejection; 317 (market depth RESET) is
+/// a [`DATA_ADVISORY_CODES`] entry; code [`ORDER_MESSAGE_CODE`] (399) can
+/// instead carry warning text. See [`Notice::category`] for partition
 /// semantics.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
 /// Synthesized notice code emitted when a handshake-time frame's
 /// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
 /// (TWS uses 0+); the other client-synthesized codes are
-/// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`], and
-/// [`SUBSCRIPTION_LAG_CODE`]. See
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
+/// [`SUBSCRIPTION_LAG_CODE`], [`NOTICE_STREAM_LAG_CODE`], and
+/// [`TRANSPORT_RECONNECT_CODE`]. See
 /// [`Notice::is_handshake_synthetic`].
 pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 
@@ -1190,7 +1245,9 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 ///
 /// Negative, like the other client-synthesized notice codes
 /// ([`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`],
-/// [`SUBSCRIPTION_LAG_CODE`]); TWS itself only uses codes 0 and up.
+/// [`SUBSCRIPTION_LAG_CODE`], [`NOTICE_STREAM_LAG_CODE`],
+/// [`TRANSPORT_RECONNECT_CODE`]); TWS itself only
+/// uses codes 0 and up.
 ///
 /// This is the observable form of a framing desynchronization: the length
 /// prefix is positional, so once a read starts at the wrong offset every
@@ -1229,6 +1286,78 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
     Notice::synthesized(SUBSCRIPTION_LAG_CODE, message)
 }
 
+/// Synthesized notice code delivered in-band on the notice stream when its
+/// consumer fell behind the notice fan-out: the broadcast channel evicted the
+/// oldest notices, and this notice — carrying the dropped count in its
+/// message — is what the consumer sees in their place.
+///
+/// Negative, like the other client-synthesized notice codes; TWS itself only
+/// uses codes 0 and up.
+///
+/// The notice stream is how a stateful consumer receives the unrouted
+/// connection-status notices (1100 lost, 1101/1102 restored) it derives
+/// durable conclusions from, so a silent skip is not survivable: losing a
+/// 1101 voids every market-data request server-side yet leaves the client's
+/// subscriptions looking healthy forever, and losing a restoration notice
+/// after a recorded 1100 holds every pending reopen forever. On receiving
+/// this notice the stream's conclusions are unknown — any of them may rest
+/// on notices that were dropped — so the consumer must resynchronize rather
+/// than resume: treat recorded state as describing an unknown moment between
+/// the eviction and now, and re-derive it (a connection-state authority
+/// re-baselines its link state and re-establishes subscriptions). This is
+/// the notice-stream instance of [`SUBSCRIPTION_LAG_CODE`], closing the
+/// step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync
+/// notice fan-out is unbounded and cannot lag.
+pub const NOTICE_STREAM_LAG_CODE: i32 = -7;
+
+/// Build the in-band notice delivered when the notice stream's consumer fell
+/// behind the notice fan-out and `skipped` notices were evicted, and emit the
+/// matching `warn!`. The single owner of the notice-stream lag wording; see
+/// [`NOTICE_STREAM_LAG_CODE`].
+#[cfg(feature = "async")]
+pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
+    let message = format!("notice stream fell behind; {skipped} notices dropped (consumer lagged the notice fan-out)");
+    log::warn!("{message}");
+    Notice::synthesized(NOTICE_STREAM_LAG_CODE, message)
+}
+
+/// Synthesized notice code published to the notice stream (sync and async)
+/// after the transport finishes reconnecting its socket to TWS/Gateway: a new
+/// connection whose server-side state starts empty, so every request
+/// subscription made on the previous connection is gone, and unrouted-notice
+/// state — notably the 1100/1101/1102 connection-status sequence — describes
+/// the previous connection only.
+///
+/// Negative, like the other client-synthesized notice codes; TWS itself only
+/// uses codes 0 and up.
+///
+/// TWS never frames this event itself: 1101/1102 announce the restoration
+/// *transition* to clients connected at that moment and are not replayed to a
+/// client that connects afterwards, so a consumer that recorded 1100 ("TWS
+/// lost its IB-server link") before a socket drop cannot learn from the new
+/// connection that the link is back. On receiving this notice, treat every
+/// fact gathered from the previous connection as describing that connection
+/// alone: re-establish what the new session must provide (resubscribe
+/// requests), and reset connection-state conclusions — a recorded 1100 — to
+/// the fresh-connection baseline a new client starts from, then let the new
+/// connection's own notices re-derive the link state.
+///
+/// Published after the reconnect's channel reset completes, so a consumer may
+/// resubscribe from inside its handler without racing that reset. Like the
+/// other client-synthesized codes this classifies as
+/// [`NoticeCategory::Error`] ("everything else"); consumers match the constant
+/// itself rather than the category.
+pub const TRANSPORT_RECONNECT_CODE: i32 = -8;
+
+/// Build the [`TRANSPORT_RECONNECT_CODE`] notice. Emits no log line: the
+/// transport already logs the reconnect. The single owner of the wording.
+pub(crate) fn transport_reconnect_notice() -> Notice {
+    Notice::synthesized(
+        TRANSPORT_RECONNECT_CODE,
+        "transport reconnected to TWS/Gateway; this is a new connection whose server-side state starts empty, so every request subscription from the previous connection is gone".to_string(),
+    )
+}
+
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all
@@ -1236,11 +1365,14 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 /// resolves overlap by **precedence**:
 ///
 /// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
-/// 2. [`Warning`](Self::Warning) — 2100..=2169, code 399 with a `Warning:` line, or
-///    code 0 (a frame whose `error_code` field was absent on the wire).
-/// 3. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
-/// 4. [`OrderRejection`](Self::OrderRejection) — 200..=399, excluding the cases above.
-/// 5. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`] (2188, 10089, 10090, 10091, 10167).
+/// 2. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`]. Ahead of
+///    the ranges: 317 is inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
+///    [`WARNING_CODE_RANGE`].
+/// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
+///    line, or code 0 (a frame whose `error_code` field was absent on the wire).
+/// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
+/// 5. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
+///    excluding the cases above.
 /// 6. [`Error`](Self::Error) — everything else.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
@@ -1263,16 +1395,16 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
-    /// Informational warning (codes 2100..=2169, code 399 with a `Warning:` line,
-    /// or code 0 — a code-less frame).
+    /// Informational warning ([`WARNING_CODE_RANGE`], code 399 with a `Warning:`
+    /// line, or code 0 — a code-less frame).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
     /// Order rejection (codes 200..=399, excluding informational cases by precedence).
     OrderRejection,
-    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request can proceed with a
-    /// fallback (delayed market data, or historical data without its
-    /// up-to-the-second tail) rather than failing. Informational.
+    /// Data advisory ([`DATA_ADVISORY_CODES`]): the request is not rejected and
+    /// data follows — a fallback, a partial entitlement, or a depth-book reset.
+    /// Informational.
     DataAdvisory,
     /// Any other error code.
     Error,
@@ -1284,7 +1416,8 @@ pub enum NoticeCategory {
 /// for a raw code) for the data-farm status codes; `None` for every other notice.
 /// Lets reconnect/health logic tell "farm came back online" from "farm went
 /// inactive" without re-parsing codes. Additive to [`NoticeCategory`], which still
-/// classifies all of 2100..=2169 as [`NoticeCategory::Warning`].
+/// classifies all of [`WARNING_CODE_RANGE`] as [`NoticeCategory::Warning`]
+/// (bar the advisory 2188).
 ///
 /// The code→state vocabulary follows IB's published Message Codes table:
 ///
@@ -1373,7 +1506,8 @@ impl Notice {
     /// advanced-order-reject JSON. Used by the client-side observability
     /// codes (see [`HANDSHAKE_UNKNOWN_FRAME_CODE`],
     /// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
-    /// [`SUBSCRIPTION_LAG_CODE`]).
+    /// [`SUBSCRIPTION_LAG_CODE`], [`NOTICE_STREAM_LAG_CODE`],
+    /// [`TRANSPORT_RECONNECT_CODE`]).
     pub(crate) fn synthesized(code: i32, message: String) -> Notice {
         Notice {
             request_id: None,
@@ -1394,9 +1528,11 @@ impl Notice {
 
     /// Returns `true` if this is a warning message.
     ///
-    /// Warnings are codes 2100..=2169, code 399 with a `Warning:` line, and
+    /// Warnings are [`WARNING_CODE_RANGE`], code 399 with a `Warning:` line, and
     /// code 0 — a frame whose `error_code` field was absent on the wire, which
-    /// IB Gateway sends for informational notices.
+    /// IB Gateway sends for informational notices. A range predicate: it is
+    /// also `true` for the advisory 2188, which [`Notice::category`] reports as
+    /// [`NoticeCategory::DataAdvisory`].
     pub fn is_warning(&self) -> bool {
         is_warning_message(self.code, &self.message)
     }
@@ -1414,13 +1550,10 @@ impl Notice {
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
     ///
-    /// Data advisories (codes 2188, 10089, 10090, 10091, 10167) announce that a
-    /// request can proceed with a fallback — delayed market data instead of
-    /// real-time, historical data without its up-to-the-second tail, or only
-    /// the ticks the account is entitled to — rather than failing. The
-    /// available data can still follow, so the subscription stays open and
-    /// the notice is informational, not an error. This does not guarantee
-    /// that every requested field will arrive.
+    /// Data advisories reject nothing: the request stands and data follows —
+    /// a fallback, a partial entitlement, or a depth-book reset. The
+    /// subscription stays open and the notice is informational, not an error.
+    /// This does not guarantee that every requested field will arrive.
     pub fn is_data_advisory(&self) -> bool {
         DATA_ADVISORY_CODES.contains(&self.code)
     }
@@ -1430,7 +1563,7 @@ impl Notice {
     /// Informational notices include cancellation confirmations, warnings,
     /// system/connectivity messages, and data advisories.
     pub fn is_informational(&self) -> bool {
-        self.is_cancellation() || self.is_warning() || self.is_system_message() || self.is_data_advisory()
+        is_informational_code(self.code, &self.message)
     }
 
     /// Returns `true` if this is an error requiring attention.
@@ -1443,9 +1576,10 @@ impl Notice {
 
     /// Returns `true` if this notice falls in the order-rejection range (200-399).
     ///
-    /// Code 202 (cancellation confirmation) and warning-form code 399 are
-    /// numerically inside this range; this predicate returns `true` for both.
-    /// For a disjoint partition, use [`Notice::category`].
+    /// Code 202 (cancellation confirmation), 317 (market depth RESET, a data
+    /// advisory) and warning-form code 399 are numerically inside this range;
+    /// this predicate returns `true` for all three. For a disjoint partition,
+    /// use [`Notice::category`].
     ///
     /// # Examples
     ///
@@ -1502,26 +1636,14 @@ impl Notice {
     /// # let _ = level;
     /// ```
     pub fn category(&self) -> NoticeCategory {
-        if self.is_cancellation() {
-            NoticeCategory::Cancellation
-        } else if self.is_warning() {
-            NoticeCategory::Warning
-        } else if self.is_system_message() {
-            NoticeCategory::SystemMessage
-        } else if self.is_order_rejection() {
-            NoticeCategory::OrderRejection
-        } else if self.is_data_advisory() {
-            NoticeCategory::DataAdvisory
-        } else {
-            NoticeCategory::Error
-        }
+        classify(self.code, &self.message)
     }
 
     /// Classify the data-farm connectivity sub-state of this notice.
     ///
     /// Returns `Some(..)` for the data-farm status codes inside
     /// [`WARNING_CODE_RANGE`]; `None` for every other notice. Additive to
-    /// [`Notice::category`], which still classifies all of 2100..=2169 as
+    /// [`Notice::category`], which still classifies the farm codes as
     /// [`NoticeCategory::Warning`]. Thin wrapper over
     /// [`ConnectivityStatus::from_code`].
     ///

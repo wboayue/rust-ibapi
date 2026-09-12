@@ -33,8 +33,15 @@ pub fn condition_time_today(hour: u8, minute: u8) -> String {
 /// "now" — a UTC date drifts by at most one day from US/Eastern, which is
 /// inside that window.
 pub fn yyyymmdd_today() -> String {
-    let now = time::OffsetDateTime::now_utc();
-    format!("{:04}{:02}{:02}", now.year(), now.month() as u8, now.day())
+    yyyymmdd_from_now(0)
+}
+
+/// The UTC date `days` from now as `YYYYMMDD`. Compares lexically against
+/// `Contract::last_trade_date_or_contract_month`, which TWS renders in the
+/// same form.
+pub fn yyyymmdd_from_now(days: i64) -> String {
+    let date = time::OffsetDateTime::now_utc() + time::Duration::days(days);
+    format!("{:04}{:02}{:02}", date.year(), date.month() as u8, date.day())
 }
 
 /// Panics if US equity markets are closed (outside Mon-Fri 9:30-16:00 Eastern).
@@ -46,6 +53,24 @@ pub fn require_market_open() {
     let close = time::Time::from_hms(16, 0, 0).unwrap();
     let is_open = day != Weekday::Saturday && day != Weekday::Sunday && now.time() >= open && now.time() < close;
     assert!(is_open, "US equity market is closed");
+}
+
+/// Panics if CME Globex equity index futures (ES) are outside their trading
+/// session: Sunday 18:00 through Friday 17:00 Eastern, with a daily
+/// maintenance halt 17:00-18:00. Does not account for holidays.
+pub fn require_globex_open() {
+    let now = time::OffsetDateTime::now_utc().to_timezone(NEW_YORK);
+    let day = now.weekday();
+    let halt_start = time::Time::from_hms(17, 0, 0).unwrap();
+    let halt_end = time::Time::from_hms(18, 0, 0).unwrap();
+    let in_daily_halt = now.time() >= halt_start && now.time() < halt_end;
+    let is_open = match day {
+        Weekday::Saturday => false,
+        Weekday::Sunday => now.time() >= halt_end,
+        Weekday::Friday => now.time() < halt_start,
+        _ => !in_daily_halt,
+    };
+    assert!(is_open, "CME Globex is closed");
 }
 
 // === Client ID Pool ===

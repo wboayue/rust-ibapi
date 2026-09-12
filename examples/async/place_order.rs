@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         e.execution.order_id, e.execution.side, e.execution.shares, e.execution.price
                     );
                 }
+                Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
                 Ok(OrderUpdate::CommissionReport(r)) => {
                     println!("[Monitor] commission: ${} for {}", r.commission, r.execution_id);
                 }

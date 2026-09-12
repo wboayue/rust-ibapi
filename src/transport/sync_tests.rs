@@ -9,9 +9,11 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
-use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
+use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
+use crate::testdata::builders::orders::order_bound;
+use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::raw_capture::{test_support, RawFrameTap};
 use crate::transport::sync::MemoryStream;
 use crate::transport::MessageBus;
@@ -505,6 +507,52 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
     Ok(())
 }
 
+/// A successful automatic reconnect replays the handshake, whose
+/// `NextValidId` is a fresh server floor for order IDs. The bus must raise
+/// the client's generator from it: before this, only the initial connection
+/// seeded the generator and every reconnect silently discarded the value,
+/// leaving allocation stale against the server.
+#[test]
+fn test_reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
+    let handler = ConnectionHandler::default();
+    let sv = handler.min_version;
+
+    let start_api_bytes = handler.format_start_api(28, sv);
+    let events = vec![
+        Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::new(
+            start_api_bytes.clone(),
+            vec![
+                managed_accounts_response("DU1234567"),
+                next_valid_id_response(100),
+                ResponseMessage::from_simple("\0"),
+            ],
+        ), // RESTART
+        Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::new(
+            start_api_bytes,
+            vec![managed_accounts_response("DU1234567"), next_valid_id_response(5000)],
+        ),
+    ];
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
+    let bus = TcpMessageBus::new(connection)?;
+
+    let order_ids = Arc::new(ClientIdManager::new(100));
+    bus.set_order_ids(order_ids.clone());
+
+    bus.dispatch()?; // reads "\0", reconnects, handshake re-receives NextValidId(5000)
+
+    assert_eq!(
+        order_ids.current_order_id(),
+        5000,
+        "order-id generator should be raised from the reconnect handshake"
+    );
+
+    Ok(())
+}
+
 const AAPL_CONTRACT_RESPONSE: &str  = "AAPL|STK||0||SMART|USD|AAPL|NMS|NMS|265598|0.01||ACTIVETIM,AD,ADDONT,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SMARTSTG,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,NASDAQ,DRCTEDGE,BEX,BATS,EDGEA,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,IBEOS,OVERNIGHT,TPLUS0,PSX|1|0|APPLE INC|NASDAQ||Technology|Computers|Computers|US/Eastern|20250324:0400-20250324:2000;20250325:0400-20250325:2000;20250326:0400-20250326:2000;20250327:0400-20250327:2000;20250328:0400-20250328:2000|20250324:0930-20250324:1600;20250325:0930-20250325:1600;20250326:0930-20250326:1600;20250327:0930-20250327:1600;20250328:0930-20250328:1600|||1|ISIN|US0378331005|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|0.0001|0.0001|100|";
 
 #[test]
@@ -577,6 +625,8 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     connection.establish_connection()?;
     let bus = TcpMessageBus::new(connection)?;
 
+    let notices = bus.connection.notice_broadcaster.subscribe();
+
     let subscription = bus.send_request(9000, &packet)?;
 
     bus.dispatch()?;
@@ -584,6 +634,19 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     match subscription.next() {
         Some(Err(Error::ConnectionReset)) => {}
         _ => panic!(),
+    }
+
+    // The restart also publishes the synthesized reconnect notice to the
+    // notice fan-out (see TRANSPORT_RECONNECT_CODE): the notice channel is
+    // how a connection-state consumer without live subscriptions learns the
+    // socket generation changed.
+    loop {
+        let notice = notices
+            .recv_timeout(Duration::from_millis(100))
+            .expect("no reconnect notice on the notice fan-out");
+        if notice.code == TRANSPORT_RECONNECT_CODE {
+            break;
+        }
     }
 
     Ok(())
@@ -1128,6 +1191,31 @@ fn test_request_less_warning_does_not_fail_one_shot() -> Result<(), Error> {
     Ok(())
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[test]
+fn test_request_less_system_message_does_not_fail_one_shot() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.dispatch()?;
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed system message");
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+    Ok(())
+}
+
 /// A one-shot `send_shared_request` drains the shared queue before writing:
 /// a request-less error buffered while no request was in flight must not
 /// poison the next call, which reads only its own response.
@@ -1207,6 +1295,7 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
 // `Err(_)` / `None` as expected.
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
@@ -1228,10 +1317,10 @@ impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     }
 }
 
-fn wrap_subscription(
+fn wrap_subscription<T: crate::subscriptions::StreamDecoder<T>>(
     bus: Arc<TcpMessageBus<MemoryStream>>,
     internal: InternalSubscription,
-) -> crate::subscriptions::sync::Subscription<NoticeTestData> {
+) -> crate::subscriptions::sync::Subscription<T> {
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
@@ -1289,12 +1378,12 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
     use crate::contracts::tick_types::TickType;
     use crate::market_data::realtime::TickTypes;
     use crate::messages::IncomingMessages;
-    use crate::subscriptions::{sync::Subscription, DecoderContext, SubscriptionItem};
+    use crate::subscriptions::SubscriptionItem;
     use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, &[])?;
-    let subscription = Subscription::<TickTypes>::new(bus.clone(), internal, DecoderContext::default());
+    let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
     let computation = tick_option_computation()
         .request_id(42)
         .tick_type(TickType::DelayedModelOption as i32)
@@ -1326,6 +1415,59 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
             assert_eq!(greeks.implied_volatility, None);
         }
         other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+    Ok(())
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[test]
+fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::messages::IncomingMessages;
+    use crate::subscriptions::SubscriptionItem;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, &[])?;
+    let subscription = wrap_subscription::<MarketDepths>(bus.clone(), internal);
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
     }
     Ok(())
 }
@@ -2046,4 +2188,16 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
         notice.message
     );
     Ok(())
+}
+
+#[test]
+fn order_binding_reaches_updates_without_using_raw_order_id() {
+    let (stream, bus) = make_bus();
+    let order_sub = bus.send_order_request(42, &[]).unwrap();
+    let update_sub = bus.create_order_update_subscription().unwrap();
+    stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
+    bus.dispatch().unwrap();
+    let message = update_sub.next_timeout(TICK).expect("update stream got no message").unwrap();
+    assert_eq!(message.message_type(), IncomingMessages::OrderBound);
+    assert!(order_sub.next_timeout(TICK).is_none());
 }

@@ -62,6 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("  Price: {}", exec_data.execution.price);
                     println!("  Time: {}", exec_data.execution.time);
                 }
+                Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
                 Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission Report:");
                     println!("  Execution ID: {}", report.execution_id);

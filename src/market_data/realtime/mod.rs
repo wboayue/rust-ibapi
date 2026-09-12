@@ -250,6 +250,13 @@ impl std::fmt::Display for WhatToShow {
 }
 
 /// Market depth data types.
+///
+/// A `SubscriptionItem::Notice` with code 317 ("Market depth data has been
+/// RESET") means TWS discarded the book on its side: drop every row held and
+/// rebuild from the updates that follow. The stream stays open — 317 is a
+/// [`DATA_ADVISORY_CODES`](crate::messages::DATA_ADVISORY_CODES) entry. Its
+/// sibling 316 ("Market depth data has been HALTED") is terminal: the stream
+/// ends with `Err`, and the caller re-subscribes.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {

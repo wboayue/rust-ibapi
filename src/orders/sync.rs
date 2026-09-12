@@ -155,8 +155,8 @@ impl Client {
     ///
     /// Only the current day's executions can be retrieved.
     /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionReport`] will also be returned.
-    /// Join a commission to its execution deterministically by `execution_id` (see the
-    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the two may arrive in either order.
+    /// Join a commission to its execution by `execution_id` (see the
+    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the commission follows its execution.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -211,8 +211,13 @@ impl Client {
 
     /// Gets the next valid order ID from the TWS server.
     ///
-    /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server and updates the client's internal order ID sequence.
+    /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server.
     /// This can be for ensuring that order IDs are unique across multiple clients.
+    ///
+    /// The returned value also raises the client's order-ID generator to at
+    /// least that value — monotonically, never lowering it below locally
+    /// allocated order IDs, including IDs whose order has not yet reached the
+    /// server.
     ///
     /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
     ///
@@ -236,7 +241,7 @@ impl Client {
             expect_proto(decoders::decode_next_valid_id_proto),
         )?;
 
-        self.set_next_order_id(next_order_id);
+        self.raise_next_order_id(next_order_id);
         Ok(next_order_id)
     }
 
@@ -357,6 +362,7 @@ impl Client {
     ///         OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///         OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
     ///         OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///         OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
     ///         _ => {}
     ///     }
     /// }
@@ -441,7 +447,7 @@ impl Client {
     ///
     /// To pair a [`CommissionReport`](crate::orders::CommissionReport) with the
     /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
-    /// `execution_id` — the two arrive in either order but share that key. See
+    /// `execution_id` — the commission follows its execution and shares that key. See
     /// the [`CommissionReport`](crate::orders::CommissionReport) docs for the idiom.
     ///
     /// # Reconnection

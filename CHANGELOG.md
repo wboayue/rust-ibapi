@@ -7,15 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `NOTICE_STREAM_LAG_CODE` (`-7`), a synthesized notice code delivered in-band on the async notice stream when its consumer fell behind the notice fan-out (fixed capacity 1024; `ClientBuilder::channel_capacity` does not reach it). The notice names the dropped count where the missed notices were previously skipped with only a `warn!`. Because the stream carries the connection-status notices (1100/1101/1102) a stateful consumer derives durable conclusions from, the consumer must resynchronize on this notice rather than resume — see the constant's docs. The notice-stream instance of `SUBSCRIPTION_LAG_CODE`, closing the step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync notice fan-out is unbounded and cannot lag (#813).
+- `TRANSPORT_RECONNECT_CODE` (`-8`), a synthesized notice code published to the notice stream (sync and async) after the transport finishes reconnecting its socket to TWS/Gateway. The reconnect previously reached only live request/order/shared subscriptions (as `Error::ConnectionReset`); a consumer using the notice stream as its connection-state authority could hold a recorded 1100 across a successful reconnect forever, since TWS never frames the reconnect and does not replay 1101/1102 on the new connection. On receiving it, resubscribe and re-baseline connection state; see the constant's docs (#812).
+
 ### Changed
+
+- `OrderUpdate` includes `OrderBound`, exposing the permanent order ID, API client ID, and API order ID reported by TWS. Exhaustive matches must handle this variant. Sync and async transports deliver these notifications only to the order-update stream, so bindings for another client cannot reach a subscription sharing its raw order ID; see `docs/migration-4.0.md` §11 (#814).
 
 - `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).
 
+- `WARNING_CODE_RANGE` widens from `2100..=2169` to `2100..=2199`: IB keeps adding warnings above the old ceiling (2176, 2187), and each one was a hard error that failed in-flight one-shots and ended subscriptions. Codes 2170–2199 now route as non-terminal notices and `Notice::category()` reports them as `Warning` (#805).
+
+- `Notice::category()` resolves `DATA_ADVISORY_CODES` ahead of the warning and order-rejection bands instead of after them, so 2188 stays `DataAdvisory` inside the widened warning band (and 317 below categorises the same way). The range predicates are unchanged: `Notice::is_warning()` is now true for 2188 and `Notice::is_order_rejection()` remains true for 317 (#806).
+
 ### Fixed
+
+- `CommissionReport` docs no longer claim it "may arrive in either order" relative to its `ExecutionData`. A live ES fill shows TWS sends the execution first and the commission a few frames later; the routing that keys commissions off the execution's `execution_id` mapping relies on exactly that order. The `Orders` stream decoder also dropped a dead arm that would have decoded a `CommissionsReport` frame as an open order (#788).
+
+- A successful automatic reconnect now re-seeds the client's order-id generator from the `NextValidId` frame the reconnect handshake re-receives. Previously only the initial connection seeded the generator: every reconnect stored the fresh server floor in `ConnectionMetadata` and then discarded it, so after a TWS/IB Gateway restart the client could resume allocating below the server's counter and hit error 103. The re-seed is a monotonic raise and never lowers the generator below IDs allocated before the disconnect (#803).
+
+- `next_valid_order_id()` no longer rewinds the order-id generator: the server's value is applied as a lower bound (`fetch_max`) instead of an overwrite, so an ID already allocated locally — including one whose order has not reached the server yet — is never reissued. Previously a response at or below the local counter, which is what the server returns whenever it has not yet seen the allocated IDs, made the next `next_order_id()` hand out a duplicate and TWS rejected the second order with error 103 (#802).
+
+- Error 317 ("Market depth data has been RESET. Please empty deep book contents before applying any new entries.") is a data advisory: it is published as a non-terminal `SubscriptionItem::Notice` on the market-depth subscription instead of ending it, so the rows that rebuild the book still arrive. Consumers discard their book on this notice and apply the updates that follow. Its sibling 316 (market depth HALTED) remains terminal (#806).
 
 - Error 10091 ("Part of requested market data requires additional subscription for API") is classified as a data advisory like 10089, 10090, and 10167: it is published as a non-terminal notice instead of ending the market-data subscription, so ticks that follow it — including delayed option computations — still arrive (#804).
 
 - Disconnecting while the client is reconnecting no longer hangs: the reconnect backoff now observes the shutdown request and the dispatcher exits with `Error::Shutdown`. Previously the sync `Client::drop` / `disconnect()` blocked until every reconnect attempt was exhausted (forever with `reconnect_forever`), and the async dispatcher task leaked (#795).
+
+- System messages (codes 1100, 1101, 1102, 1300) no longer fail every in-flight one-shot request. They are routed as non-terminal notices, like the order-cancellation confirmation (202); `Notice::is_warning()` and `Notice::category()` are unchanged for these codes (#800).
 
 - `HistoricalDataEnd` start/end decoding accepts the zone-less UTC format (`YYYYMMDD-HH:MM:SS`) a gateway sends when its API date/time setting is "UTC format". Previously the string failed to parse and ended the historical-data subscription, so `keep_up_to_date` streams never saw their completion marker. Multi-word zone names in the instrument-timezone rendering (`20260101 09:30:00 China Standard Time`) now resolve as well; before, only the last word was looked up (#808).
 

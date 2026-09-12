@@ -9,8 +9,9 @@ use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessag
 /// An item yielded by a [`Subscription`](crate::subscriptions::Subscription).
 ///
 /// Subscriptions yield `Result<SubscriptionItem<T>, Error>` items. `Data(T)` is
-/// the decoded payload; `Notice` is a non-fatal IB notice (warning codes
-/// 2100..=2169) bound to this subscription — the stream stays open. Use the
+/// the decoded payload; `Notice` is a non-fatal IB notice (warning codes in
+/// [`WARNING_CODE_RANGE`](crate::messages::WARNING_CODE_RANGE)) bound to this
+/// subscription — the stream stays open. Use the
 /// `filter_data` adapter on the `Subscription` (sync: via `SubscriptionItemIterExt`;
 /// async: via `SubscriptionItemStreamExt`) when you only care about data and
 /// want notices logged automatically.
@@ -18,10 +19,12 @@ use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessag
 pub enum SubscriptionItem<T> {
     /// A successfully decoded payload from the subscription stream.
     Data(T),
-    /// A non-fatal IB notice bound to this subscription: warnings (codes
-    /// 2100..=2169), warning-form order messages (code 399), and — on the
-    /// order-update stream — order-bound errors. Receiving a notice does not
-    /// terminate the stream.
+    /// A non-fatal IB notice bound to this subscription: warnings
+    /// ([`WARNING_CODE_RANGE`](crate::messages::WARNING_CODE_RANGE)),
+    /// warning-form order messages (code 399), data advisories
+    /// ([`DATA_ADVISORY_CODES`](crate::messages::DATA_ADVISORY_CODES)), and —
+    /// on the order-update stream — order-bound errors. Receiving a notice does
+    /// not terminate the stream.
     Notice(Notice),
 }
 

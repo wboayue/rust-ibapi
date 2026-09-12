@@ -11,10 +11,12 @@ use std::time::Duration;
 
 use super::*;
 use crate::common::test_utils::helpers;
-use crate::common::test_utils::helpers::{binary_proto, error_frame};
+use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::OutgoingMessages;
+use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
+use crate::testdata::builders::orders::order_bound;
+use crate::testdata::builders::ResponseProtoEncoder;
 
 /// Build a binary-text-payload response body from a pipe-delimited test input.
 /// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
@@ -420,6 +422,30 @@ async fn test_request_less_warning_does_not_fail_one_shot() {
     assert!(one_shot.try_next_routed().is_none(), "warning must not fail a one-shot shared request");
 }
 
+/// A request-less *system message* (1102, connectivity restored with data
+/// maintained) reports a connection-wide state change, not a failed request.
+/// It must reach the notice stream without failing in-flight one-shot shared
+/// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
+#[tokio::test]
+async fn test_request_less_system_message_does_not_fail_one_shot() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
+
+    let code = crate::messages::CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE;
+    stream.push_inbound(error_frame(-1, code, CONNECTIVITY_RESTORED_MSG));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "system message must not fail a one-shot shared request"
+    );
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.code, code);
+    assert!(notice.is_system_message());
+}
+
 /// Order-channel fallback: a notice arrives bound to an `order_id` matching
 /// an order subscription. The dispatcher's `deliver_to_request_id` helper
 /// falls back to the order channel when no request channel matches.
@@ -453,6 +479,7 @@ use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, Subs
 use futures::StreamExt;
 
 const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
@@ -490,7 +517,7 @@ async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMe
 
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
-async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+async fn next_item<T: Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
     tokio::time::timeout(TICK, sub.next())
         .await
         .expect("subscription got no item before timeout")
@@ -545,7 +572,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert_eq!(notice.request_id, Some(42));
             assert_eq!(notice.code, 10091);
@@ -554,7 +581,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
         }
         other => panic!("expected nonterminal 10091 notice, got {other:?}"),
     }
-    match tokio::time::timeout(TICK, subscription.next()).await.unwrap() {
+    match next_item(&mut subscription).await {
         Some(Ok(SubscriptionItem::Data(TickTypes::OptionComputation(greeks)))) => {
             assert_eq!(greeks.field, TickType::DelayedModelOption);
             assert_eq!(greeks.tick_attribute, Some(0));
@@ -562,6 +589,56 @@ async fn test_subscription_10091_preserves_later_option_computation() {
             assert_eq!(greeks.implied_volatility, None);
         }
         other => panic!("option computation after 10091 lost: {other:?}"),
+    }
+}
+
+/// A depth-book reset (317) precedes the rows that rebuild it on the same
+/// request; the notice must not end the depth stream (#806).
+#[tokio::test]
+async fn test_subscription_317_preserves_later_market_depth() {
+    use crate::market_data::realtime::MarketDepths;
+    use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = Subscription::new_from_internal::<MarketDepths>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let row = market_depth_response()
+        .request_id(42)
+        .position(0)
+        .operation(0)
+        .side(1)
+        .price(101.5)
+        .size(3.0)
+        .to_proto();
+
+    // Both frames are dispatched before polling: the reset must not hide the
+    // first row of the rebuilt book.
+    stream.push_inbound(error_frame(
+        42,
+        317,
+        "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
+    ));
+    stream.push_inbound(binary_proto(IncomingMessages::MarketDepth as i32, &row));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.code, 317);
+            assert!(notice.is_data_advisory());
+        }
+        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    }
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+            assert_eq!(depth.position, 0);
+            assert_eq!(depth.operation, 0);
+            assert_eq!(depth.side, 1);
+            assert_eq!(depth.price, 101.5);
+            assert_eq!(depth.size, 3.0);
+        }
+        other => panic!("market depth row after 317 lost: {other:?}"),
     }
 }
 
@@ -1111,6 +1188,26 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
     assert!(late.try_next_routed().is_none(), "post-reset shared subscription read a stale reset");
 }
 
+/// `reset_channels` also publishes the reconnect notice to the notice stream:
+/// a connection-state consumer subscribed there learns the socket generation
+/// changed even with no live subscription to carry a `ConnectionReset`. TWS
+/// never replays 1101/1102 on the new connection, so this notice is the only
+/// signal that un-strands state recorded from the previous one (a held 1100).
+#[tokio::test]
+async fn test_reset_channels_publishes_reconnect_notice_to_notice_stream() {
+    let (_, bus) = make_bus();
+
+    let mut notices = bus.connection.notice_sender.subscribe();
+
+    bus.reset_channels().await;
+
+    let notice = tokio::time::timeout(TICK, notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+}
+
 /// `ensure_shutdown` joins the running message-processing task and reports
 /// `is_connected() == false` afterwards. The handle is installed asynchronously
 /// (separate `tokio::spawn`), so we yield until it's set rather than sleeping.
@@ -1128,6 +1225,42 @@ async fn test_ensure_shutdown_joins_processing_task() {
 
     mb.ensure_shutdown().await;
     assert!(!mb.is_connected());
+}
+
+/// A successful automatic reconnect replays the handshake, whose
+/// `NextValidId` is a fresh server floor for order IDs. The bus must raise
+/// the client's generator from it: before this, only the initial connection
+/// seeded the generator and every reconnect silently discarded the value,
+/// leaving allocation stale against the server.
+#[tokio::test]
+async fn test_reconnect_raises_order_ids_from_handshake() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    // First read fails as InvalidFrame (a body too short to hold a message
+    // id), which the processing loop classifies as connection lost.
+    stream.push_inbound(b"xx".to_vec());
+    // Frames the reconnect handshake consumes, in order.
+    let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
+    stream.push_inbound(handshake.into_bytes());
+    stream.push_inbound(next_valid_id_frame(5000));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100));
+    bus.set_order_ids(order_ids.clone());
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while order_ids.current_order_id() < 5000 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "order-id generator was never raised from the reconnect handshake"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
 }
 
 #[tokio::test]
@@ -1176,4 +1309,16 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
         "notice must name the offending id, got {:?}",
         notice.message
     );
+}
+
+#[tokio::test]
+async fn order_binding_reaches_updates_without_using_raw_order_id() {
+    let (stream, bus) = make_bus();
+    let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
+    let mut update_sub = bus.create_order_update_subscription().await.unwrap();
+    stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
+    bus.read_and_route_message().await.unwrap();
+    let message = next_message(&mut update_sub).await;
+    assert_eq!(message.message_type(), IncomingMessages::OrderBound);
+    assert!(tokio::time::timeout(TICK, order_sub.next()).await.is_err());
 }

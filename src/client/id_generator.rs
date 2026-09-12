@@ -43,15 +43,14 @@ impl IdGenerator {
         self.next_id.load(Ordering::Relaxed)
     }
 
-    /// Sets the next ID value (useful for order ID updates from server)
-    pub(crate) fn set(&self, value: i32) {
-        self.next_id.store(value, Ordering::Relaxed);
-    }
-
-    /// Resets the generator to a new starting value
-    #[allow(dead_code)]
-    pub(crate) fn reset(&self, start: i32) {
-        self.set(start);
+    /// Raises the next ID value to at least `value`; never lowers it.
+    ///
+    /// Server responses are lower bounds, not overwrites: IDs already allocated
+    /// locally — including IDs whose request has not reached the server yet —
+    /// stay reserved, so a stale or racing server value can never make `next`
+    /// reissue an ID.
+    pub(crate) fn raise(&self, value: i32) {
+        self.next_id.fetch_max(value, Ordering::Relaxed);
     }
 }
 
@@ -87,9 +86,10 @@ impl ClientIdManager {
         self.order_ids.next()
     }
 
-    /// Updates the order ID (e.g., from server's next valid ID response)
-    pub(crate) fn set_order_id(&self, order_id: i32) {
-        self.order_ids.set(order_id);
+    /// Raises the order ID to at least the given value (e.g., from the server's
+    /// next valid ID response); never lowers it below locally allocated IDs.
+    pub(crate) fn raise_order_id(&self, order_id: i32) {
+        self.order_ids.raise(order_id);
     }
 
     /// Gets the current order ID without incrementing

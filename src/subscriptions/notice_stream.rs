@@ -72,17 +72,19 @@ pub mod async_impl {
     //! Async `NoticeStream` backed by a `tokio::sync::broadcast` receiver.
 
     use futures::stream::{unfold, Stream};
-    use log::warn;
     use tokio::sync::broadcast::{self, error::RecvError};
 
-    use crate::messages::Notice;
+    use crate::messages::{notice_stream_lag_notice, Notice};
 
     /// A handle for receiving globally routed notices on the async transport.
     ///
     /// If the channel lags (broadcaster wraps around because a subscriber didn't
-    /// keep up), the missed items are skipped with a `warn!` and `next` resumes
-    /// from the most recent notice. (Unlike data subscriptions, no in-band gap
-    /// notice is injected here yet — see `plans/broadcast-lag-visibility.md`.)
+    /// keep up), a [`NOTICE_STREAM_LAG_CODE`](crate::NOTICE_STREAM_LAG_CODE)
+    /// notice naming the dropped count is delivered in place of the missed
+    /// notices — the same treatment data subscriptions get from
+    /// `SUBSCRIPTION_LAG_CODE` — so a stateful consumer can resynchronize
+    /// instead of resuming on silently-stale conclusions. The fan-out keeps
+    /// the default capacity regardless of `ClientBuilder::channel_capacity`.
     #[must_use = "NoticeStream must be polled (.next().await / .stream()) to receive notices; dropping it releases the dispatcher slot"]
     pub struct NoticeStream {
         receiver: broadcast::Receiver<Notice>,
@@ -95,15 +97,10 @@ pub mod async_impl {
 
         /// Wait for the next notice. Returns `None` when the bus shuts down.
         pub async fn next(&mut self) -> Option<Notice> {
-            loop {
-                match self.receiver.recv().await {
-                    Ok(notice) => return Some(notice),
-                    Err(RecvError::Closed) => return None,
-                    Err(RecvError::Lagged(skipped)) => {
-                        warn!("NoticeStream lagged, skipped {skipped} notices");
-                        continue;
-                    }
-                }
+            match self.receiver.recv().await {
+                Ok(notice) => Some(notice),
+                Err(RecvError::Closed) => None,
+                Err(RecvError::Lagged(skipped)) => Some(notice_stream_lag_notice(skipped)),
             }
         }
 
