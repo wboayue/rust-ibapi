@@ -1,5 +1,6 @@
+use time::format_description::FormatItem;
 use time::macros::format_description;
-use time::{Date, OffsetDateTime, PrimitiveDateTime};
+use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 use time_tz::Tz;
 
 use crate::common::timezone::{find_timezone, resolve_local};
@@ -58,28 +59,46 @@ fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
     Ok(zones[0])
 }
 
+/// `YYYYMMDD-HH:MM:SS`: historical-schedule session bounds, and the zone-less UTC
+/// rendering of `HistoricalDataEnd`.
+const DASHED_DATE_TIME: &[FormatItem<'static>] = format_description!("[year][month][day]-[hour]:[minute]:[second]");
+
 fn parse_schedule_date_time(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
-    let schedule_date_time_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
-    let schedule_date_time = PrimitiveDateTime::parse(text, schedule_date_time_format)?;
+    let schedule_date_time = PrimitiveDateTime::parse(text, DASHED_DATE_TIME)?;
     Ok(resolve_local(schedule_date_time, time_zone))
 }
 
-fn parse_schedule_date(text: &str) -> Result<Date, Error> {
-    let schedule_date_format = format_description!("[year][month][day]");
-    let schedule_date = Date::parse(text, schedule_date_format)?;
-    Ok(schedule_date)
+fn parse_yyyymmdd(text: &str) -> Result<Date, Error> {
+    Ok(Date::parse(text, format_description!("[year][month][day]"))?)
 }
 
-/// Parses "YYYYMMDD HH:MM:SS TZ" (single space + embedded timezone) — the
-/// shape `HistoricalDataEnd` carries in its `start_date_str` / `end_date_str`.
-fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
-    let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    let (datetime_part, tz_name) = text
-        .rsplit_once(' ')
-        .ok_or_else(|| Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS TZ'"))?;
-    let tz = parse_time_zone(tz_name.trim())?;
-    let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
-    Ok(resolve_local(dt, tz))
+/// Parses the two wire-verified renderings `HistoricalDataEnd` carries in its
+/// `start_date_str` / `end_date_str`. The gateway's "Send instrument-specific
+/// attributes ... in" setting picks the rendering:
+///
+/// - instrument timezone (default): `YYYYMMDD HH:MM:SS <zone>`, a wall clock in the
+///   named zone. The zone name may contain spaces (`China Standard Time`), so
+///   everything after the time is the zone.
+/// - UTC format: `YYYYMMDD-HH:MM:SS`, zone-less, the UTC shape documented since
+///   TWS 10.17. Captured from a 10.50 gateway in #808.
+///
+/// Anything else is rejected loudly rather than guessed at: a zone-less wall clock
+/// resolved in the wrong zone is a silently wrong instant. Candidate shapes seen on
+/// other messages or older APIs are tracked in `plans/historical-data-end-renderings.md`.
+fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Error> {
+    let text = text.trim();
+    if let Ok(utc) = PrimitiveDateTime::parse(text, DASHED_DATE_TIME) {
+        return Ok(utc.assume_utc());
+    }
+    let mut parts = text.splitn(3, ' ');
+    let (Some(date), Some(time), Some(zone_name)) = (parts.next(), parts.next(), parts.next()) else {
+        return Err(Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS <zone>' or 'YYYYMMDD-HH:MM:SS'"));
+    };
+    // Wall clock before zone, so a malformed clock reports a parse error rather than
+    // an unsupported timezone.
+    let wall_clock = PrimitiveDateTime::new(parse_yyyymmdd(date)?, Time::parse(time, format_description!("[hour]:[minute]:[second]"))?);
+    let zone = parse_time_zone(zone_name.trim())?;
+    Ok(resolve_local(wall_clock, zone))
 }
 
 // === Protobuf decoders ===
@@ -185,8 +204,8 @@ pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec
 
 pub(crate) fn decode_historical_data_end_proto(bytes: &[u8]) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
     let p = proto::HistoricalDataEnd::decode(bytes)?;
-    let start = parse_date_with_tz(p.start_date_str.as_deref().unwrap_or(""))?;
-    let end = parse_date_with_tz(p.end_date_str.as_deref().unwrap_or(""))?;
+    let start = parse_historical_data_end_timestamp(p.start_date_str.as_deref().unwrap_or(""))?;
+    let end = parse_historical_data_end_timestamp(p.end_date_str.as_deref().unwrap_or(""))?;
     Ok((start, end))
 }
 
@@ -212,7 +231,7 @@ pub(crate) fn decode_historical_schedule_proto(p: crate::proto::HistoricalSchedu
             Ok(Session {
                 start: parse_schedule_date_time(s.start_date_time.as_deref().unwrap_or(""), time_zone)?,
                 end: parse_schedule_date_time(s.end_date_time.as_deref().unwrap_or(""), time_zone)?,
-                reference: parse_schedule_date(s.ref_date.as_deref().unwrap_or(""))?,
+                reference: parse_yyyymmdd(s.ref_date.as_deref().unwrap_or(""))?,
             })
         })
         .collect::<Result<Vec<Session>, Error>>()?;

@@ -207,7 +207,7 @@ fn test_decode_histogram_data_proto() {
 
 #[test]
 fn test_decode_historical_data_end_proto() {
-    // Wire format for start/end uses "YYYYMMDD HH:MM:SS TZ".
+    // Instrument-timezone rendering, distinct start/end.
     let proto_msg = crate::proto::HistoricalDataEnd {
         req_id: Some(1),
         start_date_str: Some("20260101 09:30:00 US/Eastern".into()),
@@ -218,6 +218,63 @@ fn test_decode_historical_data_end_proto() {
     assert!(start < end);
     assert_eq!(start.year(), 2026);
     assert_eq!(end.year(), 2026);
+}
+
+#[test]
+fn test_decode_historical_data_end_accepted_renderings() {
+    // The two wire-verified renderings, selected by the gateway's timezone setting:
+    // instrument timezone (wall clock + zone, zone may contain spaces) and the UTC
+    // format captured from a 10.50 gateway in #808.
+    let cases = [
+        ("20260101 09:30:00 US/Eastern", datetime!(2026-01-01 14:30:00 UTC)),
+        ("20260101 09:30:00 China Standard Time", datetime!(2026-01-01 01:30:00 UTC)),
+        ("20260101 09:30:00 UTC", datetime!(2026-01-01 09:30:00 UTC)),
+        ("20260101-09:30:00", datetime!(2026-01-01 09:30:00 UTC)),
+        (" 20260101-09:30:00 ", datetime!(2026-01-01 09:30:00 UTC)),
+    ];
+
+    for (rendering, expected) in cases {
+        let proto_msg = crate::proto::HistoricalDataEnd {
+            req_id: Some(1),
+            start_date_str: Some(rendering.into()),
+            end_date_str: Some(rendering.into()),
+        };
+
+        let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).unwrap();
+        assert_eq!(start, expected, "rendering: {rendering:?}");
+        assert_eq!(end, start, "rendering: {rendering:?}");
+    }
+}
+
+#[test]
+fn test_decode_historical_data_end_rejected_renderings() {
+    // Unverified shapes fail loudly instead of being resolved in a guessed zone
+    // (plans/historical-data-end-renderings.md). A malformed clock is a parse error;
+    // only a well-formed clock with an unknown zone is UnsupportedTimeZone, and the
+    // error carries the whole zone name.
+    let parse_errors = [
+        "",
+        "20260101 09:30:00",
+        "20260101  09:30:00 US/Eastern",
+        "2026-01-01 09:30:00",
+        "2026-01-01 09:30:00 UTC",
+        "20260101 09:30:00.0 US/Eastern",
+        "20260101 09:30 US/Eastern",
+        "20260101-09:30",
+    ];
+    for rendering in parse_errors {
+        let err = super::parse_historical_data_end_timestamp(rendering).unwrap_err();
+        assert!(
+            matches!(err, Error::Parse(..) | Error::ParseTime(_)),
+            "rendering: {rendering:?} -> {err:?}"
+        );
+    }
+
+    let err = super::parse_historical_data_end_timestamp("20260101 09:30:00 Bogus Standard Time").unwrap_err();
+    assert!(
+        matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"),
+        "{err:?}"
+    );
 }
 
 #[test]
@@ -505,7 +562,7 @@ fn test_window_edge_in_dst_fold_or_gap_decodes() {
     assert_eq!(end, datetime!(2026-08-29 08:33:35 UTC));
 
     // A gap reading is pushed forward, not rejected — rejecting it discarded the bars.
-    let gap = super::parse_date_with_tz("20260308 02:30:00 US/Eastern").expect("gap resolves");
+    let gap = super::parse_historical_data_end_timestamp("20260308 02:30:00 US/Eastern").expect("gap resolves");
     assert_eq!(gap, datetime!(2026-03-08 07:30:00 UTC));
 
     let tz = time_tz::timezones::get_by_name("US/Eastern").expect("tz");

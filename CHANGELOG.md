@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - System messages (codes 1100, 1101, 1102, 1300) no longer fail every in-flight one-shot request. They are routed as non-terminal notices, like the order-cancellation confirmation (202); `Notice::is_warning()` and `Notice::category()` are unchanged for these codes (#800).
 
+- `HistoricalDataEnd` start/end decoding accepts the zone-less UTC format (`YYYYMMDD-HH:MM:SS`) a gateway sends when its API date/time setting is "UTC format". Previously the string failed to parse and ended the historical-data subscription, so `keep_up_to_date` streams never saw their completion marker. Multi-word zone names in the instrument-timezone rendering (`20260101 09:30:00 China Standard Time`) now resolve as well; before, only the last word was looked up (#808).
+
 ## [4.0.1] - 2026-09-06
 
 ### Changed
