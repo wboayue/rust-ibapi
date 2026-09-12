@@ -12,7 +12,7 @@ use log::{debug, warn};
 use tokio::sync::mpsc;
 
 use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
-use super::StreamDecoder;
+use super::{log_cancel_error, StreamDecoder};
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
@@ -449,7 +449,7 @@ impl<T> Subscription<T> {
             let id = self.request_id.or(self.order_id);
             if let Ok(message) = cancel_fn(self.context.server_version, id, Some(&self.context)) {
                 if let Err(e) = message_bus.send_message(message).await {
-                    warn!("error sending cancel message: {e}")
+                    log_cancel_error("subscription", &e);
                 }
             }
         }
@@ -482,7 +482,7 @@ impl<T> Drop for Subscription<T> {
                 // Drop can't be async; spawn the cancel send so it actually goes out.
                 tokio::spawn(async move {
                     if let Err(e) = message_bus.send_message(message).await {
-                        warn!("error sending cancel message in drop: {e}");
+                        log_cancel_error("subscription", &e);
                     }
                 });
             }

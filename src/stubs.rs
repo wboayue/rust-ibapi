@@ -266,6 +266,10 @@ impl MessageBus for MessageBusStub {
 
     fn ensure_shutdown(&self) {}
 
+    fn wait_connected(&self) -> Result<(), Error> {
+        Ok(()) // Stub is always connected
+    }
+
     fn is_connected(&self) -> bool {
         true // Stub always returns connected
     }
@@ -370,6 +374,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn request_shutdown_sync(&self) {
         // No-op for test stub
+    }
+
+    async fn wait_connected(&self) -> Result<(), Error> {
+        Ok(()) // Stub is always connected
     }
 
     fn is_connected(&self) -> bool {
