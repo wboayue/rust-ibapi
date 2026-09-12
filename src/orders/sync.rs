@@ -362,6 +362,7 @@ impl Client {
     ///         OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///         OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
     ///         OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///         OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
     ///         _ => {}
     ///     }
     /// }

@@ -11,7 +11,7 @@ use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
     completed_orders_request, execution_data, executions_request, global_cancel_request, next_valid_order_id_request, open_order,
-    open_orders_request, order_status, place_order_request,
+    open_orders_request, order_bound, order_status, place_order_request,
 };
 use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
@@ -939,4 +939,25 @@ fn submit_rejects_a_non_finite_price_before_sending() {
     let err = client.order(&contract).buy(100).limit(f64::NAN).submit().expect_err("NaN is not a price");
     assert!(err.to_string().contains("Invalid price"), "got {err}");
     assert_eq!(request_message_count(&bus), 0);
+}
+
+#[test]
+fn order_update_stream_delivers_order_binding() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderBound,
+        order_bound().encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+    let stream = client.order_update_stream().unwrap();
+    let Some(Ok(OrderUpdate::OrderBound(bound))) = stream.next_data() else {
+        panic!("expected an order binding notification");
+    };
+    assert_eq!(
+        bound,
+        crate::orders::OrderBound {
+            perm_id: 9_876_543_210,
+            client_id: 0,
+            order_id: 42
+        }
+    );
 }

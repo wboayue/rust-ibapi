@@ -636,6 +636,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let strategy = order_routing_strategy(message.message_type());
 
         match strategy {
+            OrderRoutingStrategy::OrderUpdateOnly => {}
             OrderRoutingStrategy::ExecutionData => {
                 // Try order_id channel first, then request_id, storing execution_id mapping
                 if let Some(actual_order_id) = message.order_id() {

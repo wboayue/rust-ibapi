@@ -26,6 +26,7 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
 impl StreamDecoder<OrderUpdate> for OrderUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
+        IncomingMessages::OrderBound,
         IncomingMessages::OrderStatus,
         IncomingMessages::ExecutionData,
         IncomingMessages::CommissionsReport,
@@ -33,6 +34,7 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OrderUpdate, Error> {
         match message.message_type() {
+            IncomingMessages::OrderBound => Ok(OrderUpdate::OrderBound(decoders::decode_order_bound(message)?)),
             IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(message)?)),

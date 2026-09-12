@@ -268,6 +268,35 @@ Two things the old signature let callers get wrong, both verified against a live
 
 An unset exchange is now absent from the request rather than sent as `""`; TWS treats the two identically.
 
+### 11. `OrderUpdate` gains `OrderBound`
+
+TWS sends an `OrderBound` notification when it binds a permanent order ID to an API client ID and an order ID in that client's namespace. The official client documents it as the response to an order-binding request: client ID 0 can take over orders submitted manually in TWS via `reqAutoOpenOrders`, and each order it takes over is announced this way. The wire type existed in 3.x but no transport delivered it, so it was silently dropped. `order_update_stream()` now yields it as `OrderUpdate::OrderBound(OrderBound { perm_id, client_id, order_id })`:
+
+```rust,ignore
+// 3.x — exhaustive match compiled
+match update? {
+    OrderUpdate::OrderStatus(status) => {}
+    OrderUpdate::OpenOrder(order) => {}
+    OrderUpdate::ExecutionData(exec) => {}
+    OrderUpdate::CommissionReport(report) => {}
+}
+
+// 4.0 — add an arm for the new variant
+match update? {
+    OrderUpdate::OrderStatus(status) => {}
+    OrderUpdate::OpenOrder(order) => {}
+    OrderUpdate::ExecutionData(exec) => {}
+    OrderUpdate::CommissionReport(report) => {}
+    OrderUpdate::OrderBound(binding) => println!("perm {} is client {} order {}", binding.perm_id, binding.client_id, binding.order_id),
+}
+```
+
+What changes for compiling code:
+
+- **Exhaustive matches need the new arm.** Like `Liquidity` and `OrderStatusKind`, the enum stays exhaustive (no `#[non_exhaustive]`), so the compiler points at every site. Matches with a `_` arm compile unchanged.
+- **Bindings arrive only on `order_update_stream()`.** They do not reach the per-order `place_order` subscription, even for this client's own orders: API order IDs are scoped to a client ID, and the transport does not filter on it, so a binding for another client's order 42 must not land on a local subscription for order 42. This matches the official client, which delivers `orderBound` only to the global wrapper callback. Consume bindings from the update stream and key on `perm_id` when you need an account-wide identity.
+- **A binding grants nothing.** Knowing another client's `(client_id, order_id)` does not let this client modify or cancel that order.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -296,7 +325,8 @@ No code changes required, but observable at runtime:
 8. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
 9. Add an `OrderStatusKind::Unknown(raw)` arm to exhaustive matches on order statuses, and `.clone()` (or borrow) where code relied on the removed `Copy` — see [§9](#9-orderstatuskind-gains-unknownstring).
 10. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
-11. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+11. Add an `OrderUpdate::OrderBound(binding)` arm to exhaustive matches on order updates, and read bindings from `order_update_stream()` — they never reach `place_order` subscriptions; see [§11](#11-orderupdate-gains-orderbound).
+12. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
