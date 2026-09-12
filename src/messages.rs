@@ -1252,7 +1252,7 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 /// the notice-stream instance of [`SUBSCRIPTION_LAG_CODE`], closing the
 /// step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync
 /// notice fan-out is unbounded and cannot lag.
-pub const NOTICE_STREAM_LAG_CODE: i32 = -8;
+pub const NOTICE_STREAM_LAG_CODE: i32 = -7;
 
 /// Build the in-band notice delivered when the notice stream's consumer fell
 /// behind the notice fan-out and `skipped` notices were evicted, and emit the

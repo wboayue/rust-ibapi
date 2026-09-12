@@ -123,11 +123,14 @@ mod async_tests {
         // The lag surfaces in-band: a gap notice naming the dropped count...
         let gap = stream.next().await.expect("gap notice");
         assert_eq!(gap.code, crate::NOTICE_STREAM_LAG_CODE, "{gap}");
+        assert_eq!(gap.category(), crate::NoticeCategory::Error, "{gap}");
         assert!(gap.message.contains("2 notices"), "gap notice should name the dropped count: {gap}");
 
-        // ...and the retained notices follow.
-        let retained = stream.next().await.expect("retained notice");
-        assert!(retained.code >= 3, "expected a retained post-lag notice, got {retained}");
+        // ...and the retained notices follow, in order, with nothing else skipped.
+        for expected in [3, 4] {
+            let retained = stream.next().await.expect("retained notice");
+            assert_eq!(retained.code, expected, "{retained}");
+        }
     }
 
     #[tokio::test]

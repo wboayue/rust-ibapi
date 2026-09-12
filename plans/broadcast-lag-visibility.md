@@ -45,7 +45,7 @@ Step-1 leftovers, deliberately excluded (fold into step 2 or do piecemeal):
 
 - `NoticeStream` (async) lag: upgraded `debug!`→`warn!` only in step 1; the
   in-band gap notice shipped piecemeal afterwards as
-  `NOTICE_STREAM_LAG_CODE` (`-8`) — the same treatment as
+  `NOTICE_STREAM_LAG_CODE` (`-7`) — the same treatment as
   `SUBSCRIPTION_LAG_CODE`: the dropped count in-band, `warn!` alongside.
 - `NoticeBroadcaster` (sync notice fan-out) has no watermark.
 - Three sibling `test_notice`/`make_notice` helpers exist across test files;
