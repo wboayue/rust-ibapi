@@ -270,7 +270,7 @@ An unset exchange is now absent from the request rather than sent as `""`; TWS t
 
 ### 11. `OrderUpdate` gains `OrderBound`
 
-TWS sends an `OrderBound` notification when it binds a permanent order ID to an API client ID and that client's order ID — for orders placed through the API and for orders entered in the TWS UI that TWS later assigns to a client. The wire type existed in 3.x but no transport delivered it, so it was silently dropped. `order_update_stream()` now yields it as `OrderUpdate::OrderBound(OrderBound { perm_id, client_id, order_id })`:
+TWS sends an `OrderBound` notification when it binds a permanent order ID to an API client ID and an order ID in that client's namespace. The official client documents it as the response to an order-binding request: client ID 0 can take over orders submitted manually in TWS via `reqAutoOpenOrders`, and each order it takes over is announced this way. The wire type existed in 3.x but no transport delivered it, so it was silently dropped. `order_update_stream()` now yields it as `OrderUpdate::OrderBound(OrderBound { perm_id, client_id, order_id })`:
 
 ```rust,ignore
 // 3.x — exhaustive match compiled
