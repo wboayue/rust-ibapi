@@ -11,8 +11,8 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_order, completed_orders_end, completed_orders_request, execution_data, execution_data_end,
-    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_status,
-    place_order_request,
+    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_bound,
+    order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
@@ -890,11 +890,7 @@ async fn submit_rejects_a_non_finite_price_before_sending() {
 async fn order_update_stream_delivers_order_binding() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::OrderBound,
-        prost::Message::encode_to_vec(&crate::proto::OrderBound {
-            perm_id: Some(9_876_543_210),
-            client_id: Some(0),
-            order_id: Some(42),
-        }),
+        order_bound().encode_proto(),
     )]));
     let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
     let mut stream = client.order_update_stream().await.unwrap();

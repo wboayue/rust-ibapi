@@ -220,6 +220,56 @@ impl ResponseProtoEncoder for CommissionReportResponse {
     }
 }
 
+// --- OrderBound (msg 100) ---
+//
+// Fields are `Option` so a test can drop one to exercise the decoder's
+// missing-field path via struct update syntax: `OrderBoundResponse { perm_id: None, ..order_bound() }`.
+// The default `perm_id` exceeds `i32::MAX` on purpose — it proves the 64-bit path.
+
+#[derive(Clone, Copy, Debug)]
+pub struct OrderBoundResponse {
+    pub perm_id: Option<i64>,
+    pub client_id: Option<i32>,
+    pub order_id: Option<i32>,
+}
+
+impl Default for OrderBoundResponse {
+    fn default() -> Self {
+        Self {
+            perm_id: Some(9_876_543_210),
+            client_id: Some(0),
+            order_id: Some(42),
+        }
+    }
+}
+
+impl OrderBoundResponse {
+    pub fn perm_id(mut self, v: i64) -> Self {
+        self.perm_id = Some(v);
+        self
+    }
+    pub fn client_id(mut self, v: i32) -> Self {
+        self.client_id = Some(v);
+        self
+    }
+    pub fn order_id(mut self, v: i32) -> Self {
+        self.order_id = Some(v);
+        self
+    }
+}
+
+impl ResponseProtoEncoder for OrderBoundResponse {
+    type Proto = proto::OrderBound;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::OrderBound {
+            perm_id: self.perm_id,
+            client_id: self.client_id,
+            order_id: self.order_id,
+        }
+    }
+}
+
 // --- ExecutionData (msg 11) ---
 //
 // Server version >= LAST_LIQUIDITY (136): version field dropped, model_code + last_liquidity emitted.
@@ -1164,6 +1214,10 @@ pub fn order_status() -> OrderStatusResponse {
 
 pub fn commission_report() -> CommissionReportResponse {
     CommissionReportResponse::default()
+}
+
+pub fn order_bound() -> OrderBoundResponse {
+    OrderBoundResponse::default()
 }
 
 pub fn execution_data() -> ExecutionDataResponse {

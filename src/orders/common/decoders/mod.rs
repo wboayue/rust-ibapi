@@ -17,11 +17,15 @@ pub(crate) fn decode_order_status(message: &ResponseMessage) -> Result<OrderStat
 }
 
 pub(crate) fn decode_order_bound(message: &ResponseMessage) -> Result<OrderBound, Error> {
+    fn required<T>(field: Option<T>, name: &str) -> Result<T, Error> {
+        field.ok_or_else(|| Error::parse_proto(name, "missing in OrderBound"))
+    }
+
     let p: crate::proto::OrderBound = prost::Message::decode(message.require_proto()?)?;
     Ok(OrderBound {
-        perm_id: p.perm_id.ok_or_else(|| Error::Simple("OrderBound is missing perm_id".into()))?,
-        client_id: p.client_id.ok_or_else(|| Error::Simple("OrderBound is missing client_id".into()))?,
-        order_id: p.order_id.ok_or_else(|| Error::Simple("OrderBound is missing order_id".into()))?,
+        perm_id: required(p.perm_id, "perm_id")?,
+        client_id: required(p.client_id, "client_id")?,
+        order_id: required(p.order_id, "order_id")?,
     })
 }
 

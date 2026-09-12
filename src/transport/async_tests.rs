@@ -15,6 +15,8 @@ use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_acco
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
+use crate::testdata::builders::orders::order_bound;
+use crate::testdata::builders::ResponseProtoEncoder;
 
 /// Build a binary-text-payload response body from a pipe-delimited test input.
 /// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
@@ -1294,14 +1296,7 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
     let (stream, bus) = make_bus();
     let mut order_sub = bus.send_order_request(42, vec![]).await.unwrap();
     let mut update_sub = bus.create_order_update_subscription().await.unwrap();
-    stream.push_inbound(binary_proto(
-        IncomingMessages::OrderBound as i32,
-        &crate::proto::OrderBound {
-            perm_id: Some(9_876_543_210),
-            client_id: Some(73),
-            order_id: Some(42),
-        },
-    ));
+    stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
     bus.read_and_route_message().await.unwrap();
     let message = next_message(&mut update_sub).await;
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);

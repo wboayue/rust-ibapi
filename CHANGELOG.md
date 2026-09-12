@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `OrderUpdate` includes `OrderBound`, exposing the permanent order ID, API client ID, and API order ID reported by TWS. Exhaustive matches must handle this variant. Sync and async transports deliver these notifications only to the order-update stream, so bindings for another client cannot reach a subscription sharing its raw order ID.
+- `OrderUpdate` includes `OrderBound`, exposing the permanent order ID, API client ID, and API order ID reported by TWS. Exhaustive matches must handle this variant. Sync and async transports deliver these notifications only to the order-update stream, so bindings for another client cannot reach a subscription sharing its raw order ID; see `docs/migration-4.0.md` §11 (#814).
 
 - `DATA_ADVISORY_CODES` is a `&[i32]` slice instead of a fixed-size array, so adding an advisory code is no longer a type change. Code binding the constant with an explicit array type, or iterating it by value, must adjust; see `docs/migration-4.0.md` §6 (#807).
 
