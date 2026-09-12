@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
 
     let matches = Command::new("stream_bars")
         .version("1.0")
-        .author("Wil Boayue <wil@wsbsolutions.com")
+        .author("Wil Boayue <wil@wsblabs.com>")
         .about("Streams realtime bars")
         .arg(arg!(--connection_string <VALUE>).default_value("localhost:4002"))
         .arg(arg!(--stock <SYMBOL>))
