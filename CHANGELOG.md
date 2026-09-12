@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `NOTICE_STREAM_LAG_CODE` (`-7`), a synthesized notice code delivered in-band on the async notice stream when its consumer fell behind the notice fan-out (fixed capacity 1024; `ClientBuilder::channel_capacity` does not reach it). The notice names the dropped count where the missed notices were previously skipped with only a `warn!`. Because the stream carries the connection-status notices (1100/1101/1102) a stateful consumer derives durable conclusions from, the consumer must resynchronize on this notice rather than resume — see the constant's docs. The notice-stream instance of `SUBSCRIPTION_LAG_CODE`, closing the step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync notice fan-out is unbounded and cannot lag (#813).
+
 ### Changed
 
 - `OrderUpdate` includes `OrderBound`, exposing the permanent order ID, API client ID, and API order ID reported by TWS. Exhaustive matches must handle this variant. Sync and async transports deliver these notifications only to the order-update stream, so bindings for another client cannot reach a subscription sharing its raw order ID; see `docs/migration-4.0.md` §11 (#814).
