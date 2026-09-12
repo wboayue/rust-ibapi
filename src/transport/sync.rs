@@ -6,13 +6,14 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, warn};
 
+use crate::client::id_generator::ClientIdManager;
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
@@ -199,6 +200,11 @@ pub struct TcpMessageBus<S: Stream> {
     shutdown_recv: Receiver<()>,
     /// Shared with the connection so a reconnect in progress sees the request.
     shutdown: Arc<ShutdownSignal>,
+    /// The client's order-ID generator, raised from the NextValidId frame the
+    /// reconnect handshake re-receives. Installed once via
+    /// [`Self::set_order_ids`] before the dispatcher thread starts; absent in
+    /// bus-only test fixtures, which never reconnect a client.
+    order_ids: OnceLock<Arc<ClientIdManager>>,
     order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
     connected: AtomicBool,
 }
@@ -221,9 +227,17 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown_send,
             shutdown_recv,
             shutdown,
+            order_ids: OnceLock::new(),
             order_update_stream: Mutex::new(None),
             connected: AtomicBool::new(true),
         })
+    }
+
+    /// Installs the client's order-ID generator so a successful reconnect
+    /// re-seeds it from the handshake's NextValidId. Called exactly once,
+    /// before the dispatcher thread starts.
+    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
+        self.order_ids.set(order_ids).expect("order-id generator installed twice");
     }
 
     fn is_shutting_down(&self) -> bool {
@@ -264,16 +278,17 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.notify_all(|| Error::ConnectionReset.into());
         self.orders.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        self.requests.clear();
+        self.orders.clear();
+        self.executions.clear();
+
         // TWS never frames the socket reconnect itself and does not replay
         // restoration notices on the new connection, so the notice fan-out —
         // the carrier 1100/1101/1102 arrive on — learns the socket generation
         // changed from this synthesized notice alone; see
-        // `TRANSPORT_RECONNECT_CODE`.
+        // `TRANSPORT_RECONNECT_CODE`. Published last so a consumer that
+        // resubscribes on it registers into maps the clears above cannot wipe.
         self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
-
-        self.requests.clear();
-        self.orders.clear();
-        self.executions.clear();
     }
 
     // The three cleanup handlers below remove a registration only when it is
@@ -360,6 +375,16 @@ impl<S: Stream> TcpMessageBus<S> {
                 if self.is_shutting_down() {
                     debug!("shutdown requested during reconnect; dispatcher thread exiting");
                     return Err(Error::Shutdown);
+                }
+
+                // The handshake re-received NextValidId; raise the client's
+                // generator from the server's floor so allocation never
+                // resumes below it. Only the initial connection seeded the
+                // generator before this. Do it before reporting the session
+                // as live so a caller gating on `is_connected()` cannot
+                // allocate below the new floor.
+                if let Some(order_ids) = self.order_ids.get() {
+                    order_ids.raise_order_id(self.connection.connection_metadata().next_order_id);
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
@@ -466,6 +491,9 @@ impl<S: Stream> TcpMessageBus<S> {
         let strategy = order_routing_strategy(message.message_type());
 
         match strategy {
+            OrderRoutingStrategy::OrderUpdateOnly => {
+                self.send_order_update(&message);
+            }
             OrderRoutingStrategy::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
 

@@ -268,6 +268,35 @@ Two things the old signature let callers get wrong, both verified against a live
 
 An unset exchange is now absent from the request rather than sent as `""`; TWS treats the two identically.
 
+### 11. `OrderUpdate` gains `OrderBound`
+
+TWS sends an `OrderBound` notification when it binds a permanent order ID to an API client ID and an order ID in that client's namespace. The official client documents it as the response to an order-binding request: client ID 0 can take over orders submitted manually in TWS via `reqAutoOpenOrders`, and each order it takes over is announced this way. The wire type existed in 3.x but no transport delivered it, so it was silently dropped. `order_update_stream()` now yields it as `OrderUpdate::OrderBound(OrderBound { perm_id, client_id, order_id })`:
+
+```rust,ignore
+// 3.x — exhaustive match compiled
+match update? {
+    OrderUpdate::OrderStatus(status) => {}
+    OrderUpdate::OpenOrder(order) => {}
+    OrderUpdate::ExecutionData(exec) => {}
+    OrderUpdate::CommissionReport(report) => {}
+}
+
+// 4.0 — add an arm for the new variant
+match update? {
+    OrderUpdate::OrderStatus(status) => {}
+    OrderUpdate::OpenOrder(order) => {}
+    OrderUpdate::ExecutionData(exec) => {}
+    OrderUpdate::CommissionReport(report) => {}
+    OrderUpdate::OrderBound(binding) => println!("perm {} is client {} order {}", binding.perm_id, binding.client_id, binding.order_id),
+}
+```
+
+What changes for compiling code:
+
+- **Exhaustive matches need the new arm.** Like `Liquidity` and `OrderStatusKind`, the enum stays exhaustive (no `#[non_exhaustive]`), so the compiler points at every site. Matches with a `_` arm compile unchanged.
+- **Bindings arrive only on `order_update_stream()`.** They do not reach the per-order `place_order` subscription, even for this client's own orders: API order IDs are scoped to a client ID, and the transport does not filter on it, so a binding for another client's order 42 must not land on a local subscription for order 42. This matches the official client, which delivers `orderBound` only to the global wrapper callback. Consume bindings from the update stream and key on `perm_id` when you need an account-wide identity.
+- **A binding grants nothing.** Knowing another client's `(client_id, order_id)` does not let this client modify or cancel that order.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -276,12 +305,12 @@ No code changes required, but observable at runtime:
 - **One-shot requests narrow to the message type they asked for.** A foreign frame surfaces as `Error::UnexpectedResponse` naming both the expected and received type, instead of being fed to the wrong payload decoder — where overlapping protobuf field numbers usually produced a plausible struct full of wrong values.
 - **Retry-on-reset is uniform.** `market_rule`, `family_codes`, `calculate_option_price`, `calculate_implied_volatility`, and `next_valid_order_id` now retry a connection reset up to three times like every other one-shot; `head_timestamp`, `histogram_data`, `market_depth_exchanges`, `historical_data(..).fetch()`, and `historical_schedules(..).fetch()` now retry *at most* three times instead of unboundedly (or, on the async side, not at all), and sync/async agree on what a closed stream returns.
 - **Frames are validated.** A length prefix that cannot describe a TWS message (shorter than the message id, or over the official 16 MiB cap) raises `Error::InvalidFrame` and drives a reconnect instead of a multi-gigabyte allocation and a permanently mis-framed stream; a body too short for the message id no longer panics the dispatcher. A frame whose message id maps to no known type raises an `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`) notice on `Client::notice_stream` — the observable form of a framing desynchronization. Both new `Error` variants arrive via `#[non_exhaustive]`, so they are not compile-breaking.
-- **Notices reclassified.** Codes 2188 and 10090 are data advisories (TWS keeps delivering data after sending them, but the subscription used to be torn down); code-399 order messages whose text carries a `Warning:` line classify as warnings instead of order rejections; a notice with no `error_code` field (code 0) classifies as a warning instead of failing every in-flight shared one-shot.
+- **Notices reclassified.** Codes 2188 and 10090 are data advisories (TWS keeps delivering data after sending them, but the subscription used to be torn down); code-399 order messages whose text carries a `Warning:` line classify as warnings instead of order rejections; a notice with no `error_code` field (code 0) classifies as a warning instead of failing every in-flight shared one-shot. After 4.0.1, `WARNING_CODE_RANGE` covers the whole `21xx` band (`2100..=2199`), 317 (market depth RESET) is a data advisory, and `DATA_ADVISORY_CODES` resolves before the ranges in `category()` — see the CHANGELOG entries for #805 / #806.
 - **The order-update stream delivers order-bound errors as notices.** Order-bound error frames arrive as `SubscriptionItem::Notice` (with `request_id`, code, and message) instead of raw frames that failed to decode as `OrderUpdate`. Note `filter_data()` / `iter_data()` drop notices — match on `SubscriptionItem::Notice` to observe rejections of fire-and-forget orders. Request-less errors and errors owned by a data-request subscription no longer reach the stream at all.
 - **Real errors instead of empty results.** `OrderBuilder::analyze()` returns the TWS rejection (e.g. code 201) instead of `Error::UnexpectedEndOfStream`; blocking `matching_symbols()` returns the TWS error instead of `Ok(vec![])`.
 - **Malformed decimals fail instead of decoding as `0`.** Beyond the size fields whose types changed in [§1](#1-market-data-sizes-are-optionf64), every decimal-typed wire field — order quantities, execution shares, positions, bar volume/WAP, market-depth sizes — now surfaces a malformed value as `Error::Parse` instead of silently substituting `0`. TWS's "unset" sentinels are also recognized on all of these fields (previously only a few), decoding to `None` — or `0.0` where the field stays `f64` — instead of leaking as a literal 2.1-billion value.
 - **`TickTypes::MarketDataType` actually arrives.** The variant existed but was never routed to `Client::market_data` subscriptions; TWS's market-data-type notifications (real-time / frozen / delayed / delayed-frozen, sent on subscribe and whenever the feed switches) now reach them, so a match that never saw this variant will start seeing it.
-- **Falling behind is observable.** An async subscription whose consumer lags its broadcast channel (capacity 1024, now settable via `ClientBuilder::channel_capacity`) receives a non-terminal `SUBSCRIPTION_LAG_CODE` (`-6`) notice naming the number of evicted frames, plus a `warn!`, where it previously resumed with no signal at any level; reconcile as after a reconnect gap. On the sync side, whose channels are unbounded and never drop, a stalled consumer now triggers `warn!` watermarks at every 10,000 queued messages on the subscription, shared, and order-update send paths (the notice fan-out is excluded on both transports).
+- **Falling behind is observable.** An async subscription whose consumer lags its broadcast channel (capacity 1024, now settable via `ClientBuilder::channel_capacity`) receives a non-terminal `SUBSCRIPTION_LAG_CODE` (`-6`) notice naming the number of evicted frames, plus a `warn!`, where it previously resumed with no signal at any level; reconcile as after a reconnect gap. The async notice stream (`Client::notice_stream`) rides the same bounded fan-out at the fixed default capacity, and a lagging consumer receives a `NOTICE_STREAM_LAG_CODE` (`-7`) notice in place of the evicted notices; because that stream carries the 1100/1101/1102 connection-status notices, resynchronize (re-baseline link state, re-establish subscriptions) rather than resume. A finished socket reconnect publishes a `TRANSPORT_RECONNECT_CODE` (`-8`) notice to the notice stream on both sides, since TWS never frames the reconnect and does not replay 1101/1102 on the new connection; treat it the same way. On the sync side, whose channels are unbounded and never drop, a stalled consumer now triggers `warn!` watermarks at every 10,000 queued messages on the subscription, shared, and order-update send paths (the sync notice fan-out has no watermark).
 - **Reconnection is configurable and more resilient.** `ClientBuilder::max_reconnect_attempts` / `reconnect_forever` control the retry budget (default unchanged: 20 attempts, ~7.5 minutes). A session-establishment failure (handshake, `startAPI`, account info) consumes one attempt and backs off instead of aborting the loop — common during an automated TWS restart — and when every attempt fails, `reconnect` returns the last real error instead of a generic `Error::ConnectionFailed`.
 
 ## Quick migration checklist
@@ -296,7 +325,8 @@ No code changes required, but observable at runtime:
 8. If you consume the order-update stream through `filter_data()` / `iter_data()`, decide whether you need a `SubscriptionItem::Notice` arm to observe order rejections.
 9. Add an `OrderStatusKind::Unknown(raw)` arm to exhaustive matches on order statuses, and `.clone()` (or borrow) where code relied on the removed `Copy` — see [§9](#9-orderstatuskind-gains-unknownstring).
 10. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
-11. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+11. Add an `OrderUpdate::OrderBound(binding)` arm to exhaustive matches on order updates, and read bindings from `order_update_stream()` — they never reach `place_order` subscriptions; see [§11](#11-orderupdate-gains-orderbound).
+12. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

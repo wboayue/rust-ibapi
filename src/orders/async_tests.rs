@@ -11,8 +11,8 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_order, completed_orders_end, completed_orders_request, execution_data, execution_data_end,
-    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_status,
-    place_order_request,
+    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_bound,
+    order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
@@ -454,7 +454,7 @@ async fn test_exercise_options() {
 
 #[tokio::test]
 async fn test_next_valid_order_id() {
-    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(123) };
+    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(9123) };
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NextValidId,
         prost::Message::encode_to_vec(&next_valid_id_proto),
@@ -465,12 +465,29 @@ async fn test_next_valid_order_id() {
 
     let order_id = client.next_valid_order_id().await.expect("failed to get next valid order id");
 
-    assert_eq!(order_id, 123, "Expected order ID 123");
-    assert_eq!(client.next_order_id(), 123, "Client's order ID should be updated to 123");
+    assert_eq!(order_id, 9123, "Expected order ID 9123");
+    assert_eq!(client.next_order_id(), 9123, "Client's order ID should be raised to 9123");
     assert_ne!(client.next_order_id(), initial_order_id, "Client's order ID should have changed");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &next_valid_order_id_request());
+}
+
+// The server only knows about IDs it has seen: an ID allocated locally but not
+// yet transmitted is invisible to it, so its answer can sit at or below the
+// local counter. That answer must not rewind the generator.
+#[tokio::test]
+async fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        prost::Message::encode_to_vec(&crate::proto::NextValidId { order_id: Some(5) }),
+    )]);
+
+    let allocated = client.next_order_id();
+    let server_value = client.next_valid_order_id().await.expect("next_valid_order_id");
+
+    assert_eq!(server_value, 5, "the server's value is still returned verbatim");
+    assert_eq!(client.next_order_id(), allocated + 1, "generator must not rewind below an allocated ID");
 }
 
 #[tokio::test]
@@ -645,9 +662,9 @@ async fn analyze_surfaces_rejected_what_if_order() {
 async fn analyze_returns_order_state_for_the_matching_order() {
     let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::OpenOrder,
-        open_order().order_id(90).status(OrderStatusKind::PreSubmitted).encode_proto(),
+        open_order().order_id(9090).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.set_next_order_id(90);
+    client.raise_next_order_id(9090);
     let contract = Contract::stock("AAPL").build();
 
     let state = client
@@ -680,7 +697,7 @@ async fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[tokio::test]
 async fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(100);
+    client.raise_next_order_id(9100);
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client
@@ -690,11 +707,11 @@ async fn submit_assigns_the_next_order_id_and_sends_the_order() {
         .submit()
         .await
         .expect("submit should succeed");
-    assert_eq!(order_id.value(), 100);
+    assert_eq!(order_id.value(), 9100);
 
     assert_eq!(request_message_count(&bus), 1);
     let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
-    assert_eq!(request.order_id, Some(100));
+    assert_eq!(request.order_id, Some(9100));
     let order = request.order.expect("request carries an order");
     assert_eq!(order.action.as_deref(), Some("BUY"));
     assert_eq!(order.order_type.as_deref(), Some("LMT"));
@@ -721,7 +738,7 @@ async fn submit_rejects_an_invalid_order_before_sending() {
 #[tokio::test]
 async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(200);
+    client.raise_next_order_id(9200);
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -736,7 +753,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
         .await
         .expect("bracket submission should succeed");
 
-    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (200, 201, 202));
+    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (9200, 9201, 9202));
     assert_eq!(request_message_count(&bus), 3);
 
     let orders: Vec<crate::proto::Order> = (0..3)
@@ -751,7 +768,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     // at its default is omitted on the wire, so read them through unwrap_or_default.
     assert_eq!(
         orders.iter().map(|o| o.parent_id.unwrap_or_default()).collect::<Vec<_>>(),
-        vec![0, 200, 200]
+        vec![0, 9200, 9200]
     );
 
     // Only the last order transmits, so TWS receives the trio atomically.
@@ -774,7 +791,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[tokio::test]
 async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_test_client();
-    client.set_next_order_id(300);
+    client.raise_next_order_id(9300);
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
@@ -798,7 +815,7 @@ async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
         .await
         .expect("OCA submission should succeed");
 
-    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![300, 301]);
+    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
     for i in 0..2 {
@@ -867,4 +884,25 @@ async fn submit_rejects_a_non_finite_price_before_sending() {
         .expect_err("NaN is not a price");
     assert!(err.to_string().contains("Invalid price"), "got {err}");
     assert_eq!(request_message_count(&bus), 0);
+}
+
+#[tokio::test]
+async fn order_update_stream_delivers_order_binding() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OrderBound,
+        order_bound().encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+    let mut stream = client.order_update_stream().await.unwrap();
+    let Some(Ok(SubscriptionItem::Data(OrderUpdate::OrderBound(bound)))) = stream.next().await else {
+        panic!("expected an order binding notification");
+    };
+    assert_eq!(
+        bound,
+        crate::orders::OrderBound {
+            perm_id: 9_876_543_210,
+            client_id: 0,
+            order_id: 42
+        }
+    );
 }

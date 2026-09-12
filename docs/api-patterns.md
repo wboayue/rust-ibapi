@@ -548,29 +548,30 @@ for notice in notices.iter() {
 
 ### Correlating Commissions with Executions
 
-`CommissionReport` joins to its `ExecutionData` deterministically by `execution_id` —
-the same value carried on `Execution::execution_id`. Both arrive on the same streams
-(`executions`, `place_order`, `order_update_stream`), and IBKR may deliver them in
-either order, so index commissions by `execution_id` rather than guessing at arrival
-order. There is no temporal pairing to reason about.
+`CommissionReport` joins to its `ExecutionData` by `execution_id` — the same value
+carried on `Execution::execution_id`. TWS sends the execution first and the commission
+shortly after, but order-status and open-order frames can land between them, so index
+commissions by `execution_id` rather than assuming the two are adjacent. Both arrive on
+the same streams (`executions`, `place_order`, `order_update_stream`).
 
 ```rust
-use ibapi::orders::{CommissionReport, OrderUpdate};
+use ibapi::orders::{ExecutionData, OrderUpdate};
 use std::collections::HashMap;
 
-let mut commissions: HashMap<String, CommissionReport> = HashMap::new();
+let mut executions: HashMap<String, ExecutionData> = HashMap::new();
 
 let updates = client.order_update_stream()?;
 for update in updates.iter_data() {
     match update? {
-        OrderUpdate::CommissionReport(report) => {
-            // Index each commission by its execution_id.
-            commissions.insert(report.execution_id.clone(), report);
-        }
         OrderUpdate::ExecutionData(exec) => {
-            // Look up the matching commission deterministically.
-            let commission = commissions.get(&exec.execution.execution_id);
-            println!("execution {} commission: {commission:?}", exec.execution.execution_id);
+            // The execution arrives first: index it by execution_id.
+            executions.insert(exec.execution.execution_id.clone(), exec);
+        }
+        OrderUpdate::CommissionReport(report) => {
+            // The commission follows: join it to the execution it belongs to.
+            if let Some(exec) = executions.remove(&report.execution_id) {
+                println!("{} x {} commission {}", exec.execution.shares, exec.contract.symbol, report.commission);
+            }
         }
         _ => {}
     }

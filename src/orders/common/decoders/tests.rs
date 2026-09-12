@@ -5,6 +5,9 @@ use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::contracts::Symbol;
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, OrderStatusKind};
+use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
+use crate::testdata::builders::ResponseProtoEncoder;
+use crate::Error;
 
 #[test]
 fn test_decode_open_order_proto() {
@@ -447,4 +450,58 @@ fn test_decode_order_status_proto_rejects_malformed_remaining() {
     .encode_to_vec();
 
     assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
+}
+
+#[test]
+fn order_binding_decodes_all_identity_fields() {
+    let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::OrderBound, order_bound().client_id(7).encode_proto());
+    assert_eq!(
+        decode_order_bound(&message).unwrap(),
+        crate::orders::OrderBound {
+            perm_id: 9_876_543_210,
+            client_id: 7,
+            order_id: 42
+        }
+    );
+}
+
+#[test]
+fn order_binding_requires_complete_identity() {
+    for (fixture, missing) in [
+        (
+            OrderBoundResponse {
+                perm_id: None,
+                ..order_bound()
+            },
+            "perm_id",
+        ),
+        (
+            OrderBoundResponse {
+                client_id: None,
+                ..order_bound()
+            },
+            "client_id",
+        ),
+        (
+            OrderBoundResponse {
+                order_id: None,
+                ..order_bound()
+            },
+            "order_id",
+        ),
+    ] {
+        let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::OrderBound, fixture.encode_proto());
+        match decode_order_bound(&message).unwrap_err() {
+            Error::Parse(_, field, reason) => {
+                assert_eq!(field, missing);
+                assert_eq!(reason, "missing in OrderBound");
+            }
+            other => panic!("expected Error::Parse for missing {missing}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn order_binding_rejects_text_framing() {
+    assert_rejects_text_framing(IncomingMessages::OrderBound, "100\0", decode_order_bound);
 }

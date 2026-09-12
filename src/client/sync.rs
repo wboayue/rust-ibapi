@@ -33,8 +33,8 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    client_id: i32,              // ID of client.
-    id_manager: ClientIdManager, // Manages request and order ID generation
+    client_id: i32,                   // ID of client.
+    id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
 }
 
 impl Client {
@@ -110,10 +110,18 @@ impl Client {
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
-        // Starts thread to read messages from TWS
-        message_bus.process_messages(connection_metadata.server_version)?;
+        let server_version = connection_metadata.server_version;
+        let client = Client::new(connection_metadata, message_bus.clone())?;
 
-        Client::new(connection_metadata, message_bus)
+        // Share the order-ID generator with the bus so a successful reconnect
+        // re-seeds it from the handshake's NextValidId; must be installed
+        // before the dispatcher thread starts.
+        message_bus.set_order_ids(client.id_manager.clone());
+
+        // Starts thread to read messages from TWS
+        message_bus.process_messages(server_version)?;
+
+        Ok(client)
     }
 
     fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn MessageBus>) -> Result<Client, Error> {
@@ -123,7 +131,7 @@ impl Client {
             time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
-            id_manager: ClientIdManager::new(connection_metadata.next_order_id),
+            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)),
         };
 
         Ok(client)
@@ -146,9 +154,10 @@ impl Client {
         self.id_manager.next_order_id()
     }
 
-    /// Sets the current value of order ID.
-    pub(crate) fn set_next_order_id(&self, order_id: i32) {
-        self.id_manager.set_order_id(order_id);
+    /// Raises the order-ID generator to at least the given value; never
+    /// lowers it below locally allocated order IDs.
+    pub(crate) fn raise_next_order_id(&self, order_id: i32) {
+        self.id_manager.raise_order_id(order_id);
     }
 
     /// Returns the version of the TWS API server to which the client is connected.
@@ -281,7 +290,7 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            id_manager: ClientIdManager::new(-1),
+            id_manager: Arc::new(ClientIdManager::new(9000)),
         }
     }
 
