@@ -1,3 +1,4 @@
+use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 use time_tz::Tz;
@@ -58,92 +59,46 @@ fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
     Ok(zones[0])
 }
 
+/// `YYYYMMDD-HH:MM:SS`: historical-schedule session bounds, and the zone-less UTC
+/// rendering of `HistoricalDataEnd`.
+const DASHED_DATE_TIME: &[FormatItem<'static>] = format_description!("[year][month][day]-[hour]:[minute]:[second]");
+
 fn parse_schedule_date_time(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
-    let schedule_date_time_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
-    let schedule_date_time = PrimitiveDateTime::parse(text, schedule_date_time_format)?;
+    let schedule_date_time = PrimitiveDateTime::parse(text, DASHED_DATE_TIME)?;
     Ok(resolve_local(schedule_date_time, time_zone))
 }
 
-fn parse_schedule_date(text: &str) -> Result<Date, Error> {
-    let schedule_date_format = format_description!("[year][month][day]");
-    let schedule_date = Date::parse(text, schedule_date_format)?;
-    Ok(schedule_date)
+fn parse_yyyymmdd(text: &str) -> Result<Date, Error> {
+    Ok(Date::parse(text, format_description!("[year][month][day]"))?)
 }
 
-/// Parses the renderings `HistoricalDataEnd` carries in its `start_date_str` /
-/// `end_date_str`.
+/// Parses the two wire-verified renderings `HistoricalDataEnd` carries in its
+/// `start_date_str` / `end_date_str`. The gateway's "Send instrument-specific
+/// attributes ... in" setting picks the rendering:
 ///
-/// The gateway's timezone setting decides the rendering: classic zones send a wall
-/// clock with a trailing zone name ("20260101 09:30:00 US/Eastern"), while the UTC
-/// rendering documented since TWS 10.17 is zone-less ("20260101-09:30:00"), and
-/// dashed dates with or without a zone or fractional seconds ("2026-01-01
-/// 09:30:00[.0][ UTC]") are also sent — the news decoder already treats zone-less
-/// dashed times as UTC. A trailing zone name resolves the wall clock in that zone;
-/// zone-less shapes are UTC, the documented meaning of IB's UTC format.
+/// - instrument timezone (default): `YYYYMMDD HH:MM:SS <zone>`, a wall clock in the
+///   named zone. The zone name may contain spaces (`China Standard Time`), so
+///   everything after the time is the zone.
+/// - UTC format: `YYYYMMDD-HH:MM:SS`, zone-less, the UTC shape documented since
+///   TWS 10.17. Captured from a 10.50 gateway in #808.
+///
+/// Anything else is rejected loudly rather than guessed at: a zone-less wall clock
+/// resolved in the wrong zone is a silently wrong instant. Candidate shapes seen on
+/// other messages or older APIs are tracked in `plans/historical-data-end-renderings.md`.
 fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Error> {
     let text = text.trim();
-    // Try the whole string as a zone-less wall clock first, so a rendering whose clock
-    // fills the string is never mistaken for a zone name.
-    if let Ok(wall_clock) = parse_wall_clock(text) {
-        return Ok(wall_clock.assume_utc());
+    if let Ok(utc) = PrimitiveDateTime::parse(text, DASHED_DATE_TIME) {
+        return Ok(utc.assume_utc());
     }
-    // Timezone-qualified rendering: "<wall clock> <zone>". The last token must name a
-    // zone, so an unrecognized gateway zone name still surfaces as UnsupportedTimeZone.
-    let (datetime_part, zone_name) = text
-        .rsplit_once(' ')
-        .ok_or_else(|| Error::parse_field(text, "expected a wall clock with optional trailing timezone"))?;
-    let zone = parse_time_zone(zone_name)?;
-    let wall_clock = parse_wall_clock(datetime_part)?;
+    let mut parts = text.splitn(3, ' ');
+    let (Some(date), Some(time), Some(zone_name)) = (parts.next(), parts.next(), parts.next()) else {
+        return Err(Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS <zone>' or 'YYYYMMDD-HH:MM:SS'"));
+    };
+    // Wall clock before zone, so a malformed clock reports a parse error rather than
+    // an unsupported timezone.
+    let wall_clock = PrimitiveDateTime::new(parse_yyyymmdd(date)?, Time::parse(time, format_description!("[hour]:[minute]:[second]"))?);
+    let zone = parse_time_zone(zone_name.trim())?;
     Ok(resolve_local(wall_clock, zone))
-}
-
-/// Parses "<date><sep><HH:MM:SS[.f]>", the wall-clock body shared by every rendering:
-/// `<date>` is "YYYYMMDD" or "YYYY-MM-DD", `<sep>` is at least one space or the dash
-/// of the zone-less UTC format (IB has been observed to double the space), and a
-/// fractional-second suffix is a rendering artifact without sub-second meaning on
-/// this message.
-fn parse_wall_clock(text: &str) -> Result<PrimitiveDateTime, Error> {
-    let malformed = |reason: String| Error::parse_field(text, format!("malformed wall-clock datetime: {reason}"));
-
-    if !text.is_ascii() {
-        return Err(malformed("non-ASCII input".into()));
-    }
-
-    // "YYYY-MM-DD" carries a dash at index 4; "YYYYMMDD" does not.
-    let bytes = text.as_bytes();
-    let (date_len, date_format) = if bytes.get(4) == Some(&b'-') {
-        (10, format_description!("[year]-[month]-[day]"))
-    } else {
-        (8, format_description!("[year][month][day]"))
-    };
-    if bytes.len() <= date_len {
-        return Err(malformed("missing time of day".into()));
-    }
-    let date = Date::parse(&text[..date_len], date_format).map_err(|e| malformed(e.to_string()))?;
-
-    let time_part = match text[date_len..].strip_prefix('-') {
-        Some(time_part) => time_part,
-        None => {
-            let time_part = text[date_len..].trim_start_matches(' ');
-            if time_part.len() == text.len() - date_len {
-                return Err(malformed("missing date/time separator".into()));
-            }
-            time_part
-        }
-    };
-
-    let time_part = match time_part.split_once('.') {
-        Some((time_part, fraction)) => {
-            if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) {
-                return Err(malformed("malformed fractional seconds".into()));
-            }
-            time_part
-        }
-        None => time_part,
-    };
-
-    let time = Time::parse(time_part, format_description!("[hour]:[minute]:[second]")).map_err(|e| malformed(e.to_string()))?;
-    Ok(PrimitiveDateTime::new(date, time))
 }
 
 // === Protobuf decoders ===
@@ -276,7 +231,7 @@ pub(crate) fn decode_historical_schedule_proto(p: crate::proto::HistoricalSchedu
             Ok(Session {
                 start: parse_schedule_date_time(s.start_date_time.as_deref().unwrap_or(""), time_zone)?,
                 end: parse_schedule_date_time(s.end_date_time.as_deref().unwrap_or(""), time_zone)?,
-                reference: parse_schedule_date(s.ref_date.as_deref().unwrap_or(""))?,
+                reference: parse_yyyymmdd(s.ref_date.as_deref().unwrap_or(""))?,
             })
         })
         .collect::<Result<Vec<Session>, Error>>()?;
