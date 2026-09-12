@@ -9,7 +9,7 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
 use crate::contracts::Contract;
-use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage};
+use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::testdata::builders::orders::order_bound;
@@ -625,6 +625,8 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     connection.establish_connection()?;
     let bus = TcpMessageBus::new(connection)?;
 
+    let notices = bus.connection.notice_broadcaster.subscribe();
+
     let subscription = bus.send_request(9000, &packet)?;
 
     bus.dispatch()?;
@@ -632,6 +634,19 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     match subscription.next() {
         Some(Err(Error::ConnectionReset)) => {}
         _ => panic!(),
+    }
+
+    // The restart also publishes the synthesized reconnect notice to the
+    // notice fan-out (see TRANSPORT_RECONNECT_CODE): the notice channel is
+    // how a connection-state consumer without live subscriptions learns the
+    // socket generation changed.
+    loop {
+        let notice = notices
+            .recv_timeout(Duration::from_millis(100))
+            .expect("no reconnect notice on the notice fan-out");
+        if notice.code == TRANSPORT_RECONNECT_CODE {
+            break;
+        }
     }
 
     Ok(())

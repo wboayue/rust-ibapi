@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `NOTICE_STREAM_LAG_CODE` (`-7`), a synthesized notice code delivered in-band on the async notice stream when its consumer fell behind the notice fan-out (fixed capacity 1024; `ClientBuilder::channel_capacity` does not reach it). The notice names the dropped count where the missed notices were previously skipped with only a `warn!`. Because the stream carries the connection-status notices (1100/1101/1102) a stateful consumer derives durable conclusions from, the consumer must resynchronize on this notice rather than resume — see the constant's docs. The notice-stream instance of `SUBSCRIPTION_LAG_CODE`, closing the step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync notice fan-out is unbounded and cannot lag (#813).
+- `TRANSPORT_RECONNECT_CODE` (`-8`), a synthesized notice code published to the notice stream (sync and async) after the transport finishes reconnecting its socket to TWS/Gateway. The reconnect previously reached only live request/order/shared subscriptions (as `Error::ConnectionReset`); a consumer using the notice stream as its connection-state authority could hold a recorded 1100 across a successful reconnect forever, since TWS never frames the reconnect and does not replay 1101/1102 on the new connection. On receiving it, resubscribe and re-baseline connection state; see the constant's docs (#812).
 
 ### Changed
 
