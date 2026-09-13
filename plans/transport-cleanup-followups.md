@@ -88,7 +88,8 @@ Candidate fix (small, needs tests): notify once per queue (iterate the
 also drain when `Arc::strong_count(&shared_receiver) == 2` (map + this caller:
 no live subscriber holds the queue). The drain-discards-live-messages risk
 above only applies when another subscriber holds it. Would remove the caveat
-on `TRANSPORT_RECONNECT_CODE` and in the changelog.
+on `TRANSPORT_RECONNECT_CODE` and in the changelog. Implementation plan:
+[sync shared queues: stale resets and frames](sync-shared-queue-stale-items.md).
 
 ## 5. Async shutdown/reset shape
 
