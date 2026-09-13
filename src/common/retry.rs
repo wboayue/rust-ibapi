@@ -21,8 +21,10 @@ mod sync_retry {
 
     /// What a retry waits on between attempts.
     pub trait ReconnectWaiter {
-        /// Block until the session is connected again. `Err` means it never
-        /// will be (a reconnect that gave up, or during shutdown).
+        /// Block until the session is connected again. Returns
+        /// `Error::Shutdown` if it never will be (a reconnect that gave up, or
+        /// during shutdown); the retry passes that on as-is, since a
+        /// `ConnectionReset` would invite the caller to retry a client that is gone.
         fn wait_connected(&self) -> Result<(), Error>;
     }
 
@@ -42,13 +44,9 @@ mod sync_retry {
             match operation() {
                 Err(Error::ConnectionReset) if attempts < max_retries => {
                     attempts += 1;
-                    // The reset came from a connection that is being replaced.
-                    // Retrying before the replacement is ready is blocked by
-                    // the send gate, so give up with the reset the caller would
-                    // have seen anyway if it never comes.
-                    if waiter.wait_connected().is_err() {
-                        return Err(Error::ConnectionReset);
-                    }
+                    // The send gate refuses a retry until the replacement
+                    // connection is ready, so wait for it first.
+                    waiter.wait_connected()?;
                     continue;
                 }
                 other => return other,
@@ -75,8 +73,10 @@ mod async_retry {
     /// What a retry waits on between attempts.
     #[async_trait]
     pub trait ReconnectWaiter: Sync {
-        /// Resolve once the session is connected again. `Err` means it never
-        /// will be (a reconnect that gave up, or during shutdown).
+        /// Resolve once the session is connected again. Returns
+        /// `Error::Shutdown` if it never will be (a reconnect that gave up, or
+        /// during shutdown); the retry passes that on as-is, since a
+        /// `ConnectionReset` would invite the caller to retry a client that is gone.
         async fn wait_connected(&self) -> Result<(), Error>;
     }
 
@@ -102,13 +102,9 @@ mod async_retry {
             match operation().await {
                 Err(Error::ConnectionReset) if attempts < max_retries => {
                     attempts += 1;
-                    // The reset came from a connection that is being replaced.
-                    // Retrying before the replacement is ready is blocked by
-                    // the send gate, so give up with the reset the caller would
-                    // have seen anyway if it never comes.
-                    if waiter.wait_connected().await.is_err() {
-                        return Err(Error::ConnectionReset);
-                    }
+                    // The send gate refuses a retry until the replacement
+                    // connection is ready, so wait for it first.
+                    waiter.wait_connected().await?;
                     continue;
                 }
                 other => return other,
