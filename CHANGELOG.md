@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- `time` minimum raised to 0.3.47, so a stale downstream lockfile can no longer resolve a version affected by RUSTSEC-2026-0009 (denial of service via stack exhaustion) (#PR).
+- `time` minimum raised to 0.3.47, so a stale downstream lockfile can no longer resolve a version affected by RUSTSEC-2026-0009 (denial of service via stack exhaustion) (#820).
 
 ## [4.1.0] - 2026-09-11
 
