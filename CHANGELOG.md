@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - One-shot requests still recover across a TWS restart: the retry waits for the reconnect before resending, and gives up with `Error::Shutdown` if the session does not return (#816).
 - `TRANSPORT_RECONNECT_CODE` is published once the reconnected session is live, so a resubscribe from its handler lands on the new session. On the blocking client, a resubscribe to a stream without a request id (for example `open_orders`) can still read a stale reset left on its shared channel as its first item (#816).
 
+### Security
+
+- `time` minimum raised to 0.3.47, so a stale downstream lockfile can no longer resolve a version affected by RUSTSEC-2026-0009 (denial of service via stack exhaustion) (#820).
+
 ## [4.1.0] - 2026-09-11
 
 ### Added
