@@ -914,7 +914,9 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 /// triggers reconnect; the stub's reconnect "succeeds" but the subsequent
 /// handshake also reads EOF, so `dispatch` ultimately returns `ConnectionFailed`
 /// rather than hanging or silently dropping the error. In-flight subscriptions
-/// are notified of `Error::Shutdown`.
+/// are notified of `Error::ConnectionReset` before the reconnect is attempted,
+/// and the `Error::Shutdown` the failed reconnect then requests finds the
+/// channel already cleared - so the reset is the only notification.
 #[test]
 fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -925,7 +927,8 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     assert!(matches!(err, Error::ConnectionFailed), "unexpected error: {err:?}");
 
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
-    assert!(matches!(resp, Err(Error::Shutdown)), "got: {resp:?}");
+    assert!(matches!(resp, Err(Error::ConnectionReset)), "got: {resp:?}");
+    assert!(sub.try_next().is_none(), "subscription received a second notification");
     Ok(())
 }
 
@@ -2188,6 +2191,124 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
         notice.message
     );
     Ok(())
+}
+
+/// Every send is refused while the session is down: nothing reaches the socket
+/// the reconnect is replacing, and nothing is registered on a channel no reset
+/// would clear again.
+#[test]
+fn test_sends_are_refused_while_disconnected() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    bus.connection_state.set_disconnected();
+
+    assert!(matches!(mb.send_request(100, b"req-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(mb.send_order_request(42, b"order-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(
+        mb.send_shared_request(OutgoingMessages::RequestManagedAccounts, b"shared-bytes"),
+        Err(Error::ConnectionReset)
+    ));
+    assert!(matches!(mb.send_message(b"message-bytes"), Err(Error::ConnectionReset)));
+
+    assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
+    assert_eq!(bus.orders.len(), 0, "a refused order request must register nothing");
+    assert!(stream.captured().is_empty(), "a refused send must not reach the socket");
+
+    // The same send goes through once the handshake has put the session back.
+    bus.connection_state.set_connected();
+    assert!(mb.send_request(100, b"req-bytes").is_ok());
+    assert!(!stream.captured().is_empty());
+}
+
+/// A cancel that cannot be sent is not an error the caller has to handle:
+/// the session that held the subscription is gone. The local registration goes
+/// either way, so nothing is left behind.
+#[test]
+fn test_cancel_while_disconnected_clears_the_registration() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+    let sub = mb.send_request(100, b"req-bytes")?;
+    assert_eq!(bus.requests.len(), 1);
+
+    bus.connection_state.set_disconnected();
+
+    let result = mb.cancel_subscription(100, b"cancel-bytes");
+    assert!(matches!(result, Err(Error::ConnectionReset)), "got: {result:?}");
+    assert_eq!(bus.requests.len(), 0, "cancel must clear the registration anyway");
+
+    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
+    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    Ok(())
+}
+
+/// `wait_connected` blocks the one-shot retry until the session is back, and a
+/// shutdown releases it rather than leaving the caller there for good.
+#[test]
+fn test_wait_connected_returns_shutdown_when_the_bus_shuts_down() {
+    let (_stream, bus) = make_bus();
+    bus.connection_state.set_disconnected();
+
+    let closer = Arc::clone(&bus);
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        closer.request_shutdown();
+    });
+
+    let start = Instant::now();
+    let result = MessageBus::wait_connected(&*bus);
+    assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
+    assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on shutdown");
+}
+
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
+/// the send gate cannot close: the write is refused after the registration
+/// went in.
+#[derive(Clone, Debug)]
+struct FailingWriteStream(MemoryStream);
+
+impl Io for FailingWriteStream {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.0.read_message()
+    }
+
+    fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
+        Err(Error::ConnectionReset)
+    }
+}
+
+impl Reconnect for FailingWriteStream {
+    fn reconnect(&self) -> Result<(), Error> {
+        self.0.reconnect()
+    }
+
+    fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
+        self.0.sleep(duration, shutdown)
+    }
+
+    fn shutdown_read(&self) -> Result<(), Error> {
+        self.0.shutdown_read()
+    }
+}
+
+impl Stream for FailingWriteStream {}
+
+/// A send whose write fails takes its registration with it, so no channel is
+/// left waiting on a response that was never requested. Covers the window the
+/// `ensure_connected` check cannot close, where the session goes down between
+/// the check and the write.
+#[test]
+fn test_failed_write_leaves_no_registration() {
+    let connection = Connection::stubbed(FailingWriteStream(MemoryStream::default()), 28);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    assert!(mb.send_request(100, b"req-bytes").is_err());
+    assert_eq!(bus.requests.len(), 0, "a failed write must leave no request registered");
+
+    assert!(mb.send_order_request(42, b"order-bytes").is_err());
+    assert_eq!(bus.orders.len(), 0, "a failed write must leave no order registered");
 }
 
 #[test]

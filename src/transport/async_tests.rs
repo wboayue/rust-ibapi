@@ -1188,24 +1188,39 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
     assert!(late.try_next_routed().is_none(), "post-reset shared subscription read a stale reset");
 }
 
-/// `reset_channels` also publishes the reconnect notice to the notice stream:
+/// A finished reconnect publishes the reconnect notice to the notice stream:
 /// a connection-state consumer subscribed there learns the socket generation
 /// changed even with no live subscription to carry a `ConnectionReset`. TWS
 /// never replays 1101/1102 on the new connection, so this notice is the only
 /// signal that un-strands state recorded from the previous one (a held 1100).
+/// It is published once the session is live again - the channel reset runs
+/// before the reconnect, so the notice cannot ride on it - and a consumer
+/// that resubscribes on it lands on the new session.
 #[tokio::test]
-async fn test_reset_channels_publishes_reconnect_notice_to_notice_stream() {
-    let (_, bus) = make_bus();
+async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
 
+    // First read fails as InvalidFrame, which the processing loop classifies
+    // as connection lost; then the frames the reconnect handshake consumes.
+    stream.push_inbound(b"xx".to_vec());
+    let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
+    stream.push_inbound(handshake.into_bytes());
+    stream.push_inbound(next_valid_id_frame(5000));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     let mut notices = bus.connection.notice_sender.subscribe();
 
-    bus.reset_channels().await;
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
 
-    let notice = tokio::time::timeout(TICK, notices.recv())
+    let notice = tokio::time::timeout(Duration::from_secs(2), notices.recv())
         .await
         .expect("no reconnect notice on the notice stream")
         .expect("notice stream closed");
     assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+    assert!(bus.is_connected(), "the notice must follow the session going live");
 }
 
 /// `ensure_shutdown` joins the running message-processing task and reports
@@ -1308,6 +1323,137 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
         notice.message.contains(&helpers::UNKNOWN_MESSAGE_ID.to_string()),
         "notice must name the offending id, got {:?}",
         notice.message
+    );
+}
+
+/// Every send is refused while the session is down: nothing reaches the socket
+/// the reconnect is replacing, and nothing is registered on a channel no reset
+/// would clear again.
+#[tokio::test]
+async fn test_sends_are_refused_while_disconnected() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    bus.connection_state.set_disconnected();
+
+    assert!(matches!(mb.send_request(100, b"req-bytes".to_vec()).await, Err(Error::ConnectionReset)));
+    assert!(matches!(
+        mb.send_order_request(42, b"order-bytes".to_vec()).await,
+        Err(Error::ConnectionReset)
+    ));
+    assert!(matches!(
+        mb.send_shared_request(OutgoingMessages::RequestManagedAccounts, b"shared-bytes".to_vec())
+            .await,
+        Err(Error::ConnectionReset)
+    ));
+    assert!(matches!(mb.send_message(b"message-bytes".to_vec()).await, Err(Error::ConnectionReset)));
+
+    assert!(bus.request_channels.read().await.is_empty(), "a refused request must register nothing");
+    assert!(
+        bus.order_channels.read().await.is_empty(),
+        "a refused order request must register nothing"
+    );
+    assert!(stream.captured().is_empty(), "a refused send must not reach the socket");
+
+    // The same send goes through once the handshake has put the session back.
+    bus.connection_state.set_connected();
+    assert!(mb.send_request(100, b"req-bytes".to_vec()).await.is_ok());
+    assert!(!stream.captured().is_empty());
+}
+
+/// A cancel that cannot be written is not an error the caller has to handle:
+/// the session that held the subscription is gone. The local registration goes
+/// either way, so nothing is left behind.
+#[tokio::test]
+async fn test_cancel_while_disconnected_clears_the_registration() {
+    let (_stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    let mut sub = mb.send_request(100, b"req-bytes".to_vec()).await.expect("send_request");
+    assert_eq!(bus.request_channels.read().await.len(), 1);
+
+    bus.connection_state.set_disconnected();
+
+    let result = mb.cancel_subscription(100, b"cancel-bytes".to_vec()).await;
+    assert!(matches!(result, Err(Error::ConnectionReset)), "got: {result:?}");
+    assert!(bus.request_channels.read().await.is_empty(), "cancel must clear the registration anyway");
+
+    let item = tokio::time::timeout(TICK, sub.next())
+        .await
+        .expect("subscription got no notification")
+        .expect("subscription channel closed");
+    assert!(matches!(item, Err(Error::Cancelled)), "got: {item:?}");
+}
+
+/// `wait_connected` holds the one-shot retry until the session is back, and a
+/// shutdown releases it rather than leaving the caller there for good.
+#[tokio::test]
+async fn test_wait_connected_returns_shutdown_when_the_bus_shuts_down() {
+    let (_stream, bus) = make_bus();
+    bus.connection_state.set_disconnected();
+
+    let closer = Arc::clone(&bus);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        closer.request_shutdown_sync();
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+        .await
+        .expect("wait_connected did not return on shutdown");
+    assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
+}
+
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
+/// the send gate cannot close: the write is refused after the registration
+/// went in.
+#[derive(Clone, Debug, Default)]
+struct FailingWriteStream(MemoryStream);
+
+#[async_trait::async_trait]
+impl AsyncIo for FailingWriteStream {
+    async fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.0.read_message().await
+    }
+
+    async fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
+        Err(Error::ConnectionReset)
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncReconnect for FailingWriteStream {
+    async fn reconnect(&self) -> Result<(), Error> {
+        self.0.reconnect().await
+    }
+
+    async fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
+        self.0.sleep(duration, shutdown).await
+    }
+}
+
+impl AsyncStream for FailingWriteStream {}
+
+/// A send whose write fails takes its registration with it, so no channel is
+/// left waiting on a response that was never requested. Covers the window the
+/// `ensure_connected` check cannot close, where the session goes down between
+/// the check and the write.
+#[tokio::test]
+async fn test_failed_write_leaves_no_registration() {
+    let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    assert!(mb.send_request(100, b"req-bytes".to_vec()).await.is_err());
+    assert!(
+        bus.request_channels.read().await.is_empty(),
+        "a failed write must leave no request registered"
+    );
+
+    assert!(mb.send_order_request(42, b"order-bytes".to_vec()).await.is_err());
+    assert!(
+        bus.order_channels.read().await.is_empty(),
+        "a failed write must leave no order registered"
     );
 }
 

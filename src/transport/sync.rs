@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -206,7 +205,8 @@ pub struct TcpMessageBus<S: Stream> {
     /// bus-only test fixtures, which never reconnect a client.
     order_ids: OnceLock<Arc<ClientIdManager>>,
     order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
-    connected: AtomicBool,
+    /// Session state, and what `wait_connected` blocks on.
+    connection_state: ConnectionSignal,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -229,7 +229,7 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown,
             order_ids: OnceLock::new(),
             order_update_stream: Mutex::new(None),
-            connected: AtomicBool::new(true),
+            connection_state: ConnectionSignal::default(),
         })
     }
 
@@ -256,8 +256,10 @@ impl<S: Stream> TcpMessageBus<S> {
         self.executions.clear();
         self.connection.notice_broadcaster.close();
 
-        self.connected.store(false, Ordering::Relaxed);
-        // Latches, and ends any backoff wait `Connection::reconnect` is in.
+        // Both latch: the connection signal releases every `wait_connected`
+        // with `Error::Shutdown`, and the shutdown signal ends any backoff
+        // wait `Connection::reconnect` is in.
+        self.connection_state.shutdown();
         self.shutdown.request();
 
         // bounded(1) + try_send: if a shutdown is already pending,
@@ -272,6 +274,36 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 
+    /// The send gate: every bus-originated write checks here first, and is
+    /// refused with `Error::ConnectionReset` unless the session is live and
+    /// not shutting down.
+    ///
+    /// Without it, a request sent while the connection is down would be lost
+    /// on the dead socket - or, worse, interleave with the handshake the
+    /// reconnect is writing on the new one - and the channel it registered
+    /// would never be reset again, so its caller would block forever. Callers
+    /// wait the reconnect out through `wait_connected` instead.
+    ///
+    /// The check-then-write window is not closed: a caller that passes here
+    /// just before the dispatcher flips the state can still write, and in
+    /// principle race the socket swap inside `reconnect`. Closing that needs a
+    /// session-level gate held across the handshake.
+    fn ensure_connected(&self) -> Result<(), Error> {
+        if self.connection_state.is_connected() && !self.is_shutting_down() {
+            Ok(())
+        } else {
+            Err(Error::ConnectionReset)
+        }
+    }
+
+    /// The one funnel for every bus-originated write, so no send can reach a
+    /// socket the session no longer owns. The dispatcher's own reconnect
+    /// handshake writes through `Connection`, not here.
+    fn write_message(&self, message: &[u8]) -> Result<(), Error> {
+        self.ensure_connected()?;
+        self.connection.write_message(message)
+    }
+
     fn reset(&self) {
         debug!("reset message bus");
 
@@ -281,14 +313,6 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
-
-        // TWS never frames the socket reconnect itself and does not replay
-        // restoration notices on the new connection, so the notice fan-out —
-        // the carrier 1100/1101/1102 arrive on — learns the socket generation
-        // changed from this synthesized notice alone; see
-        // `TRANSPORT_RECONNECT_CODE`. Published last so a consumer that
-        // resubscribes on it registers into maps the clears above cannot wipe.
-        self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
     }
 
     // The three cleanup handlers below remove a registration only when it is
@@ -352,7 +376,12 @@ impl<S: Stream> TcpMessageBus<S> {
                     return Err(Error::Shutdown);
                 }
                 error!("error reading next message (will attempt reconnect): {err:?}");
-                self.connected.store(false, Ordering::Relaxed);
+                self.connection_state.set_disconnected();
+
+                // Fail every registered channel before reconnecting, not
+                // after: nothing they wait for can arrive on the dead
+                // session, and the reconnect can run for minutes.
+                self.reset();
 
                 match self.connection.reconnect() {
                     Ok(()) => {}
@@ -388,8 +417,16 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
-                self.connected.store(true, Ordering::Relaxed);
-                self.reset();
+                self.connection_state.set_connected();
+
+                // TWS never frames the socket reconnect itself and does not replay
+                // restoration notices on the new connection, so the notice fan-out —
+                // the carrier 1100/1101/1102 arrive on — learns the socket generation
+                // changed from this synthesized notice alone; see
+                // `TRANSPORT_RECONNECT_CODE`. Published after the session is live
+                // so a consumer that resubscribes on it lands on the new session,
+                // into maps the reset above can no longer wipe.
+                self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
                 Ok(())
             }
             Err(err) => {
@@ -672,12 +709,21 @@ impl<S: Stream> TcpMessageBus<S> {
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
         self.requests.insert(request_id, sender);
 
-        self.connection.write_message(message)?;
+        // The gate can close between `ensure_connected` and the write, so take
+        // the registration back out on failure rather than leave a channel no
+        // reset will clear. `remove_if_same` so a newer registration under the
+        // same id survives.
+        if let Err(e) = self.write_message(message) {
+            self.requests.remove_if_same(&request_id, &sender_copy);
+            return Err(e);
+        }
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -690,7 +736,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
-        self.connection.write_message(message)?;
+        // The local registration goes whether or not the cancel reaches TWS:
+        // a cancel that cannot be sent is one whose session is already
+        // gone, and leaving the entry behind would outlive the subscription.
+        let written = self.write_message(message);
 
         if let Err(e) = self.requests.send(&request_id, Error::Cancelled.into()) {
             info!("error sending cancel notification: {e}");
@@ -698,17 +747,23 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
         self.requests.remove(&request_id);
 
-        Ok(())
+        written
     }
 
     fn send_order_request(&self, order_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
         self.orders.insert(order_id, sender);
         debug!("Registered order subscription for order_id={}", order_id);
 
-        self.connection.write_message(message)?;
+        // See `send_request`: a failed write takes its registration with it.
+        if let Err(e) = self.write_message(message) {
+            self.orders.remove_if_same(&order_id, &sender_copy);
+            return Err(e);
+        }
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -721,7 +776,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
-        self.connection.write_message(message)?;
+        self.write_message(message)?;
         Ok(())
     }
 
@@ -748,7 +803,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn cancel_order_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
-        self.connection.write_message(message)?;
+        // See `cancel_subscription`: the local registration goes either way.
+        let written = self.write_message(message);
 
         if let Err(e) = self.orders.send(&request_id, Error::Cancelled.into()) {
             info!("error sending cancel notification: {e}");
@@ -756,10 +812,12 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
         self.orders.remove(&request_id);
 
-        Ok(())
+        written
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let shared_receiver = self.shared_channels.get_receiver(message_type);
 
         // Shared channels are one crossbeam queue per request type (unlike the async
@@ -773,7 +831,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             while shared_receiver.try_recv().is_ok() {}
         }
 
-        self.connection.write_message(message)?;
+        self.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .shared_receiver(shared_receiver)
@@ -784,7 +842,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &[u8]) -> Result<(), Error> {
-        self.connection.write_message(message)?;
+        self.write_message(message)?;
         // TODO send cancel
         Ok(())
     }
@@ -798,8 +856,12 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.join();
     }
 
+    fn wait_connected(&self) -> Result<(), Error> {
+        self.connection_state.wait_connected()
+    }
+
     fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed) && !self.is_shutting_down()
+        self.connection_state.is_connected() && !self.is_shutting_down()
     }
 }
 
@@ -1013,7 +1075,9 @@ pub(crate) trait Io {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
 
+mod connection_signal;
 mod shutdown;
+pub(crate) use connection_signal::ConnectionSignal;
 pub(crate) use shutdown::ShutdownSignal;
 
 #[cfg(test)]

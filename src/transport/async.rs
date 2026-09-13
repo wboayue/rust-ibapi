@@ -1,7 +1,9 @@
 //! Asynchronous transport implementation
 
+mod connection_signal;
 mod io;
 mod shutdown;
+pub(crate) use connection_signal::ConnectionSignal;
 /// The frame reader itself, for tests that drive it over an in-memory cursor
 /// rather than a socket. Production callers reach it through `AsyncIo`.
 #[cfg(test)]
@@ -13,7 +15,6 @@ pub(crate) use io::{AsyncStream, AsyncTcpSocket};
 pub(crate) use shutdown::ShutdownSignal;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -76,6 +77,10 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn ensure_shutdown(&self);
 
     fn request_shutdown_sync(&self);
+
+    /// Resolve once the session is connected again, returning
+    /// [`Error::Shutdown`] if the session will never reconnect.
+    async fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
 }
@@ -274,14 +279,17 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// [`Self::set_order_ids`] before the processing task starts; absent in
     /// bus-only test fixtures, which never reconnect a client.
     order_ids: OnceLock<Arc<ClientIdManager>>,
-    connected: Arc<AtomicBool>,
+    /// Session state, and what `wait_connected` awaits.
+    connection_state: Arc<ConnectionSignal>,
 }
 
 impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
     fn drop(&mut self) {
         debug!("dropping async tcp message bus");
-        // Latch the shutdown flag; the message loop and any reconnect in
-        // progress observe it on their next check.
+        // Latch both flags; the message loop and any reconnect in progress
+        // observe them on their next check, and no `wait_connected` is left
+        // waiting on a session that is going away.
+        self.connection_state.shutdown();
         self.shutdown.request();
     }
 }
@@ -329,7 +337,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             process_task: Arc::new(RwLock::new(None)),
             shutdown,
             order_ids: OnceLock::new(),
-            connected: Arc::new(AtomicBool::new(true)),
+            connection_state: Arc::new(ConnectionSignal::default()),
         };
 
         // Start cleanup task
@@ -408,14 +416,20 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                             }
                             Err(ref err) if err.is_connection_lost() => {
                                 error!("Connection error detected, attempting to reconnect: {err:?}");
-                                message_bus.connected.store(false, Ordering::Relaxed);
+                                message_bus.connection_state.set_disconnected();
+
+                                // Fail every registered channel before
+                                // reconnecting, not after: nothing they wait
+                                // for can arrive on the dead session, and the
+                                // reconnect can run for minutes.
+                                message_bus.reset_channels().await;
 
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
                                         // Shutdown may have been requested while the
                                         // connect was in flight; the reconnect
                                         // succeeded anyway, so check before reporting
-                                        // the session as live and resetting channels.
+                                        // the session as live.
                                         if message_bus.shutdown.is_requested() {
                                             debug!("shutdown requested during reconnect; dispatcher task exiting");
                                             break;
@@ -434,8 +448,19 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");
-                                        message_bus.connected.store(true, Ordering::Relaxed);
-                                        message_bus.reset_channels().await;
+                                        message_bus.connection_state.set_connected();
+
+                                        // The notice stream is the central carrier of
+                                        // connection-status information (1100/1101/1102
+                                        // land there), but TWS never sends socket reconnect
+                                        // notices itself and does not replay restoration
+                                        // notices on the new connection — so publish the
+                                        // reconnect there the same way `report_unroutable_frame`
+                                        // publishes decode failures: as a synthesized notice.
+                                        // Published after the session is live so a consumer
+                                        // that resubscribes on it lands on the new session,
+                                        // into maps the reset above can no longer wipe.
+                                        let _ = message_bus.connection.notice_sender.send(transport_reconnect_notice());
                                     }
                                     // Shutdown was requested while reconnecting:
                                     // not a failure, and the flag is already
@@ -496,7 +521,38 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
     }
 
-    /// Reset all channels after reconnection
+    /// The send gate: every bus-originated write checks here first, and is
+    /// refused with `Error::ConnectionReset` unless the session is live and
+    /// not shutting down.
+    ///
+    /// Without it, a request sent while the connection is down would be lost
+    /// on the dead socket - or, worse, interleave with the handshake the
+    /// reconnect is writing on the new one - and the channel it registered
+    /// would never be reset again, so its caller would await forever. Callers
+    /// wait the reconnect out through `wait_connected` instead.
+    ///
+    /// The check-then-write window is not closed: a caller that passes here
+    /// just before the dispatcher flips the state can still write, and in
+    /// principle race the socket swap inside `reconnect`. Closing that needs a
+    /// session-level gate held across the handshake.
+    fn ensure_connected(&self) -> Result<(), Error> {
+        if self.connection_state.is_connected() && !self.shutdown.is_requested() {
+            Ok(())
+        } else {
+            Err(Error::ConnectionReset)
+        }
+    }
+
+    /// The one funnel for every bus-originated write, so no send can reach a
+    /// socket the session no longer owns. The dispatcher's own reconnect
+    /// handshake writes through `AsyncConnection`, not here.
+    async fn write_message(&self, message: &[u8]) -> Result<(), Error> {
+        self.ensure_connected()?;
+        self.connection.write_message(message).await
+    }
+
+    /// Fail all registered channels with `Error::ConnectionReset`, before a
+    /// reconnect is attempted.
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
 
@@ -520,25 +576,15 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.request_channels.write().await.clear();
         self.order_channels.write().await.clear();
         self.execution_channels.write().await.clear();
-
-        // The notice stream is the central carrier of connection-status
-        // information (1100/1101/1102 land there), but TWS never frames the
-        // socket reconnect itself and does not replay restoration notices on
-        // the new connection — so publish the reconnect there the same way
-        // `report_unroutable_frame` publishes decode failures: as a
-        // synthesized notice. A connection-state consumer that recorded 1100
-        // before the drop reconciles on this instead of stranding on it.
-        // Published last: a consumer that resubscribes on it registers into
-        // maps the clears above can no longer wipe.
-        let _ = self.connection.notice_sender.send(transport_reconnect_notice());
     }
 
     /// Notify all waiting subscriptions about shutdown
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        // Set the shutdown flag and mark as disconnected
-        self.connected.store(false, Ordering::Relaxed);
+        // Both latch: the connection signal releases every `wait_connected`
+        // with `Error::Shutdown`, and the shutdown flag stops the dispatcher.
+        self.connection_state.shutdown();
         self.shutdown.request();
 
         // Clear all channels - dropping the senders will close the channels
@@ -807,14 +853,26 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
         {
             let mut channels = self.request_channels.write().await;
-            channels.insert(request_id, sender);
+            channels.insert(request_id, sender.clone());
         }
 
-        self.connection.write_message(&message).await?;
+        // The gate can close between `ensure_connected` and the write, so take
+        // the registration back out on failure rather than leave a channel no
+        // reset will clear. `same_channel` so a newer registration under the
+        // same id survives.
+        if let Err(e) = self.write_message(&message).await {
+            let mut channels = self.request_channels.write().await;
+            if channels.get(&request_id).is_some_and(|registered| registered.same_channel(&sender)) {
+                channels.remove(&request_id);
+            }
+            return Err(e);
+        }
 
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
@@ -824,14 +882,23 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
         {
             let mut channels = self.order_channels.write().await;
-            channels.insert(order_id, sender);
+            channels.insert(order_id, sender.clone());
         }
 
-        self.connection.write_message(&message).await?;
+        // See `send_request`: a failed write takes its registration with it.
+        if let Err(e) = self.write_message(&message).await {
+            let mut channels = self.order_channels.write().await;
+            if channels.get(&order_id).is_some_and(|registered| registered.same_channel(&sender)) {
+                channels.remove(&order_id);
+            }
+            return Err(e);
+        }
 
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
@@ -841,6 +908,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_connected()?;
+
         let receiver = {
             let channels = self.shared_channel_receivers.read().await;
             if let Some(receiver) = channels.get(&message_type) {
@@ -853,7 +922,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             }
         };
 
-        self.connection.write_message(&message).await?;
+        self.write_message(&message).await?;
 
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
@@ -863,11 +932,14 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
-        self.connection.write_message(&message).await
+        self.write_message(&message).await
     }
 
     async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error> {
-        self.connection.write_message(&message).await?;
+        // The local registration goes whether or not the cancel reaches TWS:
+        // a cancel that cannot be sent is one whose session is already
+        // gone, and leaving the entry behind would outlive the subscription.
+        let written = self.write_message(&message).await;
 
         // Single write lock: the previous version held a read guard while
         // awaiting the write upgrade and self-deadlocked on the same task.
@@ -877,11 +949,12 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         }
         channels.remove(&request_id);
 
-        Ok(())
+        written
     }
 
     async fn cancel_order_subscription(&self, order_id: i32, message: Vec<u8>) -> Result<(), Error> {
-        self.connection.write_message(&message).await?;
+        // See `cancel_subscription`: the local registration goes either way.
+        let written = self.write_message(&message).await;
 
         let mut channels = self.order_channels.write().await;
         if let Some(sender) = channels.get(&order_id) {
@@ -889,7 +962,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         }
         channels.remove(&order_id);
 
-        Ok(())
+        written
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
@@ -940,13 +1013,17 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
-        self.connected.store(false, Ordering::Relaxed);
-        // Latching and runtime-free: safe from `Drop`.
+        // Both latching and runtime-free: safe from `Drop`.
+        self.connection_state.shutdown();
         self.shutdown.request();
     }
 
+    async fn wait_connected(&self) -> Result<(), Error> {
+        self.connection_state.wait_connected().await
+    }
+
     fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Relaxed) && !self.shutdown.is_requested()
+        self.connection_state.is_connected() && !self.shutdown.is_requested()
     }
 }
 

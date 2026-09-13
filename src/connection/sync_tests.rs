@@ -481,3 +481,108 @@ fn dispatcher_exits_when_shutdown_requested_during_a_successful_reconnect() {
     receiver.recv_timeout(Duration::from_secs(5)).expect("ensure_shutdown did not return");
     assert!(!MessageBus::is_connected(&*bus));
 }
+
+/// A subscription in flight when the connection drops must be failed with
+/// `Error::ConnectionReset` before the reconnect runs, not after it: nothing
+/// it waits for can arrive on the dead session, and the reconnect can take
+/// minutes (forever with `reconnect_forever`). The receive timeout is what
+/// fails a regression, which would otherwise hang until the gate opens.
+///
+/// The session stays disconnected for that whole window, so a caller that
+/// polls `is_connected` before registering a request cannot create one in a
+/// window where the channels are about to be cleared.
+#[test]
+fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::gated(stream.clone());
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("establish_connection failed");
+    let server_version = connection.server_version();
+
+    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    bus.process_messages(server_version).expect("process_messages");
+    let message_bus: &dyn MessageBus = bus.as_ref();
+
+    let subscription = message_bus.send_request(9000, b"req-bytes").expect("send_request");
+
+    // Break the read: the dispatcher enters reconnect and blocks on the gated
+    // connect, which only `release` below completes.
+    stream.close();
+    wait_for("reconnect to start", || socket.reconnect_started());
+
+    let item = subscription
+        .next_timeout(Duration::from_secs(5))
+        .expect("subscription was not notified during the reconnect");
+    assert!(matches!(item, Err(Error::ConnectionReset)), "expected ConnectionReset, got {item:?}");
+    assert!(!MessageBus::is_connected(&*bus), "session reported connected during the reconnect");
+
+    // Let the connect and its handshake replay succeed.
+    stream.reopen();
+    push_handshake(&stream);
+    socket.release();
+
+    wait_for("session to report connected", || MessageBus::is_connected(&*bus));
+
+    MessageBus::ensure_shutdown(&*bus);
+}
+
+/// How many times `request` has been written to the stream.
+fn count_writes(stream: &MemoryStream, request: &[u8]) -> usize {
+    let captured = stream.captured();
+    captured.windows(request.len()).filter(|window| *window == request).count()
+}
+
+/// A one-shot request in flight when the connection drops is retried, not
+/// failed: the reset wakes it, `wait_connected` holds the retry until the
+/// handshake has replayed, and the resend is answered on the new session.
+///
+/// Without the wait the retry would meet the send gate and spend every attempt
+/// while the reconnect was still running.
+#[test]
+fn one_shot_request_is_retried_after_the_reconnect() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::gated(stream.clone());
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("establish_connection failed");
+    let server_version = connection.server_version();
+
+    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    bus.process_messages(server_version).expect("process_messages");
+    let client = Arc::new(Client::stubbed(bus.clone(), server_version));
+
+    let request = crate::accounts::common::encoders::encode_request_managed_accounts().expect("encode");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let caller = Arc::clone(&client);
+    thread::spawn(move || {
+        let _ = sender.send(caller.managed_accounts());
+    });
+
+    wait_for("the first request", || count_writes(&stream, &request) == 1);
+
+    // Break the connection while the one-shot is waiting for its answer.
+    stream.close();
+    wait_for("reconnect to start", || socket.reconnect_started());
+
+    // Nothing was resent into the reconnect: the retry is parked in
+    // `wait_connected`.
+    assert_eq!(count_writes(&stream, &request), 1, "the retry must not write while disconnected");
+
+    stream.reopen();
+    push_handshake(&stream);
+    socket.release();
+
+    wait_for("the retried request", || count_writes(&stream, &request) == 2);
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    let accounts = receiver
+        .recv_timeout(Duration::from_secs(10))
+        .expect("managed_accounts did not return")
+        .expect("managed_accounts failed");
+    assert_eq!(accounts, vec!["DU1234567".to_string()]);
+
+    MessageBus::ensure_shutdown(&*bus);
+}

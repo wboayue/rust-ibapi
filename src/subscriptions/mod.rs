@@ -19,6 +19,22 @@
 //! (`subscriptions::r#async::Subscription`) is the giveaway that the spelling
 //! is non-canonical.
 
+use log::{debug, warn};
+
+use crate::errors::Error;
+
+/// Report a cancel that never reached TWS.
+///
+/// A send is refused while the session is down, and a session that is down or
+/// gone takes its subscriptions with it - there is nothing left to cancel, so
+/// this is not worth a warning. The local registration is cleared either way.
+pub(crate) fn log_cancel_error(what: &str, error: &Error) {
+    match error {
+        Error::ConnectionReset | Error::Shutdown => debug!("{what} cancel not sent, session is down: {error}"),
+        _ => warn!("error cancelling {what}: {error}"),
+    }
+}
+
 pub(crate) mod common;
 pub use common::SubscriptionItem;
 pub(crate) use common::{DecoderContext, StreamDecoder};

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Subscriptions and one-shot requests that were in flight when the socket dropped were left waiting until the reconnect finished (up to 7.5 minutes of backoff at the defaults, forever with `reconnect_forever`), although the dead session could never have answered them; and a request registered after the session was marked connected but before the late channel reset ran was wiped by that reset, its replies orphaned. Both dispatchers now fail every registered channel with `Error::ConnectionReset` at the moment the read fails, before entering the reconnect. Sends made while the session is down are refused with `Error::ConnectionReset` instead of being written to a socket the reconnect was replacing, and `is_connected()` reports false until the replayed handshake completes. One-shot requests still recover across a TWS restart: their retry waits for the reconnect before resending and gives up with `Error::ConnectionReset` if the session does not return. The `TRANSPORT_RECONNECT_CODE` notice moved from the channel reset to the reconnect arm, so it is published once the session is live and a resubscribe from its handler lands on the new session (#816).
+
 ## [4.1.0] - 2026-09-11
 
 ### Added

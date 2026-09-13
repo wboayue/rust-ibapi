@@ -49,6 +49,12 @@ impl MemoryStream {
         self.notify.notify_waiters();
     }
 
+    /// Undo a `close`, so a stream broken to trigger a reconnect can serve
+    /// the replayed handshake and stay readable afterwards.
+    pub fn reopen(&self) {
+        self.inner.lock().unwrap().closed = false;
+    }
+
     /// Schedule the next `count` `reconnect()` calls to fail with
     /// `Error::Simple`; subsequent calls succeed.
     pub fn set_reconnect_failures(&self, count: usize) {

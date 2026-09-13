@@ -488,3 +488,116 @@ async fn dispatcher_task_finishes_when_shutdown_requested_during_reconnect() {
         .expect("dispatcher task did not finish");
     assert!(!message_bus.is_connected());
 }
+
+/// Async mirror of `in_flight_subscription_is_reset_before_the_reconnect_completes`:
+/// a subscription in flight when the connection drops must be failed with
+/// `Error::ConnectionReset` before the reconnect runs, not after it. The
+/// timeout is what fails a regression, which would otherwise hang until the
+/// gate opens.
+///
+/// The session stays disconnected for that whole window, so a caller that
+/// polls `is_connected` before registering a request cannot create one in a
+/// window where the channels are about to be cleared.
+#[tokio::test]
+async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::gated(stream.clone());
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("establish_connection failed");
+    let server_version = connection.server_version();
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    bus.clone()
+        .process_messages(server_version, Duration::from_millis(0))
+        .expect("process_messages");
+    let message_bus: &dyn AsyncMessageBus = bus.as_ref();
+
+    let mut subscription = message_bus.send_request(9000, b"req-bytes".to_vec()).await.expect("send_request");
+
+    // Break the read: the dispatcher enters reconnect and blocks on the gated
+    // connect, which only `release` below completes.
+    stream.close();
+    wait_for("reconnect to start", || socket.reconnect_started()).await;
+
+    let item = tokio::time::timeout(Duration::from_secs(5), subscription.next())
+        .await
+        .expect("subscription was not notified during the reconnect")
+        .expect("subscription channel closed");
+    assert!(matches!(item, Err(Error::ConnectionReset)), "expected ConnectionReset, got {item:?}");
+    assert!(!message_bus.is_connected(), "session reported connected during the reconnect");
+
+    // Let the connect and its handshake replay succeed.
+    stream.reopen();
+    push_handshake(&stream);
+    socket.release();
+
+    wait_for("session to report connected", || message_bus.is_connected()).await;
+
+    message_bus.request_shutdown_sync();
+    tokio::time::timeout(Duration::from_secs(10), message_bus.ensure_shutdown())
+        .await
+        .expect("dispatcher task did not finish");
+}
+
+/// How many times `request` has been written to the stream.
+fn count_writes(stream: &MemoryStream, request: &[u8]) -> usize {
+    let captured = stream.captured();
+    captured.windows(request.len()).filter(|window| *window == request).count()
+}
+
+/// Async mirror of `one_shot_request_is_retried_after_the_reconnect`: a
+/// one-shot in flight when the connection drops is retried, not failed. The
+/// reset wakes it, `wait_connected` holds the retry until the handshake has
+/// replayed, and the resend is answered on the new session.
+#[tokio::test]
+async fn one_shot_request_is_retried_after_the_reconnect() {
+    let stream = MemoryStream::default();
+    let socket = TestSocket::gated(stream.clone());
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("establish_connection failed");
+    let server_version = connection.server_version();
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    bus.clone()
+        .process_messages(server_version, Duration::from_millis(0))
+        .expect("process_messages");
+    let client = Arc::new(Client::stubbed(bus.clone(), server_version));
+
+    let request = crate::accounts::common::encoders::encode_request_managed_accounts().expect("encode");
+    let caller = Arc::clone(&client);
+    let call = tokio::spawn(async move { caller.managed_accounts().await });
+
+    wait_for("the first request", || count_writes(&stream, &request) == 1).await;
+
+    // Break the connection while the one-shot is waiting for its answer.
+    stream.close();
+    wait_for("reconnect to start", || socket.reconnect_started()).await;
+
+    // Nothing was resent into the reconnect: the retry is parked in
+    // `wait_connected`.
+    assert_eq!(count_writes(&stream, &request), 1, "the retry must not write while disconnected");
+
+    stream.reopen();
+    push_handshake(&stream);
+    socket.release();
+
+    wait_for("the retried request", || count_writes(&stream, &request) == 2).await;
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    let accounts = tokio::time::timeout(Duration::from_secs(10), call)
+        .await
+        .expect("managed_accounts did not return")
+        .expect("caller task panicked")
+        .expect("managed_accounts failed");
+    assert_eq!(accounts, vec!["DU1234567".to_string()]);
+
+    let message_bus: &dyn AsyncMessageBus = bus.as_ref();
+    message_bus.request_shutdown_sync();
+    tokio::time::timeout(Duration::from_secs(10), message_bus.ensure_shutdown())
+        .await
+        .expect("dispatcher task did not finish");
+}
