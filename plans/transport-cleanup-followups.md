@@ -72,9 +72,23 @@ a concurrent live subscription of the same type (see the comment in sync
 
 More reachable since PR #817: the reset now runs at the socket drop, and
 resubscribing from the `TRANSPORT_RECONNECT_CODE` handler is the documented
-recovery, so a resubscribe to an idle streaming type reads the stale reset
-first. Documented as a caveat on `TRANSPORT_RECONNECT_CODE` and in the
-changelog until this lands.
+recovery. Wider than first described (verified in the #818 /simplify pass):
+
+- `SharedChannels::notify_all` iterates senders by *inbound* type, and
+  `register` files one sender under every response type of its request, so a
+  queue receives one reset per response type it maps to. A sync subscription
+  stops at its first error, so even one live at the drop leaves the extra
+  copies queued — not only idle queues.
+- Unowned order activity is also fanned into the open-orders queues, so a
+  later `open_orders()` can read stale `OpenOrder`/`OrderStatus` frames, not
+  just a stale reset.
+
+Candidate fix (small, needs tests): notify once per queue (iterate the
+`receivers`' senders, or dedupe by `Arc::ptr_eq`), and in `send_shared_request`
+also drain when `Arc::strong_count(&shared_receiver) == 2` (map + this caller:
+no live subscriber holds the queue). The drain-discards-live-messages risk
+above only applies when another subscriber holds it. Would remove the caveat
+on `TRANSPORT_RECONNECT_CODE` and in the changelog.
 
 ## 5. Async shutdown/reset shape
 

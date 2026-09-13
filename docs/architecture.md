@@ -201,7 +201,7 @@ The `Client` can be shared between threads for concurrent operations:
 - Configurable via `ClientBuilder::max_reconnect_attempts` / `ClientBuilder::reconnect_forever`
 - Async subscriptions ride bounded broadcast channels (default 1024, `ClientBuilder::channel_capacity`); a lagging consumer gets an in-band `SUBSCRIPTION_LAG_CODE` notice for the evicted frames. Sync channels are unbounded; a stalled consumer triggers queue-depth `warn!` watermarks instead. The notice stream rides the same bounded fan-out at the fixed default capacity (`channel_capacity` does not reach it); a lagging notice consumer gets an in-band `NOTICE_STREAM_LAG_CODE` notice for the skipped notices
 - On a socket drop, every live subscription and in-flight one-shot request fails with `Error::ConnectionReset` immediately, before the reconnect starts: the session that held them cannot answer, whether or not the reconnect succeeds
-- While the session is down, sends are refused with `Error::ConnectionReset`, and `is_connected()` reports false until the replayed handshake completes. One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) wait out the reconnect and retry, giving up with `Error::Shutdown` if it fails
+- While the session is down, sends are refused with `Error::ConnectionReset`, and `is_connected()` reports false until the replayed handshake completes (it is a snapshot: a call made right after the check can still be refused). One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) wait out the reconnect and retry, giving up with `Error::Shutdown` if it fails
 - Once the reconnected session is live, a `TRANSPORT_RECONNECT_CODE` notice is published to the notice stream: TWS never frames the reconnect itself and does not replay 1101/1102 on the new connection, so the notice stream is otherwise blind to the socket generation change. Resubscribing from its handler lands on the new session
 
 ### Connection Monitoring
@@ -211,8 +211,6 @@ if client.is_connected() {
     // Safe to make API calls
 }
 ```
-
-`is_connected()` is a snapshot: if the socket drops right after the check, the call fails with `Error::ConnectionReset` rather than blocking.
 
 ## Important Design Considerations
 

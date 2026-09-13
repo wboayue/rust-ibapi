@@ -141,8 +141,7 @@ mod sync_tests {
     }
 
     /// A session that never comes back ends the retry with the waiter's
-    /// `Error::Shutdown` instead of looping, not a `ConnectionReset` that
-    /// would invite another retry.
+    /// error instead of looping.
     #[test]
     fn test_retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
@@ -338,8 +337,7 @@ mod async_tests {
     }
 
     /// A session that never comes back ends the retry with the waiter's
-    /// `Error::Shutdown` instead of looping, not a `ConnectionReset` that
-    /// would invite another retry.
+    /// error instead of looping.
     #[tokio::test]
     async fn test_retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();

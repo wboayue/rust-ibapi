@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In-flight subscriptions and one-shot requests now fail with `Error::ConnectionReset` the moment the socket read fails, on both clients. Previously the channel reset ran only after the reconnect finished (up to 7.5 minutes of backoff at the defaults, forever with `reconnect_forever`), and a request registered between the session being marked connected and that late reset was wiped, its replies orphaned (#816).
 - Sends made while the session is down are refused with `Error::ConnectionReset` instead of being written to the socket the reconnect is replacing, and `is_connected()` reports false until the replayed handshake completes (#816).
 - One-shot requests still recover across a TWS restart: the retry waits for the reconnect before resending, and gives up with `Error::Shutdown` if the session does not return (#816).
-- `TRANSPORT_RECONNECT_CODE` is published once the reconnected session is live, so a resubscribe from its handler lands on the new session. On the blocking client, a stream without a request id (for example `open_orders`) that had no live subscription at the drop can still read the stale reset as its first item (#816).
+- `TRANSPORT_RECONNECT_CODE` is published once the reconnected session is live, so a resubscribe from its handler lands on the new session. On the blocking client, a resubscribe to a stream without a request id (for example `open_orders`) can still read a stale reset left on its shared channel as its first item (#816).
 
 ## [4.1.0] - 2026-09-11
 
