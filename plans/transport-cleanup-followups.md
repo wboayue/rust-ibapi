@@ -70,6 +70,12 @@ a concurrent live subscription of the same type (see the comment in sync
 `send_shared_request`). Needs either per-subscription sync shared channels
 (the async model) or reset-generation tagging.
 
+More reachable since PR #817: the reset now runs at the socket drop, and
+resubscribing from the `TRANSPORT_RECONNECT_CODE` handler is the documented
+recovery, so a resubscribe to an idle streaming type reads the stale reset
+first. Documented as a caveat on `TRANSPORT_RECONNECT_CODE` and in the
+changelog until this lands.
+
 ## 5. Async shutdown/reset shape
 
 Two related /simplify flags from PR #783:

@@ -536,7 +536,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// principle race the socket swap inside `reconnect`. Closing that needs a
     /// session-level gate held across the handshake.
     fn ensure_connected(&self) -> Result<(), Error> {
-        if self.connection_state.is_connected() && !self.shutdown.is_requested() {
+        if self.is_connected() {
             Ok(())
         } else {
             Err(Error::ConnectionReset)

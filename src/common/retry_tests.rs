@@ -140,8 +140,9 @@ mod sync_tests {
         assert_eq!(waiter.waits(), 2, "one wait per retry, none before the first attempt");
     }
 
-    /// A session that never comes back ends the retry with the reset
-    /// instead of looping.
+    /// A session that never comes back ends the retry with the waiter's
+    /// `Error::Shutdown` instead of looping, not a `ConnectionReset` that
+    /// would invite another retry.
     #[test]
     fn test_retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
@@ -151,7 +152,7 @@ mod sync_tests {
             Err::<i32, Error>(Error::ConnectionReset)
         });
 
-        assert!(matches!(result.unwrap_err(), Error::ConnectionReset));
+        assert!(matches!(result.unwrap_err(), Error::Shutdown));
         assert_eq!(call_count, 1, "no attempt after the session was reported gone");
         assert_eq!(waiter.waits(), 1);
     }
@@ -336,8 +337,9 @@ mod async_tests {
         assert_eq!(waiter.waits(), 2, "one wait per retry, none before the first attempt");
     }
 
-    /// A session that never comes back ends the retry with the reset
-    /// instead of looping.
+    /// A session that never comes back ends the retry with the waiter's
+    /// `Error::Shutdown` instead of looping, not a `ConnectionReset` that
+    /// would invite another retry.
     #[tokio::test]
     async fn test_retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
@@ -353,7 +355,7 @@ mod async_tests {
         })
         .await;
 
-        assert!(matches!(result.unwrap_err(), Error::ConnectionReset));
+        assert!(matches!(result.unwrap_err(), Error::Shutdown));
         assert_eq!(*call_count.lock().unwrap(), 1, "no attempt after the session was reported gone");
         assert_eq!(waiter.waits(), 1);
     }

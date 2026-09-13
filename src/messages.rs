@@ -1344,7 +1344,12 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 ///
 /// Published once the reconnected session is live: the channel reset runs
 /// before the reconnect, so a consumer may resubscribe from inside its handler
-/// and land on the new session without racing either. Like the
+/// and land on the new session without racing either. One caveat on the
+/// blocking client: a stream without a request id (for example `open_orders`)
+/// that had no live subscription when the socket dropped keeps the reset
+/// queued on its shared channel, so a resubscribe can read that stale
+/// [`Error::ConnectionReset`](crate::Error::ConnectionReset) as its first
+/// item, ahead of its own responses. Like the
 /// other client-synthesized codes this classifies as
 /// [`NoticeCategory::Error`] ("everything else"); consumers match the constant
 /// itself rather than the category.

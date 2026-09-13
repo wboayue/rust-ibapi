@@ -44,11 +44,10 @@ mod sync_retry {
                     attempts += 1;
                     // The reset came from a connection that is being replaced.
                     // Retrying before the replacement is ready is blocked by
-                    // the send gate, so give up with the reset the caller would
-                    // have seen anyway if it never comes.
-                    if waiter.wait_connected().is_err() {
-                        return Err(Error::ConnectionReset);
-                    }
+                    // the send gate. If it never comes, surface the waiter's
+                    // error (`Error::Shutdown`): the client is gone, and a
+                    // `ConnectionReset` would invite the caller to retry.
+                    waiter.wait_connected()?;
                     continue;
                 }
                 other => return other,
@@ -104,11 +103,10 @@ mod async_retry {
                     attempts += 1;
                     // The reset came from a connection that is being replaced.
                     // Retrying before the replacement is ready is blocked by
-                    // the send gate, so give up with the reset the caller would
-                    // have seen anyway if it never comes.
-                    if waiter.wait_connected().await.is_err() {
-                        return Err(Error::ConnectionReset);
-                    }
+                    // the send gate. If it never comes, surface the waiter's
+                    // error (`Error::Shutdown`): the client is gone, and a
+                    // `ConnectionReset` would invite the caller to retry.
+                    waiter.wait_connected().await?;
                     continue;
                 }
                 other => return other,

@@ -29,10 +29,17 @@ use crate::errors::Error;
 /// gone takes its subscriptions with it - there is nothing left to cancel, so
 /// this is not worth a warning. The local registration is cleared either way.
 pub(crate) fn log_cancel_error(what: &str, error: &Error) {
-    match error {
-        Error::ConnectionReset | Error::Shutdown => debug!("{what} cancel not sent, session is down: {error}"),
-        _ => warn!("error cancelling {what}: {error}"),
+    if is_session_down_error(error) {
+        debug!("{what} cancel not sent, session is down: {error}");
+    } else {
+        warn!("error cancelling {what}: {error}");
     }
+}
+
+/// Whether a failed cancel means the session is down or gone, rather than a
+/// fault worth a warning.
+fn is_session_down_error(error: &Error) -> bool {
+    matches!(error, Error::ConnectionReset | Error::Shutdown)
 }
 
 pub(crate) mod common;
@@ -70,3 +77,7 @@ pub use sync::Subscription;
 
 #[cfg(feature = "async")]
 pub use r#async::{FilterDataStream, Subscription, SubscriptionItemStreamExt};
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
