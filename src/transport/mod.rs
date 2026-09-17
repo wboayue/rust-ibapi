@@ -4,8 +4,6 @@
 pub(crate) mod common;
 
 #[cfg(feature = "sync")]
-use std::sync::Arc;
-#[cfg(feature = "sync")]
 use std::time::Duration;
 
 #[cfg(feature = "sync")]
@@ -143,21 +141,18 @@ pub(crate) trait MessageBus: Send + Sync {
 #[cfg(feature = "sync")]
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<RoutedItem>>, // requests with request ids receive responses via this channel
-    sender: Option<Sender<RoutedItem>>,     // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<RoutedItem>>>, // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,       // for client to signal termination
-    pub(crate) request_id: Option<i32>,     // initiating request id
-    pub(crate) order_id: Option<i32>,       // initiating order id
+    receiver: Option<Receiver<RoutedItem>>,  // this subscription's own queue
+    sender: Option<Sender<RoutedItem>>,      // feeds `receiver`; the drop signal's identity
+    signaler: Option<Sender<Signal>>,        // for client to signal termination
+    pub(crate) request_id: Option<i32>,      // initiating request id
+    pub(crate) order_id: Option<i32>,        // initiating order id
     pub(crate) shared: Option<SharedTicket>, // shared-channel identity, when routed by message type
 }
 
 #[cfg(feature = "sync")]
 impl InternalSubscription {
-    /// The underlying receiver — either the per-subscription one or the
-    /// shared-channel one. Both deliver `RoutedItem`.
     fn pick_receiver(&self) -> Option<&Receiver<RoutedItem>> {
-        self.receiver.as_ref().or(self.shared_receiver.as_deref())
+        self.receiver.as_ref()
     }
 
     /// Blocks until next message become available.
@@ -203,15 +198,25 @@ impl InternalSubscription {
     }
 
     pub(crate) fn cancel(&self) {
-        if let Some(sender) = &self.sender {
-            if let Err(e) = sender.send(Error::Cancelled.into()) {
-                log::warn!("error sending cancel notification: {e}")
+        let Some(sender) = &self.sender else {
+            return;
+        };
+        if let Err(e) = sender.send(Error::Cancelled.into()) {
+            log::warn!("error sending cancel notification: {e}")
+        }
+        // A cancelled shared subscription is unregistered by the cleanup
+        // thread once it processes this signal, rather than at the handle's
+        // drop: a handle kept after `cancel()` must not go on collecting
+        // every frame of its type. Frames dispatched before the signal is
+        // processed still land on the queue. The registration is identified
+        // by this sender, so the drop signal for the same sender is later a
+        // no-op. Id-routed subscriptions are unregistered by the bus's
+        // `cancel_*` call instead.
+        if let (Some(_), Some(signaler)) = (&self.shared, &self.signaler) {
+            if let Err(e) = signaler.send(Signal::Shared(sender.clone())) {
+                log::warn!("error sending cancel signal: {e}");
             }
         }
-        // No shared-channel signal. On drop nobody is left reading this
-        // handle, and other live subscriptions of the type keep reading the
-        // queue. An explicit `cancel()` on a handle another thread is blocked
-        // in `next()` on leaves that thread blocked; not addressed here.
     }
 
     fn receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
@@ -252,10 +257,11 @@ impl Drop for InternalSubscription {
         let (Some(signaler), Some(sender)) = (&self.signaler, self.sender.clone()) else {
             return;
         };
-        let signal = match (self.request_id, self.order_id) {
-            (Some(request_id), _) => Signal::Request(request_id, sender),
-            (_, Some(order_id)) => Signal::Order(order_id, sender),
-            // No request or order id: the order update stream.
+        let signal = match (self.request_id, self.order_id, self.shared) {
+            (Some(request_id), _, _) => Signal::Request(request_id, sender),
+            (_, Some(order_id), _) => Signal::Order(order_id, sender),
+            (_, _, Some(_)) => Signal::Shared(sender),
+            // No request, order id or shared ticket: the order update stream.
             _ => Signal::OrderUpdateStream(sender),
         };
         if let Err(e) = signaler.send(signal) {
@@ -274,6 +280,7 @@ pub enum Signal {
     Request(i32, Sender<RoutedItem>),
     Order(i32, Sender<RoutedItem>),
     OrderUpdateStream(Sender<RoutedItem>),
+    Shared(Sender<RoutedItem>),
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances
@@ -281,7 +288,6 @@ pub enum Signal {
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<RoutedItem>>,
     sender: Option<Sender<RoutedItem>>,
-    shared_receiver: Option<Arc<Receiver<RoutedItem>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
@@ -294,7 +300,6 @@ impl SubscriptionBuilder {
         Self {
             receiver: None,
             sender: None,
-            shared_receiver: None,
             signaler: None,
             order_id: None,
             request_id: None,
@@ -309,11 +314,6 @@ impl SubscriptionBuilder {
 
     pub(crate) fn sender(mut self, sender: Sender<RoutedItem>) -> Self {
         self.sender = Some(sender);
-        self
-    }
-
-    pub(crate) fn shared_receiver(mut self, receiver: Arc<Receiver<RoutedItem>>) -> Self {
-        self.shared_receiver = Some(receiver);
         self
     }
 
@@ -338,28 +338,16 @@ impl SubscriptionBuilder {
     }
 
     pub(crate) fn build(self) -> InternalSubscription {
-        if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
-            InternalSubscription {
-                receiver: Some(receiver),
-                sender: self.sender,
-                shared_receiver: None,
-                signaler: Some(signaler),
-                request_id: self.request_id,
-                order_id: self.order_id,
-                shared: self.shared,
-            }
-        } else if let Some(receiver) = self.shared_receiver {
-            InternalSubscription {
-                receiver: None,
-                sender: None,
-                shared_receiver: Some(receiver),
-                signaler: None,
-                request_id: self.request_id,
-                order_id: self.order_id,
-                shared: self.shared,
-            }
-        } else {
+        let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) else {
             panic!("bad configuration");
+        };
+        InternalSubscription {
+            receiver: Some(receiver),
+            sender: self.sender,
+            signaler: Some(signaler),
+            request_id: self.request_id,
+            order_id: self.order_id,
+            shared: self.shared,
         }
     }
 }

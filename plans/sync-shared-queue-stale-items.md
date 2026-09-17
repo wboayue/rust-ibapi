@@ -1,5 +1,19 @@
 # Sync shared queues: stale resets and frames — follow-up to #817 / #818
 
+**§1-§5 resolved** by the per-subscription sync shared channels this plan's
+§6 put out of scope: `send_shared_request` now gives each subscription its own
+queue, registered under the request's response types and removed when the
+subscription drops, so nothing dispatched before a subscription exists can
+reach it. Cause (a) in §2 is gone (a reset is delivered once per
+subscription); the fan-out in cause (b) is kept by design (every live
+subscription of a response type receives the frame, as on the async client),
+but a queue with no reader no longer exists, so nothing buffers. The narrower
+fix in §3 and the drain it kept were not implemented. The transport tests in
+§4 landed in fan-out form in `src/transport/sync_tests.rs`; the
+connection-level reconnect test in §4 was not added. The docs in §5 are
+updated. §6's async duplicate-reset item is still open. Kept for its
+analysis.
+
 Expands [transport cleanup follow-ups §4](transport-cleanup-followups.md#4-sync-stale-connectionreset-buffered-in-idle-streaming-shared-queues).
 PR #818 documented the symptom as a caveat on `TRANSPORT_RECONNECT_CODE`
 (`src/messages.rs`) and in the `## [Unreleased]` changelog; this plan removes

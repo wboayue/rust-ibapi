@@ -1007,8 +1007,7 @@ fn test_cancel_order_subscription_notifies_in_flight() -> Result<(), Error> {
 }
 
 /// `MessageBus::cancel_shared_subscription` with no counted subscription of
-/// the type writes the cancel bytes through to the connection. (No notify
-/// path — shared channels are persistent.)
+/// the type writes the cancel bytes through to the connection.
 #[test]
 fn test_cancel_shared_subscription_writes_through() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -1347,21 +1346,21 @@ fn test_request_less_system_message_does_not_fail_one_shot() -> Result<(), Error
     Ok(())
 }
 
-/// A one-shot `send_shared_request` drains the shared queue before writing:
-/// a request-less error buffered while no request was in flight must not
-/// poison the next call, which reads only its own response.
+/// A request-less error fanned out while no one-shot request was in flight
+/// reaches nobody: a one-shot request made afterwards has a queue of its own
+/// and reads only its own response.
 #[test]
-fn test_one_shot_shared_request_drains_stale_buffered_error() -> Result<(), Error> {
+fn test_one_shot_shared_request_does_not_see_earlier_error() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    // Hard error arrives with no request in flight; fanned to the persistent
-    // one-shot senders, it buffers in the RequestIds shared queue.
     stream.push_inbound(error_frame(-1, 321, READ_ONLY_MSG));
     bus.dispatch()?;
 
-    // The next one-shot request drains the stale error and reads only its own response.
     let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
-    assert!(one_shot.try_next_routed().is_none(), "stale buffered error must be drained");
+    assert!(
+        one_shot.try_next_routed().is_none(),
+        "error from before the request must not be delivered"
+    );
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::NextValidId as i32,
@@ -1374,24 +1373,272 @@ fn test_one_shot_shared_request_drains_stale_buffered_error() -> Result<(), Erro
     Ok(())
 }
 
-/// Streaming `send_shared_request` must NOT drain the shared queue: sync
-/// shares one crossbeam queue per request type, so draining could discard
-/// messages buffered for a concurrent live subscription of the same type.
+/// Two one-shot requests of the same type in flight at once each read the
+/// reply: neither takes it from the other.
 #[test]
-fn test_streaming_shared_request_does_not_drain_buffered_items() -> Result<(), Error> {
+fn test_concurrent_one_shot_shared_requests_each_receive_reply() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    // A message buffers in the RequestPositions shared queue (e.g. delivered for a
-    // concurrent subscription of the same type that hasn't consumed it yet).
+    let first = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, &[])?;
+    let second = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, &[])?;
+
+    stream.push_inbound(body("49|1|1700000000|"));
+    bus.dispatch()?;
+
+    for (name, sub) in [("first", &first), ("second", &second)] {
+        let message = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} one-shot got no reply"))?;
+        assert_eq!(message.peek_int(2)?, 1_700_000_000, "{name}");
+        assert!(sub.try_next_routed().is_none(), "{name} one-shot received more than the reply");
+    }
+    Ok(())
+}
+
+/// Every live subscription of a shared streaming type receives every frame,
+/// as with the async broadcast: two `RequestPositions` subscriptions both see
+/// each `Position` and `PositionEnd`.
+#[test]
+fn test_live_shared_subscriptions_each_receive_every_frame() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let first = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    let second = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::Position as i32,
+        &crate::proto::Position {
+            account: Some("DU123".to_string()),
+            ..Default::default()
+        },
+    ));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    for (name, sub) in [("first", &first), ("second", &second)] {
+        let position = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} got no Position"))?;
+        assert_eq!(position.message_type(), crate::messages::IncomingMessages::Position, "{name}");
+        let end = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} got no PositionEnd"))?;
+        assert_eq!(end.message_type(), crate::messages::IncomingMessages::PositionEnd, "{name}");
+        assert!(sub.try_next_routed().is_none(), "{name} received a frame twice");
+    }
+    Ok(())
+}
+
+/// Frames dispatched before a subscription existed never reach it: a
+/// `RequestPositions` subscription made after a `PositionEnd` was delivered to
+/// an earlier one starts empty, and the earlier one keeps its frame.
+#[test]
+fn test_later_shared_subscription_does_not_see_earlier_frames() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let earlier = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::PositionEnd as i32,
         &crate::proto::PositionEnd {},
     ));
     bus.dispatch()?;
 
-    // A new streaming request of the same type must leave the buffered item intact.
-    let streaming = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
-    let message = streaming.next_timeout(TICK).expect("buffered streaming message was drained")?;
+    let later = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    assert!(later.try_next_routed().is_none(), "frame from before the request was delivered");
+
+    let message = earlier.next_timeout(TICK).expect("earlier subscription lost its frame")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::PositionEnd);
+    Ok(())
+}
+
+/// A reset with no subscription in flight leaves nothing behind: a streaming
+/// shared request made after it reads its own responses, not a stale
+/// `ConnectionReset`.
+#[test]
+fn test_later_shared_subscription_does_not_see_earlier_reset() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    bus.reset();
+
+    let sub = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+    assert!(sub.try_next_routed().is_none(), "reset from before the request was delivered");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrderEnd as i32,
+        &crate::proto::OpenOrdersEnd {},
+    ));
+    bus.dispatch()?;
+
+    let message = sub.next_timeout(TICK).expect("response missing")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::OpenOrderEnd);
+    Ok(())
+}
+
+/// The registered shared subscriptions matching `predicate`.
+fn shared_subscriber_count<S: Stream>(bus: &TcpMessageBus<S>, predicate: impl Fn(&SharedSubscriber) -> bool) -> usize {
+    bus.shared_channels.subscribers.lock().unwrap().iter().filter(|s| predicate(s)).count()
+}
+
+/// Dropping a shared subscription removes its registration, so no response
+/// type it was registered under delivers to it any more. `RequestOpenOrders`
+/// maps to three response types; one drop signal clears all three.
+#[test]
+fn test_dropped_shared_subscription_is_unregistered() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let sub = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+    let survivor = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+    let registered = |bus: &TcpMessageBus<MemoryStream>| shared_subscriber_count(bus, |s| s.request == OutgoingMessages::RequestOpenOrders);
+    assert_eq!(registered(&bus), 2);
+
+    drop(sub);
+    drain_cleanup_signals(&bus);
+    assert_eq!(registered(&bus), 1, "dropped subscription still registered");
+
+    // The survivor is the one still registered: every response type of the
+    // mapping still delivers to it, once.
+    for message_type in shared_channel_configuration::response_types(OutgoingMessages::RequestOpenOrders).unwrap() {
+        stream.push_inbound(match message_type {
+            crate::messages::IncomingMessages::OpenOrder => binary_proto(
+                *message_type as i32,
+                &crate::proto::OpenOrder {
+                    order_id: Some(7),
+                    ..Default::default()
+                },
+            ),
+            crate::messages::IncomingMessages::OrderStatus => binary_proto(
+                *message_type as i32,
+                &crate::proto::OrderStatus {
+                    order_id: Some(7),
+                    ..Default::default()
+                },
+            ),
+            crate::messages::IncomingMessages::OpenOrderEnd => binary_proto(*message_type as i32, &crate::proto::OpenOrdersEnd {}),
+            other => panic!("unexpected response type {other:?} in the RequestOpenOrders mapping"),
+        });
+        bus.dispatch()?;
+        let message = survivor
+            .next_timeout(TICK)
+            .unwrap_or_else(|| panic!("survivor got no {message_type:?}"))?;
+        assert_eq!(message.message_type(), *message_type);
+    }
+    assert!(survivor.try_next_routed().is_none(), "survivor received a frame twice");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// Until the cleanup thread processes the drop signal, a send to the dropped
+/// subscription's queue fails; the dispatcher removes the registration then,
+/// so nothing accumulates and a queue with no reader is not left registered.
+#[test]
+fn test_send_to_dropped_shared_subscription_unregisters_it() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let sub = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    drop(sub);
+    assert_eq!(
+        shared_subscriber_count(&bus, |_| true),
+        1,
+        "no cleanup thread: the drop signal is still queued"
+    );
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+
+    assert_eq!(shared_subscriber_count(&bus, |_| true), 0, "send to a dropped queue must unregister it");
+    Ok(())
+}
+
+/// `cancel()` on a shared subscription delivers `Error::Cancelled` to its own
+/// queue, so a thread blocked in `next()` on the same handle returns, and
+/// unregisters it: a frame of its type dispatched afterwards is not queued on
+/// the cancelled handle, while a subscription made afterwards receives it.
+#[test]
+fn test_shared_subscription_cancel_notifies_and_unregisters() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let sub = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    sub.cancel();
+    drain_cleanup_signals(&bus);
+    assert_eq!(shared_subscriber_count(&bus, |_| true), 0, "cancelled subscription still registered");
+
+    let later = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+
+    let resp = sub.next_timeout(TICK).expect("cancelled shared subscription got no notification");
+    assert!(matches!(resp, Err(Error::Cancelled)), "{resp:?}");
+    assert!(sub.try_next_routed().is_none(), "frame queued on a cancelled handle");
+    let message = later.next_timeout(TICK).expect("later subscription got nothing")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::PositionEnd);
+
+    drop(sub);
+    drain_cleanup_signals(&bus);
+    assert_eq!(
+        shared_subscriber_count(&bus, |_| true),
+        1,
+        "drop after cancel removed the wrong registration"
+    );
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// `Subscription::cancel()` on a shared stream unregisters the handle through
+/// the same path, so a cancelled `positions()` handle kept in a struct stops
+/// collecting frames while the count is released for the cancel.
+#[test]
+fn test_subscription_cancel_unregisters_shared_handle() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+    let cancel = positions_cancel();
+
+    let sub = positions_subscription(&bus)?;
+    sub.cancel();
+    drain_cleanup_signals(&bus);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    assert_eq!(shared_subscriber_count(&bus, |_| true), 0, "cancelled subscription still registered");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// `reset` unregisters every shared subscription after failing it once (not
+/// once per response type): a frame of the type dispatched afterwards is not
+/// queued on the dead handle, and a resubscription made after the reset
+/// receives it.
+#[test]
+fn test_reset_unregisters_shared_subscriptions() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let old = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    bus.reset();
+    assert_eq!(shared_subscriber_count(&bus, |_| true), 0, "reset left a registration behind");
+
+    let new = bus.send_shared_request(OutgoingMessages::RequestPositions, &[])?;
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+
+    let resp = old.next_timeout(TICK).expect("dead handle got no reset");
+    assert!(matches!(resp, Err(Error::ConnectionReset)), "{resp:?}");
+    assert!(
+        old.try_next_routed().is_none(),
+        "dead handle got a second reset or a frame; a reset is delivered once, not once per response type"
+    );
+    let message = new.next_timeout(TICK).expect("resubscription got nothing")?;
     assert_eq!(message.message_type(), crate::messages::IncomingMessages::PositionEnd);
     Ok(())
 }
@@ -2225,14 +2472,16 @@ fn test_response_with_no_recipient_dropped() -> Result<(), Error> {
 
 /// `reset` notifies every channel category — requests, orders, shared — and
 /// clears the channel maps. All three categories must be live before the call
-/// to exercise each `notify_all` branch.
+/// to exercise each `notify_all` branch. A shared subscription receives the
+/// reset once, however many response types its request maps to
+/// (`RequestAccountData` maps to four).
 #[test]
 fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
     let (_, bus) = make_bus();
 
     let req = bus.send_request(100, &[])?;
     let order = bus.send_order_request(200, &[])?;
-    let shared = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, &[])?;
+    let shared = bus.send_shared_request(OutgoingMessages::RequestAccountData, &[])?;
 
     bus.reset();
 
@@ -2240,6 +2489,10 @@ fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
         let resp = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} sub got no notification"));
         assert!(matches!(resp, Err(Error::ConnectionReset)), "{name}: {resp:?}");
     }
+    assert!(
+        shared.try_next_routed().is_none(),
+        "shared subscription received the reset more than once"
+    );
 
     assert!(!bus.requests.contains(&100));
     assert!(!bus.orders.contains(&200));
@@ -2341,6 +2594,11 @@ fn test_sends_are_refused_while_disconnected() {
 
     assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
     assert_eq!(bus.orders.len(), 0, "a refused order request must register nothing");
+    assert_eq!(
+        shared_subscriber_count(&bus, |_| true),
+        0,
+        "a refused shared request must register nothing"
+    );
     assert!(stream.captured().is_empty(), "a refused send must not reach the socket");
 
     // The same send goes through once the handshake has put the session back.
@@ -2437,6 +2695,13 @@ fn test_failed_write_leaves_no_registration() {
 
     assert!(mb.send_order_request(42, b"order-bytes").is_err());
     assert_eq!(bus.orders.len(), 0, "a failed write must leave no order registered");
+
+    assert!(mb.send_shared_request(OutgoingMessages::RequestPositions, b"positions").is_err());
+    assert_eq!(
+        shared_subscriber_count(&bus, |_| true),
+        0,
+        "a failed write must leave no shared subscription registered"
+    );
 }
 
 #[test]
