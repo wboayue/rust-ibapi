@@ -147,7 +147,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn send_shared_request_uses_shared_receiver() {
+    fn send_shared_request_sets_message_type() {
         let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
         let sub = MessageBus::send_shared_request(&stub, OutgoingMessages::RequestMarketData, b"shared-bytes").expect("send_shared_request");
 

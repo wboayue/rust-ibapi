@@ -7,9 +7,6 @@ use std::{
 };
 
 #[cfg(feature = "sync")]
-use std::sync::Arc;
-
-#[cfg(feature = "sync")]
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -298,9 +295,7 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     if let Some(request_id) = request_id {
         subscription = subscription.receiver(receiver).request_id(request_id);
     } else if let Some(message_type) = message_type {
-        subscription = subscription
-            .shared_receiver(Arc::new(receiver))
-            .shared(SharedTicket { message_type, generation: 0 });
+        subscription = subscription.receiver(receiver).shared(SharedTicket { message_type, generation: 0 });
     }
 
     subscription.build()
