@@ -174,7 +174,7 @@ impl Client {
     /// Calculates an option's price based on the provided volatility and its underlying's price.
     ///
     /// # Arguments
-    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `contract`   - The [Contract] object representing the option for which the calculation is being requested.
     /// * `volatility` - Hypothetical volatility.
     /// * `underlying_price` - Hypothetical option's underlying price.
     ///
@@ -208,7 +208,7 @@ impl Client {
     /// Calculates the implied volatility based on hypothetical option and its underlying prices.
     ///
     /// # Arguments
-    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `contract`   - The [Contract] object representing the option for which the calculation is being requested.
     /// * `option_price` - Hypothetical option price.
     /// * `underlying_price` - Hypothetical option's underlying price.
     ///
