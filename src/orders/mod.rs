@@ -709,7 +709,7 @@ impl_wire_enum!(Action);
 
 /// The lifecycle state of an order, as reported by TWS.
 ///
-/// See the [IB OrderStatus reference](https://interactivebrokers.github.io/tws-api/order_submission.html#order_status).
+/// See the [IB OrderStatus reference](https://www.interactivebrokers.com/docs/tws-api/doc/order-management/order-status/understanding-order-status-message).
 ///
 /// Default is [`OrderStatusKind::Submitted`] to match the [`Action`] enum's
 /// pragmatic default; [`OrderStatus::default`] callers should overwrite it

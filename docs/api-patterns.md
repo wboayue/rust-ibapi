@@ -486,8 +486,8 @@ received tick IDs (e.g. `BID_SIZE` = 0, `RT_VOLUME` = 48). Received tick IDs
 live on [`contracts::tick_types::TickType`]; each generic-tick constant's
 doc-comment names which received-tick types it subscribes to.
 
-See: <https://interactivebrokers.github.io/tws-api/tick_types.html> (the
-*Generic Tick Required* column on the IB docs page).
+See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction> (the
+*Generic tick required* column on the IB docs page).
 
 [`market_data::realtime::generic_tick`]: https://docs.rs/ibapi/latest/ibapi/market_data/realtime/generic_tick/index.html
 [`contracts::tick_types::TickType`]: https://docs.rs/ibapi/latest/ibapi/contracts/tick_types/enum.TickType.html

@@ -40,8 +40,8 @@
 //!
 //! # References
 //!
-//! - IB docs: <https://interactivebrokers.github.io/tws-api/tick_types.html>
-//!   (see the *Generic Tick Required* column).
+//! - IB docs: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>
+//!   (see the *Generic tick required* column).
 //!
 //! [`MarketDataBuilder::generic_ticks`]: crate::market_data::realtime::MarketDataBuilder::generic_ticks
 //! [`MarketDataBuilder::add_generic_tick`]: crate::market_data::realtime::MarketDataBuilder::add_generic_tick
