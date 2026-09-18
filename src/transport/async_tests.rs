@@ -515,6 +515,181 @@ async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMe
     (stream, bus, sub)
 }
 
+/// Number of length-prefixed frames in `captured` whose payload is `payload`.
+fn count_frames(captured: &[u8], payload: &[u8]) -> usize {
+    let mut rest = captured;
+    let mut count = 0;
+    while rest.len() >= 4 {
+        let len = u32::from_be_bytes([rest[0], rest[1], rest[2], rest[3]]) as usize;
+        let (frame, tail) = rest[4..].split_at(len);
+        count += usize::from(frame == payload);
+        rest = tail;
+    }
+    count
+}
+
+/// Wait until `captured` holds `expected` frames equal to `payload`, or the
+/// deadline passes. Async `Drop` spawns the cancel send, so a count can only
+/// be asserted after that task has had a chance to run.
+async fn wait_for_frames(stream: &MemoryStream, payload: &[u8], expected: usize) -> usize {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        let count = count_frames(&stream.captured(), payload);
+        if count >= expected || std::time::Instant::now() >= deadline {
+            return count;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
+/// TWS keeps one positions stream per client (`CancelPositions` carries no id),
+/// so with two live `RequestPositions` subscriptions the first drop must not
+/// write the cancel, the survivor must keep receiving, and the last drop writes
+/// exactly one cancel. Subscriptions are built through the production
+/// `SubscriptionBuilder::send_shared`.
+#[tokio::test]
+async fn test_shared_subscription_cancel_waits_for_last_subscriber() {
+    use crate::accounts::PositionUpdate;
+    use crate::client::builders::r#async::SubscriptionBuilder;
+
+    let (stream, bus) = make_bus();
+    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None).unwrap();
+
+    let make = || async {
+        let message_bus: Arc<dyn AsyncMessageBus> = bus.clone();
+        SubscriptionBuilder::<PositionUpdate>::new_with_components(DecoderContext::default(), message_bus)
+            .send_shared(OutgoingMessages::RequestPositions, b"positions".to_vec())
+            .await
+            .unwrap()
+    };
+    let first = make().await;
+    let mut second = make().await;
+
+    drop(first);
+    // Give a wrongly spawned cancel time to land before asserting its absence.
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(
+        count_frames(&stream.captured(), &cancel),
+        0,
+        "cancel written while a subscription is still live"
+    );
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.read_and_route_message().await.unwrap();
+    let item = next_item(&mut second).await.expect("survivor received nothing").unwrap();
+    assert!(matches!(item, SubscriptionItem::Data(PositionUpdate::PositionEnd)), "got: {item:?}");
+
+    drop(second);
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "last drop must write exactly one cancel");
+}
+
+/// `Orders` has no cancel message, so its drop writes nothing; the count for
+/// its request type must still return to zero, or a later cancel for the
+/// type would be withheld. The release runs in the task `Drop` spawns.
+///
+/// Built the way `open_orders()` builds it: `send_shared_request` then
+/// `new_from_internal_simple`, with nothing naming the request type. The
+/// drop can only reach the count because the subscription derives the type
+/// from the internal subscription's cleanup signal.
+#[tokio::test]
+async fn test_shared_subscription_without_cancel_message_releases_count() {
+    use crate::orders::Orders;
+
+    let (stream, bus) = make_bus();
+    let count = || async { bus.shared_counts.lock().await.live(OutgoingMessages::RequestOpenOrders) };
+
+    let internal = bus
+        .send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
+        .await
+        .unwrap();
+    let sub = Subscription::<Orders>::new_from_internal_simple(internal, bus.clone(), DecoderContext::default());
+    assert_eq!(count().await, 1);
+
+    drop(sub);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while count().await != 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(count().await, 0, "count leaked for a type with no cancel message");
+    assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1, "only the request was written");
+}
+
+type PositionsSubscription = Subscription<crate::accounts::PositionUpdate>;
+
+async fn positions_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) -> PositionsSubscription {
+    let internal = bus
+        .send_shared_request(OutgoingMessages::RequestPositions, b"positions".to_vec())
+        .await
+        .unwrap();
+    Subscription::new_from_internal(internal, bus.clone(), None, None, DecoderContext::default())
+}
+
+fn positions_cancel() -> Vec<u8> {
+    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None).unwrap()
+}
+
+async fn positions_live(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) -> usize {
+    bus.shared_counts.lock().await.live(OutgoingMessages::RequestPositions)
+}
+
+/// Wait until the count for `RequestPositions` reaches `expected`, or the
+/// deadline passes; the release runs in the task `Drop` spawns.
+async fn wait_for_positions_live(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, expected: usize) -> usize {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        let live = positions_live(bus).await;
+        if live == expected || std::time::Instant::now() >= deadline {
+            return live;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
+/// A reset ends every shared subscription, so the count restarts at zero for
+/// the new session: a resubscription made after the reset is the only live one
+/// and its drop writes the cancel even while the dead handle is still held.
+#[tokio::test]
+async fn test_shared_count_restarts_after_reset() {
+    let (stream, bus) = make_bus();
+    let cancel = positions_cancel();
+
+    let old = positions_subscription(&bus).await;
+    bus.reset_channels().await;
+    assert_eq!(positions_live(&bus).await, 0);
+
+    let new = positions_subscription(&bus).await;
+    drop(new);
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "cancel withheld by a dead handle");
+
+    drop(old);
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1, "dead handle wrote a cancel");
+}
+
+/// A handle from before the reset is dead: its drop must neither cancel on the
+/// new session, which has no such stream, nor touch the new session's count.
+#[tokio::test]
+async fn test_stale_shared_handle_neither_cancels_nor_decrements() {
+    let (stream, bus) = make_bus();
+    let cancel = positions_cancel();
+
+    let old = positions_subscription(&bus).await;
+    bus.reset_channels().await;
+    let new = positions_subscription(&bus).await;
+
+    drop(old);
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(count_frames(&stream.captured(), &cancel), 0, "dead handle wrote a cancel");
+    assert_eq!(positions_live(&bus).await, 1);
+
+    drop(new);
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1);
+    assert_eq!(wait_for_positions_live(&bus, 0).await, 0);
+}
+
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
 async fn next_item<T: StreamDecoder<T> + Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {

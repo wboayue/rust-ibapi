@@ -153,14 +153,18 @@ mod sync_tests {
 
         assert_eq!(stub.request_messages(), vec![b"shared-bytes".to_vec()]);
         assert_eq!(sub.request_id, None);
-        assert_eq!(sub.message_type, Some(OutgoingMessages::RequestMarketData));
+        assert_eq!(sub.shared.map(|t| t.message_type), Some(OutgoingMessages::RequestMarketData));
         assert_eq!(drain_subscription(&sub).len(), 1);
     }
 
     #[test]
     fn cancel_shared_subscription_captures_packet() {
         let stub = MessageBusStub::default();
-        MessageBus::cancel_shared_subscription(&stub, OutgoingMessages::RequestMarketData, b"cancel-shared").expect("cancel_shared_subscription");
+        let ticket = SharedTicket {
+            message_type: OutgoingMessages::RequestMarketData,
+            generation: 0,
+        };
+        MessageBus::cancel_shared_subscription(&stub, ticket, Some(b"cancel-shared")).expect("cancel_shared_subscription");
         assert_eq!(stub.request_messages(), vec![b"cancel-shared".to_vec()]);
     }
 

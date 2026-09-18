@@ -1006,17 +1006,145 @@ fn test_cancel_order_subscription_notifies_in_flight() -> Result<(), Error> {
     Ok(())
 }
 
-/// `MessageBus::cancel_shared_subscription` writes the cancel bytes through
-/// to the connection. (No notify path — shared channels are persistent.)
+/// `MessageBus::cancel_shared_subscription` with no counted subscription of
+/// the type writes the cancel bytes through to the connection. (No notify
+/// path — shared channels are persistent.)
 #[test]
 fn test_cancel_shared_subscription_writes_through() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let mb: &dyn MessageBus = bus.as_ref();
 
-    mb.cancel_shared_subscription(OutgoingMessages::RequestCurrentTime, b"cancel-bytes")?;
+    let ticket = SharedTicket {
+        message_type: OutgoingMessages::RequestCurrentTime,
+        generation: 0,
+    };
+    mb.cancel_shared_subscription(ticket, Some(b"cancel-bytes"))?;
 
     let captured = stream.captured();
     assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+    Ok(())
+}
+
+/// Number of length-prefixed frames in `captured` whose payload is `payload`.
+fn count_frames(captured: &[u8], payload: &[u8]) -> usize {
+    let mut rest = captured;
+    let mut count = 0;
+    while rest.len() >= 4 {
+        let len = u32::from_be_bytes([rest[0], rest[1], rest[2], rest[3]]) as usize;
+        let (frame, tail) = rest[4..].split_at(len);
+        count += usize::from(frame == payload);
+        rest = tail;
+    }
+    count
+}
+
+/// TWS keeps one positions stream per client (`CancelPositions` carries no id),
+/// so with two live `RequestPositions` subscriptions the first drop must not
+/// write the cancel, the survivor must keep receiving, and the last drop writes
+/// exactly one cancel.
+#[test]
+fn test_shared_subscription_cancel_waits_for_last_subscriber() -> Result<(), Error> {
+    use crate::accounts::PositionUpdate;
+    use crate::subscriptions::{StreamDecoder, SubscriptionItem};
+
+    let (stream, bus) = make_bus();
+    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None)?;
+    let cancels_written = || count_frames(&stream.captured(), &cancel);
+
+    let first: crate::subscriptions::sync::Subscription<PositionUpdate> =
+        wrap_subscription(bus.clone(), bus.send_shared_request(OutgoingMessages::RequestPositions, b"positions")?);
+    let second: crate::subscriptions::sync::Subscription<PositionUpdate> =
+        wrap_subscription(bus.clone(), bus.send_shared_request(OutgoingMessages::RequestPositions, b"positions")?);
+
+    drop(first);
+    assert_eq!(cancels_written(), 0, "cancel written while a subscription is still live");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::PositionEnd as i32,
+        &crate::proto::PositionEnd {},
+    ));
+    bus.dispatch()?;
+    let item = second.next_timeout(TICK).expect("survivor received nothing")?;
+    assert!(matches!(item, SubscriptionItem::Data(PositionUpdate::PositionEnd)), "got: {item:?}");
+
+    drop(second);
+    assert_eq!(cancels_written(), 1, "last drop must write exactly one cancel");
+    Ok(())
+}
+
+/// `Orders` has no cancel message, so its drop writes nothing; the count for
+/// its request type must still return to zero, or a later cancel for the
+/// type would be withheld.
+#[test]
+fn test_shared_subscription_without_cancel_message_releases_count() -> Result<(), Error> {
+    use crate::orders::Orders;
+
+    let (stream, bus) = make_bus();
+    let count = || bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestOpenOrders);
+
+    let sub: crate::subscriptions::sync::Subscription<Orders> =
+        wrap_subscription(bus.clone(), bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders")?);
+    assert_eq!(count(), 1);
+
+    drop(sub);
+    assert_eq!(count(), 0, "count leaked for a type with no cancel message");
+    assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1, "only the request was written");
+    Ok(())
+}
+
+type PositionsSubscription = crate::subscriptions::sync::Subscription<crate::accounts::PositionUpdate>;
+
+fn positions_subscription(bus: &Arc<TcpMessageBus<MemoryStream>>) -> Result<PositionsSubscription, Error> {
+    Ok(wrap_subscription(
+        bus.clone(),
+        bus.send_shared_request(OutgoingMessages::RequestPositions, b"positions")?,
+    ))
+}
+
+fn positions_cancel() -> Vec<u8> {
+    use crate::subscriptions::StreamDecoder;
+    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None).unwrap()
+}
+
+/// A reset ends every shared subscription, so the count restarts at zero for
+/// the new session: a resubscription made after the reset is the only live one
+/// and its drop writes the cancel even while the dead handle is still held.
+#[test]
+fn test_shared_count_restarts_after_reset() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let cancel = positions_cancel();
+
+    let old = positions_subscription(&bus)?;
+    bus.reset();
+    assert_eq!(bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestPositions), 0);
+
+    let new = positions_subscription(&bus)?;
+    drop(new);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1, "cancel withheld by a dead handle");
+
+    drop(old);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1, "dead handle wrote a cancel");
+    Ok(())
+}
+
+/// A handle from before the reset is dead: its drop must neither cancel on the
+/// new session, which has no such stream, nor touch the new session's count.
+#[test]
+fn test_stale_shared_handle_neither_cancels_nor_decrements() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let cancel = positions_cancel();
+
+    let old = positions_subscription(&bus)?;
+    bus.reset();
+    let new = positions_subscription(&bus)?;
+
+    drop(old);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 0, "dead handle wrote a cancel");
+    assert_eq!(bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestPositions), 1);
+
+    drop(new);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    assert_eq!(bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestPositions), 0);
     Ok(())
 }
 

@@ -10,8 +10,7 @@ use log::{debug, error, warn};
 use super::common::{debug_assert_request_id_routable, filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
 use crate::errors::Error;
-use crate::messages::OutgoingMessages;
-use crate::transport::{InternalSubscription, MessageBus};
+use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
 ///
@@ -41,7 +40,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     message_bus: Arc<dyn MessageBus>,
     request_id: Option<i32>,
     order_id: Option<i32>,
-    message_type: Option<OutgoingMessages>,
+    shared: Option<SharedTicket>,
     phantom: PhantomData<T>,
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
@@ -59,7 +58,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     pub(crate) fn new(message_bus: Arc<dyn MessageBus>, subscription: InternalSubscription, context: DecoderContext) -> Self {
         let request_id = subscription.request_id;
         let order_id = subscription.order_id;
-        let message_type = subscription.message_type;
+        let shared = subscription.shared;
 
         debug_assert_request_id_routable::<T, T>(request_id);
 
@@ -68,7 +67,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             message_bus,
             request_id,
             order_id,
-            message_type,
+            shared,
             subscription,
             phantom: PhantomData,
             cancelled: AtomicBool::new(false),
@@ -84,11 +83,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return;
         }
 
-        if self.cancelled.load(Ordering::Relaxed) {
+        // One atomic swap, not a load then a store: two threads cancelling the
+        // same handle would otherwise both reach the bus, and on a shared
+        // stream that releases the count twice.
+        if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
         }
-
-        self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
@@ -104,13 +104,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
                 self.subscription.cancel();
             }
-        } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
-                if let Err(e) = self.message_bus.cancel_shared_subscription(message_type, &message) {
-                    log_cancel_error("shared subscription", &e);
-                }
-                self.subscription.cancel();
+        } else if let Some(ticket) = self.shared {
+            // The count is released whether or not the type has a cancel message.
+            let message = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)).ok();
+            if let Err(e) = self.message_bus.cancel_shared_subscription(ticket, message.as_deref()) {
+                log_cancel_error("shared subscription", &e);
             }
+            self.subscription.cancel();
         } else {
             debug!("Could not determine cancel method")
         }

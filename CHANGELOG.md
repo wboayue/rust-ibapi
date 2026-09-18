@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-4.0.md` §17 (#838).
 - `market_data::realtime::Trade::tick_type`. It held the wire code `"1"` / `"2"` and was constant per stream; the method that opened the stream (`tick_by_tick(..).last()` / `.all_last()`) names the feed. See `docs/migration-4.0.md` §18 (#844).
 
+### Fixed
+
+- Dropping one of several live subscriptions to the same shared stream (`positions`, `account_updates`, `news_bulletins`) no longer cancels the stream at TWS for the others. TWS keeps one such stream per client and its cancel carries no id, so both clients now count live subscriptions per request type and send the cancel only when the last one ends (#836).
+- Dropping an async subscription outside a Tokio runtime no longer panics: the cancel is skipped with a warning, and for a shared stream the live count is left one too high until the next reconnect (#836).
+
 ## [4.2.0] - 2026-09-21
 
 ### Added
