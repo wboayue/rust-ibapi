@@ -22,7 +22,10 @@ impl VersionedClient for crate::client::r#async::Client {
 
 // Verifies that Order is properly formed.
 pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order, _order_id: i32) -> Result<(), Error> {
-    let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
+    // Ported from the official C# client, where this is
+    // `StringsAreEqual(Constants.BagSecType, contract.SecType)`. The contract
+    // is not passed in here, so bag orders are never detected.
+    let is_bag_order: bool = false;
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
         client.check_version(server_versions::SCALE_ORDERS, "It does not support Scale orders.")?
