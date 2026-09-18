@@ -13,7 +13,7 @@ use log::{debug, warn};
 
 use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
-use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
+use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
 
 /// Asynchronous subscription for streaming data.
@@ -51,6 +51,13 @@ use crate::Error;
 /// # Ok(()) }
 /// ```
 ///
+/// Drop the subscription inside a Tokio runtime: the cancel is sent from a
+/// task spawned by `Drop`. A drop on a thread with no runtime logs a warning
+/// and skips it; for a shared stream (`positions`, `account_updates`,
+/// `news_bulletins`, ...) that also leaves the stream's live count one too
+/// high until the next reconnect, so no later subscription of that type can
+/// cancel it.
+///
 /// When you only care about data, use the [`SubscriptionItemStreamExt::filter_data`]
 /// adapter to filter notices (logged at `warn!`):
 ///
@@ -75,6 +82,10 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// Metadata for cancellation
     request_id: Option<i32>,
     order_id: Option<i32>,
+    /// Set for shared-channel subscriptions (no request or order id), so the
+    /// cancel is routed through the bus's per-type count. Derived from the
+    /// internal subscription's cleanup signal, never set by a caller.
+    shared: Option<SharedTicket>,
     context: DecoderContext,
     /// Shared across clones — one `cancel()` call disables future cancel sends from any clone.
     cancelled: Arc<AtomicBool>,
@@ -96,6 +107,7 @@ impl<T: StreamDecoder<T>> Clone for Subscription<T> {
             subscription: self.subscription.clone(),
             request_id: self.request_id,
             order_id: self.order_id,
+            shared: self.shared,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
             snapshot_ended: self.snapshot_ended.clone(),
@@ -124,10 +136,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ) -> Self {
         super::common::debug_assert_request_id_routable::<T, T>(request_id);
 
+        let shared = internal.shared_ticket();
         Self {
             subscription: internal,
             request_id,
             order_id,
+            shared,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
             snapshot_ended: Arc::new(AtomicBool::new(false)),
@@ -331,18 +345,37 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return;
         }
 
-        if self.cancelled.load(Ordering::Relaxed) {
+        // One atomic swap, not a load then a store: clones share this flag,
+        // and two tasks cancelling at once would otherwise both reach the
+        // bus, releasing a shared stream's count twice.
+        if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
         }
 
-        self.cancelled.store(true, Ordering::Relaxed);
-
         let id = self.request_id.or(self.order_id);
-        if let Ok(message) = T::cancel_message(self.context.server_version, id, Some(&self.context)) {
-            if let Err(e) = self.message_bus.send_message(message).await {
-                log_cancel_error("subscription", &e);
-            }
+        let message = T::cancel_message(self.context.server_version, id, Some(&self.context)).ok();
+        if let Err(e) = send_cancel(&self.message_bus, id, self.shared, message).await {
+            log_cancel_error("subscription", &e);
         }
+    }
+}
+
+/// A shared-channel subscription (no id) ends through the bus's per-type
+/// count, with or without a cancel message; everything else writes its
+/// cancel directly, and has nothing to do without one.
+///
+/// Four arguments, over the budget: they are exactly what `Drop` moves into
+/// its task, and a private helper gains nothing from a struct for them.
+async fn send_cancel(
+    message_bus: &Arc<dyn AsyncMessageBus>,
+    id: Option<i32>,
+    shared: Option<SharedTicket>,
+    message: Option<Vec<u8>>,
+) -> Result<(), Error> {
+    match (id, shared, message) {
+        (None, Some(ticket), message) => message_bus.cancel_shared_subscription(ticket, message).await,
+        (_, _, Some(message)) => message_bus.send_message(message).await,
+        (_, _, None) => Ok(()),
     }
 }
 
@@ -355,25 +388,38 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
             return;
         }
 
-        // Check if already cancelled
-        if self.cancelled.load(Ordering::Relaxed) {
+        // Already cancelled, or being cancelled by a clone right now.
+        if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
         }
 
-        self.cancelled.store(true, Ordering::Relaxed);
-
         // Decoders without a cancel message (the `StreamDecoder` default) return
-        // `Err(NotImplemented)`, so nothing is sent for them.
+        // `Err(NotImplemented)`; a shared subscription still has its count to
+        // release, an id-routed one has nothing to do.
         let id = self.request_id.or(self.order_id);
-        if let Ok(message) = T::cancel_message(self.context.server_version, id, Some(&self.context)) {
-            let message_bus = self.message_bus.clone();
-            // Drop can't be async; spawn the cancel send so it actually goes out.
-            tokio::spawn(async move {
-                if let Err(e) = message_bus.send_message(message).await {
-                    log_cancel_error("subscription", &e);
-                }
-            });
+        let shared = self.shared;
+        let message = T::cancel_message(self.context.server_version, id, Some(&self.context)).ok();
+        // Nothing to send and no count to release: nothing to spawn.
+        if message.is_none() && shared.is_none() {
+            return;
         }
+        // Drop can't be async; the cancel send is spawned so it actually goes
+        // out. With no runtime on this thread there is nowhere to spawn it, so
+        // the cancel and the count release are skipped rather than panicking
+        // in Drop. If the bus is still live (the drop happened on a plain
+        // thread, not at runtime teardown), the type's count stays one too
+        // high until the next reconnect, so no later subscription of the type
+        // can write its cancel.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            warn!("async subscription dropped outside a Tokio runtime: cancel not sent, shared count not released");
+            return;
+        };
+        let message_bus = self.message_bus.clone();
+        runtime.spawn(async move {
+            if let Err(e) = send_cancel(&message_bus, id, shared, message).await {
+                log_cancel_error("subscription", &e);
+            }
+        });
     }
 }
 

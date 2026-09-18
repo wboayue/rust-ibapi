@@ -20,7 +20,7 @@ use std::sync::{Arc, OnceLock};
 use async_trait::async_trait;
 use futures::Stream;
 use log::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -36,7 +36,7 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::RoutedItem;
+use super::{RoutedItem, SharedCounts, SharedTicket};
 
 /// Default capacity for broadcast channels. Subscription-data channels take
 /// the per-client override from `ClientBuilder::channel_capacity`; the notice
@@ -50,7 +50,7 @@ pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
 pub enum CleanupSignal {
     Request(i32),
     Order(i32),
-    Shared(OutgoingMessages),
+    Shared(SharedTicket),
     OrderUpdateStream,
 }
 
@@ -64,6 +64,11 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
+
+    /// Ends the subscription `ticket` names. `message` is the cancel to
+    /// write for the last one; `None` for a stream TWS never cancels, which
+    /// still releases the count.
+    async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error>;
 
     #[allow(dead_code)]
     async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error>;
@@ -199,6 +204,16 @@ impl AsyncInternalSubscription {
         std::future::poll_fn(|cx| self.poll_next_routed(cx)).now_or_never()?
     }
 
+    /// The shared-channel ticket when this is a shared-channel subscription,
+    /// taken from the cleanup signal `send_shared_request` attached; `None`
+    /// otherwise.
+    pub(crate) fn shared_ticket(&self) -> Option<SharedTicket> {
+        match self.cleanup_signal {
+            Some(CleanupSignal::Shared(ticket)) => Some(ticket),
+            _ => None,
+        }
+    }
+
     /// Send the cleanup signal, detaching this subscription's receivers first.
     fn send_cleanup_signal(&mut self) {
         let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), self.cleanup_signal.take()) else {
@@ -258,6 +273,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     shared_channel_senders: Arc<RwLock<HashMap<IncomingMessages, Vec<BroadcastSender>>>>,
     /// Maps OutgoingMessages to receivers for client subscription
     shared_channel_receivers: Arc<RwLock<HashMap<OutgoingMessages, broadcast::Receiver<RoutedItem>>>>,
+    /// Live subscriptions per shared request type; see [`SharedCounts`].
+    shared_counts: Mutex<SharedCounts>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
     /// Maps execution IDs to their response channels (for commission reports)
@@ -329,6 +346,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             request_channels: Arc::new(RwLock::new(HashMap::new())),
             shared_channel_senders: Arc::new(RwLock::new(shared_channel_senders)),
             shared_channel_receivers: Arc::new(RwLock::new(shared_channel_receivers)),
+            shared_counts: Mutex::new(SharedCounts::default()),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
             execution_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
@@ -355,10 +373,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 match signal {
                     CleanupSignal::Request(request_id) => remove_if_dead(&request_channels, request_id, "request").await,
                     CleanupSignal::Order(order_id) => remove_if_dead(&order_channels, order_id, "order").await,
-                    CleanupSignal::Shared(message_type) => {
+                    CleanupSignal::Shared(ticket) => {
                         // Shared channels are persistent and should not be removed
                         // They are created at initialization and reused across multiple requests
-                        debug!("Subscription for shared channel {:?} ended (channel remains active)", message_type);
+                        debug!("Subscription for shared channel {:?} ended (channel remains active)", ticket.message_type);
                     }
                     CleanupSignal::OrderUpdateStream => {
                         let mut stream = order_update_stream.write().await;
@@ -572,6 +590,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         for sender in self.shared_channel_senders.read().await.values().flatten() {
             let _ = sender.send(Error::ConnectionReset.into());
         }
+        // Every live shared subscription has just been failed: start a new
+        // generation so their later drops cannot touch the next session's counts.
+        self.shared_counts.lock().await.reset();
 
         self.request_channels.write().await.clear();
         self.order_channels.write().await.clear();
@@ -922,13 +943,29 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             }
         };
 
-        self.write_message(&message).await?;
+        // The lock spans the write so the count and the wire agree.
+        let ticket = {
+            let mut counts = self.shared_counts.lock().await;
+            self.write_message(&message).await?;
+            counts.subscribe(message_type)
+        };
 
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
             self.cleanup_sender.clone(),
-            CleanupSignal::Shared(message_type),
+            CleanupSignal::Shared(ticket),
         ))
+    }
+
+    async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {
+        let mut counts = self.shared_counts.lock().await;
+        if !counts.unsubscribe(ticket) {
+            return Ok(());
+        }
+        match message {
+            Some(message) => self.write_message(&message).await,
+            None => Ok(()),
+        }
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {

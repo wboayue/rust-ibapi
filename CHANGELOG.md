@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Dropping one of several live subscriptions to the same shared stream (`positions`, `account_updates`, `news_bulletins`) no longer cancels the stream at TWS for the others. TWS keeps one such stream per client and its cancel carries no id, so both clients now count live subscriptions per request type and send the cancel only when the last one ends (#836).
+- Dropping an async subscription outside a Tokio runtime no longer panics: the cancel is skipped with a warning, and for a shared stream the live count is left one too high until the next reconnect (#836).
+
 ## [4.2.0] - 2026-09-21
 
 ### Added

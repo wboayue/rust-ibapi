@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -21,7 +21,7 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
+use super::{InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
@@ -60,6 +60,8 @@ struct SharedChannels {
     senders: HashMap<IncomingMessages, Vec<Arc<Sender<RoutedItem>>>>,
     // Maps an outbound request to channel used to receive responses.
     receivers: HashMap<OutgoingMessages, Arc<Receiver<RoutedItem>>>,
+    // Live subscriptions per request type; see `SharedCounts`.
+    counts: Mutex<SharedCounts>,
 }
 
 impl SharedChannels {
@@ -68,6 +70,7 @@ impl SharedChannels {
         let mut instance = Self {
             senders: HashMap::new(),
             receivers: HashMap::new(),
+            counts: Mutex::new(SharedCounts::default()),
         };
 
         // Register request/response pairs.
@@ -106,6 +109,31 @@ impl SharedChannels {
 
     fn contains_sender(&self, message_type: IncomingMessages) -> bool {
         self.senders.contains_key(&message_type)
+    }
+
+    // Runs `write` for a new subscription of `message_type` and counts it on
+    // success. The lock spans the write so the count and the wire agree.
+    fn subscribe(&self, message_type: OutgoingMessages, write: impl FnOnce() -> Result<(), Error>) -> Result<SharedTicket, Error> {
+        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        write()?;
+        Ok(counts.subscribe(message_type))
+    }
+
+    // Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
+    // `SharedCounts::unsubscribe` says so.
+    fn unsubscribe(&self, ticket: SharedTicket, write: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
+        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        if counts.unsubscribe(ticket) {
+            write()
+        } else {
+            Ok(())
+        }
+    }
+
+    // Every live shared subscription has just been failed: start a new
+    // generation so their later drops cannot touch the next session's counts.
+    fn reset_counts(&self) {
+        self.counts.lock().unwrap_or_else(PoisonError::into_inner).reset();
     }
 
     // Notify all listeners of a given message type with message.
@@ -310,6 +338,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.notify_all(|| Error::ConnectionReset.into());
         self.orders.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        self.shared_channels.reset_counts();
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
@@ -831,20 +860,16 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             while shared_receiver.try_recv().is_ok() {}
         }
 
-        self.write_message(message)?;
+        let ticket = self.shared_channels.subscribe(message_type, || self.write_message(message))?;
 
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(shared_receiver)
-            .message_type(message_type)
-            .build();
+        let subscription = SubscriptionBuilder::new().shared_receiver(shared_receiver).shared(ticket).build();
 
         Ok(subscription)
     }
 
-    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &[u8]) -> Result<(), Error> {
-        self.write_message(message)?;
-        // TODO send cancel
-        Ok(())
+    fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<&[u8]>) -> Result<(), Error> {
+        self.shared_channels
+            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_message(message)))
     }
 
     fn notice_subscribe(&self) -> NoticeStream {

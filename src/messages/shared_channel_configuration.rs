@@ -164,11 +164,12 @@ pub(crate) fn exclusive_one_shot_response_types() -> &'static HashSet<IncomingMe
 /// `true` when `request` maps to a one-shot shared channel (single terminating
 /// response). Requests without a shared-channel mapping return `false`.
 ///
-/// Used by the sync transport to decide whether `send_shared_request` should
-/// drain the shared queue before writing: only one-shot channels receive
-/// fanned request-less errors, and draining a streaming channel could discard
+/// Both transports use it to keep one-shot requests out of the per-type
+/// live-subscription count that gates the shared cancel. The sync transport
+/// also uses it to decide whether `send_shared_request` should drain the
+/// shared queue before writing: only one-shot channels receive fanned
+/// request-less errors, and draining a streaming channel could discard
 /// messages buffered for a concurrent live subscription of the same type.
-#[cfg(any(feature = "sync", test))]
 pub(crate) fn is_one_shot_request(request: OutgoingMessages) -> bool {
     CHANNEL_MAPPINGS.iter().any(|m| m.request == request && m.one_shot)
 }

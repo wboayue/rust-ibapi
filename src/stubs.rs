@@ -14,7 +14,7 @@ use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::routing::{classify_error, determine_routing, ErrorDisposition, RoutingDecision};
-use crate::transport::RoutedItem;
+use crate::transport::{RoutedItem, SharedTicket};
 use crate::Error;
 
 #[cfg(feature = "sync")]
@@ -160,7 +160,9 @@ impl MessageBusStub {
 
     /// Record the outbound request and hand back a subscription pre-loaded with
     /// the configured responses. Every async `send_*` differs only in the id or
-    /// message-type argument it ignores.
+    /// message-type argument it ignores. The subscription carries no cleanup
+    /// signal, so a shared request built through the stub is not tagged with
+    /// its request type and its drop does not take the shared-cancel path.
     #[cfg(feature = "async")]
     fn seeded_subscription(&self, message: Vec<u8>) -> AsyncInternalSubscription {
         self.request_messages.write().unwrap().push(message);
@@ -252,8 +254,10 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, None, Some(message_type), message))
     }
 
-    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, packet: &[u8]) -> Result<(), Error> {
-        self.request_messages.write().unwrap().push(packet.to_vec());
+    fn cancel_shared_subscription(&self, _ticket: SharedTicket, packet: Option<&[u8]>) -> Result<(), Error> {
+        if let Some(packet) = packet {
+            self.request_messages.write().unwrap().push(packet.to_vec());
+        }
         Ok(())
     }
 
@@ -294,7 +298,9 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     if let Some(request_id) = request_id {
         subscription = subscription.receiver(receiver).request_id(request_id);
     } else if let Some(message_type) = message_type {
-        subscription = subscription.shared_receiver(Arc::new(receiver)).message_type(message_type);
+        subscription = subscription
+            .shared_receiver(Arc::new(receiver))
+            .shared(SharedTicket { message_type, generation: 0 });
     }
 
     subscription.build()
@@ -317,6 +323,13 @@ impl AsyncMessageBus for MessageBusStub {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message);
+        Ok(())
+    }
+
+    async fn cancel_shared_subscription(&self, _ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {
+        if let Some(message) = message {
+            self.request_messages.write().unwrap().push(message);
+        }
         Ok(())
     }
 
