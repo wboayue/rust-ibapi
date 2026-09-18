@@ -21,14 +21,12 @@ Paper trading (port 4002) is recommended.
 integration/
 ├── common/         # ibapi-test: shared test helpers
 │   └── src/lib.rs  # ClientId pool, rate limiter
-├── async/          # async client tests and binaries
+├── async/          # async client tests
 │   ├── src/lib.rs  # shared helpers
-│   ├── tests/      # test modules (cargo test)
-│   └── bin/        # standalone binaries (cargo run)
-└── sync/           # sync client tests and binaries
+│   └── tests/      # test modules (cargo test)
+└── sync/           # sync client tests
     ├── src/lib.rs
-    ├── tests/
-    └── bin/
+    └── tests/
 ```
 
 ## Test Helpers (`ibapi-test`)
@@ -104,13 +102,6 @@ just integration-async
 # Or directly with cargo
 cargo test -p ibapi-integration-sync
 cargo test -p ibapi-integration-async
-```
-
-## Running Binaries
-
-```bash
-cargo run -p ibapi-integration-async --bin <name>
-cargo run -p ibapi-integration-sync --bin <name>
 ```
 
 ## Environment Variables

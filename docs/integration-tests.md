@@ -9,10 +9,10 @@ See also: [integration/README.md](../integration/README.md) for setup and runnin
 | Crate | Path | Purpose |
 |-------|------|---------|
 | `ibapi-test` | `integration/common/` | Shared helpers (ClientId pool, rate limiter) |
-| `ibapi-integration-sync` | `integration/sync/` | Sync client tests and binaries |
-| `ibapi-integration-async` | `integration/async/` | Async client tests and binaries |
+| `ibapi-integration-sync` | `integration/sync/` | Sync client tests |
+| `ibapi-integration-async` | `integration/async/` | Async client tests |
 
-Tests go in `tests/`, standalone binaries in `bin/`.
+Tests go in `tests/`.
 
 ## Writing a Sync Test
 

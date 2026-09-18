@@ -26,7 +26,7 @@ cargo run --no-default-features --features sync --example positions
 - `market_data` / `async_market_data` - Real-time quotes
 - `historical_data` / `async_historical_data` - Historical bars
 - `tick_by_tick_*` - Tick-by-tick data streams
-- `realtime_bars` / `async_realtime_bars` - 5-second bars
+- `stream_bars` / `async_realtime_bars` - 5-second bars
 
 ### Account & Portfolio
 - `positions` / `async_positions` - Current positions
@@ -35,8 +35,8 @@ cargo run --no-default-features --features sync --example positions
 
 ### Orders & Execution
 - `place_order` / `async_place_order` - Submit orders
-- `order_management` / `async_order_management` - Modify/cancel orders
-- `executions` / `async_executions` - Execution reports
+- `cancel_orders` - Cancel orders
+- `executions` - Execution reports
 
 ### Options
 - `option_chain` / `async_option_chain` - Option contracts
@@ -89,13 +89,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 let subscription = client.market_data(&contract).subscribe()?;
 
-for update in subscription.timeout_iter(Duration::from_secs(30)) {
+for update in subscription.timeout_iter_data(Duration::from_secs(30)) {
     match update? {
-        MarketData::Price(price) => {
-            println!("Price: {}", price);
+        TickTypes::Price(price) => {
+            println!("Price: {:?}", price);
         },
-        MarketData::Size(size) => {
-            println!("Size: {}", size);
+        TickTypes::Size(size) => {
+            println!("Size: {:?}", size);
         },
         _ => {}
     }
@@ -105,20 +105,22 @@ for update in subscription.timeout_iter(Duration::from_secs(30)) {
 ### Handling Subscriptions (Async)
 ```rust
 use futures::StreamExt;
+use ibapi::subscriptions::SubscriptionItemStreamExt;
 use tokio::time::timeout;
 
-let mut subscription = client.market_data(&contract).subscribe().await?;
+let subscription = client.market_data(&contract).subscribe().await?;
+let mut data = subscription.filter_data();
 
 while let Ok(Some(update)) = timeout(
     Duration::from_secs(30),
-    subscription.next()
+    data.next()
 ).await {
     match update? {
-        MarketData::Price(price) => {
-            println!("Price: {}", price);
+        TickTypes::Price(price) => {
+            println!("Price: {:?}", price);
         },
-        MarketData::Size(size) => {
-            println!("Size: {}", size);
+        TickTypes::Size(size) => {
+            println!("Size: {:?}", size);
         },
         _ => {}
     }

@@ -363,7 +363,9 @@ For comprehensive conditional order documentation, see [Order Types - Conditiona
 Use the protocol module for version-specific features:
 
 ```rust
+use crate::messages::{encode_protobuf_message, OutgoingMessages};
 use crate::protocol::{check_version, Features, is_supported};
+use prost::Message;
 
 // Check if feature is supported
 pub fn tick_by_tick_trades(&self, contract: &Contract) 
@@ -373,19 +375,19 @@ pub fn tick_by_tick_trades(&self, contract: &Contract)
     // ... implementation
 }
 
-// Conditional field encoding
-pub fn encode_order(order: &Order, server_version: i32) -> RequestMessage {
-    let mut message = RequestMessage::new();
-    
-    // Always included
-    message.push_field(&order.order_id);
-    
-    // Conditionally included based on server version
+// Conditional field encoding: encoders build a prost message and return the
+// framed bytes; a version-gated field stays `None` when unsupported
+pub fn encode_my_request(request: &MyRequest, server_version: i32) -> Result<Vec<u8>, Error> {
+    let mut proto = crate::proto::MyRequest {
+        req_id: Some(request.id),
+        ..Default::default()
+    };
+
     if is_supported(server_version, Features::DECISION_MAKER) {
-        message.push_field(&order.decision_maker);
+        proto.decision_maker = Some(request.decision_maker.clone());
     }
-    
-    message
+
+    Ok(encode_protobuf_message(OutgoingMessages::MyRequest as i32, &proto.encode_to_vec()))
 }
 ```
 
@@ -642,11 +644,11 @@ loop {
 // - 2+ types need the same operation (encode, decode, validate)
 // - You want to write generic functions over those types
 pub trait Encodable {
-    fn encode(&self, message: &mut RequestMessage) -> Result<(), Error>;
+    fn encode(&self) -> Result<Vec<u8>, Error>;
 }
 
 pub trait Decodable: Sized {
-    fn decode(fields: &mut FieldIter) -> Result<Self, Error>;
+    fn decode(bytes: &[u8]) -> Result<Self, Error>;
 }
 
 // Implement for types that need this behavior
