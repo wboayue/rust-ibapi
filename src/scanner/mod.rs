@@ -105,5 +105,3 @@ pub struct ScannerData {
     /// Describes the combo legs when the scanner is returning EFP.
     pub leg: String,
 }
-
-// Async API methods are now on Client directly via scanner/async.rs

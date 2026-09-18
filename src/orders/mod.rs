@@ -1943,5 +1943,3 @@ mod r#async;
 
 #[cfg(test)]
 mod tests;
-
-// Async API methods are now on Client directly via orders/async.rs
