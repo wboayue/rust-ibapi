@@ -83,7 +83,7 @@ impl<'a> BracketOrderBuilder<'a, Client> {
     }
 }
 
-/// Extension trait for submitting multiple OCA orders
+/// Submitting several OCA orders in one call.
 impl Client {
     /// Submit multiple OCA (One-Cancels-All) orders
     ///
