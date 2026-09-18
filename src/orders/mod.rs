@@ -27,8 +27,9 @@
 //! ## Usage
 //!
 //! Orders are created using the `Order` struct and can be customized with various
-//! parameters. The `order_builder` module provides a fluent API for constructing
-//! complex orders.
+//! parameters. [`OrderBuilder`](crate::orders::OrderBuilder), reached through `Client::order`, provides a fluent API
+//! for constructing complex orders; the `order_builder` module holds free functions
+//! that return preset `Order` values.
 
 // Common implementation modules
 pub(crate) mod common;
