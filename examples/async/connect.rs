@@ -3,7 +3,7 @@
 //!
 //! To run this example:
 //! ```bash
-//! cargo run --features async --example async_connect
+//! cargo run --example async_connect
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled:

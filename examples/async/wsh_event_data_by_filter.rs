@@ -7,7 +7,7 @@
 //!
 //! To run this example:
 //! ```bash
-//! cargo run --features async --example async_wsh_event_data_by_filter
+//! cargo run --example async_wsh_event_data_by_filter
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled

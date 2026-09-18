@@ -11,7 +11,7 @@
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --features async --example async_historical_schedules
+//! cargo run --example async_historical_schedules
 //! ```
 //!
 //! # Configuration

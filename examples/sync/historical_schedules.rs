@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_schedules -- <STOCK_SYMBOL> [--connection_string <HOST:PORT>]
+//! cargo run --no-default-features --features sync --example historical_schedules -- <STOCK_SYMBOL> [--connection_string <HOST:PORT>]
 //! ```
 
 use clap::{arg, Command};

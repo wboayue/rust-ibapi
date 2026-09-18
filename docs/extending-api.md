@@ -261,13 +261,13 @@ pub const MY_API_TESTS: &[MyApiTestCase] = &[
 Test your implementation in both sync and async modes:
 
 ```bash
-# Test sync implementation
-cargo test <module>::sync --features sync
-cargo clippy --features sync
-
 # Test async implementation  
-cargo test <module>::async --features async
-cargo clippy --features async
+cargo test <module>::async
+cargo clippy
+
+# Test sync implementation
+cargo test <module>::sync --no-default-features --features sync
+cargo clippy --no-default-features --features sync
 ```
 
 ### Step 10: Add Examples

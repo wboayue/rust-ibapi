@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example readme_realtime_data_2
+//! cargo run --no-default-features --features sync --example readme_realtime_data_2
 //! ```
 
 use ibapi::client::blocking::Client;

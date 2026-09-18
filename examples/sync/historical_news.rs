@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_news
+//! cargo run --no-default-features --features sync --example historical_news
 //! ```
 
 use time::macros::datetime;

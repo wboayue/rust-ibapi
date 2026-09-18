@@ -11,7 +11,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example bracket_order
+//! cargo run --no-default-features --features sync --example bracket_order
 //! ```
 
 use ibapi::client::blocking::Client;

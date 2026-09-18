@@ -6,7 +6,7 @@
 //! (2104/2105/2106/2107/2108).
 //!
 //! ```bash
-//! cargo run --features async --example async_notice_stream
+//! cargo run --example async_notice_stream
 //! ```
 
 use ibapi::Client;

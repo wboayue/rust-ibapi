@@ -9,7 +9,7 @@
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --features async --example async_market_depth
+//! cargo run --example async_market_depth
 //! ```
 //!
 //! # Configuration

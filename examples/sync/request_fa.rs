@@ -6,8 +6,8 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example request_fa -- groups
-//! cargo run --features sync --example request_fa -- aliases
+//! cargo run --no-default-features --features sync --example request_fa -- groups
+//! cargo run --no-default-features --features sync --example request_fa -- aliases
 //! ```
 
 use ibapi::accounts::FaDataType;

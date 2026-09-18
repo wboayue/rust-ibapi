@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example stream_retry
+//! cargo run --no-default-features --features sync --example stream_retry
 //! ```
 
 use ibapi::client::blocking::Client;

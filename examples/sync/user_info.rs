@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example user_info
+//! cargo run --no-default-features --features sync --example user_info
 //! ```
 
 use ibapi::client::blocking::Client;

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example family_codes
+//! cargo run --no-default-features --features sync --example family_codes
 //! ```
 
 use ibapi::client::blocking::Client;

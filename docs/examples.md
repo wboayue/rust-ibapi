@@ -5,15 +5,15 @@
 Examples are organized by sync/async mode:
 
 ```bash
-# Sync examples
-cargo run --features sync --example connect
-cargo run --features sync --example market_data
-cargo run --features sync --example positions
+# Async examples (async is the default feature)
+cargo run --example async_connect
+cargo run --example async_market_data
+cargo run --example async_positions
 
-# Async examples  
-cargo run --features async --example async_connect
-cargo run --features async --example async_market_data
-cargo run --features async --example async_positions
+# Sync examples
+cargo run --no-default-features --features sync --example connect
+cargo run --no-default-features --features sync --example market_data
+cargo run --no-default-features --features sync --example positions
 ```
 
 ## Example Categories
@@ -164,22 +164,22 @@ let forex = Contract::forex("EUR", "USD").build();
 ### Enable Logging
 ```bash
 # Basic info
-RUST_LOG=info cargo run --features sync --example market_data
+RUST_LOG=info cargo run --no-default-features --features sync --example market_data
 
 # Debug messages
-RUST_LOG=debug cargo run --features sync --example market_data
+RUST_LOG=debug cargo run --no-default-features --features sync --example market_data
 
 # Trace everything
-RUST_LOG=trace cargo run --features sync --example market_data
+RUST_LOG=trace cargo run --no-default-features --features sync --example market_data
 
 # Module-specific
-RUST_LOG=ibapi::transport=debug cargo run --features sync --example market_data
+RUST_LOG=ibapi::transport=debug cargo run --no-default-features --features sync --example market_data
 ```
 
 ### Record Messages
 ```bash
 # Save all TWS communication, one file per message
-IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example market_data
+IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --no-default-features --features sync --example market_data
 
 # Files created, under a per-run timestamped subdirectory:
 # /tmp/tws-messages/2024-03-15-14-30-0/0000-request.msg
@@ -192,7 +192,7 @@ Responses above are recorded *after* parsing, so they carry no length prefixes.
 When the framing itself is suspect, tap the socket instead:
 
 ```bash
-IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --features sync --example market_data
+IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --no-default-features --features sync --example market_data
 
 # The inbound stream byte for byte, plus a per-frame index:
 # /tmp/tws-raw/2024-03-15-14-30-0-inbound-000.bin

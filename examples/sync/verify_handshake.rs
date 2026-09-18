@@ -10,7 +10,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example verify_handshake -- MyApp 1.0 signed-data
+//! cargo run --no-default-features --features sync --example verify_handshake -- MyApp 1.0 signed-data
 //! ```
 
 use ibapi::client::blocking::Client;

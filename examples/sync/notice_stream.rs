@@ -6,7 +6,7 @@
 //! (2104/2105/2106/2107/2108).
 //!
 //! ```bash
-//! cargo run --features sync --example notice_stream
+//! cargo run --no-default-features --features sync --example notice_stream
 //! ```
 
 use ibapi::client::blocking::Client;

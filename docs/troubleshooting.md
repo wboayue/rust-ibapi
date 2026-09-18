@@ -4,20 +4,21 @@ Common issues and solutions when using rust-ibapi.
 
 ## Build & Compilation Issues
 
-### No Feature Specified
+### No Client Feature Enabled
 
 **Error:**
 ```
-error: no feature specified. Enable either 'sync' or 'async' feature
+error: You must enable at least one of the 'sync' or 'async' features to use this crate.
 ```
 
 **Solution:**
-If you've disabled default features, add one back explicitly:
-```bash
-cargo build --features sync
+Default features are off and neither client is enabled. In a dependency, add one back in `Cargo.toml`:
+```toml
+ibapi = { version = "4.0", default-features = false, features = ["async"] }
 # OR
-cargo build --features async
+ibapi = { version = "4.0", default-features = false, features = ["sync"] }
 ```
+When building this repository with `--no-default-features`, add `--features sync` or `--features async` to the command.
 
 ### Mutually Exclusive Features
 
@@ -194,7 +195,7 @@ Error: Order rejected - reason: ...
 **Solution:**
 Enable debug logging to see all messages:
 ```bash
-RUST_LOG=debug cargo run --features sync --example your_example
+RUST_LOG=debug cargo run --no-default-features --features sync --example your_example
 ```
 
 ### Slow Performance
@@ -212,13 +213,13 @@ RUST_LOG=debug cargo run --features sync --example your_example
 See detailed communication with TWS:
 ```bash
 # Debug level
-RUST_LOG=debug cargo run --features sync --example your_example
+RUST_LOG=debug cargo run --no-default-features --features sync --example your_example
 
 # Trace level (very verbose)
-RUST_LOG=trace cargo run --features sync --example your_example
+RUST_LOG=trace cargo run --no-default-features --features sync --example your_example
 
 # Only ibapi debug messages
-RUST_LOG=ibapi=debug cargo run --features sync --example your_example
+RUST_LOG=ibapi=debug cargo run --no-default-features --features sync --example your_example
 ```
 
 ### Record TWS Messages
@@ -227,7 +228,7 @@ Save all TWS communication for analysis. Each run writes a timestamped
 subdirectory holding one file per message, numbered in the order they crossed
 the wire:
 ```bash
-IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example your_example
+IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --no-default-features --features sync --example your_example
 
 # View recorded messages
 ls -la /tmp/tws-messages/*/
@@ -305,10 +306,10 @@ match client.place_order(order_id, &contract, &order) {
 **Solution:**
 ```bash
 # Always test both modes locally before pushing
-cargo test --features sync
-cargo test --features async
-cargo clippy --features sync
-cargo clippy --features async
+cargo test
+cargo test --no-default-features --features sync
+cargo clippy
+cargo clippy --no-default-features --features sync
 ```
 
 ## Platform-Specific Issues
@@ -357,7 +358,7 @@ If you're still stuck:
 
 ## Quick Fixes Checklist
 
-- [ ] Using exactly one feature flag (sync OR async)?
+- [ ] Building the feature configuration you meant (`--features sync` alone is sync + async)?
 - [ ] IB Gateway/TWS running?
 - [ ] Correct port number?
 - [ ] API enabled in IB Gateway/TWS?

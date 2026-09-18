@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features async --example async_head_timestamp AAPL
+//! cargo run --example async_head_timestamp AAPL
 //! ```
 //!
 //! # Arguments

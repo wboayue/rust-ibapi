@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example histogram_data
+//! cargo run --no-default-features --features sync --example histogram_data
 //! ```
 
 use ibapi::client::blocking::Client;

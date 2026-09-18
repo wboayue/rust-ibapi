@@ -9,7 +9,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cat new_groups.xml | cargo run --features sync --example replace_fa -- groups
+//! cat new_groups.xml | cargo run --no-default-features --features sync --example replace_fa -- groups
 //! ```
 
 use ibapi::accounts::FaDataType;

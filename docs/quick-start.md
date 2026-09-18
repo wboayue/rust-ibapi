@@ -9,22 +9,23 @@ Before you begin, ensure you have:
 2. **IB Gateway or TWS** - Running and configured for API connections
 3. **Git** - For cloning the repository
 
-## Critical: Choose Your Feature
+## Choose Your Client
 
-⚠️ **rust-ibapi requires exactly ONE feature flag:**
+rust-ibapi has two clients, selected by feature flag. `async` is the default; `sync` is
+opt-in, and both may be enabled together (see [Feature Flags](feature-flags.md)).
 
 ```mermaid
 graph LR
     Choice{Your Application Type?}
-    Sync[--features sync<br/>Traditional threads]
-    Async[--features async<br/>Tokio async/await]
+    Async[default features<br/>Tokio async/await]
+    Sync[--no-default-features --features sync<br/>Traditional threads]
     
-    Choice -->|Simple/Traditional| Sync
     Choice -->|High Performance/Modern| Async
+    Choice -->|Simple/Traditional| Sync
     
     style Choice fill:#fff3e0
-    style Sync fill:#e8f5e9
     style Async fill:#e3f2fd
+    style Sync fill:#e8f5e9
 ```
 
 - **`async` (default)** - Modern asynchronous execution using tokio
@@ -236,14 +237,14 @@ The repository includes many examples in the `examples/` directory:
 # List all examples
 ls examples/
 
-# Run a sync example
-cargo run --features sync --example account_summary
-
 # Run an async example  
-cargo run --features async --example async_account_summary
+cargo run --example async_account_summary
+
+# Run a sync example
+cargo run --no-default-features --features sync --example account_summary
 
 # Run with debug logging
-RUST_LOG=debug cargo run --features sync --example market_data
+RUST_LOG=debug cargo run --no-default-features --features sync --example market_data
 ```
 
 ### Popular Examples
@@ -262,11 +263,9 @@ For async versions, the default features are sufficient: `cargo run --example as
 
 ### Common Issues and Solutions
 
-#### "No feature specified" Error
-```bash
-error: no feature specified. Enable either 'sync' or 'async' feature
-```
-**Solution**: If you've disabled default features, add `--features sync` or `--features async` to your command.
+#### "You must enable at least one of the 'sync' or 'async' features" Error
+
+**Solution**: Default features are off and neither client is enabled. Add `features = ["sync"]` or `features = ["async"]` to the `ibapi` entry in `Cargo.toml`, or `--features sync` / `--features async` to a `cargo` command that passes `--no-default-features`.
 
 #### "Mutually exclusive features" Error
 ```bash
@@ -305,22 +304,22 @@ Enable detailed logging to troubleshoot issues:
 
 ```bash
 # Basic debug logging
-RUST_LOG=debug cargo run --features sync --example your_example
+RUST_LOG=debug cargo run --no-default-features --features sync --example your_example
 
 # Trace-level logging (very verbose)
-RUST_LOG=trace cargo run --features sync --example your_example
+RUST_LOG=trace cargo run --no-default-features --features sync --example your_example
 
 # Log only ibapi messages
-RUST_LOG=ibapi=debug cargo run --features sync --example your_example
+RUST_LOG=ibapi=debug cargo run --no-default-features --features sync --example your_example
 
 # Record all TWS messages for analysis
-IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example your_example
+IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --no-default-features --features sync --example your_example
 ```
 
 ### Getting Help
 
 1. **Check the examples** - Most common use cases are demonstrated
-2. **Read the API docs** - `cargo doc --open --features sync`
+2. **Read the API docs** - `cargo doc --open --all-features`
 3. **Review test cases** - Tests show expected behavior
 4. **GitHub Issues** - Search existing issues or create a new one
 5. **Documentation** - See [docs/](.) for detailed guides
@@ -339,20 +338,24 @@ Now that you're up and running:
 ### Essential Commands
 
 ```bash
-# Build
-cargo build --features sync      # or --features async
+# Build (async is the default; sync-only needs --no-default-features)
+cargo build
+cargo build --no-default-features --features sync
 
 # Test
-cargo test --features sync       # or --features async
+cargo test
+cargo test --no-default-features --features sync
 
 # Run example
-cargo run --features sync --example example_name
+cargo run --example async_example_name
+cargo run --no-default-features --features sync --example example_name
 
 # Generate docs
-cargo doc --open --features sync
+cargo doc --open --all-features
 
 # Check code
-cargo clippy --features sync -- -D warnings
+cargo clippy -- -D warnings
+cargo clippy --no-default-features --features sync -- -D warnings
 cargo fmt --check
 ```
 
@@ -367,16 +370,16 @@ cargo fmt --check
 
 ### Feature Selection Guide
 
-Choose **sync** if you:
-- Are new to Rust async programming
-- Want simpler, traditional code
-- Don't need high concurrency
-- Prefer familiar thread-based patterns
-
 Choose **async** if you:
 - Need high performance
 - Want to handle many concurrent operations
 - Are comfortable with async/await
 - Use other async libraries (tokio ecosystem)
 
-Remember: You must choose exactly one!
+Choose **sync** if you:
+- Are new to Rust async programming
+- Want simpler, traditional code
+- Don't need high concurrency
+- Prefer familiar thread-based patterns
+
+Remember: `async` is the default; enable `sync` alone with `--no-default-features --features sync`, or together with `async`.

@@ -6,7 +6,7 @@
 //!
 //! To run this example:
 //! ```bash
-//! cargo run --features async --example async_group_events
+//! cargo run --example async_group_events
 //! ```
 //!
 //! Make sure TWS is running with API connections enabled
