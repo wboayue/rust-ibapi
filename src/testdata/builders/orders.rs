@@ -584,6 +584,10 @@ impl OpenOrderResponse {
         self.action = v.into();
         self
     }
+    pub fn tif(mut self, v: impl Into<String>) -> Self {
+        self.tif = v.into();
+        self
+    }
     pub fn total_quantity(mut self, v: f64) -> Self {
         self.total_quantity = v;
         self

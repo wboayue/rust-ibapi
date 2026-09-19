@@ -7,9 +7,9 @@ triggers:
   - typing a String field as an enum
   - a decoder falls back to T::default() on a missing field
   - adding a FromStr impl for a wire value
-symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse]
+symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -40,10 +40,13 @@ unrecognized string parses as a value-preserving `Unknown(String)` variant via
 matching exact and case-sensitive — a case-variant lands in `Unknown` where it is
 observable, never coerced to the nearest known variant. The variant costs `Copy` and
 makes `as_str` return `&str`; the enum stays deliberately exhaustive so the compiler
-points callers at the new arm. Two consequences the derive path hides: serde must be
-hand-written (the derive would emit the externally tagged `{"Unknown":"..."}` for the
-payload variant instead of the plain wire string), and so must the `utoipa` schema
-(`PartialSchema` delegating to `String`). There is deliberately no decode-time log when
+points callers at the new arm. Two consequences the derive path hides when the enum's
+serde form is the wire string, as `OrderStatusKind`'s is: serde must be hand-written (the
+derive would emit the externally tagged `{"Unknown":"..."}` for the payload variant instead
+of the plain wire string), and so must the `utoipa` schema (`PartialSchema` delegating to
+`String`); `TimeInForce` follows it. An enum whose serde form is the derived variant name
+(`Rule80A`, `OrderOpenClose`) keeps its derives: existing variants serialize as before and
+`Unknown` takes the tagged form. There is deliberately no decode-time log when
 `Unknown` is constructed — callers own the signal, as migration §9's example shows.
 `OrderStatusKind` is the precedent (the official C# client's `OrderStatus` has the same
 `Unknown` fallback). The criterion for opening another enum is its decode path, not its
@@ -70,6 +73,24 @@ wire — broadening would have baked a display artifact into the parser.
 For shape-identical enums, `impl_wire_enum!` in `src/macros.rs` generates `Display`,
 `FromStr<Err = Error>`, and `ToField` from an `as_str` + `from_wire` data table.
 
+## Integer-coded enums
+
+A field that arrives as an `i32` code (`Liquidity`, `OcaType`, `TriggerMethod`, ...) has no
+missing/empty half: the proto default is a real code. The rule for the value half is the same
+as for strings: **`From<i32>` never coerces an unrecognized code to a known variant.** The
+shape `Liquidity` established is a `#[repr(i32)]` enum with an `Unknown(i32)` payload
+variant and a total `From<i32>` returning `Unknown(code)` for anything outside the table, so
+the value is observable rather than silently read as `None`, `Default`, or the first listed
+variant. The seven order enums also implement `From<T> for i32`, handing the code back,
+written by hand because `value as i32` no longer compiles once a payload variant exists.
+`Unknown(i32)` is `Copy`, so an enum that was `Copy` stays so, and derived serde stays.
+There is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded on a
+streaming path where an error kills the subscription, so a payload variant is the only way
+to keep the conversion total without coercing. `AuctionStrategy` takes the same shape for
+uniformity only - the proto `Order` carries no such field
+(`grep -rn auction_strategy src/proto/` is empty), so its `From<i32>` converts nothing but
+the `i32` a caller hands `OrderBuilder`.
+
 ## Required tests
 
 - Both `None` and `Some("")` produce `Err(Error::Parse(..))` for required fields, or
@@ -78,6 +99,9 @@ For shape-identical enums, `impl_wire_enum!` in `src/macros.rs` generates `Displ
 - For an open enum: an unrecognized string parses as `Unknown(raw)` and round-trips
   through `Display` unchanged; empty still errors; a streaming subscription survives a
   frame carrying the unknown value (see `order_update_stream_survives_unknown_status`).
+- For an integer-coded enum: `check_wire_code_round_trip` over the full code table plus
+  `Unknown(code)` rows, and a decoder test feeding a code outside the table (see
+  `decode_order_preserves_unknown_integer_codes`).
 
 ## Precedents
 
@@ -101,4 +125,16 @@ migrations — consult it rather than re-deriving which fields were converted an
   — the directive's missing-input half assumes a field the wire always carries; and the
   variant table needs its own guard, since an enum this wide is tested from a hand-written
   table that a new variant does not break (`orders::tests::all_tifs_covers_every_variant`).
+- #825 — the rest of the `src/orders` sweep, on top of #822. Three inherent `from(&str)`
+  methods (`Action` panicked with `todo!()`, `Rule80A` / `OrderOpenClose` returned `None`)
+  moved onto `impl_wire_enum!`; seven `From<i32>` impls that collapsed an unknown code to
+  a known variant took the `Liquidity` shape. Per-enum call: `Action` closed (fixed
+  vocabulary, `Copy` relied on by value); `Rule80A` and `OrderOpenClose` open (optional
+  fields, already not `Copy`, so preserving costs nothing). `decode_order` moved onto
+  `parse_required` / `parse_optional` for those three, so a missing `action` is now
+  `Error::Parse` rather than `Buy` — unlike `tif` above, `action` has no unset state
+  upstream, so an absent one is a malformed frame, not a default. `From<i32> for
+  OrderCondition` panics on an unsupported discriminator and `decode_order_condition`
+  falls back to a default price condition; both were left alone because they type a
+  condition discriminator, not a field, and are a separate change.
 

@@ -357,6 +357,21 @@ pub mod wire_enum {
             );
         }
     }
+
+    /// Assert `From<i32>`, `From<T> for i32`, and `ToField` agree on a
+    /// hand-written `(variant, code)` table for an integer-coded wire enum.
+    /// List the `Unknown(code)` rows in the table too — they round-trip the
+    /// same way.
+    pub fn check_wire_code_round_trip<T>(table: &[(T, i32)])
+    where
+        T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug + crate::ToField,
+    {
+        for &(variant, code) in table {
+            assert_eq!(T::from(code), variant, "From({code})");
+            assert_eq!(variant.into(), code, "i32::from({variant:?})");
+            assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
+        }
+    }
 }
 
 /// Walking the crate's own source, for the gates that check a hand-listed roster

@@ -223,13 +223,22 @@ fn decode_contract_propagates_bad_combo_leg() {
     assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse(_, _, _))));
 }
 
-// === decode_order hedge_max_size ===
+// === decode_order ===
+
+/// The smallest `proto::Order` `decode_order` accepts: `action` is the one
+/// required wire field.
+fn proto_order() -> proto::Order {
+    proto::Order {
+        action: Some("BUY".into()),
+        ..Default::default()
+    }
+}
 
 #[test]
 fn decode_order_maps_hedge_max_size() {
     let proto_order = proto::Order {
         hedge_max_size: Some(500),
-        ..Default::default()
+        ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
     assert_eq!(order.hedge_max_size, Some(500));
@@ -237,7 +246,7 @@ fn decode_order_maps_hedge_max_size() {
 
 #[test]
 fn decode_order_hedge_max_size_absent_is_none() {
-    let order = decode_order(&proto::Order::default()).unwrap();
+    let order = decode_order(&proto_order()).unwrap();
     assert!(order.hedge_max_size.is_none());
 }
 
@@ -247,7 +256,7 @@ fn decode_order_hedge_max_size_absent_is_none() {
 fn decode_order_maps_deactivate() {
     let proto_order = proto::Order {
         deactivate: Some(true),
-        ..Default::default()
+        ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
     assert!(order.deactivate);
@@ -255,7 +264,7 @@ fn decode_order_maps_deactivate() {
 
 #[test]
 fn decode_order_deactivate_absent_is_false() {
-    let order = decode_order(&proto::Order::default()).unwrap();
+    let order = decode_order(&proto_order()).unwrap();
     assert!(!order.deactivate);
 }
 
@@ -267,7 +276,7 @@ fn decode_order_preserves_unknown_tif() {
     // bug GoodTillCrossing hit before it was a variant (#822).
     let proto_order = proto::Order {
         tif: Some("GTZ".to_string()),
-        ..Default::default()
+        ..proto_order()
     };
     assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Unknown("GTZ".to_string()));
 }
@@ -276,7 +285,7 @@ fn decode_order_preserves_unknown_tif() {
 fn decode_order_maps_known_tif() {
     let proto_order = proto::Order {
         tif: Some("GTX".to_string()),
-        ..Default::default()
+        ..proto_order()
     };
     assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::GoodTillCrossing);
 }
@@ -284,14 +293,14 @@ fn decode_order_maps_known_tif() {
 #[test]
 fn decode_order_tif_absent_or_empty_is_day() {
     // Upstream omits an empty Tif rather than sending one, so neither form is
-    // an unknown value to preserve.
-    assert_eq!(decode_order(&proto::Order::default()).unwrap().tif, TimeInForce::Day);
+    // an unknown value to preserve (unlike action, which is required).
+    assert_eq!(decode_order(&proto_order()).unwrap().tif, TimeInForce::Day);
 
-    let proto_order = proto::Order {
+    let empty_tif = proto::Order {
         tif: Some(String::new()),
-        ..Default::default()
+        ..proto_order()
     };
-    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Day);
+    assert_eq!(decode_order(&empty_tif).unwrap().tif, TimeInForce::Day);
 }
 
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
@@ -300,7 +309,7 @@ fn decode_order_tif_absent_or_empty_is_day() {
 fn decode_order_rejects_malformed_total_quantity() {
     let proto_order = proto::Order {
         total_quantity: Some("abc".into()),
-        ..Default::default()
+        ..proto_order()
     };
     assert_decimal_parse_error(decode_order(&proto_order), "abc");
 }
@@ -309,9 +318,107 @@ fn decode_order_rejects_malformed_total_quantity() {
 fn decode_order_preserves_fractional_total_quantity() {
     let proto_order = proto::Order {
         total_quantity: Some("0.5".into()),
-        ..Default::default()
+        ..proto_order()
     };
     assert_eq!(decode_order(&proto_order).unwrap().total_quantity, 0.5);
+}
+
+// === decode_order enum fields go through parse_required / parse_optional ===
+
+#[test]
+fn decode_order_rejects_missing_or_empty_action() {
+    // Unlike tif, action has no unset state upstream: an order without a
+    // side is a malformed frame, not a default.
+    for proto_order in [
+        proto::Order {
+            action: None,
+            ..proto_order()
+        },
+        proto::Order {
+            action: Some(String::new()),
+            ..proto_order()
+        },
+    ] {
+        assert!(
+            matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))),
+            "expected Error::Parse for {proto_order:?}"
+        );
+    }
+}
+
+#[test]
+fn decode_order_rejects_unknown_action() {
+    // Action is closed: an unrecognized side fails the decode rather than
+    // reading as Buy.
+    let proto_order = proto::Order {
+        action: Some("NOTASIDE".into()),
+        ..proto_order()
+    };
+    assert!(matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))));
+}
+
+#[test]
+fn decode_order_preserves_unknown_string_codes() {
+    // rule80_a and open_close are open: an unrecognized value survives the
+    // decode as Unknown(raw) instead of failing the order stream (tif is
+    // covered by decode_order_preserves_unknown_tif above).
+    let proto_order = proto::Order {
+        rule80_a: Some("Z".into()),
+        open_close: Some("X".into()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.rule_80_a, Some(Rule80A::Unknown("Z".into())));
+    assert_eq!(order.open_close, Some(OrderOpenClose::Unknown("X".into())));
+}
+
+#[test]
+fn decode_order_empty_optional_strings_are_none() {
+    let proto_order = proto::Order {
+        rule80_a: Some(String::new()),
+        open_close: Some(String::new()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.rule_80_a, None);
+    assert_eq!(order.open_close, None);
+}
+
+#[test]
+fn decode_order_preserves_unknown_integer_codes() {
+    let proto_order = proto::Order {
+        oca_type: Some(9),
+        trigger_method: Some(99),
+        volatility_type: Some(9),
+        reference_price_type: Some(9),
+        origin: Some(9),
+        short_sale_slot: Some(9),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.oca_type, OcaType::Unknown(9));
+    assert_eq!(order.trigger_method, TriggerMethod::Unknown(99));
+    assert_eq!(order.volatility_type, Some(VolatilityType::Unknown(9)));
+    assert_eq!(order.reference_price_type, Some(ReferencePriceType::Unknown(9)));
+    assert_eq!(order.origin, OrderOrigin::Unknown(9));
+    assert_eq!(order.short_sale_slot, ShortSaleSlot::Unknown(9));
+}
+
+#[test]
+fn decode_order_condition_preserves_unknown_trigger_method() {
+    let proto_order = proto::Order {
+        conditions: vec![proto::OrderCondition {
+            r#type: Some(1),
+            trigger_method: Some(99),
+            ..Default::default()
+        }],
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    match &order.conditions[..] {
+        [OrderCondition::Price(price)] => assert_eq!(price.trigger_method, TriggerMethod::Unknown(99)),
+        other => panic!("expected one price condition, got {other:?}"),
+    }
 }
 
 #[test]
