@@ -297,6 +297,30 @@ What changes for compiling code:
 - **Bindings arrive only on `order_update_stream()`.** They do not reach the per-order `place_order` subscription, even for this client's own orders: API order IDs are scoped to a client ID, and the transport does not filter on it, so a binding for another client's order 42 must not land on a local subscription for order 42. This matches the official client, which delivers `orderBound` only to the global wrapper callback. Consume bindings from the update stream and key on `perm_id` when you need an account-wide identity.
 - **A binding grants nothing.** Knowing another client's `(client_id, order_id)` does not let this client modify or cancel that order.
 
+### 12. The async `Subscription::new(receiver)` constructor is removed
+
+The async `Subscription` had a second constructor, `Subscription::new(rx)`, that wrapped a `tokio::sync::mpsc::UnboundedReceiver<Result<T, Error>>` of items already decoded by the caller. It was a leftover from before the async client decoded through `StreamDecoder`: a subscription built that way had no message bus, could not be cancelled, and panicked on `clone()`. Nothing in `examples/` or the integration crates called it. It is gone, along with the type-erased decoder path it needed inside `Subscription`. The blocking `Subscription` never had it.
+
+What changes for compiling code:
+
+- `Subscription<T>` now requires `T` to be one of the crate's stream item types (`TickTypes`, `Bar`, `OrderUpdate`, ...), as the blocking `Subscription` always has. `Subscription<i32>` or `Subscription<String>` no longer names a type.
+- Generic code over the async subscription, such as `async fn drain<T: Send + 'static>(sub: &mut Subscription<T>)`, no longer compiles: the bound the type now needs is a crate-private trait, so downstream generics cannot spell it. Write such helpers against a concrete item type, or against `impl Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin`. The blocking `Subscription` has always been in this position.
+- `Subscription::clone()` has no panicking path; every async subscription clones.
+
+If you were using `Subscription::new(rx)` to give your own channel the `Stream` interface, wrap the receiver directly. `UnboundedReceiverStream` lives in the `tokio-stream` crate, which `ibapi` does not re-export, so add it to your own `Cargo.toml`:
+
+```rust,ignore
+// before — async only
+let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+let mut stream = ibapi::prelude::Subscription::new(rx);
+
+// after — tokio-stream = "0.1"
+let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+let mut stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+```
+
+The removed constructor yielded `SubscriptionItem::Data(item)`; the wrapper yields `item` as sent. Subscriptions returned by `Client` methods are unaffected.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -326,7 +350,8 @@ No code changes required, but observable at runtime:
 9. Add an `OrderStatusKind::Unknown(raw)` arm to exhaustive matches on order statuses, and `.clone()` (or borrow) where code relied on the removed `Copy` — see [§9](#9-orderstatuskind-gains-unknownstring).
 10. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
 11. Add an `OrderUpdate::OrderBound(binding)` arm to exhaustive matches on order updates, and read bindings from `order_update_stream()` — they never reach `place_order` subscriptions; see [§11](#11-orderupdate-gains-orderbound).
-12. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+12. Replace any `Subscription::new(rx)` over your own channel with `tokio_stream::wrappers::UnboundedReceiverStream::new(rx)` (add `tokio-stream` to your dependencies), and give any generic helper over the async `Subscription<T>` a concrete item type — see [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed).
+13. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

@@ -218,7 +218,7 @@ mod async_helpers {
     {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;
-        client.subscription::<T>().send_shared::<T>(message_type, request).await
+        client.subscription::<T>().send_shared(message_type, request).await
     }
 
     /// Async helper for shared requests without version check

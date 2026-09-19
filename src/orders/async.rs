@@ -86,7 +86,7 @@ impl Client {
     /// ```
     pub async fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         let internal_subscription = self.create_order_update_subscription().await?;
-        Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -156,7 +156,7 @@ impl Client {
         let request = encoders::encode_place_order(order_id, contract, order)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
-        Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -201,7 +201,7 @@ impl Client {
         let request = encoders::encode_cancel_order(order_id, manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
-        Ok(Subscription::new_from_internal_simple::<CancelOrder>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -285,7 +285,7 @@ impl Client {
         let request = encoders::encode_completed_orders(api_only)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
-        Ok(Subscription::new_from_internal_simple::<Orders>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -313,7 +313,7 @@ impl Client {
         let request = encoders::encode_open_orders()?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
-        Ok(Subscription::new_from_internal_simple::<Orders>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -341,7 +341,7 @@ impl Client {
         let request = encoders::encode_all_open_orders()?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
-        Ok(Subscription::new_from_internal_simple::<Orders>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -369,7 +369,7 @@ impl Client {
         let request = encoders::encode_auto_open_orders(auto_bind)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
-        Ok(Subscription::new_from_internal_simple::<Orders>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -413,7 +413,7 @@ impl Client {
         let request_id = self.next_request_id();
         let request = encoders::encode_executions(request_id, &filter)?;
         let internal_subscription = self.send_request(request_id, request).await?;
-        Ok(Subscription::new_from_internal_simple::<Executions>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),
@@ -458,7 +458,7 @@ impl Client {
         let order_id = self.next_order_id();
         let request = encoders::encode_exercise_options(order_id, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
-        Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
+        Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
             self.decoder_context(),

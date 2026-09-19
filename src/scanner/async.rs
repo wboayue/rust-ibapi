@@ -90,7 +90,7 @@ impl Client {
         let request = encoders::encode_scanner_subscription(request_id, subscription, filter)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
-        Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
+        Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),

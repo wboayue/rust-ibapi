@@ -10,7 +10,7 @@ fn test_is_undeclared() {
     assert!(!is_undeclared(ids, &ResponseMessage::from("2\0payload\0")));
     assert!(is_undeclared(ids, &ResponseMessage::from("3\0payload\0")));
     // An empty declaration skips everything — which is why the trait const has
-    // no default and `with_decoder` takes it as a required argument.
+    // no default: both drivers read it straight off the decoder type.
     assert!(is_undeclared(&[], &ResponseMessage::from("1\0payload\0")));
 }
 

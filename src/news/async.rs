@@ -58,7 +58,7 @@ impl Client {
         let request = encoders::encode_request_news_bulletins(all_messages)?;
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestNewsBulletins, request).await?;
 
-        Ok(Subscription::new_from_internal::<NewsBulletin>(
+        Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
             None,
@@ -110,7 +110,7 @@ impl Client {
         let request = encoders::encode_request_historical_news(request_id, contract_id, provider_codes, start_time, end_time, total_results)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
-        Ok(Subscription::new_from_internal::<NewsArticle>(
+        Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),
@@ -170,7 +170,7 @@ impl Client {
         let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
-        Ok(Subscription::new_from_internal::<NewsArticle>(
+        Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),
@@ -201,7 +201,7 @@ impl Client {
         let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
-        Ok(Subscription::new_from_internal::<NewsArticle>(
+        Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
             Some(request_id),
