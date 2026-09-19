@@ -68,7 +68,7 @@ mod sync_integration_tests {
         assert_eq!(order.limit_price, Some(50.00));
         assert!(order.hidden);
         assert!(order.outside_rth);
-        assert_eq!(order.tif, TimeInForce::GoodTilDate);
+        assert_eq!(order.tif, TimeInForce::GoodTillDate);
         assert_eq!(order.good_till_date, "20240630 23:59:59");
         assert_eq!(order.account, "TEST123");
         assert_eq!(order.algo_strategy, "VWAP");

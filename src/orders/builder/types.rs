@@ -135,50 +135,6 @@ impl Price {
     }
 }
 
-/// Time in force options
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TimeInForce {
-    /// Order is active only for the current trading day.
-    Day,
-    /// Order remains active until cancelled.
-    GoodTillCancel,
-    /// Order must be filled immediately or cancelled.
-    ImmediateOrCancel,
-    /// Order remains active until the specified date (`YYYYMMDD`).
-    GoodTillDate {
-        /// Date at which the order expires.
-        date: String,
-    },
-    /// Order must be filled entirely or cancelled immediately.
-    FillOrKill,
-    /// Good-till-crossing (GTX) order type.
-    GoodTillCrossing,
-    /// Day-till-cancelled (DTC) order type.
-    DayTillCanceled,
-    /// Auction-only order.
-    Auction,
-    /// Opening auction order.
-    OpeningAuction,
-}
-
-impl TimeInForce {
-    /// Return the TWS API string identifier for the time-in-force.
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Day => "DAY",
-            Self::GoodTillCancel => "GTC",
-            Self::ImmediateOrCancel => "IOC",
-            Self::GoodTillDate { .. } => "GTD",
-            Self::FillOrKill => "FOK",
-            Self::GoodTillCrossing => "GTX",
-            Self::DayTillCanceled => "DTC",
-            Self::Auction => "AUC",
-            Self::OpeningAuction => "OPG",
-        }
-    }
-}
-
 /// Auction type for auction orders
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

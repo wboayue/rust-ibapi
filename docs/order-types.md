@@ -1329,7 +1329,7 @@ let order = Order {
     order_type: "LMT".to_string(),
     total_quantity: 100.0,
     limit_price: Some(150.50),
-    tif: TimeInForce::GoodTilCanceled,
+    tif: TimeInForce::GoodTillCanceled,
     outside_rth: true,
     ..Default::default()
 };

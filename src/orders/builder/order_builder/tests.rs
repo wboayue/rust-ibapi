@@ -1,7 +1,8 @@
 use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
-use crate::orders::Action;
+use crate::orders::{Action, TimeInForce};
+use crate::proto::encoders::encode_order;
 
 fn create_test_contract() -> Contract {
     Contract {
@@ -186,25 +187,25 @@ fn test_time_conditions() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().day_order();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::Day);
+    assert_eq!(order.tif, TimeInForce::Day);
 
     // Test Good Till Cancel
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().good_till_cancel();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::GoodTilCanceled);
+    assert_eq!(order.tif, TimeInForce::GoodTillCanceled);
 
     // Test Immediate or Cancel
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().immediate_or_cancel();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::ImmediateOrCancel);
+    assert_eq!(order.tif, TimeInForce::ImmediateOrCancel);
 
     // Test Fill or Kill
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().fill_or_kill();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::FillOrKill);
+    assert_eq!(order.tif, TimeInForce::FillOrKill);
 }
 
 #[test]
@@ -218,7 +219,108 @@ fn test_time_in_force_method() {
         .time_in_force(TimeInForce::ImmediateOrCancel);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::ImmediateOrCancel);
+    assert_eq!(order.tif, TimeInForce::ImmediateOrCancel);
+}
+
+// Every variant reaches the wire under its TWS identifier. GTX previously fell
+// through a string round trip and was sent as DAY.
+#[test]
+fn time_in_force_variants_encode_to_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let cases = [
+        (TimeInForce::Day, "DAY"),
+        (TimeInForce::GoodTillCanceled, "GTC"),
+        (TimeInForce::ImmediateOrCancel, "IOC"),
+        (TimeInForce::GoodTillDate, "GTD"),
+        (TimeInForce::OnOpen, "OPG"),
+        (TimeInForce::FillOrKill, "FOK"),
+        (TimeInForce::DayTillCanceled, "DTC"),
+        (TimeInForce::Auction, "AUC"),
+        (TimeInForce::GoodTillCrossing, "GTX"),
+    ];
+
+    for (tif, wire) in cases {
+        let mut builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.0).time_in_force(tif.clone());
+        if tif == TimeInForce::GoodTillDate {
+            builder = builder.good_till_time("20240630 23:59:59");
+        }
+        let order = builder.build().unwrap();
+        assert_eq!(order.tif, tif, "tif for {wire}");
+        assert_eq!(encode_order(&order).tif.as_deref(), Some(wire), "wire for {wire}");
+    }
+}
+
+#[test]
+fn test_good_till_crossing() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .good_till_crossing()
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::GoodTillCrossing);
+    assert_eq!(encode_order(&order).tif.as_deref(), Some("GTX"));
+}
+
+#[test]
+fn test_day_till_canceled() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .day_till_canceled()
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::DayTillCanceled);
+    assert_eq!(encode_order(&order).tif.as_deref(), Some("DTC"));
+}
+
+// good_till_date and good_till_time write the same field; the last call wins.
+#[test]
+fn good_till_date_last_write_wins() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .good_till_date("20240630 23:59:59")
+        .good_till_time("20240701 23:59:59")
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::GoodTillDate);
+    assert_eq!(order.good_till_date, "20240701 23:59:59");
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .good_till_time("20240701 23:59:59")
+        .good_till_date("20240630 23:59:59")
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::GoodTillDate);
+    assert_eq!(order.good_till_date, "20240630 23:59:59");
+}
+
+#[test]
+fn test_good_till_date_requires_date() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let err = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .time_in_force(TimeInForce::GoodTillDate)
+        .build()
+        .unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("good_till_date"));
 }
 
 #[test]
@@ -232,7 +334,7 @@ fn test_good_till_date() {
         .good_till_date("20240630 23:59:59");
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, crate::orders::TimeInForce::GoodTilDate);
+    assert_eq!(order.tif, TimeInForce::GoodTillDate);
     assert_eq!(order.good_till_date, "20240630 23:59:59");
 }
 
@@ -967,7 +1069,7 @@ fn test_market_on_open() {
     assert_eq!(order.order_type, "MKT");
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
-    assert_eq!(order.tif, crate::orders::TimeInForce::OnOpen);
+    assert_eq!(order.tif, TimeInForce::OnOpen);
     assert_eq!(order.limit_price, None);
 }
 
@@ -983,7 +1085,7 @@ fn test_limit_on_open() {
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, Some(50.50));
-    assert_eq!(order.tif, crate::orders::TimeInForce::OnOpen);
+    assert_eq!(order.tif, TimeInForce::OnOpen);
 }
 
 #[test]
@@ -1334,7 +1436,7 @@ fn bracket_order_propagates_tif() {
         .build()
         .unwrap();
 
-    assert_eq!(orders[0].tif, crate::orders::TimeInForce::GoodTilCanceled);
-    assert_eq!(orders[1].tif, crate::orders::TimeInForce::GoodTilCanceled);
-    assert_eq!(orders[2].tif, crate::orders::TimeInForce::GoodTilCanceled);
+    assert_eq!(orders[0].tif, TimeInForce::GoodTillCanceled);
+    assert_eq!(orders[1].tif, TimeInForce::GoodTillCanceled);
+    assert_eq!(orders[2].tif, TimeInForce::GoodTillCanceled);
 }

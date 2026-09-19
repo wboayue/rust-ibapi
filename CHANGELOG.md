@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `orders::TimeInForce::GoodTillCrossing` (`GTX`), and `OrderBuilder::good_till_crossing()` / `OrderBuilder::day_till_canceled()` so GTX and DTC are reachable without `time_in_force()` (#822).
+
+### Changed
+
+- `orders::TimeInForce` variants are spelled "till", matching IB's `goodTillDate`, `Order.good_till_date` and the builder setters: `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`. Wire strings are unchanged (#822).
+- `OrderBuilder::time_in_force` takes `orders::TimeInForce`; exhaustive matches on `orders::TimeInForce` need a `GoodTillCrossing` arm. See `docs/migration-4.0.md` §13 (#822).
+
 ### Removed
 
 - The async `Subscription::new(receiver)` constructor, which wrapped a channel of already-decoded items and had no cancel, no clone (it panicked), and no bus behind it. Every async `Subscription<T>` is now built by the typed `Client` methods and decodes through `T` directly, as the blocking one does, so `T` must be one of the crate's stream item types; `Subscription::clone()` no longer has a panicking path. See `docs/migration-4.0.md` §12 (#823).
+- `orders::builder::TimeInForce`. Use `orders::TimeInForce`: `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` with the date passed to `.good_till_date(..)`; `GoodTillCrossing` and `DayTillCanceled` keep their names; see `docs/migration-4.0.md` §13 (#822).
 
 ### Fixed
 
+- A `GTX` order built through `OrderBuilder` reached TWS as `DAY`; it is now sent as `GTX` (#822).
 - In-flight subscriptions and one-shot requests now fail with `Error::ConnectionReset` the moment the socket read fails, on both clients. Previously the channel reset ran only after the reconnect finished (up to 7.5 minutes of backoff at the defaults, forever with `reconnect_forever`), and a request registered between the session being marked connected and that late reset was wiped, its replies orphaned (#816).
 - Sends made while the session is down are refused with `Error::ConnectionReset` instead of being written to the socket the reconnect is replacing, and `is_connected()` reports false until the replayed handshake completes (#816).
 - One-shot requests still recover across a TWS restart: the retry waits for the reconnect before resending, and gives up with `Error::Shutdown` if the session does not return (#816).

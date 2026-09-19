@@ -113,3 +113,23 @@ fn liquidity_preserves_unknown_wire_code() {
     assert_eq!(Liquidity::from(4), Liquidity::Unknown(4));
     assert_eq!(Liquidity::from(-1), Liquidity::Unknown(-1));
 }
+
+#[test]
+fn time_in_force_round_trips_every_wire_value() {
+    let cases = [
+        (TimeInForce::Day, "DAY"),
+        (TimeInForce::GoodTillCanceled, "GTC"),
+        (TimeInForce::ImmediateOrCancel, "IOC"),
+        (TimeInForce::GoodTillDate, "GTD"),
+        (TimeInForce::OnOpen, "OPG"),
+        (TimeInForce::FillOrKill, "FOK"),
+        (TimeInForce::DayTillCanceled, "DTC"),
+        (TimeInForce::Auction, "AUC"),
+        (TimeInForce::GoodTillCrossing, "GTX"),
+    ];
+    for (variant, wire) in cases {
+        assert_eq!(variant.to_string(), wire, "Display for {variant:?}");
+        assert_eq!(TimeInForce::from(wire), variant, "From({wire})");
+        assert_eq!(TimeInForce::from(wire.to_string()), variant, "From(String {wire})");
+    }
+}

@@ -25,4 +25,4 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-pub use types::{AuctionType, OrderAnalysis, OrderType, Price, Quantity, TimeInForce, ValidationError};
+pub use types::{AuctionType, OrderAnalysis, OrderType, Price, Quantity, ValidationError};

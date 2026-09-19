@@ -852,22 +852,24 @@ pub enum TimeInForce {
     Day,
     /// Good until canceled. The order will continue to work within the system and in the marketplace
     /// until it executes or is canceled. GTC orders will be automatically cancelled under certain conditions.
-    GoodTilCanceled,
+    GoodTillCanceled,
     /// Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the
     /// market is canceled.
     ImmediateOrCancel,
     /// Good until Date. It will remain working within the system and in the marketplace until it
     /// executes or until the close of the market on the date specified.
-    GoodTilDate,
+    GoodTillDate,
     /// Market-on-open (MOO) or limit-on-open (LOO) order.
     OnOpen,
     /// Fill-or-Kill. If the entire order does not execute as soon as it becomes available, the entire
     /// order is canceled.
     FillOrKill,
     /// Day until Canceled.
-    DayTilCanceled,
+    DayTillCanceled,
     /// Auction - for auction orders.
     Auction,
+    /// Good until Crossing (GTX).
+    GoodTillCrossing,
 }
 
 impl ToField for TimeInForce {
@@ -880,13 +882,14 @@ impl std::fmt::Display for TimeInForce {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = match self {
             TimeInForce::Day => "DAY",
-            TimeInForce::GoodTilCanceled => "GTC",
+            TimeInForce::GoodTillCanceled => "GTC",
             TimeInForce::ImmediateOrCancel => "IOC",
-            TimeInForce::GoodTilDate => "GTD",
+            TimeInForce::GoodTillDate => "GTD",
             TimeInForce::OnOpen => "OPG",
             TimeInForce::FillOrKill => "FOK",
-            TimeInForce::DayTilCanceled => "DTC",
+            TimeInForce::DayTillCanceled => "DTC",
             TimeInForce::Auction => "AUC",
+            TimeInForce::GoodTillCrossing => "GTX",
         };
         write!(f, "{text}")
     }
@@ -902,13 +905,14 @@ impl From<&str> for TimeInForce {
     fn from(value: &str) -> Self {
         match value {
             "DAY" => TimeInForce::Day,
-            "GTC" => TimeInForce::GoodTilCanceled,
+            "GTC" => TimeInForce::GoodTillCanceled,
             "IOC" => TimeInForce::ImmediateOrCancel,
-            "GTD" => TimeInForce::GoodTilDate,
+            "GTD" => TimeInForce::GoodTillDate,
             "OPG" => TimeInForce::OnOpen,
             "FOK" => TimeInForce::FillOrKill,
-            "DTC" => TimeInForce::DayTilCanceled,
+            "DTC" => TimeInForce::DayTillCanceled,
             "AUC" => TimeInForce::Auction,
+            "GTX" => TimeInForce::GoodTillCrossing,
             _ => TimeInForce::Day, // Default fallback
         }
     }
