@@ -10,7 +10,7 @@ This library provides a comprehensive Rust implementation of the Interactive Bro
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data.
 
-> **📚 Migrating?** See the [v3.x → v4.0 guide](docs/migration-4.0.md) for the latest breaking changes, the [v2.x → v3.0 guide](docs/migration-3.0.md) for the `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
+> **📚 Migrating?** See the [v3.x → v4.x guide](docs/migration-4.0.md) for the latest breaking changes, the [v2.x → v3.0 guide](docs/migration-3.0.md) for the `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
 
 ## Sync/Async Architecture
 

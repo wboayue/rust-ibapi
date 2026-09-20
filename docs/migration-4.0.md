@@ -1,6 +1,6 @@
-# Migration Guide: 3.x to 4.0
+# Migration Guide: 3.x to 4.x
 
-Version 4.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 3.x to 4.0. For 2.x → 3.x, see [`migration-3.0.md`](migration-3.0.md); for 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md).
+This guide walks through the changes required to upgrade from `ibapi` 3.x to the 4.x line. Most of it describes the 4.0 release, but the 4.x line has continued to make breaking changes in minor releases, and each one is documented here rather than in a guide of its own — see [Which release introduced what](#which-release-introduced-what) for the mapping. For 2.x → 3.x, see [`migration-3.0.md`](migration-3.0.md); for 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md).
 
 ## Highlights
 
@@ -11,6 +11,16 @@ Version 4.0 is a breaking release. This guide walks through the changes required
 - `Notice` gains a `request_id` field — the originating request or order id, `None` for request-less notices.
 - `MarketDataBuilder` moves from `market_data::builder` to `market_data::realtime`, beside its sibling builders.
 - Transport hardening (behavioral, not API-breaking): frame-length validation with automatic reconnect, wrong-wire-format detection, unified retry-on-reset across one-shot requests, a configurable reconnect attempt limit (`ClientBuilder::max_reconnect_attempts` / `reconnect_forever`), observable consumer lag (`SUBSCRIPTION_LAG_CODE` notices, `ClientBuilder::channel_capacity`, sync backlog watermarks), and byte-level stream capture via `IBAPI_RAW_CAPTURE_DIR`.
+
+## Which release introduced what
+
+Section numbers are stable; new sections are appended as later 4.x releases break something.
+
+| Release | Sections |
+|---|---|
+| 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
+| 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
+| unreleased | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed) |
 
 ## Breaking changes
 
@@ -319,7 +329,12 @@ let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 let mut stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
 ```
 
-The removed constructor yielded `SubscriptionItem::Data(item)`; the wrapper yields `item` as sent. Subscriptions returned by `Client` methods are unaffected.
+Two differences to carry across, neither of which the compiler will point at:
+
+- **Item shape.** The removed constructor yielded `SubscriptionItem::Data(item)`; the wrapper yields `item` as sent. `SubscriptionItemStreamExt::filter_data` does not apply to it, because there are no `Notice` items to filter.
+- **Errors are no longer terminal.** `Subscription::new(rx)` treated the first `Err` as the end of the stream: it latched an internal flag and every later poll returned `None` without reading the channel again, so items queued behind an error were never yielded. `UnboundedReceiverStream` has no such rule — an `Err` is an ordinary item and the stream keeps going. If you relied on the old behavior, restore it explicitly, for example with `.take_while(|item| futures::future::ready(item.is_ok()))` plus one final yield of the error, or by having the producer close the channel when it sends one.
+
+Subscriptions returned by `Client` methods are unaffected.
 
 ## Behavioral changes
 
