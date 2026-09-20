@@ -371,7 +371,7 @@ pub fn main() {
     let order_id = client.order(&contract)
         .sell(50)
         .limit(150.00)
-        .good_till_cancel()
+        .good_till_canceled()
         .outside_rth()
         .submit()
         .expect("order submission failed!");

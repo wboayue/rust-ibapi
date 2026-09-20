@@ -422,8 +422,8 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
-    /// Good till cancelled order
-    pub fn good_till_cancel(mut self) -> Self {
+    /// Good till canceled order
+    pub fn good_till_canceled(mut self) -> Self {
         self.time_in_force = TimeInForce::GoodTillCanceled;
         self
     }
@@ -441,7 +441,7 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
-    /// Day till cancelled order
+    /// Day till canceled order
     pub fn day_till_canceled(mut self) -> Self {
         self.time_in_force = TimeInForce::DayTillCanceled;
         self
