@@ -9,29 +9,29 @@
 
 ### Basic Build
 ```bash
+# Build with async support (async is the default feature)
+cargo build
+
 # Build with sync support
 cargo build --no-default-features --features sync
 
-# Build with async support
-cargo build --features async
-
 # Release build with optimizations
+cargo build --release
 cargo build --release --no-default-features --features sync
-cargo build --release --features async
 
 # Build all targets including examples
+cargo build --all-targets
 cargo build --all-targets --no-default-features --features sync
-cargo build --all-targets --features async
 ```
 
 ### Running Tests
 
 ```bash
+# Run async tests (async is the default feature)
+cargo test
+
 # Run sync tests
 cargo test --no-default-features --features sync
-
-# Run async tests
-cargo test --features async
 
 # Run specific test
 cargo test test_name --no-default-features --features sync

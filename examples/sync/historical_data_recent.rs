@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_data_recent
+//! cargo run --no-default-features --features sync --example historical_data_recent
 //! ```
 
 use clap::{arg, Command};

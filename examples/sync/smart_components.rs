@@ -9,7 +9,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example smart_components -- a6
+//! cargo run --no-default-features --features sync --example smart_components -- a6
 //! ```
 
 use ibapi::client::blocking::Client;

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example market_rule
+//! cargo run --no-default-features --features sync --example market_rule
 //! ```
 
 use ibapi::client::blocking::Client;

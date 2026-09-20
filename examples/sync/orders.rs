@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example orders
+//! cargo run --no-default-features --features sync --example orders
 //! ```
 
 use anyhow::Ok;

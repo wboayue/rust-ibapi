@@ -8,7 +8,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example place_order -- --stock AAPL --buy 100
+//! cargo run --no-default-features --features sync --example place_order -- --stock AAPL --buy 100
 //! ```
 
 use clap::{arg, ArgMatches, Command};

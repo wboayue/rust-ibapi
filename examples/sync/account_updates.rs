@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example account_updates
+//! cargo run --no-default-features --features sync --example account_updates
 //! ```
 
 use ibapi::accounts::{types::AccountId, AccountUpdate};

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_ticks_mid_point -- <INTERVAL_START> <STOCK_SYMBOL> [--number_of_ticks <N>] [--connection_string <HOST:PORT>]
+//! cargo run --no-default-features --features sync --example historical_ticks_mid_point -- <INTERVAL_START> <STOCK_SYMBOL> [--number_of_ticks <N>] [--connection_string <HOST:PORT>]
 //! ```
 
 use clap::{arg, Command};

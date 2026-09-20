@@ -14,7 +14,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example next_order_id
+//! cargo run --no-default-features --features sync --example next_order_id
 //! ```
 
 use ibapi::client::blocking::Client;

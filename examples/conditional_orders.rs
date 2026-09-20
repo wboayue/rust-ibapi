@@ -34,8 +34,8 @@
 //! # Just compile to verify syntax (default features)
 //! cargo build --example conditional_orders
 //!
-//! # Or with sync support
-//! cargo build --features sync --example conditional_orders
+//! # Or sync-only
+//! cargo build --no-default-features --features sync --example conditional_orders
 //! ```
 
 use ibapi::orders::conditions::TriggerMethod;

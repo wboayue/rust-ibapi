@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features async --example async_market_data
+//! cargo run --example async_market_data
 //! ```
 
 use std::sync::Arc;

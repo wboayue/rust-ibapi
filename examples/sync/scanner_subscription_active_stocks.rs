@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example scanner_subscription_active_stocks
+//! cargo run --no-default-features --features sync --example scanner_subscription_active_stocks
 //! ```
 
 use ibapi::client::blocking::Client;

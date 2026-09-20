@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example set_server_log_level -- detail
+//! cargo run --no-default-features --features sync --example set_server_log_level -- detail
 //! ```
 //!
 //! Accepted levels: `system`, `error`, `warning`, `info`, `detail`.

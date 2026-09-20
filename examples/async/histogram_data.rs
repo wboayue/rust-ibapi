@@ -9,7 +9,7 @@
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --features async --example async_histogram_data
+//! cargo run --example async_histogram_data
 //! ```
 //!
 //! # Configuration

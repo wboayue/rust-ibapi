@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example soft_dollar_tiers
+//! cargo run --no-default-features --features sync --example soft_dollar_tiers
 //! ```
 
 use ibapi::client::blocking::Client;

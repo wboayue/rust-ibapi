@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example group_events
+//! cargo run --no-default-features --features sync --example group_events
 //! ```
 //!
 //! Make sure TWS is running with API connections enabled

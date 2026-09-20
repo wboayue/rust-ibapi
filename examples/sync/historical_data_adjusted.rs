@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example historical_data_adjusted
+//! cargo run --no-default-features --features sync --example historical_data_adjusted
 //! ```
 
 use clap::{arg, Command};

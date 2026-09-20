@@ -8,7 +8,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example options_purchase
+//! cargo run --no-default-features --features sync --example options_purchase
 //! ```
 
 use ibapi::client::blocking::Client;

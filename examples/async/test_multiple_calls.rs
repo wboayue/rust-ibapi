@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features async --example async_test_multiple_calls
+//! cargo run --example async_test_multiple_calls
 //! ```
 
 use ibapi::prelude::*;

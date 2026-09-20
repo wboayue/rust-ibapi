@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example market_data
+//! cargo run --no-default-features --features sync --example market_data
 //! ```
 
 use ibapi::client::blocking::Client;

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --features sync --example wsh_event_data_by_filter
+//! cargo run --no-default-features --features sync --example wsh_event_data_by_filter
 //! ```
 
 use ibapi::client::blocking::Client;

@@ -28,9 +28,9 @@ Run commands for every configuration that your change touches (default async, sy
    cargo test
    cargo test --no-default-features --features sync
    cargo test --all-features
-   cargo clippy
-   cargo clippy --no-default-features --features sync
-   cargo clippy --all-features
+   cargo clippy --all-targets
+   cargo clippy --all-targets --no-default-features --features sync
+   cargo clippy --all-targets --all-features
    cargo fmt
    ```
 6. **Submit** a pull request
@@ -43,8 +43,8 @@ graph TD
     Clone[2. Clone Your Fork]
     Branch[3. Create Feature Branch]
     Code[4. Make Changes]
-    TestSync[5a. Test Sync Mode<br/>cargo test --features sync]
-    TestAsync[5b. Test Async Mode<br/>cargo test --features async]
+    TestAsync[5a. Test Async<br/>cargo test]
+    TestSync[5b. Test Sync-only<br/>cargo test --no-default-features --features sync]
     Clippy[6. Run Clippy<br/>Both modes]
     Format[7. Format Code<br/>cargo fmt]
     Commit[8. Commit Changes]
@@ -57,10 +57,10 @@ graph TD
     Fork --> Clone
     Clone --> Branch
     Branch --> Code
-    Code --> TestSync
     Code --> TestAsync
-    TestSync --> Clippy
+    Code --> TestSync
     TestAsync --> Clippy
+    TestSync --> Clippy
     Clippy --> Format
     Format --> Commit
     Commit --> Push
@@ -71,8 +71,8 @@ graph TD
     
     style Fork fill:#e3f2fd
     style Merge fill:#c8e6c9
-    style TestSync fill:#fff9c4
     style TestAsync fill:#fff9c4
+    style TestSync fill:#fff9c4
 ```
 
 ## Branches
@@ -109,11 +109,11 @@ Bug fixes and security patches for older releases should target the appropriate 
 3. Fork and clone the repository
 4. Verify your environment works with both features:
    ```bash
-   # Test sync mode
-   cargo test --features sync
+   # Test async (the default)
+   cargo test
    
-   # Test async mode
-   cargo test --features async
+   # Test sync-only
+   cargo test --no-default-features --features sync
    ```
 
 ### Recommended IDE Setup
@@ -132,17 +132,19 @@ Bug fixes and security patches for older releases should target the appropriate 
 
 2. Make your changes following our [code style guidelines](docs/code-style.md)
 
-3. Test both feature modes:
+3. Test every feature mode:
    ```bash
-   cargo test --features sync
-   cargo test --features async
+   cargo test
+   cargo test --no-default-features --features sync
+   cargo test --all-features
    ```
 
 4. Run quality checks:
    ```bash
    cargo fmt
-   cargo clippy --features sync -- -D warnings
-   cargo clippy --features async -- -D warnings
+   cargo clippy --all-targets -- -D warnings
+   cargo clippy --all-targets --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets --all-features -- -D warnings
    ```
 
 ### Common Tasks
@@ -156,19 +158,20 @@ Bug fixes and security patches for older releases should target the appropriate 
 
 ### Running Tests
 
-Always test both sync and async modes:
+Always test every feature mode:
 
 ```bash
-# Run all tests for both modes
-cargo test --features sync
-cargo test --features async
+# Run all tests, one leg per feature configuration
+cargo test
+cargo test --no-default-features --features sync
+cargo test --all-features
 
 # Run specific test
-cargo test test_name --features sync
-cargo test test_name --features async
+cargo test test_name
+cargo test test_name --no-default-features --features sync
 
 # Run with output
-cargo test --features sync -- --nocapture
+cargo test --no-default-features --features sync -- --nocapture
 
 # Generate coverage report (covers sync + async in one run)
 cargo llvm-cov --all-features --html --open
@@ -224,11 +227,12 @@ See [Code Style Guidelines](docs/code-style.md) for more details.
 ### Before Submitting
 
 1. **Test every mode you touched** - default async, sync-only, and combined (`--all-features`) when relevant
-2. **Run quality checks**:
+2. **Run quality checks** - one clippy leg per feature configuration, matching CI:
    ```bash
    cargo fmt --check
-   cargo clippy --features sync -- -D warnings
-   cargo clippy --features async -- -D warnings
+   cargo clippy --all-targets -- -D warnings
+   cargo clippy --all-targets --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets --all-features -- -D warnings
    ```
 3. **Update documentation** if needed
 4. **Add tests** for new functionality
@@ -320,15 +324,15 @@ This pattern provides:
 
 ```bash
 # Enable debug logging
-RUST_LOG=debug cargo run --features sync --example example_name
+RUST_LOG=debug cargo run --no-default-features --features sync --example example_name
 
 # Record TWS messages for debugging
-IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example example_name
+IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --no-default-features --features sync --example example_name
 ```
 
 ### Common Issues
 
-- **"no feature specified"** - If you disabled default features, add `--features sync` or `--features async`
+- **"You must enable at least one of the 'sync' or 'async' features"** - `--no-default-features` drops the async client; add `--features sync` or `--features async` after it
 - **"mutually exclusive features"** - Update to the latest `main`; older commits required choosing only one feature
 - **Tests failing** - Ensure you're running the suite for every relevant feature combination
 - **Clippy warnings** - Run clippy for default, sync-only, and `--all-features`
