@@ -28,9 +28,9 @@ Run commands for every configuration that your change touches (default async, sy
    cargo test
    cargo test --no-default-features --features sync
    cargo test --all-features
-   cargo clippy
-   cargo clippy --no-default-features --features sync
-   cargo clippy --all-features
+   cargo clippy --all-targets
+   cargo clippy --all-targets --no-default-features --features sync
+   cargo clippy --all-targets --all-features
    cargo fmt
    ```
 6. **Submit** a pull request
@@ -132,17 +132,19 @@ Bug fixes and security patches for older releases should target the appropriate 
 
 2. Make your changes following our [code style guidelines](docs/code-style.md)
 
-3. Test both feature modes:
+3. Test every feature mode:
    ```bash
    cargo test
    cargo test --no-default-features --features sync
+   cargo test --all-features
    ```
 
 4. Run quality checks:
    ```bash
    cargo fmt
-   cargo clippy -- -D warnings
-   cargo clippy --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets -- -D warnings
+   cargo clippy --all-targets --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets --all-features -- -D warnings
    ```
 
 ### Common Tasks
@@ -156,12 +158,13 @@ Bug fixes and security patches for older releases should target the appropriate 
 
 ### Running Tests
 
-Always test both sync and async modes:
+Always test every feature mode:
 
 ```bash
-# Run all tests for both modes
+# Run all tests, one leg per feature configuration
 cargo test
 cargo test --no-default-features --features sync
+cargo test --all-features
 
 # Run specific test
 cargo test test_name
@@ -224,11 +227,12 @@ See [Code Style Guidelines](docs/code-style.md) for more details.
 ### Before Submitting
 
 1. **Test every mode you touched** - default async, sync-only, and combined (`--all-features`) when relevant
-2. **Run quality checks**:
+2. **Run quality checks** - one clippy leg per feature configuration, matching CI:
    ```bash
    cargo fmt --check
-   cargo clippy -- -D warnings
-   cargo clippy --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets -- -D warnings
+   cargo clippy --all-targets --no-default-features --features sync -- -D warnings
+   cargo clippy --all-targets --all-features -- -D warnings
    ```
 3. **Update documentation** if needed
 4. **Add tests** for new functionality

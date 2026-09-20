@@ -7,26 +7,25 @@ This directory contains the GitHub Actions workflows for the rust-ibapi project.
 ### ci.yml
 The main CI workflow that runs on every push and pull request to the main branch. It includes:
 
-#### Test Job
-- **Matrix**: One leg per feature configuration: `async` (default), `sync` (sync-only), `all-features`
-- **Steps**:
-  - Build the library with appropriate features
+#### `ci` Job
+- **Matrix**: One leg per feature configuration: `async` (default, no flags), `sync`
+  (`--no-default-features --features sync`), `all-features` (`--all-features`)
+- **Steps** (every one of these runs once per leg, three times in total):
+  - `cargo fmt -- --check` — the format check is a step inside the matrix, not a
+    separate job, so it repeats per leg even though formatting is feature-independent
+  - Build the library with the leg's features
+  - `cargo clippy --all-targets <flags> -- -D warnings` — warnings as errors, across
+    tests and examples as well as the library
   - Run all tests
   - Build all examples to ensure they compile
+  - Build documentation with `cargo doc --no-deps`
+  - Check that benches compile (failures here are tolerated)
 
-#### Clippy Job
-- **Matrix**: Runs clippy for each of the three feature configurations
-- **Steps**:
-  - Runs clippy with warnings as errors (`-D warnings`)
-  - Checks all targets including tests and examples
-
-#### Format Job
-- Runs once (formatting is feature-independent)
-- Checks that all code is properly formatted with `cargo fmt`
-
-#### Documentation Job
-- **Matrix**: Builds docs for each of the three feature configurations
-- Ensures documentation compiles without errors
+#### `basic-checks` Job
+- Runs once, outside the feature matrix
+- Validates `Cargo.toml` with `cargo metadata`
+- Validates the `docs/rules/` knowledge graph via `./tools/check-rules-graph.sh`
+- Runs `cargo audit` for a security advisory scan (failures are tolerated)
 
 ### coverage.yml
 Runs after successful CI workflow completion:
@@ -60,7 +59,7 @@ The workflows test three feature configurations:
    cargo build --examples --all-features
    ```
 
-This script runs all the same checks that CI will run.
+Running all three sets locally reproduces the `ci` job's coverage of the feature matrix.
 
 ## Caching
 

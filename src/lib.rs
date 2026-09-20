@@ -82,8 +82,8 @@ compile_error!(
     "You must enable at least one of the 'sync' or 'async' features to use this crate.\n\
      The 'async' feature is enabled by default; if you disabled default features, be sure to\n\
      opt back into either API:\n\
-         ibapi = { version = \"3.0\", default-features = false, features = [\"sync\"] }\n\
-         ibapi = { version = \"3.0\", default-features = false, features = [\"async\"] }\n\
+         ibapi = { version = \"4.0\", default-features = false, features = [\"sync\"] }\n\
+         ibapi = { version = \"4.0\", default-features = false, features = [\"async\"] }\n\
      You may also enable both to access the synchronous API under `client::blocking`."
 );
 
