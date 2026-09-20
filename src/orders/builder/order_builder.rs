@@ -4,7 +4,7 @@ use super::validation;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
-use crate::orders::{Action, Order, OrderComboLeg, OrderCondition};
+use crate::orders::{Action, Order, OrderComboLeg, OrderCondition, TimeInForce};
 
 #[cfg(test)]
 mod tests;
@@ -383,7 +383,7 @@ impl<'a, C> OrderBuilder<'a, C> {
     /// Market on Open - executes as market order at market open
     pub fn market_on_open(mut self) -> Self {
         self.order_type = Some(OrderType::Market);
-        self.time_in_force = TimeInForce::OpeningAuction;
+        self.time_in_force = TimeInForce::OnOpen;
         self
     }
 
@@ -391,7 +391,7 @@ impl<'a, C> OrderBuilder<'a, C> {
     pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> Self {
         self.order_type = Some(OrderType::Limit);
         self.limit_price = Some(limit_price.into());
-        self.time_in_force = TimeInForce::OpeningAuction;
+        self.time_in_force = TimeInForce::OnOpen;
         self
     }
 
@@ -424,15 +424,26 @@ impl<'a, C> OrderBuilder<'a, C> {
 
     /// Good till cancelled order
     pub fn good_till_cancel(mut self) -> Self {
-        self.time_in_force = TimeInForce::GoodTillCancel;
+        self.time_in_force = TimeInForce::GoodTillCanceled;
         self
     }
 
     /// Good till specific date
     pub fn good_till_date(mut self, date: impl Into<String>) -> Self {
-        let date_str = date.into();
-        self.time_in_force = TimeInForce::GoodTillDate { date: date_str.clone() };
-        self.good_till_date = Some(date_str);
+        self.time_in_force = TimeInForce::GoodTillDate;
+        self.good_till_date = Some(date.into());
+        self
+    }
+
+    /// Good till crossing order
+    pub fn good_till_crossing(mut self) -> Self {
+        self.time_in_force = TimeInForce::GoodTillCrossing;
+        self
+    }
+
+    /// Day till cancelled order
+    pub fn day_till_canceled(mut self) -> Self {
+        self.time_in_force = TimeInForce::DayTillCanceled;
         self
     }
 
@@ -789,10 +800,8 @@ impl<'a, C> OrderBuilder<'a, C> {
         }
 
         // Validate time in force specific requirements
-        if let TimeInForce::GoodTillDate { .. } = &self.time_in_force {
-            if self.good_till_date.is_none() {
-                return Err(ValidationError::MissingRequiredField("good_till_date"));
-            }
+        if self.time_in_force == TimeInForce::GoodTillDate && self.good_till_date.is_none() {
+            return Err(ValidationError::MissingRequiredField("good_till_date"));
         }
 
         // Build the order
@@ -825,10 +834,7 @@ impl<'a, C> OrderBuilder<'a, C> {
         }
 
         // Set time in force
-        order.tif = crate::orders::TimeInForce::from(self.time_in_force.as_str());
-        if let TimeInForce::GoodTillDate { date } = &self.time_in_force {
-            order.good_till_date = date.clone();
-        }
+        order.tif = self.time_in_force;
 
         // Set other fields
         order.outside_rth = self.outside_rth;
@@ -852,12 +858,8 @@ impl<'a, C> OrderBuilder<'a, C> {
             order.good_after_time = time;
         }
 
-        // Set good_till_date if set via good_till_time method
         if let Some(date_time) = self.good_till_date {
-            if !matches!(self.time_in_force, TimeInForce::GoodTillDate { .. }) {
-                // If not already set via time_in_force
-                order.good_till_date = date_time;
-            }
+            order.good_till_date = date_time;
         }
 
         if let Some(strategy) = self.algo_strategy {

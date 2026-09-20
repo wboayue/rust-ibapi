@@ -90,7 +90,7 @@ fn main() {
 
     let mut order = order_builder::market_order(Action::Sell, 200.0);
     order.conditions = vec![OrderCondition::Margin(margin_condition)];
-    order.tif = ibapi::orders::TimeInForce::GoodTilCanceled; // Good-til-canceled
+    order.tif = ibapi::orders::TimeInForce::GoodTillCanceled;
 
     println!("   Order: Sell 200 shares at market");
     println!("   Condition: Margin cushion < 30%");
@@ -216,7 +216,7 @@ fn main() {
         OrderCondition::Time(time_cond),
     ];
     order.conditions_cancel_order = false; // Activate (not cancel) when triggered
-    order.tif = ibapi::orders::TimeInForce::GoodTilCanceled;
+    order.tif = ibapi::orders::TimeInForce::GoodTillCanceled;
 
     println!("   Order: Sell 100 shares at market");
     println!("   Conditions (ANY can trigger):");

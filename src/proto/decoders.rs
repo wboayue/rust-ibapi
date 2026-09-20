@@ -220,7 +220,12 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.order_type = s(&proto.order_type);
     order.limit_price = optional_f64(proto.lmt_price);
     order.aux_price = optional_f64(proto.aux_price);
-    order.tif = TimeInForce::from(proto.tif.as_deref().unwrap_or("DAY"));
+    // Absent means the field is unset upstream, not GTZ-style unknown:
+    // EClientUtils omits an empty Tif and EDecoderUtils only assigns when
+    // HasTif, so "" and absent both collapse to the Order::default() TIF.
+    // Anything else we do not model is preserved as Unknown(raw) rather than
+    // coerced to DAY.
+    order.tif = TimeInForce::from(proto.tif.as_deref().filter(|tif| !tif.is_empty()).unwrap_or("DAY"));
 
     // clearing info
     order.account = s(&proto.account);

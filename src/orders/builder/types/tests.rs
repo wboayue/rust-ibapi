@@ -53,20 +53,6 @@ fn test_price_validation() {
 }
 
 #[test]
-fn test_time_in_force() {
-    assert_eq!(TimeInForce::Day.as_str(), "DAY");
-    assert_eq!(TimeInForce::GoodTillCancel.as_str(), "GTC");
-    assert_eq!(TimeInForce::ImmediateOrCancel.as_str(), "IOC");
-    assert_eq!(
-        TimeInForce::GoodTillDate {
-            date: "20240101".to_string()
-        }
-        .as_str(),
-        "GTD"
-    );
-}
-
-#[test]
 fn test_order_type() {
     assert_eq!(OrderType::Market.as_str(), "MKT");
     assert_eq!(OrderType::Limit.as_str(), "LMT");

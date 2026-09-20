@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -92,4 +92,13 @@ migrations — consult it rather than re-deriving which fields were converted an
   terminated every order stream, including `order_update_stream`. Opened
   `OrderStatusKind` with `Unknown(String)` via the macro's `fallback` form; the
   missing/empty half of the directive is unchanged.
+- #822 — `TimeInForce`: the failure without an open enum, on an infallible `From<&str>`
+  rather than a `FromStr`. `GTX` had no variant, so `_ => Day` reported every GTX order
+  as a day order and sent every GTX order as one — no parse error, nothing to observe.
+  Opened it with `impl_wire_enum!(TimeInForce, fallback Unknown)`. Two notes for the
+  next one: absent/empty here collapses to the struct default rather than `Error::Parse`,
+  because upstream omits the field instead of sending it (`EClientUtils` / `EDecoderUtils`)
+  — the directive's missing-input half assumes a field the wire always carries; and the
+  variant table needs its own guard, since an enum this wide is tested from a hand-written
+  table that a new variant does not break (`orders::tests::all_tifs_covers_every_variant`).
 

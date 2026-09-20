@@ -13,6 +13,18 @@ const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
     (OrderStatusKind::Inactive, "Inactive"),
 ];
 
+const ALL_TIFS: &[(TimeInForce, &str)] = &[
+    (TimeInForce::Day, "DAY"),
+    (TimeInForce::GoodTillCanceled, "GTC"),
+    (TimeInForce::ImmediateOrCancel, "IOC"),
+    (TimeInForce::GoodTillDate, "GTD"),
+    (TimeInForce::OnOpen, "OPG"),
+    (TimeInForce::FillOrKill, "FOK"),
+    (TimeInForce::DayTillCanceled, "DTC"),
+    (TimeInForce::Auction, "AUC"),
+    (TimeInForce::GoodTillCrossing, "GTX"),
+];
+
 #[test]
 fn order_status_kind_round_trip() {
     check_wire_enum_round_trip(ALL_KINDS);
@@ -112,4 +124,89 @@ fn liquidity_preserves_unknown_wire_code() {
     assert_eq!(Liquidity::from(0), Liquidity::None);
     assert_eq!(Liquidity::from(4), Liquidity::Unknown(4));
     assert_eq!(Liquidity::from(-1), Liquidity::Unknown(-1));
+}
+
+#[test]
+fn time_in_force_round_trips_every_wire_value() {
+    check_wire_enum_round_trip(ALL_TIFS);
+
+    // `From` is the seam the proto decoder uses; it must agree with `FromStr`
+    // on every known value.
+    for (variant, wire) in ALL_TIFS {
+        assert_eq!(&TimeInForce::from(*wire), variant, "From(&str {wire})");
+        assert_eq!(&TimeInForce::from(wire.to_string()), variant, "From(String {wire})");
+    }
+}
+
+/// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new
+/// variant has no arm in `modeled_index` and fails to compile; the arm it
+/// forces then indexes past `seen`, so the table has to grow before the
+/// workspace goes green. `GoodTillCrossing` reached TWS as `DAY` for three
+/// releases because nothing made a missing variant loud — see
+/// `docs/migration-4.0.md` §13.
+///
+/// `src/orders/builder/order_builder/tests.rs` drives the same variant list
+/// through the builder and the proto encoder; this guard covers both tables.
+#[test]
+fn all_tifs_covers_every_variant() {
+    fn modeled_index(tif: &TimeInForce) -> Option<usize> {
+        match tif {
+            TimeInForce::Day => Some(0),
+            TimeInForce::GoodTillCanceled => Some(1),
+            TimeInForce::ImmediateOrCancel => Some(2),
+            TimeInForce::GoodTillDate => Some(3),
+            TimeInForce::OnOpen => Some(4),
+            TimeInForce::FillOrKill => Some(5),
+            TimeInForce::DayTillCanceled => Some(6),
+            TimeInForce::Auction => Some(7),
+            TimeInForce::GoodTillCrossing => Some(8),
+            // Unknown carries a raw string, so it has no place in a table of
+            // modeled wire values; `time_in_force_preserves_unknown_wire_value`
+            // covers it.
+            TimeInForce::Unknown(_) => None,
+        }
+    }
+
+    let mut seen = [false; 9];
+    for (variant, _) in ALL_TIFS {
+        if let Some(index) = modeled_index(variant) {
+            seen[index] = true;
+        }
+    }
+    assert!(seen.iter().all(|&s| s), "ALL_TIFS is missing a TimeInForce variant");
+}
+
+#[test]
+fn time_in_force_preserves_unknown_wire_value() {
+    // Open enum, same shape as OrderStatusKind: an unrecognized non-empty TIF
+    // keeps its raw value instead of decoding as Day, and puts that value back
+    // on the wire unchanged so an order read from TWS round-trips. Matching is
+    // exact and case-sensitive.
+    check_wire_enum_round_trip(&[
+        (TimeInForce::Unknown("NotARealTif".into()), "NotARealTif"),
+        (TimeInForce::Unknown("gtc".into()), "gtc"),
+        (TimeInForce::Unknown("Gtd".into()), "Gtd"),
+    ]);
+
+    // `FromStr` rejects the absent value (docs/rules/wire/enum-typing.md);
+    // infallible `From` cannot, so it yields Unknown("") — the proto decoder
+    // substitutes "DAY" before it gets here.
+    check_wire_enum_rejects_unknown::<TimeInForce>(&[""]);
+    assert_eq!(TimeInForce::from(""), TimeInForce::Unknown(String::new()));
+}
+
+#[test]
+fn time_in_force_serde_round_trips_as_plain_string() {
+    // Manual serde keeps the JSON the TWS wire string in both directions, so
+    // Unknown("X") serializes as "X" rather than {"Unknown":"X"}, and renaming
+    // a variant on the Rust side never moves the JSON.
+    let known = TimeInForce::GoodTillCanceled;
+    assert_eq!(serde_json::to_string(&known).unwrap(), "\"GTC\"");
+    assert_eq!(serde_json::from_str::<TimeInForce>("\"GTC\"").unwrap(), known);
+
+    let unknown = TimeInForce::Unknown("GTZ".to_string());
+    assert_eq!(serde_json::to_string(&unknown).unwrap(), "\"GTZ\"");
+    assert_eq!(serde_json::from_str::<TimeInForce>("\"GTZ\"").unwrap(), unknown);
+
+    assert!(serde_json::from_str::<TimeInForce>("\"\"").is_err(), "empty string must not deserialize");
 }

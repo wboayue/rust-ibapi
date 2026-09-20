@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::{ExecutionSide, OrderStatusKind};
+use crate::orders::{ExecutionSide, OrderStatusKind, TimeInForce};
 
 // === parse_required ===
 
@@ -257,6 +257,41 @@ fn decode_order_maps_deactivate() {
 fn decode_order_deactivate_absent_is_false() {
     let order = decode_order(&proto::Order::default()).unwrap();
     assert!(!order.deactivate);
+}
+
+// === decode_order tif ===
+
+#[test]
+fn decode_order_preserves_unknown_tif() {
+    // An unmodeled TIF keeps its raw value instead of decoding as DAY — the
+    // bug GoodTillCrossing hit before it was a variant (#822).
+    let proto_order = proto::Order {
+        tif: Some("GTZ".to_string()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Unknown("GTZ".to_string()));
+}
+
+#[test]
+fn decode_order_maps_known_tif() {
+    let proto_order = proto::Order {
+        tif: Some("GTX".to_string()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::GoodTillCrossing);
+}
+
+#[test]
+fn decode_order_tif_absent_or_empty_is_day() {
+    // Upstream omits an empty Tif rather than sending one, so neither form is
+    // an unknown value to preserve.
+    assert_eq!(decode_order(&proto::Order::default()).unwrap().tif, TimeInForce::Day);
+
+    let proto_order = proto::Order {
+        tif: Some(String::new()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Day);
 }
 
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
