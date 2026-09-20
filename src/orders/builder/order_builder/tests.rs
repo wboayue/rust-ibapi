@@ -223,7 +223,9 @@ fn test_time_in_force_method() {
 }
 
 // Every variant reaches the wire under its TWS identifier. GTX previously fell
-// through a string round trip and was sent as DAY.
+// through a string round trip and was sent as DAY. A new variant fails to
+// compile in `orders::tests::all_tifs_covers_every_variant`, which is the
+// reminder to extend this table as well.
 #[test]
 fn time_in_force_variants_encode_to_wire() {
     let client = MockClient;
@@ -253,7 +255,7 @@ fn time_in_force_variants_encode_to_wire() {
 }
 
 #[test]
-fn test_good_till_crossing() {
+fn good_till_crossing_sets_gtx() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -268,7 +270,7 @@ fn test_good_till_crossing() {
 }
 
 #[test]
-fn test_day_till_canceled() {
+fn day_till_canceled_sets_dtc() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -280,6 +282,23 @@ fn test_day_till_canceled() {
         .unwrap();
     assert_eq!(order.tif, TimeInForce::DayTillCanceled);
     assert_eq!(encode_order(&order).tif.as_deref(), Some("DTC"));
+}
+
+#[test]
+fn unknown_time_in_force_reaches_the_wire_unchanged() {
+    // An order read back from TWS carrying a TIF this crate does not model can
+    // be resubmitted: the raw string passes through the builder untouched
+    // rather than being coerced to DAY.
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .time_in_force(TimeInForce::Unknown("GTZ".to_string()))
+        .build()
+        .unwrap();
+    assert_eq!(encode_order(&order).tif.as_deref(), Some("GTZ"));
 }
 
 // good_till_date and good_till_time write the same field; the last call wins.
@@ -310,7 +329,7 @@ fn good_till_date_last_write_wins() {
 }
 
 #[test]
-fn test_good_till_date_requires_date() {
+fn good_till_date_without_a_date_fails_validation() {
     let client = MockClient;
     let contract = create_test_contract();
 

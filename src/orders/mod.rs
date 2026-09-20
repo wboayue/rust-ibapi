@@ -844,8 +844,7 @@ impl<'de> Deserialize<'de> for OrderStatusKind {
 }
 
 /// Time in force specifies how long an order remains active.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum TimeInForce {
     /// Valid for the day only.
     #[default]
@@ -870,17 +869,21 @@ pub enum TimeInForce {
     Auction,
     /// Good until Crossing (GTX).
     GoodTillCrossing,
+    /// Time-in-force string not modeled by this version of the API. Carries the
+    /// raw wire value so callers can log, store, or act on it, rather than
+    /// having an unrecognized value silently decode as [`Day`](Self::Day).
+    /// Matching is exact and case-sensitive. Sending one back through
+    /// [`OrderBuilder::time_in_force`](crate::orders::OrderBuilder::time_in_force)
+    /// or `Order.tif` puts the raw string on the wire unchanged, so an order
+    /// read from TWS round-trips. See `docs/migration-4.0.md` §13.
+    Unknown(String),
 }
 
-impl ToField for TimeInForce {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl std::fmt::Display for TimeInForce {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = match self {
+impl TimeInForce {
+    /// Return the TWS wire string for this time-in-force — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
+        match self {
             TimeInForce::Day => "DAY",
             TimeInForce::GoodTillCanceled => "GTC",
             TimeInForce::ImmediateOrCancel => "IOC",
@@ -890,8 +893,53 @@ impl std::fmt::Display for TimeInForce {
             TimeInForce::DayTillCanceled => "DTC",
             TimeInForce::Auction => "AUC",
             TimeInForce::GoodTillCrossing => "GTX",
-        };
-        write!(f, "{text}")
+            TimeInForce::Unknown(raw) => raw,
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "DAY" => Some(TimeInForce::Day),
+            "GTC" => Some(TimeInForce::GoodTillCanceled),
+            "IOC" => Some(TimeInForce::ImmediateOrCancel),
+            "GTD" => Some(TimeInForce::GoodTillDate),
+            "OPG" => Some(TimeInForce::OnOpen),
+            "FOK" => Some(TimeInForce::FillOrKill),
+            "DTC" => Some(TimeInForce::DayTillCanceled),
+            "AUC" => Some(TimeInForce::Auction),
+            "GTX" => Some(TimeInForce::GoodTillCrossing),
+            _ => None,
+        }
+    }
+}
+
+impl_wire_enum!(TimeInForce, fallback Unknown);
+
+// Serde as the plain wire string in both directions, so `Unknown("X")`
+// round-trips as `"X"` rather than the externally tagged `{"Unknown":"X"}` a
+// derive would produce for the one payload variant. This also keeps the JSON
+// stable against Rust-side renames — see `OrderStatusKind` for the same
+// reasoning, including why the utoipa schema is hand-written.
+#[cfg(feature = "utoipa")]
+impl utoipa::PartialSchema for TimeInForce {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        String::schema()
+    }
+}
+
+#[cfg(feature = "utoipa")]
+impl utoipa::ToSchema for TimeInForce {}
+
+impl Serialize for TimeInForce {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for TimeInForce {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
@@ -901,20 +949,13 @@ impl From<String> for TimeInForce {
     }
 }
 
+// Infallible, unlike the `FromStr` the macro generates: the empty string has
+// nowhere to go but `Unknown("")`, which `some_str` in the proto encoder then
+// omits from the wire exactly as `EClientUtils` does upstream. Callers that
+// need the empty case rejected should use `FromStr`.
 impl From<&str> for TimeInForce {
     fn from(value: &str) -> Self {
-        match value {
-            "DAY" => TimeInForce::Day,
-            "GTC" => TimeInForce::GoodTillCanceled,
-            "IOC" => TimeInForce::ImmediateOrCancel,
-            "GTD" => TimeInForce::GoodTillDate,
-            "OPG" => TimeInForce::OnOpen,
-            "FOK" => TimeInForce::FillOrKill,
-            "DTC" => TimeInForce::DayTillCanceled,
-            "AUC" => TimeInForce::Auction,
-            "GTX" => TimeInForce::GoodTillCrossing,
-            _ => TimeInForce::Day, // Default fallback
-        }
+        Self::from_wire(value).unwrap_or_else(|| TimeInForce::Unknown(value.to_string()))
     }
 }
 

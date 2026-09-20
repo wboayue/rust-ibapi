@@ -340,7 +340,7 @@ Subscriptions returned by `Client` methods are unaffected.
 
 3.x exported two `TimeInForce` enums naming the same wire values with different identifiers: `orders::TimeInForce` on `Order.tif` (spelled `GoodTilCanceled`), and `orders::builder::TimeInForce` taken by `OrderBuilder::time_in_force` (spelled `GoodTillCancel`). The builder converted between them by formatting to the wire string and re-parsing, and `orders::TimeInForce` had no `GTX` variant, so `builder::TimeInForce::GoodTillCrossing` was silently submitted as `DAY`.
 
-In 4.0 the builder enum is gone and `OrderBuilder::time_in_force` takes `orders::TimeInForce`. Its variants now use "till", matching IB's own `goodTillDate`, the `Order.good_till_date` field and the builder setters, and it gains `GoodTillCrossing` (`GTX`). Wire strings are unchanged.
+In 4.0 the builder enum is gone and `OrderBuilder::time_in_force` takes `orders::TimeInForce`. Its variants now use "till", matching IB's own `goodTillDate`, the `Order.good_till_date` field and the builder setters, and it gains `GoodTillCrossing` (`GTX`). TWS wire strings are unchanged.
 
 ```rust,ignore
 // 3.x
@@ -370,7 +370,11 @@ Rename the variants from either 3.x enum:
 
 The named setters (`.day_order()`, `.good_till_cancel()`, `.good_till_date(..)`, `.fill_or_kill()`, `.immediate_or_cancel()`) are unchanged, and `.good_till_crossing()` and `.day_till_canceled()` are added. `.time_in_force(TimeInForce::GoodTillDate)` without a date still fails `build()` with `ValidationError::MissingRequiredField("good_till_date")`. The builder keeps the GTD date only in the field written by `.good_till_date(..)` / `.good_till_time(..)`; in 3.x a date carried in the `GoodTillDate { date }` payload took precedence over one set through those methods; now the last one set wins.
 
-Exhaustive matches on `orders::TimeInForce` need a `GoodTillCrossing` arm.
+`orders::TimeInForce` is also an open enum now, like `OrderStatusKind` in [§9](#9-orderstatuskind-gains-unknownstring): a TIF string this crate does not model decodes as `Unknown(raw)` carrying the value TWS sent, instead of being coerced to `Day`. Sending an `Unknown` back — through `.time_in_force(..)` or `Order.tif` — puts the raw string on the wire unchanged, so an order read from TWS round-trips. Matching is exact and case-sensitive, so a case-variant such as `"gtc"` lands in `Unknown` rather than being coerced to the nearest known variant.
+
+Exhaustive matches on `orders::TimeInForce` need both a `GoodTillCrossing` and an `Unknown(raw)` arm.
+
+**If you serialize orders to JSON**, `TimeInForce` now serializes as the TWS wire string — `"GTC"`, not the variant name `"GoodTilCanceled"` — in both directions, and its `utoipa` schema is a plain string. That keeps the JSON stable against Rust-side renames and keeps `Unknown("GTZ")` as `"GTZ"` rather than the `{"Unknown":"GTZ"}` a derive would emit. Update stored documents and downstream consumers that read the old variant names.
 
 ## Behavioral changes
 
@@ -402,7 +406,7 @@ No code changes required, but observable at runtime:
 10. If you serialize market-data types to JSON, update downstream consumers: sizes are now `number | null` instead of `integer`, and notices may carry `request_id`.
 11. Add an `OrderUpdate::OrderBound(binding)` arm to exhaustive matches on order updates, and read bindings from `order_update_stream()` — they never reach `place_order` subscriptions; see [§11](#11-orderupdate-gains-orderbound).
 12. Replace any `Subscription::new(rx)` over your own channel with `tokio_stream::wrappers::UnboundedReceiverStream::new(rx)` (add `tokio-stream` to your dependencies), and give any generic helper over the async `Subscription<T>` a concrete item type — see [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed).
-13. Use `ibapi::orders::TimeInForce` everywhere (`ibapi::orders::builder::TimeInForce` is gone) and spell the variants "till": `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`; from the builder enum, `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` plus `.good_till_date(date)`. Add a `GoodTillCrossing` arm to exhaustive matches — see [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till).
+13. Use `ibapi::orders::TimeInForce` everywhere (`ibapi::orders::builder::TimeInForce` is gone) and spell the variants "till": `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`; from the builder enum, `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` plus `.good_till_date(date)`. Add `GoodTillCrossing` and `Unknown(raw)` arms to exhaustive matches, and re-read any stored JSON — the field is the wire string now — see [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till).
 14. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?

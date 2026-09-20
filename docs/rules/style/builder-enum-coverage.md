@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549"]
+precedents: ["#549", "#822"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -31,3 +31,13 @@ constructing the order struct by hand, which is the surface the builder exists t
 Nothing gates this. Rust's exhaustiveness checking covers `match`, not "is there a method per
 variant", so the check is a read: list the variants, list the setters, compare. Do it when you
 touch either side.
+
+## Precedents
+
+- #549 — `Action::SellShort` / `Action::SellLong` were reachable only by hand-building the
+  order struct; `.sell_short()` / `.sell_long()` closed the gap.
+- #822 — `TimeInForce` gained `GoodTillCrossing` and `.good_till_crossing()` in the same PR,
+  as the directive says. Its open-enum `Unknown(raw)` arm is the one variant with no named
+  method, deliberately: the raw value comes from a decode, so the general
+  `.time_in_force(..)` setter is the only sensible way in and a `.unknown("GTZ")` method
+  would read as an invitation to invent wire strings.

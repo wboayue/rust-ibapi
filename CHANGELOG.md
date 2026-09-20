@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `orders::TimeInForce::GoodTillCrossing` (`GTX`), and `OrderBuilder::good_till_crossing()` / `OrderBuilder::day_till_canceled()` so GTX and DTC are reachable without `time_in_force()` (#822).
+- `orders::TimeInForce::Unknown(String)`: a time-in-force string this crate does not model now keeps its raw wire value instead of decoding as `Day`, and goes back out unchanged, so an order read from TWS round-trips. `TimeInForce` also gains `as_str()` and `FromStr` (#822).
 
 ### Changed
 
 - `orders::TimeInForce` variants are spelled "till", matching IB's `goodTillDate`, `Order.good_till_date` and the builder setters: `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`. Wire strings are unchanged (#822).
-- `OrderBuilder::time_in_force` takes `orders::TimeInForce`; exhaustive matches on `orders::TimeInForce` need a `GoodTillCrossing` arm. See `docs/migration-4.0.md` §13 (#822).
+- `OrderBuilder::time_in_force` takes `orders::TimeInForce`; exhaustive matches on `orders::TimeInForce` need `GoodTillCrossing` and `Unknown(raw)` arms. See `docs/migration-4.0.md` §13 (#822).
+- `orders::TimeInForce` serializes as the TWS wire string (`"GTC"`) rather than the variant name (`"GoodTilCanceled"`), in both directions, and its `utoipa` schema is a plain string — matching `OrderStatusKind`. Stored JSON and downstream consumers that read the old variant names need updating (#822).
 
 ### Removed
 
@@ -23,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A `GTX` order built through `OrderBuilder` reached TWS as `DAY`; it is now sent as `GTX` (#822).
+- `GTX` was not modeled at all: an order built through `OrderBuilder` reached TWS as `DAY`, and a `GTX` order read back from TWS was reported as `TimeInForce::Day` on `open_orders()` and the order streams. Both directions now carry `GoodTillCrossing` (#822).
 - In-flight subscriptions and one-shot requests now fail with `Error::ConnectionReset` the moment the socket read fails, on both clients. Previously the channel reset ran only after the reconnect finished (up to 7.5 minutes of backoff at the defaults, forever with `reconnect_forever`), and a request registered between the session being marked connected and that late reset was wiped, its replies orphaned (#816).
 - Sends made while the session is down are refused with `Error::ConnectionReset` instead of being written to the socket the reconnect is replacing, and `is_connected()` reports false until the replayed handshake completes (#816).
 - One-shot requests still recover across a TWS restart: the retry waits for the reconnect before resending, and gives up with `Error::Shutdown` if the session does not return (#816).
