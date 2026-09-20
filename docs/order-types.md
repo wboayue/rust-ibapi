@@ -564,7 +564,7 @@ let order_id = client.order(&contract)
     .and_condition(volume(265598, "SMART").greater_than(80_000_000))
     .and_condition(time().greater_than("20251230 10:00:00 US/Eastern"))
     .and_condition(margin().greater_than(40))
-    .good_till_cancel()
+    .good_till_canceled()
     .submit()?;
 ```
 
@@ -1217,7 +1217,7 @@ Control how long an order remains active:
 let order_id = client.order(&contract)
     .buy(100)
     .limit(150.00)
-    .good_till_cancel()
+    .good_till_canceled()
     .submit()?;
 
 // Good till specific date

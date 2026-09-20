@@ -190,7 +190,7 @@ fn test_time_conditions() {
     assert_eq!(order.tif, TimeInForce::Day);
 
     // Test Good Till Cancel
-    let builder = OrderBuilder::new(&client, &contract).buy(100).market().good_till_cancel();
+    let builder = OrderBuilder::new(&client, &contract).buy(100).market().good_till_canceled();
 
     let order = builder.build().unwrap();
     assert_eq!(order.tif, TimeInForce::GoodTillCanceled);
@@ -1447,7 +1447,7 @@ fn bracket_order_propagates_tif() {
 
     let orders = OrderBuilder::new(&client, &contract)
         .buy(100)
-        .good_till_cancel()
+        .good_till_canceled()
         .bracket()
         .entry_limit(50.0)
         .take_profit(55.0)

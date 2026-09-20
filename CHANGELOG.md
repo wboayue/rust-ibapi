@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `orders::TimeInForce` variants are spelled "till", matching IB's `goodTillDate`, `Order.good_till_date` and the builder setters: `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`. Wire strings are unchanged (#822).
 - `OrderBuilder::time_in_force` takes `orders::TimeInForce`; exhaustive matches on `orders::TimeInForce` need `GoodTillCrossing` and `Unknown(raw)` arms. See `docs/migration-4.0.md` §13 (#822).
+- `OrderBuilder::good_till_cancel()` is renamed `good_till_canceled()`, matching the `TimeInForce::GoodTillCanceled` variant it sets and the neighbouring `day_till_canceled()` (#826).
 - `orders::TimeInForce` serializes as the TWS wire string (`"GTC"`) rather than the variant name (`"GoodTilCanceled"`), in both directions, and its `utoipa` schema is a plain string — matching `OrderStatusKind`. Stored JSON and downstream consumers that read the old variant names need updating (#822).
 
 ### Removed
