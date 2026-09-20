@@ -267,12 +267,6 @@ For async versions, the default features are sufficient: `cargo run --example as
 
 **Solution**: Default features are off and neither client is enabled. Add `features = ["sync"]` or `features = ["async"]` to the `ibapi` entry in `Cargo.toml`, or `--features sync` / `--features async` to a `cargo` command that passes `--no-default-features`.
 
-#### "Mutually exclusive features" Error
-```bash
-error: features 'sync' and 'async' are mutually exclusive
-```
-**Solution**: Update to the latest release—current versions support enabling both features simultaneously.
-
 #### Connection Refused
 ```bash
 Error: Connection refused (os error 111)

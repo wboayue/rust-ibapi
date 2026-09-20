@@ -20,19 +20,6 @@ ibapi = { version = "4.0", default-features = false, features = ["sync"] }
 ```
 When building this repository with `--no-default-features`, add `--features sync` or `--features async` to the command.
 
-### Mutually Exclusive Features
-
-**Error:**
-```
-error: features 'sync' and 'async' are mutually exclusive
-```
-
-**Solution:**
-Update to the latest `rust-ibapi`—current releases allow both features to be enabled together. If you still see this error, ensure `Cargo.lock` is refreshed:
-```bash
-cargo update -p ibapi
-```
-
 ## Connection Issues
 
 ### Connection Refused
