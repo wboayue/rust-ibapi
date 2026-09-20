@@ -1,5 +1,6 @@
 //! Asynchronous subscription implementation
 
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -9,20 +10,11 @@ use std::time::Duration;
 use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
-use tokio::sync::mpsc;
 
 use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
-use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
-
-// Type aliases to reduce complexity
-type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
-type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &ResponseMessage) -> Result<T, Error> + Send + Sync>;
-// Non-capturing detector — a plain fn pointer (the decoder's `is_snapshot_end`),
-// so it needs no allocation, no vtable, and is `Copy`.
-type SnapshotEndFn<T> = fn(&T) -> bool;
 
 /// Asynchronous subscription for streaming data.
 ///
@@ -65,9 +57,10 @@ type SnapshotEndFn<T> = fn(&T) -> bool;
 /// ```no_run
 /// # use ibapi::subscriptions::SubscriptionItemStreamExt;
 /// # use futures::StreamExt;
-/// # async fn run(subscription: ibapi::subscriptions::Subscription<i32>) {
+/// # use ibapi::market_data::realtime::TickTypes;
+/// # async fn run(subscription: ibapi::subscriptions::Subscription<TickTypes>) {
 /// let mut data = subscription.filter_data();
-/// while let Some(result) = data.next().await { /* result: Result<i32, _> */ }
+/// while let Some(result) = data.next().await { /* result: Result<TickTypes, _> */ }
 /// # }
 /// ```
 ///
@@ -75,9 +68,10 @@ type SnapshotEndFn<T> = fn(&T) -> bool;
 /// 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc. — are not delivered
 /// here. Subscribe to them via [`Client::notice_stream`](crate::Client::notice_stream)
 /// instead.
+#[allow(private_bounds)]
 #[must_use = "Subscription must be polled (via .next().await or .filter_data()) to receive data; dropping it cancels the request"]
-pub struct Subscription<T> {
-    inner: SubscriptionInner<T>,
+pub struct Subscription<T: StreamDecoder<T>> {
+    subscription: AsyncInternalSubscription,
     /// Metadata for cancellation
     request_id: Option<i32>,
     order_id: Option<i32>,
@@ -90,48 +84,16 @@ pub struct Subscription<T> {
     /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
     /// on one clone must not short-circuit other clones' polls.
     stream_ended: AtomicBool,
-    message_bus: Option<Arc<dyn AsyncMessageBus>>,
-    /// Cancel message generator
-    cancel_fn: Option<Arc<CancelFn>>,
-    /// Snapshot-end detector captured from the decoder (`None` for pre-decoded subscriptions).
-    snapshot_end_fn: Option<SnapshotEndFn<T>>,
-    /// The decoder's declared message types, captured because `poll_next` has
-    /// erased the decoder to a closure. Required, not optional: an absent
-    /// declaration would silently disable the skip filter, which is the failure
-    /// shape `RESPONSE_MESSAGE_IDS` dropped its default to prevent.
-    response_message_ids: &'static [IncomingMessages],
+    message_bus: Arc<dyn AsyncMessageBus>,
+    /// `fn() -> T` rather than `T`: keeps the struct `Unpin`, `Send`, and `Sync`
+    /// regardless of `T`, which `poll_next` relies on to project to `&mut Self`.
+    phantom: PhantomData<fn() -> T>,
 }
 
-enum SubscriptionInner<T> {
-    /// Subscription with decoder - receives ResponseMessage and decodes to T.
-    /// The `context` for decode lives on the outer `Subscription<T>`.
-    WithDecoder {
-        subscription: AsyncInternalSubscription,
-        decoder: DecoderFn<T>,
-    },
-    /// Pre-decoded subscription - receives T directly
-    PreDecoded { receiver: mpsc::UnboundedReceiver<Result<T, Error>> },
-}
-
-impl<T> Clone for SubscriptionInner<T> {
-    fn clone(&self) -> Self {
-        match self {
-            SubscriptionInner::WithDecoder { subscription, decoder } => SubscriptionInner::WithDecoder {
-                subscription: subscription.clone(),
-                decoder: decoder.clone(),
-            },
-            SubscriptionInner::PreDecoded { .. } => {
-                // Can't clone mpsc receivers
-                panic!("Cannot clone pre-decoded subscriptions");
-            }
-        }
-    }
-}
-
-impl<T> Clone for Subscription<T> {
+impl<T: StreamDecoder<T>> Clone for Subscription<T> {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            subscription: self.subscription.clone(),
             request_id: self.request_id,
             order_id: self.order_id,
             context: self.context.clone(),
@@ -140,104 +102,49 @@ impl<T> Clone for Subscription<T> {
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
             stream_ended: AtomicBool::new(false),
             message_bus: self.message_bus.clone(),
-            cancel_fn: self.cancel_fn.clone(),
-            snapshot_end_fn: self.snapshot_end_fn,
-            response_message_ids: self.response_message_ids,
+            phantom: PhantomData,
         }
     }
 }
 
-impl<T> Subscription<T> {
-    /// Create a subscription from an internal subscription and a decoder.
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T>> Subscription<T> {
+    /// Create a subscription from an internal subscription. `T` is the decoder:
+    /// `poll_next` calls `T::decode` directly, as the sync side does.
     ///
     /// `pub(crate)` because the parameter types (`AsyncInternalSubscription`,
     /// `DecoderContext`) are not part of the public API. External callers
     /// reach subscriptions via the typed builders on `Client`.
-    pub(crate) fn with_decoder<D>(
+    pub(crate) fn new_from_internal(
         internal: AsyncInternalSubscription,
         message_bus: Arc<dyn AsyncMessageBus>,
-        decoder: D,
-        response_message_ids: &'static [IncomingMessages],
         request_id: Option<i32>,
         order_id: Option<i32>,
         context: DecoderContext,
-    ) -> Self
-    where
-        D: Fn(&DecoderContext, &ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
-    {
+    ) -> Self {
+        super::common::debug_assert_request_id_routable::<T, T>(request_id);
+
         Self {
-            inner: SubscriptionInner::WithDecoder {
-                subscription: internal,
-                decoder: Arc::new(decoder),
-            },
+            subscription: internal,
             request_id,
             order_id,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
             snapshot_ended: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
-            message_bus: Some(message_bus),
-            cancel_fn: None,
-            snapshot_end_fn: None,
-            response_message_ids,
+            message_bus,
+            phantom: PhantomData,
         }
-    }
-
-    /// Create a subscription from an internal subscription using the DataStream decoder
-    pub(crate) fn new_from_internal<D>(
-        internal: AsyncInternalSubscription,
-        message_bus: Arc<dyn AsyncMessageBus>,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        context: DecoderContext,
-    ) -> Self
-    where
-        D: StreamDecoder<T> + 'static,
-        T: StreamDecoder<T> + 'static,
-    {
-        super::common::debug_assert_request_id_routable::<T, D>(request_id);
-
-        let mut sub = Self::with_decoder(internal, message_bus, D::decode, D::RESPONSE_MESSAGE_IDS, request_id, order_id, context);
-        sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
-        // Capture the decoder's snapshot-end detector so `poll_next` (which lacks the
-        // `StreamDecoder` bound) can flag a completed snapshot and skip the cancel on
-        // drop — the async mirror of the sync side's intrinsic `snapshot_ended` tracking.
-        sub.snapshot_end_fn = Some(<T as StreamDecoder<T>>::is_snapshot_end);
-        sub
     }
 
     /// Create a subscription from internal subscription without explicit metadata.
-    /// AsyncInternalSubscription's Drop carries the cancel signal, so no cancel-fn metadata.
-    pub(crate) fn new_from_internal_simple<D>(
+    /// AsyncInternalSubscription's Drop carries the cancel signal, so no id metadata.
+    pub(crate) fn new_from_internal_simple(
         internal: AsyncInternalSubscription,
         message_bus: Arc<dyn AsyncMessageBus>,
         context: DecoderContext,
-    ) -> Self
-    where
-        D: StreamDecoder<T> + 'static,
-        T: StreamDecoder<T> + 'static,
-    {
-        Self::new_from_internal::<D>(internal, message_bus, None, None, context)
-    }
-
-    /// Create subscription from existing receiver (for backward compatibility)
-    pub fn new(receiver: mpsc::UnboundedReceiver<Result<T, Error>>) -> Self {
-        // This creates a subscription that expects pre-decoded messages
-        // Used for compatibility with existing code that manually decodes
-        Self {
-            inner: SubscriptionInner::PreDecoded { receiver },
-            request_id: None,
-            order_id: None,
-            context: DecoderContext::default(),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            snapshot_ended: Arc::new(AtomicBool::new(false)),
-            stream_ended: AtomicBool::new(false),
-            message_bus: None,
-            cancel_fn: None,
-            snapshot_end_fn: None,
-            // Pre-decoded subscriptions never reach the filter (other poll_next arm).
-            response_message_ids: &[],
-        }
+    ) -> Self {
+        Self::new_from_internal(internal, message_bus, None, None, context)
     }
 
     /// Get the request ID associated with this subscription
@@ -344,13 +251,14 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     }
 }
 
-impl<T: Send + 'static> Stream for Subscription<T> {
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
     type Item = Result<SubscriptionItem<T>, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Subscription<T> is auto-Unpin: BroadcastStream uses ReusableBoxFuture
-        // (boxed → Unpin externally), mpsc::UnboundedReceiver is Unpin, and
-        // every other field is Unpin. Safe to project to &mut Self.
+        // (boxed → Unpin externally), the phantom is `fn() -> T`, and every
+        // other field is Unpin. Safe to project to &mut Self.
         let this = self.get_mut();
 
         if this.stream_ended.load(Ordering::Relaxed) {
@@ -358,79 +266,63 @@ impl<T: Send + 'static> Stream for Subscription<T> {
         }
 
         let Subscription {
-            inner,
+            subscription,
             context,
             stream_ended,
             snapshot_ended,
-            snapshot_end_fn,
-            response_message_ids,
             ..
         } = this;
+        // Drain the BroadcastStream synchronously while items are ready, so
+        // skipped frames don't re-yield to the executor between
+        // immediately-available items.
+        // Lag is converted to an in-band gap notice inside `poll_next_routed`
+        // (#779); the Notice arm below delivers it.
         loop {
-            match inner {
-                SubscriptionInner::WithDecoder { subscription, decoder } => {
-                    // Drain the BroadcastStream synchronously while items are
-                    // ready, so skipped frames don't re-yield to the executor
-                    // between immediately-available items.
-                    // Lag is converted to an in-band gap notice inside
-                    // `poll_next_routed` (#779); the Notice arm below delivers it.
-                    let routed = match subscription.poll_next_routed(cx) {
-                        Poll::Ready(Some(item)) => item,
-                        Poll::Ready(None) => return Poll::Ready(None),
-                        Poll::Pending => return Poll::Pending,
-                    };
+            let routed = match subscription.poll_next_routed(cx) {
+                Poll::Ready(Some(item)) => item,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            };
 
-                    match routed {
-                        RoutedItem::Response(message) => {
-                            if is_undeclared(response_message_ids, &message) {
-                                log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
-                                continue;
+            match routed {
+                RoutedItem::Response(message) => {
+                    if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) {
+                        log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
+                        continue;
+                    }
+                    match T::decode(context, &message) {
+                        Ok(val) => {
+                            if val.is_snapshot_end() {
+                                snapshot_ended.store(true, Ordering::Relaxed);
                             }
-                            match decoder(context, &message) {
-                                Ok(val) => {
-                                    if snapshot_end_fn.is_some_and(|is_end| is_end(&val)) {
-                                        snapshot_ended.store(true, Ordering::Relaxed);
-                                    }
-                                    return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
-                                }
-                                Err(Error::EndOfStream) => {
-                                    stream_ended.store(true, Ordering::Relaxed);
-                                    return Poll::Ready(None);
-                                }
-                                Err(err) => {
-                                    stream_ended.store(true, Ordering::Relaxed);
-                                    return Poll::Ready(Some(Err(err)));
-                                }
-                            }
+                            return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
                         }
-                        RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
-                        RoutedItem::Error(Error::EndOfStream) => {
+                        Err(Error::EndOfStream) => {
                             stream_ended.store(true, Ordering::Relaxed);
                             return Poll::Ready(None);
                         }
-                        RoutedItem::Error(e) => {
+                        Err(err) => {
                             stream_ended.store(true, Ordering::Relaxed);
-                            return Poll::Ready(Some(Err(e)));
+                            return Poll::Ready(Some(Err(err)));
                         }
                     }
                 }
-                SubscriptionInner::PreDecoded { receiver } => {
-                    return match receiver.poll_recv(cx) {
-                        Poll::Ready(Some(Ok(t))) => Poll::Ready(Some(Ok(SubscriptionItem::Data(t)))),
-                        Poll::Ready(Some(Err(e))) => {
-                            stream_ended.store(true, Ordering::Relaxed);
-                            Poll::Ready(Some(Err(e)))
-                        }
-                        Poll::Ready(None) => Poll::Ready(None),
-                        Poll::Pending => Poll::Pending,
-                    };
+                RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
+                RoutedItem::Error(Error::EndOfStream) => {
+                    stream_ended.store(true, Ordering::Relaxed);
+                    return Poll::Ready(None);
+                }
+                RoutedItem::Error(e) => {
+                    stream_ended.store(true, Ordering::Relaxed);
+                    return Poll::Ready(Some(Err(e)));
                 }
             }
         }
     }
 }
 
-impl<T> Subscription<T> {
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T>> Subscription<T> {
     /// Cancel the subscription
     pub async fn cancel(&self) {
         // Snapshot subscriptions self-terminate after the snapshot-end sentinel;
@@ -445,18 +337,16 @@ impl<T> Subscription<T> {
 
         self.cancelled.store(true, Ordering::Relaxed);
 
-        if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
-            let id = self.request_id.or(self.order_id);
-            if let Ok(message) = cancel_fn(self.context.server_version, id, Some(&self.context)) {
-                if let Err(e) = message_bus.send_message(message).await {
-                    log_cancel_error("subscription", &e);
-                }
+        let id = self.request_id.or(self.order_id);
+        if let Ok(message) = T::cancel_message(self.context.server_version, id, Some(&self.context)) {
+            if let Err(e) = self.message_bus.send_message(message).await {
+                log_cancel_error("subscription", &e);
             }
         }
     }
 }
 
-impl<T> Drop for Subscription<T> {
+impl<T: StreamDecoder<T>> Drop for Subscription<T> {
     fn drop(&mut self) {
         debug!("dropping async subscription");
 
@@ -472,20 +362,17 @@ impl<T> Drop for Subscription<T> {
 
         self.cancelled.store(true, Ordering::Relaxed);
 
-        // Try to send cancel message if we have the necessary components
-        if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
-            let message_bus = message_bus.clone();
-            let id = self.request_id.or(self.order_id);
-            let context = self.context.clone();
-
-            if let Ok(message) = cancel_fn(context.server_version, id, Some(&context)) {
-                // Drop can't be async; spawn the cancel send so it actually goes out.
-                tokio::spawn(async move {
-                    if let Err(e) = message_bus.send_message(message).await {
-                        log_cancel_error("subscription", &e);
-                    }
-                });
-            }
+        // Decoders without a cancel message (the `StreamDecoder` default) return
+        // `Err(NotImplemented)`, so nothing is sent for them.
+        let id = self.request_id.or(self.order_id);
+        if let Ok(message) = T::cancel_message(self.context.server_version, id, Some(&self.context)) {
+            let message_bus = self.message_bus.clone();
+            // Drop can't be async; spawn the cancel send so it actually goes out.
+            tokio::spawn(async move {
+                if let Err(e) = message_bus.send_message(message).await {
+                    log_cancel_error("subscription", &e);
+                }
+            });
         }
     }
 }
@@ -532,9 +419,10 @@ where
 /// ```no_run
 /// # use ibapi::subscriptions::{Subscription, SubscriptionItemStreamExt};
 /// # use futures::StreamExt;
-/// # async fn run(subscription: Subscription<i32>) {
+/// # use ibapi::market_data::realtime::TickTypes;
+/// # async fn run(subscription: Subscription<TickTypes>) {
 /// let mut data = subscription.filter_data();
-/// while let Some(result) = data.next().await { /* result: Result<i32, _> */ }
+/// while let Some(result) = data.next().await { /* result: Result<TickTypes, _> */ }
 /// # }
 /// ```
 pub trait SubscriptionItemStreamExt: Stream + Sized {

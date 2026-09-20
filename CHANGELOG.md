@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The async `Subscription::new(receiver)` constructor, which wrapped a channel of already-decoded items and had no cancel, no clone (it panicked), and no bus behind it. Every async `Subscription<T>` is now built by the typed `Client` methods and decodes through `T` directly, as the blocking one does, so `T` must be one of the crate's stream item types; `Subscription::clone()` no longer has a panicking path. See `docs/migration-4.0.md` §12 (#823).
+
 ### Fixed
 
 - In-flight subscriptions and one-shot requests now fail with `Error::ConnectionReset` the moment the socket read fails, on both clients. Previously the channel reset ran only after the reconnect finished (up to 7.5 minutes of backoff at the defaults, forever with `reconnect_forever`), and a request registered between the session being marked connected and that late reset was wiped, its replies orphaned (#816).

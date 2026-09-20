@@ -504,20 +504,20 @@ impl StreamDecoder<NoticeTestData> for NoticeTestData {
 async fn make_request_subscription(request_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
     let internal = bus.send_request(request_id, vec![]).await.unwrap();
-    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), Some(request_id), None, DecoderContext::default());
+    let sub = Subscription::new_from_internal(internal, bus.clone(), Some(request_id), None, DecoderContext::default());
     (stream, bus, sub)
 }
 
 async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
     let internal = bus.send_order_request(order_id, vec![]).await.unwrap();
-    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), None, Some(order_id), DecoderContext::default());
+    let sub = Subscription::new_from_internal(internal, bus.clone(), None, Some(order_id), DecoderContext::default());
     (stream, bus, sub)
 }
 
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
-async fn next_item<T: Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
+async fn next_item<T: StreamDecoder<T> + Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
     tokio::time::timeout(TICK, sub.next())
         .await
         .expect("subscription got no item before timeout")
@@ -557,7 +557,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, vec![]).await.unwrap();
-    let mut subscription = Subscription::new_from_internal::<TickTypes>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let mut subscription = Subscription::new_from_internal(internal, bus.clone(), Some(42), None, DecoderContext::default());
     let computation = tick_option_computation()
         .request_id(42)
         .tick_type(TickType::DelayedModelOption as i32)
@@ -601,7 +601,7 @@ async fn test_subscription_317_preserves_later_market_depth() {
 
     let (stream, bus) = make_bus();
     let internal = bus.send_request(42, vec![]).await.unwrap();
-    let mut subscription = Subscription::new_from_internal::<MarketDepths>(internal, bus.clone(), Some(42), None, DecoderContext::default());
+    let mut subscription = Subscription::new_from_internal(internal, bus.clone(), Some(42), None, DecoderContext::default());
     let row = market_depth_response()
         .request_id(42)
         .position(0)

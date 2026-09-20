@@ -1,56 +1,96 @@
 use super::*;
-use crate::market_data::realtime::Bar;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
+use crate::messages::{encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItem;
 use crate::subscriptions::SubscriptionItemStreamExt;
 use futures::StreamExt;
-use time::OffsetDateTime;
-use tokio::sync::{broadcast, mpsc};
+use std::time::Duration;
+use tokio::sync::broadcast;
 
-#[tokio::test]
-async fn test_subscription_with_decoder() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        "1|9000|20241231 12:00:00|100.5|101.0|100.0|100.25|1000|100.2|5|0".to_string(),
-    ]));
+// ---- Test decoders --------------------------------------------------------
+//
+// `Subscription<T>` dispatches statically on `T: StreamDecoder<T>`, so each
+// decode behavior under test is a type. All declare `TickPrice` (message id 1);
+// `int_frame` builds a frame the declared-id filter lets through.
 
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
+/// Decodes the integer at field 1. The value `-1` marks a snapshot-end
+/// sentinel (mirrors `TickTypes::SnapshotEnd`).
+#[derive(Debug, PartialEq)]
+struct IntItem(i32);
 
-    let subscription: Subscription<Bar> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| {
-            let bar = Bar {
-                date: OffsetDateTime::now_utc(),
-                open: 100.5,
-                high: 101.0,
-                low: 100.0,
-                close: 100.25,
-                volume: 1000.0,
-                wap: 100.2,
-                count: 5,
-            };
-            Ok(bar)
-        },
-        &[IncomingMessages::TickPrice],
-        Some(9000),
-        None,
-        DecoderContext::default(),
-    );
+impl StreamDecoder<IntItem> for IntItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
-    // Send a test message
-    let msg = ResponseMessage::from("1\09000\020241231 12:00:00\0100.5\0101.0\0100.0\0100.25\01000\0100.2\05\00");
-    tx.send(msg.into()).unwrap();
+    fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<IntItem, Error> {
+        Ok(IntItem(msg.peek_int(1)?))
+    }
 
-    // Test that we can receive the decoded message
-    let mut sub = subscription;
-    let Some(Ok(SubscriptionItem::Data(bar))) = sub.next().await else {
-        panic!("expected Data");
-    };
-    assert_eq!(bar.open, 100.5);
-    assert_eq!(bar.high, 101.0);
+    fn is_snapshot_end(&self) -> bool {
+        self.0 == -1
+    }
+}
+
+/// Like `IntItem`, with a cancel message, so cancel and drop have something to send.
+#[derive(Debug)]
+struct CancellableItem;
+
+impl StreamDecoder<CancellableItem> for CancellableItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<CancellableItem, Error> {
+        Ok(CancellableItem)
+    }
+
+    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        Ok(cancel_frame())
+    }
+}
+
+/// Panics if `decode` runs: for tests whose frames must never reach the decoder.
+#[derive(Debug)]
+struct NeverDecodes;
+
+impl StreamDecoder<NeverDecodes> for NeverDecodes {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<NeverDecodes, Error> {
+        unreachable!("no Response frames should reach this decoder")
+    }
+}
+
+/// Every frame fails to decode.
+#[derive(Debug)]
+struct DecodeError;
+
+impl StreamDecoder<DecodeError> for DecodeError {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DecodeError, Error> {
+        Err(Error::Simple("decode error".into()))
+    }
+}
+
+/// Every frame ends the stream.
+#[derive(Debug)]
+struct EndOfStreamItem;
+
+impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndOfStreamItem, Error> {
+        Err(Error::EndOfStream)
+    }
+}
+
+fn cancel_frame() -> Vec<u8> {
+    encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])
+}
+
+/// Field 0 is the message id (`TickPrice`, matching every decoder above);
+/// the payload `IntItem` reads sits at field 1.
+fn int_frame(value: i32) -> RoutedItem {
+    RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
 }
 
 /// A request-less notice for tests (no error_time / advanced-reject payload).
@@ -61,6 +101,31 @@ fn test_notice(code: i32, message: &str) -> Notice {
         message: message.into(),
         error_time: None,
         advanced_order_reject_json: String::new(),
+    }
+}
+
+/// Build a `Subscription<T>` over a fresh broadcast channel with no request or
+/// order id and a default context. Returns the sender so the test can feed it.
+fn subscription<T: StreamDecoder<T>>(message_bus: Arc<MessageBusStub>) -> (Subscription<T>, broadcast::Sender<RoutedItem>) {
+    let (tx, rx) = broadcast::channel(100);
+    let internal = AsyncInternalSubscription::new(rx);
+    (
+        Subscription::new_from_internal(internal, message_bus, None, None, DecoderContext::default()),
+        tx,
+    )
+}
+
+// ---- Stream contract --------------------------------------------------------
+
+#[tokio::test]
+async fn test_subscription_decodes_through_stream_decoder() {
+    let (mut sub, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
+
+    tx.send(int_frame(42)).unwrap();
+
+    match sub.next().await {
+        Some(Ok(SubscriptionItem::Data(item))) => assert_eq!(item, IntItem(42)),
+        other => panic!("expected Data, got {other:?}"),
     }
 }
 
@@ -77,15 +142,8 @@ async fn test_subscription_lag_yields_gap_notice_then_items() {
 
     // Capacity 2 with 4 sends: the 2 oldest frames were evicted.
     let internal = AsyncInternalSubscription::new(rx);
-    let mut subscription: Subscription<Bar> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| unreachable!("no Response frames in this test"),
-        &[IncomingMessages::TickPrice],
-        Some(9000),
-        None,
-        DecoderContext::default(),
-    );
+    let mut subscription: Subscription<NeverDecodes> =
+        Subscription::new_from_internal(internal, message_bus, Some(9000), None, DecoderContext::default());
 
     match subscription.next().await {
         Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n, crate::messages::subscription_lag_notice(2)),
@@ -100,56 +158,10 @@ async fn test_subscription_lag_yields_gap_notice_then_items() {
 }
 
 #[tokio::test]
-async fn test_subscription_new_from_receiver() {
-    let (tx, rx) = mpsc::unbounded_channel();
-
-    let mut subscription = Subscription::new(rx);
-
-    // Send test data
-    tx.send(Ok("test".to_string())).unwrap();
-
-    assert!(matches!(
-        subscription.next().await,
-        Some(Ok(SubscriptionItem::Data(ref s))) if s == "test"
-    ));
-}
-
-#[tokio::test]
-async fn test_pre_decoded_error_terminates_stream() {
-    // Regression: the PreDecoded arm of `next()` previously did not flip
-    // `stream_ended` when surfacing an error, so subsequent calls would
-    // re-poll the receiver instead of returning `None` deterministically.
-    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let mut subscription = Subscription::new(rx);
-
-    tx.send(Err(Error::ConnectionReset)).unwrap();
-    tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
-
-    let first = subscription.next().await;
-    assert!(matches!(first, Some(Err(Error::ConnectionReset))));
-
-    let second = subscription.next().await;
-    assert!(second.is_none(), "stream must terminate after a terminal error");
-}
-
-#[tokio::test]
 async fn test_routed_item_error_surfaces_through_async_subscription() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
-
-    // Decoder would succeed if it ran — but the channel emits a terminal
-    // RoutedItem::Error that the consumer should surface directly without
-    // ever invoking the decoder.
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Ok("should-not-be-called".to_string()),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
+    // The channel emits a terminal RoutedItem::Error that the consumer must
+    // surface directly without ever invoking the decoder.
+    let (mut subscription, tx) = subscription::<NeverDecodes>(Arc::new(MessageBusStub::default()));
 
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
@@ -159,58 +171,25 @@ async fn test_routed_item_error_surfaces_through_async_subscription() {
 
 #[tokio::test]
 async fn test_routed_item_notice_skipped_then_response_delivered() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
+    let (subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
 
-    let subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Ok("data".to_string()),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
-
-    // PR 2a never emits Notice from the dispatcher, but the receiver-side
-    // contract is that notices are silently consumed and the next item is
-    // delivered. Lock that contract before PR 3 starts emitting them.
-    tx.send(RoutedItem::Notice(Notice {
-        request_id: None,
-        code: 2104,
-        message: "Market data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }))
-    .unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
+    // The receiver-side contract: notices are consumed by `filter_data` and
+    // the next data item is delivered.
+    tx.send(RoutedItem::Notice(test_notice(2104, "Market data farm OK"))).unwrap();
+    tx.send(int_frame(7)).unwrap();
 
     // First item via the raw Stream is the Notice (passes through);
     // filter_data() drops it and yields the Data.
     let mut data = subscription.filter_data();
-    assert!(matches!(data.next().await, Some(Ok(ref s)) if s == "data"));
+    assert!(matches!(data.next().await, Some(Ok(IntItem(7)))));
 }
 
 #[tokio::test]
 async fn test_subscription_next_with_error() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
-
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Err(Error::Simple("decode error".into())),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
+    let (mut subscription, tx) = subscription::<DecodeError>(Arc::new(MessageBusStub::default()));
 
     // Send a message that will trigger the error
-    let msg = ResponseMessage::from("test\0");
-    tx.send(msg.into()).unwrap();
+    tx.send(int_frame(1)).unwrap();
 
     let result = subscription.next().await;
     assert!(result.is_some());
@@ -219,23 +198,10 @@ async fn test_subscription_next_with_error() {
 
 #[tokio::test]
 async fn test_subscription_next_end_of_stream() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
-
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Err(Error::EndOfStream),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
+    let (mut subscription, tx) = subscription::<EndOfStreamItem>(Arc::new(MessageBusStub::default()));
 
     // Send a message that will trigger end of stream
-    let msg = ResponseMessage::from("test\0");
-    tx.send(msg.into()).unwrap();
+    tx.send(int_frame(1)).unwrap();
 
     let result = subscription.next().await;
     assert!(result.is_none());
@@ -243,45 +209,44 @@ async fn test_subscription_next_end_of_stream() {
 
 #[tokio::test]
 async fn test_subscription_no_retries_after_end_of_stream() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
+    use std::sync::atomic::AtomicUsize;
 
-    let call_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let call_count_clone = call_count.clone();
+    static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        move |_context, _msg| {
-            let n = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    /// First frame ends the stream; any later call is a stray that must not happen.
+    #[derive(Debug)]
+    struct EndThenStray;
+
+    impl StreamDecoder<EndThenStray> for EndThenStray {
+        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndThenStray, Error> {
+            let n = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
             if n == 0 {
                 Err(Error::EndOfStream)
             } else {
                 Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
             }
-        },
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
+        }
+    }
+
+    let (mut subscription, tx) = subscription::<EndThenStray>(Arc::new(MessageBusStub::default()));
 
     // First message triggers EndOfStream
-    tx.send(ResponseMessage::from("end\0").into()).unwrap();
+    tx.send(int_frame(1)).unwrap();
     let result = subscription.next().await;
     assert!(result.is_none());
 
     // Send stray messages after stream ended
-    tx.send(ResponseMessage::from("stray1\0").into()).unwrap();
-    tx.send(ResponseMessage::from("stray2\0").into()).unwrap();
+    tx.send(int_frame(2)).unwrap();
+    tx.send(int_frame(3)).unwrap();
 
     // Subsequent calls should return None immediately without invoking decoder
     let result = subscription.next().await;
     assert!(result.is_none());
 
     // Decoder should have been called only once (for the EndOfStream message)
-    assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test]
@@ -308,7 +273,7 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
     let internal = AsyncInternalSubscription::new(rx);
 
     let mut subscription: Subscription<DeclaresTickPrice> =
-        Subscription::new_from_internal::<DeclaresTickPrice>(internal, message_bus, Some(1), None, DecoderContext::default());
+        Subscription::new_from_internal(internal, message_bus, Some(1), None, DecoderContext::default());
 
     // Many undeclared frames, then one the decoder declares.
     for _ in 0..20 {
@@ -328,47 +293,95 @@ async fn test_subscription_skips_undeclared_messages_without_retry_limit() {
 }
 
 #[tokio::test]
+async fn test_stream_yields_error_then_ends() {
+    // A terminal error flips `stream_ended`, so later polls return `None`
+    // instead of re-polling the channel for the queued item behind it.
+    let (mut subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
+
+    tx.send(int_frame(1)).unwrap();
+    tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+    tx.send(int_frame(2)).unwrap();
+
+    let first = subscription.next().await;
+    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(IntItem(1))))));
+
+    let second = subscription.next().await;
+    assert!(matches!(second, Some(Err(Error::ConnectionReset))));
+
+    let third = subscription.next().await;
+    assert!(third.is_none(), "stream must end after a terminal error");
+}
+
+/// Exercises `impl Stream for Subscription<T>` end-to-end via `StreamExt`:
+/// one-shot `next().await` and combinator chaining on `&mut subscription`.
+#[tokio::test]
+async fn subscription_impls_stream() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let (tx, rx) = broadcast::channel::<RoutedItem>(16);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    let mut subscription: Subscription<IntItem> = Subscription::new_from_internal(internal, message_bus, Some(1), None, DecoderContext::default());
+
+    tx.send(int_frame(10)).unwrap();
+    tx.send(int_frame(20)).unwrap();
+    tx.send(int_frame(30)).unwrap();
+
+    // One-shot read via StreamExt::next.
+    let first = subscription.next().await;
+    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(IntItem(10))))));
+
+    // Combinator chain on &mut subscription (subscription stays usable after).
+    let next_two: Vec<_> = (&mut subscription).take(2).collect().await;
+    assert_eq!(next_two.len(), 2);
+    assert!(matches!(next_two[0], Ok(SubscriptionItem::Data(IntItem(20)))));
+    assert!(matches!(next_two[1], Ok(SubscriptionItem::Data(IntItem(30)))));
+}
+
+// ---- Cancel, clone, drop ----------------------------------------------------
+
+#[tokio::test]
 async fn test_subscription_cancel() {
     let message_bus = Arc::new(MessageBusStub::default());
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    // Mock cancel function
-    let cancel_fn: CancelFn =
-        Box::new(|_version, _id, _ctx| Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])));
+    let subscription: Subscription<CancellableItem> =
+        Subscription::new_from_internal(internal, message_bus.clone(), Some(123), None, DecoderContext::default());
 
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus.clone(),
-        |_context, _msg| Ok("test".to_string()),
-        &[IncomingMessages::NotValid],
-        Some(123),
-        None,
-        DecoderContext::default(),
-    );
-    subscription.cancel_fn = Some(Arc::new(cancel_fn));
-
-    // Cancel the subscription
+    // Cancel the subscription: the decoder's cancel message goes to the bus.
     subscription.cancel().await;
-
-    // Verify cancelled flag is set
     assert!(subscription.cancelled.load(Ordering::Relaxed));
+    assert_eq!(message_bus.request_messages(), vec![cancel_frame()]);
 
-    // Cancel again should be a no-op
+    // Cancel again is a no-op.
     subscription.cancel().await;
+    assert_eq!(message_bus.request_messages().len(), 1);
+}
+
+#[tokio::test]
+async fn test_subscription_cancel_without_cancel_message_sends_nothing() {
+    // `StreamDecoder::cancel_message` defaults to `Err(NotImplemented)`.
+    let message_bus = Arc::new(MessageBusStub::default());
+    let (_tx, rx) = broadcast::channel(100);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    let subscription: Subscription<IntItem> =
+        Subscription::new_from_internal(internal, message_bus.clone(), Some(123), None, DecoderContext::default());
+
+    subscription.cancel().await;
+    assert!(subscription.cancelled.load(Ordering::Relaxed));
+    assert!(message_bus.request_messages().is_empty());
 }
 
 #[tokio::test]
 async fn test_subscription_clone() {
     let message_bus = Arc::new(MessageBusStub::default());
-    let (_tx, rx) = broadcast::channel(100);
+    let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<String> = Subscription::with_decoder(
+    let mut subscription: Subscription<IntItem> = Subscription::new_from_internal(
         internal,
         message_bus,
-        |_context, _msg| Ok("test".to_string()),
-        &[IncomingMessages::NotValid],
         Some(456),
         Some(789),
         DecoderContext::default()
@@ -376,10 +389,15 @@ async fn test_subscription_clone() {
             .with_request_type(OutgoingMessages::RequestPositions),
     );
 
-    let cloned = subscription.clone();
+    let mut cloned = subscription.clone();
     assert_eq!(cloned.request_id, Some(456));
     assert_eq!(cloned.order_id, Some(789));
     assert!(cloned.context.is_smart_depth);
+
+    // Both clones receive frames sent after the clone; `stream_ended` is per clone.
+    tx.send(int_frame(5)).unwrap();
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(IntItem(5))))));
+    assert!(matches!(cloned.next().await, Some(Ok(SubscriptionItem::Data(IntItem(5))))));
 }
 
 #[tokio::test]
@@ -388,36 +406,15 @@ async fn test_subscription_drop_with_cancel() {
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    // Mock cancel function
-    let cancel_fn: CancelFn =
-        Box::new(|_version, _id, _ctx| Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])));
-
     {
-        let mut subscription: Subscription<String> = Subscription::with_decoder(
-            internal,
-            message_bus.clone(),
-            |_context, _msg| Ok("test".to_string()),
-            &[IncomingMessages::NotValid],
-            Some(999),
-            None,
-            DecoderContext::default(),
-        );
-        subscription.cancel_fn = Some(Arc::new(cancel_fn));
-        // Subscription will be dropped here and should send cancel message
+        let _subscription: Subscription<CancellableItem> =
+            Subscription::new_from_internal(internal, message_bus.clone(), Some(999), None, DecoderContext::default());
+        // Dropped here: the cancel send is spawned onto the runtime.
     }
 
-    // Give async task time to execute
-    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-}
-
-#[tokio::test]
-#[should_panic(expected = "Cannot clone pre-decoded subscriptions")]
-async fn test_subscription_inner_clone_panic() {
-    let (_tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let subscription = Subscription::new(rx);
-
-    // This should panic because PreDecoded subscriptions can't be cloned
-    let _ = subscription.inner.clone();
+    // Give the spawned task time to execute.
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    assert_eq!(message_bus.request_messages(), vec![cancel_frame()]);
 }
 
 #[tokio::test]
@@ -430,75 +427,56 @@ async fn test_subscription_with_context() {
         .with_smart_depth(true)
         .with_request_type(OutgoingMessages::RequestMarketDepth);
 
-    let subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Ok("test".to_string()),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        context.clone(),
-    );
+    let subscription: Subscription<IntItem> = Subscription::new_from_internal(internal, message_bus, None, None, context.clone());
 
     assert_eq!(subscription.context, context);
 }
 
 #[tokio::test]
 async fn test_subscription_new_from_internal_simple() {
-    // A self-decoding item type (decoder type == item type), like every
-    // production decoder.
-    #[derive(Debug)]
-    struct TestItem;
-
-    impl StreamDecoder<TestItem> for TestItem {
-        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
-
-        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<TestItem, Error> {
-            Ok(TestItem)
-        }
-
-        fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-            Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[]))
-        }
-    }
-
     let message_bus = Arc::new(MessageBusStub::default());
     let (_tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<TestItem> = Subscription::new_from_internal_simple::<TestItem>(internal, message_bus, DecoderContext::default());
+    let subscription: Subscription<CancellableItem> =
+        Subscription::new_from_internal_simple(internal, message_bus.clone(), DecoderContext::default());
 
-    assert!(subscription.cancel_fn.is_some());
+    assert_eq!(subscription.request_id(), None);
+    assert_eq!(subscription.order_id, None);
+
+    // No id, but the decoder's cancel message is still sent.
+    subscription.cancel().await;
+    assert_eq!(message_bus.request_messages(), vec![cancel_frame()]);
 }
+
+// ---- filter_data ------------------------------------------------------------
 
 #[tokio::test]
 async fn test_data_stream_collects_data_items() {
-    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let subscription = Subscription::new(rx);
+    let (subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
 
-    tx.send(Ok("a".to_string())).unwrap();
-    tx.send(Ok("b".to_string())).unwrap();
-    drop(tx);
+    tx.send(int_frame(1)).unwrap();
+    tx.send(int_frame(2)).unwrap();
+    drop(tx); // close the channel so the stream terminates.
 
     let collected: Vec<_> = subscription.filter_data().collect().await;
     assert_eq!(collected.len(), 2);
-    assert_eq!(collected[0].as_ref().unwrap(), "a");
-    assert_eq!(collected[1].as_ref().unwrap(), "b");
+    assert_eq!(collected[0].as_ref().unwrap(), &IntItem(1));
+    assert_eq!(collected[1].as_ref().unwrap(), &IntItem(2));
 }
 
 #[tokio::test]
 async fn test_data_stream_yields_error_then_ends() {
-    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let subscription = Subscription::new(rx);
+    let (subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
 
-    tx.send(Ok("first".to_string())).unwrap();
-    tx.send(Err(Error::ConnectionReset)).unwrap();
-    tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
+    tx.send(int_frame(1)).unwrap();
+    tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+    tx.send(int_frame(2)).unwrap();
 
     let mut stream = subscription.filter_data();
 
     let first = stream.next().await;
-    assert_eq!(first.unwrap().unwrap(), "first");
+    assert_eq!(first.unwrap().unwrap(), IntItem(1));
 
     let second = stream.next().await;
     assert!(matches!(second, Some(Err(Error::ConnectionReset))));
@@ -509,63 +487,25 @@ async fn test_data_stream_yields_error_then_ends() {
 
 #[tokio::test]
 async fn test_data_stream_filters_notices() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
+    let (subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
 
-    let subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Ok("data".to_string()),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
-
-    tx.send(RoutedItem::Notice(Notice {
-        request_id: None,
-        code: 2104,
-        message: "Market data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }))
-    .unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
+    tx.send(RoutedItem::Notice(test_notice(2104, "Market data farm OK"))).unwrap();
+    tx.send(int_frame(3)).unwrap();
     drop(tx);
 
     let collected: Vec<_> = subscription.filter_data().collect().await;
     assert_eq!(collected.len(), 1);
-    assert_eq!(collected[0].as_ref().unwrap(), "data");
+    assert_eq!(collected[0].as_ref().unwrap(), &IntItem(3));
 }
 
-/// PR 3: dispatcher emits `RoutedItem::Notice`; `Subscription<T>::next()`
+/// The dispatcher emits `RoutedItem::Notice`; `Subscription<T>::next()`
 /// surfaces it as `SubscriptionItem::Notice` without terminating the stream.
 #[tokio::test]
 async fn test_routed_item_notice_surfaces_as_subscription_item() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
+    let (mut subscription, tx) = subscription::<IntItem>(Arc::new(MessageBusStub::default()));
 
-    let mut subscription: Subscription<String> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_context, _msg| Ok("data".to_string()),
-        &[IncomingMessages::NotValid],
-        None,
-        None,
-        DecoderContext::default(),
-    );
-
-    tx.send(RoutedItem::Notice(Notice {
-        request_id: None,
-        code: 2104,
-        message: "Market data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }))
-    .unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
+    tx.send(RoutedItem::Notice(test_notice(2104, "Market data farm OK"))).unwrap();
+    tx.send(int_frame(3)).unwrap();
 
     match subscription.next().await {
         Some(Ok(SubscriptionItem::Notice(n))) => {
@@ -577,62 +517,6 @@ async fn test_routed_item_notice_surfaces_as_subscription_item() {
     assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))));
 }
 
-#[tokio::test]
-async fn test_stream_yields_error_then_ends() {
-    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
-    let mut subscription = Subscription::new(rx);
-
-    tx.send(Ok("first".to_string())).unwrap();
-    tx.send(Err(Error::ConnectionReset)).unwrap();
-    tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
-
-    let stream = &mut subscription;
-
-    let first = stream.next().await;
-    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(ref s))) if s == "first"));
-
-    let second = stream.next().await;
-    assert!(matches!(second, Some(Err(Error::ConnectionReset))));
-
-    let third = stream.next().await;
-    assert!(third.is_none(), "stream must end after a terminal error");
-}
-
-// ---- Stream-impl / SubscriptionItemStreamExt regression tests (Commit 1) ----
-
-/// Exercises `impl Stream for Subscription<T>` end-to-end via `StreamExt`:
-/// one-shot `next().await` and combinator chaining on `&mut subscription`.
-#[tokio::test]
-async fn subscription_impls_stream() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel::<RoutedItem>(16);
-    let internal = AsyncInternalSubscription::new(rx);
-
-    let mut subscription: Subscription<i32> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_ctx, msg| Ok(msg.peek_int(1).unwrap_or_default()),
-        &[IncomingMessages::TickPrice],
-        Some(1),
-        None,
-        DecoderContext::default(),
-    );
-
-    tx.send(RoutedItem::Response(ResponseMessage::from("1\010\0"))).unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("1\020\0"))).unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("1\030\0"))).unwrap();
-
-    // One-shot read via StreamExt::next.
-    let first = subscription.next().await;
-    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(10)))));
-
-    // Combinator chain on &mut subscription (subscription stays usable after).
-    let next_two: Vec<_> = (&mut subscription).take(2).collect().await;
-    assert_eq!(next_two.len(), 2);
-    assert!(matches!(next_two[0], Ok(SubscriptionItem::Data(20))));
-    assert!(matches!(next_two[1], Ok(SubscriptionItem::Data(30))));
-}
-
 /// `SubscriptionItemStreamExt::filter_data` drops `Notice` items (logged) and
 /// yields the underlying `Result<T, Error>`. Errors must still propagate.
 #[tokio::test]
@@ -641,125 +525,66 @@ async fn filter_data_stream_drops_notices() {
     let (tx, rx) = broadcast::channel::<RoutedItem>(16);
     let internal = AsyncInternalSubscription::new(rx);
 
-    let subscription: Subscription<i32> = Subscription::with_decoder(
-        internal,
-        message_bus,
-        |_ctx, msg| Ok(msg.peek_int(1).unwrap_or_default()),
-        &[IncomingMessages::TickPrice],
-        Some(7),
-        None,
-        DecoderContext::default(),
-    );
+    let subscription: Subscription<IntItem> = Subscription::new_from_internal(internal, message_bus, Some(7), None, DecoderContext::default());
 
-    tx.send(RoutedItem::Response(ResponseMessage::from("1\011\0"))).unwrap();
-    tx.send(RoutedItem::Notice(Notice {
-        request_id: None,
-        code: 2104,
-        message: "data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }))
-    .unwrap();
-    tx.send(RoutedItem::Response(ResponseMessage::from("1\013\0"))).unwrap();
+    tx.send(int_frame(11)).unwrap();
+    tx.send(RoutedItem::Notice(test_notice(2104, "data farm OK"))).unwrap();
+    tx.send(int_frame(13)).unwrap();
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
     let mut data = subscription.filter_data();
-    assert!(matches!(data.next().await, Some(Ok(11))));
+    assert!(matches!(data.next().await, Some(Ok(IntItem(11)))));
     // Notice is filtered (logged at warn!) — the next yielded item is the 13 payload.
-    assert!(matches!(data.next().await, Some(Ok(13))));
+    assert!(matches!(data.next().await, Some(Ok(IntItem(13)))));
     // Errors still propagate through filter_data.
     assert!(matches!(data.next().await, Some(Err(Error::ConnectionReset))));
     // After a terminal error, the stream is exhausted.
     assert!(data.next().await.is_none());
 }
 
-/// The `PreDecoded` arm of `Subscription` is polled via
-/// `mpsc::UnboundedReceiver::poll_recv` inside the `Stream` impl — exercise
-/// it explicitly so the dispatch arm stays covered.
-#[tokio::test]
-async fn pre_decoded_subscription_polls() {
-    let (tx, rx) = mpsc::unbounded_channel::<Result<u32, Error>>();
-    let mut subscription: Subscription<u32> = Subscription::new(rx);
-
-    tx.send(Ok(1)).unwrap();
-    tx.send(Ok(2)).unwrap();
-    drop(tx); // close the channel so the stream eventually terminates.
-
-    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(1)))));
-    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(2)))));
-    // After the sender drops, the stream is exhausted.
-    assert!(subscription.next().await.is_none());
-}
-
 // --- collect_for / collect_until ----------------------------------------
 
-use std::time::Duration;
-
-/// Test decoder for the collect tests: the value `-1` marks a snapshot-end
-/// sentinel (mirrors `TickTypes::SnapshotEnd`).
-#[derive(Debug, PartialEq)]
-struct CollectItem(i32);
-
-impl StreamDecoder<CollectItem> for CollectItem {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
-
-    fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<CollectItem, Error> {
-        Ok(CollectItem(msg.peek_int(1)?))
-    }
-
-    fn is_snapshot_end(&self) -> bool {
-        self.0 == -1
-    }
-}
-
-/// Field 0 is the message id (`TickPrice`, matching `CollectItem`'s
-/// declaration); the payload the decoder reads sits at field 1.
-fn collect_data(value: i32) -> RoutedItem {
-    RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
-}
-
-/// Build a `Subscription<CollectItem>` pre-loaded with `items`. When `keep_open`
+/// Build a `Subscription<IntItem>` pre-loaded with `items`. When `keep_open`
 /// the broadcast sender is returned so the channel stays open (lets the timeout
 /// branch fire); otherwise it is dropped so the stream ends after draining.
-fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscription<CollectItem>, Option<broadcast::Sender<RoutedItem>>) {
+fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscription<IntItem>, Option<broadcast::Sender<RoutedItem>>) {
     let message_bus = Arc::new(MessageBusStub::default());
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
     for item in items {
         tx.send(item).unwrap();
     }
-    // `new_from_internal` rather than `with_decoder` so the declared-id filter is
-    // live here, matching the sync twin.
-    let sub = Subscription::<CollectItem>::new_from_internal::<CollectItem>(internal, message_bus, Some(1), None, DecoderContext::default());
+    let sub = Subscription::<IntItem>::new_from_internal(internal, message_bus, Some(1), None, DecoderContext::default());
     let keep = if keep_open { Some(tx) } else { None };
     (sub, keep)
 }
 
 #[tokio::test]
 async fn test_collect_for_stops_at_snapshot_end() {
-    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(-1), collect_data(30)], true);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), int_frame(-1), int_frame(30)], true);
 
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
-    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+    assert_eq!(collected, vec![IntItem(10), IntItem(20)]);
+    assert!(sub.snapshot_ended.load(Ordering::Relaxed));
 }
 
 #[tokio::test]
 async fn test_collect_until_stops_on_predicate() {
-    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(30), collect_data(40)], true);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), int_frame(30), int_frame(40)], true);
 
     let collected = sub.collect_until(Duration::from_secs(30), |items| items.len() >= 2).await;
 
-    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+    assert_eq!(collected, vec![IntItem(10), IntItem(20)]);
 }
 
 #[tokio::test]
 async fn test_collect_for_returns_prefix_on_terminal_error() {
-    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), RoutedItem::Error(Error::ConnectionReset), collect_data(20)], true);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), RoutedItem::Error(Error::ConnectionReset), int_frame(20)], true);
 
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
-    assert_eq!(collected, vec![CollectItem(10)]);
+    assert_eq!(collected, vec![IntItem(10)]);
 }
 
 #[tokio::test]
@@ -774,25 +599,19 @@ async fn test_collect_for_returns_empty_on_timeout() {
 
 #[tokio::test]
 async fn test_collect_for_drains_to_stream_end() {
-    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), collect_data(20), collect_data(30)], false);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), int_frame(30)], false);
 
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
-    assert_eq!(collected, vec![CollectItem(10), CollectItem(20), CollectItem(30)]);
+    assert_eq!(collected, vec![IntItem(10), IntItem(20), IntItem(30)]);
 }
 
 #[tokio::test]
 async fn test_collect_for_filters_notices() {
-    let notice = RoutedItem::Notice(Notice {
-        request_id: None,
-        code: 2104,
-        message: "Market data farm OK".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    });
-    let (mut sub, _keep) = collect_subscription(vec![collect_data(10), notice, collect_data(20)], false);
+    let notice = RoutedItem::Notice(test_notice(2104, "Market data farm OK"));
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), notice, int_frame(20)], false);
 
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
-    assert_eq!(collected, vec![CollectItem(10), CollectItem(20)]);
+    assert_eq!(collected, vec![IntItem(10), IntItem(20)]);
 }

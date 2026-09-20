@@ -52,7 +52,7 @@ impl<'a> RequestBuilder<'a> {
         let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id::<T>(self.request_id, message)
+            .send_with_request_id(self.request_id, message)
             .await
     }
 
@@ -63,7 +63,7 @@ impl<'a> RequestBuilder<'a> {
     {
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id::<T>(self.request_id, message)
+            .send_with_request_id(self.request_id, message)
             .await
     }
 
@@ -101,7 +101,7 @@ impl<'a> SharedRequestBuilder<'a> {
         let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_shared::<T>(self.message_type, message)
+            .send_shared(self.message_type, message)
             .await
     }
 
@@ -112,7 +112,7 @@ impl<'a> SharedRequestBuilder<'a> {
     {
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_shared::<T>(self.message_type, message)
+            .send_shared(self.message_type, message)
             .await
     }
 
@@ -221,14 +221,13 @@ where
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub async fn send_with_request_id<D>(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
+    pub async fn send_with_request_id(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
-        D: StreamDecoder<T> + 'static,
         T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_request(request_id, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
+        Ok(Subscription::new_from_internal(
             subscription,
             self.message_bus.clone(),
             Some(request_id),
@@ -238,14 +237,13 @@ where
     }
 
     /// Sends a shared request (no ID) and builds the subscription
-    pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error>
+    pub async fn send_shared(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
-        D: StreamDecoder<T> + 'static,
         T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
+        Ok(Subscription::new_from_internal(
             subscription,
             self.message_bus.clone(),
             None,
@@ -255,14 +253,13 @@ where
     }
 
     /// Sends an order request and builds the subscription
-    pub async fn send_order<D>(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
+    pub async fn send_order(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
-        D: StreamDecoder<T> + 'static,
         T: StreamDecoder<T>,
     {
         let subscription = self.message_bus.send_order_request(order_id, message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(
+        Ok(Subscription::new_from_internal(
             subscription,
             self.message_bus.clone(),
             None,
