@@ -1,6 +1,6 @@
 # Migration Guide: 2.x to 3.0
 
-Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md). Upgrading past 3.x? The 4.0 breaking changes are covered separately in [`migration-4.0.md`](migration-4.0.md).
+Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md). Upgrading past 3.x? The 4.x breaking changes are covered separately in [`migration-4.0.md`](migration-4.0.md).
 
 ## Highlights
 
