@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The blocking client's `SharesChannel` marker trait (`ibapi::subscriptions::SharesChannel`, `ibapi::client::blocking::SharesChannel`). It was inert: the only bound naming it was on a crate-private helper whose single caller already satisfied it. Its real function was to flag shared-channel subscriptions in rustdoc, and it marked `positions` and `news_bulletins` but not `account_updates` or the `open_orders` family, so an unmarked type read as safe for concurrent use when it was not. The hazards it could have flagged are gone with the shared-stream fixes in this release; what remains applies to both clients. Delete any bound or impl on it. See `docs/migration-4.0.md` §16 (#836).
+
 ### Fixed
 
 - Dropping one of several live subscriptions to the same shared stream (`positions`, `account_updates`, `news_bulletins`) no longer cancels the stream at TWS for the others. TWS keeps one such stream per client and its cancel carries no id, so both clients now count live subscriptions per request type and send the cancel only when the last one ends (#836).

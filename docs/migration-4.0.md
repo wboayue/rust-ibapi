@@ -21,6 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
+| unreleased | [§16](#16-the-blocking-clients-shareschannel-marker-trait-is-removed) |
 
 ## Breaking changes
 
@@ -449,6 +450,17 @@ let order = auction_limit(Action::Buy, 100.0, 50.0);
 
 `orders::builder::AuctionType` is removed in the same pass. It was public, had no caller anywhere in the crate, and its `to_strategy()` codes (`1` / `2` / `4`) matched no TWS auction field; its variants (`Opening` / `Closing` / `Volatility`) were not auction strategies. Nothing replaces it.
 
+### 16. The blocking client's `SharesChannel` marker trait is removed
+
+`SharesChannel` was an empty trait (`pub trait SharesChannel {}`) reachable as `ibapi::subscriptions::SharesChannel` and `ibapi::client::blocking::SharesChannel`, meant to tag blocking subscriptions that share a channel keyed by message type rather than by request ID. It was inert: the only bound naming it was on a crate-private helper whose single caller already satisfied it. Its real function was to flag those subscriptions in rustdoc, and as a flag it misled: it marked `positions` and `news_bulletins` but not `account_updates`, `open_orders`, `all_open_orders`, `auto_open_orders` or `completed_orders`, which share channels the same way, so an unmarked type read as safe for concurrent use when it was not. It also marked `Vec<NewsProvider>`, a one-shot result rather than a subscription. The async client never had it. The trait, its three impls and both re-exports are gone.
+
+What changes for compiling code:
+
+- `use ibapi::subscriptions::SharesChannel;` and `use ibapi::client::blocking::SharesChannel;` no longer resolve. Delete the import.
+- A downstream `impl SharesChannel for ...` or a `where Subscription<T>: SharesChannel` bound no longer compiles. Delete it; nothing in the crate depended on your impl, so nothing else needs to change.
+
+Nothing changes at runtime. The hazards the trait could have flagged are gone with the fixes in this release: on the blocking client, live subscriptions of the same shared type each receive the whole stream, as on the async client; and on both clients, dropping one no longer cancels the stream for the others. The requests that share a channel still do, on both clients, and their responses still cannot be attributed to the request that caused them - see [Multi-Threading](../README.md#multi-threading) in the README.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -484,7 +496,8 @@ No code changes required, but observable at runtime:
 13. Use `ibapi::orders::TimeInForce` everywhere (`ibapi::orders::builder::TimeInForce` is gone) and spell the variants "till": `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`; from the builder enum, `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` plus `.good_till_date(date)`. Rename `.good_till_cancel()` calls to `.good_till_canceled()`, add `GoodTillCrossing` and `Unknown(raw)` arms to exhaustive matches, and re-read any stored JSON — the field is the wire string now — see [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till).
 14. Replace `Action::from(s)`, `Rule80A::from(s)` and `OrderOpenClose::from(s)` with `s.parse()?`, and add an `Unknown(..)` arm to exhaustive matches on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` — see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
 15. Pass an `OcaType` to `OrderBuilder::oca_group` instead of an `i32`, drop the fourth argument from `auction_limit(..)` calls, remove any use of `orders::AuctionStrategy`, `Order::auction_strategy` or `orders::builder::AuctionType`, and replace hand-built `Order` structs that only existed to set `trigger_method` / `origin` / `short_sale_slot` / `designated_location` / `volatility_type` / `reference_price_type` with the new builder setters — see [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed).
-16. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+16. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound - see [§16](#16-the-blocking-clients-shareschannel-marker-trait-is-removed).
+17. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

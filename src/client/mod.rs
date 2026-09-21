@@ -39,9 +39,7 @@ pub mod blocking {
     pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
     pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
     pub use crate::subscriptions::notice_stream::sync_impl::{NoticeStream, NoticeStreamIter};
-    pub use crate::subscriptions::sync::{
-        SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter,
-    };
+    pub use crate::subscriptions::sync::{Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 }
 
 // Re-export the appropriate Client based on feature selection

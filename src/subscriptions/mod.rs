@@ -61,9 +61,7 @@ pub use notice_stream::sync_impl::NoticeStream;
 
 // Re-export the appropriate subscription types based on feature
 #[cfg(feature = "sync")]
-pub use sync::{
-    FilterData, SharesChannel, SubscriptionItemIterExt, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter,
-};
+pub use sync::{FilterData, SubscriptionItemIterExt, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::Subscription;
