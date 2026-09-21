@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` gain `Unknown(i32)`; `From<i32>` preserves an unrecognized code instead of collapsing it to a known variant. Exhaustive matches need the new arm, and `variant as i32` becomes `i32::from(variant)`. See `docs/migration-4.0.md` §14 (#825).
 - An inbound order with a missing or empty `action` fails to decode with `Error::Parse` instead of reading as `Buy`; as with any decode error, the subscription that received the frame yields the error and ends rather than skipping the frame (#825).
 - An `OpenOrder`, `CompletedOrder` or `ExecutionDetails` frame whose `contract` / `order` / `order_state` / `execution` submessage is absent fails to decode with `Error::Parse` instead of yielding a default-constructed one. #825 made a present-but-empty `action` an error while this layer still handed back `Order::default()` — `action == Buy` — for a wholly absent `order`; the reference client drops such a frame outright (#829).
+- `orders::builder::price` takes `contract_id: i32`, as `volume` and `percent_change` already do, instead of `impl Into<i32>`. The generic form accepted `OrderId`, `bool` and the narrower integer types, none of which is a contract id; a call passing one of those no longer compiles. See `docs/migration-4.0.md` §19 (#845).
 
 ### Removed
 
