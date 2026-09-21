@@ -100,7 +100,7 @@ impl Client {
     ///         .await
     ///         .expect("historical data request failed");
     ///
-    ///     // Convenience: explicit date range (computes duration internally)
+    ///     // Convenience: explicit date range; bars outside it are dropped
     ///     let bars = client
     ///         .historical_data(&contract, HistoricalBarSize::Hour)
     ///         .between(datetime!(2023-04-08 0:00 UTC), datetime!(2023-04-15 0:00 UTC))
