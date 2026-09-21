@@ -80,14 +80,12 @@ Follow-ups left open by #832:
   exactly what `limit_order(action, quantity, price)` does. It survives only as a
   documented BOX-routing entry point. Third occurrence of a duplicate free constructor
   trips the `/simplify` rule of three — fold it into `limit_order` then.
-- #832 scoped its audit to the *integer-coded* enums, so two string-typed ones are still
-  `builder-enum-coverage` gaps: `Order::rule_80_a` (`Option<Rule80A>`) and
-  `Order::open_close` (`Option<OrderOpenClose>`). Both are public, both encode
-  (`src/proto/encoders.rs` `rule80_a:` and `open_close:`), and neither has an
-  `OrderBuilder` setter. Both are institutional-only, which is why they were not urgent;
-  the same `pub fn rule_80_a(Rule80A)` / `pub fn open_close(OrderOpenClose)` shape
-  closes them. Check the wire first, as #832 had to for `AuctionStrategy` — unlike that
-  one, these two are in `Order.proto`.
+- ~~#832 scoped its audit to the *integer-coded* enums, so two string-typed ones are still
+  `builder-enum-coverage` gaps: `Order::rule_80_a` and `Order::open_close`.~~ **Closed by
+  #833** with `pub fn rule_80_a(Rule80A)` / `pub fn open_close(OrderOpenClose)`. Both are
+  real proto fields (`Order.proto` `rule80A = 29`, `openClose = 68`), checked first as
+  #832 had to for `AuctionStrategy`. `OrderBuilder` now has a setter for every public enum
+  on an `Order` field.
 
 ### 6. "All eight macros in `src/`" is nine
 
