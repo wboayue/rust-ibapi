@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Codes 10018 and 10019, the "Orders/Trades use EV warning" pair, no longer terminate the subscription reporting them. IB documents both as warnings and their text begins `Warning:`: the product trades on the basis of currency price, so an order or trade is reported with an EV factor applied and the request proceeds. They sit outside every warning band, so they were routed as hard errors. The new public const `EV_WARNING_CODES` names them; `Notice::category()` reports `NoticeCategory::Warning` for them and they route as non-terminal notices. `Notice::is_warning()`, a band predicate, stays `false` for them, the same split the data advisories have with their bands. No other 10xxx code is included (#834).
+
 ## [4.2.0] - 2026-09-21
 
 ### Added

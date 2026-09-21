@@ -1121,7 +1121,7 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
         NoticeCategory::Cancellation
     } else if DATA_ADVISORY_CODES.contains(&code) {
         NoticeCategory::DataAdvisory
-    } else if is_warning_message(code, message) {
+    } else if is_warning_message(code, message) || EV_WARNING_CODES.contains(&code) {
         NoticeCategory::Warning
     } else if SYSTEM_MESSAGE_CODES.contains(&code) {
         NoticeCategory::SystemMessage
@@ -1194,6 +1194,20 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 /// A slice rather than an array so that adding a code is not a type change
 /// for callers that bind the constant explicitly.
 pub const DATA_ADVISORY_CODES: &[i32] = &[317, 2188, 10089, 10090, 10091, 10167];
+
+/// The two "Orders/Trades use EV warning" codes, which IB documents as
+/// warnings, and whose text begins `Warning:`: the product trades on the
+/// basis of currency price rather than the quoted price, so an order or trade
+/// is reported with an EV factor applied. The request proceeds - the order is
+/// not rejected - but the codes sit outside every warning band, so they used
+/// to terminate the subscription reporting them.
+///
+/// The classifier files them as [`NoticeCategory::Warning`], so
+/// [`Notice::category`] and routing agree. [`Notice::is_warning`] is a band
+/// predicate and stays `false` for them, the same split [`DATA_ADVISORY_CODES`]
+/// has with the bands. The exception is deliberately these two codes and no
+/// other 10xxx code.
+pub const EV_WARNING_CODES: [i32; 2] = [10018, 10019];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
@@ -1374,8 +1388,8 @@ pub(crate) fn transport_reconnect_notice() -> Notice {
 /// 2. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`]. Ahead of
 ///    the ranges: 317 is inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
 ///    [`WARNING_CODE_RANGE`].
-/// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
-///    line, or code 0 (a frame whose `error_code` field was absent on the wire).
+/// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], [`EV_WARNING_CODES`], code 399
+///    with a `Warning:` line, or code 0 (a frame whose `error_code` field was absent on the wire).
 /// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 5. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
 ///    excluding the cases above.
