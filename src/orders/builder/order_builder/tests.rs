@@ -572,8 +572,10 @@ fn volatility_type_does_not_depend_on_volatility_being_set() {
     let client = MockClient;
     let contract = create_test_contract();
 
-    // `volatility_type` used to be applied only inside the `volatility` branch, so a
-    // caller that set the type without a figure lost it silently.
+    // `build()` used to apply `volatility_type` only inside the `volatility` branch. No
+    // caller could reach that guard (the field had no setter until this setter existed),
+    // so this is a forward guard, not a regression test: the type is a VOL-order attribute
+    // TWS reads on its own, and re-nesting it under `volatility` would drop it silently.
     let order = OrderBuilder::new(&client, &contract)
         .buy(100)
         .limit(50.0)

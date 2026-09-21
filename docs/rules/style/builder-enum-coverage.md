@@ -27,6 +27,12 @@ standing in for the enum (`oca_group(group, 1)`) and a private field nothing wri
 symptoms, and the second can mean the wire has no such field — see
 [wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
 
+`OrderBuilder` is not clear of this yet. #832 closed the integer-coded enums;
+`Order::rule_80_a` (`Option<Rule80A>`) and `Order::open_close` (`Option<OrderOpenClose>`) are
+public, encoded (`src/proto/encoders.rs` `rule80_a:` / `open_close:`), and still have no
+setter. Re-derive rather than trust this list:
+`grep -n 'rule_80_a\|open_close' src/orders/builder/order_builder.rs` is empty today.
+
 ## Why
 
 **The canary is an `unreachable!()` in someone else's code.** A caller matching on the enum has
@@ -43,7 +49,7 @@ touch either side.
 
 - #549 — `Action::SellShort` / `Action::SellLong` were reachable only by hand-building the
   order struct; `.sell_short()` / `.sell_long()` closed the gap.
-- #832 — the audit #828 asked for. Six of the seven integer-coded order enums had no entry
+- #832 — the audit #828 asked for, scoped to the integer-coded enums. Six of the seven had no entry
   point: `OcaType` was reachable only as a bare `i32` on `oca_group`, `VolatilityType` through
   a private field with no setter, and `TriggerMethod` / `OrderOrigin` / `ShortSaleSlot` /
   `ReferencePriceType` not at all. All six got a setter taking the enum. The seventh,

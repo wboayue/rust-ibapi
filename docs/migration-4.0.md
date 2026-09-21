@@ -433,7 +433,7 @@ use ibapi::orders::OcaType;
 let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", OcaType::CancelWithBlock).build()?;
 ```
 
-`volatility_type` also changes behavior: `build()` applied it only when `volatility()` had been called, so a hand-built chain that set the type alone silently dropped it. It is applied unconditionally now.
+`volatility_type` is the one with a builder field already: a private `Option<i32>` that `build()` read only when `volatility()` had also been called. Nothing ever wrote it — there was no setter — so it was always `None` and the guard never ran. The new setter is applied unconditionally, which is why the guard is gone rather than preserved.
 
 **`AuctionStrategy` and `Order::auction_strategy` are gone.** The seventh integer-coded enum had nothing behind it. IBKR's `source/proto/Order.proto` declares no `auctionStrategy` field, and the reference client's `EClientUtils.createOrderProto` never sets one — the field exists only on the legacy text encoding this crate dropped at server version 213. So `Order::auction_strategy` was written by `auction_limit` and discarded by `encode_order`, and no decoder ever produced one: unreachable in both directions, the same call 3.0 made on `TickEFP`.
 
