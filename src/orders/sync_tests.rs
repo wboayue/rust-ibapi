@@ -855,7 +855,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let ids = client
         .order(&contract)
         .buy(100)
-        .good_till_cancel()
+        .good_till_canceled()
         .bracket()
         .entry_limit(50.0)
         .take_profit(55.0)
