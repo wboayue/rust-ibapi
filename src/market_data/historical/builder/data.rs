@@ -72,36 +72,6 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// start time, so a bar that begins before `start` is dropped even if it overlaps the range.
     /// Daily and longer bars carry only a date and compare as midnight UTC: a `start` after
     /// midnight UTC drops that day's bar.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # #[cfg(feature = "async")]
-    /// use ibapi::prelude::*;
-    /// # #[cfg(feature = "async")]
-    /// use time::macros::datetime;
-    ///
-    /// # #[cfg(feature = "async")]
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::stock("AAPL").build();
-    ///
-    ///     // Hourly bars for one calendar day (UTC).
-    ///     let data = client
-    ///         .historical_data(&contract, HistoricalBarSize::Hour)
-    ///         .between(datetime!(2026-09-17 0:00 UTC), datetime!(2026-09-18 0:00 UTC))
-    ///         .fetch()
-    ///         .await
-    ///         .expect("historical data request failed");
-    ///
-    ///     for bar in &data.bars {
-    ///         println!("{:?} close={}", bar.date, bar.close);
-    ///     }
-    /// }
-    /// # #[cfg(not(feature = "async"))]
-    /// # fn main() {}
-    /// ```
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
