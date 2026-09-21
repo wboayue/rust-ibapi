@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `orders::TimeInForce::GoodTillCrossing` (`GTX`), and `OrderBuilder::good_till_crossing()` / `OrderBuilder::day_till_canceled()` so GTX and DTC are reachable without `time_in_force()` (#822).
 - `orders::TimeInForce::Unknown(String)`: a time-in-force string this crate does not model now keeps its raw wire value instead of decoding as `Day`, and goes back out unchanged, so an order read from TWS round-trips. `TimeInForce` also gains `as_str()` and `FromStr` (#822).
+- `as_str()` on `Action`, `Rule80A` and `OrderOpenClose`, returning the TWS wire string (`&'static str` for `Action`; `&str` for the other two, borrowing the raw value for `Unknown`) (#825).
 
 ### Changed
 
@@ -20,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `orders::TimeInForce` serializes as the TWS wire string (`"GTC"`) rather than the variant name (`"GoodTilCanceled"`), in both directions, and its `utoipa` schema is a plain string — matching `OrderStatusKind`. Stored JSON and downstream consumers that read the old variant names need updating (#822).
 - Order enums no longer mishandle a value IB adds later: `Action`, `Rule80A` and `OrderOpenClose` parse through `FromStr` (`s.parse()`), and the last two gain `Unknown(String)` so an unrecognized inbound value is preserved instead of read as `None`; `Action` stays closed and rejects one with `Error::Parse` where it panicked. See `docs/migration-4.0.md` §14 (#825).
 - `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod` gain `Unknown(i32)`; `From<i32>` preserves an unrecognized code instead of collapsing it to a known variant. Exhaustive matches need the new arm, and `variant as i32` becomes `i32::from(variant)`. See `docs/migration-4.0.md` §14 (#825).
-- An inbound order with a missing or empty `action` fails to decode with `Error::Parse` instead of reading as `Buy`; as with any decode error, the subscription that received the frame yields the error and ends rather than skipping the frame (#825).
+- An inbound order with a missing or empty `action` fails to decode with `Error::Parse`; previously an absent `action` read as `Buy` and an empty one hit `Action::from`'s `todo!()` and panicked. As with any decode error, the subscription that received the frame yields the error and ends rather than skipping the frame (#825).
 
 ### Removed
 

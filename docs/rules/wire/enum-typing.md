@@ -52,7 +52,10 @@ of the plain wire string), and so must the `utoipa` schema (`PartialSchema` dele
 `Unknown` fallback). The criterion for opening another enum is its decode path, not its
 vocabulary: inbound stream-parsed enums are candidates when the question arises;
 one-shot and outbound-only enums stay closed — a hard error there fails one call, not
-a stream.
+a stream. One exception: an inbound enum may stay closed when IB fixes its vocabulary
+and it is also an outbound field, where an `Unknown(String)` payload would let a caller
+submit an arbitrary string as that field. `Action` is the case (#825); the cost of
+opening it would also be losing `Copy`.
 
 ## Why
 
@@ -88,8 +91,11 @@ There is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded
 streaming path where an error kills the subscription, so a payload variant is the only way
 to keep the conversion total without coercing. `AuctionStrategy` takes the same shape for
 uniformity only - the proto `Order` carries no such field
-(`grep -rn auction_strategy src/proto/` is empty), so its `From<i32>` converts nothing but
-the `i32` a caller hands `OrderBuilder`.
+(`grep -rn auction_strategy src/proto/` is empty), and `OrderBuilder`'s `auction_strategy`
+field has no setter (`grep -n auction_strategy src/orders/builder/order_builder.rs` shows
+only the field, its `None` default, and one `.into()` that never runs), so the `From<i32>`
+is kept only because it is public; the one production caller that takes the enum is
+`order_builder::auction_limit`.
 
 ## Required tests
 
@@ -128,13 +134,17 @@ migrations — consult it rather than re-deriving which fields were converted an
 - #825 — the rest of the `src/orders` sweep, on top of #822. Three inherent `from(&str)`
   methods (`Action` panicked with `todo!()`, `Rule80A` / `OrderOpenClose` returned `None`)
   moved onto `impl_wire_enum!`; seven `From<i32>` impls that collapsed an unknown code to
-  a known variant took the `Liquidity` shape. Per-enum call: `Action` closed (fixed
-  vocabulary, `Copy` relied on by value); `Rule80A` and `OrderOpenClose` open (optional
-  fields, already not `Copy`, so preserving costs nothing). `decode_order` moved onto
+  a known variant took the `Liquidity` shape. `Rule80A` and `OrderOpenClose` opened
+  (optional inbound fields, already not `Copy`, so preserving costs nothing). **`Action`
+  is the counter-example to the decode-path criterion**: it is decoded on every order
+  stream, yet stays closed, because IB fixes the four sides by account type and the field
+  is outbound too — an `Unknown(String)` would let a caller submit an arbitrary side —
+  and opening it would cost `Copy`, which the builder and validation take by value. An
+  unrecognized side fails the decode as `Error::Parse`. `decode_order` moved onto
   `parse_required` / `parse_optional` for those three, so a missing `action` is now
-  `Error::Parse` rather than `Buy` — unlike `tif` above, `action` has no unset state
-  upstream, so an absent one is a malformed frame, not a default. `From<i32> for
-  OrderCondition` panics on an unsupported discriminator and `decode_order_condition`
-  falls back to a default price condition; both were left alone because they type a
-  condition discriminator, not a field, and are a separate change.
+  `Error::Parse` rather than `Buy` — a missing side has no safe default, where `tif`
+  above has one (`Day`). `From<i32> for OrderCondition` panics on an unsupported
+  discriminator and `decode_order_condition` falls back to a default price condition;
+  both were left alone because they type a condition discriminator, not a field, and are
+  a separate change.
 

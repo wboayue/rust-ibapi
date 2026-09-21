@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderStatusKind, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderOpenClose, OrderStatusKind, Rule80A, TimeInForce};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
@@ -700,6 +700,40 @@ fn order_update_stream_survives_unknown_tif() {
             assert_eq!(o.order.tif, TimeInForce::GoodTillCanceled);
         }
         other => panic!("stream did not survive the unknown tif, got {other:?}"),
+    }
+}
+
+#[test]
+fn order_update_stream_survives_unknown_rule80_a_and_open_close() {
+    // Rule80A and OrderOpenClose are open: an OpenOrder frame carrying codes
+    // this crate does not model arrives as Unknown and the frame queued
+    // behind it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).rule80_a("Z").open_close("X").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).rule80_a("A").open_close("O").encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.rule_80_a, Some(Rule80A::Unknown("Z".into())));
+            assert_eq!(o.order.open_close, Some(OrderOpenClose::Unknown("X".into())));
+        }
+        other => panic!("expected OpenOrder with Unknown codes, got {other:?}"),
+    }
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.rule_80_a, Some(Rule80A::Agency));
+            assert_eq!(o.order.open_close, Some(OrderOpenClose::Open));
+        }
+        other => panic!("stream did not survive the unknown codes, got {other:?}"),
     }
 }
 

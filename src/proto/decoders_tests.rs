@@ -327,8 +327,8 @@ fn decode_order_preserves_fractional_total_quantity() {
 
 #[test]
 fn decode_order_rejects_missing_or_empty_action() {
-    // Unlike tif, action has no unset state upstream: an order without a
-    // side is a malformed frame, not a default.
+    // Unlike tif, a missing side has no safe default: previously an absent
+    // action read as Buy and an empty one panicked in Action::from.
     for proto_order in [
         proto::Order {
             action: None,

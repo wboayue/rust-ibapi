@@ -504,6 +504,8 @@ pub struct OpenOrderResponse {
     pub client_id: i32,
     pub perm_id: i64,
     pub status: OrderStatusKind,
+    pub rule80_a: Option<String>,
+    pub open_close: Option<String>,
 }
 
 impl Default for OpenOrderResponse {
@@ -531,6 +533,8 @@ impl Default for OpenOrderResponse {
             client_id: 100,
             perm_id: TEST_PERM_ID,
             status: OrderStatusKind::Submitted,
+            rule80_a: None,
+            open_close: None,
         }
     }
 }
@@ -586,6 +590,14 @@ impl OpenOrderResponse {
     }
     pub fn tif(mut self, v: impl Into<String>) -> Self {
         self.tif = v.into();
+        self
+    }
+    pub fn rule80_a(mut self, v: impl Into<String>) -> Self {
+        self.rule80_a = Some(v.into());
+        self
+    }
+    pub fn open_close(mut self, v: impl Into<String>) -> Self {
+        self.open_close = Some(v.into());
         self
     }
     pub fn total_quantity(mut self, v: f64) -> Self {
@@ -645,6 +657,8 @@ impl ResponseProtoEncoder for OpenOrderResponse {
                 tif: Some(self.tif.clone()),
                 account: Some(self.account.clone()),
                 perm_id: Some(self.perm_id),
+                rule80_a: self.rule80_a.clone(),
+                open_close: self.open_close.clone(),
                 ..Default::default()
             }),
             order_state: Some(proto::OrderState {
