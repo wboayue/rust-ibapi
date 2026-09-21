@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822", "#830"]
+precedents: ["#549", "#822", "#832"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -43,7 +43,7 @@ touch either side.
 
 - #549 — `Action::SellShort` / `Action::SellLong` were reachable only by hand-building the
   order struct; `.sell_short()` / `.sell_long()` closed the gap.
-- #830 — the audit #828 asked for. Six of the seven integer-coded order enums had no entry
+- #832 — the audit #828 asked for. Six of the seven integer-coded order enums had no entry
   point: `OcaType` was reachable only as a bare `i32` on `oca_group`, `VolatilityType` through
   a private field with no setter, and `TriggerMethod` / `OrderOrigin` / `ShortSaleSlot` /
   `ReferencePriceType` not at all. All six got a setter taking the enum. The seventh,

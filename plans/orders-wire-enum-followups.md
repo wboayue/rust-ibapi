@@ -67,7 +67,7 @@ Delete the dead field and correct the claim. The missing `.auction_strategy(..)`
 is a `builder-enum-coverage` gap, tracked in issue #828 rather than adding public
 API here.
 
-**Resolved in #830, the other way round.** The setter was never addable: IBKR's
+**Resolved in #832, the other way round.** The setter was never addable: IBKR's
 `source/proto/Order.proto` has no `auctionStrategy` field and
 `EClientUtils.createOrderProto` never sets one, so at the protobuf floor
 `Order::auction_strategy` was written by `auction_limit` and dropped by `encode_order`.
