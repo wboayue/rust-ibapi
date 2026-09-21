@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed) |
 
 ## Breaking changes
 
@@ -511,6 +511,17 @@ let mut merged = futures::stream::select(last, all);
 
 Consider whether you need both: `AllLast` is a superset of `Last`, adding the trades `Last` leaves out, and each subscription uses a tick-by-tick slot. Subscribing to `AllLast` alone and filtering on `special_conditions` avoids the merge.
 
+### 19. The blocking client's `SharesChannel` marker trait is removed
+
+`SharesChannel` was an empty trait (`pub trait SharesChannel {}`) reachable as `ibapi::subscriptions::SharesChannel` and `ibapi::client::blocking::SharesChannel`, meant to tag blocking subscriptions that share a channel keyed by message type rather than by request ID. It was inert: the only bound naming it was on a crate-private helper whose single caller already satisfied it. Its real function was to flag those subscriptions in rustdoc, and as a flag it misled: it marked `positions` and `news_bulletins` but not `account_updates`, `open_orders`, `all_open_orders`, `auto_open_orders` or `completed_orders`, which share channels the same way, so an unmarked type read as safe for concurrent use when it was not. It also marked `Vec<NewsProvider>`, a one-shot result rather than a subscription. The async client never had it. The trait, its three impls and both re-exports are gone.
+
+What changes for compiling code:
+
+- `use ibapi::subscriptions::SharesChannel;` and `use ibapi::client::blocking::SharesChannel;` no longer resolve. Delete the import.
+- A downstream `impl SharesChannel for ...` or a `where Subscription<T>: SharesChannel` bound no longer compiles. Delete it; nothing in the crate depended on your impl, so nothing else needs to change.
+
+Nothing changes at runtime. The hazards the trait could have flagged are gone with the fixes in this release: on the blocking client, live subscriptions of the same shared type each receive the whole stream, as on the async client; and on both clients, dropping one no longer cancels the stream for the others. The requests that share a channel still do, on both clients, and their responses still cannot be attributed to the request that caused them — see [Multi-Threading](../README.md#multi-threading) in the README.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -549,7 +560,8 @@ No code changes required, but observable at runtime:
 16. Add an `OrderCondition::Unknown(c)` arm to exhaustive matches on order conditions, and replace `OrderCondition::from(code)` with a condition builder — see [§16](#16-ordercondition-gains-unknownunknowncondition).
 17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
 18. Drop reads of `Trade.tick_type`; if you merge the `last()` and `all_last()` streams, tag each item when merging — see [§18](#18-tradetick_type-is-removed).
-19. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+19. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound — see [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed).
+20. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

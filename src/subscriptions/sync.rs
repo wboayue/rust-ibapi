@@ -505,9 +505,6 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
     }
 }
 
-/// Marker trait for subscriptions that share a channel based on message type
-pub trait SharesChannel {}
-
 #[cfg(all(test, feature = "sync"))]
 #[path = "sync_tests.rs"]
 mod tests;
