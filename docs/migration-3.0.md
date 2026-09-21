@@ -665,7 +665,7 @@ let sub = client
 Two date-spec styles are supported and mutually exclusive at the terminal:
 
 - **IBKR-native**: `.duration(D)` (defaults `end_date = None` → now) with optional `.ending(end)` to anchor a specific end date.
-- **Range** (convenience): `.between(start, end)` — computes duration internally and sets `end_date = end`.
+- **Range** (convenience): `.between(start, end)` — sets `end_date = end`, requests a duration that covers the range (IBKR counts durations in trading time), and drops bars outside `[start, end)`.
 
 Mixing the two (`.between` together with `.duration` or `.ending`) returns `Err(Error::InvalidArgument)` from the terminal. `.stream()` rejects builders that called `.ending(...)` or `.between(...)` — IBKR requires `end_date = None` for `keep_up_to_date = true`.
 
