@@ -21,12 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Order enums no longer mishandle a value IB adds later: `Action`, `Rule80A` and `OrderOpenClose` parse through `FromStr` (`s.parse()`), and the last two gain `Unknown(String)` so an unrecognized inbound value is preserved instead of read as `None`; `Action` stays closed and rejects one with `Error::Parse` where it panicked. See `docs/migration-4.0.md` §14 (#825).
 - `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod` gain `Unknown(i32)`; `From<i32>` preserves an unrecognized code instead of collapsing it to a known variant. Exhaustive matches need the new arm, and `variant as i32` becomes `i32::from(variant)`. See `docs/migration-4.0.md` §14 (#825).
 - An inbound order with a missing or empty `action` fails to decode with `Error::Parse` instead of reading as `Buy`; as with any decode error, the subscription that received the frame yields the error and ends rather than skipping the frame (#825).
+- An `OpenOrder`, `CompletedOrder` or `ExecutionDetails` frame whose `contract` / `order` / `order_state` / `execution` submessage is absent fails to decode with `Error::Parse` instead of yielding a default-constructed one. #825 made a present-but-empty `action` an error while this layer still handed back `Order::default()` — `action == Buy` — for a wholly absent `order`; the reference client drops such a frame outright (#829).
 
 ### Removed
 
 - The async `Subscription::new(receiver)` constructor, which wrapped a channel of already-decoded items and had no cancel, no clone (it panicked), and no bus behind it. Every async `Subscription<T>` is now built by the typed `Client` methods and decodes through `T` directly, as the blocking one does, so `T` must be one of the crate's stream item types; `Subscription::clone()` no longer has a panicking path. See `docs/migration-4.0.md` §12 (#823).
 - `orders::builder::TimeInForce`. Use `orders::TimeInForce`: `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` with the date passed to `.good_till_date(..)`; `GoodTillCrossing` and `DayTillCanceled` keep their names; see `docs/migration-4.0.md` §13 (#822).
 - `Action::from(&str)`, `Rule80A::from(&str)` and `OrderOpenClose::from(&str)`. Use `str::parse` / `FromStr`; see `docs/migration-4.0.md` §14 (#825).
+- `#[repr(i32)]` and the explicit discriminants on `Liquidity`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod`. Nothing read them once each enum gained an `Unknown(i32)` payload variant — `variant as i32` no longer compiles either way — so the hand-written `From<T> for i32` is now the only source of truth, and each variant's wire code is documented in its rustdoc (#829).
 
 ### Fixed
 

@@ -80,9 +80,6 @@ pub struct OrderBuilder<'a, C> {
     // Manual order time
     manual_order_time: Option<String>,
 
-    // Auction strategy
-    auction_strategy: Option<i32>,
-
     // Starting price
     starting_price: Option<f64>,
 
@@ -144,7 +141,6 @@ impl<'a, C> OrderBuilder<'a, C> {
             smart_combo_routing_params: Vec::new(),
             cash_qty: None,
             manual_order_time: None,
-            auction_strategy: None,
             starting_price: None,
             hedge_type: None,
         }
@@ -972,11 +968,6 @@ impl<'a, C> OrderBuilder<'a, C> {
         // Set manual order time
         if let Some(time) = self.manual_order_time {
             order.manual_order_time = time;
-        }
-
-        // Set auction strategy
-        if let Some(strategy) = self.auction_strategy {
-            order.auction_strategy = Some(strategy.into());
         }
 
         // Set starting price

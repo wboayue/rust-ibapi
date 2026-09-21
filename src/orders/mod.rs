@@ -957,18 +957,17 @@ impl From<&str> for TimeInForce {
 
 /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OcaType {
-    /// Not part of OCA group.
+    /// Not part of OCA group. Wire code `0`.
     #[default]
-    None = 0,
-    /// Cancel all remaining orders with block (overfill protection - only one order routed at a time).
-    CancelWithBlock = 1,
-    /// Proportionally reduce remaining orders with block.
-    ReduceWithBlock = 2,
-    /// Proportionally reduce remaining orders without block.
-    ReduceWithoutBlock = 3,
+    None,
+    /// Cancel all remaining orders with block (overfill protection - only one order routed at a time). Wire code `1`.
+    CancelWithBlock,
+    /// Proportionally reduce remaining orders with block. Wire code `2`.
+    ReduceWithBlock,
+    /// Proportionally reduce remaining orders without block. Wire code `3`.
+    ReduceWithoutBlock,
     /// OCA type code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1005,14 +1004,13 @@ impl From<i32> for OcaType {
 
 /// The order's origin. Identifies the type of customer from which the order originated.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderOrigin {
-    /// Customer order.
+    /// Customer order. Wire code `0`.
     #[default]
-    Customer = 0,
-    /// Firm order (institutional customers only).
-    Firm = 1,
+    Customer,
+    /// Firm order (institutional customers only). Wire code `1`.
+    Firm,
     /// Origin code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1045,16 +1043,15 @@ impl From<i32> for OrderOrigin {
 
 /// Specifies the short sale slot (for institutional short sales).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShortSaleSlot {
-    /// Not a short sale.
+    /// Not a short sale. Wire code `0`.
     #[default]
-    None = 0,
-    /// Broker holds shares.
-    Broker = 1,
-    /// Shares come from elsewhere (third party). Use with `designated_location` field.
-    ThirdParty = 2,
+    None,
+    /// Broker holds shares. Wire code `1`.
+    Broker,
+    /// Shares come from elsewhere (third party). Use with `designated_location` field. Wire code `2`.
+    ThirdParty,
     /// Short sale slot code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1089,13 +1086,12 @@ impl From<i32> for ShortSaleSlot {
 
 /// Volatility type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VolatilityType {
-    /// Daily volatility.
-    Daily = 1,
-    /// Annual volatility.
-    Annual = 2,
+    /// Daily volatility. Wire code `1`.
+    Daily,
+    /// Annual volatility. Wire code `2`.
+    Annual,
     /// Volatility type code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1134,13 +1130,12 @@ impl From<i32> for VolatilityType {
 
 /// Reference price type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReferencePriceType {
-    /// Average of National Best Bid/Offer.
-    AverageOfNBBO = 1,
-    /// NBB or NBO depending on action and right.
-    NBBO = 2,
+    /// Average of National Best Bid/Offer. Wire code `1`.
+    AverageOfNBBO,
+    /// NBB or NBO depending on action and right. Wire code `2`.
+    NBBO,
     /// Reference price type code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1250,15 +1245,14 @@ impl_wire_enum!(Rule80A, fallback Unknown);
 
 /// Auction strategy for BOX orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuctionStrategy {
-    /// Match strategy.
-    Match = 1,
-    /// Improvement strategy.
-    Improvement = 2,
-    /// Transparent strategy.
-    Transparent = 3,
+    /// Match strategy. Wire code `1`.
+    Match,
+    /// Improvement strategy. Wire code `2`.
+    Improvement,
+    /// Transparent strategy. Wire code `3`.
+    Transparent,
     /// Auction strategy code not modeled by this version of the API.
     Unknown(i32),
 }
@@ -1600,18 +1594,17 @@ pub struct CommissionReport {
 
 /// Liquidity types for executions.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
-    /// No liquidity information.
+    /// No liquidity information. Wire code `0`.
     #[default]
-    None = 0,
-    /// Added liquidity to the market.
-    AddedLiquidity = 1,
-    /// Removed liquidity from the market.
-    RemovedLiquidity = 2,
-    /// Liquidity was routed out.
-    LiquidityRoutedOut = 3,
+    None,
+    /// Added liquidity to the market. Wire code `1`.
+    AddedLiquidity,
+    /// Removed liquidity from the market. Wire code `2`.
+    RemovedLiquidity,
+    /// Liquidity was routed out. Wire code `3`.
+    LiquidityRoutedOut,
     /// Liquidity code not modeled by this version of the API.
     Unknown(i32),
 }

@@ -8,6 +8,19 @@ use crate::Error;
 // is rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
+/// A proto submessage or scalar the frame is meaningless without.
+///
+/// The reference client drops the whole frame when one is absent —
+/// `EDecoder.cs`'s `OpenOrderEventProtoBuf` returns before `eWrapper.openOrder(..)`
+/// if `Contract`, `Order` or `OrderState` is null, rather than synthesizing a
+/// default. This crate has no "skip this frame" channel, so it surfaces the
+/// malformed frame as `Error::Parse` instead. Defaulting is the one option
+/// neither client takes: it hands the caller a phantom BUY order over an empty
+/// contract, which reads as real data (docs/rules/wire/enum-typing.md).
+fn required<T>(field: Option<T>, name: &str, message: &str) -> Result<T, Error> {
+    field.ok_or_else(|| Error::parse_proto(name, format!("missing in {message}")))
+}
+
 pub(crate) fn decode_open_order(message: &ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order_proto(message.require_proto()?)
 }
@@ -17,15 +30,11 @@ pub(crate) fn decode_order_status(message: &ResponseMessage) -> Result<OrderStat
 }
 
 pub(crate) fn decode_order_bound(message: &ResponseMessage) -> Result<OrderBound, Error> {
-    fn required<T>(field: Option<T>, name: &str) -> Result<T, Error> {
-        field.ok_or_else(|| Error::parse_proto(name, "missing in OrderBound"))
-    }
-
     let p: crate::proto::OrderBound = prost::Message::decode(message.require_proto()?)?;
     Ok(OrderBound {
-        perm_id: required(p.perm_id, "perm_id")?,
-        client_id: required(p.client_id, "client_id")?,
-        order_id: required(p.order_id, "order_id")?,
+        perm_id: required(p.perm_id, "perm_id", "OrderBound")?,
+        client_id: required(p.client_id, "client_id", "OrderBound")?,
+        order_id: required(p.order_id, "order_id", "OrderBound")?,
     })
 }
 
@@ -45,30 +54,12 @@ pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderD
 
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::OpenOrder = prost::Message::decode(bytes)?;
-    let contract = p
-        .contract
-        .as_ref()
-        .map(crate::proto::decoders::decode_contract)
-        .transpose()?
-        .unwrap_or_default();
-    let order = p
-        .order
-        .as_ref()
-        .map(crate::proto::decoders::decode_order)
-        .transpose()?
-        .unwrap_or_default();
-    let order_state = p
-        .order_state
-        .as_ref()
-        .map(crate::proto::decoders::decode_order_state)
-        .transpose()?
-        .unwrap_or_default();
 
     Ok(OrderData {
         order_id: p.order_id.unwrap_or_default(),
-        contract,
-        order,
-        order_state,
+        contract: crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "OpenOrder")?)?,
+        order: crate::proto::decoders::decode_order(required(p.order.as_ref(), "order", "OpenOrder")?)?,
+        order_state: crate::proto::decoders::decode_order_state(required(p.order_state.as_ref(), "order_state", "OpenOrder")?)?,
     })
 }
 
@@ -95,41 +86,16 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
 
     Ok(ExecutionData {
         request_id: p.req_id.unwrap_or_default(),
-        contract: p
-            .contract
-            .as_ref()
-            .map(crate::proto::decoders::decode_contract)
-            .transpose()?
-            .unwrap_or_default(),
-        execution: p
-            .execution
-            .as_ref()
-            .map(crate::proto::decoders::decode_execution)
-            .transpose()?
-            .unwrap_or_default(),
+        contract: crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "ExecutionDetails")?)?,
+        execution: crate::proto::decoders::decode_execution(required(p.execution.as_ref(), "execution", "ExecutionDetails")?)?,
     })
 }
 
 pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
     let p: crate::proto::CompletedOrder = prost::Message::decode(bytes)?;
-    let contract = p
-        .contract
-        .as_ref()
-        .map(crate::proto::decoders::decode_contract)
-        .transpose()?
-        .unwrap_or_default();
-    let order = p
-        .order
-        .as_ref()
-        .map(crate::proto::decoders::decode_order)
-        .transpose()?
-        .unwrap_or_default();
-    let order_state = p
-        .order_state
-        .as_ref()
-        .map(crate::proto::decoders::decode_order_state)
-        .transpose()?
-        .unwrap_or_default();
+    let contract = crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "CompletedOrder")?)?;
+    let order = crate::proto::decoders::decode_order(required(p.order.as_ref(), "order", "CompletedOrder")?)?;
+    let order_state = crate::proto::decoders::decode_order_state(required(p.order_state.as_ref(), "order_state", "CompletedOrder")?)?;
 
     Ok(OrderData {
         // Completed orders carry no live order_id; preserve the legacy text-decoder

@@ -38,6 +38,12 @@ macro_rules! impl_str_partial_eq {
 /// macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
 /// macro is the only viable shape.
 ///
+/// Both forms distinguish the two ways a wire value can be unusable: empty
+/// input is `"empty $name"` (no value at all) and an unrecognized non-empty
+/// value is `"unknown $name"`. `parse_required` reaches the first only when a
+/// caller parses directly — it intercepts empty with its own `"missing
+/// {label}"`, which names the field rather than the type.
+///
 /// The `fallback $variant` form is for open enums on inbound stream paths,
 /// where an unrecognized value must not terminate the subscription: a
 /// non-empty string that `from_wire` does not recognize parses as
@@ -52,6 +58,9 @@ macro_rules! impl_wire_enum {
         impl ::std::str::FromStr for $name {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                if s.is_empty() {
+                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                }
                 Self::from_wire(s).ok_or_else(|| $crate::Error::Parse(0, s.to_string(), concat!("unknown ", stringify!($name)).into()))
             }
         }
