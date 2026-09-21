@@ -33,8 +33,8 @@ use crate::orders::OrderCondition;
 ///     .greater_than(150.0)
 ///     .build();
 /// ```
-pub fn price(contract_id: impl Into<i32>, exchange: impl Into<String>) -> PriceConditionBuilder {
-    PriceCondition::builder(contract_id.into(), exchange)
+pub fn price(contract_id: i32, exchange: impl Into<String>) -> PriceConditionBuilder {
+    PriceCondition::builder(contract_id, exchange)
 }
 
 /// Create a time condition builder.

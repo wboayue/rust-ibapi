@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§19](#19-the-price-condition-helper-takes-contract_id-i32) |
 
 ## Breaking changes
 
@@ -511,6 +511,20 @@ let mut merged = futures::stream::select(last, all);
 
 Consider whether you need both: `AllLast` is a superset of `Last`, adding the trades `Last` leaves out, and each subscription uses a tick-by-tick slot. Subscribing to `AllLast` alone and filtering on `special_conditions` avoids the merge.
 
+### 19. The `price` condition helper takes `contract_id: i32`
+
+`orders::builder::price(contract_id, exchange)` took `contract_id: impl Into<i32>`; its siblings `volume` and `percent_change` take `contract_id: i32`, and the three set the same field on their conditions. The generic form let `price` accept anything with a `From` conversion into `i32` - `u8` / `i8` / `u16` / `i16`, `bool`, and this crate's `OrderId` - none of which is a contract id. `price` now takes `i32` like the other two.
+
+Calls that pass an integer literal or an `i32` - a `contract_id` read off a `Contract` or `ContractDetails` - are unaffected. A call that passed an `OrderId` was a bug; one that passed a narrower integer type needs a cast:
+
+```rust,ignore
+// 4.2
+let condition = price(contract_id_u16, "SMART").greater_than(150.0);
+
+// Unreleased
+let condition = price(i32::from(contract_id_u16), "SMART").greater_than(150.0);
+```
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -547,7 +561,8 @@ No code changes required, but observable at runtime:
 16. Add an `OrderCondition::Unknown(c)` arm to exhaustive matches on order conditions, and replace `OrderCondition::from(code)` with a condition builder — see [§16](#16-ordercondition-gains-unknownunknowncondition).
 17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
 18. Drop reads of `Trade.tick_type`; if you merge the `last()` and `all_last()` streams, tag each item when merging — see [§18](#18-tradetick_type-is-removed).
-19. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+19. Convert any narrower integer passed to the `price(..)` condition helper with `i32::from(..)`; an `OrderId` there was a bug, not a conversion - see [§19](#19-the-price-condition-helper-takes-contract_id-i32).
+20. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
