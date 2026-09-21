@@ -607,6 +607,31 @@ fn open_wire_enums_round_trip_unknown_values_through_the_builder() {
     assert_eq!(proto.open_close.as_deref(), Some("X"));
 }
 
+/// An `Unknown` carrying the empty string is omitted rather than sent as `""`, matching
+/// `action` / `tif` and `EClientUtils`'s `if (!Util.StringIsEmpty(..))`. A decode cannot
+/// produce this — `FromStr` rejects empty — but the setters put it one call away.
+#[test]
+fn empty_unknown_wire_values_are_omitted_not_sent_blank() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .rule_80_a(Rule80A::Unknown(String::new()))
+        .open_close(OrderOpenClose::Unknown(String::new()))
+        .build()
+        .unwrap();
+
+    // The builder keeps what the caller passed; only the encoder drops it.
+    assert_eq!(order.rule_80_a, Some(Rule80A::Unknown(String::new())));
+    assert_eq!(order.open_close, Some(OrderOpenClose::Unknown(String::new())));
+
+    let proto = encode_order(&order);
+    assert_eq!(proto.rule80_a, None);
+    assert_eq!(proto.open_close, None);
+}
+
 #[test]
 fn volatility_type_reaches_the_wire() {
     let client = MockClient;

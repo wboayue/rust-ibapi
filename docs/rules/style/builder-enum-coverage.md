@@ -28,9 +28,11 @@ symptoms, and the second can mean the wire has no such field — see
 [wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
 
 `OrderBuilder` is clear of this as of #833: #832 closed the integer-coded enums and #833 the
-two string-typed ones. Ten `Order` fields are enum-typed; eight have a same-named setter,
-`action` goes through `.buy()` / `.sell()` / `.sell_short()` / `.sell_long()` and `tif`
-through `.time_in_force()` and its named siblings. Re-derive rather than trust that count:
+two string-typed ones. Ten `Order` fields are enum-typed; **seven** have a same-named setter.
+The other three do not, and are the ones a name-match reports as gaps when they are not:
+`oca_type` is set by `.oca_group(group, OcaType)`, `action` by `.buy()` / `.sell()` /
+`.sell_short()` / `.sell_long()`, and `tif` by `.time_in_force()` and its named siblings.
+Re-derive rather than trust that count:
 
 ```bash
 sed -n '/^pub struct Order {/,/^}/p' src/orders/mod.rs \
@@ -40,9 +42,11 @@ sed -n '/^pub struct Order {/,/^}/p' src/orders/mod.rs \
 
 That prints eleven rows today — `soft_dollar_tier: SoftDollarTier` is a struct, not an enum,
 so drop it. Look each surviving field name up in
-`grep -oE 'pub fn [a-z_0-9]+' src/orders/builder/order_builder.rs`. A field whose setter is
-named for the *variants* rather than the field (`action`, `tif`) reads as missing there and
-is not — check those two by hand.
+`grep -oE 'pub fn [a-z_0-9]+' src/orders/builder/order_builder.rs`, and expect three misses
+that are not gaps: a setter named for the *variants* (`action`, `tif`) or for a *neighbouring
+field* (`oca_type`, set alongside the group) never matches its own field name. Check those
+three by hand. The recipe is also blind to an enum inside a collection — the `Vec` filter
+drops `conditions: Vec<OrderCondition>`, reachable through `.condition()`.
 
 ## Why
 
