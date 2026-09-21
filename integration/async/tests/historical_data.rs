@@ -1,11 +1,13 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
+use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, WhatToShow};
 use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
+use time::macros::datetime;
+use time::OffsetDateTime;
 
 #[tokio::test]
 #[serial(historical)]
@@ -268,4 +270,65 @@ async fn historical_data_streaming() {
     // Should receive initial historical bars
     let item = subscription.next().await;
     assert!(item.is_some(), "expected initial historical data");
+}
+
+// Issue #835: `.between` sent the wall-clock span as `N S`, which IBKR counts in
+// trading time, so a 1-day range returned ~3.7 RTH sessions ending at `end`.
+#[tokio::test]
+#[serial(historical)]
+async fn historical_data_between_one_day_stays_in_range() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    let start = datetime!(2026-09-17 00:00 UTC);
+    let end = datetime!(2026-09-18 00:00 UTC);
+
+    rate_limit();
+    let contract = Contract::stock("AAPL").build();
+    let data = client
+        .historical_data(&contract, BarSize::Hour)
+        .between(start, end)
+        .fetch()
+        .await
+        .expect("historical_data failed");
+
+    assert_bars_within(&data.bars, start, end);
+}
+
+// Issue #835: a multi-day range exceeds IBKR's 86400 S ceiling for the seconds unit.
+#[tokio::test]
+#[serial(historical)]
+async fn historical_data_between_multi_day_stays_in_range() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    let start = datetime!(2026-09-15 00:00 UTC);
+    let end = datetime!(2026-09-18 00:00 UTC);
+
+    rate_limit();
+    let contract = Contract::stock("AAPL").build();
+    let data = client
+        .historical_data(&contract, BarSize::Hour)
+        .between(start, end)
+        .fetch()
+        .await
+        .expect("historical_data failed");
+
+    assert_bars_within(&data.bars, start, end);
+    assert!(
+        data.bars
+            .first()
+            .is_some_and(|bar| bar.date < BarTimestamp::from(datetime!(2026-09-16 00:00 UTC))),
+        "expected bars from the first day of the range, first bar: {:?}",
+        data.bars.first().map(|bar| bar.date)
+    );
+}
+
+fn assert_bars_within(bars: &[Bar], start: OffsetDateTime, end: OffsetDateTime) {
+    assert!(!bars.is_empty(), "expected non-empty bars");
+    let (start, end) = (BarTimestamp::from(start), BarTimestamp::from(end));
+    let outside: Vec<_> = bars.iter().map(|bar| bar.date).filter(|date| *date < start || *date >= end).collect();
+    assert!(outside.is_empty(), "bars outside [{start:?}, {end:?}): {outside:?}");
 }

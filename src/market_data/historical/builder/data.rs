@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
-use crate::market_data::historical::{BarSize, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
+use crate::market_data::historical::{BarSize, BarTimestamp, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
 
@@ -64,7 +64,14 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
         self
     }
 
-    /// Convenience: specify an explicit date range (computes duration internally).
+    /// Convenience: specify an explicit date range.
+    ///
+    /// IBKR measures request durations in trading time, so no duration maps exactly onto a
+    /// wall-clock range. The request asks for a duration that covers `[start, end)`, and bars
+    /// timestamped outside that range are dropped from the result. Bars are stamped with their
+    /// start time, so a bar that begins before `start` is dropped even if it overlaps the range.
+    /// Daily and longer bars carry only a date and compare as midnight UTC: a `start` after
+    /// midnight UTC drops that day's bar.
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
@@ -83,13 +90,7 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
                         "historical_data: .between(start, end) requires end > start".to_owned(),
                     ));
                 }
-                let seconds = (end - start).whole_seconds();
-                if seconds > i32::MAX as i64 {
-                    return Err(Error::InvalidArgument(
-                        "historical_data: .between(start, end) range exceeds i32::MAX seconds".to_owned(),
-                    ));
-                }
-                Ok((Some(end), Duration::seconds(seconds as i32)))
+                Ok((Some(end), covering_duration(end - start)))
             }
             (None, Some(duration), ending) => Ok((ending, duration)),
             (None, None, _) => Err(Error::InvalidArgument(
@@ -110,6 +111,40 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
         self.duration
             .ok_or_else(|| Error::InvalidArgument("historical_data().stream(): must set .duration()".to_owned()))
     }
+}
+
+const SECONDS_PER_DAY: u64 = 86_400;
+/// IBKR rejects `S` durations above one day and `D` durations above 365.
+const MAX_DAYS: u64 = 365;
+
+/// An IBKR duration that covers a wall-clock `span` ending at the request's end date.
+///
+/// IBKR counts `S` in trading seconds, `D` in whole sessions counted back from the
+/// session containing the end date, and `Y` in calendar years. Trading time never exceeds
+/// wall-clock time, so `S` and `D` over-fetch rather than fall short, provided `D` asks for
+/// one extra session to cover a range that starts partway through one. `span` is positive.
+fn covering_duration(span: time::Duration) -> Duration {
+    let seconds = span.whole_seconds().unsigned_abs() + u64::from(span.subsec_nanoseconds() != 0);
+    if seconds <= SECONDS_PER_DAY {
+        return Duration::seconds(seconds as i32);
+    }
+    let days = seconds.div_ceil(SECONDS_PER_DAY) + 1;
+    if days <= MAX_DAYS {
+        return Duration::days(days as i32);
+    }
+    Duration::years(seconds.div_ceil(MAX_DAYS * SECONDS_PER_DAY) as i32)
+}
+
+/// Drop bars outside `[start, end)` when the request came from [`between`](HistoricalDataBuilder::between).
+fn trim_to_range(mut data: HistoricalData, range: Option<(OffsetDateTime, OffsetDateTime)>) -> HistoricalData {
+    let Some((start, end)) = range else {
+        return data;
+    };
+    let (first, last) = (BarTimestamp::from(start), BarTimestamp::from(end));
+    data.bars.retain(|bar| bar.date >= first && bar.date < last);
+    data.start = start;
+    data.end = end;
+    data
 }
 
 #[cfg(feature = "sync")]
@@ -144,7 +179,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// ```
     pub fn fetch(self) -> Result<HistoricalData, Error> {
         let (end_date, duration) = self.resolve_date_spec()?;
-        crate::market_data::historical::sync::historical_data(
+        let data = crate::market_data::historical::sync::historical_data(
             self.client,
             self.contract,
             end_date,
@@ -152,7 +187,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
-        )
+        )?;
+        Ok(trim_to_range(data, self.between))
     }
 
     /// Submit a streaming request (`keep_up_to_date = true`) and return a
@@ -227,7 +263,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// ```
     pub async fn fetch(self) -> Result<HistoricalData, Error> {
         let (end_date, duration) = self.resolve_date_spec()?;
-        crate::market_data::historical::r#async::historical_data(
+        let data = crate::market_data::historical::r#async::historical_data(
             self.client,
             self.contract,
             end_date,
@@ -236,7 +272,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
             self.what_to_show,
             self.trading_hours,
         )
-        .await
+        .await?;
+        Ok(trim_to_range(data, self.between))
     }
 
     /// Submit a streaming request (`keep_up_to_date = true`) and return a
