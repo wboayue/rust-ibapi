@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::OrderStatusKind;
+use crate::orders::{OrderStatusKind, TimeInForce};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
@@ -581,6 +581,53 @@ async fn test_order_update_stream_survives_unknown_status() {
         }
         other => panic!("stream did not survive the unknown status, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn test_order_update_stream_survives_unknown_tif() {
+    // TimeInForce is open: an OpenOrder frame carrying a tif this crate
+    // does not model arrives as TimeInForce::Unknown and the frame queued
+    // behind it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).tif("NOTATIF").encode_proto()),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).tif("GTC").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
+            assert_eq!(o.order.tif, TimeInForce::Unknown("NOTATIF".into()));
+        }
+        other => panic!("expected OpenOrder with Unknown tif, got {other:?}"),
+    }
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
+            assert_eq!(o.order.tif, TimeInForce::GoodTillCanceled);
+        }
+        other => panic!("stream did not survive the unknown tif, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_order_update_stream_ends_on_empty_action() {
+    // action is required: an OpenOrder frame with an empty action fails
+    // decode with Error::Parse, which terminates the subscription — the
+    // frame queued behind it is never delivered. The survives_unknown_tif
+    // test above uses the same two-frame stub and does receive its second
+    // frame, so the None here comes from termination, not an empty stub.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).action("").encode_proto()),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).action("SELL").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Err(Error::Parse(_, _, msg))) => assert!(msg.contains("action"), "expected the field name in the error, got {msg}"),
+        other => panic!("expected Error::Parse for the empty action, got {other:?}"),
+    }
+    assert!(stream.next().await.is_none(), "stream should end after a decode error");
 }
 
 #[tokio::test]

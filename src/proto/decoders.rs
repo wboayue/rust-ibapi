@@ -213,7 +213,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.perm_id = proto.perm_id.unwrap_or_default();
     order.parent_id = proto.parent_id.unwrap_or_default();
 
-    order.action = Action::from(proto.action.as_deref().unwrap_or("BUY"));
+    order.action = parse_required::<Action>(proto.action.as_deref(), "action")?;
     // Absent means 0 upstream (Order.cs leaves TotalQuantity at decimal's default).
     order.total_quantity = parse_decimal_or_zero(proto.total_quantity.as_deref())?;
     order.display_size = proto.display_size.map(Some).unwrap_or(Some(0));
@@ -247,7 +247,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.good_till_date = s(&proto.good_till_date);
     order.oca_group = s(&proto.oca_group);
     order.order_ref = s(&proto.order_ref);
-    order.rule_80_a = proto.rule80_a.as_deref().and_then(Rule80A::from);
+    order.rule_80_a = parse_optional::<Rule80A>(proto.rule80_a.as_deref())?;
     order.oca_type = OcaType::from(proto.oca_type.unwrap_or_default());
     order.trigger_method = TriggerMethod::from(proto.trigger_method.unwrap_or_default());
 
@@ -306,7 +306,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.override_percentage_constraints = proto.override_percentage_constraints.unwrap_or_default();
 
     // institutional orders
-    order.open_close = proto.open_close.as_deref().and_then(OrderOpenClose::from);
+    order.open_close = parse_optional::<OrderOpenClose>(proto.open_close.as_deref())?;
     order.origin = OrderOrigin::from(proto.origin.unwrap_or_default());
     order.short_sale_slot = ShortSaleSlot::from(proto.short_sale_slot.unwrap_or_default());
     order.designated_location = s(&proto.designated_location);

@@ -371,6 +371,7 @@ let condition = price(265598, "SMART")
 - `TriggerMethod::BidAsk` - Current bid or ask price
 - `TriggerMethod::LastOrBidAsk` - Last price or bid/ask if no last price
 - `TriggerMethod::Midpoint` - Mid-point between bid and ask
+- `TriggerMethod::Unknown(code)` - A catch-all in case TWS adds a new trigger method
 
 #### Time Condition
 

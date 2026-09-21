@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderStatusKind};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OrderStatusKind, TimeInForce};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
@@ -675,6 +675,53 @@ fn order_update_stream_survives_unknown_status() {
         }
         other => panic!("stream did not survive the unknown status, got {other:?}"),
     }
+}
+
+#[test]
+fn order_update_stream_survives_unknown_tif() {
+    // TimeInForce is open: an OpenOrder frame carrying a tif this crate
+    // does not model arrives as TimeInForce::Unknown and the frame queued
+    // behind it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).tif("NOTATIF").encode_proto()),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).tif("GTC").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.tif, TimeInForce::Unknown("NOTATIF".into()));
+        }
+        other => panic!("expected OpenOrder with Unknown tif, got {other:?}"),
+    }
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.tif, TimeInForce::GoodTillCanceled);
+        }
+        other => panic!("stream did not survive the unknown tif, got {other:?}"),
+    }
+}
+
+#[test]
+fn order_update_stream_ends_on_empty_action() {
+    // action is required: an OpenOrder frame with an empty action fails
+    // decode with Error::Parse, which terminates the subscription — the
+    // frame queued behind it is never delivered. The survives_unknown_tif
+    // test above uses the same two-frame stub and does receive its second
+    // frame, so the None here comes from termination, not an empty stub.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).action("").encode_proto()),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).action("SELL").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Err(Error::Parse(_, _, msg))) => assert!(msg.contains("action"), "expected the field name in the error, got {msg}"),
+        other => panic!("expected Error::Parse for the empty action, got {other:?}"),
+    }
+    assert!(stream.next_data().is_none(), "stream should end after a decode error");
 }
 
 #[test]

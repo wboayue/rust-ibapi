@@ -668,25 +668,6 @@ pub enum Action {
     SellLong,
 }
 
-impl ToField for Action {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl std::fmt::Display for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = match self {
-            Action::Buy => "BUY",
-            Action::Sell => "SELL",
-            Action::SellShort => "SSHORT",
-            Action::SellLong => "SLONG",
-        };
-
-        write!(f, "{text}")
-    }
-}
-
 impl Action {
     /// Return the logical opposite action (buy ↔ sell).
     pub fn reverse(self) -> Action {
@@ -698,17 +679,32 @@ impl Action {
         }
     }
 
-    /// Parse an action from the TWS string identifier.
-    pub fn from(name: &str) -> Self {
-        match name {
-            "BUY" => Self::Buy,
-            "SELL" => Self::Sell,
-            "SSHORT" => Self::SellShort,
-            "SLONG" => Self::SellLong,
-            &_ => todo!(),
+    /// Return the TWS wire string (`"BUY"`, `"SELL"`, `"SSHORT"`, `"SLONG"`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Action::Buy => "BUY",
+            Action::Sell => "SELL",
+            Action::SellShort => "SSHORT",
+            Action::SellLong => "SLONG",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "BUY" => Some(Self::Buy),
+            "SELL" => Some(Self::Sell),
+            "SSHORT" => Some(Self::SellShort),
+            "SLONG" => Some(Self::SellLong),
+            _ => None,
         }
     }
 }
+
+// Closed on purpose: the four sides are fixed by account type, not a
+// growing vocabulary, and `Unknown(String)` would cost `Copy` on a type the
+// builder and validation paths pass by value. An unrecognized side on an
+// inbound order fails that decode with `Error::Parse`.
+impl_wire_enum!(Action);
 
 /// The lifecycle state of an order, as reported by TWS.
 ///
@@ -961,6 +957,7 @@ impl From<&str> for TimeInForce {
 
 /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OcaType {
     /// Not part of OCA group.
@@ -972,6 +969,8 @@ pub enum OcaType {
     ReduceWithBlock = 2,
     /// Proportionally reduce remaining orders without block.
     ReduceWithoutBlock = 3,
+    /// OCA type code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for OcaType {
@@ -982,7 +981,13 @@ impl ToField for OcaType {
 
 impl From<OcaType> for i32 {
     fn from(value: OcaType) -> i32 {
-        value as i32
+        match value {
+            OcaType::None => 0,
+            OcaType::CancelWithBlock => 1,
+            OcaType::ReduceWithBlock => 2,
+            OcaType::ReduceWithoutBlock => 3,
+            OcaType::Unknown(code) => code,
+        }
     }
 }
 
@@ -993,13 +998,14 @@ impl From<i32> for OcaType {
             1 => OcaType::CancelWithBlock,
             2 => OcaType::ReduceWithBlock,
             3 => OcaType::ReduceWithoutBlock,
-            _ => OcaType::None,
+            code => OcaType::Unknown(code),
         }
     }
 }
 
 /// The order's origin. Identifies the type of customer from which the order originated.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderOrigin {
     /// Customer order.
@@ -1007,6 +1013,8 @@ pub enum OrderOrigin {
     Customer = 0,
     /// Firm order (institutional customers only).
     Firm = 1,
+    /// Origin code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for OrderOrigin {
@@ -1017,7 +1025,11 @@ impl ToField for OrderOrigin {
 
 impl From<OrderOrigin> for i32 {
     fn from(value: OrderOrigin) -> i32 {
-        value as i32
+        match value {
+            OrderOrigin::Customer => 0,
+            OrderOrigin::Firm => 1,
+            OrderOrigin::Unknown(code) => code,
+        }
     }
 }
 
@@ -1026,13 +1038,14 @@ impl From<i32> for OrderOrigin {
         match value {
             0 => OrderOrigin::Customer,
             1 => OrderOrigin::Firm,
-            _ => OrderOrigin::Customer,
+            code => OrderOrigin::Unknown(code),
         }
     }
 }
 
 /// Specifies the short sale slot (for institutional short sales).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShortSaleSlot {
     /// Not a short sale.
@@ -1042,6 +1055,8 @@ pub enum ShortSaleSlot {
     Broker = 1,
     /// Shares come from elsewhere (third party). Use with `designated_location` field.
     ThirdParty = 2,
+    /// Short sale slot code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for ShortSaleSlot {
@@ -1052,7 +1067,12 @@ impl ToField for ShortSaleSlot {
 
 impl From<ShortSaleSlot> for i32 {
     fn from(value: ShortSaleSlot) -> i32 {
-        value as i32
+        match value {
+            ShortSaleSlot::None => 0,
+            ShortSaleSlot::Broker => 1,
+            ShortSaleSlot::ThirdParty => 2,
+            ShortSaleSlot::Unknown(code) => code,
+        }
     }
 }
 
@@ -1062,19 +1082,22 @@ impl From<i32> for ShortSaleSlot {
             0 => ShortSaleSlot::None,
             1 => ShortSaleSlot::Broker,
             2 => ShortSaleSlot::ThirdParty,
-            _ => ShortSaleSlot::None,
+            code => ShortSaleSlot::Unknown(code),
         }
     }
 }
 
 /// Volatility type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VolatilityType {
     /// Daily volatility.
     Daily = 1,
     /// Annual volatility.
     Annual = 2,
+    /// Volatility type code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for VolatilityType {
@@ -1091,7 +1114,11 @@ impl ToField for Option<VolatilityType> {
 
 impl From<VolatilityType> for i32 {
     fn from(value: VolatilityType) -> i32 {
-        value as i32
+        match value {
+            VolatilityType::Daily => 1,
+            VolatilityType::Annual => 2,
+            VolatilityType::Unknown(code) => code,
+        }
     }
 }
 
@@ -1100,19 +1127,22 @@ impl From<i32> for VolatilityType {
         match value {
             1 => VolatilityType::Daily,
             2 => VolatilityType::Annual,
-            _ => VolatilityType::Daily,
+            code => VolatilityType::Unknown(code),
         }
     }
 }
 
 /// Reference price type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReferencePriceType {
     /// Average of National Best Bid/Offer.
     AverageOfNBBO = 1,
     /// NBB or NBO depending on action and right.
     NBBO = 2,
+    /// Reference price type code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for ReferencePriceType {
@@ -1129,7 +1159,11 @@ impl ToField for Option<ReferencePriceType> {
 
 impl From<ReferencePriceType> for i32 {
     fn from(value: ReferencePriceType) -> i32 {
-        value as i32
+        match value {
+            ReferencePriceType::AverageOfNBBO => 1,
+            ReferencePriceType::NBBO => 2,
+            ReferencePriceType::Unknown(code) => code,
+        }
     }
 }
 
@@ -1138,7 +1172,7 @@ impl From<i32> for ReferencePriceType {
         match value {
             1 => ReferencePriceType::AverageOfNBBO,
             2 => ReferencePriceType::NBBO,
-            _ => ReferencePriceType::AverageOfNBBO,
+            code => ReferencePriceType::Unknown(code),
         }
     }
 }
@@ -1165,12 +1199,9 @@ pub enum Rule80A {
     AgencyPT,
     /// Agent for other member principal transaction.
     AgentOtherMemberPT,
-}
-
-impl ToField for Rule80A {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
+    /// Rule 80A code not modeled by this version of the API. Carries the raw
+    /// wire value as received on an inbound order; sent back unchanged.
+    Unknown(String),
 }
 
 impl ToField for Option<Rule80A> {
@@ -1179,9 +1210,11 @@ impl ToField for Option<Rule80A> {
     }
 }
 
-impl std::fmt::Display for Rule80A {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = match self {
+impl Rule80A {
+    /// Return the TWS wire code (`"I"`, `"A"`, ...) — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
+        match self {
             Rule80A::Individual => "I",
             Rule80A::Agency => "A",
             Rule80A::AgentOtherMember => "W",
@@ -1191,16 +1224,12 @@ impl std::fmt::Display for Rule80A {
             Rule80A::IndividualPT => "K",
             Rule80A::AgencyPT => "Y",
             Rule80A::AgentOtherMemberPT => "N",
-        };
-
-        write!(f, "{text}")
+            Rule80A::Unknown(raw) => raw,
+        }
     }
-}
 
-impl Rule80A {
-    /// Parse a rule 80A code from its string representation.
-    pub fn from(source: &str) -> Option<Self> {
-        match source {
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
             "I" => Some(Rule80A::Individual),
             "A" => Some(Rule80A::Agency),
             "W" => Some(Rule80A::AgentOtherMember),
@@ -1215,8 +1244,13 @@ impl Rule80A {
     }
 }
 
+// Open: an optional field on inbound OpenOrder frames whose code letters are
+// assigned by the exchange, not by this crate.
+impl_wire_enum!(Rule80A, fallback Unknown);
+
 /// Auction strategy for BOX orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuctionStrategy {
     /// Match strategy.
@@ -1225,6 +1259,8 @@ pub enum AuctionStrategy {
     Improvement = 2,
     /// Transparent strategy.
     Transparent = 3,
+    /// Auction strategy code not modeled by this version of the API.
+    Unknown(i32),
 }
 
 impl ToField for AuctionStrategy {
@@ -1241,7 +1277,12 @@ impl ToField for Option<AuctionStrategy> {
 
 impl From<AuctionStrategy> for i32 {
     fn from(value: AuctionStrategy) -> i32 {
-        value as i32
+        match value {
+            AuctionStrategy::Match => 1,
+            AuctionStrategy::Improvement => 2,
+            AuctionStrategy::Transparent => 3,
+            AuctionStrategy::Unknown(code) => code,
+        }
     }
 }
 
@@ -1251,7 +1292,7 @@ impl From<i32> for AuctionStrategy {
             1 => AuctionStrategy::Match,
             2 => AuctionStrategy::Improvement,
             3 => AuctionStrategy::Transparent,
-            _ => AuctionStrategy::Match,
+            code => AuctionStrategy::Unknown(code),
         }
     }
 }
@@ -1462,12 +1503,9 @@ pub enum OrderOpenClose {
     Open,
     /// Close an existing position.
     Close,
-}
-
-impl ToField for OrderOpenClose {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
+    /// Open/close value not modeled by this version of the API. Carries the
+    /// raw wire value as received on an inbound order; sent back unchanged.
+    Unknown(String),
 }
 
 impl ToField for Option<OrderOpenClose> {
@@ -1476,27 +1514,30 @@ impl ToField for Option<OrderOpenClose> {
     }
 }
 
-impl std::fmt::Display for OrderOpenClose {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = match self {
+impl OrderOpenClose {
+    /// Return the TWS wire string (`"O"` / `"C"`) — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
+        match self {
             OrderOpenClose::Open => "O",
             OrderOpenClose::Close => "C",
-        };
-
-        write!(f, "{text}")
+            OrderOpenClose::Unknown(raw) => raw,
+        }
     }
-}
 
-impl OrderOpenClose {
-    /// Parse an `OrderOpenClose` from the wire-format string.
-    pub fn from(source: &str) -> Option<Self> {
-        match source {
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
             "O" => Some(OrderOpenClose::Open),
             "C" => Some(OrderOpenClose::Close),
             _ => None,
         }
     }
 }
+
+// Open: an optional field on inbound OpenOrder frames. The value is binary
+// today, but unlike `ExecutionSide` the type is already not `Copy`, so
+// preserving a surprise costs nothing and keeps the order streams up.
+impl_wire_enum!(OrderOpenClose, fallback Unknown);
 
 /// Represents the commission generated by an execution.
 ///

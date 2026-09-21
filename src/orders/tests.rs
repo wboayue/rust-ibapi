@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+use crate::common::test_utils::wire_enum::{check_wire_code_round_trip, check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 
 const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
     (OrderStatusKind::ApiPending, "ApiPending"),
@@ -136,6 +136,119 @@ fn time_in_force_round_trips_every_wire_value() {
         assert_eq!(&TimeInForce::from(*wire), variant, "From(&str {wire})");
         assert_eq!(&TimeInForce::from(wire.to_string()), variant, "From(String {wire})");
     }
+}
+
+#[test]
+fn action_round_trip() {
+    check_wire_enum_round_trip(&[
+        (Action::Buy, "BUY"),
+        (Action::Sell, "SELL"),
+        (Action::SellShort, "SSHORT"),
+        (Action::SellLong, "SLONG"),
+    ]);
+}
+
+#[test]
+fn action_from_str_rejects_unknown() {
+    // Closed enum: empty, arbitrary, case-variants, and the Execution.side
+    // vocabulary (BOT/SLD) are all errors, never coerced to Buy.
+    check_wire_enum_rejects_unknown::<Action>(&["", "INVALID", "buy", "sell", "BOT", "SLD"]);
+}
+
+#[test]
+fn rule_80_a_round_trip() {
+    check_wire_enum_round_trip(&[
+        (Rule80A::Individual, "I"),
+        (Rule80A::Agency, "A"),
+        (Rule80A::AgentOtherMember, "W"),
+        (Rule80A::IndividualPTIA, "J"),
+        (Rule80A::AgencyPTIA, "U"),
+        (Rule80A::AgentOtherMemberPTIA, "M"),
+        (Rule80A::IndividualPT, "K"),
+        (Rule80A::AgencyPT, "Y"),
+        (Rule80A::AgentOtherMemberPT, "N"),
+    ]);
+}
+
+#[test]
+fn rule_80_a_preserves_unknown_wire_value() {
+    check_wire_enum_round_trip(&[(Rule80A::Unknown("Z".into()), "Z"), (Rule80A::Unknown("i".into()), "i")]);
+    check_wire_enum_rejects_unknown::<Rule80A>(&[""]);
+}
+
+#[test]
+fn order_open_close_round_trip() {
+    check_wire_enum_round_trip(&[(OrderOpenClose::Open, "O"), (OrderOpenClose::Close, "C")]);
+}
+
+#[test]
+fn order_open_close_preserves_unknown_wire_value() {
+    check_wire_enum_round_trip(&[(OrderOpenClose::Unknown("X".into()), "X"), (OrderOpenClose::Unknown("o".into()), "o")]);
+    check_wire_enum_rejects_unknown::<OrderOpenClose>(&[""]);
+}
+
+#[test]
+fn oca_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (OcaType::None, 0),
+        (OcaType::CancelWithBlock, 1),
+        (OcaType::ReduceWithBlock, 2),
+        (OcaType::ReduceWithoutBlock, 3),
+        (OcaType::Unknown(4), 4),
+        (OcaType::Unknown(-1), -1),
+    ]);
+}
+
+#[test]
+fn order_origin_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (OrderOrigin::Customer, 0),
+        (OrderOrigin::Firm, 1),
+        (OrderOrigin::Unknown(2), 2),
+        (OrderOrigin::Unknown(-1), -1),
+    ]);
+}
+
+#[test]
+fn short_sale_slot_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (ShortSaleSlot::None, 0),
+        (ShortSaleSlot::Broker, 1),
+        (ShortSaleSlot::ThirdParty, 2),
+        (ShortSaleSlot::Unknown(3), 3),
+        (ShortSaleSlot::Unknown(-1), -1),
+    ]);
+}
+
+#[test]
+fn volatility_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (VolatilityType::Daily, 1),
+        (VolatilityType::Annual, 2),
+        (VolatilityType::Unknown(0), 0),
+        (VolatilityType::Unknown(3), 3),
+    ]);
+}
+
+#[test]
+fn reference_price_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (ReferencePriceType::AverageOfNBBO, 1),
+        (ReferencePriceType::NBBO, 2),
+        (ReferencePriceType::Unknown(0), 0),
+        (ReferencePriceType::Unknown(3), 3),
+    ]);
+}
+
+#[test]
+fn auction_strategy_round_trips_every_wire_code() {
+    check_wire_code_round_trip(&[
+        (AuctionStrategy::Match, 1),
+        (AuctionStrategy::Improvement, 2),
+        (AuctionStrategy::Transparent, 3),
+        (AuctionStrategy::Unknown(0), 0),
+        (AuctionStrategy::Unknown(4), 4),
+    ]);
 }
 
 /// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new

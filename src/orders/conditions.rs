@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 /// Price evaluation method for price conditions.
 ///
 /// Determines which price feed to use when evaluating price conditions.
+/// The codes are IB's, listed at
+/// <https://www.interactivebrokers.com/docs/tws-api/doc/orders/trigger-methods>.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggerMethod {
     /// Default method (last for most securities, double bid/ask for OTC and options)
@@ -26,11 +29,22 @@ pub enum TriggerMethod {
     LastOrBidAsk = 7,
     /// Mid-point between bid and ask
     Midpoint = 8,
+    /// A catch-all in case TWS adds a new trigger method.
+    Unknown(i32),
 }
 
 impl From<TriggerMethod> for i32 {
     fn from(method: TriggerMethod) -> i32 {
-        method as i32
+        match method {
+            TriggerMethod::Default => 0,
+            TriggerMethod::DoubleBidAsk => 1,
+            TriggerMethod::Last => 2,
+            TriggerMethod::DoubleLast => 3,
+            TriggerMethod::BidAsk => 4,
+            TriggerMethod::LastOrBidAsk => 7,
+            TriggerMethod::Midpoint => 8,
+            TriggerMethod::Unknown(code) => code,
+        }
     }
 }
 
@@ -44,7 +58,7 @@ impl From<i32> for TriggerMethod {
             4 => TriggerMethod::BidAsk,
             7 => TriggerMethod::LastOrBidAsk,
             8 => TriggerMethod::Midpoint,
-            _ => TriggerMethod::Default,
+            code => TriggerMethod::Unknown(code),
         }
     }
 }

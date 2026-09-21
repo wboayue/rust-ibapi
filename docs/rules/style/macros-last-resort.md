@@ -45,7 +45,7 @@ All eight macros in `src/`, and what each one buys:
 | Macro | Home | Why not a function |
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Orphan rule: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions = 12 impls |
-| `impl_wire_enum!` | `macros.rs` | Same — `Display` / `FromStr` / `ToField` are foreign traits. 8 enums × 3 impls = 24. The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
+| `impl_wire_enum!` | `macros.rs` | Same — `Display` / `FromStr` / `ToField` are foreign traits. 12 enums × 3 impls = 36 (`grep -rn 'impl_wire_enum!(' src --include=*.rs \| grep -v '^src/macros.rs' \| wc -l`). The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Calls inherent `<$t>::new` and `.as_str()`; 5 test fns |
 | `single_req_id_request_builder!` | `testdata/builders/mod.rs` | Generates a new named struct per proto type |
 | `request_id_response_builder!` | `testdata/builders/mod.rs` | Same — a distinct nominal type per fixture |

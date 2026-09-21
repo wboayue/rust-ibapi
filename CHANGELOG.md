@@ -18,11 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OrderBuilder::time_in_force` takes `orders::TimeInForce`; exhaustive matches on `orders::TimeInForce` need `GoodTillCrossing` and `Unknown(raw)` arms. See `docs/migration-4.0.md` §13 (#822).
 - `OrderBuilder::good_till_cancel()` is renamed `good_till_canceled()`, matching the `TimeInForce::GoodTillCanceled` variant it sets and the neighbouring `day_till_canceled()` (#826).
 - `orders::TimeInForce` serializes as the TWS wire string (`"GTC"`) rather than the variant name (`"GoodTilCanceled"`), in both directions, and its `utoipa` schema is a plain string — matching `OrderStatusKind`. Stored JSON and downstream consumers that read the old variant names need updating (#822).
+- Order enums no longer mishandle a value IB adds later: `Action`, `Rule80A` and `OrderOpenClose` parse through `FromStr` (`s.parse()`), and the last two gain `Unknown(String)` so an unrecognized inbound value is preserved instead of read as `None`; `Action` stays closed and rejects one with `Error::Parse` where it panicked. See `docs/migration-4.0.md` §14 (#825).
+- `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod` gain `Unknown(i32)`; `From<i32>` preserves an unrecognized code instead of collapsing it to a known variant. Exhaustive matches need the new arm, and `variant as i32` becomes `i32::from(variant)`. See `docs/migration-4.0.md` §14 (#825).
+- An inbound order with a missing or empty `action` fails to decode with `Error::Parse` instead of reading as `Buy`; as with any decode error, the subscription that received the frame yields the error and ends rather than skipping the frame (#825).
 
 ### Removed
 
 - The async `Subscription::new(receiver)` constructor, which wrapped a channel of already-decoded items and had no cancel, no clone (it panicked), and no bus behind it. Every async `Subscription<T>` is now built by the typed `Client` methods and decodes through `T` directly, as the blocking one does, so `T` must be one of the crate's stream item types; `Subscription::clone()` no longer has a panicking path. See `docs/migration-4.0.md` §12 (#823).
 - `orders::builder::TimeInForce`. Use `orders::TimeInForce`: `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` with the date passed to `.good_till_date(..)`; `GoodTillCrossing` and `DayTillCanceled` keep their names; see `docs/migration-4.0.md` §13 (#822).
+- `Action::from(&str)`, `Rule80A::from(&str)` and `OrderOpenClose::from(&str)`. Use `str::parse` / `FromStr`; see `docs/migration-4.0.md` §14 (#825).
 
 ### Fixed
 
