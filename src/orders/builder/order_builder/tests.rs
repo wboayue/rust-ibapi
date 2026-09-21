@@ -1,7 +1,8 @@
 use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
-use crate::orders::{Action, TimeInForce};
+use crate::orders::conditions::TriggerMethod;
+use crate::orders::{Action, OcaType, OrderOrigin, ReferencePriceType, ShortSaleSlot, TimeInForce, VolatilityType};
 use crate::proto::encoders::encode_order;
 
 fn create_test_contract() -> Contract {
@@ -442,11 +443,148 @@ fn test_oca_group_settings() {
     let client = MockClient;
     let contract = create_test_contract();
 
-    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(50.00).oca_group("TEST_OCA", 2);
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.00)
+        .oca_group("TEST_OCA", OcaType::ReduceWithBlock);
 
     let order = builder.build().unwrap();
     assert_eq!(order.oca_group, "TEST_OCA");
     assert_eq!(order.oca_type, crate::orders::OcaType::ReduceWithBlock);
+}
+
+#[test]
+fn oca_type_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.00)
+        .oca_group("TEST_OCA", OcaType::ReduceWithoutBlock)
+        .build()
+        .unwrap();
+
+    assert_eq!(encode_order(&order).oca_type, Some(3));
+}
+
+#[test]
+fn trigger_method_sets_the_field_and_the_wire_code() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .sell(100)
+        .stop(95.0)
+        .trigger_method(TriggerMethod::Midpoint)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.trigger_method, TriggerMethod::Midpoint);
+    assert_eq!(encode_order(&order).trigger_method, Some(8));
+}
+
+#[test]
+fn trigger_method_defaults_to_default() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).sell(100).stop(95.0).build().unwrap();
+
+    assert_eq!(order.trigger_method, TriggerMethod::Default);
+    // `Default` is wire code 0, which the encoder omits.
+    assert_eq!(encode_order(&order).trigger_method, None);
+}
+
+#[test]
+fn origin_sets_the_field_and_the_wire_code() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .origin(OrderOrigin::Firm)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.origin, OrderOrigin::Firm);
+    assert_eq!(encode_order(&order).origin, Some(1));
+}
+
+#[test]
+fn short_sale_slot_and_designated_location_reach_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .sell_short(100)
+        .market()
+        .short_sale_slot(ShortSaleSlot::ThirdParty)
+        .designated_location("ABC SECURITIES")
+        .build()
+        .unwrap();
+
+    assert_eq!(order.short_sale_slot, ShortSaleSlot::ThirdParty);
+    assert_eq!(order.designated_location, "ABC SECURITIES");
+
+    let proto = encode_order(&order);
+    assert_eq!(proto.short_sale_slot, Some(2));
+    assert_eq!(proto.designated_location.as_deref(), Some("ABC SECURITIES"));
+}
+
+#[test]
+fn volatility_type_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(1)
+        .order_type(OrderType::Volatility)
+        .volatility(0.25)
+        .volatility_type(VolatilityType::Annual)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
+    assert_eq!(encode_order(&order).volatility_type, Some(2));
+}
+
+#[test]
+fn reference_price_type_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(1)
+        .order_type(OrderType::Volatility)
+        .volatility(0.25)
+        .reference_price_type(ReferencePriceType::NBBO)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.reference_price_type, Some(ReferencePriceType::NBBO));
+    assert_eq!(encode_order(&order).reference_price_type, Some(2));
+}
+
+#[test]
+fn volatility_type_does_not_depend_on_volatility_being_set() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    // `build()` used to apply `volatility_type` only inside the `volatility` branch. No
+    // caller could reach that guard (the field had no setter until this setter existed),
+    // so this is a forward guard, not a regression test: the type is a VOL-order attribute
+    // TWS reads on its own, and re-nesting it under `volatility` would drop it silently.
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .volatility_type(VolatilityType::Daily)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.volatility, None);
+    assert_eq!(order.volatility_type, Some(VolatilityType::Daily));
 }
 
 #[test]

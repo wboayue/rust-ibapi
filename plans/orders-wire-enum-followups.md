@@ -67,6 +67,28 @@ Delete the dead field and correct the claim. The missing `.auction_strategy(..)`
 is a `builder-enum-coverage` gap, tracked in issue #828 rather than adding public
 API here.
 
+**Resolved in #832, the other way round.** The setter was never addable: IBKR's
+`source/proto/Order.proto` has no `auctionStrategy` field and
+`EClientUtils.createOrderProto` never sets one, so at the protobuf floor
+`Order::auction_strategy` was written by `auction_limit` and dropped by `encode_order`.
+`AuctionStrategy`, the `Order` field and `auction_limit`'s fourth parameter are gone.
+The six enums that *do* reach the wire got setters in the same PR.
+
+Follow-ups left open by #832:
+
+- With the strategy parameter gone, `auction_limit(action, quantity, price)` constructs
+  exactly what `limit_order(action, quantity, price)` does. It survives only as a
+  documented BOX-routing entry point. Third occurrence of a duplicate free constructor
+  trips the `/simplify` rule of three — fold it into `limit_order` then.
+- #832 scoped its audit to the *integer-coded* enums, so two string-typed ones are still
+  `builder-enum-coverage` gaps: `Order::rule_80_a` (`Option<Rule80A>`) and
+  `Order::open_close` (`Option<OrderOpenClose>`). Both are public, both encode
+  (`src/proto/encoders.rs` `rule80_a:` and `open_close:`), and neither has an
+  `OrderBuilder` setter. Both are institutional-only, which is why they were not urgent;
+  the same `pub fn rule_80_a(Rule80A)` / `pub fn open_close(OrderOpenClose)` shape
+  closes them. Check the wire first, as #832 had to for `AuctionStrategy` — unlike that
+  one, these two are in `Order.proto`.
+
 ### 6. "All eight macros in `src/`" is nine
 
 `grep -rn "macro_rules!" src --include=*.rs | wc -l` → 9. `impl_proto_payload!`

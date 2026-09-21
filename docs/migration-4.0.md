@@ -20,7 +20,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 |---|---|
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
-| unreleased | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values) |
+| unreleased | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
 
 ## Breaking changes
 
@@ -378,10 +378,10 @@ Exhaustive matches on `orders::TimeInForce` need both a `GoodTillCrossing` and a
 
 ### 14. Order enums parse through `FromStr` and preserve unrecognized wire values
 
-If IB adds a value to one of these enums, 3.x silently mishandled it: `Action::from(&str)` panicked, `Rule80A::from(&str)` and `OrderOpenClose::from(&str)` returned `None` (so an inbound code the crate did not model read as "field absent"), and the `From<i32>` impls on `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod` each collapsed an unrecognized code to one of their known variants. All of them now follow the shape `Liquidity`, `OrderStatusKind` and (per [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till)) `TimeInForce` already use:
+If IB adds a value to one of these enums, 3.x silently mishandled it: `Action::from(&str)` panicked, `Rule80A::from(&str)` and `OrderOpenClose::from(&str)` returned `None` (so an inbound code the crate did not model read as "field absent"), and the `From<i32>` impls on `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` each collapsed an unrecognized code to one of their known variants. All of them now follow the shape `Liquidity`, `OrderStatusKind` and (per [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till)) `TimeInForce` already use:
 
 - **String enums parse through `FromStr<Err = Error>`.** The three inherent `from` methods are gone. `Action` is closed: an unrecognized side is `Error::Parse`. `Rule80A` and `OrderOpenClose` are open: an unrecognized non-empty value parses as `Unknown(String)` carrying the raw wire value, which `Display` writes back unchanged. Empty input is `Error::Parse` for all three.
-- **Integer-coded enums gain `Unknown(i32)`.** `From<i32>` on the seven enums above now returns `Unknown(code)` for a code outside the table, and `i32::from(Unknown(code))` gives the code back. The known codes convert exactly as before.
+- **Integer-coded enums gain `Unknown(i32)`.** `From<i32>` on the six enums above now returns `Unknown(code)` for a code outside the table, and `i32::from(Unknown(code))` gives the code back. The known codes convert exactly as before.
 - **`decode_order` treats `action` as required.** An inbound order that omits it, or carries it empty, fails the decode with `Error::Parse` instead of reading as `Buy`; as with any decode error, any subscription that receives `OpenOrder` / `CompletedOrder` frames - `open_orders` and its `all_` / `auto_` variants, `completed_orders`, `order_update_stream`, `exercise_options`, a `place_order` subscription - yields the error and ends rather than skipping the frame. `rule_80_a` and `open_close` stay optional: absent or empty is `None`. `tif` is deliberately different: an absent or empty `tif` decodes as `Order::default().tif` (per [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till)), because the reference client omits an empty `Tif` rather than sending one, so absence is an unset field with a known default; a missing side has no safe default, and defaulting it to `Buy` is exactly the mishandling this change removes.
 - **A frame missing a whole submessage is an error too.** An `OpenOrder` or `CompletedOrder` whose `contract`, `order` or `order_state` is absent — or an `ExecutionDetails` missing `contract` or `execution` — fails with `Error::Parse` rather than yielding a default-constructed one. The required-`action` rule above only bites when the `order` submessage is *present*; without this, an absent one still produced `Order::default()` — `action == Buy`. The reference client drops such a frame outright (`EDecoder.cs`'s `OpenOrderEventProtoBuf` returns before `eWrapper.openOrder(..)`); this crate has no skip channel, so it surfaces the error.
 
@@ -401,12 +401,53 @@ let code = i32::from(OcaType::CancelWithBlock);          // `as i32` no longer c
 
 What changes for compiling code:
 
-- **Exhaustive matches need the new arm** on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod`. Like `Liquidity`, they stay exhaustive (no `#[non_exhaustive]`), so the compiler points at every site. `Action` is unchanged in shape.
-- **`variant as i32` no longer compiles** on the seven integer-coded enums, because a payload variant removes the fieldless-enum cast. Use `i32::from(variant)` or `.into()`; `ToField` already does. For the same reason these enums (and `Liquidity`) carry neither `#[repr(i32)]` nor explicit discriminants: nothing reads them, so the hand-written `From<T> for i32` is the only source of truth and each variant's wire code is in its rustdoc.
+- **Exhaustive matches need the new arm** on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod`. Like `Liquidity`, they stay exhaustive (no `#[non_exhaustive]`), so the compiler points at every site. `Action` is unchanged in shape.
+- **`variant as i32` no longer compiles** on the six integer-coded enums, because a payload variant removes the fieldless-enum cast. Use `i32::from(variant)` or `.into()`; `ToField` already does. For the same reason these enums (and `Liquidity`) carry neither `#[repr(i32)]` nor explicit discriminants: nothing reads them, so the hand-written `From<T> for i32` is the only source of truth and each variant's wire code is in its rustdoc.
 - **`as_str()` is added** to `Action` (returns `&'static str`) and to `Rule80A` and `OrderOpenClose` (returns `&str`; for `Unknown` it borrows the raw value).
 - **`Copy` is unaffected.** `Action` keeps it; the integer-coded enums keep it (`Unknown(i32)` is `Copy`); `Rule80A` and `OrderOpenClose` never had it.
 - **`Display` and wire strings are unchanged** for every existing variant. `ToField` still writes the wire string or code.
 - **Serde and `utoipa` are unchanged for existing variants.** These enums keep their derives (variant names, not wire strings), so `Unknown` serializes in the derive's externally tagged form (`{"Unknown":"Z"}`, `{"Unknown":9}`) and the generated schema gains a matching `Unknown` object branch — unlike `OrderStatusKind` and `TimeInForce`, whose serde form is the wire string.
+
+### 15. `OrderBuilder` covers the integer-coded order enums, and `AuctionStrategy` is removed
+
+Six public order enums sat on public `Order` fields that reach TWS, with no way to set them through the fluent builder — the only path was constructing `Order` by hand, which is the surface the builder replaces. `OcaType` was half-exposed: reachable, but as a bare `i32`.
+
+| Field | 4.1 | unreleased |
+|---|---|---|
+| `oca_type` | `.oca_group("MyOCA", 1)` | `.oca_group("MyOCA", OcaType::CancelWithBlock)` |
+| `trigger_method` | hand-built `Order` | `.trigger_method(TriggerMethod::Last)` |
+| `origin` | hand-built `Order` | `.origin(OrderOrigin::Firm)` |
+| `short_sale_slot` | hand-built `Order` | `.short_sale_slot(ShortSaleSlot::ThirdParty)` |
+| `designated_location` | hand-built `Order` | `.designated_location("ABC SECURITIES")` |
+| `volatility_type` | hand-built `Order` | `.volatility_type(VolatilityType::Annual)` |
+| `reference_price_type` | hand-built `Order` | `.reference_price_type(ReferencePriceType::NBBO)` |
+
+Only `oca_group` is source-breaking. The bare code maps straight onto the variant — `0` → `OcaType::None`, `1` → `CancelWithBlock`, `2` → `ReduceWithBlock`, `3` → `ReduceWithoutBlock` — and anything else onto `OcaType::Unknown(code)`, so `.oca_group(g, n)` becomes `.oca_group(g, OcaType::from(n))` if you are forwarding a runtime integer:
+
+```rust,ignore
+// 4.1
+let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", 1).build()?;
+
+// unreleased
+use ibapi::orders::OcaType;
+let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", OcaType::CancelWithBlock).build()?;
+```
+
+`volatility_type` is the one with a builder field already: a private `Option<i32>` that `build()` read only when `volatility()` had also been called. Nothing ever wrote it — there was no setter — so it was always `None` and the guard never ran. The new setter is applied unconditionally, which is why the guard is gone rather than preserved.
+
+**`AuctionStrategy` and `Order::auction_strategy` are gone.** The seventh integer-coded enum had nothing behind it. IBKR's `source/proto/Order.proto` declares no `auctionStrategy` field, and the reference client's `EClientUtils.createOrderProto` never sets one — the field exists only on the legacy text encoding this crate dropped at server version 213. So `Order::auction_strategy` was written by `auction_limit` and discarded by `encode_order`, and no decoder ever produced one: unreachable in both directions, the same call 3.0 made on `TickEFP`.
+
+`orders::order_builder::auction_limit` loses its fourth parameter as a result. There is no replacement for setting the strategy from the API; TWS applies the account's configured BOX default.
+
+```rust,ignore
+// 4.1 — the strategy never reached TWS
+let order = auction_limit(Action::Buy, 100.0, 50.0, AuctionStrategy::Improvement);
+
+// unreleased
+let order = auction_limit(Action::Buy, 100.0, 50.0);
+```
+
+`orders::builder::AuctionType` is removed in the same pass. It was public, had no caller anywhere in the crate, and its `to_strategy()` codes (`1` / `2` / `4`) matched no TWS auction field; its variants (`Opening` / `Closing` / `Volatility`) were not auction strategies. Nothing replaces it.
 
 ## Behavioral changes
 
@@ -439,8 +480,9 @@ No code changes required, but observable at runtime:
 11. Add an `OrderUpdate::OrderBound(binding)` arm to exhaustive matches on order updates, and read bindings from `order_update_stream()` — they never reach `place_order` subscriptions; see [§11](#11-orderupdate-gains-orderbound).
 12. Replace any `Subscription::new(rx)` over your own channel with `tokio_stream::wrappers::UnboundedReceiverStream::new(rx)` (add `tokio-stream` to your dependencies), and give any generic helper over the async `Subscription<T>` a concrete item type — see [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed).
 13. Use `ibapi::orders::TimeInForce` everywhere (`ibapi::orders::builder::TimeInForce` is gone) and spell the variants "till": `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`; from the builder enum, `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` plus `.good_till_date(date)`. Rename `.good_till_cancel()` calls to `.good_till_canceled()`, add `GoodTillCrossing` and `Unknown(raw)` arms to exhaustive matches, and re-read any stored JSON — the field is the wire string now — see [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till).
-14. Replace `Action::from(s)`, `Rule80A::from(s)` and `OrderOpenClose::from(s)` with `s.parse()?`, and add an `Unknown(..)` arm to exhaustive matches on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType`, `AuctionStrategy` and `TriggerMethod` — see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
-15. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+14. Replace `Action::from(s)`, `Rule80A::from(s)` and `OrderOpenClose::from(s)` with `s.parse()?`, and add an `Unknown(..)` arm to exhaustive matches on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` — see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
+15. Pass an `OcaType` to `OrderBuilder::oca_group` instead of an `i32`, drop the fourth argument from `auction_limit(..)` calls, remove any use of `orders::AuctionStrategy`, `Order::auction_strategy` or `orders::builder::AuctionType`, and replace hand-built `Order` structs that only existed to set `trigger_method` / `origin` / `short_sale_slot` / `designated_location` / `volatility_type` / `reference_price_type` with the new builder setters — see [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed).
+16. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

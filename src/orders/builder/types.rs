@@ -135,29 +135,6 @@ impl Price {
     }
 }
 
-/// Auction type for auction orders
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AuctionType {
-    /// Opening auction strategy.
-    Opening,
-    /// Closing auction strategy.
-    Closing,
-    /// Volatility auction strategy.
-    Volatility,
-}
-
-impl AuctionType {
-    /// Return the numeric strategy identifier used by TWS.
-    pub fn to_strategy(&self) -> i32 {
-        match self {
-            Self::Opening => 1,
-            Self::Closing => 2,
-            Self::Volatility => 4,
-        }
-    }
-}
-
 /// Order types supported by Interactive Brokers
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

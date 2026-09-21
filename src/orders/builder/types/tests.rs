@@ -67,13 +67,6 @@ fn test_order_type() {
 }
 
 #[test]
-fn test_auction_type() {
-    assert_eq!(AuctionType::Opening.to_strategy(), 1);
-    assert_eq!(AuctionType::Closing.to_strategy(), 2);
-    assert_eq!(AuctionType::Volatility.to_strategy(), 4);
-}
-
-#[test]
 fn test_validation_error_display() {
     let err = ValidationError::InvalidQuantity(0.0);
     assert_eq!(err.to_string(), "Invalid quantity: 0");

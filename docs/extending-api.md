@@ -59,7 +59,7 @@ impl Client {
 ```rust
 // Bad: 4+ params signal need for builder.
 fn create_order(action: Action, qty: f64, price: f64, tif: TimeInForce,
-                oca_group: String, oca_type: i32, cond: Option<Condition>) { }
+                oca_group: String, oca_type: OcaType, cond: Option<Condition>) { }
 
 // Good: fluent builder on Client.
 client.order(&contract)

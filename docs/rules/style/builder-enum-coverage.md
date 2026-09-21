@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822"]
+precedents: ["#549", "#822", "#832"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -19,6 +19,19 @@ builder that covers four of six variants is a builder that cannot express the ot
 caller has no fallback: the field is private and the setter is the only way in.
 
 Adding a variant to such an enum means adding the method in the same PR.
+
+**The harder gap is an enum with no entry point at all.** A public enum on a public `Order`
+field that the builder cannot set is unreachable through the surface the builder exists to
+replace. Before adding the setter, check the field reaches TWS: an untyped `i32` parameter
+standing in for the enum (`oca_group(group, 1)`) and a private field nothing writes are both
+symptoms, and the second can mean the wire has no such field — see
+[wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
+
+`OrderBuilder` is not clear of this yet. #832 closed the integer-coded enums;
+`Order::rule_80_a` (`Option<Rule80A>`) and `Order::open_close` (`Option<OrderOpenClose>`) are
+public, encoded (`src/proto/encoders.rs` `rule80_a:` / `open_close:`), and still have no
+setter. Re-derive rather than trust this list:
+`grep -n 'rule_80_a\|open_close' src/orders/builder/order_builder.rs` is empty today.
 
 ## Why
 
@@ -36,6 +49,12 @@ touch either side.
 
 - #549 — `Action::SellShort` / `Action::SellLong` were reachable only by hand-building the
   order struct; `.sell_short()` / `.sell_long()` closed the gap.
+- #832 — the audit #828 asked for, scoped to the integer-coded enums. Six of the seven had no entry
+  point: `OcaType` was reachable only as a bare `i32` on `oca_group`, `VolatilityType` through
+  a private field with no setter, and `TriggerMethod` / `OrderOrigin` / `ShortSaleSlot` /
+  `ReferencePriceType` not at all. All six got a setter taking the enum. The seventh,
+  `AuctionStrategy`, had no proto field behind it and was deleted instead — the
+  counter-example: a missing setter is sometimes the honest signal that the field is dead.
 - #822 — `TimeInForce` gained `GoodTillCrossing` and `.good_till_crossing()` in the same PR,
   as the directive says. Its open-enum `Unknown(raw)` arm is the one variant with no named
   method, deliberately: the raw value comes from a decode, so the general

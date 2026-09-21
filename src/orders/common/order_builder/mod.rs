@@ -40,9 +40,7 @@
 //! `.buy()` / `.sell()` instead.
 
 use crate::orders::builder::ValidationError;
-use crate::orders::{
-    Action, AuctionStrategy, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
-};
+use crate::orders::{Action, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -237,13 +235,15 @@ pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
 /// limit order price and the nearest listed increment.
 /// Products: OPT
 /// Supported Exchanges: BOX
-pub fn auction_limit(action: Action, quantity: f64, price: f64, auction_strategy: AuctionStrategy) -> Order {
+///
+/// Note: TWS's protobuf `Order` message carries no auction-strategy field, so the strategy
+/// cannot be set from the API — TWS applies the account's configured default.
+pub fn auction_limit(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
         order_type: "LMT".to_owned(),
         total_quantity: quantity,
         limit_price: Some(price),
-        auction_strategy: Some(auction_strategy),
         ..Order::default()
     }
 }

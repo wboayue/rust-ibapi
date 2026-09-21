@@ -4,7 +4,10 @@ use super::validation;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
-use crate::orders::{Action, Order, OrderComboLeg, OrderCondition, TimeInForce};
+use crate::orders::conditions::TriggerMethod;
+use crate::orders::{
+    Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOrigin, ReferencePriceType, ShortSaleSlot, TimeInForce, VolatilityType,
+};
 
 #[cfg(test)]
 mod tests;
@@ -28,7 +31,7 @@ pub struct OrderBuilder<'a, C> {
     transmit: bool,
     parent_id: Option<i32>,
     oca_group: Option<String>,
-    oca_type: Option<i32>,
+    oca_type: OcaType,
     account: Option<String>,
     good_after_time: Option<String>,
     good_till_date: Option<String>,
@@ -43,9 +46,16 @@ pub struct OrderBuilder<'a, C> {
     trail_stop_price: Option<f64>,
     limit_price_offset: Option<f64>,
     volatility: Option<f64>,
-    volatility_type: Option<i32>,
+    volatility_type: Option<VolatilityType>,
+    reference_price_type: Option<ReferencePriceType>,
     delta: Option<f64>,
     aux_price: Option<f64>,
+
+    // Institutional and exchange routing fields
+    trigger_method: TriggerMethod,
+    origin: OrderOrigin,
+    short_sale_slot: ShortSaleSlot,
+    designated_location: Option<String>,
 
     // Special order flags
     sweep_to_fill: bool,
@@ -104,7 +114,7 @@ impl<'a, C> OrderBuilder<'a, C> {
             transmit: true,
             parent_id: None,
             oca_group: None,
-            oca_type: None,
+            oca_type: OcaType::None,
             account: None,
             good_after_time: None,
             good_till_date: None,
@@ -118,6 +128,11 @@ impl<'a, C> OrderBuilder<'a, C> {
             limit_price_offset: None,
             volatility: None,
             volatility_type: None,
+            reference_price_type: None,
+            trigger_method: TriggerMethod::Default,
+            origin: OrderOrigin::Customer,
+            short_sale_slot: ShortSaleSlot::None,
+            designated_location: None,
             delta: None,
             aux_price: None,
             sweep_to_fill: false,
@@ -495,10 +510,150 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
-    /// Set OCA group
-    pub fn oca_group(mut self, group: impl Into<String>, oca_type: i32) -> Self {
+    /// Join a One-Cancels-All group.
+    ///
+    /// `oca_type` tells TWS what to do with the rest of the group when one order fills;
+    /// see [`OcaType`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::OcaType;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(150.0)
+    ///     .oca_group("MyOCA", OcaType::CancelWithBlock)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn oca_group(mut self, group: impl Into<String>, oca_type: OcaType) -> Self {
         self.oca_group = Some(group.into());
-        self.oca_type = Some(oca_type);
+        self.oca_type = oca_type;
+        self
+    }
+
+    /// Set how simulated stop, stop-limit and trailing-stop orders are triggered.
+    ///
+    /// See [`TriggerMethod`]. The default is [`TriggerMethod::Default`], which lets TWS pick
+    /// per security type.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::conditions::TriggerMethod;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .sell(100)
+    ///     .stop(140.0)
+    ///     .trigger_method(TriggerMethod::Last)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn trigger_method(mut self, method: TriggerMethod) -> Self {
+        self.trigger_method = method;
+        self
+    }
+
+    /// Set the order's origin. Institutional customers only; see [`OrderOrigin`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::OrderOrigin;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .origin(OrderOrigin::Firm)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn origin(mut self, origin: OrderOrigin) -> Self {
+        self.origin = origin;
+        self
+    }
+
+    /// Set the short sale slot. Institutional short sales only; see [`ShortSaleSlot`].
+    ///
+    /// [`ShortSaleSlot::ThirdParty`] also needs [`designated_location`](Self::designated_location).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::ShortSaleSlot;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .sell_short(100)
+    ///     .market()
+    ///     .short_sale_slot(ShortSaleSlot::Broker)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn short_sale_slot(mut self, slot: ShortSaleSlot) -> Self {
+        self.short_sale_slot = slot;
+        self
+    }
+
+    /// Set where the shares to short come from.
+    ///
+    /// Only meaningful with [`ShortSaleSlot::ThirdParty`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::ShortSaleSlot;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .sell_short(100)
+    ///     .market()
+    ///     .short_sale_slot(ShortSaleSlot::ThirdParty)
+    ///     .designated_location("ABC SECURITIES")
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn designated_location(mut self, location: impl Into<String>) -> Self {
+        self.designated_location = Some(location.into());
         self
     }
 
@@ -684,6 +839,68 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
+    /// Set whether the [`volatility`](Self::volatility) figure is daily or annual.
+    ///
+    /// VOL orders only; see [`VolatilityType`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::VolatilityType;
+    /// use ibapi::orders::builder::OrderType;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(1)
+    ///     .order_type(OrderType::Volatility)
+    ///     .volatility(0.25)
+    ///     .volatility_type(VolatilityType::Annual)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn volatility_type(mut self, volatility_type: VolatilityType) -> Self {
+        self.volatility_type = Some(volatility_type);
+        self
+    }
+
+    /// Set how TWS computes the limit price for a volatility order.
+    ///
+    /// VOL orders only; see [`ReferencePriceType`]. Also drives stock range price monitoring.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::ReferencePriceType;
+    /// use ibapi::orders::builder::OrderType;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(1)
+    ///     .order_type(OrderType::Volatility)
+    ///     .volatility(0.25)
+    ///     .reference_price_type(ReferencePriceType::AverageOfNBBO)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn reference_price_type(mut self, reference_price_type: ReferencePriceType) -> Self {
+        self.reference_price_type = Some(reference_price_type);
+        self
+    }
+
     /// Mark order as not held
     pub fn not_held(mut self) -> Self {
         self.not_held = true;
@@ -843,7 +1060,7 @@ impl<'a, C> OrderBuilder<'a, C> {
 
         if let Some(group) = self.oca_group {
             order.oca_group = group;
-            order.oca_type = self.oca_type.unwrap_or(0).into();
+            order.oca_type = self.oca_type;
         }
 
         if let Some(account) = self.account {
@@ -872,7 +1089,17 @@ impl<'a, C> OrderBuilder<'a, C> {
 
         if let Some(vol) = self.volatility {
             order.volatility = Some(vol);
-            order.volatility_type = self.volatility_type.map(|v| v.into());
+        }
+
+        order.volatility_type = self.volatility_type;
+        order.reference_price_type = self.reference_price_type;
+
+        order.trigger_method = self.trigger_method;
+        order.origin = self.origin;
+        order.short_sale_slot = self.short_sale_slot;
+
+        if let Some(location) = self.designated_location {
+            order.designated_location = location;
         }
 
         if let Some(delta) = self.delta {

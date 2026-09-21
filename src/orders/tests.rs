@@ -279,20 +279,6 @@ fn reference_price_type_round_trips_every_wire_code() {
     );
 }
 
-#[test]
-fn auction_strategy_round_trips_every_wire_code() {
-    check_wire_code_round_trip(
-        &[
-            (AuctionStrategy::Match, 1),
-            (AuctionStrategy::Improvement, 2),
-            (AuctionStrategy::Transparent, 3),
-            (AuctionStrategy::Unknown(0), 0),
-            (AuctionStrategy::Unknown(4), 4),
-        ],
-        AuctionStrategy::Unknown,
-    );
-}
-
 /// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new
 /// variant has no arm in `modeled_index` and fails to compile; the arm it
 /// forces then indexes past `seen`, so the table has to grow before the
