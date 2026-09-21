@@ -110,17 +110,20 @@ fn test_percent_change_condition_builder_missing_threshold_panics() {
 
 #[test]
 fn trigger_method_round_trips_every_wire_code() {
-    crate::common::test_utils::wire_enum::check_wire_code_round_trip(&[
-        (TriggerMethod::Default, 0),
-        (TriggerMethod::DoubleBidAsk, 1),
-        (TriggerMethod::Last, 2),
-        (TriggerMethod::DoubleLast, 3),
-        (TriggerMethod::BidAsk, 4),
-        (TriggerMethod::LastOrBidAsk, 7),
-        (TriggerMethod::Midpoint, 8),
-        // 5 and 6 are unassigned codes; neither may collapse to Default.
-        (TriggerMethod::Unknown(5), 5),
-        (TriggerMethod::Unknown(6), 6),
-        (TriggerMethod::Unknown(9), 9),
-    ]);
+    crate::common::test_utils::wire_enum::check_wire_code_round_trip(
+        &[
+            (TriggerMethod::Default, 0),
+            (TriggerMethod::DoubleBidAsk, 1),
+            (TriggerMethod::Last, 2),
+            (TriggerMethod::DoubleLast, 3),
+            (TriggerMethod::BidAsk, 4),
+            (TriggerMethod::LastOrBidAsk, 7),
+            (TriggerMethod::Midpoint, 8),
+            // 5 and 6 are unassigned codes; neither may collapse to Default.
+            (TriggerMethod::Unknown(5), 5),
+            (TriggerMethod::Unknown(6), 6),
+            (TriggerMethod::Unknown(9), 9),
+        ],
+        TriggerMethod::Unknown,
+    );
 }

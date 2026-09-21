@@ -11,24 +11,23 @@ use serde::{Deserialize, Serialize};
 /// The codes are IB's, listed at
 /// <https://www.interactivebrokers.com/docs/tws-api/doc/orders/trigger-methods>.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggerMethod {
-    /// Default method (last for most securities, double bid/ask for OTC and options)
+    /// Default method (last for most securities, double bid/ask for OTC and options). Wire code `0`.
     #[default]
-    Default = 0,
-    /// Two consecutive bid or ask prices
-    DoubleBidAsk = 1,
-    /// Last traded price
-    Last = 2,
-    /// Two consecutive last prices
-    DoubleLast = 3,
-    /// Current bid or ask price
-    BidAsk = 4,
-    /// Last price or bid/ask if no last price available
-    LastOrBidAsk = 7,
-    /// Mid-point between bid and ask
-    Midpoint = 8,
+    Default,
+    /// Two consecutive bid or ask prices. Wire code `1`.
+    DoubleBidAsk,
+    /// Last traded price. Wire code `2`.
+    Last,
+    /// Two consecutive last prices. Wire code `3`.
+    DoubleLast,
+    /// Current bid or ask price. Wire code `4`.
+    BidAsk,
+    /// Last price or bid/ask if no last price available. Wire code `7`.
+    LastOrBidAsk,
+    /// Mid-point between bid and ask. Wire code `8`.
+    Midpoint,
     /// A catch-all in case TWS adds a new trigger method.
     Unknown(i32),
 }

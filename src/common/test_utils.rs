@@ -358,11 +358,27 @@ pub mod wire_enum {
         }
     }
 
+    /// Codes probed for the completeness half of [`check_wire_code_round_trip`].
+    /// Wide enough to cover any code IB would plausibly add to one of these
+    /// enums — the largest in use is `TriggerMethod::Midpoint` at 8 — and the
+    /// negative end guards a `From<i32>` that reaches for `.abs()` or `as u32`.
+    const PROBE_CODES: std::ops::RangeInclusive<i32> = -8..=64;
+
     /// Assert `From<i32>`, `From<T> for i32`, and `ToField` agree on a
-    /// hand-written `(variant, code)` table for an integer-coded wire enum.
-    /// List the `Unknown(code)` rows in the table too — they round-trip the
-    /// same way.
-    pub fn check_wire_code_round_trip<T>(table: &[(T, i32)])
+    /// hand-written `(variant, code)` table for an integer-coded wire enum,
+    /// **and that the table lists every code the enum models**.
+    ///
+    /// The completeness half is what the `_every_wire_code` in the callers'
+    /// names claims, and the reason this takes `unknown`: `From<i32>` is total,
+    /// so every code outside the table has to land on `unknown(code)`. A
+    /// variant added without a table row is modeled, so the probe finds it —
+    /// the gap `all_tifs_covers_every_variant` closes for the string enums
+    /// (docs/rules/wire/enum-typing.md).
+    ///
+    /// Listing `Unknown(code)` rows in the table is still useful — only those
+    /// exercise `Into<i32>` and `ToField` on the payload variant — and costs
+    /// nothing: a listed code is skipped by the probe that would re-derive it.
+    pub fn check_wire_code_round_trip<T>(table: &[(T, i32)], unknown: fn(i32) -> T)
     where
         T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug + crate::ToField,
     {
@@ -370,6 +386,17 @@ pub mod wire_enum {
             assert_eq!(T::from(code), variant, "From({code})");
             assert_eq!(variant.into(), code, "i32::from({variant:?})");
             assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
+        }
+
+        for code in PROBE_CODES {
+            if table.iter().any(|&(_, listed)| listed == code) {
+                continue;
+            }
+            assert_eq!(
+                T::from(code),
+                unknown(code),
+                "code {code} is modeled by a variant the table does not list"
+            );
         }
     }
 }

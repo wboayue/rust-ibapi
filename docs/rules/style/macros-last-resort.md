@@ -40,7 +40,7 @@ error spans point into generated code; goto-def and rust-analyzer degrade at the
 tax is worth paying to delete fifty lines of mechanical impls and not worth paying to save
 five.
 
-All eight macros in `src/`, and what each one buys:
+All nine macros in `src/`, and what each one buys (`grep -rn 'macro_rules!' src --include=*.rs | wc -l`):
 
 | Macro | Home | Why not a function |
 |---|---|---|
@@ -52,8 +52,9 @@ All eight macros in `src/`, and what each one buys:
 | `empty_request_builder!` | `testdata/builders/mod.rs` | Same |
 | `encode_cancel_by_id!` | `proto/encoders.rs` | Names a distinct `proto::` struct literal per call; there is no trait over "prost message with a `req_id` field" |
 | `encode_empty_proto!` | `proto/encoders.rs` | Same, for the no-field request bodies |
+| `impl_proto_payload!` | `proto/payload.rs` | Same — a `const MESSAGE_ID` per generated `prost` type, 25 of them (`awk '/^impl_proto_payload! \{/,/^\}/' src/proto/payload.rs \| grep -c '=>'`). Load-bearing, not cosmetic: `expect_proto` will not compile for a payload lacking a line |
 
-The last five are all case 3 — a type name is the argument, and generics cannot construct a
+The last six are all case 3 — a type name is the argument, and generics cannot construct a
 type they were handed as an identifier.
 
 And the counter-examples, both from #554, which are the shape to imitate when a reviewer asks

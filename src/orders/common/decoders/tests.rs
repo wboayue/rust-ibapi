@@ -505,3 +505,143 @@ fn order_binding_requires_complete_identity() {
 fn order_binding_rejects_text_framing() {
     assert_rejects_text_framing(IncomingMessages::OrderBound, "100\0", decode_order_bound);
 }
+
+// =============================================================================
+// Required submessages (#825 review follow-up)
+// =============================================================================
+
+#[test]
+fn decode_open_order_proto_rejects_missing_submessages() {
+    use prost::Message;
+
+    // #825 made a present-but-empty `action` Error::Parse, but the layer here
+    // still defaulted a wholly absent `order` to Order::default() — action ==
+    // Buy, the mishandling it removed. The reference client drops such a frame
+    // (EDecoder.cs OpenOrderEventProtoBuf returns before eWrapper.openOrder);
+    // this crate has no skip channel, so it errors.
+    let full = crate::proto::OpenOrder {
+        order_id: Some(42),
+        contract: Some(crate::proto::Contract::default()),
+        order: Some(crate::proto::Order {
+            action: Some("BUY".into()),
+            ..Default::default()
+        }),
+        order_state: Some(crate::proto::OrderState {
+            status: Some("Submitted".into()),
+            ..Default::default()
+        }),
+    };
+    assert!(decode_open_order_proto(&full.encode_to_vec()).is_ok(), "control frame must decode");
+
+    for (name, frame) in [
+        (
+            "contract",
+            crate::proto::OpenOrder {
+                contract: None,
+                ..full.clone()
+            },
+        ),
+        ("order", crate::proto::OpenOrder { order: None, ..full.clone() }),
+        (
+            "order_state",
+            crate::proto::OpenOrder {
+                order_state: None,
+                ..full.clone()
+            },
+        ),
+    ] {
+        match decode_open_order_proto(&frame.encode_to_vec()) {
+            Err(Error::Parse(_, field, reason)) => {
+                assert_eq!(field, name);
+                assert_eq!(reason, "missing in OpenOrder");
+            }
+            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn decode_completed_order_proto_rejects_missing_submessages() {
+    use prost::Message;
+
+    let full = crate::proto::CompletedOrder {
+        contract: Some(crate::proto::Contract::default()),
+        order: Some(crate::proto::Order {
+            action: Some("BUY".into()),
+            ..Default::default()
+        }),
+        order_state: Some(crate::proto::OrderState {
+            status: Some("Submitted".into()),
+            ..Default::default()
+        }),
+    };
+    assert!(decode_completed_order_proto(&full.encode_to_vec()).is_ok(), "control frame must decode");
+
+    for (name, frame) in [
+        (
+            "contract",
+            crate::proto::CompletedOrder {
+                contract: None,
+                ..full.clone()
+            },
+        ),
+        ("order", crate::proto::CompletedOrder { order: None, ..full.clone() }),
+        (
+            "order_state",
+            crate::proto::CompletedOrder {
+                order_state: None,
+                ..full.clone()
+            },
+        ),
+    ] {
+        match decode_completed_order_proto(&frame.encode_to_vec()) {
+            Err(Error::Parse(_, field, reason)) => {
+                assert_eq!(field, name);
+                assert_eq!(reason, "missing in CompletedOrder");
+            }
+            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn decode_execution_data_proto_rejects_missing_submessages() {
+    use prost::Message;
+
+    // Same shape as the two above: EDecoder.cs's ExecutionDataEventProtoBuf
+    // returns before eWrapper.execDetails(..) when either is null.
+    let full = crate::proto::ExecutionDetails {
+        req_id: Some(9),
+        contract: Some(crate::proto::Contract::default()),
+        execution: Some(crate::proto::Execution {
+            side: Some("BOT".into()),
+            ..Default::default()
+        }),
+    };
+    decode_execution_data_proto(&full.encode_to_vec()).expect("control frame must decode");
+
+    for (name, frame) in [
+        (
+            "contract",
+            crate::proto::ExecutionDetails {
+                contract: None,
+                ..full.clone()
+            },
+        ),
+        (
+            "execution",
+            crate::proto::ExecutionDetails {
+                execution: None,
+                ..full.clone()
+            },
+        ),
+    ] {
+        match decode_execution_data_proto(&frame.encode_to_vec()) {
+            Err(Error::Parse(_, field, reason)) => {
+                assert_eq!(field, name);
+                assert_eq!(reason, "missing in ExecutionDetails");
+            }
+            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
+        }
+    }
+}

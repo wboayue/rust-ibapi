@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -78,18 +78,33 @@ For shape-identical enums, `impl_wire_enum!` in `src/macros.rs` generates `Displ
 A field that arrives as an `i32` code (`Liquidity`, `OcaType`, `TriggerMethod`, ...) has no
 missing/empty half: the proto default is a real code. The rule for the value half is the same
 as for strings: **`From<i32>` never coerces an unrecognized code to a known variant.** The
-shape `Liquidity` established is a `#[repr(i32)]` enum with an `Unknown(i32)` payload
-variant and a total `From<i32>` returning `Unknown(code)` for anything outside the table, so
-the value is observable rather than silently read as `None`, `Default`, or the first listed
-variant. The seven order enums also implement `From<T> for i32`, handing the code back,
-written by hand because `value as i32` no longer compiles once a payload variant exists.
-`Unknown(i32)` is `Copy`, so an enum that was `Copy` stays so, and derived serde stays.
-There is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded on a
-streaming path where an error kills the subscription, so a payload variant is the only way
-to keep the conversion total without coercing. `AuctionStrategy` takes the same shape for
-uniformity only - the proto `Order` carries no such field
-(`grep -rn auction_strategy src/proto/` is empty), so its `From<i32>` converts nothing but
-the `i32` a caller hands `OrderBuilder`.
+shape `Liquidity` established is an enum with an `Unknown(i32)` payload variant and a total
+`From<i32>` returning `Unknown(code)` for anything outside the table, so the value is
+observable rather than silently read as `None`, `Default`, or the first listed variant. The
+seven order enums also implement `From<T> for i32`, handing the code back, written by hand
+because `value as i32` no longer compiles once a payload variant exists. `Unknown(i32)` is
+`Copy`, so an enum that was `Copy` stays so, and derived serde stays. There is no closed
+(`TryFrom<i32>`) form of this shape: these fields are decoded on a streaming path where an
+error kills the subscription, so a payload variant is the only way to keep the conversion
+total without coercing.
+
+**The wire code lives in the `From` impls, not in a discriminant.** #825 first wrote these
+with `#[repr(i32)]` and `Customer = 0` alongside the hand-written `From<T> for i32`, copying
+`Liquidity`. #829 dropped both from all eight: once the payload variant exists nothing reads
+the discriminant — `value as i32` will not compile — so `= 0` was decoration that a reader
+takes for the source of truth, and `#[repr(i32)]` (which explicit discriminants on a
+data-carrying enum require) was an ABI commitment in the public API buying nothing. A missing
+match arm is a compile error; `Foo = 5` paired with `Foo => 6` is not. The code is rustdoc'd
+on each variant instead (``Wire code `0`.``).
+
+`AuctionStrategy` takes the same shape for uniformity only - the proto `Order` carries no
+such field (`grep -rn auction_strategy src/proto/` is empty). #825's claim that its
+`From<i32>` "converts nothing but the `i32` a caller hands `OrderBuilder`" was wrong: the
+`OrderBuilder::auction_strategy` field it named had no setter, so the `.into()` reading it
+was unreachable. #829 deleted the field. `From<i32> for AuctionStrategy` now has no in-crate
+caller at all — `auction_limit` takes an `AuctionStrategy` directly — and stays only as
+public API symmetric with the other six. The builder has no typed setter for it (issue
+[#828]), which is the `builder-enum-coverage` gap the dead field was hiding.
 
 ## Required tests
 
@@ -101,7 +116,11 @@ the `i32` a caller hands `OrderBuilder`.
   frame carrying the unknown value (see `order_update_stream_survives_unknown_status`).
 - For an integer-coded enum: `check_wire_code_round_trip` over the full code table plus
   `Unknown(code)` rows, and a decoder test feeding a code outside the table (see
-  `decode_order_preserves_unknown_integer_codes`).
+  `decode_order_preserves_unknown_integer_codes`). The helper takes the `Unknown`
+  constructor and probes every code in `-8..=64` that the table does not list, asserting
+  each lands on `Unknown` — that is what makes the callers' `_every_wire_code` name true,
+  and it fails when a variant is added without a table row. The string enums have no such
+  probe (the value space is unbounded); they need the `modeled_index` guard below instead.
 
 ## Precedents
 
@@ -136,5 +155,13 @@ migrations — consult it rather than re-deriving which fields were converted an
   upstream, so an absent one is a malformed frame, not a default. `From<i32> for
   OrderCondition` panics on an unsupported discriminator and `decode_order_condition`
   falls back to a default price condition; both were left alone because they type a
-  condition discriminator, not a field, and are a separate change.
+  condition discriminator, not a field, and are a separate change (issue #827).
+- #829 — the review follow-up, and a counter-example on two counts. #825's `#[repr(i32)]`
+  plus explicit discriminants copied `Liquidity` faithfully and were still wrong: they
+  duplicate the hand-written `From<T> for i32` that a payload variant forces, and nothing
+  reads them. Copying a precedent is not the same as checking it still earns its shape.
+  #825's `AuctionStrategy` note also named an `OrderBuilder` field as the conversion's one
+  caller without checking the field had a setter — it had none, and the line reading it was
+  unreachable. The `_every_wire_code` test names were the third: they asserted only the rows
+  listed until `check_wire_code_round_trip` gained the `Unknown`-constructor probe.
 

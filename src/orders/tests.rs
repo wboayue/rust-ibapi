@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::test_utils::wire_enum::{check_wire_code_round_trip, check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+use crate::Error;
 
 const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
     (OrderStatusKind::ApiPending, "ApiPending"),
@@ -149,6 +150,29 @@ fn action_round_trip() {
 }
 
 #[test]
+fn wire_enum_distinguishes_empty_from_unknown() {
+    // Both macro arms report the two failures apart: no value at all vs. a
+    // value this crate does not model. `parse_required` reaches the first only
+    // when a caller parses directly — it intercepts empty with "missing
+    // {label}", which names the field instead of the type.
+    for (input, reason) in [("", "empty Action"), ("NOTASIDE", "unknown Action")] {
+        match input.parse::<Action>() {
+            Err(Error::Parse(_, raw, got)) => {
+                assert_eq!(raw, input);
+                assert_eq!(got, reason);
+            }
+            other => panic!("expected Error::Parse for {input:?}, got {other:?}"),
+        }
+    }
+
+    // The `fallback` arm only ever rejects empty; anything else is Unknown.
+    match "".parse::<Rule80A>() {
+        Err(Error::Parse(_, _, reason)) => assert_eq!(reason, "empty Rule80A"),
+        other => panic!("expected Error::Parse for an empty Rule80A, got {other:?}"),
+    }
+}
+
+#[test]
 fn action_from_str_rejects_unknown() {
     // Closed enum: empty, arbitrary, case-variants, and the Execution.side
     // vocabulary (BOT/SLD) are all errors, never coerced to Buy.
@@ -189,66 +213,84 @@ fn order_open_close_preserves_unknown_wire_value() {
 
 #[test]
 fn oca_type_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (OcaType::None, 0),
-        (OcaType::CancelWithBlock, 1),
-        (OcaType::ReduceWithBlock, 2),
-        (OcaType::ReduceWithoutBlock, 3),
-        (OcaType::Unknown(4), 4),
-        (OcaType::Unknown(-1), -1),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (OcaType::None, 0),
+            (OcaType::CancelWithBlock, 1),
+            (OcaType::ReduceWithBlock, 2),
+            (OcaType::ReduceWithoutBlock, 3),
+            (OcaType::Unknown(4), 4),
+            (OcaType::Unknown(-1), -1),
+        ],
+        OcaType::Unknown,
+    );
 }
 
 #[test]
 fn order_origin_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (OrderOrigin::Customer, 0),
-        (OrderOrigin::Firm, 1),
-        (OrderOrigin::Unknown(2), 2),
-        (OrderOrigin::Unknown(-1), -1),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (OrderOrigin::Customer, 0),
+            (OrderOrigin::Firm, 1),
+            (OrderOrigin::Unknown(2), 2),
+            (OrderOrigin::Unknown(-1), -1),
+        ],
+        OrderOrigin::Unknown,
+    );
 }
 
 #[test]
 fn short_sale_slot_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (ShortSaleSlot::None, 0),
-        (ShortSaleSlot::Broker, 1),
-        (ShortSaleSlot::ThirdParty, 2),
-        (ShortSaleSlot::Unknown(3), 3),
-        (ShortSaleSlot::Unknown(-1), -1),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (ShortSaleSlot::None, 0),
+            (ShortSaleSlot::Broker, 1),
+            (ShortSaleSlot::ThirdParty, 2),
+            (ShortSaleSlot::Unknown(3), 3),
+            (ShortSaleSlot::Unknown(-1), -1),
+        ],
+        ShortSaleSlot::Unknown,
+    );
 }
 
 #[test]
 fn volatility_type_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (VolatilityType::Daily, 1),
-        (VolatilityType::Annual, 2),
-        (VolatilityType::Unknown(0), 0),
-        (VolatilityType::Unknown(3), 3),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (VolatilityType::Daily, 1),
+            (VolatilityType::Annual, 2),
+            (VolatilityType::Unknown(0), 0),
+            (VolatilityType::Unknown(3), 3),
+        ],
+        VolatilityType::Unknown,
+    );
 }
 
 #[test]
 fn reference_price_type_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (ReferencePriceType::AverageOfNBBO, 1),
-        (ReferencePriceType::NBBO, 2),
-        (ReferencePriceType::Unknown(0), 0),
-        (ReferencePriceType::Unknown(3), 3),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (ReferencePriceType::AverageOfNBBO, 1),
+            (ReferencePriceType::NBBO, 2),
+            (ReferencePriceType::Unknown(0), 0),
+            (ReferencePriceType::Unknown(3), 3),
+        ],
+        ReferencePriceType::Unknown,
+    );
 }
 
 #[test]
 fn auction_strategy_round_trips_every_wire_code() {
-    check_wire_code_round_trip(&[
-        (AuctionStrategy::Match, 1),
-        (AuctionStrategy::Improvement, 2),
-        (AuctionStrategy::Transparent, 3),
-        (AuctionStrategy::Unknown(0), 0),
-        (AuctionStrategy::Unknown(4), 4),
-    ]);
+    check_wire_code_round_trip(
+        &[
+            (AuctionStrategy::Match, 1),
+            (AuctionStrategy::Improvement, 2),
+            (AuctionStrategy::Transparent, 3),
+            (AuctionStrategy::Unknown(0), 0),
+            (AuctionStrategy::Unknown(4), 4),
+        ],
+        AuctionStrategy::Unknown,
+    );
 }
 
 /// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new
