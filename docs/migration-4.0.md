@@ -20,7 +20,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 |---|---|
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
-| unreleased | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
+| 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
 
 ## Breaking changes
 
@@ -412,7 +412,7 @@ What changes for compiling code:
 
 Six public order enums sat on public `Order` fields that reach TWS, with no way to set them through the fluent builder — the only path was constructing `Order` by hand, which is the surface the builder replaces. `OcaType` was half-exposed: reachable, but as a bare `i32`.
 
-| Field | 4.1 | unreleased |
+| Field | 4.1 | 4.2 |
 |---|---|---|
 | `oca_type` | `.oca_group("MyOCA", 1)` | `.oca_group("MyOCA", OcaType::CancelWithBlock)` |
 | `trigger_method` | hand-built `Order` | `.trigger_method(TriggerMethod::Last)` |
@@ -428,7 +428,7 @@ Only `oca_group` is source-breaking. The bare code maps straight onto the varian
 // 4.1
 let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", 1).build()?;
 
-// unreleased
+// 4.2
 use ibapi::orders::OcaType;
 let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", OcaType::CancelWithBlock).build()?;
 ```
@@ -443,7 +443,7 @@ let order = client.order(&contract).buy(100).limit(50.0).oca_group("MyOCA", OcaT
 // 4.1 — the strategy never reached TWS
 let order = auction_limit(Action::Buy, 100.0, 50.0, AuctionStrategy::Improvement);
 
-// unreleased
+// 4.2
 let order = auction_limit(Action::Buy, 100.0, 50.0);
 ```
 

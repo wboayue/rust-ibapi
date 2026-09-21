@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-21
+
 ### Added
 
 - `orders::TimeInForce::GoodTillCrossing` (`GTX`), and `OrderBuilder::good_till_crossing()` / `OrderBuilder::day_till_canceled()` so GTX and DTC are reachable without `time_in_force()` (#822).
@@ -252,7 +254,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/wboayue/rust-ibapi/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/wboayue/rust-ibapi/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/wboayue/rust-ibapi/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/wboayue/rust-ibapi/compare/v3.3.0...v4.0.0
