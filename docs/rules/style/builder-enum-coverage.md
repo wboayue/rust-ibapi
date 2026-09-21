@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822", "#832"]
+precedents: ["#549", "#822", "#832", "#833"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -27,11 +27,22 @@ standing in for the enum (`oca_group(group, 1)`) and a private field nothing wri
 symptoms, and the second can mean the wire has no such field — see
 [wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
 
-`OrderBuilder` is not clear of this yet. #832 closed the integer-coded enums;
-`Order::rule_80_a` (`Option<Rule80A>`) and `Order::open_close` (`Option<OrderOpenClose>`) are
-public, encoded (`src/proto/encoders.rs` `rule80_a:` / `open_close:`), and still have no
-setter. Re-derive rather than trust this list:
-`grep -n 'rule_80_a\|open_close' src/orders/builder/order_builder.rs` is empty today.
+`OrderBuilder` is clear of this as of #833: #832 closed the integer-coded enums and #833 the
+two string-typed ones. Ten `Order` fields are enum-typed; eight have a same-named setter,
+`action` goes through `.buy()` / `.sell()` / `.sell_short()` / `.sell_long()` and `tif`
+through `.time_in_force()` and its named siblings. Re-derive rather than trust that count:
+
+```bash
+sed -n '/^pub struct Order {/,/^}/p' src/orders/mod.rs \
+  | grep -oE '^    pub [a-z_0-9]+: (Option<)?(conditions::)?[A-Z][A-Za-z0-9]*>?,$' \
+  | grep -vE ': (Option<)?(String|Vec)' | sed 's/^    pub //'
+```
+
+That prints eleven rows today — `soft_dollar_tier: SoftDollarTier` is a struct, not an enum,
+so drop it. Look each surviving field name up in
+`grep -oE 'pub fn [a-z_0-9]+' src/orders/builder/order_builder.rs`. A field whose setter is
+named for the *variants* rather than the field (`action`, `tif`) reads as missing there and
+is not — check those two by hand.
 
 ## Why
 
@@ -55,6 +66,11 @@ touch either side.
   `ReferencePriceType` not at all. All six got a setter taking the enum. The seventh,
   `AuctionStrategy`, had no proto field behind it and was deleted instead — the
   counter-example: a missing setter is sometimes the honest signal that the field is dead.
+- #833 — the two the #832 audit left out, both open enums: `.rule_80_a(Rule80A)` and
+  `.open_close(OrderOpenClose)`. As with `TimeInForce` below, the general setter is the only
+  way in for `Unknown(raw)` and no named per-variant methods were added — the raw value comes
+  from a decode, and a `.unknown("Z")` method would read as an invitation to invent wire
+  strings.
 - #822 — `TimeInForce` gained `GoodTillCrossing` and `.good_till_crossing()` in the same PR,
   as the directive says. Its open-enum `Unknown(raw)` arm is the one variant with no named
   method, deliberately: the raw value comes from a decode, so the general

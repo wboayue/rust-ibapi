@@ -6,7 +6,8 @@ use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOrigin, ReferencePriceType, ShortSaleSlot, TimeInForce, VolatilityType,
+    Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce,
+    VolatilityType,
 };
 
 #[cfg(test)]
@@ -56,6 +57,8 @@ pub struct OrderBuilder<'a, C> {
     origin: OrderOrigin,
     short_sale_slot: ShortSaleSlot,
     designated_location: Option<String>,
+    rule_80_a: Option<Rule80A>,
+    open_close: Option<OrderOpenClose>,
 
     // Special order flags
     sweep_to_fill: bool,
@@ -133,6 +136,8 @@ impl<'a, C> OrderBuilder<'a, C> {
             origin: OrderOrigin::Customer,
             short_sale_slot: ShortSaleSlot::None,
             designated_location: None,
+            rule_80_a: None,
+            open_close: None,
             delta: None,
             aux_price: None,
             sweep_to_fill: false,
@@ -657,6 +662,66 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
+    /// Set the NYSE Rule 80A designation.
+    ///
+    /// Institutional trading only; see [`Rule80A`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::Rule80A;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(150.0)
+    ///     .rule_80_a(Rule80A::Agency)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn rule_80_a(mut self, rule: Rule80A) -> Self {
+        self.rule_80_a = Some(rule);
+        self
+    }
+
+    /// Set whether the order opens or closes a position.
+    ///
+    /// Institutional customers only; see [`OrderOpenClose`]. With
+    /// [`Action::Buy`], [`Open`](OrderOpenClose::Open) opens a new long position and
+    /// [`Close`](OrderOpenClose::Close) closes an existing short one.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::OrderOpenClose;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(150.0)
+    ///     .open_close(OrderOpenClose::Open)
+    ///     .submit()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn open_close(mut self, open_close: OrderOpenClose) -> Self {
+        self.open_close = Some(open_close);
+        self
+    }
+
     /// Do not transmit order immediately
     pub fn do_not_transmit(mut self) -> Self {
         self.transmit = false;
@@ -1101,6 +1166,9 @@ impl<'a, C> OrderBuilder<'a, C> {
         if let Some(location) = self.designated_location {
             order.designated_location = location;
         }
+
+        order.rule_80_a = self.rule_80_a;
+        order.open_close = self.open_close;
 
         if let Some(delta) = self.delta {
             order.delta = Some(delta);

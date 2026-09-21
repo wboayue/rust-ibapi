@@ -2,7 +2,7 @@ use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 use crate::orders::conditions::TriggerMethod;
-use crate::orders::{Action, OcaType, OrderOrigin, ReferencePriceType, ShortSaleSlot, TimeInForce, VolatilityType};
+use crate::orders::{Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType};
 use crate::proto::encoders::encode_order;
 
 fn create_test_contract() -> Contract {
@@ -531,6 +531,80 @@ fn short_sale_slot_and_designated_location_reach_the_wire() {
     let proto = encode_order(&order);
     assert_eq!(proto.short_sale_slot, Some(2));
     assert_eq!(proto.designated_location.as_deref(), Some("ABC SECURITIES"));
+}
+
+#[test]
+fn rule_80_a_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .rule_80_a(Rule80A::AgentOtherMemberPTIA)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.rule_80_a, Some(Rule80A::AgentOtherMemberPTIA));
+    assert_eq!(encode_order(&order).rule80_a.as_deref(), Some("M"));
+}
+
+#[test]
+fn rule_80_a_is_absent_when_unset() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).buy(100).limit(50.0).build().unwrap();
+
+    assert_eq!(order.rule_80_a, None);
+    assert_eq!(encode_order(&order).rule80_a, None);
+}
+
+#[test]
+fn open_close_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .open_close(OrderOpenClose::Close)
+        .build()
+        .unwrap();
+
+    assert_eq!(order.open_close, Some(OrderOpenClose::Close));
+    assert_eq!(encode_order(&order).open_close.as_deref(), Some("C"));
+}
+
+#[test]
+fn open_close_is_absent_when_unset() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).buy(100).limit(50.0).build().unwrap();
+
+    assert_eq!(order.open_close, None);
+    assert_eq!(encode_order(&order).open_close, None);
+}
+
+/// Both enums are open: an `Unknown(raw)` decoded off the wire goes back out
+/// unchanged, so round-tripping an inbound order through the builder is lossless.
+#[test]
+fn open_wire_enums_round_trip_unknown_values_through_the_builder() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .rule_80_a(Rule80A::Unknown("Z".to_string()))
+        .open_close(OrderOpenClose::Unknown("X".to_string()))
+        .build()
+        .unwrap();
+
+    let proto = encode_order(&order);
+    assert_eq!(proto.rule80_a.as_deref(), Some("Z"));
+    assert_eq!(proto.open_close.as_deref(), Some("X"));
 }
 
 #[test]
