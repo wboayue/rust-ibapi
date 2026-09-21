@@ -1,23 +1,23 @@
 use crate::common::test_utils::helpers::proto_response;
+use crate::market_data::historical::{BarTimestamp, HistoricalData};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
-use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response};
+use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response, HistoricalDataBarFields};
 use crate::testdata::builders::ResponseProtoEncoder;
+use time::macros::datetime;
+use time::OffsetDateTime;
 
 fn historical_data_response_pair() -> Vec<ResponseMessage> {
+    response_pair(vec![historical_data_bar(1_678_886_400)
+        .ohlc(185.50, 186.00, 185.25, 185.75)
+        .volume(1000.0)
+        .wap(185.70)
+        .count(100)])
+}
+
+fn response_pair(bars: Vec<HistoricalDataBarFields>) -> Vec<ResponseMessage> {
     vec![
-        proto_response(
-            IncomingMessages::HistoricalData,
-            historical_data_response()
-                .bar(
-                    historical_data_bar(1_678_886_400)
-                        .ohlc(185.50, 186.00, 185.25, 185.75)
-                        .volume(1000.0)
-                        .wap(185.70)
-                        .count(100),
-                )
-                .encode_proto(),
-        ),
+        proto_response(IncomingMessages::HistoricalData, historical_data_response().bars(bars).encode_proto()),
         proto_response(
             IncomingMessages::HistoricalDataEnd,
             historical_data_end_response()
@@ -29,48 +29,29 @@ fn historical_data_response_pair() -> Vec<ResponseMessage> {
 }
 
 // Issue #835: IBKR counts durations in trading time, so `.between` over-fetches
-// and must trim. Range [2026-04-15 00:00, 2026-04-16 00:00) UTC; the first bar
-// (2026-04-14 19:00) is overshoot from the prior session.
-const TRIM_RANGE_START: i64 = 1_776_211_200;
-const TRIM_RANGE_END: i64 = 1_776_297_600;
-const TRIM_BAR_BEFORE: i64 = 1_776_193_200;
-const TRIM_BARS_INSIDE: [i64; 2] = [1_776_259_800, 1_776_279_600];
+// and must trim. The first bar is overshoot from the prior session.
+const TRIM_START: OffsetDateTime = datetime!(2026-04-15 00:00 UTC);
+const TRIM_END: OffsetDateTime = datetime!(2026-04-16 00:00 UTC);
+const TRIM_BAR_BEFORE: OffsetDateTime = datetime!(2026-04-14 19:00 UTC);
+const TRIM_BARS_INSIDE: [OffsetDateTime; 2] = [datetime!(2026-04-15 13:30 UTC), datetime!(2026-04-15 19:00 UTC)];
 
 fn overshooting_response_pair() -> Vec<ResponseMessage> {
-    let bars = std::iter::once(TRIM_BAR_BEFORE)
-        .chain(TRIM_BARS_INSIDE)
-        .map(|ts| historical_data_bar(ts).ohlc(1.0, 1.0, 1.0, 1.0))
-        .collect();
-    vec![
-        proto_response(IncomingMessages::HistoricalData, historical_data_response().bars(bars).encode_proto()),
-        proto_response(
-            IncomingMessages::HistoricalDataEnd,
-            historical_data_end_response()
-                .start_date_str("20260414 19:00:00 UTC")
-                .end_date_str("20260416 00:00:00 UTC")
-                .encode_proto(),
-        ),
-    ]
-}
-
-fn trim_range() -> (time::OffsetDateTime, time::OffsetDateTime) {
-    (
-        time::OffsetDateTime::from_unix_timestamp(TRIM_RANGE_START).unwrap(),
-        time::OffsetDateTime::from_unix_timestamp(TRIM_RANGE_END).unwrap(),
+    response_pair(
+        std::iter::once(TRIM_BAR_BEFORE)
+            .chain(TRIM_BARS_INSIDE)
+            .map(|dt| historical_data_bar(dt.unix_timestamp()).ohlc(1.0, 1.0, 1.0, 1.0))
+            .collect(),
     )
 }
 
-fn assert_trimmed(data: &crate::market_data::historical::HistoricalData) {
-    let dates: Vec<i64> = data
-        .bars
-        .iter()
-        .map(|bar| match bar.date {
-            crate::market_data::historical::BarTimestamp::DateTime(dt) => dt.unix_timestamp(),
-            other => panic!("expected intraday bar, got {other:?}"),
-        })
-        .collect();
-    assert_eq!(dates, TRIM_BARS_INSIDE, "bars outside the requested range were not trimmed");
-    assert_eq!((data.start, data.end), trim_range(), "window should report the requested range");
+fn assert_trimmed(data: &HistoricalData) {
+    let dates: Vec<BarTimestamp> = data.bars.iter().map(|bar| bar.date).collect();
+    assert_eq!(
+        dates,
+        TRIM_BARS_INSIDE.map(BarTimestamp::from),
+        "bars outside the requested range were not trimmed"
+    );
+    assert_eq!((data.start, data.end), (TRIM_START, TRIM_END), "window should report the requested range");
 }
 
 // `Subscription<T>` doesn't impl Debug, so `{:?}` formatting on `Result<Subscription<_>, _>`
@@ -181,8 +162,7 @@ mod sync_tests {
             .fetch()
             .expect("fetch should succeed");
 
-        // 7 days exceeds IBKR's 86400 S ceiling; `N D` is session-aligned, so one extra
-        // session covers a range whose ends fall mid-session (issue #835).
+        // Unit choice is covered by `covering_duration_tests`; this pins the wiring.
         assert_request(
             &bus,
             0,
@@ -202,11 +182,9 @@ mod sync_tests {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(super::overshooting_response_pair()));
         let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
         let contract = Contract::stock("AAPL").build();
-        let (start, end) = super::trim_range();
-
         let data = client
             .historical_data(&contract, BarSize::Hour)
-            .between(start, end)
+            .between(super::TRIM_START, super::TRIM_END)
             .fetch()
             .expect("fetch should succeed");
 
@@ -350,8 +328,7 @@ mod async_tests {
             .await
             .expect("fetch should succeed");
 
-        // 7 days exceeds IBKR's 86400 S ceiling; `N D` is session-aligned, so one extra
-        // session covers a range whose ends fall mid-session (issue #835).
+        // Unit choice is covered by `covering_duration_tests`; this pins the wiring.
         assert_request(
             &bus,
             0,
@@ -371,11 +348,9 @@ mod async_tests {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(super::overshooting_response_pair()));
         let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
         let contract = Contract::stock("AAPL").build();
-        let (start, end) = super::trim_range();
-
         let data = client
             .historical_data(&contract, BarSize::Hour)
-            .between(start, end)
+            .between(super::TRIM_START, super::TRIM_END)
             .fetch()
             .await
             .expect("fetch should succeed");

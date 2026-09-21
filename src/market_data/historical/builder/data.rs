@@ -70,6 +70,8 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// wall-clock range. The request asks for a duration that covers `[start, end)`, and bars
     /// timestamped outside that range are dropped from the result. Bars are stamped with their
     /// start time, so a bar that begins before `start` is dropped even if it overlaps the range.
+    /// Daily and longer bars carry only a date and compare as midnight UTC: a `start` after
+    /// midnight UTC drops that day's bar.
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
