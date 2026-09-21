@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{OrderStatusKind, TimeInForce};
+use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
@@ -846,14 +846,14 @@ async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
         .order(&apple)
         .buy(100)
         .limit(50.0)
-        .oca_group("TestOCA", 1)
+        .oca_group("TestOCA", OcaType::CancelWithBlock)
         .build_order()
         .expect("order should build");
     let second = client
         .order(&microsoft)
         .buy(100)
         .limit(45.0)
-        .oca_group("TestOCA", 1)
+        .oca_group("TestOCA", OcaType::CancelWithBlock)
         .build_order()
         .expect("order should build");
 

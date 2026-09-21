@@ -67,6 +67,18 @@ Delete the dead field and correct the claim. The missing `.auction_strategy(..)`
 is a `builder-enum-coverage` gap, tracked in issue #828 rather than adding public
 API here.
 
+**Resolved in #830, the other way round.** The setter was never addable: IBKR's
+`source/proto/Order.proto` has no `auctionStrategy` field and
+`EClientUtils.createOrderProto` never sets one, so at the protobuf floor
+`Order::auction_strategy` was written by `auction_limit` and dropped by `encode_order`.
+`AuctionStrategy`, the `Order` field and `auction_limit`'s fourth parameter are gone.
+The six enums that *do* reach the wire got setters in the same PR.
+
+Follow-up left open: with the strategy parameter gone, `auction_limit(action, quantity,
+price)` constructs exactly what `limit_order(action, quantity, price)` does. It survives
+only as a documented BOX-routing entry point. Third occurrence of a duplicate free
+constructor trips the `/simplify` rule of three — fold it into `limit_order` then.
+
 ### 6. "All eight macros in `src/`" is nine
 
 `grep -rn "macro_rules!" src --include=*.rs | wc -l` → 9. `impl_proto_payload!`

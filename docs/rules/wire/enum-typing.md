@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#830"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -97,14 +97,17 @@ data-carrying enum require) was an ABI commitment in the public API buying nothi
 match arm is a compile error; `Foo = 5` paired with `Foo => 6` is not. The code is rustdoc'd
 on each variant instead (``Wire code `0`.``).
 
-`AuctionStrategy` takes the same shape for uniformity only - the proto `Order` carries no
-such field (`grep -rn auction_strategy src/proto/` is empty). #825's claim that its
-`From<i32>` "converts nothing but the `i32` a caller hands `OrderBuilder`" was wrong: the
-`OrderBuilder::auction_strategy` field it named had no setter, so the `.into()` reading it
-was unreachable. #829 deleted the field. `From<i32> for AuctionStrategy` now has no in-crate
-caller at all — `auction_limit` takes an `AuctionStrategy` directly — and stays only as
-public API symmetric with the other six. The builder has no typed setter for it (issue
-[#828]), which is the `builder-enum-coverage` gap the dead field was hiding.
+**An eighth enum, `AuctionStrategy`, was deleted rather than typed.** It took the same shape
+in #825 "for uniformity", on a field the proto `Order` does not carry: IBKR's
+`source/proto/Order.proto` has no `auctionStrategy`, the reference client's
+`EClientUtils.createOrderProto` never sets one, and `grep -rn auction src/proto/` finds only
+`ignore_open_auction`. `AuctionStrategy` was therefore unreachable in both directions at the
+protobuf floor — `Order::auction_strategy` was written by `auction_limit` and dropped by
+`encode_order`, and no decoder ever produced one. #828 went looking for the missing
+`OrderBuilder` setter and found there was nothing for a setter to reach; the enum,
+the `Order` field and `auction_limit`'s fourth parameter went instead, on the `TickEFP`
+precedent. **Uniformity with a sibling enum is not evidence that a field exists** — check
+`Order.proto` for the field name before giving a wire enum this shape.
 
 ## Required tests
 

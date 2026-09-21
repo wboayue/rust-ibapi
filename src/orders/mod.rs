@@ -203,10 +203,6 @@ pub struct Order {
     /// When set to false, orders routed directly to ASX will NOT use SmartRouting.
     /// When set to true, orders routed directly to ASX orders WILL use SmartRouting.
     pub opt_out_smart_routing: bool,
-    /// For BOX orders only.
-    ///
-    /// See [`AuctionStrategy`] for available options.
-    pub auction_strategy: Option<AuctionStrategy>,
     /// The auction's starting price. For BOX orders only.
     pub starting_price: Option<f64>,
     /// The stock's reference price.
@@ -527,7 +523,6 @@ impl Default for Order {
             exempt_code: -1,
             discretionary_amt: 0.0,
             opt_out_smart_routing: false,
-            auction_strategy: None,
             starting_price: None,
             stock_ref_price: None,
             delta: None,
@@ -1242,54 +1237,6 @@ impl Rule80A {
 // Open: an optional field on inbound OpenOrder frames whose code letters are
 // assigned by the exchange, not by this crate.
 impl_wire_enum!(Rule80A, fallback Unknown);
-
-/// Auction strategy for BOX orders.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AuctionStrategy {
-    /// Match strategy. Wire code `1`.
-    Match,
-    /// Improvement strategy. Wire code `2`.
-    Improvement,
-    /// Transparent strategy. Wire code `3`.
-    Transparent,
-    /// Auction strategy code not modeled by this version of the API.
-    Unknown(i32),
-}
-
-impl ToField for AuctionStrategy {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
-impl ToField for Option<AuctionStrategy> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl From<AuctionStrategy> for i32 {
-    fn from(value: AuctionStrategy) -> i32 {
-        match value {
-            AuctionStrategy::Match => 1,
-            AuctionStrategy::Improvement => 2,
-            AuctionStrategy::Transparent => 3,
-            AuctionStrategy::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for AuctionStrategy {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => AuctionStrategy::Match,
-            2 => AuctionStrategy::Improvement,
-            3 => AuctionStrategy::Transparent,
-            code => AuctionStrategy::Unknown(code),
-        }
-    }
-}
 
 /// Represents the price component of a combo leg order.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

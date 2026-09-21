@@ -93,6 +93,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OcaType;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -102,13 +103,13 @@ impl Client {
     /// let order1 = client.order(&contract1)
     ///     .buy(100)
     ///     .limit(50.0)
-    ///     .oca_group("MyOCA", 1)
+    ///     .oca_group("MyOCA", OcaType::CancelWithBlock)
     ///     .build_order().expect("order build failed");
     ///     
     /// let order2 = client.order(&contract2)
     ///     .buy(100)
     ///     .limit(45.0)
-    ///     .oca_group("MyOCA", 1)
+    ///     .oca_group("MyOCA", OcaType::CancelWithBlock)
     ///     .build_order().expect("order build failed");
     ///
     /// let order_ids = client.submit_oca_orders(

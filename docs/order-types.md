@@ -747,17 +747,19 @@ println!("Stop loss: {}", bracket_ids.stop_loss);
 Groups orders where execution of one cancels all others.
 
 ```rust
+use ibapi::orders::OcaType;
+
 // Build individual orders with OCA group
 let order1 = client.order(&contract1)
     .buy(100)
     .limit(50.00)
-    .oca_group("MyOCA", 1)
+    .oca_group("MyOCA", OcaType::CancelWithBlock)
     .build()?;
 
 let order2 = client.order(&contract2)
     .buy(100)
     .limit(45.00)
-    .oca_group("MyOCA", 1)
+    .oca_group("MyOCA", OcaType::CancelWithBlock)
     .build()?;
 
 // Submit as OCA group (requires contract-order pairs)

@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822"]
+precedents: ["#549", "#822", "#830"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -19,6 +19,13 @@ builder that covers four of six variants is a builder that cannot express the ot
 caller has no fallback: the field is private and the setter is the only way in.
 
 Adding a variant to such an enum means adding the method in the same PR.
+
+**The harder gap is an enum with no entry point at all.** A public enum on a public `Order`
+field that the builder cannot set is unreachable through the surface the builder exists to
+replace. Before adding the setter, check the field reaches TWS: an untyped `i32` parameter
+standing in for the enum (`oca_group(group, 1)`) and a private field nothing writes are both
+symptoms, and the second can mean the wire has no such field — see
+[wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
 
 ## Why
 
@@ -36,6 +43,12 @@ touch either side.
 
 - #549 — `Action::SellShort` / `Action::SellLong` were reachable only by hand-building the
   order struct; `.sell_short()` / `.sell_long()` closed the gap.
+- #830 — the audit #828 asked for. Six of the seven integer-coded order enums had no entry
+  point: `OcaType` was reachable only as a bare `i32` on `oca_group`, `VolatilityType` through
+  a private field with no setter, and `TriggerMethod` / `OrderOrigin` / `ShortSaleSlot` /
+  `ReferencePriceType` not at all. All six got a setter taking the enum. The seventh,
+  `AuctionStrategy`, had no proto field behind it and was deleted instead — the
+  counter-example: a missing setter is sometimes the honest signal that the field is dead.
 - #822 — `TimeInForce` gained `GoodTillCrossing` and `.good_till_crossing()` in the same PR,
   as the directive says. Its open-enum `Unknown(raw)` arm is the one variant with no named
   method, deliberately: the raw value comes from a decode, so the general

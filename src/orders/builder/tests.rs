@@ -60,7 +60,7 @@ mod sync_integration_tests {
             .algo("VWAP")
             .algo_param("startTime", "09:30:00")
             .algo_param("endTime", "16:00:00")
-            .oca_group("TestGroup", 1)
+            .oca_group("TestGroup", OcaType::CancelWithBlock)
             .build()
             .unwrap();
 

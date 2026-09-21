@@ -305,13 +305,12 @@ mod specialized_order_tests {
 
     #[test]
     fn test_auction_limit() {
-        let order = auction_limit(Action::Buy, 100.0, 50.0, AuctionStrategy::Improvement);
+        let order = auction_limit(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "LMT");
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
-        assert_eq!(order.auction_strategy, Some(AuctionStrategy::Improvement));
     }
 
     #[test]
