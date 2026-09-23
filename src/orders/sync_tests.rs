@@ -6,7 +6,8 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderStatusKind, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
+use crate::proto;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
@@ -674,6 +675,38 @@ fn order_update_stream_survives_unknown_status() {
             assert_eq!(s.status, OrderStatusKind::Filled);
         }
         other => panic!("stream did not survive the unknown status, got {other:?}"),
+    }
+}
+
+#[test]
+fn order_update_stream_survives_unknown_condition() {
+    // #827: an OpenOrder carrying a condition type this crate does not model
+    // arrives as OrderCondition::Unknown and the frame queued behind it still arrives.
+    let unknown = proto::OrderCondition {
+        r#type: Some(2),
+        is_conjunction_connection: Some(true),
+        ..Default::default()
+    };
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).conditions(vec![unknown]).encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(2).encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => match &o.order.conditions[..] {
+            [OrderCondition::Unknown(c)] => assert_eq!(c.condition_type, 2),
+            other => panic!("expected one Unknown condition, got {other:?}"),
+        },
+        other => panic!("expected OpenOrder, got {other:?}"),
+    }
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => assert_eq!(o.order_id, 2),
+        other => panic!("stream did not survive the unknown condition, got {other:?}"),
     }
 }
 

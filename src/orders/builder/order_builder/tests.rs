@@ -1496,6 +1496,30 @@ fn test_multiple_or_conditions() {
 }
 
 #[test]
+fn test_or_condition_sets_conjunction_on_unknown() {
+    use crate::orders::builder::price;
+    use crate::orders::{OrderCondition, UnknownCondition};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+    let unknown = OrderCondition::Unknown(UnknownCondition {
+        condition_type: 2,
+        is_conjunction: true,
+        ..Default::default()
+    });
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(unknown)
+        .or_condition(price(265598, "SMART").less_than(100.0))
+        .build()
+        .unwrap();
+
+    assert!(!order.conditions[0].is_conjunction());
+}
+
+#[test]
 fn test_mixed_and_or_conditions() {
     use crate::orders::builder::{margin, price, time, volume};
 

@@ -127,3 +127,22 @@ fn trigger_method_round_trips_every_wire_code() {
         TriggerMethod::Unknown,
     );
 }
+
+#[test]
+fn unknown_condition_accessors_and_serde() {
+    use crate::orders::OrderCondition;
+
+    let condition = OrderCondition::Unknown(UnknownCondition {
+        condition_type: 2,
+        is_conjunction: false,
+        contract_id: Some(265598),
+        time: Some("20251230 14:30:00 US/Eastern".into()),
+        ..Default::default()
+    });
+    assert_eq!(condition.condition_type(), 2);
+    assert!(!condition.is_conjunction());
+
+    let json = serde_json::to_string(&condition).unwrap();
+    assert!(json.starts_with("{\"Unknown\":"), "got {json}");
+    assert_eq!(serde_json::from_str::<OrderCondition>(&json).unwrap(), condition);
+}
