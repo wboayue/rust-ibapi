@@ -504,6 +504,7 @@ pub struct OpenOrderResponse {
     pub client_id: i32,
     pub perm_id: i64,
     pub status: OrderStatusKind,
+    pub conditions: Vec<proto::OrderCondition>,
 }
 
 impl Default for OpenOrderResponse {
@@ -531,6 +532,7 @@ impl Default for OpenOrderResponse {
             client_id: 100,
             perm_id: TEST_PERM_ID,
             status: OrderStatusKind::Submitted,
+            conditions: Vec::new(),
         }
     }
 }
@@ -612,6 +614,10 @@ impl OpenOrderResponse {
         self.status = v;
         self
     }
+    pub fn conditions(mut self, v: Vec<proto::OrderCondition>) -> Self {
+        self.conditions = v;
+        self
+    }
 }
 
 impl ResponseProtoEncoder for OpenOrderResponse {
@@ -645,6 +651,7 @@ impl ResponseProtoEncoder for OpenOrderResponse {
                 tif: Some(self.tif.clone()),
                 account: Some(self.account.clone()),
                 perm_id: Some(self.perm_id),
+                conditions: self.conditions.clone(),
                 ..Default::default()
             }),
             order_state: Some(proto::OrderState {

@@ -354,7 +354,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.limit_price_offset = optional_f64(proto.lmt_price_offset);
 
     // conditions
-    order.conditions = proto.conditions.iter().map(decode_order_condition).collect();
+    order.conditions = proto.conditions.iter().map(decode_order_condition).collect::<Result<_, _>>()?;
     order.conditions_cancel_order = proto.conditions_cancel_order.unwrap_or_default();
     order.conditions_ignore_rth = proto.conditions_ignore_rth.unwrap_or_default();
 
@@ -405,14 +405,17 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     Ok(order)
 }
 
-fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
+fn decode_order_condition(proto: &proto::OrderCondition) -> Result<OrderCondition, Error> {
     use crate::orders::conditions::*;
 
-    let condition_type = proto.r#type.unwrap_or_default();
+    // The reference client always sets `type`, so an absent one is a malformed frame.
+    let Some(condition_type) = proto.r#type else {
+        return Err(Error::parse_proto("type", "missing OrderCondition type"));
+    };
     let is_conjunction = proto.is_conjunction_connection.unwrap_or(true);
     let is_more = proto.is_more.unwrap_or_default();
 
-    match condition_type {
+    let condition = match condition_type {
         1 => OrderCondition::Price(PriceCondition {
             contract_id: proto.con_id.unwrap_or_default(),
             exchange: s(&proto.exchange),
@@ -451,8 +454,25 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
             is_more,
             is_conjunction,
         }),
-        _ => OrderCondition::Price(PriceCondition::default()),
-    }
+        // Preserved whole, so re-placing the order sends it back unchanged.
+        _ => OrderCondition::Unknown(UnknownCondition {
+            condition_type,
+            is_conjunction,
+            is_more: proto.is_more,
+            contract_id: proto.con_id,
+            exchange: proto.exchange.clone(),
+            symbol: proto.symbol.clone(),
+            security_type: proto.sec_type.clone(),
+            percent: proto.percent,
+            change_percent: proto.change_percent,
+            price: proto.price,
+            trigger_method: proto.trigger_method,
+            time: proto.time.clone(),
+            volume: proto.volume,
+        }),
+    };
+
+    Ok(condition)
 }
 
 pub fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error> {

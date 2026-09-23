@@ -50,7 +50,7 @@ pub use builder::types::{BracketOrderIds, OrderId};
 // Re-export condition types and builders
 pub use conditions::{
     ExecutionCondition, ExecutionConditionBuilder, MarginCondition, MarginConditionBuilder, PercentChangeCondition, PercentChangeConditionBuilder,
-    PriceCondition, PriceConditionBuilder, TimeCondition, TimeConditionBuilder, VolumeCondition, VolumeConditionBuilder,
+    PriceCondition, PriceConditionBuilder, TimeCondition, TimeConditionBuilder, UnknownCondition, VolumeCondition, VolumeConditionBuilder,
 };
 
 use std::convert::From;
@@ -1265,6 +1265,8 @@ pub enum OrderCondition {
     Volume(VolumeCondition),
     /// Percent change condition that triggers when a contract's price changes by a specified percentage.
     PercentChange(PercentChangeCondition),
+    /// A condition type this crate does not model, preserved so it round-trips unchanged.
+    Unknown(UnknownCondition),
 }
 
 impl OrderCondition {
@@ -1277,6 +1279,7 @@ impl OrderCondition {
             Self::Execution(_) => 5,
             Self::Volume(_) => 6,
             Self::PercentChange(_) => 7,
+            Self::Unknown(c) => c.condition_type,
         }
     }
 
@@ -1289,33 +1292,7 @@ impl OrderCondition {
             Self::Execution(c) => c.is_conjunction,
             Self::Volume(c) => c.is_conjunction,
             Self::PercentChange(c) => c.is_conjunction,
-        }
-    }
-}
-
-impl ToField for OrderCondition {
-    fn to_field(&self) -> String {
-        self.condition_type().to_string()
-    }
-}
-
-impl ToField for Option<OrderCondition> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl From<i32> for OrderCondition {
-    /// Creates an OrderCondition variant with default values from a type discriminator.
-    fn from(val: i32) -> Self {
-        match val {
-            1 => OrderCondition::Price(PriceCondition::default()),
-            3 => OrderCondition::Time(TimeCondition::default()),
-            4 => OrderCondition::Margin(MarginCondition::default()),
-            5 => OrderCondition::Execution(ExecutionCondition::default()),
-            6 => OrderCondition::Volume(VolumeCondition::default()),
-            7 => OrderCondition::PercentChange(PercentChangeCondition::default()),
-            _ => panic!("OrderCondition({val}) is unsupported"),
+            Self::Unknown(c) => c.is_conjunction,
         }
     }
 }

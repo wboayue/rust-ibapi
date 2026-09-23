@@ -351,6 +351,19 @@ fn encode_condition(condition: &OrderCondition) -> proto::OrderCondition {
             proto_cond.exchange = some_str(&c.exchange);
             proto_cond.change_percent = some_f64_ne(c.percent, 0.0);
         }
+        OrderCondition::Unknown(c) => {
+            proto_cond.is_more = c.is_more;
+            proto_cond.con_id = c.contract_id;
+            proto_cond.exchange = c.exchange.clone();
+            proto_cond.symbol = c.symbol.clone();
+            proto_cond.sec_type = c.security_type.clone();
+            proto_cond.percent = c.percent;
+            proto_cond.change_percent = c.change_percent;
+            proto_cond.price = c.price;
+            proto_cond.trigger_method = c.trigger_method;
+            proto_cond.time = c.time.clone();
+            proto_cond.volume = c.volume;
+        }
     }
 
     proto_cond

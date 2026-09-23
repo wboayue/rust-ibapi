@@ -109,6 +109,10 @@ path. `From<i32> for OrderCondition` (`src/orders/mod.rs`) also still carries a 
 `panic!`, though nothing on the decode path reaches it. #825 deferred both explicitly
 as "a separate change"; keeping that call. Tracked in issue #827.
 
+**Resolved by #827** (`plans/order-condition-unknown-type.md`): `OrderCondition::Unknown(UnknownCondition)`
+preserves every wire field and round-trips; absent `type` is `Error::Parse`; the panicking
+`From<i32>` and the dead `ToField` impls are removed.
+
 ### 8. `Unknown(code)` aliasing a known code
 
 `OcaType::Unknown(1) != OcaType::CancelWithBlock` under derived `PartialEq`, yet both
