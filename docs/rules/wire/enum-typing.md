@@ -169,7 +169,8 @@ migrations — consult it rather than re-deriving which fields were converted an
   `Price(PriceCondition::default())`, so re-placing the order sent TWS a different
   condition. When the discriminator selects a *message shape* rather than naming a value,
   `Unknown(code)` is not enough — the value is the whole message. `Unknown(UnknownCondition)`
-  carries the type code plus every wire field as an `Option`, so encode(decode(p)) == p.
+  carries the type code plus every wire field as an `Option`, so encode(decode(p)) == p for
+  every field except an absent conjunction flag, which returns as explicit AND (`Some(true)`).
   The reference client drops an unknown condition instead, which loses it on the same
   round-trip. An absent `type` is `Error::Parse` (upstream always sets it). The panicking
   `From<i32> for OrderCondition` went rather than taking the `Unknown(i32)` shape: it built

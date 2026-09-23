@@ -51,7 +51,8 @@ pub struct UnknownCondition {
 ```
 
 - Field names follow the modeled structs (`contract_id`, `security_type`), not proto names.
-- `Option`s mirror proto presence so encode(decode(p)) == p exactly — the whole point.
+- `Option`s mirror proto presence so encode(decode(p)) == p — the whole point — except an
+  absent conjunction flag, which returns as explicit AND (see open question).
 - `is_conjunction: bool` (not `Option`) so `is_conjunction()` / `set_conjunction` stay
   uniform; decoded with the same `unwrap_or(true)` as the others.
 - Why not `Unknown { condition_type, is_conjunction }`: lossy; re-placing would send a
