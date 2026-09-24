@@ -737,7 +737,7 @@ fn main() {
 }
 ```
 
-Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same message type (if not synchronized by the application) may receive responses for other requests of the same message type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) using shared channels are tagged with the blocking client's [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/blocking/trait.SharesChannel.html) trait to highlight areas that the application may need to synchronize.
+Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, every live subscription mapped to a response type receives every response of that type: concurrent requests of the same message type (if not synchronized by the application) also receive the responses to each other, and so do requests that share response types, such as `open_orders` and `all_open_orders`. Responses cannot be attributed to the request that caused them, so an application that issues such requests concurrently - with different arguments, or of kinds whose response types overlap - has to serialize them itself.
 
 To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
 

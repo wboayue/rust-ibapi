@@ -2,10 +2,10 @@
 //! It provides functionality for routing requests from the Client to TWS,
 //! and responses from TWS back to the Client.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -21,7 +21,7 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
+use super::{InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
@@ -52,106 +52,162 @@ fn warn_if_backlogged(label: std::fmt::Arguments<'_>, depth: usize) {
     }
 }
 
-// For requests without an identifier, shared channels are created
-// to route request/response pairs based on message type.
+// One live subscription to a shared (id-less) request. Registered under
+// every response type of its request mapping; `sender` feeds its own queue.
+#[derive(Debug)]
+struct SharedSubscriber {
+    request: OutgoingMessages,
+    responses: &'static [IncomingMessages],
+    sender: Sender<RoutedItem>,
+}
+
+impl SharedSubscriber {
+    fn receives(&self, message_type: IncomingMessages) -> bool {
+        self.responses.contains(&message_type)
+    }
+}
+
+// For requests without an identifier, responses are routed by message type
+// to every live subscription of a request mapped to that type. Each
+// subscription owns its own queue (like the async broadcast `resubscribe`),
+// so every subscriber sees every frame, nothing dispatched before it
+// subscribed reaches it, and nothing is queued for a subscriber that no
+// longer exists.
 #[derive(Debug)]
 struct SharedChannels {
-    // Maps an inbound reply to channel used to send responses.
-    senders: HashMap<IncomingMessages, Vec<Arc<Sender<RoutedItem>>>>,
-    // Maps an outbound request to channel used to receive responses.
-    receivers: HashMap<OutgoingMessages, Arc<Receiver<RoutedItem>>>,
+    // Every response type of `CHANNEL_MAPPINGS`; a frame of one of these
+    // types is a shared response whether or not anybody is subscribed.
+    response_types: HashSet<IncomingMessages>,
+    // Live subscriptions, added in `send_shared_request` and removed by the
+    // cleanup thread on drop or, lazily, when a send finds the queue gone.
+    subscribers: Mutex<Vec<SharedSubscriber>>,
+    // Live subscriptions per request type; see `SharedCounts`.
+    counts: Mutex<SharedCounts>,
 }
 
 impl SharedChannels {
-    // Creates new instance and registers request/reply pairs.
     pub fn new() -> Self {
-        let mut instance = Self {
-            senders: HashMap::new(),
-            receivers: HashMap::new(),
-        };
-
-        // Register request/response pairs.
-        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            instance.register(mapping.request, mapping.responses);
+        Self {
+            response_types: shared_channel_configuration::CHANNEL_MAPPINGS
+                .iter()
+                .flat_map(|mapping| mapping.responses.iter().copied())
+                .collect(),
+            subscribers: Mutex::new(Vec::new()),
+            counts: Mutex::new(SharedCounts::default()),
         }
-
-        instance
     }
 
-    // Maps an outgoing message to incoming message(s)
-    fn register(&mut self, outbound: OutgoingMessages, inbounds: &[IncomingMessages]) {
-        let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    fn subscribers(&self) -> std::sync::MutexGuard<'_, Vec<SharedSubscriber>> {
+        self.subscribers.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 
-        self.receivers.insert(outbound, Arc::new(receiver));
+    // Registers `sender` for every response type of `request`. Panics if
+    // `request` has no mapping.
+    fn add(&self, request: OutgoingMessages, sender: Sender<RoutedItem>) {
+        let responses = shared_channel_configuration::response_types(request)
+            .unwrap_or_else(|| panic!("unsupported request message {request:?}. check mapping in messages::shared_channel_configuration"));
+        self.subscribers().push(SharedSubscriber { request, responses, sender });
+    }
 
-        let sender = &Arc::new(sender);
+    // Removes the subscription whose queue `sender` feeds, if still registered.
+    fn remove(&self, sender: &Sender<RoutedItem>) {
+        let mut subscribers = self.subscribers();
+        let before = subscribers.len();
+        subscribers.retain(|subscriber| !subscriber.sender.same_channel(sender));
+        debug!("cleanup shared subscription: removed={}", before != subscribers.len());
+    }
 
-        for inbound in inbounds {
-            if !self.senders.contains_key(inbound) {
-                self.senders.insert(*inbound, Vec::new());
+    // Removes every registration. Every subscription has just been failed,
+    // and a failed handle's queue must not keep filling until it is dropped.
+    fn clear(&self) {
+        self.subscribers().clear();
+    }
+
+    fn is_shared_response(&self, message_type: IncomingMessages) -> bool {
+        self.response_types.contains(&message_type)
+    }
+
+    // Runs `write` for a new subscription of `message_type` and counts it on
+    // success. The lock spans the write so the count and the wire agree.
+    fn subscribe(&self, message_type: OutgoingMessages, write: impl FnOnce() -> Result<(), Error>) -> Result<SharedTicket, Error> {
+        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        write()?;
+        Ok(counts.subscribe(message_type))
+    }
+
+    // Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
+    // `SharedCounts::unsubscribe` says so.
+    fn unsubscribe(&self, ticket: SharedTicket, write: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
+        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        if counts.unsubscribe(ticket) {
+            write()
+        } else {
+            Ok(())
+        }
+    }
+
+    // Every live shared subscription has just been failed: start a new
+    // generation so their later drops cannot touch the next session's counts.
+    fn reset_counts(&self) {
+        self.counts.lock().unwrap_or_else(PoisonError::into_inner).reset();
+    }
+
+    // Sends `item()` to every subscriber selected by `filter`; returns how
+    // many were selected. A send fails only when the subscriber's queue is
+    // gone (its handle was dropped and the cleanup signal has not been
+    // processed yet); it is removed here.
+    fn send_to<F, I>(&self, filter: F, item: I) -> usize
+    where
+        F: Fn(&SharedSubscriber) -> bool,
+        I: Fn() -> RoutedItem,
+    {
+        let mut selected = 0;
+        self.subscribers().retain(|subscriber| {
+            if !filter(subscriber) {
+                return true;
             }
-            self.senders.get_mut(inbound).unwrap().push(Arc::clone(sender));
-        }
-    }
-
-    // Get receiver for specified message type. Panics if receiver not found.
-    fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<RoutedItem>> {
-        let receiver = self
-            .receivers
-            .get(&message_type)
-            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}. check mapping in messages::shared_channel_configuration"));
-
-        Arc::clone(receiver)
-    }
-
-    fn contains_sender(&self, message_type: IncomingMessages) -> bool {
-        self.senders.contains_key(&message_type)
-    }
-
-    // Notify all listeners of a given message type with message.
-    fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
-        if let Some(senders) = self.senders.get(&message_type) {
-            for sender in senders.iter() {
-                if let Err(e) = sender.send(message.clone().into()) {
-                    warn!("error sending message: {e}");
-                } else {
-                    warn_if_backlogged(format_args!("shared channel for {message_type:?}"), sender.len());
+            selected += 1;
+            match subscriber.sender.send(item()) {
+                Ok(()) => {
+                    warn_if_backlogged(format_args!("shared channel for {:?}", subscriber.request), subscriber.sender.len());
+                    true
+                }
+                Err(_) => {
+                    debug!("shared subscription {:?} dropped: removed", subscriber.request);
+                    false
                 }
             }
+        });
+        selected
+    }
+
+    // Deliver `message` to every live subscription registered for its type.
+    // With none, the frame is dropped: a shared response nobody asked for
+    // (e.g. `OpenOrder` from another client, or after the requester's drop).
+    fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
+        if self.send_to(|subscriber| subscriber.receives(message_type), || message.clone().into()) == 0 {
+            debug!("no shared subscription for {message_type:?}: frame dropped");
         }
     }
 
-    // Notify all senders with a given message
+    // Deliver `message_fn()` once to every live subscription.
     fn notify_all<F>(&self, message_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
-        for senders in self.senders.values() {
-            for sender in senders {
-                if let Err(e) = sender.send(message_fn()) {
-                    warn!("error sending notification: {e}");
-                }
-            }
-        }
+        self.send_to(|_| true, message_fn);
     }
 
     // Fail in-flight one-shot requests fast by delivering an error to the
-    // one-shot senders only. Used for request-less errors, which carry no id
-    // to correlate. Streaming channels are excluded so an unrelated error
-    // can't terminate a live stream.
+    // one-shot subscriptions only. Used for request-less errors, which carry
+    // no id to correlate. Streaming subscriptions are excluded so an
+    // unrelated error can't terminate a live stream.
     fn fail_one_shot_channels<F>(&self, error_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
-        for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
-            if let Some(senders) = self.senders.get(message_type) {
-                for sender in senders {
-                    if let Err(e) = sender.send(error_fn()) {
-                        warn!("error failing one-shot channel: {e}");
-                    }
-                }
-            }
-        }
+        let one_shot = shared_channel_configuration::exclusive_one_shot_response_types();
+        self.send_to(|subscriber| subscriber.responses.iter().any(|r| one_shot.contains(r)), error_fn);
     }
 }
 
@@ -254,6 +310,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
+        self.shared_channels.clear();
         self.connection.notice_broadcaster.close();
 
         // Both latch: the connection signal releases every `wait_connected`
@@ -310,9 +367,11 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.notify_all(|| Error::ConnectionReset.into());
         self.orders.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        self.shared_channels.reset_counts();
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
+        self.shared_channels.clear();
     }
 
     // The three cleanup handlers below remove a registration only when it is
@@ -504,7 +563,7 @@ impl<S: Stream> TcpMessageBus<S> {
             self.requests.send(&request_id, message.into()).unwrap();
         } else if self.orders.contains(&request_id) {
             self.orders.send(&request_id, message.into()).unwrap();
-        } else if self.shared_channels.contains_sender(message.message_type()) {
+        } else if self.shared_channels.is_shared_response(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
             report_unroutable_frame(&message, &*self.connection.notice_broadcaster);
@@ -586,7 +645,7 @@ impl<S: Stream> TcpMessageBus<S> {
                         }
                         return;
                     }
-                    if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
+                    if self.shared_channels.is_shared_response(IncomingMessages::OpenOrder) {
                         self.shared_channels.send_message(message.message_type(), &message);
                         return;
                     }
@@ -667,6 +726,7 @@ impl<S: Stream> TcpMessageBus<S> {
                         Ok(Signal::Request(request_id, sender)) => message_bus.clean_request(request_id, &sender),
                         Ok(Signal::Order(order_id, sender)) => message_bus.clean_order(order_id, &sender),
                         Ok(Signal::OrderUpdateStream(sender)) => message_bus.clear_order_update_stream(&sender),
+                        Ok(Signal::Shared(sender)) => message_bus.shared_channels.remove(&sender),
                         Err(_) => {
                             debug!("cleanup signal channel closed");
                             return;
@@ -818,33 +878,33 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
         self.ensure_connected()?;
 
-        let shared_receiver = self.shared_channels.get_receiver(message_type);
+        // A queue of its own, registered before the write so no response can
+        // arrive ahead of it. A failed write takes the registration with it.
+        let (sender, receiver) = channel::unbounded();
+        self.shared_channels.add(message_type, sender.clone());
+        let ticket = match self.shared_channels.subscribe(message_type, || self.write_message(message)) {
+            Ok(ticket) => ticket,
+            Err(e) => {
+                self.shared_channels.remove(&sender);
+                return Err(e);
+            }
+        };
 
-        // Shared channels are one crossbeam queue per request type (unlike the async
-        // broadcast, whose `resubscribe` starts fresh). For one-shot requests, discard
-        // anything buffered while no request was in flight — e.g. a request-less error
-        // fanned out to one-shot channels — so this request reads only its own
-        // responses. Streaming channels are not drained: they never receive fanned
-        // errors, and draining could discard messages buffered for a concurrent live
-        // subscription of the same type.
-        if shared_channel_configuration::is_one_shot_request(message_type) {
-            while shared_receiver.try_recv().is_ok() {}
-        }
-
-        self.write_message(message)?;
-
+        // The sender is the drop signal's identity: `Signal::Shared` removes
+        // exactly this registration.
         let subscription = SubscriptionBuilder::new()
-            .shared_receiver(shared_receiver)
-            .message_type(message_type)
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals_send.clone())
+            .shared(ticket)
             .build();
 
         Ok(subscription)
     }
 
-    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &[u8]) -> Result<(), Error> {
-        self.write_message(message)?;
-        // TODO send cancel
-        Ok(())
+    fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<&[u8]>) -> Result<(), Error> {
+        self.shared_channels
+            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_message(message)))
     }
 
     fn notice_subscribe(&self) -> NoticeStream {
