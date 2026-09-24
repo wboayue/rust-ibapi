@@ -83,7 +83,6 @@ mod trade_tick_tests {
     #[test]
     fn test_decode_trade_tick_proto_last() {
         let trade = decode_trade_tick_proto(&fixture(1).encode_proto()).expect("decode failed");
-        assert_eq!(trade.tick_type, "1");
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(trade.price, 3895.25);
         assert_eq!(trade.size, 7.0);
@@ -96,13 +95,21 @@ mod trade_tick_tests {
     #[test]
     fn test_decode_trade_tick_proto_all_last() {
         let trade = decode_trade_tick_proto(&fixture(2).encode_proto()).expect("decode failed");
-        assert_eq!(trade.tick_type, "2");
+        assert_eq!(trade.price, 3895.25);
     }
 
     #[test]
     fn test_decode_trade_tick_proto_invalid_type() {
         // tick_type 3 = BidAsk — wrong feed for the trade decoder.
         let err = decode_trade_tick_proto(&fixture(3).encode_proto()).expect_err("should reject bid/ask tick type");
+        assert!(err.to_string().contains("Unexpected tick_type"));
+    }
+
+    #[test]
+    fn test_decode_trade_tick_proto_absent_type() {
+        let mut msg = fixture(1).to_proto();
+        msg.tick_type = None;
+        let err = decode_trade_tick_proto(&msg.encode_to_vec()).expect_err("should reject absent tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
     }
 

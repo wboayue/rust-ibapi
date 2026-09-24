@@ -491,6 +491,26 @@ let what: WhatToShow = "TRADES".parse()?;
 
 `ibapi::Error` now implements `From<HistoricalParseError>`, so the `?` above also works in a function returning `Result<_, ibapi::Error>`.
 
+### 18. `Trade.tick_type` is removed
+
+`market_data::realtime::Trade` carried `tick_type: String`, holding the wire code `"1"` (`Last`) or `"2"` (`AllLast`). It was constant per stream: `tick_by_tick(..).last()` only ever yields `"1"`, and `.all_last()` only `"2"`, so the method that opened the stream already names the feed. The field is removed.
+
+A caller that merges both feeds into one stream tags each item at merge time instead:
+
+```rust,ignore
+// 4.2
+if trade.tick_type == "2" { /* AllLast */ }
+
+// Unreleased - tag at merge time
+enum Feed { Last, AllLast }
+
+let last = client.tick_by_tick(&contract, 0).last().await?.filter_data().map(|t| (Feed::Last, t));
+let all = client.tick_by_tick(&contract, 0).all_last().await?.filter_data().map(|t| (Feed::AllLast, t));
+let mut merged = futures::stream::select(last, all);
+```
+
+Consider whether you need both: `AllLast` is a superset of `Last`, adding the trades `Last` leaves out, and each subscription uses a tick-by-tick slot. Subscribing to `AllLast` alone and filtering on `special_conditions` avoids the merge.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -526,7 +546,8 @@ No code changes required, but observable at runtime:
 15. Pass an `OcaType` to `OrderBuilder::oca_group` instead of an `i32`, drop the fourth argument from `auction_limit(..)` calls, remove any use of `orders::AuctionStrategy`, `Order::auction_strategy` or `orders::builder::AuctionType`, and replace hand-built `Order` structs that only existed to set `trigger_method` / `origin` / `short_sale_slot` / `designated_location` / `volatility_type` / `reference_price_type` with the new builder setters — see [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed).
 16. Add an `OrderCondition::Unknown(c)` arm to exhaustive matches on order conditions, and replace `OrderCondition::from(code)` with a condition builder — see [§16](#16-ordercondition-gains-unknownunknowncondition).
 17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
-18. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+18. Drop reads of `Trade.tick_type`; if you merge the `last()` and `all_last()` streams, tag each item when merging — see [§18](#18-tradetick_type-is-removed).
+19. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
