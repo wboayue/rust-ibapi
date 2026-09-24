@@ -58,6 +58,10 @@ use crate::Error;
 /// high until the next reconnect, so no later subscription of that type can
 /// cancel it.
 ///
+/// Clones share one cancel: dropping or cancelling any clone ends the request
+/// for every clone. For a shared stream the clones count as one subscription,
+/// so the stream is cancelled at TWS even while another clone is still polling.
+///
 /// When you only care about data, use the [`SubscriptionItemStreamExt::filter_data`]
 /// adapter to filter notices (logged at `warn!`):
 ///

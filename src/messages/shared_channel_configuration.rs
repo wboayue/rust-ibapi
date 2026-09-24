@@ -17,6 +17,10 @@ pub struct ChannelMapping {
     /// channels are excluded because an unrelated error would otherwise terminate
     /// a live subscription. See [`exclusive_one_shot_response_types`].
     ///
+    /// Also keeps one-shots out of the per-type live-subscription count that
+    /// gates the shared cancel: they never cancel, so counting them would
+    /// withhold every later cancel for the type.
+    ///
     /// Note this is explicit data, not derived from the presence of an `*End`
     /// response: `NewsBulletins` streams without an End marker.
     pub one_shot: bool,

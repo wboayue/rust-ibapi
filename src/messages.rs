@@ -1344,10 +1344,10 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 ///
 /// Published once the reconnected session is live: the channel reset runs
 /// before the reconnect, so a consumer may resubscribe from inside its handler
-/// and land on the new session without racing either. Like the
-/// other client-synthesized codes this classifies as
-/// [`NoticeCategory::Error`] ("everything else"); consumers match the constant
-/// itself rather than the category.
+/// and land on the new session without racing either. Like the other
+/// client-synthesized codes this classifies as [`NoticeCategory::Error`]
+/// ("everything else"); consumers match the constant itself rather than the
+/// category.
 pub const TRANSPORT_RECONNECT_CODE: i32 = -8;
 
 /// Build the [`TRANSPORT_RECONNECT_CODE`] notice. Emits no log line: the
