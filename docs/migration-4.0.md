@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only) |
 
 ## Breaking changes
 
@@ -473,6 +473,24 @@ match condition {
 
 Exhaustive matches on `OrderCondition` need the new arm; the enum stays exhaustive so the compiler finds them. Serde uses the derived externally tagged form (`{"Unknown":{..}}`), like every other `OrderCondition` variant.
 
+### 17. Historical `BarSize`, `Duration` and `WhatToShow` parse through `FromStr` only
+
+`market_data::historical::BarSize`, `Duration` and `WhatToShow` each implemented `From<&str>` and `From<String>` beside their `FromStr`. The `From` impls were `Self::from_str(s).unwrap()`: an infallible conversion that panicked on any string `FromStr` rejects. Nothing in the crate, `examples/` or the integration crates called them. They are removed; `FromStr` is unchanged, so `s.parse()` accepts exactly the strings `From` did and returns `Err(HistoricalParseError)` where `From` panicked.
+
+```rust,ignore
+// 4.2 - infallible, panicked on an unrecognized string
+let bar_size = BarSize::from("MIN5");
+let duration: Duration = "1 D".into();
+let what: WhatToShow = String::from("TRADES").into();
+
+// Unreleased - Err(HistoricalParseError) on an unrecognized string
+let bar_size: BarSize = "MIN5".parse()?;
+let duration: Duration = "1 D".parse()?;
+let what: WhatToShow = "TRADES".parse()?;
+```
+
+`ibapi::Error` now implements `From<HistoricalParseError>`, so the `?` above also works in a function returning `Result<_, ibapi::Error>`.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -507,7 +525,8 @@ No code changes required, but observable at runtime:
 14. Replace `Action::from(s)`, `Rule80A::from(s)` and `OrderOpenClose::from(s)` with `s.parse()?`, and add an `Unknown(..)` arm to exhaustive matches on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` — see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
 15. Pass an `OcaType` to `OrderBuilder::oca_group` instead of an `i32`, drop the fourth argument from `auction_limit(..)` calls, remove any use of `orders::AuctionStrategy`, `Order::auction_strategy` or `orders::builder::AuctionType`, and replace hand-built `Order` structs that only existed to set `trigger_method` / `origin` / `short_sale_slot` / `designated_location` / `volatility_type` / `reference_price_type` with the new builder setters — see [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed).
 16. Add an `OrderCondition::Unknown(c)` arm to exhaustive matches on order conditions, and replace `OrderCondition::from(code)` with a condition builder — see [§16](#16-ordercondition-gains-unknownunknowncondition).
-17. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
+18. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
