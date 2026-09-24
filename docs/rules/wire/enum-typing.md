@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -155,10 +155,8 @@ migrations — consult it rather than re-deriving which fields were converted an
   fields, already not `Copy`, so preserving costs nothing). `decode_order` moved onto
   `parse_required` / `parse_optional` for those three, so a missing `action` is now
   `Error::Parse` rather than `Buy` — unlike `tif` above, `action` has no unset state
-  upstream, so an absent one is a malformed frame, not a default. `From<i32> for
-  OrderCondition` panics on an unsupported discriminator and `decode_order_condition`
-  falls back to a default price condition; both were left alone because they type a
-  condition discriminator, not a field, and are a separate change (issue #827).
+  upstream, so an absent one is a malformed frame, not a default. The condition
+  discriminator was left for a separate change — #827 below.
 - #829 — the review follow-up, and a counter-example on two counts. #825's `#[repr(i32)]`
   plus explicit discriminants copied `Liquidity` faithfully and were still wrong: they
   duplicate the hand-written `From<T> for i32` that a payload variant forces, and nothing
@@ -167,4 +165,13 @@ migrations — consult it rather than re-deriving which fields were converted an
   caller without checking the field had a setter — it had none, and the line reading it was
   unreachable. The `_every_wire_code` test names were the third: they asserted only the rows
   listed until `check_wire_code_round_trip` gained the `Unknown`-constructor probe.
-
+- #827 — `OrderCondition`, the discriminator #825 deferred: an unmodeled type decoded as
+  `Price(PriceCondition::default())`, so re-placing the order sent TWS a different
+  condition. When the discriminator selects a *message shape* rather than naming a value,
+  `Unknown(code)` is not enough — the value is the whole message. `Unknown(UnknownCondition)`
+  carries the type code plus every wire field as an `Option`, so encode(decode(p)) == p for
+  every field except an absent conjunction flag, which returns as explicit AND (`Some(true)`).
+  The reference client drops an unknown condition instead, which loses it on the same
+  round-trip. An absent `type` is `Error::Parse` (upstream always sets it). The panicking
+  `From<i32> for OrderCondition` went rather than taking the `Unknown(i32)` shape: it built
+  default-valued conditions, had no caller, and the builders are the construction path.

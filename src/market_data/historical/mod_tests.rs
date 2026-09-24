@@ -27,29 +27,29 @@ fn test_bar_size_to_string() {
 }
 
 #[test]
-fn test_bar_size_from_string() {
-    assert_eq!(BarSize::Sec, BarSize::from("SEC"));
-    assert_eq!(BarSize::Sec5, BarSize::from("SEC5"));
-    assert_eq!(BarSize::Sec10, BarSize::from("SEC10"));
-    assert_eq!(BarSize::Sec15, BarSize::from("SEC15"));
-    assert_eq!(BarSize::Sec30, BarSize::from("SEC30"));
-    assert_eq!(BarSize::Min, BarSize::from("MIN"));
-    assert_eq!(BarSize::Min2, BarSize::from("MIN2"));
-    assert_eq!(BarSize::Min3, BarSize::from("MIN3"));
-    assert_eq!(BarSize::Min4, BarSize::from("MIN4"));
-    assert_eq!(BarSize::Min5, BarSize::from("MIN5"));
-    assert_eq!(BarSize::Min10, BarSize::from("MIN10"));
-    assert_eq!(BarSize::Min15, BarSize::from("MIN15"));
-    assert_eq!(BarSize::Min20, BarSize::from("MIN20"));
-    assert_eq!(BarSize::Min30, BarSize::from("MIN30"));
-    assert_eq!(BarSize::Hour, BarSize::from("HOUR"));
-    assert_eq!(BarSize::Hour2, BarSize::from("HOUR2"));
-    assert_eq!(BarSize::Hour3, BarSize::from("HOUR3"));
-    assert_eq!(BarSize::Hour4, BarSize::from("HOUR4"));
-    assert_eq!(BarSize::Hour8, BarSize::from("HOUR8"));
-    assert_eq!(BarSize::Day, BarSize::from("DAY"));
-    assert_eq!(BarSize::Week, BarSize::from("WEEK"));
-    assert_eq!(BarSize::Month, BarSize::from("MONTH"));
+fn test_bar_size_parse() {
+    assert_eq!("SEC".parse::<BarSize>(), Ok(BarSize::Sec));
+    assert_eq!("SEC5".parse::<BarSize>(), Ok(BarSize::Sec5));
+    assert_eq!("SEC10".parse::<BarSize>(), Ok(BarSize::Sec10));
+    assert_eq!("SEC15".parse::<BarSize>(), Ok(BarSize::Sec15));
+    assert_eq!("SEC30".parse::<BarSize>(), Ok(BarSize::Sec30));
+    assert_eq!("MIN".parse::<BarSize>(), Ok(BarSize::Min));
+    assert_eq!("MIN2".parse::<BarSize>(), Ok(BarSize::Min2));
+    assert_eq!("MIN3".parse::<BarSize>(), Ok(BarSize::Min3));
+    assert_eq!("MIN4".parse::<BarSize>(), Ok(BarSize::Min4));
+    assert_eq!("MIN5".parse::<BarSize>(), Ok(BarSize::Min5));
+    assert_eq!("MIN10".parse::<BarSize>(), Ok(BarSize::Min10));
+    assert_eq!("MIN15".parse::<BarSize>(), Ok(BarSize::Min15));
+    assert_eq!("MIN20".parse::<BarSize>(), Ok(BarSize::Min20));
+    assert_eq!("MIN30".parse::<BarSize>(), Ok(BarSize::Min30));
+    assert_eq!("HOUR".parse::<BarSize>(), Ok(BarSize::Hour));
+    assert_eq!("HOUR2".parse::<BarSize>(), Ok(BarSize::Hour2));
+    assert_eq!("HOUR3".parse::<BarSize>(), Ok(BarSize::Hour3));
+    assert_eq!("HOUR4".parse::<BarSize>(), Ok(BarSize::Hour4));
+    assert_eq!("HOUR8".parse::<BarSize>(), Ok(BarSize::Hour8));
+    assert_eq!("DAY".parse::<BarSize>(), Ok(BarSize::Day));
+    assert_eq!("WEEK".parse::<BarSize>(), Ok(BarSize::Week));
+    assert_eq!("MONTH".parse::<BarSize>(), Ok(BarSize::Month));
 }
 
 #[test]
@@ -68,18 +68,18 @@ fn test_what_to_show_to_string() {
 }
 
 #[test]
-fn test_what_to_show_from_string() {
-    assert_eq!(WhatToShow::Trades, WhatToShow::from("TRADES"));
-    assert_eq!(WhatToShow::MidPoint, WhatToShow::from("MIDPOINT"));
-    assert_eq!(WhatToShow::Bid, WhatToShow::from("BID"));
-    assert_eq!(WhatToShow::Ask, WhatToShow::from("ASK"));
-    assert_eq!(WhatToShow::BidAsk, WhatToShow::from("BID_ASK"));
-    assert_eq!(WhatToShow::AggTrades, WhatToShow::from("AGGTRADES"));
-    assert_eq!(WhatToShow::HistoricalVolatility, WhatToShow::from("HISTORICAL_VOLATILITY"));
-    assert_eq!(WhatToShow::OptionImpliedVolatility, WhatToShow::from("OPTION_IMPLIED_VOLATILITY"));
-    assert_eq!(WhatToShow::FeeRate, WhatToShow::from("FEE_RATE"));
-    assert_eq!(WhatToShow::Schedule, WhatToShow::from("SCHEDULE"));
-    assert_eq!(WhatToShow::AdjustedLast, WhatToShow::from("ADJUSTED_LAST"));
+fn test_what_to_show_parse() {
+    assert_eq!("TRADES".parse::<WhatToShow>(), Ok(WhatToShow::Trades));
+    assert_eq!("MIDPOINT".parse::<WhatToShow>(), Ok(WhatToShow::MidPoint));
+    assert_eq!("BID".parse::<WhatToShow>(), Ok(WhatToShow::Bid));
+    assert_eq!("ASK".parse::<WhatToShow>(), Ok(WhatToShow::Ask));
+    assert_eq!("BID_ASK".parse::<WhatToShow>(), Ok(WhatToShow::BidAsk));
+    assert_eq!("AGGTRADES".parse::<WhatToShow>(), Ok(WhatToShow::AggTrades));
+    assert_eq!("HISTORICAL_VOLATILITY".parse::<WhatToShow>(), Ok(WhatToShow::HistoricalVolatility));
+    assert_eq!("OPTION_IMPLIED_VOLATILITY".parse::<WhatToShow>(), Ok(WhatToShow::OptionImpliedVolatility));
+    assert_eq!("FEE_RATE".parse::<WhatToShow>(), Ok(WhatToShow::FeeRate));
+    assert_eq!("SCHEDULE".parse::<WhatToShow>(), Ok(WhatToShow::Schedule));
+    assert_eq!("ADJUSTED_LAST".parse::<WhatToShow>(), Ok(WhatToShow::AdjustedLast));
 }
 
 #[test]
@@ -123,9 +123,6 @@ fn test_duration_parse() {
         "abc ".parse::<Duration>(),
         Err(HistoricalParseError::ParseIntError("ABC".to_string(), expected_int_error))
     );
-
-    assert_eq!(Duration::seconds(1), Duration::from("1 S"));
-    assert_eq!(Duration::seconds(1), Duration::from(String::from("1 S")));
 }
 
 #[test]

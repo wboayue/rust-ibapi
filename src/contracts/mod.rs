@@ -16,7 +16,7 @@ use tick_types::TickType;
 use crate::encode_option_field;
 use crate::ToField;
 
-// Re-export V2 API types
+// Re-export builder and contract types
 pub use builders::*;
 pub use common::contract_builder::ContractBuilder;
 pub use option_chain_builder::OptionChainBuilder;
@@ -26,7 +26,7 @@ pub use types::*;
 mod common;
 mod option_chain_builder;
 
-// V2 API modules — internal grouping; their `pub` items are re-exported above
+// Internal grouping; their `pub` items are re-exported above
 // via `pub use builders::*;` / `pub use types::*;`. Users reach the types as
 // `ibapi::contracts::*`, not via these submodule paths.
 pub(crate) mod builders;
@@ -960,8 +960,6 @@ pub struct SmartComponent {
     /// Single-letter exchange abbreviation (e.g. `"P"` for Pacific).
     pub exchange_letter: String,
 }
-
-// Async API methods are now on Client directly via contracts/async.rs
 
 // ContractBuilder is deprecated - use the new builder methods on Contract instead
 // e.g., Contract::stock(), Contract::call(), Contract::put(), etc.

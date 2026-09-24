@@ -1,13 +1,8 @@
 //! # Account Management
 //!
-//! This module provides functionality for managing positions and profit and loss (PnL)
-//! information in a trading system. It includes structures and implementations for:
-//!
-//! - Position tracking
-//! - Daily, unrealized, and realized PnL calculations
-//! - Family code management
-//! - Real-time PnL updates for individual positions
-//!
+//! Account summary and updates, positions, PnL, managed accounts and family codes,
+//! financial-advisor configuration, user info, soft-dollar tiers, server time, server
+//! log level and third-party verification.
 
 // Common implementation modules
 pub(crate) mod common;

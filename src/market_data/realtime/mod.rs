@@ -175,8 +175,6 @@ impl StreamDecoder<Bar> for Bar {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
-    /// Tick type: `Last` or `AllLast`
-    pub tick_type: String,
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
     /// Tick last price

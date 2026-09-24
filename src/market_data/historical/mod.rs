@@ -292,17 +292,6 @@ impl FromStr for BarSize {
     }
 }
 
-impl From<&str> for BarSize {
-    fn from(val: &str) -> Self {
-        Self::from_str(val).unwrap()
-    }
-}
-impl From<String> for BarSize {
-    fn from(val: String) -> Self {
-        Self::from(val.as_str())
-    }
-}
-
 impl ToField for BarSize {
     fn to_field(&self) -> String {
         self.to_string()
@@ -383,17 +372,6 @@ impl FromStr for Duration {
             }
             None => Err(HistoricalParseError::Duration(val.to_string(), "Missing delimiter".to_string())),
         }
-    }
-}
-
-impl From<&str> for Duration {
-    fn from(val: &str) -> Self {
-        Self::from_str(val).unwrap()
-    }
-}
-impl From<String> for Duration {
-    fn from(val: String) -> Self {
-        Self::from(val.as_str())
     }
 }
 
@@ -695,18 +673,6 @@ impl FromStr for WhatToShow {
             "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
             _ => Err(HistoricalParseError::WhatToShow(s.to_string())),
         }
-    }
-}
-
-impl From<&str> for WhatToShow {
-    fn from(val: &str) -> Self {
-        Self::from_str(val).unwrap()
-    }
-}
-
-impl From<String> for WhatToShow {
-    fn from(val: String) -> Self {
-        Self::from(val.as_str())
     }
 }
 

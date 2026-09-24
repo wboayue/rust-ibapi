@@ -13,8 +13,6 @@ use super::common::{decoders, encoders};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
 
-// DataStream implementations are now in common/stream_decoders.rs
-
 impl Client {
     /// Subscribe to streaming position updates for all accessible accounts.
     ///

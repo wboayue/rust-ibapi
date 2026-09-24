@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::{ExecutionSide, OrderStatusKind, TimeInForce};
+use crate::orders::{ExecutionSide, OrderStatusKind, TimeInForce, UnknownCondition};
 
 // === parse_required ===
 
@@ -418,6 +418,97 @@ fn decode_order_condition_preserves_unknown_trigger_method() {
     match &order.conditions[..] {
         [OrderCondition::Price(price)] => assert_eq!(price.trigger_method, TriggerMethod::Unknown(99)),
         other => panic!("expected one price condition, got {other:?}"),
+    }
+}
+
+fn populated_condition(condition_type: i32) -> proto::OrderCondition {
+    proto::OrderCondition {
+        r#type: Some(condition_type),
+        is_conjunction_connection: Some(false),
+        is_more: Some(true),
+        con_id: Some(265598),
+        exchange: Some("SMART".into()),
+        symbol: Some("AAPL".into()),
+        sec_type: Some("STK".into()),
+        percent: Some(12),
+        change_percent: Some(2.5),
+        price: Some(150.0),
+        trigger_method: Some(2),
+        time: Some("20251230 14:30:00 US/Eastern".into()),
+        volume: Some(1000),
+    }
+}
+
+#[test]
+fn decode_order_preserves_unknown_condition_type() {
+    // #827: an unmodeled type (2 is unassigned) must not read as a zeroed price condition.
+    let proto_order = proto::Order {
+        conditions: vec![
+            populated_condition(2),
+            proto::OrderCondition {
+                r#type: Some(99),
+                ..Default::default()
+            },
+        ],
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(
+        order.conditions,
+        vec![
+            OrderCondition::Unknown(UnknownCondition {
+                condition_type: 2,
+                is_conjunction: false,
+                is_more: Some(true),
+                contract_id: Some(265598),
+                exchange: Some("SMART".into()),
+                symbol: Some("AAPL".into()),
+                security_type: Some("STK".into()),
+                percent: Some(12),
+                change_percent: Some(2.5),
+                price: Some(150.0),
+                trigger_method: Some(2),
+                time: Some("20251230 14:30:00 US/Eastern".into()),
+                volume: Some(1000),
+            }),
+            OrderCondition::Unknown(UnknownCondition {
+                condition_type: 99,
+                is_conjunction: true,
+                ..Default::default()
+            }),
+        ]
+    );
+}
+
+#[test]
+fn decode_order_condition_missing_type_is_parse_error() {
+    let proto_order = proto::Order {
+        conditions: vec![proto::OrderCondition::default()],
+        ..proto_order()
+    };
+    match decode_order(&proto_order).unwrap_err() {
+        Error::Parse(_, _, msg) => assert!(msg.contains("OrderCondition type"), "got: {msg}"),
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
+}
+
+#[test]
+fn decode_order_condition_maps_every_type_code() {
+    // Probes the same range as check_wire_code_round_trip: a type added to the
+    // decoder without a row here fails.
+    const MODELED: [i32; 6] = [1, 3, 4, 5, 6, 7];
+    for code in -8..=64 {
+        let condition = decode_order_condition(&proto::OrderCondition {
+            r#type: Some(code),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(condition.condition_type(), code, "code {code}");
+        assert_eq!(
+            matches!(condition, OrderCondition::Unknown(_)),
+            !MODELED.contains(&code),
+            "code {code} decoded as {condition:?}"
+        );
     }
 }
 

@@ -137,6 +137,15 @@ fn from_poison_error() {
 }
 
 #[test]
+fn from_historical_parse_error() {
+    fn parse(s: &str) -> Result<crate::market_data::historical::BarSize, Error> {
+        Ok(s.parse()?)
+    }
+    let error = parse("bogus").unwrap_err();
+    assert!(matches!(error, Error::HistoricalParseError(HistoricalParseError::BarSize(ref s)) if s == "bogus"));
+}
+
+#[test]
 fn from_protobuf_decode_error() {
     let error: Error = protobuf_decode_error().into();
     assert!(matches!(error, Error::ProtobufDecode(_)));

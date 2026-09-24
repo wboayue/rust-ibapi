@@ -7,8 +7,8 @@ This document describes the test-fixture strategy for the rust-ibapi crate. Test
 | Fixture | Scope | Where it lives | Use when |
 | --- | --- | --- | --- |
 | `MessageBusStub` | Domain logic | `src/stubs.rs` | Testing methods on `Client` (e.g. `realtime_bars`, `place_order`) — verify request encoding and response decoding through the `MessageBus` / `AsyncMessageBus` trait. Skips the dispatcher and framing entirely. |
-| `MemoryStream` | Transport / connection | `src/transport/sync/memory.rs`, `src/transport/async_memory.rs` | Testing the dispatcher (routing, cancel coalescing, EOF handling) or the handshake (`establish_connection`, disconnect, reconnect). Implements the `Stream` / `AsyncStream` trait so it slots into `Connection<S>` / `AsyncConnection<S>` directly. |
-| `spawn_handshake_listener` | Production TCP entry points | `src/transport/sync/test_listener.rs`, `src/transport/async_test_listener.rs` | Testing `Client::connect*` and `AsyncTcpSocket::*` — the production-only seam that does `TcpStream::connect(addr)`. One-shot listener bound to `127.0.0.1:0`. |
+| `MemoryStream` | Transport / connection | `src/transport/sync/memory.rs`, `src/transport/async/memory.rs` | Testing the dispatcher (routing, cancel coalescing, EOF handling) or the handshake (`establish_connection`, disconnect, reconnect). Implements the `Stream` / `AsyncStream` trait so it slots into `Connection<S>` / `AsyncConnection<S>` directly. |
+| `spawn_handshake_listener` | Production TCP entry points | `src/transport/sync/test_listener.rs`, `src/transport/async/test_listener.rs` | Testing `Client::connect*` and `AsyncTcpSocket::*` — the production-only seam that does `TcpStream::connect(addr)`. One-shot listener bound to `127.0.0.1:0`. |
 
 ## Pattern 1: `MessageBusStub` for domain tests
 
@@ -105,7 +105,7 @@ Going heavier than necessary adds threads, ports, or framing that doesn't earn i
 
 ## Table-driven tests
 
-Shared test tables in `<domain>/common/test_tables.rs` are exercised from both `<domain>/sync/tests.rs` and `<domain>/async/tests.rs` to enforce sync/async parity:
+Shared test tables in `<domain>/common/test_tables.rs` are exercised from both `<domain>/sync_tests.rs` and `<domain>/async_tests.rs` to enforce sync/async parity:
 
 ```rust
 // common/test_tables.rs
@@ -114,7 +114,7 @@ pub const TEST_CASES: &[TestCase] = &[
     // ...
 ];
 
-// sync/tests.rs and async/tests.rs both iterate TEST_CASES with the same assertions.
+// sync_tests.rs and async_tests.rs both iterate TEST_CASES with the same assertions.
 ```
 
 ## Running tests

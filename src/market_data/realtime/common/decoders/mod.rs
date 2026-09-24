@@ -90,7 +90,6 @@ pub(crate) fn decode_trade_tick_proto(bytes: &[u8]) -> Result<Trade, Error> {
     };
     let attr = t.tick_attrib_last.as_ref();
     Ok(Trade {
-        tick_type: tick_type.to_string(),
         time: ts(t.time.unwrap_or_default()),
         price: t.price.unwrap_or_default(),
         size: parse_decimal_or_zero(t.size.as_deref())?,

@@ -1288,6 +1288,7 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
         OrderCondition::Execution(c) => c.is_conjunction = is_conjunction,
         OrderCondition::Volume(c) => c.is_conjunction = is_conjunction,
         OrderCondition::PercentChange(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::Unknown(c) => c.is_conjunction = is_conjunction,
     }
 }
 

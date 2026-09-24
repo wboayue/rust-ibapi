@@ -33,10 +33,8 @@ const TEST_BROADCAST_CAPACITY: usize = 1024;
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
     pub response_messages: Vec<String>,
-    /// Pre-built responses (text or proto, in any order). When non-empty,
-    /// supersedes `response_messages` — supports true interleaving for tests
-    /// that mix dual-format decoders (e.g. OpenOrder text + ExecutionData proto
-    /// in the same `place_order` flow at floor 203).
+    /// Pre-built responses, served in order. When non-empty, supersedes
+    /// `response_messages`.
     pub ordered_responses: Vec<ResponseMessage>,
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
@@ -78,10 +76,9 @@ impl MessageBusStub {
         }
     }
 
-    /// Construct a stub that plays back a heterogeneous, ordered sequence of
-    /// pre-built `ResponseMessage` values. Use this when a test interleaves
-    /// text- and proto-framed responses (e.g. `place_order` flow with
-    /// dual-format `OpenOrder` text alongside proto-only `ExecutionData`).
+    /// Construct a stub that plays back an ordered sequence of pre-built
+    /// `ResponseMessage` values, typically from the proto builders in
+    /// `testdata::builders`.
     pub fn with_ordered_responses(ordered_responses: Vec<ResponseMessage>) -> Self {
         Self {
             request_messages: RwLock::new(vec![]),
@@ -113,8 +110,8 @@ impl MessageBusStub {
     }
 
     /// Materialise configured responses as `ResponseMessage` instances.
-    /// Prefers `ordered_responses` (true interleaving) over the legacy
-    /// text-only `response_messages` field; only one is non-empty per test.
+    /// Prefers `ordered_responses` over the legacy text-only
+    /// `response_messages` field; only one is non-empty per test.
     pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
         if !self.ordered_responses.is_empty() {
             return self.ordered_responses.clone();

@@ -68,10 +68,6 @@ impl crate::ToField for TriggerMethod {
     }
 }
 
-// ============================================================================
-// Condition Structs (to be created by Unit 1.1)
-// ============================================================================
-
 /// Price-based condition that activates an order when a contract reaches a specified price.
 ///
 /// This condition monitors the price of a specific contract and triggers when the price
@@ -358,6 +354,46 @@ pub struct PercentChangeCondition {
     pub is_more: bool,
     /// True for AND condition (all conditions must be met), false for OR condition (any condition triggers).
     pub is_conjunction: bool,
+}
+
+/// A condition whose type this crate does not model, preserved as TWS sent it.
+///
+/// Decoding keeps every field of the wire condition, so an order read from TWS and
+/// placed again sends the condition back unchanged. The payload fields are `Option`s
+/// mirroring their presence on the wire; which of them a given type uses is unknown.
+/// `is_conjunction` is the exception: an absent flag reads as `true` (AND), as it does
+/// for the modeled conditions, and is sent back explicitly.
+///
+/// Decoders construct this; the condition builders do not.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct UnknownCondition {
+    /// The unrecognized condition type discriminator.
+    pub condition_type: i32,
+    /// True for AND condition (all conditions must be met), false for OR condition (any condition triggers).
+    pub is_conjunction: bool,
+    /// Raw `isMore` flag.
+    pub is_more: Option<bool>,
+    /// Raw contract identifier.
+    pub contract_id: Option<i32>,
+    /// Raw exchange.
+    pub exchange: Option<String>,
+    /// Raw symbol.
+    pub symbol: Option<String>,
+    /// Raw security type.
+    pub security_type: Option<String>,
+    /// Raw integer percent (as carried by margin conditions).
+    pub percent: Option<i32>,
+    /// Raw percent change (as carried by percent-change conditions).
+    pub change_percent: Option<f64>,
+    /// Raw price.
+    pub price: Option<f64>,
+    /// Raw trigger method code.
+    pub trigger_method: Option<i32>,
+    /// Raw time string.
+    pub time: Option<String>,
+    /// Raw volume.
+    pub volume: Option<i32>,
 }
 
 // ============================================================================

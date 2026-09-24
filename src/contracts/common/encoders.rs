@@ -140,6 +140,6 @@ pub(in crate::contracts) fn encode_request_option_chain(
     ))
 }
 
-// Encoder coverage lives end-to-end in `contracts/{sync,async}/tests.rs`
-// (via `assert_request<B>`) and in `stream_decoders::test_cancel_messages`
+// Encoder coverage lives end-to-end in `contracts/{sync,async}_tests.rs`
+// (via `assert_request<B>`) and in their `test_cancel_messages`
 // (option-computation cancel dispatch).
