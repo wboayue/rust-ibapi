@@ -1,7 +1,7 @@
 use super::*;
 
 /// Regression guard: every constant must match the numeric ID listed at
-/// <https://interactivebrokers.github.io/tws-api/tick_types.html>.
+/// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>.
 ///
 /// Table is the source-of-truth column. If TWS adds a new generic tick request
 /// ID, add a row here and a `pub const` above so the constants module stays in

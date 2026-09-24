@@ -1,6 +1,6 @@
-//! Common DataStream implementations for accounts module
+//! Common StreamDecoder implementations for accounts module
 //!
-//! This module contains the DataStream trait implementations that are shared
+//! This module contains the StreamDecoder trait implementations that are shared
 //! between sync and async versions, avoiding code duplication.
 
 use crate::accounts::*;

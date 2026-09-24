@@ -94,5 +94,3 @@ pub struct NewsArticleBody {
     /// The body of article (if [ArticleType::Binary], the binary data is encoded using the Base64 scheme)
     pub article_text: String,
 }
-
-// Async API methods are now on Client directly via news/async.rs

@@ -44,7 +44,7 @@ Internal / free-function violations — take one when you are already in the fil
   `Range<T>` newtype or a builder.
 - `validate_bracket_prices(action, entry, take_profit, stop_loss)` in
   `src/orders/builder/validation.rs`.
-- `ContractBuilder::iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)`
+- `SpreadBuilder::iron_condor(self, long_put_id, short_put_id, short_call_id, long_call_id)`
   in `src/contracts/builders.rs` — consider a struct of four contract ids.
 - `pegged_to_stock(action, quantity, delta, stock_reference_price, starting_price)` in
   `src/orders/common/order_builder/mod.rs`.

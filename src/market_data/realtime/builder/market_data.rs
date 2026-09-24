@@ -66,7 +66,7 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// # }
     /// ```
     ///
-    /// See: <https://interactivebrokers.github.io/tws-api/tick_types.html>
+    /// See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>
     pub fn generic_ticks(mut self, ticks: &[&str]) -> Self {
         self.generic_ticks = ticks.iter().map(|s| s.to_string()).collect();
         self

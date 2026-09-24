@@ -153,12 +153,14 @@ Create the common implementation that both sync and async will use:
 
 ```rust
 // src/<module>/common/encoders.rs
-pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-    message.push_field(&OutgoingMessages::MyRequest);
-    message.push_field(&request_id);
-    message.push_field(param);
-    Ok(message)
+pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::MyRequest {
+        req_id: Some(request_id),
+        param: Some(param.to_string()),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::MyRequest as i32, &request.encode_to_vec()))
 }
 
 // src/<module>/common/decoders.rs

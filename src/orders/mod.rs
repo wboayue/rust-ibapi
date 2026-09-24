@@ -27,8 +27,9 @@
 //! ## Usage
 //!
 //! Orders are created using the `Order` struct and can be customized with various
-//! parameters. The `order_builder` module provides a fluent API for constructing
-//! complex orders.
+//! parameters. [`OrderBuilder`](crate::orders::OrderBuilder), reached through `Client::order`, provides a fluent API
+//! for constructing complex orders; the `order_builder` module holds free functions
+//! that return preset `Order` values.
 
 // Common implementation modules
 pub(crate) mod common;
@@ -703,7 +704,7 @@ impl_wire_enum!(Action);
 
 /// The lifecycle state of an order, as reported by TWS.
 ///
-/// See the [IB OrderStatus reference](https://interactivebrokers.github.io/tws-api/order_submission.html#order_status).
+/// See the [IB OrderStatus reference](https://www.interactivebrokers.com/docs/tws-api/doc/order-management/order-status/understanding-order-status-message).
 ///
 /// Default is [`OrderStatusKind::Submitted`] to match the [`Action`] enum's
 /// pragmatic default; [`OrderStatus::default`] callers should overwrite it
@@ -1859,5 +1860,3 @@ mod r#async;
 
 #[cfg(test)]
 mod tests;
-
-// Async API methods are now on Client directly via orders/async.rs

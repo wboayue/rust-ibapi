@@ -10,7 +10,7 @@
 //! user-friendly interface for TWS and IB Gateway. Designed with simplicity in mind, it integrates smoothly into trading systems.
 //!
 //! **API Documentation:**
-//! * [TWS API Reference](https://interactivebrokers.github.io/tws-api/introduction.html) - Detailed technical documentation
+//! * [TWS API Reference](https://www.interactivebrokers.com/docs/tws-api/doc/introduction) - Detailed technical documentation
 //! * [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/) - IB's official learning platform
 //!
 //! This fully featured API enables the retrieval of account information, access to real-time and historical market data, order management,

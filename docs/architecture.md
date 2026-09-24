@@ -145,19 +145,13 @@ pub struct AccountSummary {
     pub currency: String,
 }
 
-// Feature-specific implementations
+// Feature-specific implementations: each file holds an `impl Client` block
+// with the domain's methods, so nothing needs re-exporting.
 #[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
 mod r#async;
-
-// Re-export API functions based on active feature
-#[cfg(feature = "sync")]
-pub use sync::{account_summary, positions};
-
-#[cfg(feature = "async")]
-pub use r#async::{account_summary, positions};
 ```
 
 This structure ensures:

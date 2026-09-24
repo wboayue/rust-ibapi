@@ -68,10 +68,6 @@ impl crate::ToField for TriggerMethod {
     }
 }
 
-// ============================================================================
-// Condition Structs (to be created by Unit 1.1)
-// ============================================================================
-
 /// Price-based condition that activates an order when a contract reaches a specified price.
 ///
 /// This condition monitors the price of a specific contract and triggers when the price
