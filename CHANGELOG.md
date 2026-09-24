@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-4.0.md` §16 (#827).
 - `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-4.0.md` §17 (#838).
+- `market_data::realtime::Trade::tick_type`. It held the wire code `"1"` / `"2"` and was constant per stream; the method that opened the stream (`tick_by_tick(..).last()` / `.all_last()`) names the feed. See `docs/migration-4.0.md` §18.
 
 ## [4.2.0] - 2026-09-21
 
