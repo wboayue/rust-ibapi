@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| unreleased | [§16](#16-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only) |
 
 ## Breaking changes
 
@@ -450,7 +450,30 @@ let order = auction_limit(Action::Buy, 100.0, 50.0);
 
 `orders::builder::AuctionType` is removed in the same pass. It was public, had no caller anywhere in the crate, and its `to_strategy()` codes (`1` / `2` / `4`) matched no TWS auction field; its variants (`Opening` / `Closing` / `Volatility`) were not auction strategies. Nothing replaces it.
 
-### 16. Historical `BarSize`, `Duration` and `WhatToShow` parse through `FromStr` only
+### 16. `OrderCondition` gains `Unknown(UnknownCondition)`
+
+The last order wire enum that coerced an unrecognized value. `decode_order_condition` read any condition type it did not model — including `2`, which IB leaves unassigned between `Price = 1` and `Time = 3` — as `OrderCondition::Price(PriceCondition::default())`: contract id `0`, empty exchange, price `0.0`, indistinguishable from a real price condition. Re-placing that order sent TWS a different condition from the one it held.
+
+- **An unmodeled type decodes as `OrderCondition::Unknown(UnknownCondition)`**, carrying the type code and every field of the wire condition as received (`Option`s mirror presence). `encode_order` writes it back unchanged, so an order read from TWS and placed again keeps its condition. `condition_type()` returns the raw code and `is_conjunction()` the flag; `OrderBuilder`'s `.and_condition(..)` / `.or_condition(..)` set it like any other. The reference client drops such a condition outright, which would lose it on the same round-trip.
+- **A condition with no `type` fails to decode with `Error::Parse`.** The reference client always sets it; as in [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), the subscription that received the frame yields the error and ends.
+- **`From<i32> for OrderCondition` is removed.** It built a default-valued condition from a type code and panicked on any other; use the condition builders (`PriceCondition::builder(..)`, `orders::builder::price(..)`, …) or construct the variant directly.
+- **`ToField for OrderCondition` and `ToField for Option<OrderCondition>` are removed** — leftovers from the text wire format with no remaining caller.
+
+```rust,ignore
+// 4.2
+let condition = OrderCondition::from(1);                 // zeroed PriceCondition; panicked on 2
+
+// Unreleased
+let condition = OrderCondition::Price(PriceCondition::builder(265598, "SMART").greater_than(150.0).build());
+match condition {
+    OrderCondition::Price(_) => { /* ...and the other five modeled types */ }
+    OrderCondition::Unknown(c) => eprintln!("unmodeled condition type {}", c.condition_type),
+}
+```
+
+Exhaustive matches on `OrderCondition` need the new arm; the enum stays exhaustive so the compiler finds them. Serde uses the derived externally tagged form (`{"Unknown":{..}}`), like every other `OrderCondition` variant.
+
+### 17. Historical `BarSize`, `Duration` and `WhatToShow` parse through `FromStr` only
 
 `market_data::historical::BarSize`, `Duration` and `WhatToShow` each implemented `From<&str>` and `From<String>` beside their `FromStr`. The `From` impls were `Self::from_str(s).unwrap()`: an infallible conversion that panicked on any string `FromStr` rejects. Nothing in the crate, `examples/` or the integration crates called them. They are removed; `FromStr` is unchanged, so `s.parse()` accepts exactly the strings `From` did and returns `Err(HistoricalParseError)` where `From` panicked.
 
@@ -460,13 +483,13 @@ let bar_size = BarSize::from("MIN5");
 let duration: Duration = "1 D".into();
 let what: WhatToShow = String::from("TRADES").into();
 
-// unreleased - Err(HistoricalParseError) on an unrecognized string
+// Unreleased - Err(HistoricalParseError) on an unrecognized string
 let bar_size: BarSize = "MIN5".parse()?;
 let duration: Duration = "1 D".parse()?;
 let what: WhatToShow = "TRADES".parse()?;
 ```
 
-`HistoricalParseError` has no `From` conversion into `ibapi::Error`, so in a function returning `Result<_, ibapi::Error>` wrap it: `.map_err(ibapi::Error::HistoricalParseError)?`.
+`ibapi::Error` now implements `From<HistoricalParseError>`, so the `?` above also works in a function returning `Result<_, ibapi::Error>`.
 
 ## Behavioral changes
 
@@ -501,8 +524,9 @@ No code changes required, but observable at runtime:
 13. Use `ibapi::orders::TimeInForce` everywhere (`ibapi::orders::builder::TimeInForce` is gone) and spell the variants "till": `GoodTilCanceled` → `GoodTillCanceled`, `GoodTilDate` → `GoodTillDate`, `DayTilCanceled` → `DayTillCanceled`; from the builder enum, `GoodTillCancel` → `GoodTillCanceled`, `OpeningAuction` → `OnOpen`, `GoodTillDate { date }` → `GoodTillDate` plus `.good_till_date(date)`. Rename `.good_till_cancel()` calls to `.good_till_canceled()`, add `GoodTillCrossing` and `Unknown(raw)` arms to exhaustive matches, and re-read any stored JSON — the field is the wire string now — see [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till).
 14. Replace `Action::from(s)`, `Rule80A::from(s)` and `OrderOpenClose::from(s)` with `s.parse()?`, and add an `Unknown(..)` arm to exhaustive matches on `Rule80A`, `OrderOpenClose`, `OcaType`, `OrderOrigin`, `ShortSaleSlot`, `VolatilityType`, `ReferencePriceType` and `TriggerMethod` — see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
 15. Pass an `OcaType` to `OrderBuilder::oca_group` instead of an `i32`, drop the fourth argument from `auction_limit(..)` calls, remove any use of `orders::AuctionStrategy`, `Order::auction_strategy` or `orders::builder::AuctionType`, and replace hand-built `Order` structs that only existed to set `trigger_method` / `origin` / `short_sale_slot` / `designated_location` / `volatility_type` / `reference_price_type` with the new builder setters — see [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed).
-16. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` - see [§16](#16-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
-17. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+16. Add an `OrderCondition::Unknown(c)` arm to exhaustive matches on order conditions, and replace `OrderCondition::from(code)` with a condition builder — see [§16](#16-ordercondition-gains-unknownunknowncondition).
+17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
+18. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

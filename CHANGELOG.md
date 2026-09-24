@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `From<market_data::historical::HistoricalParseError> for Error`, so `s.parse::<BarSize>()?` (and `Duration`, `WhatToShow`) works in a function returning `ibapi::Error` (#838).
+
+### Changed
+
+- `orders::OrderCondition` gains `Unknown(UnknownCondition)`: a condition type this crate does not model (IB leaves `2` unassigned) keeps its type code and every wire field instead of decoding as a zeroed `PriceCondition`, and goes back out unchanged, so an order read from TWS and placed again keeps its condition. Exhaustive matches need the new arm. See `docs/migration-4.0.md` §16 (#827).
+- An inbound order condition with no `type` fails to decode with `Error::Parse` instead of reading as a price condition; as with any decode error, the subscription that received the frame yields the error and ends (#827).
+
 ### Removed
 
-- `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-4.0.md` §16 (#838).
+- `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-4.0.md` §16 (#827).
+- `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-4.0.md` §17 (#838).
 
 ## [4.2.0] - 2026-09-21
 

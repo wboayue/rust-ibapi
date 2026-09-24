@@ -183,6 +183,69 @@ fn test_encode_condition_price_default_trigger_method_is_emitted() {
 }
 
 #[test]
+fn test_encode_unknown_condition_round_trips() {
+    // #827: a condition decoded as Unknown goes back out as it arrived (conjunction flag set;
+    // an absent one returns as explicit AND, see the test below).
+    use crate::orders::conditions::UnknownCondition;
+    let sparse = proto::OrderCondition {
+        r#type: Some(2),
+        is_conjunction_connection: Some(true),
+        con_id: Some(265598),
+        time: Some("20251230 14:30:00 US/Eastern".into()),
+        ..Default::default()
+    };
+    let populated = proto::OrderCondition {
+        r#type: Some(99),
+        is_conjunction_connection: Some(false),
+        is_more: Some(false),
+        con_id: Some(265598),
+        exchange: Some("SMART".into()),
+        symbol: Some("AAPL".into()),
+        sec_type: Some("STK".into()),
+        percent: Some(12),
+        change_percent: Some(2.5),
+        price: Some(150.0),
+        trigger_method: Some(2),
+        time: Some("20251230 14:30:00 US/Eastern".into()),
+        volume: Some(1000),
+    };
+    for wire in [sparse, populated] {
+        let order = crate::proto::decoders::decode_order(&proto::Order {
+            action: Some("BUY".into()),
+            conditions: vec![wire.clone()],
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(matches!(order.conditions[..], [OrderCondition::Unknown(UnknownCondition { .. })]));
+        assert_eq!(encode_condition(&order.conditions[0]), wire);
+    }
+}
+
+#[test]
+fn test_encode_unknown_condition_absent_conjunction_returns_as_and() {
+    // The one field that does not round-trip verbatim: absent reads as AND and is sent explicitly.
+    let wire = proto::OrderCondition {
+        r#type: Some(2),
+        ..Default::default()
+    };
+    let order = crate::proto::decoders::decode_order(&proto::Order {
+        action: Some("BUY".into()),
+        conditions: vec![wire.clone()],
+        ..Default::default()
+    })
+    .unwrap();
+    let encoded = encode_condition(&order.conditions[0]);
+    assert_eq!(encoded.is_conjunction_connection, Some(true));
+    assert_eq!(
+        proto::OrderCondition {
+            is_conjunction_connection: None,
+            ..encoded
+        },
+        wire
+    );
+}
+
+#[test]
 fn test_encode_condition_time() {
     use crate::orders::conditions::TimeCondition;
     let cond = OrderCondition::Time(TimeCondition {

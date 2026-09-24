@@ -7,6 +7,7 @@ use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
+use crate::proto;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
@@ -580,6 +581,38 @@ async fn test_order_update_stream_survives_unknown_status() {
             assert_eq!(s.status, OrderStatusKind::Filled);
         }
         other => panic!("stream did not survive the unknown status, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_order_update_stream_survives_unknown_condition() {
+    // #827: an OpenOrder carrying a condition type this crate does not model
+    // arrives as OrderCondition::Unknown and the frame queued behind it still arrives.
+    let unknown = proto::OrderCondition {
+        r#type: Some(2),
+        is_conjunction_connection: Some(true),
+        ..Default::default()
+    };
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).conditions(vec![unknown]).encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(2).encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => match &o.order.conditions[..] {
+            [OrderCondition::Unknown(c)] => assert_eq!(c.condition_type, 2),
+            other => panic!("expected one Unknown condition, got {other:?}"),
+        },
+        other => panic!("expected OpenOrder, got {other:?}"),
+    }
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order_id, 2),
+        other => panic!("stream did not survive the unknown condition, got {other:?}"),
     }
 }
 
