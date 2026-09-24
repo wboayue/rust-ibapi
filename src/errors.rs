@@ -150,7 +150,7 @@ pub enum Error {
 
     /// Wraps errors parsing historical data parameters.
     #[error("HistoricalParseError: {0}")]
-    HistoricalParseError(HistoricalParseError),
+    HistoricalParseError(#[from] HistoricalParseError),
 
     /// Failed to decode a protobuf message.
     #[error("protobuf decode error: {0}")]
