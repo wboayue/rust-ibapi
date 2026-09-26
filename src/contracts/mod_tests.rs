@@ -159,18 +159,8 @@ fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
 }
 
 #[test]
-fn test_bond_cusip_constructor() {
-    assert_cusip_bond(Contract::bond_cusip("912810RN0"), "912810RN0");
-}
-
-#[test]
 fn test_bond_constructor_cusip_variant() {
     assert_cusip_bond(Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0"))), "912810RN0");
-}
-
-#[test]
-fn test_bond_isin_constructor_currency_mapping() {
-    assert_isin_currency_mapping(|isin| Contract::bond_isin(isin));
 }
 
 #[test]
