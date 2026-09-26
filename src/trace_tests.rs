@@ -1,12 +1,11 @@
 use super::*;
-use crate::trace::common::storage::sync_ops;
 use serial_test::serial;
 
 #[test]
 #[serial]
 fn test_no_interaction_initially() {
     // Clear to ensure clean initial state
-    sync_ops::clear();
+    clear();
     assert!(last_interaction().is_none());
 }
 
@@ -56,4 +55,24 @@ fn test_new_request_replaces_old() {
     assert_eq!(interaction.request, "REQUEST_2");
     assert_eq!(interaction.responses.len(), 1);
     assert_eq!(interaction.responses[0], "RESPONSE_2");
+}
+
+#[test]
+#[serial]
+fn test_response_without_request_is_dropped() {
+    clear();
+    record_response("ORPHAN".to_string());
+    assert!(last_interaction().is_none());
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "sync")]
+fn test_blocking_path_is_the_same_store() {
+    blocking::record_request("REQUEST".to_string());
+    record_response("RESPONSE".to_string());
+
+    let interaction = blocking::last_interaction().expect("Should have interaction");
+    assert_eq!(interaction.request, "REQUEST");
+    assert_eq!(interaction.responses, vec!["RESPONSE".to_string()]);
 }

@@ -234,7 +234,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         if let Some(raw_string) = trace_str {
             if log::log_enabled!(log::Level::Debug) {
-                trace::record_response(raw_string).await;
+                trace::record_response(raw_string);
             }
         }
 

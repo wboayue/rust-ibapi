@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `orders::OrderCondition` gains `Unknown(UnknownCondition)`: a condition type this crate does not model (IB leaves `2` unassigned) keeps its type code and every wire field instead of decoding as a zeroed `PriceCondition`, and goes back out unchanged, so an order read from TWS and placed again keeps its condition. Exhaustive matches need the new arm. See `docs/migration-4.0.md` §16 (#827).
 - `contracts::SecurityIdType` gains `Unknown(String)`: an identifier scheme this crate does not model keeps its wire value instead of failing the `Contract` decode, which ended `order_update_stream` (and any other subscription carrying the contract). `SecurityIdType` is no longer `Copy` or `#[non_exhaustive]`, and `as_str()` returns `&str`. See `docs/migration-4.0.md` §22 (#840).
 - An inbound order condition with no `type` fails to decode with `Error::Parse` instead of reading as a price condition; as with any decode error, the subscription that received the frame yields the error and ends (#827).
+- Under the async feature, `trace::last_interaction`, `trace::record_request` and `trace::record_response` are plain `fn` instead of `async fn`. They used a separate tokio-locked store whose lock was held only to replace, append to or clone the interaction; both features now use one std-locked store, so under `--all-features` the blocking and async clients record into the same store. Drop the `.await`. See `docs/migration-4.0.md` §24 (#861).
 
 ### Removed
 
