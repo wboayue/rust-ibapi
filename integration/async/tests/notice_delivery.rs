@@ -6,7 +6,7 @@
 //! as a release-time safety net against protocol-level regressions.
 //!
 //! The tests are tolerant by design: TWS doesn't always emit per-subscription
-//! notices in the 2100-2169 range (most farm-status notices are global /
+//! notices in the 2100-2199 range (most farm-status notices are global /
 //! `request_id == -1` and currently log-only). Any observed
 //! `SubscriptionItem::Notice` is logged; tests only fail when the subscription
 //! itself misbehaves.

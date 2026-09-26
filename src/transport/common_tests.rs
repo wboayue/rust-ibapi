@@ -36,16 +36,51 @@ fn test_is_benign_connectivity_notice() {
 }
 
 #[test]
+fn test_notice_log_level_follows_category() {
+    use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, SOCKET_PORT_RESET_CODE};
+
+    // Benign connectivity confirmations and the cancellation confirmation: info.
+    for code in FARM_OK_CODES
+        .into_iter()
+        .chain([CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE])
+    {
+        assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Info, "code {code}");
+    }
+    // Every warning-band code that is not benign, every data advisory, and
+    // 1101: warn. The advisories are the point - 317 and the 10xxx codes used
+    // to log at error while 2188 logged at warn, the same category twice.
+    for code in [2103, 2119, *WARNING_CODE_RANGE.end(), CONNECTIVITY_RESTORED_DATA_LOST_CODE]
+        .into_iter()
+        .chain(DATA_ADVISORY_CODES.iter().copied())
+    {
+        assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Warn, "code {code}");
+    }
+    // Connectivity lost, socket reset, order rejections and errors: error.
+    for code in [
+        CONNECTIVITY_LOST_CODE,
+        SOCKET_PORT_RESET_CODE,
+        200,
+        354,
+        *WARNING_CODE_RANGE.end() + 1,
+        10000,
+    ] {
+        assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Error, "code {code}");
+    }
+}
+
+#[test]
 fn test_log_unrouted_notice_traverses_all_severities() {
     // Smoke test: the project has no log-capture harness, so we can't assert the
     // emitted level. Drive each branch of log_unrouted_notice to confirm the
-    // benign (info), warning (warn), and error paths are reachable and panic-free.
+    // four arms - benign info, plain info (202), warn, error - are reachable and
+    // panic-free.
     log_unrouted_notice(&Notice::synthesized(FARM_OK_CODES[0], "farm OK".into()));
     log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, "1102 info".into()));
     log_unrouted_notice(&Notice::synthesized(2103, "farm broken".into()));
     log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_RESTORED_DATA_LOST_CODE, "1101 warn".into()));
     log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_LOST_CODE, "1100 error".into()));
     log_unrouted_notice(&Notice::synthesized(200, "no security definition".into()));
+    log_unrouted_notice(&Notice::synthesized(crate::messages::ORDER_CANCELLED_CODE, "202 info".into()));
 }
 
 #[test]

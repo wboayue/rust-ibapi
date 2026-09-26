@@ -1110,7 +1110,7 @@ fn test_notice_is_system_message() {
 #[test]
 fn test_notice_is_informational() {
     // Informational includes cancellations, warnings, and system messages
-    let informational_codes = [202, 1100, 1101, 1102, 1300, 2100, 2107, 2169];
+    let informational_codes = [202, 1100, 1101, 1102, 1300, *WARNING_CODE_RANGE.start(), 2107, *WARNING_CODE_RANGE.end()];
     for code in informational_codes {
         let notice = notice_with_code(code);
         assert!(notice.is_informational(), "Code {} should be informational", code);
@@ -1236,7 +1236,7 @@ fn test_connectivity_status_from_code_table() {
 
     // Non-farm codes — including warning-band neighbors and the range boundaries —
     // carry no connectivity status.
-    for code in [2100, 2120, 2169, 500, 202, 1100] {
+    for code in [*WARNING_CODE_RANGE.start(), 2120, *WARNING_CODE_RANGE.end(), 500, 202, 1100] {
         assert_eq!(ConnectivityStatus::from_code(code), None, "code {code} should have no status");
     }
 }

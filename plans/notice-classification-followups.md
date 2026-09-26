@@ -8,6 +8,10 @@ shape beyond the two issues.
 
 ## 1. Derive log severity from `NoticeCategory`
 
+**Done in #846.** `transport::common::notice_log_level` is the one mapping; the unrouted
+and handshake sites both dispatch on it. Advisories log at `warn`, 202 at `info`, and the
+handshake path now grades 1100 and 1300 at `error` where it logged them at `info`.
+
 `transport::common::log_unrouted_notice` grades an unrouted notice by
 `is_warning()` plus one exact code, and `connection::common` logs handshake
 notices by `is_warning() || is_system_message()`. Both hand-roll an
@@ -29,7 +33,8 @@ category". The overlap (2188 is a warning by band and an advisory by category;
 each predicate rather than carried by the name. Options: rename to
 `in_warning_band` / `in_order_rejection_band`, or derive them from `category()`.
 Deriving today would regress follow-up 1's sites (2188 would log at `error`),
-so land 1 first. Public API change — needs a migration note.
+so land 1 first (done: `notice_log_level` dispatches on `category()`). Public
+API change — needs a migration note.
 
 ## 3. `ORDER_REJECTION_CODE_RANGE` conflates request errors with rejections
 

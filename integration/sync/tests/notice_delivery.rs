@@ -6,7 +6,7 @@
 //! as a release-time safety net against protocol-level regressions.
 //!
 //! The tests are tolerant by design: TWS doesn't always emit per-subscription
-//! notices in the 2100-2169 range (most farm-status notices are global /
+//! notices in the 2100-2199 range (most farm-status notices are global /
 //! `request_id == -1` and currently log-only). Any observed
 //! `SubscriptionItem::Notice` is logged; tests only fail when the subscription
 //! itself misbehaves.
@@ -55,7 +55,7 @@ fn invalid_contract_terminates_with_error() {
 }
 
 /// Place a non-transmit outside-RTH market order. TWS commonly emits an
-/// order-channel warning in the 2100-2169 range for outside-RTH orders during
+/// order-channel warning in the 2100-2199 range for outside-RTH orders during
 /// closed market hours; this is the most reliable in-the-wild trigger for a
 /// per-subscription `SubscriptionItem::Notice`. The assertion is best-effort:
 /// IBKR session settings can suppress the warning.
