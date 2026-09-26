@@ -218,9 +218,45 @@ fn decode_combo_leg_accepts_sshort() {
 fn decode_contract_propagates_bad_combo_leg() {
     let proto_contract = proto::Contract {
         combo_legs: vec![proto_leg(Some("NOTAVARIANT"))],
-        ..Default::default()
+        ..stk_contract()
     };
     assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse(_, _, _))));
+}
+
+// === decode_contract sec_type ===
+
+#[test]
+fn decode_contract_reads_missing_or_empty_sec_type_as_other_empty() {
+    // Upstream sets SecType only `if (HasSecType)` and still delivers the
+    // frame, so absence is an unset field, not a malformed frame. Requiring it
+    // would end every stream carrying a contract (see #840).
+    for sec_type in [None, Some(String::new())] {
+        let proto_contract = proto::Contract {
+            sec_type,
+            ..Default::default()
+        };
+        let contract = decode_contract(&proto_contract).unwrap();
+        assert_eq!(contract.security_type, crate::contracts::SecurityType::Other(String::new()));
+    }
+}
+
+#[test]
+fn decode_contract_preserves_unknown_sec_type() {
+    let proto_contract = proto::Contract {
+        sec_type: Some("NOTASECTYPE".into()),
+        ..Default::default()
+    };
+    let contract = decode_contract(&proto_contract).unwrap();
+    assert_eq!(contract.security_type, crate::contracts::SecurityType::Other("NOTASECTYPE".into()));
+}
+
+/// A `proto::Contract` carrying a `sec_type`, for tests that are not about the
+/// `Other("")` fallback above.
+fn stk_contract() -> proto::Contract {
+    proto::Contract {
+        sec_type: Some("STK".into()),
+        ..Default::default()
+    }
 }
 
 // === decode_order ===
@@ -539,7 +575,7 @@ fn decode_contract_details_rejects_malformed_min_size() {
         min_size: Some("abc".into()),
         ..Default::default()
     };
-    assert_decimal_parse_error(decode_contract_details(&proto::Contract::default(), &details), "abc");
+    assert_decimal_parse_error(decode_contract_details(&stk_contract(), &details), "abc");
 }
 
 #[test]
@@ -548,7 +584,7 @@ fn decode_contract_details_rejects_malformed_min_tick() {
         min_tick: Some("abc".into()),
         ..Default::default()
     };
-    assert_decimal_parse_error(decode_contract_details(&proto::Contract::default(), &details), "abc");
+    assert_decimal_parse_error(decode_contract_details(&stk_contract(), &details), "abc");
 }
 
 #[test]
@@ -583,7 +619,7 @@ fn decode_order_state_rejects_malformed_allocation_position() {
 fn decode_contract_details_absent_size_rules_are_none() {
     // Contracts without size rules omit these entirely; `0.0` would have been a
     // nonsense size increment.
-    let details = decode_contract_details(&proto::Contract::default(), &proto::ContractDetails::default()).unwrap();
+    let details = decode_contract_details(&stk_contract(), &proto::ContractDetails::default()).unwrap();
 
     assert_eq!(details.min_size, None);
     assert_eq!(details.size_increment, None);
@@ -596,7 +632,7 @@ fn decode_contract_details_preserves_fractional_size_increment() {
         size_increment: Some("0.0001".into()),
         ..Default::default()
     };
-    let decoded = decode_contract_details(&proto::Contract::default(), &details).unwrap();
+    let decoded = decode_contract_details(&stk_contract(), &details).unwrap();
 
     assert_eq!(decoded.size_increment, Some(0.0001));
 }

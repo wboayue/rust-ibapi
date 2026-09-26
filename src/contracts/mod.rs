@@ -8,7 +8,6 @@ use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
 
-use log::warn;
 use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
@@ -47,6 +46,9 @@ pub mod tick_types;
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 /// SecurityType enumerates available security types
+///
+/// `Other` preserves a wire value this crate does not model; `Display` writes
+/// it back unchanged. Parse a wire string with `s.parse::<SecurityType>()`.
 pub enum SecurityType {
     /// Stock (or ETF)
     #[default]
@@ -79,14 +81,8 @@ pub enum SecurityType {
     Crypto,
     /// Contract for difference
     CFD,
-    /// Other
+    /// A security type this crate does not model, holding the raw wire value
     Other(String),
-}
-
-impl ToField for SecurityType {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
 }
 
 impl ToField for Option<SecurityType> {
@@ -95,55 +91,52 @@ impl ToField for Option<SecurityType> {
     }
 }
 
-impl std::fmt::Display for SecurityType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl SecurityType {
+    /// Return the IBKR wire string; for `Other` it borrows the raw value.
+    pub fn as_str(&self) -> &str {
         match self {
-            SecurityType::Stock => write!(f, "STK"),
-            SecurityType::Option => write!(f, "OPT"),
-            SecurityType::Future => write!(f, "FUT"),
-            SecurityType::ContinuousFuture => write!(f, "CONTFUT"),
-            SecurityType::Index => write!(f, "IND"),
-            SecurityType::FuturesOption => write!(f, "FOP"),
-            SecurityType::ForexPair => write!(f, "CASH"),
-            SecurityType::Spread => write!(f, "BAG"),
-            SecurityType::Warrant => write!(f, "WAR"),
-            SecurityType::Bond => write!(f, "BOND"),
-            SecurityType::Commodity => write!(f, "CMDTY"),
-            SecurityType::News => write!(f, "NEWS"),
-            SecurityType::MutualFund => write!(f, "FUND"),
-            SecurityType::Crypto => write!(f, "CRYPTO"),
-            SecurityType::CFD => write!(f, "CFD"),
-            SecurityType::Other(name) => write!(f, "{name}"),
+            SecurityType::Stock => "STK",
+            SecurityType::Option => "OPT",
+            SecurityType::Future => "FUT",
+            SecurityType::ContinuousFuture => "CONTFUT",
+            SecurityType::Index => "IND",
+            SecurityType::FuturesOption => "FOP",
+            SecurityType::ForexPair => "CASH",
+            SecurityType::Spread => "BAG",
+            SecurityType::Warrant => "WAR",
+            SecurityType::Bond => "BOND",
+            SecurityType::Commodity => "CMDTY",
+            SecurityType::News => "NEWS",
+            SecurityType::MutualFund => "FUND",
+            SecurityType::Crypto => "CRYPTO",
+            SecurityType::CFD => "CFD",
+            SecurityType::Other(name) => name,
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "STK" => Some(Self::Stock),
+            "OPT" => Some(Self::Option),
+            "FUT" => Some(Self::Future),
+            "CONTFUT" => Some(Self::ContinuousFuture),
+            "IND" => Some(Self::Index),
+            "FOP" => Some(Self::FuturesOption),
+            "CASH" => Some(Self::ForexPair),
+            "BAG" => Some(Self::Spread),
+            "WAR" => Some(Self::Warrant),
+            "BOND" => Some(Self::Bond),
+            "CMDTY" => Some(Self::Commodity),
+            "NEWS" => Some(Self::News),
+            "FUND" => Some(Self::MutualFund),
+            "CRYPTO" => Some(Self::Crypto),
+            "CFD" => Some(Self::CFD),
+            _ => None,
         }
     }
 }
 
-impl SecurityType {
-    /// Create a [SecurityType] from an IB symbol code (e.g. `STK`, `OPT`).
-    pub fn from(name: &str) -> SecurityType {
-        match name {
-            "STK" => SecurityType::Stock,
-            "OPT" => SecurityType::Option,
-            "FUT" => SecurityType::Future,
-            "CONTFUT" => SecurityType::ContinuousFuture,
-            "IND" => SecurityType::Index,
-            "FOP" => SecurityType::FuturesOption,
-            "CASH" => SecurityType::ForexPair,
-            "BAG" => SecurityType::Spread,
-            "WAR" => SecurityType::Warrant,
-            "BOND" => SecurityType::Bond,
-            "CMDTY" => SecurityType::Commodity,
-            "NEWS" => SecurityType::News,
-            "FUND" => SecurityType::MutualFund,
-            "CRYPTO" => SecurityType::Crypto,
-            "CFD" => SecurityType::CFD,
-            other => {
-                warn!("Unknown security type: {other}. Defaulting to Other");
-                SecurityType::Other(other.to_string())
-            }
-        }
-    }
-}
+impl_wire_enum!(SecurityType, fallback Other);
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

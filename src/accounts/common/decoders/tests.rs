@@ -137,6 +137,7 @@ fn test_decode_account_portfolio_value_proto() {
 
     let proto_msg = crate::proto::PortfolioValue {
         contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
             con_id: Some(265598),
             symbol: Some("AAPL".into()),
             ..Default::default()
@@ -214,6 +215,7 @@ fn test_decode_position_multi_proto() {
         req_id: Some(1),
         account: Some("DU1234".into()),
         contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
             con_id: Some(265598),
             symbol: Some("AAPL".into()),
             ..Default::default()
@@ -598,6 +600,7 @@ fn test_decode_position_proto_rejects_malformed_position() {
     let bytes = crate::proto::Position {
         account: Some("DU1234".into()),
         contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
             con_id: Some(265598),
             ..Default::default()
         }),
@@ -618,6 +621,7 @@ fn test_decode_position_multi_proto_rejects_malformed_position() {
         account: Some("DU1234".into()),
         model_code: Some("".into()),
         contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
             con_id: Some(265598),
             ..Default::default()
         }),
@@ -635,6 +639,7 @@ fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
 
     let bytes = crate::proto::PortfolioValue {
         contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
             con_id: Some(265598),
             ..Default::default()
         }),

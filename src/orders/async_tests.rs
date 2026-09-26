@@ -617,6 +617,35 @@ async fn test_order_update_stream_survives_unknown_condition() {
 }
 
 #[tokio::test]
+async fn test_order_update_stream_survives_unknown_sec_type() {
+    // SecurityType is open: an OpenOrder frame whose contract carries a
+    // sec_type this crate does not model arrives as SecurityType::Other and
+    // the frame queued behind it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).security_type("NOTASECTYPE").encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).security_type("STK").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
+            assert_eq!(o.contract.security_type, SecurityType::Other("NOTASECTYPE".into()));
+        }
+        other => panic!("expected OpenOrder with Other sec_type, got {other:?}"),
+    }
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
+            assert_eq!(o.contract.security_type, SecurityType::Stock);
+        }
+        other => panic!("stream did not survive the unknown sec_type, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_order_update_stream_survives_unknown_tif() {
     // TimeInForce is open: an OpenOrder frame carrying a tif this crate
     // does not model arrives as TimeInForce::Unknown and the frame queued

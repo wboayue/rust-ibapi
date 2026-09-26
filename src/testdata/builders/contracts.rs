@@ -363,7 +363,7 @@ impl Default for ContractDataResponse {
             request_id: TEST_REQ_ID_FIRST,
             contract_id: 0,
             symbol: String::new(),
-            security_type: String::new(),
+            security_type: "STK".to_string(),
             last_trade_date_or_contract_month: String::new(),
             multiplier: String::new(),
             exchange: String::new(),
