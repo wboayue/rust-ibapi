@@ -572,6 +572,7 @@ What changes for compiling code:
 - `orders::builder::OrderAnalysis`: use the `OrderState` that `OrderBuilder::analyze()` returns.
 - `ValidationError::InvalidStopPrice`, `InvalidLimitPrice` and `InvalidCombination`: no non-test code returned them; delete match arms and constructions.
 - `BracketOrderIds::as_vec` / `as_i32_vec` and `From<Vec<i32>>` / `From<[i32; 3]>`: use `BracketOrderIds::new(a, b, c)` and the `parent`, `take_profit` and `stop_loss` fields.
+- `OrderType::requires_aux_price`: match on `OrderType` yourself; `requires_limit_price()` stays.
 
 ## Behavioral changes
 

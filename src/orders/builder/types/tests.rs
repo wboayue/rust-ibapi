@@ -48,9 +48,6 @@ fn test_order_type() {
 
     assert!(OrderType::Limit.requires_limit_price());
     assert!(!OrderType::Market.requires_limit_price());
-
-    assert!(OrderType::Stop.requires_aux_price());
-    assert!(!OrderType::Limit.requires_aux_price());
 }
 
 #[test]

@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `orders::builder::OrderAnalysis`, which nothing produced: `OrderBuilder::analyze()` has returned `OrderState` since #311. Use `OrderState`. See `docs/migration-4.0.md` §25 (#865).
 - `ValidationError::InvalidStopPrice`, `InvalidLimitPrice` and `InvalidCombination`, which no non-test code returned. Delete match arms and constructions. See `docs/migration-4.0.md` §25 (#865).
 - `BracketOrderIds::as_vec` / `as_i32_vec` and its `From<Vec<i32>>` / `From<[i32; 3]>` impls; the `Vec<i32>` one panicked on any length but three. Use `BracketOrderIds::new` and the three public fields. See `docs/migration-4.0.md` §25 (#865).
+- `OrderType::requires_aux_price`, which nothing in the crate called and which did not match what `build()` requires. Match on `OrderType` yourself; `requires_limit_price` stays. See `docs/migration-4.0.md` §25 (#865).
 
 ### Fixed
 

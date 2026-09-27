@@ -289,24 +289,6 @@ impl OrderType {
                 | Self::AtAuction // TrailingStopLimit uses limit_price_offset, not limit_price
         )
     }
-
-    /// Returns true if this order type requires a stop/aux price
-    pub fn requires_aux_price(&self) -> bool {
-        matches!(
-            self,
-            Self::Stop
-                | Self::StopLimit
-                | Self::MarketIfTouched
-                | Self::LimitIfTouched
-                | Self::StopWithProtection
-                | Self::TrailingStop
-                | Self::TrailingStopLimit
-                | Self::Relative
-                | Self::PassiveRelative
-                | Self::AuctionRelative
-                | Self::PeggedToMarket
-        )
-    }
 }
 
 /// Validation errors
