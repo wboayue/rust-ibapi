@@ -50,17 +50,43 @@ impl Client {
     /// `execution_id` — the commission follows its execution and shares that key. See
     /// the [`CommissionReport`] docs for the idiom.
     ///
-    /// # Reconnection
+    /// # Gaps and recovery
     ///
-    /// The stream survives the client's automatic reconnects: the same
-    /// subscription keeps delivering once the connection returns. Updates TWS
-    /// emitted during the outage are **not** replayed, and no marker appears
-    /// in the stream itself, so a quiet stream is indistinguishable from
-    /// missed activity. To detect a gap, watch [`Self::notice_stream`] for
-    /// the connectivity notices (codes 1100 connectivity lost, 1101 restored
-    /// with data lost, 1102 restored with data maintained, 1300 socket reset)
-    /// and reconcile open-order state via [`Self::open_orders`] after
-    /// restoration.
+    /// TWS does not replay order events, so two situations leave a gap the
+    /// stream cannot fill on its own:
+    ///
+    /// - **Reconnect.** The stream survives the client's automatic reconnects:
+    ///   the same subscription keeps delivering once the connection returns,
+    ///   but updates TWS emitted during the outage are lost and no marker
+    ///   appears in the stream. Watch [`Self::notice_stream`] for the
+    ///   connectivity notices (codes 1100 connectivity lost, 1101 restored
+    ///   with data lost, 1102 restored with data maintained, 1300 socket reset).
+    /// - **Error.** An `Err` item ends the stream; every later call returns
+    ///   `None`. A frame that fails to decode is a bug in TWS or this crate,
+    ///   so it is surfaced rather than skipped.
+    ///
+    /// After an error, drop the ended subscription (and any clones) and call
+    /// `order_update_stream` again; while one is held, a second call
+    /// returns [`Error::AlreadySubscribed`].
+    /// After a reconnect, the existing subscription is still live. In both
+    /// cases, rebuild state from snapshots:
+    ///
+    /// 1. [`Self::all_open_orders`]: every open order and its status.
+    /// 2. [`Self::completed_orders`]`(false)`: orders that filled or were
+    ///    cancelled during the gap.
+    /// 3. [`Self::executions`] with a default [`ExecutionFilter`]: fills and
+    ///    their commissions. The default covers the current day only; set
+    ///    `last_n_days` when the gap may span midnight, as the daily gateway
+    ///    reset does.
+    ///
+    /// The snapshots cover every client's orders, while this stream reports
+    /// only this client's. Keep the entries whose `order.client_id` /
+    /// `execution.client_id` matches, or state will hold orders the stream
+    /// never updates.
+    ///
+    /// Take the snapshots after the stream is live again, so no event falls
+    /// between the two. An event can then arrive both ways; apply updates
+    /// idempotently, keyed by `perm_id` for orders and `execution_id` for fills.
     ///
     /// # Examples
     ///
@@ -376,7 +402,11 @@ impl Client {
         ))
     }
 
-    /// Requests current day's executions matching the filter.
+    /// Requests executions matching the filter.
+    ///
+    /// Covers the current day (since midnight) by default; set
+    /// [`ExecutionFilter::last_n_days`] or [`ExecutionFilter::specific_dates`]
+    /// to reach earlier days.
     ///
     /// Both [`ExecutionData`] and
     /// [`CommissionReport`] are delivered on this
