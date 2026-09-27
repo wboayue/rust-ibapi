@@ -1,51 +1,33 @@
 use super::*;
-use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_CONNECTING_CODES, FARM_INACTIVE_CODES, FARM_OK_CODES, WARNING_CODE_RANGE};
-
-#[test]
-fn test_is_benign_connectivity_notice() {
-    // Logging-policy invariant: data-farm Ok/Inactive/Connecting and system
-    // code 1102 (restored, data maintained) are benign → info. Broken stays
-    // at warn.
-    for code in FARM_OK_CODES.into_iter().chain(FARM_INACTIVE_CODES).chain(FARM_CONNECTING_CODES) {
-        let notice = Notice::synthesized(code, "farm OK".into());
-        assert!(is_benign_connectivity_notice(&notice), "code {code} should be benign");
-    }
-    // 1102: connectivity restored, market data maintained — nothing lost.
-    let notice = Notice::synthesized(CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, "restored, data maintained".into());
-    assert!(is_benign_connectivity_notice(&notice), "code 1102 should be benign");
-
-    // Not benign: broken codes (Broken), the range boundaries, a code outside WARNING_CODE_RANGE entirely, and the
-    // non-benign system codes (1100 lost, 1101 restored-but-data-lost).
-    for code in [
-        2100,
-        2103, // Market data farm connection is broken
-        2105, // HMDS data farm connection is broken
-        2157, // Sec-def data farm connection is broken
-        *WARNING_CODE_RANGE.end(),
-        200,                                  // outside / boundary
-        CONNECTIVITY_LOST_CODE,               // 1100 — hard error
-        CONNECTIVITY_RESTORED_DATA_LOST_CODE, // 1101 — warn (resubscribe)
-    ] {
-        let notice = Notice::synthesized(code, "not benign".into());
-        assert!(!is_benign_connectivity_notice(&notice), "code {code} should not be benign");
-    }
-}
+use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_BROKEN_CODES, FARM_CONNECTING_CODES, FARM_INACTIVE_CODES, FARM_OK_CODES, WARNING_CODE_RANGE};
 
 #[test]
 fn test_notice_log_level_follows_category() {
     use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, ORDER_MESSAGE_CODE, SOCKET_PORT_RESET_CODE};
 
-    // Benign connectivity notices and the cancellation confirmation: info.
-    for code in [2104, 2107, 2119, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE] {
+    // Farm OK/inactive/connecting, 1102 (restored, data maintained) and the
+    // cancellation confirmation: info.
+    for code in FARM_OK_CODES
+        .into_iter()
+        .chain(FARM_INACTIVE_CODES)
+        .chain(FARM_CONNECTING_CODES)
+        .chain([CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE])
+    {
         assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Info, "code {code}");
     }
-    // Every warning-band code that is not benign, code-less frames (0), every
+    // Broken farms, the rest of the warning band, code-less frames (0), every
     // data advisory, and 1101: warn. The advisories are the point - 317 and the
     // 10xxx codes used to log at error while 2188 logged at warn, the same
     // category twice.
-    for code in [0, 2103, *WARNING_CODE_RANGE.end(), CONNECTIVITY_RESTORED_DATA_LOST_CODE]
-        .into_iter()
-        .chain(DATA_ADVISORY_CODES.iter().copied())
+    for code in [
+        0,
+        *WARNING_CODE_RANGE.start(),
+        *WARNING_CODE_RANGE.end(),
+        CONNECTIVITY_RESTORED_DATA_LOST_CODE,
+    ]
+    .into_iter()
+    .chain(FARM_BROKEN_CODES)
+    .chain(DATA_ADVISORY_CODES.iter().copied())
     {
         assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Warn, "code {code}");
     }
@@ -67,13 +49,6 @@ fn test_notice_log_level_follows_category() {
     ] {
         assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Error, "code {code}");
     }
-}
-
-#[test]
-fn test_log_unrouted_notice_is_panic_free() {
-    // Smoke test: the project has no log-capture harness, so the emitted level
-    // is covered by test_notice_log_level_follows_category.
-    log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_LOST_CODE, "1100 error".into()));
 }
 
 #[test]

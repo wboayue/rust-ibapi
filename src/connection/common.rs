@@ -1,6 +1,6 @@
 //! Common connection logic shared between sync and async implementations
 
-use log::{debug, error, log, warn};
+use log::{debug, error, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::Tz;
@@ -14,7 +14,7 @@ use crate::messages::{
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
-use crate::transport::common::{notice_log_level, MIN_FRAME_LENGTH};
+use crate::transport::common::{log_notice, MIN_FRAME_LENGTH};
 
 /// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).
@@ -282,7 +282,7 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
     match kind {
         IncomingMessages::Error => {
             let notice = Notice::from(&*message);
-            log!(notice_log_level(&notice), "{notice}");
+            log_notice(&notice);
             ctx.notice_sink.deliver(notice);
         }
         IncomingMessages::OpenOrder => dispatch_typed(ctx, kind, || decode_open_order(message), StartupMessage::OpenOrder),

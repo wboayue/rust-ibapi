@@ -8,8 +8,8 @@ shape beyond the two issues.
 
 ## 1. Derive log severity from `NoticeCategory`
 
-**Done in #846.** `transport::common::notice_log_level` is the one mapping; the unrouted
-and handshake sites both dispatch on it. Advisories log at `warn`, 202 and farm
+**Done in #846.** `transport::common::log_notice` is the one mapping; the unrouted
+and handshake sites both call it. Advisories log at `warn`, 202 and farm
 inactive/connecting at `info`, and the handshake path now grades 1100 and 1300 at `error` where it logged them at `info`.
 
 `transport::common::log_unrouted_notice` grades an unrouted notice by
@@ -33,7 +33,7 @@ category". The overlap (2188 is a warning by band and an advisory by category;
 each predicate rather than carried by the name. Options: rename to
 `in_warning_band` / `in_order_rejection_band`, or derive them from `category()`.
 Deriving today would regress follow-up 1's sites (2188 would log at `error`),
-so land 1 first (done: `notice_log_level` dispatches on `category()`). Public
+so land 1 first (done: `log_notice` dispatches on `category()`). Public
 API change — needs a migration note.
 
 ## 3. `ORDER_REJECTION_CODE_RANGE` conflates request errors with rejections
@@ -55,6 +55,14 @@ merges the rebuild rows into it; the only defence is the doc paragraph on
 a depth subscription survives `iter_data()` and forces an exhaustive-match
 decision. Needs a notice-to-data hook in the subscription decoder path that
 does not exist yet; design before implementing.
+
+## 5. Move notice log policy next to `classify()`
+
+`transport::common::log_notice` / `notice_log_level` are pure functions of the
+notice, called from both `transport` (unrouted) and `connection::common`
+(handshake). Their home is `messages.rs` beside `classify()`, e.g. a
+`pub(crate) fn log(&self)` on `Notice`. Deferred from the #846 lens review:
+restructuring, not cleanup.
 
 ## Skipped /simplify items (recorded, not planned)
 
