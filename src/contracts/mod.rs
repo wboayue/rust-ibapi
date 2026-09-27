@@ -242,19 +242,6 @@ impl Default for Contract {
     }
 }
 
-/// Currency implied by an ISIN's country code (first two characters), USD when unknown.
-fn isin_currency(isin: &str) -> &'static str {
-    match isin.get(0..2) {
-        Some("US") | Some("CA") => "USD",
-        Some("GB") => "GBP",
-        Some("JP") => "JPY",
-        Some("CH") => "CHF",
-        Some("AU") => "AUD",
-        Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
-        _ => "USD",
-    }
-}
-
 impl Contract {
     /// Creates a stock contract builder.
     ///
@@ -439,12 +426,9 @@ impl Contract {
     /// let bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
     /// ```
     pub fn bond(identifier: BondIdentifier) -> Contract {
-        let (security_id_type, security_id, currency) = match identifier {
-            BondIdentifier::Cusip(cusip) => (SecurityIdType::Cusip, cusip.0, "USD"),
-            BondIdentifier::Isin(isin) => {
-                let currency = isin_currency(isin.as_str());
-                (SecurityIdType::Isin, isin.0, currency)
-            }
+        let (security_id_type, currency, security_id) = match identifier {
+            BondIdentifier::Cusip(cusip) => (SecurityIdType::Cusip, "USD", cusip.0),
+            BondIdentifier::Isin(isin) => (SecurityIdType::Isin, isin.implied_currency(), isin.0),
         };
 
         Contract {
