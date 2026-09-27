@@ -71,7 +71,12 @@ pub(crate) struct SharedCounts {
 #[cfg(any(feature = "sync", feature = "async"))]
 impl SharedCounts {
     /// Counts a new subscription of `message_type` and returns its ticket.
-    pub(crate) fn subscribe(&mut self, message_type: OutgoingMessages) -> SharedTicket {
+    /// `account` is an account-updates subscription's account, which
+    /// `check_account_updates` admitted.
+    pub(crate) fn subscribe(&mut self, message_type: OutgoingMessages, account: Option<&AccountId>) -> SharedTicket {
+        if let Some(account) = account {
+            self.account_updates = Some(account.clone());
+        }
         if !crate::messages::shared_channel_configuration::is_one_shot_request(message_type) {
             *self.live.entry(message_type).or_insert(0) += 1;
         }
@@ -81,23 +86,16 @@ impl SharedCounts {
         }
     }
 
-    /// `Err` when account updates for another account are live; call under
-    /// the lock, before writing the request.
-    pub(crate) fn check_account_updates(&self, account: &AccountId) -> Result<(), Error> {
-        match &self.account_updates {
-            Some(active) if active != account => Err(Error::AccountUpdatesInUse {
+    /// `Err` when `account` is given and account updates for another account
+    /// are live; call under the lock, before writing the request.
+    pub(crate) fn check_account_updates(&self, account: Option<&AccountId>) -> Result<(), Error> {
+        match (&self.account_updates, account) {
+            (Some(active), Some(account)) if active != account => Err(Error::AccountUpdatesInUse {
                 active: active.clone(),
                 requested: account.clone(),
             }),
             _ => Ok(()),
         }
-    }
-
-    /// Counts a new account-updates subscription for `account`, which
-    /// `check_account_updates` admitted, and returns its ticket.
-    pub(crate) fn subscribe_account_updates(&mut self, account: &AccountId) -> SharedTicket {
-        self.account_updates = Some(account.clone());
-        self.subscribe(OutgoingMessages::RequestAccountData)
     }
 
     /// Uncounts `ticket`'s subscription. `true` when the cancel should be

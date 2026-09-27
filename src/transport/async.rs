@@ -900,17 +900,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // The lock spans the write so the count and the wire agree.
         let ticket = {
             let mut counts = self.shared_counts.lock().await;
-            match account {
-                Some(account) => {
-                    counts.check_account_updates(account)?;
-                    self.write_message(&message).await?;
-                    counts.subscribe_account_updates(account)
-                }
-                None => {
-                    self.write_message(&message).await?;
-                    counts.subscribe(message_type)
-                }
-            }
+            counts.check_account_updates(account)?;
+            self.write_message(&message).await?;
+            counts.subscribe(message_type, account)
         };
 
         Ok(AsyncInternalSubscription::with_cleanup(

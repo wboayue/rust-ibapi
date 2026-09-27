@@ -138,17 +138,9 @@ impl SharedChannels {
         write: impl FnOnce() -> Result<(), Error>,
     ) -> Result<SharedTicket, Error> {
         let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
-        match account {
-            Some(account) => {
-                counts.check_account_updates(account)?;
-                write()?;
-                Ok(counts.subscribe_account_updates(account))
-            }
-            None => {
-                write()?;
-                Ok(counts.subscribe(message_type))
-            }
-        }
+        counts.check_account_updates(account)?;
+        write()?;
+        Ok(counts.subscribe(message_type, account))
     }
 
     // Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
