@@ -661,11 +661,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         };
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
-                super::common::log_unrouted_notice(&notice);
+                super::common::log_notice(&notice);
                 let _ = self.connection.notice_sender.send(notice);
             }
             ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
-                super::common::log_unrouted_notice(&notice);
+                super::common::log_notice(&notice);
                 let _ = self.connection.notice_sender.send(notice);
                 self.fail_one_shot_channels(error).await;
             }
