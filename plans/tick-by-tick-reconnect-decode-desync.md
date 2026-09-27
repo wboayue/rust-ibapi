@@ -175,27 +175,12 @@ about why that ordering matters. So if the 07-07 consumer was async, F8 is not t
 
 ### Recommended sequencing
 
-1. ~~**Fix F1 + F2**~~ — **done.** `validate_frame_length` in `src/transport/common.rs` bounds
-   the prefix at `MAX_FRAME_LENGTH` (`0x00FFFFFF`, matching C# `Constants.MaxMsgSize`) and
-   rejects bodies below `MIN_FRAME_LENGTH`; both frame readers call it, and
-   `parse_raw_message` guards the header slice instead of indexing it. Out-of-range prefixes
-   raise the new `Error::InvalidFrame`, which `is_connection_lost` reports as true so both
-   dispatchers take their reconnect branch. Regression tests at all three seams.
-2. ~~**Then F3**~~ — **done.** `report_unroutable_frame` in `src/transport/common.rs` splits the
-   two cases the old code conflated: an unrecognized message id warns *and* publishes
-   `UNKNOWN_MESSAGE_TYPE_CODE` (`-5`) to the notice stream, while a known kind with no
-   subscriber stays at `info`. Wired into both dispatchers — the blocking one at
-   `process_response_with_id`'s no-recipient branch, the async one at
-   `route_to_shared_channel`'s previously-empty `None` arm.
-3. ~~**Then the raw-frame tap (F7)**~~ — **done.** `RawFrameTap` in
-   `src/transport/raw_capture.rs`, enabled by `IBAPI_RAW_CAPTURE_DIR`. Both frame readers
-   (`transport::sync::read_header`, `transport::r#async::io::read_framed_message`) record the
-   length prefix *before* `validate_frame_length` sees it, so the prefix that a desync produces
-   reaches the capture even though it never reaches a caller. A reconnect calls
-   `start_new_segment`, so no `.bin` splices two TCP streams. Sidecar `.idx` carries
-   `seq,utc_timestamp,offset,declared_length` — the `.bin` has no clock, and correlating with a
-   `[2119]` farm notice in an operator's log needs one. `examples/replay_raw_capture.rs` walks a
-   capture and names the first unreadable frame.
+Steps 1-3 are done: F1 + F2 (`validate_frame_length` in `src/transport/common.rs`, bad
+prefixes raise `Error::InvalidFrame` and reconnect), F3 (`report_unroutable_frame`, unknown ids
+publish `UNKNOWN_MESSAGE_TYPE_CODE` `-5`), and the raw-frame tap F7 (`RawFrameTap` in
+`src/transport/raw_capture.rs`, `IBAPI_RAW_CAPTURE_DIR`, walked by
+`examples/replay_raw_capture.rs`). The tap records length prefixes before validation, so a
+desynced prefix reaches the capture; the `.idx` sidecar carries wall-clock timestamps.
 
 **What a capture now settles.** Feeding a `.bin` back through the frame reader reproduces the
 run exactly, because the prefixes are the wire's own. Three outcomes, each decisive:
@@ -212,12 +197,6 @@ run exactly, because the prefixes are the wire's own. Three outcomes, each decis
 
 Restructuring, deliberately not landed in a cleanup pass:
 
-- ~~**The unknown-id notice cannot name the id.**~~ **Done.** `ResponseMessage` carries a
-  `message_id` alongside `kind` — the numeric value `kind` was resolved from, retained because
-  that mapping collapses every unrecognized id to the single `NotValid` variant. Both the
-  `warn!` and the notice text interpolate it, so scattered ids (framing slipped) are
-  distinguishable from one repeated id (IBKR added a type). Observability *policy* stayed in
-  transport; only the information loss was repaired.
 - **`body()` is defined twice, byte-identical** — `transport/async_tests.rs` and
   `transport/sync_tests.rs` both carry the same `"msg_id|f1|f2"` → wire-bytes fixture builder,
   doc comment included, and `connection/common_tests.rs` now open-codes the same construction in

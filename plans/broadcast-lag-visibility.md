@@ -21,21 +21,12 @@ The transports sit at opposite corners, both silent:
 - **Sync**: unbounded + lossless + silent. Crossbeam queues grow without
   limit; the failure mode is memory creep → OOM, equally invisible in-band.
 
-## Step 1 — visibility only, no semantic change (SHIPPED — see the PR that carries this file)
+## Step 1 — visibility only (shipped)
 
-As shipped:
-
-- **Async**: lag→notice conversion lives in one place —
-  `AsyncInternalSubscription::poll_next_routed` — so every consumer that polls
-  through the wrapper gets the in-band `SUBSCRIPTION_LAG_CODE` (`-6`) notice
-  (built + `warn!`ed by `messages::subscription_lag_notice`); no consumer can
-  reintroduce a silent swallow. The legacy `ResponseMessage` projection drops
-  the notice by construction (`into_legacy`), so that path is warn-only.
-- **Async**: `ClientBuilder::channel_capacity` — a single global per-client
-  knob (default 1024, `0` rejected). The notice fan-out channels keep the
-  default; step 2's per-class capacities would need a new setter shape.
-- **Sync**: watermark warnings on the subscription, shared-channel, and
-  order-update send paths (every 10k of queue depth). Semantics untouched.
+Async lag becomes an in-band `SUBSCRIPTION_LAG_CODE` (`-6`) notice in
+`AsyncInternalSubscription::poll_next_routed`, `NoticeStream` lag likewise as
+`NOTICE_STREAM_LAG_CODE` (`-7`); `ClientBuilder::channel_capacity` is one global
+knob. Sync warns at queue-depth watermarks. Semantics untouched.
 
 Non-terminal is deliberate: a terminal error on lag would let a transient blip
 kill market-data subscriptions. A non-terminal `Err` item was ruled out — it
@@ -43,10 +34,6 @@ breaks the "Err is terminal" contract everywhere.
 
 Step-1 leftovers, deliberately excluded (fold into step 2 or do piecemeal):
 
-- `NoticeStream` (async) lag: upgraded `debug!`→`warn!` only in step 1; the
-  in-band gap notice shipped piecemeal afterwards as
-  `NOTICE_STREAM_LAG_CODE` (`-7`) — the same treatment as
-  `SUBSCRIPTION_LAG_CODE`: the dropped count in-band, `warn!` alongside.
 - `NoticeBroadcaster` (sync notice fan-out) has no watermark.
 - Three sibling `test_notice`/`make_notice` helpers exist across test files;
   a shared `#[cfg(test)]` constructor next to `Notice::synthesized` would
