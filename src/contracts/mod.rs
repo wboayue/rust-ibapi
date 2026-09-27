@@ -397,16 +397,7 @@ impl Contract {
     /// let bond = Contract::bond_cusip("912810RN0");
     /// ```
     pub fn bond_cusip(cusip: impl Into<String>) -> Contract {
-        let cusip_str = cusip.into();
-        Contract {
-            symbol: Symbol::new(cusip_str.clone()),
-            security_type: SecurityType::Bond,
-            security_id_type: Some(SecurityIdType::Cusip),
-            security_id: cusip_str,
-            exchange: "SMART".into(),
-            currency: "USD".into(),
-            ..Default::default()
-        }
+        Contract::bond(BondIdentifier::Cusip(Cusip::new(cusip)))
     }
 
     /// Create a bond contract with ISIN identifier
@@ -419,27 +410,7 @@ impl Contract {
     /// let bond = Contract::bond_isin("DE0001102309");
     /// ```
     pub fn bond_isin(isin: impl Into<String>) -> Contract {
-        let isin_str = isin.into();
-        // Determine currency from ISIN country code (first 2 chars)
-        let currency = match isin_str.get(0..2) {
-            Some("US") | Some("CA") => "USD",
-            Some("GB") => "GBP",
-            Some("JP") => "JPY",
-            Some("CH") => "CHF",
-            Some("AU") => "AUD",
-            Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
-            _ => "USD", // Default to USD
-        };
-
-        Contract {
-            symbol: Symbol::new(isin_str.clone()),
-            security_type: SecurityType::Bond,
-            security_id_type: Some(SecurityIdType::Isin),
-            security_id: isin_str,
-            exchange: "SMART".into(),
-            currency: currency.into(),
-            ..Default::default()
-        }
+        Contract::bond(BondIdentifier::Isin(Isin::new(isin)))
     }
 
     /// Create a bond contract with CUSIP or ISIN identifier
@@ -455,38 +426,19 @@ impl Contract {
     /// let bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
     /// ```
     pub fn bond(identifier: BondIdentifier) -> Contract {
-        match identifier {
-            BondIdentifier::Cusip(cusip) => Contract {
-                symbol: Symbol::new(cusip.to_string()),
-                security_type: SecurityType::Bond,
-                security_id_type: Some(SecurityIdType::Cusip),
-                security_id: cusip.to_string(),
-                exchange: "SMART".into(),
-                currency: "USD".into(),
-                ..Default::default()
-            },
-            BondIdentifier::Isin(isin) => {
-                // Determine currency from ISIN country code (first 2 chars)
-                let currency = match isin.as_str().get(0..2) {
-                    Some("US") | Some("CA") => "USD",
-                    Some("GB") => "GBP",
-                    Some("JP") => "JPY",
-                    Some("CH") => "CHF",
-                    Some("AU") => "AUD",
-                    Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
-                    _ => "USD", // Default to USD
-                };
+        let (security_id_type, currency, security_id) = match identifier {
+            BondIdentifier::Cusip(cusip) => (SecurityIdType::Cusip, "USD", cusip.0),
+            BondIdentifier::Isin(isin) => (SecurityIdType::Isin, isin.implied_currency(), isin.0),
+        };
 
-                Contract {
-                    symbol: Symbol::new(isin.to_string()),
-                    security_type: SecurityType::Bond,
-                    security_id_type: Some(SecurityIdType::Isin),
-                    security_id: isin.to_string(),
-                    exchange: "SMART".into(),
-                    currency: currency.into(),
-                    ..Default::default()
-                }
-            }
+        Contract {
+            symbol: Symbol::new(security_id.clone()),
+            security_type: SecurityType::Bond,
+            security_id_type: Some(security_id_type),
+            security_id,
+            exchange: "SMART".into(),
+            currency: currency.into(),
+            ..Default::default()
         }
     }
 

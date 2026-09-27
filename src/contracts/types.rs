@@ -512,6 +512,19 @@ impl Isin {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Currency implied by the country code (first two characters), USD when unknown.
+    pub(crate) fn implied_currency(&self) -> &'static str {
+        match self.0.get(0..2) {
+            Some("US") | Some("CA") => "USD",
+            Some("GB") => "GBP",
+            Some("JP") => "JPY",
+            Some("CH") => "CHF",
+            Some("AU") => "AUD",
+            Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
+            _ => "USD",
+        }
+    }
 }
 
 impl From<&str> for Isin {
