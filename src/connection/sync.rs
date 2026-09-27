@@ -11,7 +11,6 @@ use super::common::{
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, ResponseMessage};
-use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
 use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket};
@@ -208,14 +207,7 @@ impl<S: Stream> Connection<S> {
     /// Read a message from the connection
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
-        let (message, trace_str) = parse_raw_message(&data)?;
-
-        if let Some(raw_string) = trace_str {
-            if log::log_enabled!(log::Level::Debug) {
-                trace::blocking::record_response(raw_string);
-            }
-        }
-
+        let message = parse_raw_message(&data)?;
         self.recorder.record_response(&message);
 
         Ok(message)
