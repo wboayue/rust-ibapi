@@ -75,28 +75,18 @@ impl Drop for MessageBusStub {
 
 impl MessageBusStub {
     pub fn with_responses(response_messages: Vec<String>) -> Self {
-        Self {
-            request_messages: RwLock::new(vec![]),
-            response_messages,
-            ordered_responses: vec![],
-            connection_resets: AtomicUsize::new(0),
-            #[cfg(feature = "async")]
-            runtime: tokio::runtime::Handle::try_current().ok(),
-        }
+        let mut stub = Self::default();
+        stub.response_messages = response_messages;
+        stub
     }
 
     /// Construct a stub that plays back an ordered sequence of pre-built
     /// `ResponseMessage` values, typically from the proto builders in
     /// `testdata::builders`.
     pub fn with_ordered_responses(ordered_responses: Vec<ResponseMessage>) -> Self {
-        Self {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-            ordered_responses,
-            connection_resets: AtomicUsize::new(0),
-            #[cfg(feature = "async")]
-            runtime: tokio::runtime::Handle::try_current().ok(),
-        }
+        let mut stub = Self::default();
+        stub.ordered_responses = ordered_responses;
+        stub
     }
 
     /// Answer the first `count` requests with [`Error::ConnectionReset`] before
