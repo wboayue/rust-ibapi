@@ -68,14 +68,21 @@ impl Client {
     /// After an error, drop the ended subscription (and any clones) and call
     /// `order_update_stream` again; while one is held, a second call
     /// returns [`Error::AlreadySubscribed`].
-    /// After a reconnect, the existing subscription is still live. Then
-    /// rebuild state from snapshots:
+    /// After a reconnect, the existing subscription is still live. In both
+    /// cases, rebuild state from snapshots:
     ///
     /// 1. [`Self::all_open_orders`]: every open order and its status.
     /// 2. [`Self::completed_orders`]`(false)`: orders that filled or were
     ///    cancelled during the gap.
-    /// 3. [`Self::executions`]: fills and their commissions, for the current
-    ///    day only.
+    /// 3. [`Self::executions`] with a default [`ExecutionFilter`]: fills and
+    ///    their commissions. The default covers the current day only; set
+    ///    `last_n_days` when the gap may span midnight, as the daily gateway
+    ///    reset does.
+    ///
+    /// The snapshots cover every client's orders, while this stream reports
+    /// only this client's. Keep the entries whose `order.client_id` /
+    /// `execution.client_id` matches, or state will hold orders the stream
+    /// never updates.
     ///
     /// Take the snapshots after the stream is live again, so no event falls
     /// between the two. An event can then arrive both ways; apply updates
@@ -395,7 +402,11 @@ impl Client {
         ))
     }
 
-    /// Requests current day's executions matching the filter.
+    /// Requests executions matching the filter.
+    ///
+    /// Covers the current day (since midnight) by default; set
+    /// [`ExecutionFilter::last_n_days`] or [`ExecutionFilter::specific_dates`]
+    /// to reach earlier days.
     ///
     /// Both [`ExecutionData`] and
     /// [`CommissionReport`] are delivered on this
