@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed), [§25](#25-the-unused-ordersbuilder-helpers-from-311-are-removed) |
 
 ## Breaking changes
 
@@ -563,6 +563,14 @@ There is no replacement. To capture traffic, set `IBAPI_RECORDING_DIR` (one file
 
 There is no replacement API. Capture traffic with `IBAPI_RECORDING_DIR` or `IBAPI_RAW_CAPTURE_DIR`, as in [§23](#23-parser_registry-is-removed), or set `RUST_LOG=ibapi=debug` for a log line per inbound message.
 
+### 25. The unused `orders::builder` helpers from #311 are removed
+
+The fluent order builder (#311, commit f00a0a2) came with helpers that only their own unit tests used. They are removed.
+
+What changes for compiling code:
+
+- `orders::builder::OrderAnalysis`: use the `OrderState` that `OrderBuilder::analyze()` returns.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -607,7 +615,8 @@ No code changes required, but observable at runtime:
 22. Add `.clone()` where code relied on `SecurityIdType: Copy`, and handle `SecurityIdType::Unknown(raw)` where you match on it — see [§22](#22-securityidtype-gains-unknownstring-and-loses-copy).
 23. Drop any `use ibapi::parser_registry` import; the module is gone and capture goes through `IBAPI_RECORDING_DIR` / `IBAPI_RAW_CAPTURE_DIR` instead — see [§23](#23-parser_registry-is-removed).
 24. Delete calls into `ibapi::trace`; `last_interaction()` has returned `None` since 3.0 — see [§24](#24-the-trace-module-is-removed).
-25. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+25. Delete uses of the removed `orders::builder` items — see [§25](#25-the-unused-ordersbuilder-helpers-from-311-are-removed).
+26. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

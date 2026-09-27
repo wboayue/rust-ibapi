@@ -95,20 +95,3 @@ fn test_validation_error_display() {
 fn test_bracket_order_ids_wrong_length() {
     let _ = BracketOrderIds::from(vec![100, 101]); // Should panic with wrong length
 }
-
-#[test]
-fn test_order_analysis_default() {
-    let analysis = OrderAnalysis {
-        initial_margin: Some(1000.0),
-        maintenance_margin: Some(800.0),
-        commission: Some(1.5),
-        commission_currency: "USD".to_string(),
-        warning_text: String::new(),
-    };
-
-    assert_eq!(analysis.initial_margin, Some(1000.0));
-    assert_eq!(analysis.maintenance_margin, Some(800.0));
-    assert_eq!(analysis.commission, Some(1.5));
-    assert_eq!(analysis.commission_currency, "USD");
-    assert!(analysis.warning_text.is_empty());
-}
