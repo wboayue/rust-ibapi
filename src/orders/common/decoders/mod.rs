@@ -1,5 +1,6 @@
 use crate::messages::ResponseMessage;
 use crate::orders::{CommissionReport, ExecutionData, OrderBound, OrderData, OrderStatus};
+use crate::proto::decoders::required;
 use crate::Error;
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
@@ -7,19 +8,6 @@ use crate::Error;
 // The server always emits proto framing for these messages; text-framed arrival
 // is rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
-
-/// A proto submessage or scalar the frame is meaningless without.
-///
-/// The reference client drops the whole frame when one is absent —
-/// `EDecoder.cs`'s `OpenOrderEventProtoBuf` returns before `eWrapper.openOrder(..)`
-/// if `Contract`, `Order` or `OrderState` is null, rather than synthesizing a
-/// default. This crate has no "skip this frame" channel, so it surfaces the
-/// malformed frame as `Error::Parse` instead. Defaulting is the one option
-/// neither client takes: it hands the caller a phantom BUY order over an empty
-/// contract, which reads as real data (docs/rules/wire/enum-typing.md).
-fn required<T>(field: Option<T>, name: &str, message: &str) -> Result<T, Error> {
-    field.ok_or_else(|| Error::parse_proto(name, format!("missing in {message}")))
-}
 
 pub(crate) fn decode_open_order(message: &ResponseMessage) -> Result<OrderData, Error> {
     decode_open_order_proto(message.require_proto()?)

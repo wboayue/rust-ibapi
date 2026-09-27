@@ -3,7 +3,7 @@ use time::OffsetDateTime;
 use prost::Message;
 
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::parse_decimal_or_zero;
+use crate::proto::decoders::{parse_decimal_or_zero, required};
 use crate::{proto, Error};
 
 use super::super::{
@@ -73,7 +73,7 @@ pub(crate) fn decode_account_multi_value(message: &ResponseMessage) -> Result<Ac
 
 pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
     let p = proto::Position::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
+    let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "Position")?)?;
     Ok(Position {
         account: p.account.unwrap_or_default(),
         contract,
@@ -94,7 +94,7 @@ pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, E
 
 pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<AccountPortfolioValue, Error> {
     let p = proto::PortfolioValue::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
+    let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "PortfolioValue")?)?;
     Ok(AccountPortfolioValue {
         contract,
         position: parse_decimal_or_zero(p.position.as_deref())?,
@@ -146,7 +146,7 @@ pub(crate) fn decode_account_update_time_proto(bytes: &[u8]) -> Result<AccountUp
 
 pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti, Error> {
     let p = proto::PositionMulti::decode(bytes)?;
-    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).transpose()?.unwrap_or_default();
+    let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "PositionMulti")?)?;
     Ok(PositionMulti {
         account: p.account.unwrap_or_default(),
         contract,
