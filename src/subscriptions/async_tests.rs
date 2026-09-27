@@ -154,6 +154,19 @@ fn subscription<T: StreamDecoder<T>>() -> (Subscription<T>, broadcast::Sender<Ro
     (f.subscription, f.tx)
 }
 
+/// `Drop` sends the cancel from a spawned task. With no runtime to spawn on it
+/// logs and returns instead of panicking; the decoder here has a cancel
+/// message, so without the guard the spawn is reached.
+#[test]
+fn test_drop_outside_runtime_does_not_panic() {
+    use crate::accounts::PositionUpdate;
+
+    let fixture = subscription_with::<PositionUpdate>(None, None, DecoderContext::default());
+    std::thread::spawn(move || drop(fixture.subscription))
+        .join()
+        .expect("drop outside a runtime panicked");
+}
+
 // ---- Stream contract --------------------------------------------------------
 
 #[tokio::test]

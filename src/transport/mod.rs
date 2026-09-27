@@ -4,8 +4,6 @@
 pub(crate) mod common;
 
 #[cfg(feature = "sync")]
-use std::sync::Arc;
-#[cfg(feature = "sync")]
 use std::time::Duration;
 
 #[cfg(feature = "sync")]
@@ -14,7 +12,7 @@ use crossbeam::channel::{Receiver, Sender};
 use crate::errors::Error;
 use crate::messages::ResponseMessage;
 
-#[cfg(feature = "sync")]
+#[cfg(any(feature = "sync", feature = "async"))]
 use crate::messages::OutgoingMessages;
 
 #[cfg(feature = "sync")]
@@ -31,6 +29,81 @@ pub(crate) use crate::subscriptions::common::RoutedItem;
 #[allow(dead_code)]
 pub(crate) type Response = Result<ResponseMessage, Error>;
 
+/// One live shared-channel subscription: its request type and the session
+/// generation it was made in. Handed back to `cancel_shared_subscription`
+/// so a handle that outlived its session cannot touch the next one's count.
+#[cfg(any(feature = "sync", feature = "async"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SharedTicket {
+    pub(crate) message_type: OutgoingMessages,
+    pub(crate) generation: u64,
+}
+
+/// Live streaming subscriptions per shared request type, scoped to a session.
+///
+/// TWS keeps one subscription per type (`CancelPositions` carries no id), so
+/// the cancel goes out only when the last one ends. The bus holds the lock
+/// on this across the request/cancel write so the count and the wire agree.
+/// One-shot requests are not counted: they never cancel, and a count that is
+/// never decremented would withhold every later cancel for that type.
+///
+/// A reconnect ends every subscription at once (each reads
+/// `Error::ConnectionReset`), but the handles are dropped later, one by one,
+/// possibly after the same type was resubscribed on the new session. Each
+/// reset therefore starts a new generation with empty counts, and a ticket
+/// from an earlier generation neither decrements nor cancels.
+#[cfg(any(feature = "sync", feature = "async"))]
+#[derive(Debug, Default)]
+pub(crate) struct SharedCounts {
+    generation: u64,
+    live: std::collections::HashMap<OutgoingMessages, usize>,
+}
+
+#[cfg(any(feature = "sync", feature = "async"))]
+impl SharedCounts {
+    /// Counts a new subscription of `message_type` and returns its ticket.
+    pub(crate) fn subscribe(&mut self, message_type: OutgoingMessages) -> SharedTicket {
+        if !crate::messages::shared_channel_configuration::is_one_shot_request(message_type) {
+            *self.live.entry(message_type).or_insert(0) += 1;
+        }
+        SharedTicket {
+            message_type,
+            generation: self.generation,
+        }
+    }
+
+    /// Uncounts `ticket`'s subscription. `true` when the cancel should be
+    /// written: the ticket is from this session and no other subscription of
+    /// the type is live. A ticket with no counted subscription (one
+    /// fabricated in tests) still writes.
+    pub(crate) fn unsubscribe(&mut self, ticket: SharedTicket) -> bool {
+        if ticket.generation != self.generation {
+            log::debug!("shared subscription {:?} outlived its session: cancel skipped", ticket.message_type);
+            return false;
+        }
+        let count = self.live.entry(ticket.message_type).or_insert(0);
+        *count = count.saturating_sub(1);
+        if *count > 0 {
+            log::debug!("shared subscription {:?} ended, {count} still live: cancel withheld", ticket.message_type);
+            return false;
+        }
+        true
+    }
+
+    /// Starts a new session. Every subscription counted so far is dead, so
+    /// zero is the truth; see the type docs for why their drops must not
+    /// decrement.
+    pub(crate) fn reset(&mut self) {
+        self.generation += 1;
+        self.live.clear();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn live(&self, message_type: OutgoingMessages) -> usize {
+        self.live.get(&message_type).copied().unwrap_or(0)
+    }
+}
+
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
@@ -40,7 +113,10 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
-    fn cancel_shared_subscription(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<(), Error>;
+    /// Ends one subscription of `message_id`. `packet` is the cancel to write
+    /// for the last one; `None` for a stream TWS never cancels, which still
+    /// releases the count.
+    fn cancel_shared_subscription(&self, ticket: SharedTicket, packet: Option<&[u8]>) -> Result<(), Error>;
 
     fn send_order_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
@@ -65,21 +141,18 @@ pub(crate) trait MessageBus: Send + Sync {
 #[cfg(feature = "sync")]
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<RoutedItem>>, // requests with request ids receive responses via this channel
-    sender: Option<Sender<RoutedItem>>,     // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<RoutedItem>>>, // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,       // for client to signal termination
-    pub(crate) request_id: Option<i32>,     // initiating request id
-    pub(crate) order_id: Option<i32>,       // initiating order id
-    pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
+    receiver: Option<Receiver<RoutedItem>>,  // this subscription's own queue
+    sender: Option<Sender<RoutedItem>>,      // feeds `receiver`; the drop signal's identity
+    signaler: Option<Sender<Signal>>,        // for client to signal termination
+    pub(crate) request_id: Option<i32>,      // initiating request id
+    pub(crate) order_id: Option<i32>,        // initiating order id
+    pub(crate) shared: Option<SharedTicket>, // shared-channel identity, when routed by message type
 }
 
 #[cfg(feature = "sync")]
 impl InternalSubscription {
-    /// The underlying receiver — either the per-subscription one or the
-    /// shared-channel one. Both deliver `RoutedItem`.
     fn pick_receiver(&self) -> Option<&Receiver<RoutedItem>> {
-        self.receiver.as_ref().or(self.shared_receiver.as_deref())
+        self.receiver.as_ref()
     }
 
     /// Blocks until next message become available.
@@ -125,12 +198,25 @@ impl InternalSubscription {
     }
 
     pub(crate) fn cancel(&self) {
-        if let Some(sender) = &self.sender {
-            if let Err(e) = sender.send(Error::Cancelled.into()) {
-                log::warn!("error sending cancel notification: {e}")
+        let Some(sender) = &self.sender else {
+            return;
+        };
+        if let Err(e) = sender.send(Error::Cancelled.into()) {
+            log::warn!("error sending cancel notification: {e}")
+        }
+        // A cancelled shared subscription is unregistered by the cleanup
+        // thread once it processes this signal, rather than at the handle's
+        // drop: a handle kept after `cancel()` must not go on collecting
+        // every frame of its type. Frames dispatched before the signal is
+        // processed still land on the queue. The registration is identified
+        // by this sender, so the drop signal for the same sender is later a
+        // no-op. Id-routed subscriptions are unregistered by the bus's
+        // `cancel_*` call instead.
+        if let (Some(_), Some(signaler)) = (&self.shared, &self.signaler) {
+            if let Err(e) = signaler.send(Signal::Shared(sender.clone())) {
+                log::warn!("error sending cancel signal: {e}");
             }
         }
-        // TODO - shared sender
     }
 
     fn receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
@@ -171,10 +257,11 @@ impl Drop for InternalSubscription {
         let (Some(signaler), Some(sender)) = (&self.signaler, self.sender.clone()) else {
             return;
         };
-        let signal = match (self.request_id, self.order_id) {
-            (Some(request_id), _) => Signal::Request(request_id, sender),
-            (_, Some(order_id)) => Signal::Order(order_id, sender),
-            // No request or order id: the order update stream.
+        let signal = match (self.request_id, self.order_id, self.shared) {
+            (Some(request_id), _, _) => Signal::Request(request_id, sender),
+            (_, Some(order_id), _) => Signal::Order(order_id, sender),
+            (_, _, Some(_)) => Signal::Shared(sender),
+            // No request, order id or shared ticket: the order update stream.
             _ => Signal::OrderUpdateStream(sender),
         };
         if let Err(e) = signaler.send(signal) {
@@ -193,6 +280,7 @@ pub enum Signal {
     Request(i32, Sender<RoutedItem>),
     Order(i32, Sender<RoutedItem>),
     OrderUpdateStream(Sender<RoutedItem>),
+    Shared(Sender<RoutedItem>),
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances
@@ -200,11 +288,10 @@ pub enum Signal {
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<RoutedItem>>,
     sender: Option<Sender<RoutedItem>>,
-    shared_receiver: Option<Arc<Receiver<RoutedItem>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
-    message_type: Option<OutgoingMessages>,
+    shared: Option<SharedTicket>,
 }
 
 #[cfg(feature = "sync")]
@@ -213,11 +300,10 @@ impl SubscriptionBuilder {
         Self {
             receiver: None,
             sender: None,
-            shared_receiver: None,
             signaler: None,
             order_id: None,
             request_id: None,
-            message_type: None,
+            shared: None,
         }
     }
 
@@ -228,11 +314,6 @@ impl SubscriptionBuilder {
 
     pub(crate) fn sender(mut self, sender: Sender<RoutedItem>) -> Self {
         self.sender = Some(sender);
-        self
-    }
-
-    pub(crate) fn shared_receiver(mut self, receiver: Arc<Receiver<RoutedItem>>) -> Self {
-        self.shared_receiver = Some(receiver);
         self
     }
 
@@ -251,34 +332,22 @@ impl SubscriptionBuilder {
         self
     }
 
-    pub(crate) fn message_type(mut self, message_type: OutgoingMessages) -> Self {
-        self.message_type = Some(message_type);
+    pub(crate) fn shared(mut self, ticket: SharedTicket) -> Self {
+        self.shared = Some(ticket);
         self
     }
 
     pub(crate) fn build(self) -> InternalSubscription {
-        if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
-            InternalSubscription {
-                receiver: Some(receiver),
-                sender: self.sender,
-                shared_receiver: None,
-                signaler: Some(signaler),
-                request_id: self.request_id,
-                order_id: self.order_id,
-                message_type: self.message_type,
-            }
-        } else if let Some(receiver) = self.shared_receiver {
-            InternalSubscription {
-                receiver: None,
-                sender: None,
-                shared_receiver: Some(receiver),
-                signaler: None,
-                request_id: self.request_id,
-                order_id: self.order_id,
-                message_type: self.message_type,
-            }
-        } else {
+        let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) else {
             panic!("bad configuration");
+        };
+        InternalSubscription {
+            receiver: Some(receiver),
+            sender: self.sender,
+            signaler: Some(signaler),
+            request_id: self.request_id,
+            order_id: self.order_id,
+            shared: self.shared,
         }
     }
 }

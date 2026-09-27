@@ -178,7 +178,7 @@ This structure ensures:
 The `Client` can be shared between threads for concurrent operations:
 
 1. **Thread-Safe Design**: Use `Arc<Client>` when sharing across threads
-2. **Channel Isolation**: Each subscription gets its own channel
+2. **Channel Isolation**: Each subscription gets its own channel. Subscriptions to a request without an id (`positions`, `open_orders`, ...) are routed by response type, and every live subscription of that type receives every response
 3. **Subscription Model**: Subscriptions can be converted to iterators (sync) or streams (async)
 
 ## Connection Management
@@ -208,7 +208,7 @@ if client.is_connected() {
 
 ## Important Design Considerations
 
-1. **Shared Channels**: Some TWS API calls don't have unique request IDs and use shared channels. Avoid concurrent requests of the same type.
+1. **Shared Channels**: Some TWS API calls don't have unique request IDs; their responses are routed by message type to every live subscription of that type, on both clients. Concurrent subscriptions mapped to the same response types therefore see each other's responses: a second `open_orders()` while the first is still open receives the first's `OpenOrder` frames as well as its own, and so does an `all_open_orders()`, which maps to the same response types. TWS keeps one such stream per client; its cancel is sent when the last subscription of the type ends.
 
 2. **Message Ordering**: TWS doesn't guarantee message ordering for different request types.
 

@@ -2,7 +2,7 @@
 
 use time::OffsetDateTime;
 
-use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
@@ -11,9 +11,6 @@ use crate::{client::sync::Client, Error};
 use super::common::{decoders, encoders};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
-
-// Implement SharesChannel for PositionUpdate subscription
-impl SharesChannel for Subscription<PositionUpdate> {}
 
 impl Client {
     /// TWS's current time. TWS is synchronized with the server (not local computer) using NTP and this function will receive the current time in TWS.
