@@ -210,7 +210,7 @@ Everything above, kept inside the crate. Public signatures unchanged; public
     that accepts an order id → take `impl Into<OrderId>` and call `.checked()?`
     before the id crosses the domain boundary; one that accepts a request id
     → take `RequestId`, never `i32`. Inbound `i32`s become typed only through
-    `WireId::classify`." Index line under *Wire protocol* in `CLAUDE.md`;
+    `WireId::classify`." Index line under *Wire protocol* in `AGENTS.md`;
     `just rules-check`.
 
 ### PR 2 — public typed ids (separate decision)

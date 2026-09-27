@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# Validates the docs/rules/ knowledge graph and its index in CLAUDE.md.
+# Validates the docs/rules/ knowledge graph and its index in AGENTS.md.
 #
-#   1. every markdown link in CLAUDE.md, docs/rules/**, and plans/*.md resolves
+#   1. every markdown link in AGENTS.md, docs/rules/**, and plans/*.md resolves
 #      to a real file
 #   2. every node's frontmatter `id` matches its filename stem
 #   3. every `related:` id names an existing node
-#   4. CLAUDE.md contains no `@`-imports (they would inline every node into
+#   4. AGENTS.md contains no `@`-imports (they would inline every node into
 #      context on every session, defeating the point of the index)
 #   5. no node cites a `file.rs:NNN` line number — line refs rot silently the
 #      same way the retired rule numbers did, and nothing recomputes them. Name
@@ -24,7 +24,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 RULES_DIR="docs/rules"
-INDEX="CLAUDE.md"
+INDEX="AGENTS.md"
 ERRORS="$(mktemp)"
 trap 'rm -f "$ERRORS"' EXIT
 

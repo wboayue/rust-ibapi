@@ -109,7 +109,7 @@ jobs:
         run: |
           cargo metadata --format-version 1 > /dev/null
 
-      # Validate the docs/rules/ knowledge graph and its CLAUDE.md index
+      # Validate the docs/rules/ knowledge graph and its AGENTS.md index
       - name: Check rules graph
         run: ./tools/check-rules-graph.sh
           

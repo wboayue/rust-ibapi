@@ -1,6 +1,6 @@
 # Rule nodes
 
-Project conventions, one directive per file. `CLAUDE.md` carries a trigger-phrased index;
+Project conventions, one directive per file. `AGENTS.md` carries a trigger-phrased index;
 the detail lives here so it loads only when the work actually calls for it.
 
 ## Why this shape
@@ -13,7 +13,7 @@ enough to keep in context permanently while the reasoning stays available on dem
 ## When a convention changes
 
 The obligations — when a node is created, rewritten, or retired, and what has to be re-checked
-alongside it — are in **[Maintaining the rule graph](../../CLAUDE.md#maintaining-the-rule-graph)**,
+alongside it — are in **[Maintaining the rule graph](../../AGENTS.md#maintaining-the-rule-graph)**,
 because they have to fire without opening this file. This page carries the mechanics they refer
 to: the node format below, `triggers` phrasing, `status`, links, and the validator.
 
@@ -52,13 +52,13 @@ The bug class, and why the obvious approach fails.
 
 ### `triggers` is the load-bearing field
 
-It serves two purposes: it is the retrieval cue, and it is what the `CLAUDE.md` index line
+It serves two purposes: it is the retrieval cue, and it is what the `AGENTS.md` index line
 is compressed from. Phrase entries as **situations you would recognise mid-task**, not as
 topic labels. "Touching a domain decoder" fires; "decoder dispatch" does not.
 
 ### `status`
 
-`historical` nodes are kept for archaeology and stay **out** of the `CLAUDE.md` index — a
+`historical` nodes are kept for archaeology and stay **out** of the `AGENTS.md` index — a
 concluded migration has no trigger, so loading it costs context and returns nothing. Keep
 them when the reasoning would otherwise have to be reconstructed from PR archaeology, and
 when a future change could reopen the arc.
@@ -71,7 +71,7 @@ when a future change could reopen the arc.
 - `memory` names files in the maintainer's private memory directory. It is **not** validated
   — that directory lives outside the repo and is user-specific.
 
-### ⚠️ `CLAUDE.md` must never `@`-import these files
+### ⚠️ `AGENTS.md` must never `@`-import these files
 
 Claude Code inlines `@path` imports recursively. An `@docs/rules/...` line would pull every
 node into context on every session, which is exactly the cost this structure exists to
@@ -84,10 +84,10 @@ just rules-check
 ```
 
 Checks that every markdown link resolves, every `id` matches its filename, every `related`
-id names a real node, that `CLAUDE.md` contains no `@`-imports, and that no node cites a
+id names a real node, that `AGENTS.md` contains no `@`-imports, and that no node cites a
 `file.rs:NNN` line number.
 
-Link resolution covers `CLAUDE.md`, `docs/rules/**`, **and `plans/*.md`** — plan files cite
+Link resolution covers `AGENTS.md`, `docs/rules/**`, **and `plans/*.md`** — plan files cite
 nodes by relative path, and those links rot as readily as the ones inside the graph.
 
 **Cite names, not line numbers.** `src/protocol_tests.rs:5` is accurate until the next edit
@@ -108,7 +108,7 @@ untrustworthy. Name the fn, test, or type and let the reader grep; the validator
 
 ## Retired rule numbers
 
-`CLAUDE.md` carries no inline rules and no numbering. The numbering shifted at least once while
+`AGENTS.md` carries no inline rules and no numbering. The numbering shifted at least once while
 it was in use, so a "rule N" citation surviving in an old comment, plan, or memory has to be
 resolved against the `CLAUDE.md` of **its own date** (`git show <commit>:CLAUDE.md`) — this
 table is the mapping as of the final numbered revision, not a universal key.
@@ -141,7 +141,7 @@ from outside the numbered set: `wire/one-shot-narrowing` (#738/#749) and
 The regression check on trigger phrasing: re-run after a round of node edits, or whenever a
 node's `triggers` are rewritten. Give each probe to a fresh subagent with no knowledge of the
 graph. **Last run 2026-08-06: 3/3 pass** — every one opened its node as its first read rather
-than answering from the `CLAUDE.md` index line.
+than answering from the `AGENTS.md` index line.
 
 1. *"I'm adding a `contract_id()` accessor to `ResponseMessage` — what do I need to know?"*
    → must surface the `raw_bytes`-first branch **and** the `text_request_id_field` registration.

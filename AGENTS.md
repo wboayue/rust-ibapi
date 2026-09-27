@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## Quick Start
 
@@ -159,7 +159,7 @@ ids, `related`, no `@`-imports, no `file.rs:NNN`) and cannot tell whether a node
 - **Reading a node that calls its own failure mode silent, unenforced, or ungated** → that is a
   missing gate, not a documentation problem. Make the failure loud; then rewrite the node's
   claim rather than appending to it, and delete regression tests the gate made impossible.
-- **Touching `CLAUDE.md`, `docs/rules/`, or `plans/`** → `just rules-check` before the PR.
+- **Touching `AGENTS.md`, `docs/rules/`, or `plans/`** → `just rules-check` before the PR.
 
 ## Quick Commands
 
@@ -201,7 +201,7 @@ Situational — run when the change touches the matching surface:
 cargo build -p ibapi-integration-sync  --tests
 cargo build -p ibapi-integration-async --tests
 
-# CLAUDE.md, docs/rules/, or plans/ — validates the rule graph and its index
+# AGENTS.md, docs/rules/, or plans/ — validates the rule graph and its index
 just rules-check
 
 # Coverage report, nightly-only. See docs/rules/testing/coverage-floor.md.

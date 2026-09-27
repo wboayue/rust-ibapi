@@ -10,7 +10,7 @@ proto:
 cover:
     cargo +nightly llvm-cov --all-features --doctests --html --open
 
-# Validate the docs/rules/ knowledge graph and its CLAUDE.md index
+# Validate the docs/rules/ knowledge graph and its AGENTS.md index
 rules-check:
     ./tools/check-rules-graph.sh
 
