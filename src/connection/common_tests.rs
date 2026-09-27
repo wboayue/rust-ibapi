@@ -523,11 +523,10 @@ fn test_parse_raw_message_protobuf() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(&payload);
 
-    let (message, trace_str) = parse_raw_message(&data).expect("well-formed protobuf frame");
+    let message = parse_raw_message(&data).expect("well-formed protobuf frame");
     assert!(message.raw_bytes().is_some(), "protobuf framing must populate raw_bytes");
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
     assert_eq!(message.raw_bytes(), Some(payload.as_slice()));
-    assert!(trace_str.is_none()); // no trace string for protobuf
 }
 
 #[test]
@@ -538,12 +537,11 @@ fn test_parse_raw_message_binary_id_text_payload() {
     let mut data = msg_id.to_be_bytes().to_vec();
     data.extend_from_slice(text_payload);
 
-    let (message, trace_str) = parse_raw_message(&data).expect("well-formed text frame");
+    let message = parse_raw_message(&data).expect("well-formed text frame");
     assert!(message.raw_bytes().is_none(), "text framing must leave raw_bytes empty");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert_eq!(message.fields[1], "1"); // version field
     assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
-    assert!(trace_str.is_some());
 }
 
 /// A body too short to hold the 4-byte message id must be reported, not
@@ -561,7 +559,7 @@ fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
     }
 
     // A bare message id with no payload is the smallest legal frame.
-    let (message, _) = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
+    let message = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
 }
 
@@ -573,7 +571,7 @@ fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
 fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     // Protobuf framing: wire id carries the PROTOBUF_MSG_ID offset, and
     // message_id() reports the value actually looked up.
-    let (message, _) = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
+    let message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(message.message_id(), helpers::UNKNOWN_MESSAGE_ID);
 
@@ -582,12 +580,12 @@ fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     // UNKNOWN_MESSAGE_ID.
     let mut text_frame = 150_i32.to_be_bytes().to_vec();
     text_frame.extend_from_slice(b"1\0");
-    let (message, _) = parse_raw_message(&text_frame).expect("well-formed frame");
+    let message = parse_raw_message(&text_frame).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(message.message_id(), 150);
 
     // A recognized id reports itself too — the accessor is not unknown-only.
-    let (message, _) = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
+    let message = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
     assert_eq!(message.message_id(), 9);
 }

@@ -195,9 +195,6 @@ pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
 pub mod wsh;
 
-/// Server interaction tracing for debugging and monitoring
-pub mod trace;
-
 /// A prelude module for convenient importing of commonly used types.
 pub mod prelude;
 

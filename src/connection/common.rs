@@ -369,7 +369,7 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
     }
 }
 
-/// Parse raw message bytes into a `ResponseMessage`, returning an optional debug string for tracing.
+/// Parse raw message bytes into a `ResponseMessage`.
 ///
 /// Every message frame is `[4-byte BE msg_id][payload]`. When the 4-byte
 /// binary message ID exceeds [`PROTOBUF_MSG_ID`], the payload is
@@ -384,7 +384,7 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
 /// never see it; the guard stays because this is also reached from in-memory
 /// stream fixtures, which supply bodies directly and skip the length prefix
 /// entirely. It used to index straight past the end and panic the dispatcher.
-pub fn parse_raw_message(data: &[u8]) -> Result<(ResponseMessage, Option<String>), Error> {
+pub fn parse_raw_message(data: &[u8]) -> Result<ResponseMessage, Error> {
     let Some((header, payload)) = data.split_first_chunk::<MIN_FRAME_LENGTH>() else {
         return Err(Error::InvalidFrame(format!(
             "frame body of {} bytes cannot hold a message id",
@@ -396,15 +396,14 @@ pub fn parse_raw_message(data: &[u8]) -> Result<(ResponseMessage, Option<String>
     if msg_id > PROTOBUF_MSG_ID {
         let real_type = msg_id - PROTOBUF_MSG_ID;
         debug!("<- protobuf msg_id={real_type}");
-        let message = ResponseMessage::from_protobuf(real_type, payload.to_vec());
-        Ok((message, None))
+        Ok(ResponseMessage::from_protobuf(real_type, payload.to_vec()))
     } else {
         // Binary message ID, NUL-delimited text payload.
-        let raw_string = String::from_utf8_lossy(payload).into_owned();
-        debug!("<- {raw_string:?}");
+        let raw = String::from_utf8_lossy(payload);
+        debug!("<- {raw:?}");
         let mut fields = vec![msg_id.to_string()];
-        fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
-        Ok((ResponseMessage::from_text_fields(fields), Some(raw_string)))
+        fields.extend(raw.split_terminator('\0').map(|s| s.to_string()));
+        Ok(ResponseMessage::from_text_fields(fields))
     }
 }
 

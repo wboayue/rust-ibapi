@@ -13,7 +13,6 @@ use super::common::{
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
-use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
@@ -230,14 +229,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     pub(crate) async fn read_message(&self) -> Response {
         let data = self.socket.read_message().await?;
 
-        let (message, trace_str) = parse_raw_message(&data)?;
-
-        if let Some(raw_string) = trace_str {
-            if log::log_enabled!(log::Level::Debug) {
-                trace::record_response(raw_string).await;
-            }
-        }
-
+        let message = parse_raw_message(&data)?;
         self.recorder.record_response(&message);
 
         Ok(message)
