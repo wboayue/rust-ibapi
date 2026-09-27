@@ -342,7 +342,7 @@ pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error>
 }
 
 /// Parse connection time from TWS format
-/// Format: "20230405 22:20:39 PST"
+/// Format: "20230105 22:20:39 PST"
 ///
 /// Returns `Err(Error::UnsupportedTimeZone)` when the gateway includes a timezone
 /// name that is not in `TIMEZONE_ALIASES` and not a recognised IANA zone. Other
@@ -358,13 +358,9 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 
     // Combine timezone parts if more than 3 parts (e.g., "China Standard Time")
     let tz_name = if parts.len() > 3 { parts[2..].join(" ") } else { parts[2].to_string() };
-    let zones = find_timezone(&tz_name);
-
-    if zones.is_empty() {
+    let Some(timezone) = find_timezone(&tz_name) else {
         return Err(Error::UnsupportedTimeZone(tz_name));
-    }
-
-    let timezone = zones[0];
+    };
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let date_str = format!("{} {}", parts[0], parts[1]);

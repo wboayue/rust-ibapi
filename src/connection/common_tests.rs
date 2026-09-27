@@ -6,7 +6,7 @@ use crate::messages::IncomingMessages;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
+use time_tz::TimeZone;
 
 const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
@@ -390,13 +390,21 @@ fn test_require_protobuf_support_rejects_previous_scan_data_floor() {
 
 #[test]
 fn test_parse_connection_time() {
-    let example = "20230405 22:20:39 PST";
-    let (connection_time, _) = parse_connection_time(example).unwrap();
+    // TWS sends the abbreviation in force on the date: PST in winter, PDT in summer.
+    let (connection_time, timezone) = parse_connection_time("20230105 22:20:39 PST").unwrap();
+    assert_eq!(connection_time, Some(datetime!(2023-01-05 22:20:39 -08:00)));
+    assert_eq!(timezone.map(|tz| tz.name()), Some("America/Los_Angeles"));
 
-    let la = timezones::db::america::LOS_ANGELES;
-    if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
-        assert_eq!(connection_time, Some(other));
-    }
+    let (connection_time, timezone) = parse_connection_time("20230405 22:20:39 PDT").unwrap();
+    assert_eq!(connection_time, Some(datetime!(2023-04-05 22:20:39 -07:00)));
+    assert_eq!(timezone.map(|tz| tz.name()), Some("America/Los_Angeles"));
+}
+
+#[test]
+fn test_parse_connection_time_partial_name_errors() {
+    // A name that only matches IANA zones as a substring is not guessed at (#809).
+    let err = parse_connection_time("20230405 22:20:39 York").expect_err("partial name must error");
+    assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "York"));
 }
 
 #[test]

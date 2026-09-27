@@ -70,7 +70,7 @@ async fn establish_connection_populates_metadata() {
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.next_order_id, 90);
     assert_eq!(metadata.managed_accounts, "DU1234567");
-    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
+    assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
 }
 
 #[tokio::test]
@@ -310,7 +310,7 @@ async fn reconnect_clears_metadata_while_waiting_for_handshake() {
     assert_eq!(metadata.server_version, SERVER_VERSION);
     assert_eq!(metadata.next_order_id, 90);
     assert_eq!(metadata.managed_accounts, "DU1234567");
-    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
+    assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
 }
 
 /// Socket for the shutdown-during-reconnect tests. Reads and writes delegate
