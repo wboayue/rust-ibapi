@@ -274,7 +274,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
                 let handshake_data = self.connection_handler.parse_handshake_response(&mut response)?;
                 self.server_version_cache.store(handshake_data.server_version, Ordering::Release);
 
-                let (time, tz) = parse_connection_time(&handshake_data.server_time)?;
+                let (time, tz) = parse_connection_time(&handshake_data.server_time);
                 connection_metadata.connection_time = time;
                 connection_metadata.time_zone = tz;
             }

@@ -18,7 +18,11 @@ const CLIENT_ID: i32 = 100;
 const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
 fn push_handshake(stream: &MemoryStream) {
-    let handshake = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION);
+    push_handshake_in_zone(stream, "EST");
+}
+
+fn push_handshake_in_zone(stream: &MemoryStream, zone: &str) {
+    let handshake = format!("{SERVER_VERSION}\020240120 12:00:00 {zone}\0");
     stream.push_inbound(handshake.into_bytes());
     stream.push_inbound(next_valid_id_frame(90));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
@@ -70,7 +74,21 @@ async fn establish_connection_populates_metadata() {
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.next_order_id, 90);
     assert_eq!(metadata.managed_accounts, "DU1234567");
-    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
+    assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
+}
+
+#[tokio::test]
+async fn establish_connection_tolerates_unknown_time_zone() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+    push_handshake_in_zone(&stream, "Bogus Standard Time");
+
+    connection.establish_connection().await.expect("unknown zone must not fail the handshake");
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.time_zone, None);
+    assert_eq!(metadata.connection_time, None);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
 }
 
 #[tokio::test]
@@ -310,7 +328,7 @@ async fn reconnect_clears_metadata_while_waiting_for_handshake() {
     assert_eq!(metadata.server_version, SERVER_VERSION);
     assert_eq!(metadata.next_order_id, 90);
     assert_eq!(metadata.managed_accounts, "DU1234567");
-    assert_eq!(metadata.time_zone, Some(timezones::db::EST));
+    assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
 }
 
 /// Socket for the shutdown-during-reconnect tests. Reads and writes delegate

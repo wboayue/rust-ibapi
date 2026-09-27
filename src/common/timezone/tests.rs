@@ -6,59 +6,45 @@ use time_tz::{timezones, TimeZone};
 
 use super::{find_timezone, map_timezone_name_with, parse_env_aliases, register_timezone_alias, resolve_local};
 
+fn resolved_name(name: &str) -> Option<&'static str> {
+    find_timezone(name).map(|tz| tz.name())
+}
+
 #[test]
 fn test_find_timezone_standard() {
-    assert!(!find_timezone("PST").is_empty());
-    assert!(!find_timezone("America/New_York").is_empty());
+    assert_eq!(resolved_name("America/New_York"), Some("America/New_York"));
+    assert_eq!(resolved_name("US/Eastern"), Some("US/Eastern"));
+    assert_eq!(resolved_name("Etc/GMT+4"), Some("Etc/GMT+4"));
 }
 
 #[test]
 fn test_find_timezone_china_utf8() {
-    let zones = find_timezone("中国标准时间");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Asia/Shanghai");
-
-    let zones = find_timezone("北京时间");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Asia/Shanghai");
+    assert_eq!(resolved_name("中国标准时间"), Some("Asia/Shanghai"));
+    assert_eq!(resolved_name("北京时间"), Some("Asia/Shanghai"));
 }
 
 #[test]
 fn test_find_timezone_china_english() {
-    let zones = find_timezone("China Standard Time");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Asia/Shanghai");
+    assert_eq!(resolved_name("China Standard Time"), Some("Asia/Shanghai"));
 }
 
 #[test]
 fn test_find_timezone_gmt() {
-    let zones = find_timezone("Greenwich Mean Time");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Europe/London");
-
-    let zones = find_timezone("GMT Standard Time");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Europe/London");
-
-    let zones = find_timezone("British Summer Time");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Europe/London");
+    assert_eq!(resolved_name("Greenwich Mean Time"), Some("Europe/London"));
+    assert_eq!(resolved_name("GMT Standard Time"), Some("Europe/London"));
+    assert_eq!(resolved_name("British Summer Time"), Some("Europe/London"));
 }
 
 #[test]
 fn test_find_timezone_mojibake() {
     // Simulate GB2312 decoded as UTF-8 lossy (contains replacement characters)
     let mojibake = "test\u{FFFD}\u{FFFD}zone";
-    let zones = find_timezone(mojibake);
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Asia/Shanghai");
+    assert_eq!(resolved_name(mojibake), Some("Asia/Shanghai"));
 }
 
 #[test]
 fn test_find_timezone_singapore() {
-    let zones = find_timezone("SGT");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "Asia/Singapore");
+    assert_eq!(resolved_name("SGT"), Some("Asia/Singapore"));
 }
 
 #[test]
@@ -75,17 +61,52 @@ fn test_find_timezone_european_continental() {
         ("Romance Standard Time", "Europe/Paris"),
     ];
     for (windows_name, expected_iana) in cases {
-        let zones = find_timezone(windows_name);
-        assert!(!zones.is_empty(), "no match for {windows_name}");
-        assert_eq!(zones[0].name(), expected_iana, "wrong mapping for {windows_name}");
+        assert_eq!(resolved_name(windows_name), Some(expected_iana), "wrong mapping for {windows_name}");
     }
 }
 
 #[test]
 fn test_find_timezone_passthrough() {
     // Unknown timezone names pass through unchanged
-    let zones = find_timezone("Unknown/Timezone");
-    assert!(zones.is_empty());
+    assert!(resolved_name("Unknown/Timezone").is_none());
+}
+
+#[test]
+fn test_find_timezone_no_partial_match() {
+    // time_tz's `find_by_name` is a substring match, which resolved these to
+    // whichever containing zone hashed first (#809). Lookup is exact now.
+    for name in ["GMT+1", "York", "Eastern", "BST", "JST", "IST"] {
+        assert_eq!(resolved_name(name), None, "{name} must not resolve");
+    }
+    assert_eq!(resolved_name("GMT"), Some("GMT"));
+    assert_eq!(resolved_name("GB"), Some("GB"));
+}
+
+#[test]
+fn test_find_timezone_us_abbreviations() {
+    // Both halves of each pair map to one DST-observing zone, so the zone a
+    // client reports does not depend on the season it connected in.
+    let cases = [
+        ("EST", "America/New_York"),
+        ("EDT", "America/New_York"),
+        ("CST", "America/Chicago"),
+        ("CDT", "America/Chicago"),
+        ("MST", "America/Denver"),
+        ("MDT", "America/Denver"),
+        ("PST", "America/Los_Angeles"),
+        ("PDT", "America/Los_Angeles"),
+    ];
+    for (abbreviation, expected_iana) in cases {
+        assert_eq!(resolved_name(abbreviation), Some(expected_iana), "wrong mapping for {abbreviation}");
+    }
+}
+
+#[test]
+fn test_find_timezone_registry_value_is_exact() {
+    // A registered alias resolves its target exactly too: a partial IANA name
+    // is not completed to some zone that contains it.
+    register_timezone_alias("__rust_ibapi_test_alias_partial", "New_York");
+    assert_eq!(resolved_name("__rust_ibapi_test_alias_partial"), None);
 }
 
 #[test]
@@ -124,9 +145,7 @@ fn test_registry_passthrough_unknown() {
 fn test_register_timezone_alias_smoke() {
     // Unique key avoids collision with other tests touching the registry.
     register_timezone_alias("__rust_ibapi_test_alias_xyz", "America/New_York");
-    let zones = find_timezone("__rust_ibapi_test_alias_xyz");
-    assert!(!zones.is_empty());
-    assert_eq!(zones[0].name(), "America/New_York");
+    assert_eq!(resolved_name("__rust_ibapi_test_alias_xyz"), Some("America/New_York"));
 }
 
 #[test]

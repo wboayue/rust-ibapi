@@ -181,7 +181,9 @@ impl Client {
         self.connection_time
     }
 
-    /// Returns the server's time zone
+    /// Returns the server's time zone, or `None` if the gateway sent a name
+    /// that no alias or IANA zone matches (logged as a warning at connect).
+    /// Map such a name with [`register_timezone_alias`](crate::register_timezone_alias).
     pub fn time_zone(&self) -> Option<&'static Tz> {
         self.time_zone
     }

@@ -52,11 +52,7 @@ pub(crate) fn decode_historical_data_update(message: &ResponseMessage) -> Result
 }
 
 fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
-    let zones = find_timezone(name);
-    if zones.is_empty() {
-        return Err(Error::UnsupportedTimeZone(name.to_string()));
-    }
-    Ok(zones[0])
+    find_timezone(name).ok_or_else(|| Error::UnsupportedTimeZone(name.to_string()))
 }
 
 /// `YYYYMMDD-HH:MM:SS`: historical-schedule session bounds, and the zone-less UTC

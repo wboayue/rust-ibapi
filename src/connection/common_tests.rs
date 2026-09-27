@@ -6,7 +6,7 @@ use crate::messages::IncomingMessages;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
+use time_tz::TimeZone;
 
 const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
@@ -390,19 +390,20 @@ fn test_require_protobuf_support_rejects_previous_scan_data_floor() {
 
 #[test]
 fn test_parse_connection_time() {
-    let example = "20230405 22:20:39 PST";
-    let (connection_time, _) = parse_connection_time(example).unwrap();
+    // TWS sends the abbreviation in force on the date: PST in winter, PDT in summer.
+    let (connection_time, timezone) = parse_connection_time("20230105 22:20:39 PST");
+    assert_eq!(connection_time, Some(datetime!(2023-01-05 22:20:39 -08:00)));
+    assert_eq!(timezone.map(|tz| tz.name()), Some("America/Los_Angeles"));
 
-    let la = timezones::db::america::LOS_ANGELES;
-    if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
-        assert_eq!(connection_time, Some(other));
-    }
+    let (connection_time, timezone) = parse_connection_time("20230405 22:20:39 PDT");
+    assert_eq!(connection_time, Some(datetime!(2023-04-05 22:20:39 -07:00)));
+    assert_eq!(timezone.map(|tz| tz.name()), Some("America/Los_Angeles"));
 }
 
 #[test]
 fn test_parse_connection_time_china_standard_time() {
     let example = "20230405 22:20:39 China Standard Time";
-    let (connection_time, timezone) = parse_connection_time(example).unwrap();
+    let (connection_time, timezone) = parse_connection_time(example);
 
     assert!(connection_time.is_some());
     assert!(timezone.is_some());
@@ -412,7 +413,7 @@ fn test_parse_connection_time_china_standard_time() {
 #[test]
 fn test_parse_connection_time_chinese_utf8() {
     let example = "20230405 22:20:39 中国标准时间";
-    let (connection_time, timezone) = parse_connection_time(example).unwrap();
+    let (connection_time, timezone) = parse_connection_time(example);
 
     assert!(connection_time.is_some());
     assert!(timezone.is_some());
@@ -423,7 +424,7 @@ fn test_parse_connection_time_chinese_utf8() {
 fn test_parse_connection_time_mojibake() {
     // Simulate GB2312 timezone decoded as UTF-8 lossy
     let example = "20230405 22:20:39 \u{FFFD}\u{FFFD}\u{FFFD}";
-    let (connection_time, timezone) = parse_connection_time(example).unwrap();
+    let (connection_time, timezone) = parse_connection_time(example);
 
     assert!(connection_time.is_some());
     assert!(timezone.is_some());
@@ -431,22 +432,15 @@ fn test_parse_connection_time_mojibake() {
 }
 
 #[test]
-fn test_parse_connection_time_unknown_timezone_errors() {
-    let example = "20230405 22:20:39 Bogus Standard Time";
-    let err = parse_connection_time(example).expect_err("unknown tz must error");
-
-    assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
-    let rendered = err.to_string();
-    assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
-    assert!(
-        rendered.contains("register_timezone_alias"),
-        "missing programmatic-fix pointer: {rendered}"
-    );
-    assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
-    assert!(
-        rendered.contains("github.com/wboayue/rust-ibapi"),
-        "missing issue-tracker pointer: {rendered}"
-    );
+fn test_parse_connection_time_unknown_timezone_is_soft() {
+    // Only `Client::time_zone` and `connection_time` depend on the zone, so an
+    // unmatched name leaves them unset instead of failing the handshake. A
+    // partial name is not guessed at either (#809).
+    for name in ["Bogus Standard Time", "York"] {
+        let (time, tz) = parse_connection_time(&format!("20230405 22:20:39 {name}"));
+        assert!(time.is_none(), "{name}");
+        assert!(tz.is_none(), "{name}");
+    }
 }
 
 #[test]
@@ -454,7 +448,7 @@ fn test_parse_connection_time_in_dst_fold_resolves() {
     // Connecting during a fall-back hour: the reading is ambiguous. It used to
     // log "Error setting timezone" and yield None; it now takes the earlier
     // occurrence like every other wall-clock reading from TWS.
-    let (time, tz) = parse_connection_time("20251102 01:30:00 US/Eastern").unwrap();
+    let (time, tz) = parse_connection_time("20251102 01:30:00 US/Eastern");
     assert_eq!(time, Some(datetime!(2025-11-02 05:30:00 UTC)));
     assert!(tz.is_some());
 }
@@ -462,7 +456,7 @@ fn test_parse_connection_time_in_dst_fold_resolves() {
 #[test]
 fn test_parse_connection_time_short_input_still_ok() {
     // Truncated wire data — preserve current tolerance, no error.
-    let (time, tz) = parse_connection_time("20230405").unwrap();
+    let (time, tz) = parse_connection_time("20230405");
     assert!(time.is_none());
     assert!(tz.is_none());
 }
@@ -470,7 +464,7 @@ fn test_parse_connection_time_short_input_still_ok() {
 #[test]
 fn test_parse_connection_time_unparseable_date_still_ok() {
     // Timezone resolves; only the wall-clock fails. Preserve tolerance.
-    let (time, tz) = parse_connection_time("BADDATE 99:99:99 PST").unwrap();
+    let (time, tz) = parse_connection_time("BADDATE 99:99:99 PST");
     assert!(time.is_none());
     assert!(tz.is_some());
 }

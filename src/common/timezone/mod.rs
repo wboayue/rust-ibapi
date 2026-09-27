@@ -34,6 +34,22 @@ const TIMEZONE_ALIASES: &[(&str, &str)] = &[
     ("Central European Summer Time", "Europe/Warsaw"),
     ("W. Europe Standard Time", "Europe/Berlin"),
     ("Romance Standard Time", "Europe/Paris"),
+    // US abbreviations. Each standard/daylight pair maps to one DST-observing
+    // zone so `Client::time_zone` is the same whichever half of the year the
+    // connection was made in. TWS sends the abbreviation in force on the date,
+    // so the reading resolves to the same instant a fixed offset would give.
+    // These take precedence over the exact but fixed-offset `EST` and `MST`
+    // zones. `CST` also names China Standard Time, but a Chinese-locale
+    // gateway sends the long names above; register an alias to override.
+    // Likewise Arizona keeps MST all year: register `MST` → `America/Phoenix`.
+    ("EST", "America/New_York"),
+    ("EDT", "America/New_York"),
+    ("CST", "America/Chicago"),
+    ("CDT", "America/Chicago"),
+    ("MST", "America/Denver"),
+    ("MDT", "America/Denver"),
+    ("PST", "America/Los_Angeles"),
+    ("PDT", "America/Los_Angeles"),
 ];
 
 /// Process-wide user-registered aliases. Seeded from `IBAPI_TIMEZONE_ALIASES`
@@ -74,10 +90,12 @@ pub fn register_timezone_alias(name: impl Into<String>, iana: impl Into<String>)
 /// 1. User-registered aliases (`register_timezone_alias` and `IBAPI_TIMEZONE_ALIASES`)
 /// 2. Built-in `TIMEZONE_ALIASES` table
 /// 3. Mojibake heuristic (GB2312/GBK decoded as UTF-8 lossy → `Asia/Shanghai`)
-/// 4. Passthrough to `time_tz` (handles IANA names and abbreviations)
-pub fn find_timezone(name: &str) -> Vec<&'static Tz> {
-    let mapped = map_timezone_name(name);
-    timezones::find_by_name(&mapped)
+/// 4. Exact lookup in `time_tz` (IANA names, including backward links such as
+///    `US/Eastern`, and Windows names such as `Eastern Standard Time`)
+///
+/// There is no partial matching: a name that none of these resolve returns `None`.
+pub fn find_timezone(name: &str) -> Option<&'static Tz> {
+    timezones::get_by_name(&map_timezone_name(name))
 }
 
 /// Resolve a wall-clock reading in `tz` to an instant. Never panics.

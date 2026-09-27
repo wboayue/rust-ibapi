@@ -68,12 +68,15 @@ Error: Connection timeout
 
 ### Unrecognized Timezone From IB Gateway
 
-**Error:**
+**Symptom:** `client.time_zone()` and `client.connection_time()` return `None`,
+and the connect logs a warning (historical-data decoding fails with the same
+text as `Error::UnsupportedTimeZone`):
 ```
 unrecognized IB Gateway timezone "Some Standard Time"; register a mapping with
 `ibapi::register_timezone_alias("Some Standard Time", "<IANA-name>")` ...
 ```
 
+Names are matched exactly; a partial or unknown name is never guessed at.
 IB Gateway sends a free-form timezone string from the host machine's OS locale.
 On non-English Windows installations the string may be a Windows TZ name we
 don't recognize, mojibake from a non-UTF-8 locale, or any other label produced
