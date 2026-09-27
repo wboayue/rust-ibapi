@@ -584,6 +584,10 @@ impl OpenOrderResponse {
         self.trading_class = v.into();
         self
     }
+    pub fn security_id_type(mut self, v: impl Into<String>) -> Self {
+        self.security_id_type = v.into();
+        self
+    }
     pub fn action(mut self, v: impl Into<String>) -> Self {
         self.action = v.into();
         self
@@ -618,10 +622,6 @@ impl OpenOrderResponse {
     }
     pub fn conditions(mut self, v: Vec<proto::OrderCondition>) -> Self {
         self.conditions = v;
-        self
-    }
-    pub fn security_id_type(mut self, v: impl Into<String>) -> Self {
-        self.security_id_type = v.into();
         self
     }
 }

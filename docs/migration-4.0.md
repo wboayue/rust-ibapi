@@ -549,7 +549,7 @@ Two `Option<i32>` fields on `Order` request stop-loss / profit-taker children th
 - **`Copy` is removed.** `.clone()` (or borrow) where code copied a `SecurityIdType` out of a `Contract`.
 - **`as_str()` returns `&str`** instead of `&'static str`; for `Unknown` it borrows the raw value.
 - **`#[non_exhaustive]` is removed.** The `Unknown` arm now absorbs new schemes, so matches can be exhaustive and the compiler finds them if a scheme is ever promoted to a typed variant. Wildcard arms still compile.
-- **Serde** keeps the derived form: `Unknown` serializes externally tagged (`{"Unknown":"WKN"}`).
+- **Serde and `utoipa`** keep the derives: `Unknown` serializes externally tagged (`{"Unknown":"WKN"}`), and the generated schema gains a matching `Unknown` object branch, as in [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values).
 
 ## Behavioral changes
 

@@ -152,6 +152,7 @@ fn security_id_type_round_trip() {
 
 #[test]
 fn security_id_type_from_str_rejects_empty() {
+    // Open enum: empty is the only input FromStr rejects.
     check_wire_enum_rejects_unknown::<SecurityIdType>(&[""]);
 }
 
