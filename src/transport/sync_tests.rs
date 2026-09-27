@@ -1147,6 +1147,129 @@ fn test_stale_shared_handle_neither_cancels_nor_decrements() -> Result<(), Error
     Ok(())
 }
 
+type AccountUpdatesSubscription = crate::subscriptions::sync::Subscription<crate::accounts::AccountUpdate>;
+
+fn account(name: &str) -> crate::accounts::types::AccountId {
+    crate::accounts::types::AccountId(name.to_string())
+}
+
+// The request bytes name the account so each account's writes can be counted.
+fn account_updates_request(name: &str) -> Vec<u8> {
+    format!("account-updates {name}").into_bytes()
+}
+
+fn account_updates_subscription(bus: &Arc<TcpMessageBus<MemoryStream>>, name: &str) -> Result<AccountUpdatesSubscription, Error> {
+    let internal = bus.send_account_updates_request(&account(name), &account_updates_request(name))?;
+    Ok(wrap_subscription(bus.clone(), internal))
+}
+
+fn account_updates_cancel() -> Vec<u8> {
+    use crate::subscriptions::StreamDecoder;
+    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None).unwrap()
+}
+
+fn account_updates_slot(bus: &TcpMessageBus<MemoryStream>) -> Option<crate::accounts::types::AccountId> {
+    bus.shared_channels.counts.lock().unwrap().account_updates().cloned()
+}
+
+/// The same account again shares the one TWS stream: both requests go out,
+/// and only the last drop cancels and frees the slot.
+#[test]
+fn test_account_updates_same_account_shares() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let cancel = account_updates_cancel();
+
+    let first = account_updates_subscription(&bus, "DU1")?;
+    let second = account_updates_subscription(&bus, "DU1")?;
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    assert_eq!(bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestAccountData), 2);
+
+    drop(first);
+    assert_eq!(
+        count_frames(&stream.captured(), &cancel),
+        0,
+        "cancel written while a subscription is still live"
+    );
+    assert_eq!(account_updates_slot(&bus), Some(account("DU1")));
+
+    drop(second);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    assert_eq!(account_updates_slot(&bus), None);
+    Ok(())
+}
+
+/// TWS has one account-updates slot: a second account would switch the live
+/// subscription to its data. It is refused before anything is written, and
+/// the live subscription keeps its registration and its data.
+#[test]
+fn test_account_updates_other_account_refused() -> Result<(), Error> {
+    use crate::accounts::AccountUpdate;
+    use crate::subscriptions::SubscriptionItem;
+
+    let (stream, bus) = make_bus();
+    let first = account_updates_subscription(&bus, "DU1")?;
+    let subscribers = bus.shared_channels.subscribers().len();
+
+    let refused = account_updates_subscription(&bus, "DU2").map(|_| ());
+    assert!(
+        matches!(&refused, Err(Error::AccountUpdatesInUse { active, requested }) if *active == account("DU1") && *requested == account("DU2")),
+        "got: {refused:?}"
+    );
+    assert_eq!(
+        count_frames(&stream.captured(), &account_updates_request("DU2")),
+        0,
+        "refused request was written"
+    );
+    assert_eq!(bus.shared_channels.counts.lock().unwrap().live(OutgoingMessages::RequestAccountData), 1);
+    assert_eq!(bus.shared_channels.subscribers().len(), subscribers, "refused registration left behind");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::AccountDownloadEnd as i32,
+        &crate::proto::AccountDataEnd {
+            account_name: Some("DU1".to_string()),
+        },
+    ));
+    bus.dispatch()?;
+    let item = first.next_timeout(TICK).expect("live subscription received nothing")?;
+    assert!(matches!(item, SubscriptionItem::Data(AccountUpdate::End)), "got: {item:?}");
+    Ok(())
+}
+
+/// Once the last subscription of an account ends, another account is accepted.
+#[test]
+fn test_account_updates_other_account_after_cancel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let first = account_updates_subscription(&bus, "DU1")?;
+    drop(first);
+    assert_eq!(count_frames(&stream.captured(), &account_updates_cancel()), 1);
+
+    let _second = account_updates_subscription(&bus, "DU2")?;
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU2")), 1);
+    assert_eq!(account_updates_slot(&bus), Some(account("DU2")));
+    Ok(())
+}
+
+/// A reset ends every subscription, so the slot is free on the new session,
+/// and a dead handle's drop must not free the new account's slot.
+#[test]
+fn test_account_updates_slot_restarts_after_reset() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let old = account_updates_subscription(&bus, "DU1")?;
+    bus.reset();
+    let _new = account_updates_subscription(&bus, "DU2")?;
+
+    drop(old);
+    assert_eq!(
+        count_frames(&stream.captured(), &account_updates_cancel()),
+        0,
+        "dead handle wrote a cancel"
+    );
+    assert_eq!(account_updates_slot(&bus), Some(account("DU2")));
+    Ok(())
+}
+
 /// `MessageBus::send_message` writes through to the connection.
 #[test]
 fn test_send_message_writes_through() -> Result<(), Error> {

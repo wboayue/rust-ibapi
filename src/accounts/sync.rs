@@ -1,5 +1,7 @@
 //! Synchronous implementation of account management functionality
 
+use std::sync::Arc;
+
 use time::OffsetDateTime;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
@@ -197,10 +199,18 @@ impl Client {
 
     /// Subscribes to a specific account's information and portfolio.
     ///
-    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed.
+    ///
+    /// TWS streams one account at a time per connection. Subscribing to the same
+    /// account again shares the stream; another account is refused until every
+    /// subscription to the first has been cancelled or dropped. To stream several
+    /// accounts at once, use [`account_updates_multi`](Client::account_updates_multi).
     ///
     /// # Arguments
     /// * `account` - The account id (i.e. U1234567) for which the information is requested.
+    ///
+    /// # Errors
+    /// [`Error::AccountUpdatesInUse`] while another account's updates are live.
     ///
     /// # Examples
     ///
@@ -227,14 +237,15 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
-        request_helpers::blocking::shared_request(self, OutgoingMessages::RequestAccountData, || {
-            encoders::encode_request_account_updates(true, account)
-        })
+        let request = encoders::encode_request_account_updates(true, account)?;
+        let subscription = self.message_bus.send_account_updates_request(account, &request)?;
+        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
     /// Requests account updates for account and/or model.
     ///
-    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed.
+    /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
     ///
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.

@@ -26,6 +26,7 @@ use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
+use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, OutgoingMessages, ResponseMessage};
@@ -62,6 +63,10 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
+
+    /// `send_shared_request` for `RequestAccountData`, refused with
+    /// `Error::AccountUpdatesInUse` while another account is live.
+    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
 
@@ -869,6 +874,51 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
         false
     }
+
+    // Registers a subscription of `message_type` and writes its request;
+    // `account` for account updates (see `SharedCounts`).
+    async fn send_shared(
+        &self,
+        message_type: OutgoingMessages,
+        account: Option<&AccountId>,
+        message: Vec<u8>,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.ensure_connected()?;
+
+        let receiver = {
+            let channels = self.shared_channel_receivers.read().await;
+            if let Some(receiver) = channels.get(&message_type) {
+                receiver.resubscribe()
+            } else {
+                return Err(Error::InvalidArgument(format!(
+                    "No shared channel configured for message type: {:?}",
+                    message_type
+                )));
+            }
+        };
+
+        // The lock spans the write so the count and the wire agree.
+        let ticket = {
+            let mut counts = self.shared_counts.lock().await;
+            match account {
+                Some(account) => {
+                    counts.check_account_updates(account)?;
+                    self.write_message(&message).await?;
+                    counts.subscribe_account_updates(account)
+                }
+                None => {
+                    self.write_message(&message).await?;
+                    counts.subscribe(message_type)
+                }
+            }
+        };
+
+        Ok(AsyncInternalSubscription::with_cleanup(
+            receiver,
+            self.cleanup_sender.clone(),
+            CleanupSignal::Shared(ticket),
+        ))
+    }
 }
 
 #[async_trait]
@@ -929,32 +979,11 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.ensure_connected()?;
+        self.send_shared(message_type, None, message).await
+    }
 
-        let receiver = {
-            let channels = self.shared_channel_receivers.read().await;
-            if let Some(receiver) = channels.get(&message_type) {
-                receiver.resubscribe()
-            } else {
-                return Err(Error::InvalidArgument(format!(
-                    "No shared channel configured for message type: {:?}",
-                    message_type
-                )));
-            }
-        };
-
-        // The lock spans the write so the count and the wire agree.
-        let ticket = {
-            let mut counts = self.shared_counts.lock().await;
-            self.write_message(&message).await?;
-            counts.subscribe(message_type)
-        };
-
-        Ok(AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Shared(ticket),
-        ))
+    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message).await
     }
 
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {

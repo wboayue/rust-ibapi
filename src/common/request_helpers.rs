@@ -137,19 +137,6 @@ mod sync_helpers {
         client.subscription::<T>().send_shared(message_type, request)
     }
 
-    /// Helper for shared requests without version check
-    pub fn shared_request<T>(
-        client: &Client,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-    ) -> Result<Subscription<T>, Error>
-    where
-        T: StreamDecoder<T>,
-    {
-        let request = encoder()?;
-        client.shared_request(message_type).send(request)
-    }
-
     /// One-shot request answered on the shared channel for its message type.
     pub fn one_shot_shared<R>(
         client: &Client,
@@ -218,19 +205,6 @@ mod async_helpers {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;
         client.subscription::<T>().send_shared(message_type, request).await
-    }
-
-    /// Async helper for shared requests without version check
-    pub async fn shared_request<T>(
-        client: &Client,
-        message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
-    ) -> Result<Subscription<T>, Error>
-    where
-        T: StreamDecoder<T> + Send + 'static,
-    {
-        let request = encoder()?;
-        client.shared_request(message_type).send::<T>(request).await
     }
 
     /// One-shot request answered on the shared channel for its message type.

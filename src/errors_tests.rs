@@ -56,6 +56,13 @@ fn error_display() {
         (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
+            Error::AccountUpdatesInUse {
+                active: AccountId("DU1".into()),
+                requested: AccountId("DU2".into()),
+            },
+            "account updates already streaming DU1; cancel it before requesting DU2",
+        ),
+        (
             Error::HistoricalParseError(HistoricalParseError::BarSize("bogus".to_string())),
             "HistoricalParseError: Invalid BarSize input 'bogus'",
         ),
@@ -246,6 +253,10 @@ fn clone_preserves_payloaded_variants() {
         tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         Error::ProtobufDecode(protobuf_decode_error()),
+        Error::AccountUpdatesInUse {
+            active: AccountId("DU1".into()),
+            requested: AccountId("DU2".into()),
+        },
     ];
 
     for original in originals {

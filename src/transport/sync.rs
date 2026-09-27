@@ -12,6 +12,7 @@ use std::time::Duration;
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, warn};
 
+use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
 use crate::connection::sync::Connection;
 
@@ -129,10 +130,25 @@ impl SharedChannels {
 
     // Runs `write` for a new subscription of `message_type` and counts it on
     // success. The lock spans the write so the count and the wire agree.
-    fn subscribe(&self, message_type: OutgoingMessages, write: impl FnOnce() -> Result<(), Error>) -> Result<SharedTicket, Error> {
+    // `account` is the account-updates account, checked before the write.
+    fn subscribe(
+        &self,
+        message_type: OutgoingMessages,
+        account: Option<&AccountId>,
+        write: impl FnOnce() -> Result<(), Error>,
+    ) -> Result<SharedTicket, Error> {
         let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
-        write()?;
-        Ok(counts.subscribe(message_type))
+        match account {
+            Some(account) => {
+                counts.check_account_updates(account)?;
+                write()?;
+                Ok(counts.subscribe_account_updates(account))
+            }
+            None => {
+                write()?;
+                Ok(counts.subscribe(message_type))
+            }
+        }
     }
 
     // Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
@@ -765,6 +781,36 @@ impl<S: Stream> TcpMessageBus<S> {
             }
         }
     }
+
+    // Registers a subscription of `message_type` and writes its request;
+    // `account` for account updates (see `SharedCounts`).
+    fn send_shared(&self, message_type: OutgoingMessages, account: Option<&AccountId>, message: &[u8]) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
+        // A queue of its own, registered before the write so no response can
+        // arrive ahead of it. A failed write or a refused account takes the
+        // registration with it.
+        let (sender, receiver) = channel::unbounded();
+        self.shared_channels.add(message_type, sender.clone());
+        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_message(message)) {
+            Ok(ticket) => ticket,
+            Err(e) => {
+                self.shared_channels.remove(&sender);
+                return Err(e);
+            }
+        };
+
+        // The sender is the drop signal's identity: `Signal::Shared` removes
+        // exactly this registration.
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals_send.clone())
+            .shared(ticket)
+            .build();
+
+        Ok(subscription)
+    }
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
@@ -876,30 +922,11 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.ensure_connected()?;
+        self.send_shared(message_type, None, message)
+    }
 
-        // A queue of its own, registered before the write so no response can
-        // arrive ahead of it. A failed write takes the registration with it.
-        let (sender, receiver) = channel::unbounded();
-        self.shared_channels.add(message_type, sender.clone());
-        let ticket = match self.shared_channels.subscribe(message_type, || self.write_message(message)) {
-            Ok(ticket) => ticket,
-            Err(e) => {
-                self.shared_channels.remove(&sender);
-                return Err(e);
-            }
-        };
-
-        // The sender is the drop signal's identity: `Signal::Shared` removes
-        // exactly this registration.
-        let subscription = SubscriptionBuilder::new()
-            .receiver(receiver)
-            .sender(sender)
-            .signaler(self.signals_send.clone())
-            .shared(ticket)
-            .build();
-
-        Ok(subscription)
+    fn send_account_updates_request(&self, account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message)
     }
 
     fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<&[u8]>) -> Result<(), Error> {

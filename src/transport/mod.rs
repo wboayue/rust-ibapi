@@ -13,6 +13,8 @@ use crate::errors::Error;
 use crate::messages::ResponseMessage;
 
 #[cfg(any(feature = "sync", feature = "async"))]
+use crate::accounts::types::AccountId;
+#[cfg(any(feature = "sync", feature = "async"))]
 use crate::messages::OutgoingMessages;
 
 #[cfg(feature = "sync")]
@@ -52,11 +54,18 @@ pub(crate) struct SharedTicket {
 /// possibly after the same type was resubscribed on the new session. Each
 /// reset therefore starts a new generation with empty counts, and a ticket
 /// from an earlier generation neither decrements nor cancels.
+///
+/// `RequestAccountData` also has one account: a request for another account
+/// would switch every live subscription to it, so it is refused until the
+/// last subscription of the first account ends.
 #[cfg(any(feature = "sync", feature = "async"))]
 #[derive(Debug, Default)]
 pub(crate) struct SharedCounts {
     generation: u64,
     live: std::collections::HashMap<OutgoingMessages, usize>,
+    // The account of the live `RequestAccountData` subscriptions; `Some`
+    // exactly while any is live.
+    account_updates: Option<AccountId>,
 }
 
 #[cfg(any(feature = "sync", feature = "async"))]
@@ -70,6 +79,25 @@ impl SharedCounts {
             message_type,
             generation: self.generation,
         }
+    }
+
+    /// `Err` when account updates for another account are live; call under
+    /// the lock, before writing the request.
+    pub(crate) fn check_account_updates(&self, account: &AccountId) -> Result<(), Error> {
+        match &self.account_updates {
+            Some(active) if active != account => Err(Error::AccountUpdatesInUse {
+                active: active.clone(),
+                requested: account.clone(),
+            }),
+            _ => Ok(()),
+        }
+    }
+
+    /// Counts a new account-updates subscription for `account`, which
+    /// `check_account_updates` admitted, and returns its ticket.
+    pub(crate) fn subscribe_account_updates(&mut self, account: &AccountId) -> SharedTicket {
+        self.account_updates = Some(account.clone());
+        self.subscribe(OutgoingMessages::RequestAccountData)
     }
 
     /// Uncounts `ticket`'s subscription. `true` when the cancel should be
@@ -87,6 +115,9 @@ impl SharedCounts {
             log::debug!("shared subscription {:?} ended, {count} still live: cancel withheld", ticket.message_type);
             return false;
         }
+        if ticket.message_type == OutgoingMessages::RequestAccountData {
+            self.account_updates = None;
+        }
         true
     }
 
@@ -96,11 +127,17 @@ impl SharedCounts {
     pub(crate) fn reset(&mut self) {
         self.generation += 1;
         self.live.clear();
+        self.account_updates = None;
     }
 
     #[cfg(test)]
     pub(crate) fn live(&self, message_type: OutgoingMessages) -> usize {
         self.live.get(&message_type).copied().unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn account_updates(&self) -> Option<&AccountId> {
+        self.account_updates.as_ref()
     }
 }
 
@@ -112,6 +149,10 @@ pub(crate) trait MessageBus: Send + Sync {
     fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
+
+    /// `send_shared_request` for `RequestAccountData`, refused with
+    /// `Error::AccountUpdatesInUse` while another account is live.
+    fn send_account_updates_request(&self, account: &AccountId, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// Ends one subscription of `message_id`. `packet` is the cancel to write
     /// for the last one; `None` for a stream TWS never cancels, which still
@@ -364,3 +405,6 @@ pub mod connection;
 pub(crate) mod raw_capture;
 pub mod recorder;
 pub mod routing;
+
+#[cfg(all(test, any(feature = "sync", feature = "async")))]
+mod tests;
