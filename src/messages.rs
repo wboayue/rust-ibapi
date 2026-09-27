@@ -1627,14 +1627,15 @@ impl Notice {
     /// ```no_run
     /// use ibapi::{Notice, NoticeCategory};
     /// # let notice: Notice = unimplemented!();
-    /// let level = match notice.category() {
-    ///     NoticeCategory::Cancellation => "info",
-    ///     NoticeCategory::Warning | NoticeCategory::DataAdvisory => "warn",
-    ///     NoticeCategory::SystemMessage => "warn or error, by code",
+    /// let kind = match notice.category() {
+    ///     NoticeCategory::Cancellation
+    ///     | NoticeCategory::Warning
+    ///     | NoticeCategory::DataAdvisory
+    ///     | NoticeCategory::SystemMessage => "informational",
     ///     NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
     ///     _ => "unknown",
     /// };
-    /// # let _ = level;
+    /// # let _ = kind;
     /// ```
     pub fn category(&self) -> NoticeCategory {
         classify(self.code, &self.message)

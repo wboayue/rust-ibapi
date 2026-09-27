@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use log::{error, info, warn, Level};
+use log::{info, log, warn, Level};
 
 use crate::connection::common::NoticeSink;
 use crate::errors::Error;
@@ -12,26 +12,30 @@ use crate::messages::{
 };
 use crate::subscriptions::common::RoutedItem;
 
-/// A notice reports *healthy* data-farm connectivity ("…connection is OK")
-/// rather than a problem. IB's message-codes reference classifies these as
-/// System Notifications, not warnings, so they're logged at info instead of
-/// warn. Only [`ConnectivityStatus::Ok`] is benign — `Broken`/`Inactive`/
-/// `Connecting` stay at warn via [`Notice::is_warning`].
+/// A notice reports data-farm connectivity that needs no action, or a
+/// reconnect that lost nothing. Logged at info rather than warn.
+///
+/// [`ConnectivityStatus::Ok`] is a healthy farm. `Inactive` ("…inactive but
+/// should be available upon demand") and `Connecting` are routine states TWS
+/// reports on nearly every connect; the farm comes up when a request needs
+/// it. Only `Broken` stays at warn.
 ///
 /// Code 1102 ("connectivity restored — data maintained") is a system message,
 /// not a data-farm notice, so it has no [`ConnectivityStatus`]; it is treated
 /// as benign here because nothing was lost on the reconnect.
 fn is_benign_connectivity_notice(notice: &Notice) -> bool {
-    notice.connectivity_status() == Some(ConnectivityStatus::Ok) || notice.code == CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE
+    matches!(
+        notice.connectivity_status(),
+        Some(ConnectivityStatus::Ok | ConnectivityStatus::Inactive | ConnectivityStatus::Connecting)
+    ) || notice.code == CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE
 }
 
-/// Log severity for a notice that has no request or subscription to answer
-/// to, derived from [`Notice::category`] so that every code in a category
-/// logs alike regardless of which numeric band it sits in.
+/// Log severity for a notice, derived from [`Notice::category`] so that every
+/// code in a category logs alike regardless of which numeric band it sits in.
 ///
 /// Informational categories log at `warn` (the caller may want to act:
-/// a fallback engaged, a book must be cleared), except the benign data-farm
-/// confirmations and the cancellation confirmation, which log at `info`.
+/// a fallback engaged, a book must be cleared), except benign connectivity
+/// notices and the cancellation confirmation, which log at `info`.
 /// System connectivity codes are graded by how much they matter: 1102
 /// (restored, data maintained) is benign → info; 1101 (restored, data lost —
 /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
@@ -50,12 +54,7 @@ pub(crate) fn notice_log_level(notice: &Notice) -> Level {
 
 /// Log an unrouted notice (no subscription owner) at [`notice_log_level`].
 pub(crate) fn log_unrouted_notice(notice: &Notice) {
-    match notice_log_level(notice) {
-        Level::Info if is_benign_connectivity_notice(notice) => info!("connectivity: {notice}"),
-        Level::Info => info!("notice: {notice}"),
-        Level::Warn => warn!("warning: {notice}"),
-        _ => error!("error: {notice}"),
-    }
+    log!(notice_log_level(notice), "{notice}");
 }
 
 /// Log a routed notice/error that arrived bound to an id with no matching

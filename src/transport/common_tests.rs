@@ -1,12 +1,12 @@
 use super::*;
-use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_OK_CODES, WARNING_CODE_RANGE};
+use crate::messages::{CONNECTIVITY_LOST_CODE, FARM_CONNECTING_CODES, FARM_INACTIVE_CODES, FARM_OK_CODES, WARNING_CODE_RANGE};
 
 #[test]
 fn test_is_benign_connectivity_notice() {
-    // Logging-policy invariant: only ConnectivityStatus::Ok (data-farm-OK
-    // confirmations) and system code 1102 (restored, data maintained) are
-    // benign → info. Broken/Inactive/Connecting stay at warn.
-    for code in FARM_OK_CODES {
+    // Logging-policy invariant: data-farm Ok/Inactive/Connecting and system
+    // code 1102 (restored, data maintained) are benign → info. Broken stays
+    // at warn.
+    for code in FARM_OK_CODES.into_iter().chain(FARM_INACTIVE_CODES).chain(FARM_CONNECTING_CODES) {
         let notice = Notice::synthesized(code, "farm OK".into());
         assert!(is_benign_connectivity_notice(&notice), "code {code} should be benign");
     }
@@ -14,17 +14,13 @@ fn test_is_benign_connectivity_notice() {
     let notice = Notice::synthesized(CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, "restored, data maintained".into());
     assert!(is_benign_connectivity_notice(&notice), "code 1102 should be benign");
 
-    // Not benign: broken codes (Broken), inactive/connecting codes (still warn),
-    // the range boundaries, a code outside WARNING_CODE_RANGE entirely, and the
+    // Not benign: broken codes (Broken), the range boundaries, a code outside WARNING_CODE_RANGE entirely, and the
     // non-benign system codes (1100 lost, 1101 restored-but-data-lost).
     for code in [
         2100,
         2103, // Market data farm connection is broken
         2105, // HMDS data farm connection is broken
         2157, // Sec-def data farm connection is broken
-        2107,
-        2108, // inactive but available on demand — not benign
-        2119, // connecting — not benign
         *WARNING_CODE_RANGE.end(),
         200,                                  // outside / boundary
         CONNECTIVITY_LOST_CODE,               // 1100 — hard error
@@ -37,24 +33,29 @@ fn test_is_benign_connectivity_notice() {
 
 #[test]
 fn test_notice_log_level_follows_category() {
-    use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, SOCKET_PORT_RESET_CODE};
+    use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, ORDER_MESSAGE_CODE, SOCKET_PORT_RESET_CODE};
 
-    // Benign connectivity confirmations and the cancellation confirmation: info.
-    for code in FARM_OK_CODES
-        .into_iter()
-        .chain([CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE])
-    {
+    // Benign connectivity notices and the cancellation confirmation: info.
+    for code in [2104, 2107, 2119, CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE] {
         assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Info, "code {code}");
     }
-    // Every warning-band code that is not benign, every data advisory, and
-    // 1101: warn. The advisories are the point - 317 and the 10xxx codes used
-    // to log at error while 2188 logged at warn, the same category twice.
-    for code in [2103, 2119, *WARNING_CODE_RANGE.end(), CONNECTIVITY_RESTORED_DATA_LOST_CODE]
+    // Every warning-band code that is not benign, code-less frames (0), every
+    // data advisory, and 1101: warn. The advisories are the point - 317 and the
+    // 10xxx codes used to log at error while 2188 logged at warn, the same
+    // category twice.
+    for code in [0, 2103, *WARNING_CODE_RANGE.end(), CONNECTIVITY_RESTORED_DATA_LOST_CODE]
         .into_iter()
         .chain(DATA_ADVISORY_CODES.iter().copied())
     {
         assert_eq!(notice_log_level(&Notice::synthesized(code, String::new())), Level::Warn, "code {code}");
     }
+    // 399 grades by its text: a `Warning:` line warns, anything else is a rejection.
+    let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
+    assert_eq!(notice_log_level(&order_warning), Level::Warn);
+    assert_eq!(
+        notice_log_level(&Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into())),
+        Level::Error
+    );
     // Connectivity lost, socket reset, order rejections and errors: error.
     for code in [
         CONNECTIVITY_LOST_CODE,
@@ -69,18 +70,10 @@ fn test_notice_log_level_follows_category() {
 }
 
 #[test]
-fn test_log_unrouted_notice_traverses_all_severities() {
-    // Smoke test: the project has no log-capture harness, so we can't assert the
-    // emitted level. Drive each branch of log_unrouted_notice to confirm the
-    // four arms - benign info, plain info (202), warn, error - are reachable and
-    // panic-free.
-    log_unrouted_notice(&Notice::synthesized(FARM_OK_CODES[0], "farm OK".into()));
-    log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, "1102 info".into()));
-    log_unrouted_notice(&Notice::synthesized(2103, "farm broken".into()));
-    log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_RESTORED_DATA_LOST_CODE, "1101 warn".into()));
+fn test_log_unrouted_notice_is_panic_free() {
+    // Smoke test: the project has no log-capture harness, so the emitted level
+    // is covered by test_notice_log_level_follows_category.
     log_unrouted_notice(&Notice::synthesized(CONNECTIVITY_LOST_CODE, "1100 error".into()));
-    log_unrouted_notice(&Notice::synthesized(200, "no security definition".into()));
-    log_unrouted_notice(&Notice::synthesized(crate::messages::ORDER_CANCELLED_CODE, "202 info".into()));
 }
 
 #[test]
