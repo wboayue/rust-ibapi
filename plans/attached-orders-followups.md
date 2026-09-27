@@ -1,6 +1,6 @@
 # Preset attached orders — follow-ups
 
-Follow-up to [attached-orders](attached-orders.md) (#842). The encoding shipped; these Phase 0
+Follow-up to #842 (shipped in #849; its plan, `plans/attached-orders.md`, is in that PR's history). The encoding shipped; these Phase 0
 items were never observed because the paper account has no order presets, so every attach
 ended in 10355 + parent discarded.
 
@@ -27,7 +27,7 @@ outcome flips from `no preset` to `attached`.
 
 ## Decisions that hang on the answers
 
-- **Routing** ([attached-orders § Routing](attached-orders.md#routing-decide-after-phase-0-item-5)).
+- **Routing** (#849 plan, § Routing).
   Shipped as Option A: child frames reach only `order_update_stream`. If item 1 shows callers
   need the family on one subscription, Option B registers the child ids onto the parent's order
   channel in `send_order_request` (both transports; run the integration crate builds).

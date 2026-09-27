@@ -58,45 +58,7 @@ patches.
   into `SubscriptionBuilder::build()` so the sender-less state is
   unrepresentable — goes with follow-up 3's restructuring.
 
-## 4. Sync: stale `ConnectionReset` buffered in idle streaming shared queues
-
-**Resolved.** Sync shared channels are per subscription now (the async model
-named below): each `send_shared_request` gets its own queue, removed on drop,
-so there is no idle queue to buffer a reset or a frame. The candidate fix at
-the end of this section was superseded, not implemented.
-
-Opposite shape to #776 (fixed for async in PR #783): sync shared channels are
-persistent crossbeam queues, and `send_shared_request` drains only one-shot
-types. A `ConnectionReset` pushed by `reset()` into an *idle* streaming queue
-(no subscriber in flight) stays buffered, so the next `open_orders()` reads a
-stale reset as its first item and fails spuriously. Draining streaming queues
-on subscribe is not safe as-is — the drain could discard messages buffered for
-a concurrent live subscription of the same type (see the comment in sync
-`send_shared_request`). Needs either per-subscription sync shared channels
-(the async model) or reset-generation tagging.
-
-More reachable since PR #817: the reset now runs at the socket drop, and
-resubscribing from the `TRANSPORT_RECONNECT_CODE` handler is the documented
-recovery. Wider than first described (verified in the #818 /simplify pass):
-
-- `SharedChannels::notify_all` iterates senders by *inbound* type, and
-  `register` files one sender under every response type of its request, so a
-  queue receives one reset per response type it maps to. A sync subscription
-  stops at its first error, so even one live at the drop leaves the extra
-  copies queued — not only idle queues.
-- Unowned order activity is also fanned into the open-orders queues, so a
-  later `open_orders()` can read stale `OpenOrder`/`OrderStatus` frames, not
-  just a stale reset.
-
-Candidate fix (small, needs tests): notify once per queue (iterate the
-`receivers`' senders, or dedupe by `Arc::ptr_eq`), and in `send_shared_request`
-also drain when `Arc::strong_count(&shared_receiver) == 2` (map + this caller:
-no live subscriber holds the queue). The drain-discards-live-messages risk
-above only applies when another subscriber holds it. Would remove the caveat
-on `TRANSPORT_RECONNECT_CODE` and in the changelog. Implementation plan:
-[sync shared queues: stale resets and frames](sync-shared-queue-stale-items.md).
-
-## 5. Async shutdown/reset shape
+## 4. Async shutdown/reset shape
 
 Two related /simplify flags from PR #783:
 
