@@ -151,7 +151,7 @@ impl SecurityType {
 ///
 /// Prefer the typed entry points (`Contract::stock`, `Contract::call`, `Contract::put`,
 /// `Contract::futures`, `Contract::forex`, `Contract::crypto`, `Contract::index`,
-/// `Contract::bond`, `Contract::spread`) or the
+/// `Contract::bond_cusip`, `Contract::bond_isin`, `Contract::spread`) or the
 /// field-minimal [`ContractBuilder::new`] — they set the correct field types and
 /// sensible defaults for you. A bare struct literal with `..Default::default()` also
 /// works when you need full control over individual fields.
@@ -398,6 +398,32 @@ impl Contract {
             currency,
             ..Default::default()
         }
+    }
+
+    /// Create a bond contract with CUSIP identifier
+    ///
+    /// # Example
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// // US Treasury bond by CUSIP
+    /// let bond = Contract::bond_cusip("912810RN0");
+    /// ```
+    pub fn bond_cusip(cusip: impl Into<String>) -> Contract {
+        Contract::bond(BondIdentifier::Cusip(Cusip::new(cusip)))
+    }
+
+    /// Create a bond contract with ISIN identifier
+    ///
+    /// # Example
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// // European bond by ISIN
+    /// let bond = Contract::bond_isin("DE0001102309");
+    /// ```
+    pub fn bond_isin(isin: impl Into<String>) -> Contract {
+        Contract::bond(BondIdentifier::Isin(Isin::new(isin)))
     }
 
     /// Create a bond contract with CUSIP or ISIN identifier

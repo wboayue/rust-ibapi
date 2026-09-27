@@ -124,9 +124,9 @@ let futures = Contract::futures("ES")
 // Forex pairs
 let forex = Contract::forex("EUR", "USD").build();
 
-// Bonds by CUSIP or ISIN
-let treasury = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
-let euro_bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
+// Bonds - simplified API for CUSIP and ISIN
+let treasury = Contract::bond_cusip("912810RN0");
+let euro_bond = Contract::bond_isin("DE0001102309");
 ```
 
 See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.

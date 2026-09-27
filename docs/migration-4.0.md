@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§22](#22-contractbond_cusip-and-contractbond_isin-are-removed) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid) |
 
 ## Breaking changes
 
@@ -542,22 +542,6 @@ A narrower integer type tops out at 65535 at most, below most contract ids (AAPL
 
 Two `Option<i32>` fields on `Order` request stop-loss / profit-taker children that TWS attaches from its order presets (#842). A struct literal that names every field without `..Default::default()` stops compiling; add the two fields as `None`, or finish the literal with `..Default::default()`. Both default to `None`, which sends the same request as before. Orders read back from TWS always have them `None`.
 
-### 22. `Contract::bond_cusip` and `Contract::bond_isin` are removed
-
-Both were wrappers over `Contract::bond`, which takes a `BondIdentifier` and builds the same contract: same security id and type, `SMART` exchange, and the same currency (USD for a CUSIP, taken from the country code for an ISIN, USD when the code is not recognized). Call `Contract::bond` directly:
-
-```rust,ignore
-// 4.2
-let treasury = Contract::bond_cusip("912810RN0");
-let euro_bond = Contract::bond_isin("DE0001102309");
-
-// Unreleased
-use ibapi::contracts::{BondIdentifier, Cusip, Isin};
-
-let treasury = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
-let euro_bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
-```
-
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -599,8 +583,7 @@ No code changes required, but observable at runtime:
 19. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound — see [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed).
 20. Pass an `i32` or `ContractId` as `contract_id` to the price, volume and percent-change condition constructors; an `OrderId`, enum or narrower integer there was a bug — see [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid).
 21. Add `preset_stop_loss_order_id: None, preset_profit_taker_order_id: None` to exhaustive `Order` struct literals, or end them with `..Default::default()` — see [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id).
-22. Replace `Contract::bond_cusip(cusip)` with `Contract::bond(BondIdentifier::Cusip(Cusip::new(cusip)))` and `Contract::bond_isin(isin)` with `Contract::bond(BondIdentifier::Isin(Isin::new(isin)))` — see [§22](#22-contractbond_cusip-and-contractbond_isin-are-removed).
-23. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+22. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
