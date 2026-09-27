@@ -341,22 +341,6 @@ pub enum ValidationError {
     InvalidPrice(f64),
     /// Required builder field was not supplied.
     MissingRequiredField(&'static str),
-    /// Combination of inputs violates broker rules.
-    InvalidCombination(String),
-    /// Stop price conflicts with current market context.
-    InvalidStopPrice {
-        /// Stop trigger price supplied by caller.
-        stop: f64,
-        /// Reference market price used for validation.
-        current: f64,
-    },
-    /// Limit price conflicts with current market context.
-    InvalidLimitPrice {
-        /// Limit price supplied by caller.
-        limit: f64,
-        /// Reference market price used for validation.
-        current: f64,
-    },
     /// Bracket order configuration is invalid.
     InvalidBracketOrder(String),
     /// Percentage value outside allowed range (10-50%).
@@ -378,13 +362,6 @@ impl fmt::Display for ValidationError {
             Self::InvalidQuantity(q) => write!(f, "Invalid quantity: {}", q),
             Self::InvalidPrice(p) => write!(f, "Invalid price: {}", p),
             Self::MissingRequiredField(field) => write!(f, "Missing required field: {}", field),
-            Self::InvalidCombination(msg) => write!(f, "Invalid combination: {}", msg),
-            Self::InvalidStopPrice { stop, current } => {
-                write!(f, "Invalid stop price {} for current price {}", stop, current)
-            }
-            Self::InvalidLimitPrice { limit, current } => {
-                write!(f, "Invalid limit price {} for current price {}", limit, current)
-            }
             Self::InvalidBracketOrder(msg) => write!(f, "Invalid bracket order: {}", msg),
             Self::InvalidPercentage { field, value, min, max } => {
                 write!(f, "Invalid {}: {} (must be between {} and {})", field, value, min, max)

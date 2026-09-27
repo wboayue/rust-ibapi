@@ -570,6 +570,7 @@ The fluent order builder (#311, commit f00a0a2) came with helpers that only thei
 What changes for compiling code:
 
 - `orders::builder::OrderAnalysis`: use the `OrderState` that `OrderBuilder::analyze()` returns.
+- `ValidationError::InvalidStopPrice`, `InvalidLimitPrice` and `InvalidCombination`: no non-test code returned them; delete match arms and constructions.
 
 ## Behavioral changes
 

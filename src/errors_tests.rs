@@ -179,21 +179,6 @@ fn from_validation_error_covers_every_variant() {
         (ValidationError::InvalidPrice(f64::NAN), "Invalid price: NaN"),
         (ValidationError::MissingRequiredField("contract"), "Missing required field: contract"),
         (
-            ValidationError::InvalidCombination("opposing legs".to_string()),
-            "Invalid combination: opposing legs",
-        ),
-        (
-            ValidationError::InvalidStopPrice { stop: 99.0, current: 100.0 },
-            "Invalid stop price 99 for current price 100",
-        ),
-        (
-            ValidationError::InvalidLimitPrice {
-                limit: 101.0,
-                current: 100.0,
-            },
-            "Invalid limit price 101 for current price 100",
-        ),
-        (
             ValidationError::InvalidBracketOrder("missing parent".to_string()),
             "Invalid bracket order: missing parent",
         ),

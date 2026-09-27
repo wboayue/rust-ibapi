@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ibapi::parser_registry` (a `#[doc(hidden)]` re-export of `messages::parser_registry`), with the `record_interactions` example and the `tws_interactions.yaml` it produced. The registry mapped message types to field indices of the text protocol the crate stopped supporting in #452; the example could no longer produce output. There is no replacement: `IBAPI_RECORDING_DIR` and `IBAPI_RAW_CAPTURE_DIR` are the supported ways to capture traffic. See `docs/migration-4.0.md` §23 (#854).
 - The `trace` module (`Interaction`, `last_interaction`, `record_request`, `record_response`, `trace::blocking`) and the three `trace_test` examples. The client has not called `record_request` since the transport went protobuf-only (#452), so `last_interaction()` always returned `None`. Capture traffic with `IBAPI_RECORDING_DIR` / `IBAPI_RAW_CAPTURE_DIR`. See `docs/migration-4.0.md` §24 (#862).
 - `orders::builder::OrderAnalysis`, which nothing produced: `OrderBuilder::analyze()` has returned `OrderState` since #311. Use `OrderState`. See `docs/migration-4.0.md` §25 (#865).
+- `ValidationError::InvalidStopPrice`, `InvalidLimitPrice` and `InvalidCombination`, which no non-test code returned. Delete match arms and constructions. See `docs/migration-4.0.md` §25 (#865).
 
 ### Fixed
 

@@ -57,27 +57,6 @@ fn test_invalid_sell_bracket() {
 }
 
 #[test]
-fn test_stop_price_validation_buy() {
-    // Buy stop must be above current price
-    assert!(validate_stop_price(&Action::Buy, 55.0, Some(50.0)).is_ok());
-    assert!(validate_stop_price(&Action::Buy, 45.0, Some(50.0)).is_err());
-}
-
-#[test]
-fn test_stop_price_validation_sell() {
-    // Sell stop must be below current price
-    assert!(validate_stop_price(&Action::Sell, 45.0, Some(50.0)).is_ok());
-    assert!(validate_stop_price(&Action::Sell, 55.0, Some(50.0)).is_err());
-}
-
-#[test]
-fn test_stop_price_no_current_price() {
-    // Should pass if no current price provided
-    assert!(validate_stop_price(&Action::Buy, 55.0, None).is_ok());
-    assert!(validate_stop_price(&Action::Sell, 45.0, None).is_ok());
-}
-
-#[test]
 fn test_missing_action_validation() {
     let result = validate_bracket_prices(None, 50.0, 55.0, 45.0);
     assert!(result.is_err());
@@ -104,17 +83,6 @@ fn test_edge_case_equal_prices() {
     // Test when stop loss equals entry (invalid)
     let result = validate_bracket_prices(Some(&Action::Buy), 50.0, 55.0, 50.0);
     assert!(result.is_err());
-}
-
-#[test]
-fn test_stop_price_edge_cases() {
-    // Test when stop equals current (should be invalid)
-    assert!(validate_stop_price(&Action::Buy, 50.0, Some(50.0)).is_err());
-    assert!(validate_stop_price(&Action::Sell, 50.0, Some(50.0)).is_err());
-
-    // Test with very small differences
-    assert!(validate_stop_price(&Action::Buy, 50.01, Some(50.0)).is_ok());
-    assert!(validate_stop_price(&Action::Sell, 49.99, Some(50.0)).is_ok());
 }
 
 #[test]

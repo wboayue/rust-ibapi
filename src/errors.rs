@@ -332,13 +332,6 @@ impl From<ValidationError> for Error {
             ValidationError::InvalidQuantity(q) => Error::InvalidArgument(format!("Invalid quantity: {}", q)),
             ValidationError::InvalidPrice(p) => Error::InvalidArgument(format!("Invalid price: {}", p)),
             ValidationError::MissingRequiredField(field) => Error::InvalidArgument(format!("Missing required field: {}", field)),
-            ValidationError::InvalidCombination(msg) => Error::InvalidArgument(format!("Invalid combination: {}", msg)),
-            ValidationError::InvalidStopPrice { stop, current } => {
-                Error::InvalidArgument(format!("Invalid stop price {} for current price {}", stop, current))
-            }
-            ValidationError::InvalidLimitPrice { limit, current } => {
-                Error::InvalidArgument(format!("Invalid limit price {} for current price {}", limit, current))
-            }
             ValidationError::InvalidBracketOrder(msg) => Error::InvalidArgument(format!("Invalid bracket order: {}", msg)),
             ValidationError::InvalidPercentage { field, value, min, max } => {
                 Error::InvalidArgument(format!("Invalid {}: {} (must be between {} and {})", field, value, min, max))

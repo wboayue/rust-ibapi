@@ -77,15 +77,6 @@ fn test_validation_error_display() {
     let err = ValidationError::MissingRequiredField("order_type");
     assert_eq!(err.to_string(), "Missing required field: order_type");
 
-    let err = ValidationError::InvalidCombination("test".to_string());
-    assert_eq!(err.to_string(), "Invalid combination: test");
-
-    let err = ValidationError::InvalidStopPrice { stop: 100.0, current: 95.0 };
-    assert_eq!(err.to_string(), "Invalid stop price 100 for current price 95");
-
-    let err = ValidationError::InvalidLimitPrice { limit: 90.0, current: 95.0 };
-    assert_eq!(err.to_string(), "Invalid limit price 90 for current price 95");
-
     let err = ValidationError::InvalidBracketOrder("test".to_string());
     assert_eq!(err.to_string(), "Invalid bracket order: test");
 }
