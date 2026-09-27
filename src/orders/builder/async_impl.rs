@@ -1,7 +1,7 @@
 use futures::StreamExt;
 
-use super::order_builder::{BracketOrderBuilder, OrderBuilder};
-use super::types::{BracketOrderIds, OrderId};
+use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, OrderBuilder};
+use super::types::{AttachedOrderIds, BracketOrderIds, OrderId};
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::orders::PlaceOrder;
@@ -84,6 +84,44 @@ impl<'a> BracketOrderBuilder<'a, Client> {
         }
 
         Ok(BracketOrderIds::new(parent_id, tp_id, sl_id))
+    }
+}
+
+impl<'a> AttachedOrdersBuilder<'a, Client> {
+    /// Submit the order with its preset children asynchronously.
+    ///
+    /// Allocates the parent id, then one id per requested child, and sends a single
+    /// place-order request. Fire-and-forget: a missing TWS preset (error 10355, parent
+    /// `Cancelled`) arrives only on the order update stream.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let ids = client
+    ///         .order(&contract)
+    ///         .buy(100)
+    ///         .limit(150.0)
+    ///         .preset_stop_loss()
+    ///         .preset_profit_taker()
+    ///         .submit()
+    ///         .await
+    ///         .expect("submit failed");
+    ///     println!("parent {} stop-loss {:?} profit-taker {:?}", ids.parent, ids.stop_loss, ids.profit_taker);
+    /// }
+    /// ```
+    pub async fn submit(self) -> Result<AttachedOrderIds, Error> {
+        let client = self.parent_builder.client;
+        let contract = self.parent_builder.contract;
+        let (order, ids) = self.assign_ids(|| client.next_order_id())?;
+        client.submit_order(order.order_id, contract, &order).await?;
+        Ok(ids)
     }
 }
 

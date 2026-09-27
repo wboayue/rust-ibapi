@@ -313,3 +313,51 @@ fn test_tag_values_to_map() {
     assert_eq!(map.get("k1").unwrap(), "v1");
     assert_eq!(map.get("k2").unwrap(), "v2");
 }
+
+fn preset_legs(stop_loss: Option<i32>, profit_taker: Option<i32>) -> Order {
+    Order {
+        preset_stop_loss_order_id: stop_loss,
+        preset_profit_taker_order_id: profit_taker,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn encode_attached_orders_absent_without_preset_legs() {
+    assert_eq!(encode_attached_orders(&Order::default()), None);
+}
+
+#[test]
+fn encode_attached_orders_sends_preset_type_for_each_leg() {
+    let preset = Some("PRESET".to_string());
+    let cases = [
+        (
+            preset_legs(Some(11), Some(12)),
+            proto::AttachedOrders {
+                sl_order_id: Some(11),
+                sl_order_type: preset.clone(),
+                pt_order_id: Some(12),
+                pt_order_type: preset.clone(),
+            },
+        ),
+        (
+            preset_legs(Some(11), None),
+            proto::AttachedOrders {
+                sl_order_id: Some(11),
+                sl_order_type: preset.clone(),
+                ..Default::default()
+            },
+        ),
+        (
+            preset_legs(None, Some(12)),
+            proto::AttachedOrders {
+                pt_order_id: Some(12),
+                pt_order_type: preset.clone(),
+                ..Default::default()
+            },
+        ),
+    ];
+    for (order, expected) in cases {
+        assert_eq!(encode_attached_orders(&order), Some(expected));
+    }
+}

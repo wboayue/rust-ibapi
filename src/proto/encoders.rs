@@ -431,6 +431,25 @@ pub fn encode_scanner_subscription(
 
 // === OrderCancel ===
 
+/// The only attached-order type TWS accepts (live-verified, #842).
+const PRESET_ATTACHED_ORDER_TYPE: &str = "PRESET";
+
+/// `PlaceOrderRequest.attached_orders` for the preset legs on `order`, or `None` when it has none.
+pub fn encode_attached_orders(order: &Order) -> Option<proto::AttachedOrders> {
+    let stop_loss = order.preset_stop_loss_order_id;
+    let profit_taker = order.preset_profit_taker_order_id;
+    if stop_loss.is_none() && profit_taker.is_none() {
+        return None;
+    }
+    let preset = |id: Option<i32>| id.map(|_| PRESET_ATTACHED_ORDER_TYPE.to_string());
+    Some(proto::AttachedOrders {
+        sl_order_id: stop_loss,
+        sl_order_type: preset(stop_loss),
+        pt_order_id: profit_taker,
+        pt_order_type: preset(profit_taker),
+    })
+}
+
 pub fn encode_order_cancel(manual_order_cancel_time: &str) -> proto::OrderCancel {
     proto::OrderCancel {
         manual_order_cancel_time: some_str(manual_order_cancel_time),

@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Preset attached orders: `OrderBuilder::preset_stop_loss()` / `preset_profit_taker()` ask TWS to attach a stop-loss / profit-taker priced from its order presets, and `AttachedOrdersBuilder::submit()` returns the parent and child ids as `AttachedOrderIds`. The raw path is the new `Order` fields below. Requires server version 218; below it, placing such an order fails with `Error::ServerVersion`. If no preset is defined, TWS discards the parent as well (error 10355). See `examples/async/preset_attached_orders.rs` (#842).
 - `From<market_data::historical::HistoricalParseError> for Error`, so `s.parse::<BarSize>()?` (and `Duration`, `WhatToShow`) works in a function returning `ibapi::Error` (#838).
 
 ### Changed
 
+- `orders::Order` gains `preset_stop_loss_order_id` and `preset_profit_taker_order_id` (`Option<i32>`, default `None`), sent as `PlaceOrderRequest.attached_orders`. Exhaustive `Order` struct literals need the two fields. See `docs/migration-4.0.md` §21 (#842).
 - `orders::OrderCondition` gains `Unknown(UnknownCondition)`: a condition type this crate does not model (IB leaves `2` unassigned) keeps its type code and every wire field instead of decoding as a zeroed `PriceCondition`, and goes back out unchanged, so an order read from TWS and placed again keeps its condition. Exhaustive matches need the new arm. See `docs/migration-4.0.md` §16 (#827).
 - An inbound order condition with no `type` fails to decode with `Error::Parse` instead of reading as a price condition; as with any decode error, the subscription that received the frame yields the error and ends (#827).
 

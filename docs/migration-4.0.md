@@ -538,6 +538,10 @@ let condition = price(contract.contract_id, "SMART").greater_than(150.0);
 
 A narrower integer type tops out at 65535 at most, below most contract ids (AAPL's is `265598`); if you do hold one there, `i32::from(..)` it.
 
+### 21. `Order` gains `preset_stop_loss_order_id` and `preset_profit_taker_order_id`
+
+Two `Option<i32>` fields on `Order` request stop-loss / profit-taker children that TWS attaches from its order presets (#842). A struct literal that names every field without `..Default::default()` stops compiling; add the two fields as `None`, or finish the literal with `..Default::default()`. Both default to `None`, which sends the same request as before. Orders read back from TWS always have them `None`.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -578,7 +582,8 @@ No code changes required, but observable at runtime:
 18. Drop reads of `Trade.tick_type`; if you merge the `last()` and `all_last()` streams, tag each item when merging — see [§18](#18-tradetick_type-is-removed).
 19. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound — see [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed).
 20. Pass an `i32` or `ContractId` as `contract_id` to the price, volume and percent-change condition constructors; an `OrderId`, enum or narrower integer there was a bug — see [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid).
-21. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+21. Add `preset_stop_loss_order_id: None, preset_profit_taker_order_id: None` to exhaustive `Order` struct literals, or end them with `..Default::default()` — see [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id).
+22. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

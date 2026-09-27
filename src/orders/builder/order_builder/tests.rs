@@ -1720,3 +1720,56 @@ fn bracket_order_propagates_tif() {
     assert_eq!(orders[1].tif, TimeInForce::GoodTillCanceled);
     assert_eq!(orders[2].tif, TimeInForce::GoodTillCanceled);
 }
+
+fn counter(start: i32) -> impl FnMut() -> i32 {
+    let mut next = start;
+    move || {
+        next += 1;
+        next - 1
+    }
+}
+
+#[test]
+fn preset_legs_take_ids_after_the_parent() {
+    let client = MockClient;
+    let contract = create_test_contract();
+    let base = || OrderBuilder::new(&client, &contract).buy(100).limit(50.0);
+
+    let cases = [
+        (base().preset_stop_loss(), Some(101), None),
+        (base().preset_profit_taker(), None, Some(101)),
+        (base().preset_stop_loss().preset_profit_taker(), Some(101), Some(102)),
+        // Profit-taker first in the chain still numbers stop-loss first.
+        (base().preset_profit_taker().preset_stop_loss(), Some(101), Some(102)),
+        // Repeating a leg doesn't request it twice.
+        (base().preset_stop_loss().preset_stop_loss(), Some(101), None),
+    ];
+    for (builder, stop_loss, profit_taker) in cases {
+        let (order, ids) = builder.assign_ids(counter(100)).expect("valid order");
+        assert_eq!(order.order_id, 100);
+        assert_eq!(order.preset_stop_loss_order_id, stop_loss);
+        assert_eq!(order.preset_profit_taker_order_id, profit_taker);
+        assert_eq!(ids.parent, OrderId(100));
+        assert_eq!(ids.stop_loss, stop_loss.map(OrderId));
+        assert_eq!(ids.profit_taker, profit_taker.map(OrderId));
+    }
+}
+
+#[test]
+fn preset_legs_consume_no_ids_for_an_invalid_parent() {
+    let client = MockClient;
+    let contract = create_test_contract();
+    let mut calls = 0;
+
+    let result = OrderBuilder::new(&client, &contract)
+        .buy(-1)
+        .limit(50.0)
+        .preset_stop_loss()
+        .assign_ids(|| {
+            calls += 1;
+            calls
+        });
+
+    assert!(matches!(result, Err(ValidationError::InvalidQuantity(_))), "got {result:?}");
+    assert_eq!(calls, 0);
+}

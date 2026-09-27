@@ -45,8 +45,8 @@ pub use common::order_builder;
 
 // Builder types: `order_builder` and `types` are `pub(crate)` so `orders::*`
 // is the only public spelling.
-pub use builder::order_builder::{BracketOrderBuilder, OrderBuilder};
-pub use builder::types::{BracketOrderIds, OrderId};
+pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, OrderBuilder};
+pub use builder::types::{AttachedOrderIds, BracketOrderIds, OrderId};
 
 // Re-export condition types and builders
 pub use conditions::{
@@ -117,6 +117,39 @@ pub struct Order {
     pub deactivate: bool,
     /// The order ID of the parent order, used for bracket and auto trailing stop orders.
     pub parent_id: i32,
+    /// Order ID for a stop-loss that TWS attaches to this order from its order presets.
+    ///
+    /// `Some(id)` asks TWS to create the child under `id`, pricing it from the stop-loss preset
+    /// configured in TWS (Global Configuration → Presets) for the instrument; the API sends no
+    /// price. Allocate the id with [`next_order_id`](crate::Client::next_order_id). Requires
+    /// server version 218.
+    ///
+    /// If no preset is defined, TWS discards this order as well (error 10355, then status
+    /// `Cancelled`). Request-only: always `None` on orders read back from TWS.
+    ///
+    /// The builder path is [`OrderBuilder::preset_stop_loss`], which allocates the id.
+    /// Set the field directly to get a subscription from `place_order`:
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let mut order = client.order(&contract).buy(100).limit(150.0).build_order()?;
+    /// let order_id = client.next_order_id();
+    /// order.preset_stop_loss_order_id = Some(client.next_order_id());
+    /// order.preset_profit_taker_order_id = Some(client.next_order_id());
+    /// let _updates = client.place_order(order_id, &contract, &order).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub preset_stop_loss_order_id: Option<i32>,
+    /// Order ID for a profit-taker that TWS attaches to this order from its order presets.
+    ///
+    /// Same contract as [`preset_stop_loss_order_id`](Self::preset_stop_loss_order_id), using
+    /// the profit-taker preset.
+    pub preset_profit_taker_order_id: Option<i32>,
     /// If set to true, specifies that the order is an ISE Block order.
     pub block_order: bool,
     /// If set to true, specifies that the order is a Sweep-to-Fill order.
@@ -498,6 +531,8 @@ impl Default for Order {
             transmit: true,
             deactivate: false,
             parent_id: 0,
+            preset_stop_loss_order_id: None,
+            preset_profit_taker_order_id: None,
             block_order: false,
             sweep_to_fill: false,
             display_size: Some(0), // TODO - default to None?
