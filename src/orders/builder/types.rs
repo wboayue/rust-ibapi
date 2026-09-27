@@ -72,16 +72,6 @@ impl BracketOrderIds {
             stop_loss: OrderId(stop_loss),
         }
     }
-
-    /// Returns all order IDs as a vector
-    pub fn as_vec(&self) -> Vec<OrderId> {
-        vec![self.parent, self.take_profit, self.stop_loss]
-    }
-
-    /// Returns all order IDs as i32 values
-    pub fn as_i32_vec(&self) -> Vec<i32> {
-        vec![self.parent.0, self.take_profit.0, self.stop_loss.0]
-    }
 }
 
 impl fmt::Display for BracketOrderIds {
@@ -91,19 +81,6 @@ impl fmt::Display for BracketOrderIds {
             "BracketOrder(parent: {}, tp: {}, sl: {})",
             self.parent, self.take_profit, self.stop_loss
         )
-    }
-}
-
-impl From<Vec<i32>> for BracketOrderIds {
-    fn from(ids: Vec<i32>) -> Self {
-        assert_eq!(ids.len(), 3, "BracketOrderIds requires exactly 3 order IDs");
-        Self::new(ids[0], ids[1], ids[2])
-    }
-}
-
-impl From<[i32; 3]> for BracketOrderIds {
-    fn from(ids: [i32; 3]) -> Self {
-        Self::new(ids[0], ids[1], ids[2])
     }
 }
 

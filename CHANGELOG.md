@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `trace` module (`Interaction`, `last_interaction`, `record_request`, `record_response`, `trace::blocking`) and the three `trace_test` examples. The client has not called `record_request` since the transport went protobuf-only (#452), so `last_interaction()` always returned `None`. Capture traffic with `IBAPI_RECORDING_DIR` / `IBAPI_RAW_CAPTURE_DIR`. See `docs/migration-4.0.md` §24 (#862).
 - `orders::builder::OrderAnalysis`, which nothing produced: `OrderBuilder::analyze()` has returned `OrderState` since #311. Use `OrderState`. See `docs/migration-4.0.md` §25 (#865).
 - `ValidationError::InvalidStopPrice`, `InvalidLimitPrice` and `InvalidCombination`, which no non-test code returned. Delete match arms and constructions. See `docs/migration-4.0.md` §25 (#865).
+- `BracketOrderIds::as_vec` / `as_i32_vec` and its `From<Vec<i32>>` / `From<[i32; 3]>` impls; the `Vec<i32>` one panicked on any length but three. Use `BracketOrderIds::new` and the three public fields. See `docs/migration-4.0.md` §25 (#865).
 
 ### Fixed
 
