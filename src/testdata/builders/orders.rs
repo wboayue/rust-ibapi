@@ -494,6 +494,7 @@ pub struct OpenOrderResponse {
     pub currency: String,
     pub local_symbol: String,
     pub trading_class: String,
+    pub security_id_type: String,
     pub action: String,
     pub total_quantity: f64,
     pub order_type: String,
@@ -522,6 +523,7 @@ impl Default for OpenOrderResponse {
             currency: "USD".to_string(),
             local_symbol: "TSLA".to_string(),
             trading_class: "NMS".to_string(),
+            security_id_type: String::new(),
             action: "BUY".to_string(),
             total_quantity: 100.0,
             order_type: "MKT".to_string(),
@@ -582,6 +584,10 @@ impl OpenOrderResponse {
         self.trading_class = v.into();
         self
     }
+    pub fn security_id_type(mut self, v: impl Into<String>) -> Self {
+        self.security_id_type = v.into();
+        self
+    }
     pub fn action(mut self, v: impl Into<String>) -> Self {
         self.action = v.into();
         self
@@ -638,6 +644,7 @@ impl ResponseProtoEncoder for OpenOrderResponse {
                 currency: Some(self.currency.clone()),
                 local_symbol: Some(self.local_symbol.clone()),
                 trading_class: Some(self.trading_class.clone()),
+                sec_id_type: some_str(&self.security_id_type),
                 ..Default::default()
             }),
             order: Some(proto::Order {

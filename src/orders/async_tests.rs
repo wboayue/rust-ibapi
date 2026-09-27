@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
     proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
@@ -639,6 +639,33 @@ async fn test_order_update_stream_survives_unknown_tif() {
             assert_eq!(o.order.tif, TimeInForce::GoodTillCanceled);
         }
         other => panic!("stream did not survive the unknown tif, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_order_update_stream_survives_unknown_security_id_type() {
+    // SecurityIdType is open: a contract carrying an identifier scheme this
+    // crate does not model arrives as SecurityIdType::Unknown and the frame
+    // queued behind it still arrives (#840).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).security_id_type("WKN").encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(2).encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut stream = client.order_update_stream().await.unwrap();
+
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
+            assert_eq!(o.contract.security_id_type, Some(SecurityIdType::Unknown("WKN".into())));
+        }
+        other => panic!("expected OpenOrder with Unknown security_id_type, got {other:?}"),
+    }
+    match stream.next().await {
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order_id, 2),
+        other => panic!("stream did not survive the unknown security_id_type, got {other:?}"),
     }
 }
 

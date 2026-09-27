@@ -4,7 +4,7 @@ use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_blocking_test_client, create_blocking_test_client_with_ordered_proto_responses,
     decode_request_proto, proto_error_response, proto_response, request_message_count,
 };
-use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityType, Symbol};
+use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
 use crate::proto;
@@ -733,6 +733,33 @@ fn order_update_stream_survives_unknown_tif() {
             assert_eq!(o.order.tif, TimeInForce::GoodTillCanceled);
         }
         other => panic!("stream did not survive the unknown tif, got {other:?}"),
+    }
+}
+
+#[test]
+fn order_update_stream_survives_unknown_security_id_type() {
+    // SecurityIdType is open: a contract carrying an identifier scheme this
+    // crate does not model arrives as SecurityIdType::Unknown and the frame
+    // queued behind it still arrives (#840).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).security_id_type("WKN").encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(2).encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.contract.security_id_type, Some(SecurityIdType::Unknown("WKN".into())));
+        }
+        other => panic!("expected OpenOrder with Unknown security_id_type, got {other:?}"),
+    }
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => assert_eq!(o.order_id, 2),
+        other => panic!("stream did not survive the unknown security_id_type, got {other:?}"),
     }
 }
 
