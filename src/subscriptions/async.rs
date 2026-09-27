@@ -51,12 +51,10 @@ use crate::Error;
 /// # Ok(()) }
 /// ```
 ///
-/// Drop the subscription inside a Tokio runtime: the cancel is sent from a
-/// task spawned by `Drop`. A drop on a thread with no runtime logs a warning
-/// and skips it; for a shared stream (`positions`, `account_updates`,
-/// `news_bulletins`, ...) that also leaves the stream's live count one too
-/// high until the next reconnect, so no later subscription of that type can
-/// cancel it.
+/// Dropping sends the cancel from a task spawned on the client's runtime, so a
+/// subscription may be dropped on any thread, including one with no Tokio
+/// runtime. If the client's runtime has shut down, nothing is sent: the
+/// connection went with it.
 ///
 /// Clones share one cancel: dropping or cancelling any clone ends the request
 /// for every clone. For a shared stream the clones count as one subscription,
@@ -407,19 +405,10 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
         if message.is_none() && shared.is_none() {
             return;
         }
-        // Drop can't be async; the cancel send is spawned so it actually goes
-        // out. With no runtime on this thread there is nowhere to spawn it, so
-        // the cancel and the count release are skipped rather than panicking
-        // in Drop. If the bus is still live (the drop happened on a plain
-        // thread, not at runtime teardown), the type's count stays one too
-        // high until the next reconnect, so no later subscription of the type
-        // can write its cancel.
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            warn!("async subscription dropped outside a Tokio runtime: cancel not sent, shared count not released");
-            return;
-        };
+        // Drop can't be async; the cancel is spawned on the bus's runtime,
+        // which works from any thread, runtime or not.
         let message_bus = self.message_bus.clone();
-        runtime.spawn(async move {
+        self.message_bus.runtime_handle().spawn(async move {
             if let Err(e) = send_cancel(&message_bus, id, shared, message).await {
                 log_cancel_error("subscription", &e);
             }

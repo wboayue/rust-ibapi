@@ -808,6 +808,26 @@ async fn test_tick_subscription_sends_cancel_on_drop() {
     assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalTicks);
 }
 
+/// `Drop` used a bare `tokio::spawn`, which panicked on a thread with no
+/// runtime; the cancel now goes out on the bus's runtime (#848).
+#[tokio::test]
+async fn test_tick_subscription_drop_outside_runtime_sends_cancel() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+
+    let (_tx, rx) = tokio::sync::broadcast::channel(16);
+    let internal = AsyncInternalSubscription::new(rx);
+    let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9100, message_bus.clone());
+    std::thread::spawn(move || drop(subscription))
+        .join()
+        .expect("drop outside a runtime panicked");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 1, "should send cancel message on drop");
+    assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalTicks);
+}
+
 #[tokio::test]
 async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));

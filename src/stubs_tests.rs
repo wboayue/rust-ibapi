@@ -83,13 +83,9 @@ fn response_messages_decoded_translates_pipe_to_nul() {
 
 #[test]
 fn response_messages_decoded_prefers_ordered_responses() {
-    let stub = MessageBusStub {
-        request_messages: std::sync::RwLock::new(vec![]),
-        // text payloads are deliberately ignored when ordered_responses is non-empty
-        response_messages: vec!["should-not-decode".to_string()],
-        ordered_responses: vec![text_response("X|1|")],
-        connection_resets: std::sync::atomic::AtomicUsize::new(0),
-    };
+    let mut stub = MessageBusStub::with_ordered_responses(vec![text_response("X|1|")]);
+    // text payloads are deliberately ignored when ordered_responses is non-empty
+    stub.response_messages = vec!["should-not-decode".to_string()];
     let decoded = stub.response_messages_decoded();
     assert_eq!(decoded.len(), 1);
     let mut msg = decoded.into_iter().next().unwrap();

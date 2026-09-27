@@ -154,17 +154,36 @@ fn subscription<T: StreamDecoder<T>>() -> (Subscription<T>, broadcast::Sender<Ro
     (f.subscription, f.tx)
 }
 
-/// `Drop` sends the cancel from a spawned task. With no runtime to spawn on it
-/// logs and returns instead of panicking; the decoder here has a cancel
-/// message, so without the guard the spawn is reached.
-#[test]
-fn test_drop_outside_runtime_does_not_panic() {
-    use crate::accounts::PositionUpdate;
-
-    let fixture = subscription_with::<PositionUpdate>(None, None, DecoderContext::default());
-    std::thread::spawn(move || drop(fixture.subscription))
+/// `Drop` spawns the cancel on the bus's runtime, so a drop on a thread with
+/// no runtime still sends it (#848).
+#[tokio::test]
+async fn test_drop_outside_runtime_sends_cancel() {
+    let f = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
+    let subscription = f.subscription;
+    std::thread::spawn(move || drop(subscription))
         .join()
         .expect("drop outside a runtime panicked");
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while f.bus.request_messages().is_empty() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
+}
+
+/// Once the bus's runtime has shut down there is nowhere for the cancel to
+/// run; `Drop` must still not panic.
+#[test]
+fn test_drop_after_runtime_shutdown_does_not_panic() {
+    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let f = runtime.block_on(async { subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default()) });
+    drop(runtime);
+
+    let subscription = f.subscription;
+    std::thread::spawn(move || drop(subscription))
+        .join()
+        .expect("drop after runtime shutdown panicked");
+    assert!(f.bus.request_messages().is_empty());
 }
 
 // ---- Stream contract --------------------------------------------------------

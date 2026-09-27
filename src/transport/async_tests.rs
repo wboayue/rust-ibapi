@@ -648,6 +648,27 @@ async fn wait_for_positions_live(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, ex
     }
 }
 
+/// A shared subscription dropped on a thread with no runtime still writes its
+/// cancel and releases its count, so the next subscription of the type can
+/// cancel too (#848). Before, the count leaked and every later drop of the
+/// type withheld its cancel until the next reconnect.
+#[tokio::test]
+async fn test_shared_subscription_dropped_outside_runtime_cancels() {
+    let (stream, bus) = make_bus();
+    let cancel = positions_cancel();
+
+    let sub = positions_subscription(&bus).await;
+    std::thread::spawn(move || drop(sub)).join().expect("drop outside a runtime panicked");
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "off-runtime drop must write the cancel");
+
+    drop(positions_subscription(&bus).await);
+    assert_eq!(
+        wait_for_frames(&stream, &cancel, 2).await,
+        2,
+        "count leaked: next drop withheld its cancel"
+    );
+}
+
 /// A reset ends every shared subscription, so the count restarts at zero for
 /// the new session: a resubscription made after the reset is the only live one
 /// and its drop writes the cancel even while the dead handle is still held.
