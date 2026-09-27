@@ -20,6 +20,7 @@ use std::sync::{Arc, OnceLock};
 use async_trait::async_trait;
 use futures::Stream;
 use log::{debug, error, info, warn};
+use tokio::runtime::Handle;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio::task;
 use tokio::time::Duration;
@@ -93,6 +94,11 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
+
+    /// The runtime the bus was built on. `Drop` impls spawn their async
+    /// cleanup here, so it runs even when the drop is on a thread with no
+    /// runtime of its own.
+    fn runtime_handle(&self) -> &Handle;
 }
 
 /// Internal subscription for async implementation.
@@ -291,6 +297,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     channel_capacity: usize,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
+    /// Runtime the bus was built on; see [`AsyncMessageBus::runtime_handle`].
+    runtime: Handle,
     /// Handle to the message processing task
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
     /// Latching shutdown flag, shared with the connection so a reconnect in
@@ -357,6 +365,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             order_update_stream: Arc::new(RwLock::new(None)),
             channel_capacity,
             cleanup_sender,
+            runtime: Handle::current(),
             process_task: Arc::new(RwLock::new(None)),
             shutdown,
             order_ids: OnceLock::new(),
@@ -1082,6 +1091,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connection_state.is_connected() && !self.shutdown.is_requested()
+    }
+
+    fn runtime_handle(&self) -> &Handle {
+        &self.runtime
     }
 }
 

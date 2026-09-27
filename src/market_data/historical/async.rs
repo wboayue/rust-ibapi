@@ -546,7 +546,7 @@ impl<T: TickDecoder<T> + Send> Drop for TickSubscription<T> {
         let request_id = self.request_id;
         let message_bus = self.message_bus.clone();
         if let Ok(message) = encoders::encode_cancel_historical_ticks(request_id) {
-            tokio::spawn(async move {
+            self.message_bus.runtime_handle().spawn(async move {
                 if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
                     log_cancel_error("historical ticks subscription", &e);
                 }

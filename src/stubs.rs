@@ -40,6 +40,10 @@ pub(crate) struct MessageBusStub {
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
     connection_resets: AtomicUsize,
+    /// The runtime the stub was built on, if any; sync-only tests build it
+    /// with none. See [`AsyncMessageBus::runtime_handle`].
+    #[cfg(feature = "async")]
+    runtime: Option<tokio::runtime::Handle>,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -55,6 +59,8 @@ impl Default for MessageBusStub {
             response_messages: vec![],
             ordered_responses: vec![],
             connection_resets: AtomicUsize::new(0),
+            #[cfg(feature = "async")]
+            runtime: tokio::runtime::Handle::try_current().ok(),
         }
     }
 }
@@ -74,6 +80,8 @@ impl MessageBusStub {
             response_messages,
             ordered_responses: vec![],
             connection_resets: AtomicUsize::new(0),
+            #[cfg(feature = "async")]
+            runtime: tokio::runtime::Handle::try_current().ok(),
         }
     }
 
@@ -86,6 +94,8 @@ impl MessageBusStub {
             response_messages: vec![],
             ordered_responses,
             connection_resets: AtomicUsize::new(0),
+            #[cfg(feature = "async")]
+            runtime: tokio::runtime::Handle::try_current().ok(),
         }
     }
 
@@ -396,6 +406,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn is_connected(&self) -> bool {
         true // Stub always returns connected
+    }
+
+    fn runtime_handle(&self) -> &tokio::runtime::Handle {
+        self.runtime.as_ref().expect("MessageBusStub built outside a Tokio runtime")
     }
 }
 

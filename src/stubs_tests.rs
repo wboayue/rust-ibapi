@@ -89,6 +89,8 @@ fn response_messages_decoded_prefers_ordered_responses() {
         response_messages: vec!["should-not-decode".to_string()],
         ordered_responses: vec![text_response("X|1|")],
         connection_resets: std::sync::atomic::AtomicUsize::new(0),
+        #[cfg(feature = "async")]
+        runtime: None,
     };
     let decoded = stub.response_messages_decoded();
     assert_eq!(decoded.len(), 1);
