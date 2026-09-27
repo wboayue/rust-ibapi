@@ -74,6 +74,23 @@ async fn establish_connection_populates_metadata() {
 }
 
 #[tokio::test]
+async fn establish_connection_tolerates_unknown_time_zone() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+    let handshake = format!("{}\020240120 12:00:00 Bogus Standard Time\0", SERVER_VERSION);
+    stream.push_inbound(handshake.into_bytes());
+    stream.push_inbound(next_valid_id_frame(90));
+    stream.push_inbound(managed_accounts_frame("DU1234567"));
+
+    connection.establish_connection().await.expect("unknown zone must not fail the handshake");
+
+    let metadata = connection.connection_metadata().await;
+    assert_eq!(metadata.time_zone, None);
+    assert_eq!(metadata.connection_time, None);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+}
+
+#[tokio::test]
 async fn disconnect_completes() {
     let client = make_client().await;
 

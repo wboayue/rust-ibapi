@@ -344,22 +344,22 @@ pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error>
 /// Parse connection time from TWS format
 /// Format: "20230105 22:20:39 PST"
 ///
-/// Returns `Err(Error::UnsupportedTimeZone)` when the gateway includes a timezone
-/// name that is not in `TIMEZONE_ALIASES` and not a recognised IANA zone. Other
-/// failure modes (truncated string, unparseable date) remain tolerant and yield
-/// `Ok` with `None` for the affected component.
-pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDateTime>, Option<&'static Tz>), Error> {
+/// Never fails the handshake. A truncated string, an unparseable date or a
+/// timezone name that no alias or IANA zone matches yields `None` for the
+/// affected component; the unmatched name is logged with how to map it.
+pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     if parts.len() < 3 {
         error!("Invalid connection time format: {connection_time}");
-        return Ok((None, None));
+        return (None, None);
     }
 
     // Combine timezone parts if more than 3 parts (e.g., "China Standard Time")
     let tz_name = if parts.len() > 3 { parts[2..].join(" ") } else { parts[2].to_string() };
     let Some(timezone) = find_timezone(&tz_name) else {
-        return Err(Error::UnsupportedTimeZone(tz_name));
+        warn!("{}", Error::UnsupportedTimeZone(tz_name));
+        return (None, None);
     };
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
@@ -367,10 +367,10 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
     let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
 
     match date {
-        Ok(connected_at) => Ok((Some(resolve_local(connected_at, timezone)), Some(timezone))),
+        Ok(connected_at) => (Some(resolve_local(connected_at, timezone)), Some(timezone)),
         Err(err) => {
-            log::warn!("Could not parse connection time from {date_str}: {err}");
-            Ok((None, Some(timezone)))
+            warn!("Could not parse connection time from {date_str}: {err}");
+            (None, Some(timezone))
         }
     }
 }
