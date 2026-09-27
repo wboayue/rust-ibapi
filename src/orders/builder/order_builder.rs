@@ -739,11 +739,12 @@ impl<'a, C> OrderBuilder<'a, C> {
 
     /// Ask TWS to attach a stop-loss to this order, priced from its order presets.
     ///
-    /// TWS creates the child from the stop-loss preset configured for the instrument
-    /// (TWS Global Configuration → Presets); no price is sent. If no preset is defined, TWS
-    /// discards this order too: error 10355, then status `Cancelled`. `submit()` doesn't wait
-    /// for that, so watch [`order_update_stream`](crate::Client::order_update_stream).
-    /// Requires server version 218.
+    /// No price is sent; see [`Order::preset_stop_loss_order_id`] for how TWS resolves the
+    /// preset and what happens when none is defined. `submit()` doesn't wait for the outcome,
+    /// so watch [`order_update_stream`](crate::Client::order_update_stream).
+    ///
+    /// Call it after the order's own setters: it returns an [`AttachedOrdersBuilder`], which
+    /// only adds the other leg and submits.
     ///
     /// For caller-priced children placed by the client, use [`bracket`](Self::bracket).
     ///
@@ -1356,6 +1357,7 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
 ///
 /// Created by [`OrderBuilder::preset_stop_loss`] or [`OrderBuilder::preset_profit_taker`].
 /// `submit()` allocates the parent and child order ids and sends one place-order request.
+/// Set everything else on the [`OrderBuilder`] first; this builder only adds legs.
 #[must_use = "AttachedOrdersBuilder does nothing until you call .submit()"]
 pub struct AttachedOrdersBuilder<'a, C> {
     pub(crate) parent_builder: OrderBuilder<'a, C>,
@@ -1413,7 +1415,7 @@ impl<'a, C> AttachedOrdersBuilder<'a, C> {
     }
 
     /// Builds the parent order and assigns ids in order parent → stop-loss → profit-taker.
-    pub(crate) fn assign_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds), ValidationError> {
+    pub(crate) fn build_with_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds), ValidationError> {
         let mut order = self.parent_builder.build()?;
         let parent = next_id();
         order.order_id = parent;

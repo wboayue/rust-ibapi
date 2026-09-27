@@ -1745,7 +1745,7 @@ fn preset_legs_take_ids_after_the_parent() {
         (base().preset_stop_loss().preset_stop_loss(), Some(101), None),
     ];
     for (builder, stop_loss, profit_taker) in cases {
-        let (order, ids) = builder.assign_ids(counter(100)).expect("valid order");
+        let (order, ids) = builder.build_with_ids(counter(100)).expect("valid order");
         assert_eq!(order.order_id, 100);
         assert_eq!(order.preset_stop_loss_order_id, stop_loss);
         assert_eq!(order.preset_profit_taker_order_id, profit_taker);
@@ -1765,7 +1765,7 @@ fn preset_legs_consume_no_ids_for_an_invalid_parent() {
         .buy(-1)
         .limit(50.0)
         .preset_stop_loss()
-        .assign_ids(|| {
+        .build_with_ids(|| {
             calls += 1;
             calls
         });

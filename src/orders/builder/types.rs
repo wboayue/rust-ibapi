@@ -38,8 +38,8 @@ impl From<OrderId> for i32 {
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
 ///
-/// A leg is `Some` when it was requested. TWS creates the children from its order presets, so
-/// an id here doesn't mean the child exists: without a preset TWS discards the parent too.
+/// A leg is `Some` when it was requested, which doesn't mean TWS created it — see
+/// [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttachedOrderIds {

@@ -87,8 +87,8 @@ impl<'a> AttachedOrdersBuilder<'a, Client> {
     /// Submit the order with its preset children synchronously.
     ///
     /// Allocates the parent id, then one id per requested child, and sends a single
-    /// place-order request. Fire-and-forget: a missing TWS preset (error 10355, parent
-    /// `Cancelled`) arrives only on the order update stream.
+    /// place-order request. Fire-and-forget: whether TWS attached the children shows up only
+    /// on the order update stream — see [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
     ///
     /// # Examples
     ///
@@ -111,7 +111,7 @@ impl<'a> AttachedOrdersBuilder<'a, Client> {
     pub fn submit(self) -> Result<AttachedOrderIds, Error> {
         let client = self.parent_builder.client;
         let contract = self.parent_builder.contract;
-        let (order, ids) = self.assign_ids(|| client.next_order_id())?;
+        let (order, ids) = self.build_with_ids(|| client.next_order_id())?;
         client.submit_order(order.order_id, contract, &order)?;
         Ok(ids)
     }

@@ -155,8 +155,8 @@ client.order(&contract).buy(100).limit(50.0)
 - No `build()` on `AttachedOrdersBuilder`: child ids come from the client at submit, so a
   built `Order` couldn't carry them. Raw-path callers set the fields themselves.
 - Id reservation (parent → SL → PT) lives once, in the generic impl in `order_builder.rs`:
-  `fn assign_ids(self, next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds),
-  ValidationError>`. `sync_impl.rs` / `async_impl.rs` `submit()` = `assign_ids(||
+  `fn build_with_ids(self, next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds),
+  ValidationError>`. `sync_impl.rs` / `async_impl.rs` `submit()` = `build_with_ids(||
   client.next_order_id())` + one `submit_order`. (`submit_all` already duplicates its
   reservation across both files — not touched here.)
 - `submit()` is fire-and-forget, like `OrderBuilder::submit()`: the likely failure — no
@@ -186,7 +186,7 @@ B if Phase 0 shows callers need it.
   [exercise production code](../docs/rules/testing/exercise-production-code.md).
 - `verify_order`: server 217 + leg → `Err`; 218 → ok; no legs at 213 → ok. Derive versions from
   `server_versions::ATTACHED_ORDERS`, per [derive from constants](../docs/rules/testing/derive-from-constants.md).
-- Builder: `assign_ids` directly (reservation order, SL-only / PT-only / both, flags idempotent)
+- Builder: `build_with_ids` directly (reservation order, SL-only / PT-only / both, flags idempotent)
   with a counter closure — no client needed; then one sync and one async `submit()` via `create_test_client` / `create_blocking_test_client`.
 - Integration (`integration/{sync,async}/tests/orders.rs`), gated on server ≥ 218: paper LMT
   far from market with both legs. The paper account has no presets today, so assert the
