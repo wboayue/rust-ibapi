@@ -399,10 +399,10 @@ pub fn parse_raw_message(data: &[u8]) -> Result<ResponseMessage, Error> {
         Ok(ResponseMessage::from_protobuf(real_type, payload.to_vec()))
     } else {
         // Binary message ID, NUL-delimited text payload.
-        let raw_string = String::from_utf8_lossy(payload).into_owned();
-        debug!("<- {raw_string:?}");
+        let raw = String::from_utf8_lossy(payload);
+        debug!("<- {raw:?}");
         let mut fields = vec![msg_id.to_string()];
-        fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
+        fields.extend(raw.split_terminator('\0').map(|s| s.to_string()));
         Ok(ResponseMessage::from_text_fields(fields))
     }
 }
