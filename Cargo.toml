@@ -74,7 +74,6 @@ tempfile = "3.13"
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 serial_test = "4.0.1"
 toml = "1.0"
-serde_yaml = "0.9"
 # toml_edit = "0.22"  # Not needed - we're custom generating TOML
 
 [[example]]
@@ -750,12 +749,6 @@ required-features = ["async"]
 name = "async_trace_test_simple"
 path = "examples/async/trace_test_simple.rs"
 required-features = ["async"]
-
-[[example]]
-name = "record_interactions"
-path = "examples/record_interactions.rs"
-required-features = ["sync"]
-
 
 [[example]]
 name = "async_group_events"

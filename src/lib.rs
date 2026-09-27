@@ -227,8 +227,6 @@ pub use messages::{
     WARNING_CODE_RANGE,
 };
 
-#[doc(hidden)]
-pub use messages::parser_registry;
 use std::sync::LazyLock;
 use time::{
     format_description::{self, BorrowedFormatItem},

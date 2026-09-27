@@ -15,7 +15,6 @@ use time::OffsetDateTime;
 
 use crate::{Error, ToField};
 
-pub mod parser_registry;
 pub(crate) mod shared_channel_configuration;
 #[cfg(test)]
 mod tests;
