@@ -526,15 +526,17 @@ Nothing changes at runtime. The hazards the trait could have flagged are gone wi
 
 Every constructor for these three conditions now takes `contract_id: impl Into<ContractId>`: the `orders::builder::{price, volume, percent_change}` helpers, `PriceCondition::builder`, `VolumeCondition::builder` and `PercentChangeCondition::builder`, and the `new` functions on their builders. Before, `price` took `impl Into<i32>` and the others took `i32`. `impl Into<i32>` accepted anything with a `From` conversion into `i32`, such as `u8` / `u16`, `bool`, `OrderId` and the integer-coded order enums (`TriggerMethod`, `OcaType`, …), and none of those is a contract id. `ContractId` converts only from `i32`, so that decides what these functions accept.
 
-Calls that pass an integer literal, an `i32` (for example `contract.contract_id`) or a `ContractId` still compile. Passing an `OrderId` or an enum was a bug; a narrower integer type needs a widening first:
+Calls that pass an integer literal, an `i32` (for example `contract.contract_id`) or a `ContractId` still compile. The calls that no longer compile were passing the wrong value — most plausibly an order id where the contract id belonged:
 
 ```rust,ignore
-// 4.2
-let condition = price(contract_id_u16, "SMART").greater_than(150.0);
+// 4.2: compiled, and monitored whatever contract happened to have the order's id
+let condition = price(order_id, "SMART").greater_than(150.0);
 
-// Unreleased
-let condition = price(i32::from(contract_id_u16), "SMART").greater_than(150.0);
+// Unreleased: pass the id of the contract to monitor
+let condition = price(contract.contract_id, "SMART").greater_than(150.0);
 ```
+
+A narrower integer type tops out at 65535 at most, below most contract ids (AAPL's is `265598`); if you do hold one there, `i32::from(..)` it.
 
 ## Behavioral changes
 
@@ -575,7 +577,7 @@ No code changes required, but observable at runtime:
 17. Replace `BarSize::from(s)`, `Duration::from(s)` and `WhatToShow::from(s)` (and `.into()` to those types) with `s.parse()?` — see [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only).
 18. Drop reads of `Trade.tick_type`; if you merge the `last()` and `all_last()` streams, tag each item when merging — see [§18](#18-tradetick_type-is-removed).
 19. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound — see [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed).
-20. Pass an `i32` or `ContractId` as `contract_id` to the price, volume and percent-change condition constructors; widen a narrower integer with `i32::from(..)`, and an `OrderId` or enum there was a bug — see [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid).
+20. Pass an `i32` or `ContractId` as `contract_id` to the price, volume and percent-change condition constructors; an `OrderId`, enum or narrower integer there was a bug — see [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid).
 21. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
