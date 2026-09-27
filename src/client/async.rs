@@ -159,7 +159,7 @@ impl Client {
 
     /// Returns a decoder context for this client
     pub(crate) fn decoder_context(&self) -> crate::subscriptions::DecoderContext {
-        crate::subscriptions::DecoderContext::new(self.server_version, self.time_zone)
+        crate::subscriptions::DecoderContext::new(self.server_version)
     }
 
     /// Returns true if the client is currently connected to TWS/IB Gateway.

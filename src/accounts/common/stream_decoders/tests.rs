@@ -11,7 +11,7 @@ const TEST_REQUEST_ID: i32 = 123;
 const TEST_SERVER_VERSION: i32 = 151;
 
 fn test_context() -> DecoderContext {
-    DecoderContext::new(TEST_SERVER_VERSION, None)
+    DecoderContext::new(TEST_SERVER_VERSION)
 }
 
 mod account_summary_tests {
@@ -447,7 +447,7 @@ mod edge_cases {
     #[test]
     fn test_context_parameter_ignored() {
         // All cancel_message implementations should ignore the context parameter
-        let context = DecoderContext::new(TEST_SERVER_VERSION, None).with_request_type(OutgoingMessages::RequestMarketData);
+        let context = DecoderContext::new(TEST_SERVER_VERSION).with_request_type(OutgoingMessages::RequestMarketData);
 
         // Test that context is ignored (should produce same result with or without)
         let result1 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();

@@ -3,25 +3,10 @@
 Deferred from the lens review of PR #859, which made zone lookup exact
 (`get_by_name` + `TIMEZONE_ALIASES`) and made an unrecognized handshake zone a
 warning instead of a connect failure. Historical decoding (`HistoricalDataEnd`,
-`Schedule`) still fails with `Error::UnsupportedTimeZone`.
+`Schedule`) still fails with `Error::UnsupportedTimeZone`. The other deferral,
+removing the unread `DecoderContext.time_zone`, shipped in the follow-up PR.
 
-## 1. Remove `DecoderContext.time_zone`
-
-`src/subscriptions/common.rs`. No decoder reads it: the text decoders that used
-it went with the protobuf-only transport (#632). Both clients still populate it
-from `Client::time_zone` in `decoder_context()`.
-
-- Drop the field and the `time_zone` parameter of `DecoderContext::new`
-  (22 call sites, mostly tests) and the struct literals in
-  `src/subscriptions/common_tests.rs`.
-- Crate-internal (`pub(crate) use` in `subscriptions/mod.rs`): no changelog or
-  migration entry.
-- Leaves `Client::time_zone` as the handshake zone's only consumer, with
-  `connection_time`.
-
-Restructuring, not mechanical: own PR.
-
-## 2. Shared `YYYYMMDD HH:MM:SS <zone>` splitter (rule of three)
+## Shared `YYYYMMDD HH:MM:SS <zone>` splitter (rule of three)
 
 Two parsers read this rendering:
 

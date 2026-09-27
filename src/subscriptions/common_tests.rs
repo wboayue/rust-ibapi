@@ -18,23 +18,21 @@ fn test_is_undeclared() {
 fn test_decoder_context_default() {
     let context = DecoderContext::default();
     assert_eq!(context.server_version, 0);
-    assert!(context.time_zone.is_none());
     assert!(context.request_type.is_none());
     assert!(!context.is_smart_depth);
 }
 
 #[test]
 fn test_decoder_context_new() {
-    let context = DecoderContext::new(176, None);
+    let context = DecoderContext::new(176);
     assert_eq!(context.server_version, 176);
-    assert!(context.time_zone.is_none());
     assert!(context.request_type.is_none());
     assert!(!context.is_smart_depth);
 }
 
 #[test]
 fn test_decoder_context_builder() {
-    let context = DecoderContext::new(176, None)
+    let context = DecoderContext::new(176)
         .with_request_type(crate::messages::OutgoingMessages::RequestMarketData)
         .with_smart_depth(true);
 
@@ -47,7 +45,6 @@ fn test_decoder_context_builder() {
 fn test_decoder_context_clone() {
     let context = DecoderContext {
         server_version: 176,
-        time_zone: None,
         is_smart_depth: true,
         request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
     };
@@ -79,13 +76,11 @@ fn test_decoder_context_equality() {
             name: "same_values_equal",
             context1: DecoderContext {
                 server_version: 176,
-                time_zone: None,
                 is_smart_depth: true,
                 request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
             },
             context2: DecoderContext {
                 server_version: 176,
-                time_zone: None,
                 is_smart_depth: true,
                 request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
             },
@@ -138,7 +133,6 @@ fn test_decoder_context_equality() {
 fn test_decoder_context_debug_format() {
     let context = DecoderContext {
         server_version: 176,
-        time_zone: None,
         is_smart_depth: true,
         request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
     };

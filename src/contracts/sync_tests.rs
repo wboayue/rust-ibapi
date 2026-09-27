@@ -227,14 +227,14 @@ fn test_stream_decoders() {
 
         match &test_case.expected_result {
             StreamDecoderResult::OptionComputation { price, delta } => {
-                let result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &message);
+                let result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
                 assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
                 let computation = result.unwrap();
                 assert_eq!(computation.option_price, Some(*price), "Test '{}' price mismatch", test_case.name);
                 assert_eq!(computation.delta, Some(*delta), "Test '{}' delta mismatch", test_case.name);
             }
             StreamDecoderResult::OptionChain { exchange, underlying_conid } => {
-                let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &message);
+                let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
                 assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
                 let chain = result.unwrap();
                 assert_eq!(chain.exchange, *exchange, "Test '{}' exchange mismatch", test_case.name);
@@ -246,7 +246,7 @@ fn test_stream_decoders() {
             }
             StreamDecoderResult::Error(expected_error) => {
                 if test_case.name == "option chain end of stream" {
-                    let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &message);
+                    let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
                     assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
                     assert!(
                         format!("{:?}", result.err()).contains(expected_error),
@@ -254,8 +254,8 @@ fn test_stream_decoders() {
                         test_case.name
                     );
                 } else {
-                    let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &message.clone());
-                    let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &message);
+                    let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message.clone());
+                    let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
                     assert!(
                         opt_result.is_err() && chain_result.is_err(),
                         "Test '{}' should have failed",

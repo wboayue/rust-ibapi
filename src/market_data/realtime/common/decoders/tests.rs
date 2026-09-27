@@ -539,7 +539,7 @@ mod market_data_type_tests {
             market_data_type: Some(3),
         };
         let message = proto_response(crate::messages::IncomingMessages::MarketDataType, proto_msg.encode_to_vec());
-        let context = DecoderContext::new(server_versions::PROTOBUF, None);
+        let context = DecoderContext::new(server_versions::PROTOBUF);
 
         match TickTypes::decode(&context, &message).expect("proto decode failed") {
             TickTypes::MarketDataType(MarketDataType::Delayed) => {}
@@ -557,7 +557,7 @@ mod market_data_type_tests {
             ..Default::default()
         };
         let message = proto_response(crate::messages::IncomingMessages::TickReqParams, proto_msg.encode_to_vec());
-        let context = DecoderContext::new(server_versions::PROTOBUF, None);
+        let context = DecoderContext::new(server_versions::PROTOBUF);
 
         match TickTypes::decode(&context, &message).expect("proto decode failed") {
             TickTypes::RequestParameters(p) => {
@@ -573,7 +573,7 @@ mod market_data_type_tests {
     fn test_tick_types_decode_unknown_message_type_skips() {
         // Unknown message types must skip-classify (UnexpectedResponse), not terminate.
         let message = ResponseMessage::from("92\0\0AccountCode\0DU12345\0\0DU12345\0");
-        let context = DecoderContext::new(0, None);
+        let context = DecoderContext::new(0);
 
         match TickTypes::decode(&context, &message) {
             Err(Error::UnexpectedResponse(_)) => {}
