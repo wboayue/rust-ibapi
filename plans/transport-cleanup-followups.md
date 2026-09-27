@@ -60,6 +60,11 @@ patches.
 
 ## 4. Sync: stale `ConnectionReset` buffered in idle streaming shared queues
 
+**Resolved.** Sync shared channels are per subscription now (the async model
+named below): each `send_shared_request` gets its own queue, removed on drop,
+so there is no idle queue to buffer a reset or a frame. The candidate fix at
+the end of this section was superseded, not implemented.
+
 Opposite shape to #776 (fixed for async in PR #783): sync shared channels are
 persistent crossbeam queues, and `send_shared_request` drains only one-shot
 types. A `ConnectionReset` pushed by `reset()` into an *idle* streaming queue

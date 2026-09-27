@@ -100,7 +100,7 @@ mod tests;
 // Sync implementations
 #[cfg(feature = "sync")]
 mod sync_helpers {
-    use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription, SubscriptionBuilderExt};
+    use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
     use crate::client::sync::Client;
     use crate::client::StreamDecoder;
     use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -131,7 +131,6 @@ mod sync_helpers {
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
-        Subscription<T>: SharesChannel,
     {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;

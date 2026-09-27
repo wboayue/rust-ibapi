@@ -6,15 +6,12 @@ use time::OffsetDateTime;
 
 use super::common::{self, decoders, encoders};
 use super::*;
-use crate::client::blocking::{SharesChannel, Subscription};
+use crate::client::blocking::Subscription;
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
-
-impl SharesChannel for Vec<NewsProvider> {}
-impl SharesChannel for Subscription<NewsBulletin> {}
 
 impl Client {
     /// Requests news providers which the user has subscribed to.
