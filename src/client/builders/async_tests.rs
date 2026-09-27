@@ -282,7 +282,7 @@ async fn test_response_context_modifications() {
         }
 
         if let Some(request_type) = tc.set_request_type {
-            let context = DecoderContext::new(builder.context.server_version, builder.context.time_zone)
+            let context = DecoderContext::new(builder.context.server_version)
                 .with_smart_depth(builder.context.is_smart_depth)
                 .with_request_type(request_type);
             builder = builder.with_context(context);

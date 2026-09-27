@@ -4,7 +4,7 @@ use crate::testdata::builders::display_groups::display_group_updated;
 use crate::testdata::builders::ResponseProtoEncoder;
 
 fn test_context() -> DecoderContext {
-    DecoderContext::new(176, None)
+    DecoderContext::new(176)
 }
 
 fn updated_proto_message(contract_info: &str) -> ResponseMessage {

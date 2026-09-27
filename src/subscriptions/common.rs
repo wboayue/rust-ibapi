@@ -1,7 +1,6 @@
 //! Common utilities for subscription processing
 
 use serde::{Deserialize, Serialize};
-use time_tz::Tz;
 
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -103,8 +102,6 @@ pub(crate) fn is_undeclared(ids: &[IncomingMessages], message: &ResponseMessage)
 pub struct DecoderContext {
     /// Server version for protocol compatibility
     pub server_version: i32,
-    /// Timezone for parsing timestamps (from TWS connection)
-    pub time_zone: Option<&'static Tz>,
     /// Type of the original request that initiated this subscription
     pub request_type: Option<OutgoingMessages>,
     /// Whether this is a smart depth subscription
@@ -112,11 +109,10 @@ pub struct DecoderContext {
 }
 
 impl DecoderContext {
-    /// Create a new context with server version and optional timezone
-    pub fn new(server_version: i32, time_zone: Option<&'static Tz>) -> Self {
+    /// Create a new context with server version
+    pub fn new(server_version: i32) -> Self {
         Self {
             server_version,
-            time_zone,
             request_type: None,
             is_smart_depth: false,
         }
