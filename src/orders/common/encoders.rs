@@ -11,7 +11,7 @@ pub(crate) fn encode_place_order(order_id: i32, contract: &Contract, order: &Ord
         order_id: Some(order_id),
         contract: Some(crate::proto::encoders::encode_contract_with_order(contract, Some(order))),
         order: Some(crate::proto::encoders::encode_order(order)),
-        attached_orders: None,
+        attached_orders: crate::proto::encoders::encode_attached_orders(order),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::PlaceOrder as i32,

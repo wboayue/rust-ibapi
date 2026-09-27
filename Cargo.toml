@@ -173,6 +173,11 @@ path = "examples/async/order_update_stream.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_preset_attached_orders"
+path = "examples/async/preset_attached_orders.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_notice_stream"
 path = "examples/async/notice_stream.rs"
 required-features = ["async"]

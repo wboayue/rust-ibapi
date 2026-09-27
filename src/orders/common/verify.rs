@@ -194,6 +194,10 @@ pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order, _order_
         client.check_version(server_versions::HEDGE_MAX_SIZE, "It does not support hedge_max_size parameter")?
     }
 
+    if order.preset_stop_loss_order_id.is_some() || order.preset_profit_taker_order_id.is_some() {
+        client.check_version(server_versions::ATTACHED_ORDERS, "It does not support attached orders.")?
+    }
+
     Ok(())
 }
 

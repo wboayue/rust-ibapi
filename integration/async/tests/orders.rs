@@ -3,7 +3,7 @@ use std::time::Instant;
 use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::order_builder::PeggedToBenchmark;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, PlaceOrder};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, OrderUpdate, PlaceOrder};
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
 use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
@@ -432,4 +432,53 @@ async fn es_fill_delivers_execution_then_commission() {
     if let Err(reason) = outcome {
         panic!("{reason}");
     }
+}
+
+// #842: TWS accepts the attached-orders encoding. It resolves the children from
+// its order presets, so the outcome depends on the account: with presets, child
+// OpenOrders point back at the parent; without, TWS discards the parent with 10355.
+// Either proves the request was read; a malformed one gets 320 instead.
+#[tokio::test]
+#[serial(orders)]
+async fn preset_attached_orders_accepted() {
+    let (client, _client_id) = connect().await;
+    let contract = Contract::stock("AAPL").build();
+    let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
+
+    rate_limit();
+    let ids = client
+        .order(&contract)
+        .buy(1)
+        .limit(1.0)
+        .preset_stop_loss()
+        .preset_profit_taker()
+        .submit()
+        .await
+        .expect("preset attached orders submit failed");
+    let (stop_loss, profit_taker) = (ids.stop_loss.expect("stop-loss id"), ids.profit_taker.expect("profit-taker id"));
+    let children = [stop_loss.0, profit_taker.0];
+
+    let outcome = timeout(Duration::from_secs(15), async {
+        while let Some(item) = updates.next().await {
+            match item.expect("order update stream error") {
+                SubscriptionItem::Data(OrderUpdate::OpenOrder(o)) if children.contains(&o.order_id) => {
+                    assert_eq!(o.order.parent_id, ids.parent.0, "child should point at the parent");
+                    return "attached";
+                }
+                SubscriptionItem::Notice(n) if n.request_id == Some(ids.parent.0) => match n.code {
+                    10355 => return "no preset",
+                    320 => panic!("TWS could not read the attached-orders request: {n:?}"),
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        panic!("order update stream ended");
+    })
+    .await
+    .expect("no attach outcome within 15s");
+    println!("preset attached orders: {outcome}");
+
+    rate_limit();
+    let _ = client.cancel_order(ids.parent.0, "").await;
 }

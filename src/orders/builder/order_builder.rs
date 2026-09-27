@@ -729,8 +729,69 @@ impl<'a, C> OrderBuilder<'a, C> {
     }
 
     /// Create bracket orders with take profit and stop loss
+    ///
+    /// The prices are the caller's and the three orders are placed by the client. To have TWS
+    /// attach children priced from its order presets instead, see
+    /// [`preset_stop_loss`](Self::preset_stop_loss) / [`preset_profit_taker`](Self::preset_profit_taker).
     pub fn bracket(self) -> BracketOrderBuilder<'a, C> {
         BracketOrderBuilder::new(self)
+    }
+
+    /// Ask TWS to attach a stop-loss to this order, priced from its order presets.
+    ///
+    /// No price is sent; see [`Order::preset_stop_loss_order_id`] for how TWS resolves the
+    /// preset and what happens when none is defined. `submit()` doesn't wait for the outcome,
+    /// so watch [`order_update_stream`](crate::Client::order_update_stream).
+    ///
+    /// Call it after the order's own setters: it returns an [`AttachedOrdersBuilder`], which
+    /// only adds the other leg and submits.
+    ///
+    /// For caller-priced children placed by the client, use [`bracket`](Self::bracket).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(150.0)
+    ///     .preset_stop_loss()
+    ///     .preset_profit_taker()
+    ///     .submit()
+    ///     .await?;
+    /// println!("parent {} stop-loss {:?} profit-taker {:?}", ids.parent, ids.stop_loss, ids.profit_taker);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<'a, C> {
+        AttachedOrdersBuilder::new(self).preset_stop_loss()
+    }
+
+    /// Ask TWS to attach a profit-taker to this order, priced from its order presets.
+    ///
+    /// Same behavior as [`preset_stop_loss`](Self::preset_stop_loss), using the profit-taker
+    /// preset.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).limit(150.0).preset_profit_taker().submit().await?;
+    /// assert!(ids.stop_loss.is_none());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<'a, C> {
+        AttachedOrdersBuilder::new(self).preset_profit_taker()
     }
 
     // Conditional orders
@@ -1289,6 +1350,83 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
         OrderCondition::Volume(c) => c.is_conjunction = is_conjunction,
         OrderCondition::PercentChange(c) => c.is_conjunction = is_conjunction,
         OrderCondition::Unknown(c) => c.is_conjunction = is_conjunction,
+    }
+}
+
+/// Builder for an order with preset stop-loss / profit-taker children attached by TWS.
+///
+/// Created by [`OrderBuilder::preset_stop_loss`] or [`OrderBuilder::preset_profit_taker`].
+/// `submit()` allocates the parent and child order ids and sends one place-order request.
+/// Set everything else on the [`OrderBuilder`] first; this builder only adds legs.
+#[must_use = "AttachedOrdersBuilder does nothing until you call .submit()"]
+pub struct AttachedOrdersBuilder<'a, C> {
+    pub(crate) parent_builder: OrderBuilder<'a, C>,
+    stop_loss: bool,
+    profit_taker: bool,
+}
+
+impl<'a, C> AttachedOrdersBuilder<'a, C> {
+    fn new(parent_builder: OrderBuilder<'a, C>) -> Self {
+        Self {
+            parent_builder,
+            stop_loss: false,
+            profit_taker: false,
+        }
+    }
+
+    /// Also attach a preset stop-loss. See [`OrderBuilder::preset_stop_loss`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).limit(150.0).preset_profit_taker().preset_stop_loss().submit().await?;
+    /// println!("stop-loss {:?} profit-taker {:?}", ids.stop_loss, ids.profit_taker);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_stop_loss(mut self) -> Self {
+        self.stop_loss = true;
+        self
+    }
+
+    /// Also attach a preset profit-taker. See [`OrderBuilder::preset_profit_taker`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).limit(150.0).preset_stop_loss().preset_profit_taker().submit().await?;
+    /// println!("stop-loss {:?} profit-taker {:?}", ids.stop_loss, ids.profit_taker);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_profit_taker(mut self) -> Self {
+        self.profit_taker = true;
+        self
+    }
+
+    /// Builds the parent order and assigns ids in order parent → stop-loss → profit-taker.
+    pub(crate) fn build_with_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds), ValidationError> {
+        let mut order = self.parent_builder.build()?;
+        let parent = next_id();
+        order.order_id = parent;
+        order.preset_stop_loss_order_id = self.stop_loss.then(&mut next_id);
+        order.preset_profit_taker_order_id = self.profit_taker.then(&mut next_id);
+        let ids = AttachedOrderIds {
+            parent: OrderId(parent),
+            stop_loss: order.preset_stop_loss_order_id.map(OrderId),
+            profit_taker: order.preset_profit_taker_order_id.map(OrderId),
+        };
+        Ok((order, ids))
     }
 }
 

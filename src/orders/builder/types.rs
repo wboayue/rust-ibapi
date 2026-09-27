@@ -36,6 +36,21 @@ impl From<OrderId> for i32 {
     }
 }
 
+/// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
+///
+/// A leg is `Some` when it was requested, which doesn't mean TWS created it — see
+/// [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AttachedOrderIds {
+    /// The parent order ID
+    pub parent: OrderId,
+    /// The preset stop-loss order ID, if requested
+    pub stop_loss: Option<OrderId>,
+    /// The preset profit-taker order ID, if requested
+    pub profit_taker: Option<OrderId>,
+}
+
 /// Represents the order IDs for a bracket order
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

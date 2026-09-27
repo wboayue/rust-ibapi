@@ -36,6 +36,7 @@ This guide describes all order types supported by rust-ibapi and demonstrates ho
   - [Block Order](#block-order)
 - [Complex Orders](#complex-orders)
   - [Bracket Orders](#bracket-orders)
+  - [Preset Attached Orders](#preset-attached-orders)
   - [One-Cancels-All (OCA)](#one-cancels-all-oca)
 - [Algorithmic Orders](#algorithmic-orders)
   - [VWAP](#vwap)
@@ -741,6 +742,35 @@ println!("Stop loss: {}", bracket_ids.stop_loss);
 ```
 
 **When to use:** To automatically manage risk and profit targets.
+
+### Preset Attached Orders
+
+Asks TWS to attach a stop-loss and/or profit-taker to the order, priced from the order
+presets configured in TWS (Global Configuration → Presets). No child prices are sent;
+the client allocates the child order ids and TWS creates the children. Requires server
+version 218.
+
+```rust
+let ids = client.order(&contract)
+    .buy(100)
+    .limit(50.00)
+    .preset_stop_loss()
+    .preset_profit_taker()
+    .submit()?;
+
+println!("Parent order: {}", ids.parent);
+println!("Stop loss: {:?}", ids.stop_loss);      // Option<OrderId>
+println!("Profit taker: {:?}", ids.profit_taker);
+```
+
+If no preset is defined for the instrument, TWS discards the parent too: error 10355 on the
+order update stream, then status `Cancelled`. `submit()` doesn't wait for this, so watch
+`client.order_update_stream()`. For a `place_order` subscription instead, set
+`Order::preset_stop_loss_order_id` / `preset_profit_taker_order_id` to ids from
+`client.next_order_id()`.
+
+**When to use:** When stop-loss / profit-taker offsets are managed as TWS presets rather than
+computed by your code.
 
 ### One-Cancels-All (OCA)
 

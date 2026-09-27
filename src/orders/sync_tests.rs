@@ -1041,3 +1041,51 @@ fn order_update_stream_delivers_order_binding() {
         }
     );
 }
+
+#[test]
+fn preset_legs_submit_one_request_with_attached_ids() {
+    let (client, bus) = crate::common::test_utils::helpers::create_blocking_test_client_with_version(server_versions::ATTACHED_ORDERS);
+    client.raise_next_order_id(9400);
+    let contract = Contract::stock("AAPL").build();
+
+    let ids = client
+        .order(&contract)
+        .buy(100)
+        .limit(50.0)
+        .preset_stop_loss()
+        .preset_profit_taker()
+        .submit()
+        .expect("submission should succeed");
+
+    assert_eq!(ids.parent.value(), 9400);
+    assert_eq!(ids.stop_loss.map(|id| id.value()), Some(9401));
+    assert_eq!(ids.profit_taker.map(|id| id.value()), Some(9402));
+
+    // One request: TWS creates the children from the parent.
+    assert_eq!(request_message_count(&bus), 1);
+    let request = decode_request_proto::<crate::proto::PlaceOrderRequest>(&bus, 0);
+    assert_eq!(request.order_id, Some(9400));
+    assert_eq!(
+        request.attached_orders,
+        Some(crate::proto::AttachedOrders {
+            sl_order_id: Some(9401),
+            sl_order_type: Some("PRESET".to_string()),
+            pt_order_id: Some(9402),
+            pt_order_type: Some("PRESET".to_string()),
+        })
+    );
+}
+
+#[test]
+fn preset_legs_rejected_below_attached_orders_gate() {
+    let (client, bus) = crate::common::test_utils::helpers::create_blocking_test_client_with_version(server_versions::ATTACHED_ORDERS - 1);
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client.order(&contract).buy(100).limit(50.0).preset_stop_loss().submit();
+
+    match result {
+        Err(Error::ServerVersion(required, _, _)) => assert_eq!(required, server_versions::ATTACHED_ORDERS),
+        other => panic!("expected ServerVersion error, got {other:?}"),
+    }
+    assert_eq!(request_message_count(&bus), 0);
+}
