@@ -226,8 +226,21 @@ impl Client {
 
     /// Subscribe to detailed account updates for a specific account.
     ///
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed.
+    ///
+    /// TWS streams one account at a time per connection. Subscribing to the same
+    /// account again shares the stream; another account is refused until every
+    /// subscription to the first has been cancelled. Call
+    /// [`cancel`](Subscription::cancel)`().await` before switching accounts: a
+    /// dropped subscription is released by a spawned task, so a request made right
+    /// after the drop can still be refused. To stream several accounts at once, use
+    /// [`account_updates_multi`](Client::account_updates_multi).
+    ///
     /// # Arguments
     /// * `account` - The account id (i.e. U1234567) for which the information is requested.
+    ///
+    /// # Errors
+    /// [`Error::AccountUpdatesInUse`] while another account's updates are live.
     ///
     /// # Examples
     ///
@@ -261,13 +274,20 @@ impl Client {
     /// }
     /// ```
     pub async fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
-        crate::common::request_helpers::shared_request(self, OutgoingMessages::RequestAccountData, || {
-            encoders::encode_request_account_updates(true, account)
-        })
-        .await
+        let request = encoders::encode_request_account_updates(true, account)?;
+        let subscription = self.message_bus.send_account_updates_request(account, request).await?;
+        Ok(Subscription::new_from_internal(
+            subscription,
+            self.message_bus.clone(),
+            None,
+            None,
+            self.decoder_context(),
+        ))
     }
 
     /// Subscribe to account updates scoped by account and model code.
+    ///
+    /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
     ///
     /// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
     ///

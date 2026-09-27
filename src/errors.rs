@@ -6,6 +6,7 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 use thiserror::Error;
 
+use crate::accounts::types::AccountId;
 use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{Notice, ResponseMessage};
 use crate::orders::builder::ValidationError;
@@ -147,6 +148,17 @@ pub enum Error {
     /// Attempted to create a duplicate subscription.
     #[error("AlreadySubscribed")]
     AlreadySubscribed,
+
+    /// `account_updates` was called for a different account while one is
+    /// live. TWS keeps one account-updates subscription per connection; use
+    /// `account_updates_multi` to stream several accounts at once.
+    #[error("account updates already streaming {active}; cancel it before requesting {requested}")]
+    AccountUpdatesInUse {
+        /// The account currently streaming.
+        active: AccountId,
+        /// The account that was refused.
+        requested: AccountId,
+    },
 
     /// Wraps errors parsing historical data parameters.
     #[error("HistoricalParseError: {0}")]
@@ -298,6 +310,10 @@ impl Clone for Error {
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,
+            Error::AccountUpdatesInUse { active, requested } => Error::AccountUpdatesInUse {
+                active: active.clone(),
+                requested: requested.clone(),
+            },
             Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
         }

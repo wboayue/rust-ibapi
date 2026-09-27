@@ -9,6 +9,7 @@ use std::{
 #[cfg(feature = "sync")]
 use crossbeam::channel;
 
+use crate::accounts::types::AccountId;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::routing::{classify_error, determine_routing, ErrorDisposition, RoutingDecision};
 use crate::transport::{RoutedItem, SharedTicket};
@@ -248,6 +249,10 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, None, Some(message_type), message))
     }
 
+    fn send_account_updates_request(&self, _account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        MessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message)
+    }
+
     fn cancel_shared_subscription(&self, _ticket: SharedTicket, packet: Option<&[u8]>) -> Result<(), Error> {
         if let Some(packet) = packet {
             self.request_messages.write().unwrap().push(packet.to_vec());
@@ -311,6 +316,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     async fn send_shared_request(&self, _message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         Ok(self.seeded_subscription(message))
+    }
+
+    async fn send_account_updates_request(&self, _account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        AsyncMessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message).await
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {

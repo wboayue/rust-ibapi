@@ -690,6 +690,130 @@ async fn test_stale_shared_handle_neither_cancels_nor_decrements() {
     assert_eq!(wait_for_positions_live(&bus, 0).await, 0);
 }
 
+type AccountUpdatesSubscription = Subscription<crate::accounts::AccountUpdate>;
+
+fn account(name: &str) -> crate::accounts::types::AccountId {
+    crate::accounts::types::AccountId(name.to_string())
+}
+
+// The request bytes name the account so each account's writes can be counted.
+fn account_updates_request(name: &str) -> Vec<u8> {
+    format!("account-updates {name}").into_bytes()
+}
+
+async fn account_updates_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, name: &str) -> Result<AccountUpdatesSubscription, Error> {
+    let internal = bus.send_account_updates_request(&account(name), account_updates_request(name)).await?;
+    Ok(Subscription::new_from_internal(
+        internal,
+        bus.clone(),
+        None,
+        None,
+        DecoderContext::default(),
+    ))
+}
+
+fn account_updates_cancel() -> Vec<u8> {
+    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None).unwrap()
+}
+
+async fn account_updates_slot(bus: &AsyncTcpMessageBus<MemoryStream>) -> Option<crate::accounts::types::AccountId> {
+    bus.shared_counts.lock().await.account_updates().cloned()
+}
+
+/// The same account again shares the one TWS stream: both requests go out,
+/// and only the last cancel frees the slot.
+#[tokio::test]
+async fn test_account_updates_same_account_shares() {
+    let (stream, bus) = make_bus();
+    let cancel = account_updates_cancel();
+
+    let first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    assert_eq!(bus.shared_counts.lock().await.live(OutgoingMessages::RequestAccountData), 2);
+
+    first.cancel().await;
+    assert_eq!(
+        count_frames(&stream.captured(), &cancel),
+        0,
+        "cancel written while a subscription is still live"
+    );
+    assert_eq!(account_updates_slot(&bus).await, Some(account("DU1")));
+
+    second.cancel().await;
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    assert_eq!(account_updates_slot(&bus).await, None);
+}
+
+/// TWS has one account-updates slot: a second account would switch the live
+/// subscription to its data. It is refused before anything is written, and
+/// the live subscription keeps its data.
+#[tokio::test]
+async fn test_account_updates_other_account_refused() {
+    use crate::accounts::AccountUpdate;
+
+    let (stream, bus) = make_bus();
+    let mut first = account_updates_subscription(&bus, "DU1").await.unwrap();
+
+    let refused = account_updates_subscription(&bus, "DU2").await.map(|_| ());
+    assert!(
+        matches!(&refused, Err(Error::AccountUpdatesInUse { active, requested }) if *active == account("DU1") && *requested == account("DU2")),
+        "got: {refused:?}"
+    );
+    assert_eq!(
+        count_frames(&stream.captured(), &account_updates_request("DU2")),
+        0,
+        "refused request was written"
+    );
+    assert_eq!(bus.shared_counts.lock().await.live(OutgoingMessages::RequestAccountData), 1);
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::AccountDownloadEnd as i32,
+        &crate::proto::AccountDataEnd {
+            account_name: Some("DU1".to_string()),
+        },
+    ));
+    bus.read_and_route_message().await.unwrap();
+    let item = next_item(&mut first).await.expect("live subscription received nothing").unwrap();
+    assert!(matches!(item, SubscriptionItem::Data(AccountUpdate::End)), "got: {item:?}");
+}
+
+/// Once the last subscription of an account is cancelled, another account is
+/// accepted. `cancel().await` releases before it returns; a plain drop
+/// releases in a spawned task, so it is not used to switch.
+#[tokio::test]
+async fn test_account_updates_other_account_after_cancel() {
+    let (stream, bus) = make_bus();
+
+    let first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    first.cancel().await;
+    assert_eq!(count_frames(&stream.captured(), &account_updates_cancel()), 1);
+
+    let _second = account_updates_subscription(&bus, "DU2").await.unwrap();
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU2")), 1);
+    assert_eq!(account_updates_slot(&bus).await, Some(account("DU2")));
+}
+
+/// A reset ends every subscription, so the slot is free on the new session,
+/// and a dead handle's drop must not free the new account's slot.
+#[tokio::test]
+async fn test_account_updates_slot_restarts_after_reset() {
+    let (stream, bus) = make_bus();
+
+    let old = account_updates_subscription(&bus, "DU1").await.unwrap();
+    bus.reset_channels().await;
+    let _new = account_updates_subscription(&bus, "DU2").await.unwrap();
+
+    drop(old);
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(
+        count_frames(&stream.captured(), &account_updates_cancel()),
+        0,
+        "dead handle wrote a cancel"
+    );
+    assert_eq!(account_updates_slot(&bus).await, Some(account("DU2")));
+}
+
 /// Bound a `Subscription::next()` await with the test tick so a missing item
 /// surfaces as a panic rather than hanging the test thread.
 async fn next_item<T: StreamDecoder<T> + Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
