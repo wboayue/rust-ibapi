@@ -18,7 +18,11 @@ const CLIENT_ID: i32 = 100;
 const SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 
 fn push_handshake(stream: &MemoryStream) {
-    let handshake = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION);
+    push_handshake_in_zone(stream, "EST");
+}
+
+fn push_handshake_in_zone(stream: &MemoryStream, zone: &str) {
+    let handshake = format!("{SERVER_VERSION}\020240120 12:00:00 {zone}\0");
     stream.push_inbound(handshake.into_bytes());
     stream.push_inbound(next_valid_id_frame(90));
     stream.push_inbound(managed_accounts_frame("DU1234567"));
@@ -77,10 +81,7 @@ async fn establish_connection_populates_metadata() {
 async fn establish_connection_tolerates_unknown_time_zone() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
-    let handshake = format!("{}\020240120 12:00:00 Bogus Standard Time\0", SERVER_VERSION);
-    stream.push_inbound(handshake.into_bytes());
-    stream.push_inbound(next_valid_id_frame(90));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    push_handshake_in_zone(&stream, "Bogus Standard Time");
 
     connection.establish_connection().await.expect("unknown zone must not fail the handshake");
 

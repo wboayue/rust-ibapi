@@ -348,22 +348,20 @@ pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error>
 /// timezone name that no alias or IANA zone matches yields `None` for the
 /// affected component; the unmatched name is logged with how to map it.
 pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
-    let parts: Vec<&str> = connection_time.split(' ').collect();
-
-    if parts.len() < 3 {
+    // The zone is everything after the time and may contain spaces ("China Standard Time").
+    let mut parts = connection_time.splitn(3, ' ');
+    let (Some(date), Some(time), Some(tz_name)) = (parts.next(), parts.next(), parts.next()) else {
         error!("Invalid connection time format: {connection_time}");
         return (None, None);
-    }
+    };
 
-    // Combine timezone parts if more than 3 parts (e.g., "China Standard Time")
-    let tz_name = if parts.len() > 3 { parts[2..].join(" ") } else { parts[2].to_string() };
-    let Some(timezone) = find_timezone(&tz_name) else {
-        warn!("{}", Error::UnsupportedTimeZone(tz_name));
+    let Some(timezone) = find_timezone(tz_name) else {
+        warn!("{}", Error::UnsupportedTimeZone(tz_name.to_string()));
         return (None, None);
     };
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    let date_str = format!("{} {}", parts[0], parts[1]);
+    let date_str = format!("{date} {time}");
     let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
 
     match date {

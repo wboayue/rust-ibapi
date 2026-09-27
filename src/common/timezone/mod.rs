@@ -93,8 +93,7 @@ pub fn register_timezone_alias(name: impl Into<String>, iana: impl Into<String>)
 /// 4. Exact lookup in `time_tz` (IANA names, including backward links such as
 ///    `US/Eastern`, and Windows names such as `Eastern Standard Time`)
 ///
-/// There is no partial matching: a name that none of these resolve returns
-/// `None`, which callers surface as `Error::UnsupportedTimeZone`.
+/// There is no partial matching: a name that none of these resolve returns `None`.
 pub fn find_timezone(name: &str) -> Option<&'static Tz> {
     timezones::get_by_name(&map_timezone_name(name))
 }
