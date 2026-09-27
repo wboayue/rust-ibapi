@@ -143,13 +143,16 @@ fn security_id_type_round_trip() {
         (SecurityIdType::Sedol, "SEDOL"),
         (SecurityIdType::Ric, "RIC"),
         (SecurityIdType::Figi, "FIGI"),
+        // Unrecognized values are preserved verbatim; case-sensitive, so
+        // lowercase lands here rather than on the typed variant.
+        (SecurityIdType::Unknown("WKN".into()), "WKN"),
+        (SecurityIdType::Unknown("cusip".into()), "cusip"),
     ]);
 }
 
 #[test]
-fn security_id_type_from_str_rejects_unknown() {
-    // Empty + arbitrary; case-sensitive (lowercase + mixed-case rejected); trailing whitespace not on wire.
-    check_wire_enum_rejects_unknown::<SecurityIdType>(&["", "INVALID", "cusip", "isin ", "Figi"]);
+fn security_id_type_from_str_rejects_empty() {
+    check_wire_enum_rejects_unknown::<SecurityIdType>(&[""]);
 }
 
 #[test]

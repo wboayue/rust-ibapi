@@ -215,11 +215,9 @@ impl_wire_enum!(OptionRight);
 /// Security identifier scheme. Matches IBKR's `secIdType` wire vocabulary.
 ///
 /// No `Default` — `Contract.security_id_type: Option<SecurityIdType>` carries
-/// the no-identifier state via `None`. `#[non_exhaustive]` because IBKR's
-/// catalogue grows over time.
+/// the no-identifier state via `None`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SecurityIdType {
     /// CUSIP — North American security identifier.
     Cusip,
@@ -231,17 +229,22 @@ pub enum SecurityIdType {
     Ric,
     /// FIGI — Bloomberg Financial Instrument Global Identifier.
     Figi,
+    /// Identifier scheme not modeled by this version of the API. Carries the
+    /// raw wire value as received on an inbound contract; sent back unchanged.
+    Unknown(String),
 }
 
 impl SecurityIdType {
-    /// Return the canonical IBKR wire string.
-    pub fn as_str(&self) -> &'static str {
+    /// Return the canonical IBKR wire string — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
         match self {
             SecurityIdType::Cusip => "CUSIP",
             SecurityIdType::Isin => "ISIN",
             SecurityIdType::Sedol => "SEDOL",
             SecurityIdType::Ric => "RIC",
             SecurityIdType::Figi => "FIGI",
+            SecurityIdType::Unknown(raw) => raw,
         }
     }
 
@@ -257,7 +260,10 @@ impl SecurityIdType {
     }
 }
 
-impl_wire_enum!(SecurityIdType);
+// Open: decoded on every inbound `Contract`, including the `OpenOrder` and
+// `ExecutionData` frames of `order_update_stream`, and IBKR's catalogue grows.
+// A new scheme must not end those streams (#840).
+impl_wire_enum!(SecurityIdType, fallback Unknown);
 
 /// Validated strike price (must be positive)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

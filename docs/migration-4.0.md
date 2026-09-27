@@ -542,6 +542,15 @@ A narrower integer type tops out at 65535 at most, below most contract ids (AAPL
 
 Two `Option<i32>` fields on `Order` request stop-loss / profit-taker children that TWS attaches from its order presets (#842). A struct literal that names every field without `..Default::default()` stops compiling; add the two fields as `None`, or finish the literal with `..Default::default()`. Both default to `None`, which sends the same request as before. Orders read back from TWS always have them `None`.
 
+### 22. `SecurityIdType` gains `Unknown(String)` and loses `Copy`
+
+`SecurityIdType` is decoded on every inbound `Contract`, including the `OpenOrder` and `ExecutionData` frames of `order_update_stream`. An identifier scheme outside the five modeled ones failed that decode with `Error::Parse`, and the stream ended (#840). It now follows `Rule80A` / `OrderOpenClose` (see [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values)): an unrecognized non-empty value parses as `SecurityIdType::Unknown(raw)`, which `Display` / `ToField` write back unchanged. Empty input is still `Error::Parse`, and `FromStr` stays case-sensitive, so `"cusip"` is `Unknown("cusip")` rather than an error.
+
+- **`Copy` is removed.** `.clone()` (or borrow) where code copied a `SecurityIdType` out of a `Contract`.
+- **`as_str()` returns `&str`** instead of `&'static str`; for `Unknown` it borrows the raw value.
+- **`#[non_exhaustive]` is removed.** The `Unknown` arm now absorbs new schemes, so matches can be exhaustive and the compiler finds them if a scheme is ever promoted to a typed variant. Wildcard arms still compile.
+- **Serde** keeps the derived form: `Unknown` serializes externally tagged (`{"Unknown":"WKN"}`).
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -583,7 +592,8 @@ No code changes required, but observable at runtime:
 19. Delete any `use ...::SharesChannel` import and any `impl SharesChannel for ...` or `Subscription<T>: SharesChannel` bound — see [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed).
 20. Pass an `i32` or `ContractId` as `contract_id` to the price, volume and percent-change condition constructors; an `OrderId`, enum or narrower integer there was a bug — see [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid).
 21. Add `preset_stop_loss_order_id: None, preset_profit_taker_order_id: None` to exhaustive `Order` struct literals, or end them with `..Default::default()` — see [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id).
-22. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+22. Add `.clone()` where code relied on `SecurityIdType: Copy`, and handle `SecurityIdType::Unknown(raw)` where you match on it — see [§22](#22-securityidtype-gains-unknownstring-and-loses-copy).
+23. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
