@@ -14,6 +14,7 @@
 //! let margin_cond = margin().less_than(30);
 //! ```
 
+use crate::accounts::types::ContractId;
 use crate::orders::conditions::*;
 use crate::orders::OrderCondition;
 
@@ -33,7 +34,17 @@ use crate::orders::OrderCondition;
 ///     .greater_than(150.0)
 ///     .build();
 /// ```
-pub fn price(contract_id: i32, exchange: impl Into<String>) -> PriceConditionBuilder {
+///
+/// `contract_id` is anything that converts into [`ContractId`]: an integer literal,
+/// an `i32` or a `ContractId`. An order id is not a contract id:
+///
+/// ```compile_fail,E0277
+/// use ibapi::orders::builder::price;
+/// use ibapi::orders::OrderId;
+///
+/// let condition = price(OrderId::new(1), "SMART");
+/// ```
+pub fn price(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> PriceConditionBuilder {
     PriceCondition::builder(contract_id, exchange)
 }
 
@@ -83,7 +94,7 @@ pub fn margin() -> MarginConditionBuilder {
 ///     .greater_than(50_000_000)
 ///     .build();
 /// ```
-pub fn volume(contract_id: i32, exchange: impl Into<String>) -> VolumeConditionBuilder {
+pub fn volume(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> VolumeConditionBuilder {
     VolumeCondition::builder(contract_id, exchange)
 }
 
@@ -130,7 +141,7 @@ pub fn execution(symbol: impl Into<String>, security_type: impl Into<String>, ex
 ///     .greater_than(2.0)
 ///     .build();
 /// ```
-pub fn percent_change(contract_id: i32, exchange: impl Into<String>) -> PercentChangeConditionBuilder {
+pub fn percent_change(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> PercentChangeConditionBuilder {
     PercentChangeCondition::builder(contract_id, exchange)
 }
 

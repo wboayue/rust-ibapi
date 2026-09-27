@@ -3,6 +3,7 @@
 //! This module provides fluent builder APIs for constructing order conditions
 //! with type safety and validation.
 
+use crate::accounts::types::ContractId;
 use serde::{Deserialize, Serialize};
 
 /// Price evaluation method for price conditions.
@@ -431,7 +432,7 @@ impl PriceCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where the price is monitored
-    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> PriceConditionBuilder {
+    pub fn builder(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> PriceConditionBuilder {
         PriceConditionBuilder::new(contract_id, exchange)
     }
 }
@@ -443,9 +444,9 @@ impl PriceConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where the price is monitored
-    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
+    pub fn new(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> Self {
         Self {
-            contract_id,
+            contract_id: contract_id.into().value(),
             exchange: exchange.into(),
             price: None,                            // Must be set by greater_than/less_than
             trigger_method: TriggerMethod::Default, // Default trigger method
@@ -765,7 +766,7 @@ impl VolumeCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where volume is monitored
-    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> VolumeConditionBuilder {
+    pub fn builder(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> VolumeConditionBuilder {
         VolumeConditionBuilder::new(contract_id, exchange)
     }
 }
@@ -777,9 +778,9 @@ impl VolumeConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where volume is monitored
-    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
+    pub fn new(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> Self {
         Self {
-            contract_id,
+            contract_id: contract_id.into().value(),
             exchange: exchange.into(),
             volume: None,         // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
@@ -851,7 +852,7 @@ impl PercentChangeCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where price change is monitored
-    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> PercentChangeConditionBuilder {
+    pub fn builder(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> PercentChangeConditionBuilder {
         PercentChangeConditionBuilder::new(contract_id, exchange)
     }
 }
@@ -863,9 +864,9 @@ impl PercentChangeConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where price change is monitored
-    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
+    pub fn new(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> Self {
         Self {
-            contract_id,
+            contract_id: contract_id.into().value(),
             exchange: exchange.into(),
             percent: None,        // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
