@@ -54,3 +54,11 @@ fn test_percent_change_helper() {
     assert_eq!(condition.percent, 5.0);
     assert!(condition.is_more);
 }
+
+#[test]
+fn test_contract_id_helpers_accept_contract_id() {
+    let id = ContractId(265598);
+    assert_eq!(price(id, "SMART").greater_than(150.0).build().contract_id, 265598);
+    assert_eq!(volume(id, "SMART").greater_than(1000).build().contract_id, 265598);
+    assert_eq!(percent_change(id, "SMART").greater_than(5.0).build().contract_id, 265598);
+}
