@@ -666,70 +666,49 @@ fn test_decode_pnl_single_proto_rejects_malformed_position() {
 }
 
 // Absent `contract` submessage: Error::Parse, not Contract::default(). The
-// reference clients (Java EDecoder.processPositionMsgProtoBuf and siblings,
-// Python decoder.py, TWS API 10.50) return before the typed callback here.
+// reference clients (EDecoder.cs PositionEventProtoBuf and siblings) return
+// before the typed callback here.
+#[test]
+fn test_decode_position_frames_require_contract() {
+    use crate::common::test_utils::helpers::constants::TEST_CONTRACT_ID;
+    use crate::testdata::builders::accounts::portfolio_value;
+    use crate::testdata::builders::positions::{position, position_multi};
+    use crate::testdata::builders::ResponseProtoEncoder;
+    use prost::Message;
 
-fn stock_contract() -> crate::proto::Contract {
-    crate::proto::Contract {
-        con_id: Some(265598),
-        sec_type: Some("STK".into()),
-        ..Default::default()
+    type Decode = fn(&[u8]) -> Result<i32, crate::Error>;
+
+    let position = position().to_proto();
+    let position_multi = position_multi().to_proto();
+    let portfolio = portfolio_value().to_proto();
+    let cases: [(&str, Vec<u8>, Vec<u8>, Decode); 3] = [
+        (
+            "Position",
+            position.encode_to_vec(),
+            crate::proto::Position { contract: None, ..position }.encode_to_vec(),
+            |b| super::decode_position_proto(b).map(|p| p.contract.contract_id),
+        ),
+        (
+            "PositionMulti",
+            position_multi.encode_to_vec(),
+            crate::proto::PositionMulti {
+                contract: None,
+                ..position_multi
+            }
+            .encode_to_vec(),
+            |b| super::decode_position_multi_proto(b).map(|p| p.contract.contract_id),
+        ),
+        (
+            "PortfolioValue",
+            portfolio.encode_to_vec(),
+            crate::proto::PortfolioValue { contract: None, ..portfolio }.encode_to_vec(),
+            |b| super::decode_account_portfolio_value_proto(b).map(|p| p.contract.contract_id),
+        ),
+    ];
+
+    for (message, full, missing, decode) in cases {
+        let contract_id = decode(&full).unwrap_or_else(|e| panic!("{message} control frame must decode: {e}"));
+        assert_eq!(contract_id, TEST_CONTRACT_ID, "{message}");
+        assert_missing_field(decode(&missing), "contract", message);
     }
-}
-
-#[test]
-fn test_decode_position_proto_requires_contract() {
-    use prost::Message;
-
-    let full = crate::proto::Position {
-        account: Some("DU1234".into()),
-        contract: Some(stock_contract()),
-        position: Some("100".into()),
-        avg_cost: Some(150.25),
-    };
-    let decoded = super::decode_position_proto(&full.encode_to_vec()).expect("control frame must decode");
-    assert_eq!(decoded.contract.contract_id, 265598);
-
-    let missing = crate::proto::Position { contract: None, ..full };
-    assert_missing_field(super::decode_position_proto(&missing.encode_to_vec()), "contract", "Position");
-}
-
-#[test]
-fn test_decode_position_multi_proto_requires_contract() {
-    use prost::Message;
-
-    let full = crate::proto::PositionMulti {
-        req_id: Some(1),
-        account: Some("DU1234".into()),
-        contract: Some(stock_contract()),
-        position: Some("100".into()),
-        avg_cost: Some(150.25),
-        model_code: Some("".into()),
-    };
-    let decoded = super::decode_position_multi_proto(&full.encode_to_vec()).expect("control frame must decode");
-    assert_eq!(decoded.contract.contract_id, 265598);
-
-    let missing = crate::proto::PositionMulti { contract: None, ..full };
-    assert_missing_field(super::decode_position_multi_proto(&missing.encode_to_vec()), "contract", "PositionMulti");
-}
-
-#[test]
-fn test_decode_account_portfolio_value_proto_requires_contract() {
-    use prost::Message;
-
-    let full = crate::proto::PortfolioValue {
-        contract: Some(stock_contract()),
-        position: Some("100".into()),
-        account_name: Some("DU1234".into()),
-        ..Default::default()
-    };
-    let decoded = super::decode_account_portfolio_value_proto(&full.encode_to_vec()).expect("control frame must decode");
-    assert_eq!(decoded.contract.contract_id, 265598);
-
-    let missing = crate::proto::PortfolioValue { contract: None, ..full };
-    assert_missing_field(
-        super::decode_account_portfolio_value_proto(&missing.encode_to_vec()),
-        "contract",
-        "PortfolioValue",
-    );
 }

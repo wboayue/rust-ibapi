@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::messages::IncomingMessages;
 use prost::Message;
 
@@ -76,13 +76,7 @@ fn test_decode_contract_data_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        match decode_contract_data_proto(&frame.encode_to_vec()) {
-            Err(Error::Parse(_, field, reason)) => {
-                assert_eq!(field, name);
-                assert_eq!(reason, "missing in ContractData");
-            }
-            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
-        }
+        assert_missing_field(decode_contract_data_proto(&frame.encode_to_vec()), name, "ContractData");
     }
 }
 
