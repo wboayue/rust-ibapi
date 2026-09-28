@@ -291,7 +291,7 @@ pub mod helpers {
         }
     }
 
-    /// Asserts that a decoder failed on an absent required submessage, via
+    /// Asserts that a decoder failed on an absent required field, via
     /// `proto::decoders::required`: `Error::Parse` naming the field and the
     /// message that should have carried it.
     pub fn assert_missing_field<T: std::fmt::Debug>(result: Result<T, crate::Error>, field: &str, message: &str) {

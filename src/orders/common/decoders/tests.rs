@@ -1,13 +1,12 @@
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
 
 use super::*;
-use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::contracts::Symbol;
 use crate::messages::IncomingMessages;
 use crate::orders::{Action, OrderStatusKind};
 use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
 use crate::testdata::builders::ResponseProtoEncoder;
-use crate::Error;
 
 #[test]
 fn test_decode_open_order_proto() {
@@ -491,13 +490,7 @@ fn order_binding_requires_complete_identity() {
         ),
     ] {
         let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::OrderBound, fixture.encode_proto());
-        match decode_order_bound(&message).unwrap_err() {
-            Error::Parse(_, field, reason) => {
-                assert_eq!(field, missing);
-                assert_eq!(reason, "missing in OrderBound");
-            }
-            other => panic!("expected Error::Parse for missing {missing}, got {other:?}"),
-        }
+        assert_missing_field(decode_order_bound(&message), missing, "OrderBound");
     }
 }
 
@@ -553,13 +546,7 @@ fn decode_open_order_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        match decode_open_order_proto(&frame.encode_to_vec()) {
-            Err(Error::Parse(_, field, reason)) => {
-                assert_eq!(field, name);
-                assert_eq!(reason, "missing in OpenOrder");
-            }
-            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
-        }
+        assert_missing_field(decode_open_order_proto(&frame.encode_to_vec()), name, "OpenOrder");
     }
 }
 
@@ -600,13 +587,7 @@ fn decode_completed_order_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        match decode_completed_order_proto(&frame.encode_to_vec()) {
-            Err(Error::Parse(_, field, reason)) => {
-                assert_eq!(field, name);
-                assert_eq!(reason, "missing in CompletedOrder");
-            }
-            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
-        }
+        assert_missing_field(decode_completed_order_proto(&frame.encode_to_vec()), name, "CompletedOrder");
     }
 }
 
@@ -645,12 +626,6 @@ fn decode_execution_data_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        match decode_execution_data_proto(&frame.encode_to_vec()) {
-            Err(Error::Parse(_, field, reason)) => {
-                assert_eq!(field, name);
-                assert_eq!(reason, "missing in ExecutionDetails");
-            }
-            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
-        }
+        assert_missing_field(decode_execution_data_proto(&frame.encode_to_vec()), name, "ExecutionDetails");
     }
 }

@@ -2,7 +2,7 @@ use prost::Message;
 
 use crate::contracts::OptionComputation;
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::{optional_f64, parse_decimal_or_zero, parse_optional_decimal, ts};
+use crate::proto::decoders::{optional_f64, parse_decimal_or_zero, parse_optional_decimal, required, ts};
 use crate::Error;
 
 use crate::market_data::realtime::{
@@ -255,10 +255,7 @@ pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<Optio
 
 pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
     let msg = crate::proto::MarketDepth::decode(bytes)?;
-
-    let data = msg
-        .market_depth_data
-        .ok_or_else(|| Error::parse_proto("market_depth_data", "missing in MarketDepth"))?;
+    let data = required(msg.market_depth_data, "market_depth_data", "MarketDepth")?;
 
     Ok(MarketDepth {
         position: data.position.unwrap_or_default(),
@@ -271,10 +268,7 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
 
 pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2, Error> {
     let msg = crate::proto::MarketDepthL2::decode(bytes)?;
-
-    let data = msg
-        .market_depth_data
-        .ok_or_else(|| Error::parse_proto("market_depth_data", "missing in MarketDepth"))?;
+    let data = required(msg.market_depth_data, "market_depth_data", "MarketDepthL2")?;
 
     Ok(MarketDepthL2 {
         position: data.position.unwrap_or_default(),
