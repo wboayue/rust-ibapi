@@ -21,18 +21,18 @@
 //! ## Type naming: `BarSize` and `WhatToShow`
 //!
 //! Both `market_data::historical` and `market_data::realtime` define their own
-//! `BarSize` and `WhatToShow` enums (different variant sets — historical has 21
-//! `BarSize` variants and 10 `WhatToShow` variants; realtime has only `Sec5` and
-//! a 4-variant subset). Two canonical spellings depending on import style:
+//! `WhatToShow` enum (different variant sets — realtime's is a subset of
+//! historical's). Only `market_data::historical` has a `BarSize`; real-time
+//! bars are always 5 seconds. Two canonical spellings depending on import
+//! style:
 //!
 //! - **Prelude (flat) imports** — use the disambiguated names
-//!   `HistoricalBarSize` / `HistoricalWhatToShow` / `RealtimeBarSize` /
-//!   `RealtimeWhatToShow`. These are the canonical names for
-//!   `use ibapi::prelude::*;` callers.
+//!   `HistoricalBarSize` / `HistoricalWhatToShow` / `RealtimeWhatToShow`.
+//!   These are the canonical names for `use ibapi::prelude::*;` callers.
 //! - **Module-qualified imports** — use the short names directly:
 //!   `use ibapi::market_data::historical::{BarSize, WhatToShow};` or
-//!   `use ibapi::market_data::realtime::{BarSize, WhatToShow};`. The module
-//!   path provides the namespace; the short name is idiomatic Rust.
+//!   `use ibapi::market_data::realtime::WhatToShow;`. The module path
+//!   provides the namespace; the short name is idiomatic Rust.
 //!
 //! Both spellings refer to the same type — the prelude entries are `pub use`
 //! re-exports with `as` aliasing, not separate types.
@@ -55,8 +55,7 @@ pub use crate::market_data::historical::{
 
 // Market data types - realtime
 pub use crate::market_data::realtime::{
-    BarSize as RealtimeBarSize, MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder, TickTypes,
-    WhatToShow as RealtimeWhatToShow,
+    MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow as RealtimeWhatToShow,
 };
 pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 
