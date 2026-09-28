@@ -94,10 +94,15 @@ impl fmt::Display for BracketOrderIds {
     }
 }
 
-impl From<Vec<i32>> for BracketOrderIds {
-    fn from(ids: Vec<i32>) -> Self {
-        assert_eq!(ids.len(), 3, "BracketOrderIds requires exactly 3 order IDs");
-        Self::new(ids[0], ids[1], ids[2])
+impl TryFrom<Vec<i32>> for BracketOrderIds {
+    type Error = ValidationError;
+
+    /// Fails with [`ValidationError::InvalidBracketOrder`] unless `ids` has exactly three elements.
+    fn try_from(ids: Vec<i32>) -> Result<Self, Self::Error> {
+        match ids[..] {
+            [parent, take_profit, stop_loss] => Ok(Self::new(parent, take_profit, stop_loss)),
+            _ => Err(ValidationError::InvalidBracketOrder(format!("expected 3 order ids, got {}", ids.len()))),
+        }
     }
 }
 
