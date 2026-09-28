@@ -31,10 +31,8 @@ use crate::contracts::PriceIncrement;
 
 pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
     let p: crate::proto::ContractData = Message::decode(bytes)?;
-    let default_contract = crate::proto::Contract::default();
-    let default_details = crate::proto::ContractDetails::default();
-    let proto_contract = p.contract.as_ref().unwrap_or(&default_contract);
-    let proto_details = p.contract_details.as_ref().unwrap_or(&default_details);
+    let proto_contract = crate::proto::decoders::required(p.contract.as_ref(), "contract", "ContractData")?;
+    let proto_details = crate::proto::decoders::required(p.contract_details.as_ref(), "contract_details", "ContractData")?;
     crate::proto::decoders::decode_contract_details(proto_contract, proto_details)
 }
 

@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed), [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages) |
 
 ## Breaking changes
 
@@ -563,6 +563,28 @@ There is no replacement. To capture traffic, set `IBAPI_RECORDING_DIR` (one file
 
 There is no replacement API. Capture traffic with `IBAPI_RECORDING_DIR` or `IBAPI_RAW_CAPTURE_DIR`, as in [§23](#23-parser_registry-is-removed), or set `RUST_LOG=ibapi=debug` for a log line per inbound message.
 
+### 25. `SecurityType` parses through `FromStr`, and `ContractData` needs both submessages
+
+`contracts::SecurityType` had an inherent `from(&str)` rather than `FromStr`, beside a hand-written `Display`, so `SecurityType::from` resolved differently from every other wire enum. It now takes the shape [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values) gave the order enums:
+
+- **`SecurityType` parses through `FromStr<Err = Error>`.** The inherent `from` is gone. The enum stays open: an unrecognized non-empty value parses as `Other(String)` carrying the raw wire value, which `Display` writes back unchanged, and there is no longer a `warn!` when that happens. Empty input is `Error::Parse`.
+- **An absent or empty `sec_type` still decodes as `Other("")`.** `decode_contract` reads it through `parse_optional` and falls back to `Other(String::new())`, so an inbound `Contract` without one decodes exactly as in 4.2. The reference client's `decodeContract` sets `SecType` only `if (HasSecType)` and still delivers the frame, so absence is an unset field rather than a malformed frame — the same exception [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values) records for `tif`. Requiring it would have ended `order_update_stream`, `positions` and every other stream carrying a contract on the first such frame, the failure [§22](#22-securityidtype-gains-unknownstring-and-loses-copy) fixed for `sec_id_type`. Only `"".parse::<SecurityType>()` is an error.
+- **`ContractData` needs both submessages.** A `ContractData` frame with no `contract` or no `contract_details` fails to decode with `Error::Parse` naming the missing submessage (`missing in ContractData`), instead of yielding a default-constructed contract or details. The reference client (`EDecoder.cs`) drops such a frame; this crate has no skip channel, so `contract_details` returns the error, as an `OpenOrder` missing a submessage has since 4.2 ([§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values)).
+
+```rust,ignore
+// 4.2
+let sec_type = SecurityType::from("STK");            // unknowns became Other(raw), with a warn!
+
+// Unreleased
+let sec_type: SecurityType = "STK".parse()?;         // unknowns are Other(raw); "" is an error
+```
+
+What changes for compiling code:
+
+- **`SecurityType::from(s)` no longer compiles on a `&str`**: the call now resolves to the blanket `From<SecurityType>`, so the compiler points at every site. Use `s.parse::<SecurityType>()?`.
+- **`as_str()` is added**, returning `&str`; for `Other` it borrows the raw value.
+- **`Display`, `ToField`, `Default` (`Stock`), serde and `utoipa` are unchanged.** The derives stay, so `Other` still serializes in the externally tagged form.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -607,7 +629,8 @@ No code changes required, but observable at runtime:
 22. Add `.clone()` where code relied on `SecurityIdType: Copy`, and handle `SecurityIdType::Unknown(raw)` where you match on it — see [§22](#22-securityidtype-gains-unknownstring-and-loses-copy).
 23. Drop any `use ibapi::parser_registry` import; the module is gone and capture goes through `IBAPI_RECORDING_DIR` / `IBAPI_RAW_CAPTURE_DIR` instead — see [§23](#23-parser_registry-is-removed).
 24. Delete calls into `ibapi::trace`; `last_interaction()` has returned `None` since 3.0 — see [§24](#24-the-trace-module-is-removed).
-25. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+25. Replace `SecurityType::from(s)` with `s.parse::<SecurityType>()?` — see [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages).
+26. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

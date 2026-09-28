@@ -46,6 +46,47 @@ fn test_decode_contract_data_proto() {
 }
 
 #[test]
+fn test_decode_contract_data_proto_rejects_missing_submessages() {
+    // EDecoder.cs drops a ContractData frame when either submessage is null
+    // rather than synthesizing a default; this crate has no skip channel, so
+    // it errors, as #829's OpenOrder / CompletedOrder / ExecutionDetails do.
+    let full = crate::proto::ContractData {
+        req_id: Some(1),
+        contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
+            ..Default::default()
+        }),
+        contract_details: Some(crate::proto::ContractDetails::default()),
+    };
+    decode_contract_data_proto(&full.encode_to_vec()).expect("control frame must decode");
+
+    for (name, frame) in [
+        (
+            "contract",
+            crate::proto::ContractData {
+                contract: None,
+                ..full.clone()
+            },
+        ),
+        (
+            "contract_details",
+            crate::proto::ContractData {
+                contract_details: None,
+                ..full.clone()
+            },
+        ),
+    ] {
+        match decode_contract_data_proto(&frame.encode_to_vec()) {
+            Err(Error::Parse(_, field, reason)) => {
+                assert_eq!(field, name);
+                assert_eq!(reason, "missing in ContractData");
+            }
+            other => panic!("expected Error::Parse for a missing {name}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn test_decode_symbol_samples_proto() {
     let proto_msg = crate::proto::SymbolSamples {
         req_id: Some(1),
