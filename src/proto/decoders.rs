@@ -137,13 +137,14 @@ where
 
 /// A proto submessage or scalar the frame is meaningless without.
 ///
-/// The reference client drops the whole frame when one is absent —
-/// `EDecoder.cs`'s `OpenOrderEventProtoBuf` returns before `eWrapper.openOrder(..)`
-/// if `Contract`, `Order` or `OrderState` is null, rather than synthesizing a
-/// default. This crate has no "skip this frame" channel, so it surfaces the
-/// malformed frame as `Error::Parse` instead. Defaulting is the one option
-/// neither client takes: it hands the caller a phantom BUY order over an empty
-/// contract, which reads as real data (docs/rules/wire/enum-typing.md).
+/// Use only where the reference client drops the whole frame when it is absent
+/// rather than synthesizing a default — e.g. `EDecoder.cs` returns before
+/// `eWrapper.openOrder(..)` if `Contract`, `Order` or `OrderState` is null, and
+/// before `eWrapper.contractDetails(..)` if `Contract` or `ContractDetails` is.
+/// This crate has no "skip this frame" channel, so it surfaces the malformed
+/// frame as `Error::Parse` instead. Defaulting is the one option neither client
+/// takes: it hands the caller data that reads as real, such as a phantom BUY
+/// order over an empty contract (docs/rules/wire/enum-typing.md).
 pub(crate) fn required<T>(field: Option<T>, name: &str, message: &str) -> Result<T, Error> {
     field.ok_or_else(|| Error::parse_proto(name, format!("missing in {message}")))
 }
