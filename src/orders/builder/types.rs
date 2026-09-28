@@ -396,6 +396,9 @@ impl fmt::Display for ValidationError {
 impl std::error::Error for ValidationError {}
 
 /// Represents the outcome of analyzing an order for margin/commission
+///
+/// Nothing produces it: `OrderBuilder::analyze()` returns [`OrderState`](crate::orders::OrderState).
+#[deprecated(note = "nothing produces it; OrderBuilder::analyze() returns orders::OrderState")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderAnalysis {
     /// Initial margin requirement returned by TWS.
