@@ -1,6 +1,6 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::proto_response;
+use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
 use crate::server_versions;
@@ -247,11 +247,16 @@ mod market_depth_tests {
             req_id: Some(9000),
             market_depth_data: None,
         };
-        let err = decode_market_depth_proto(&msg.encode_to_vec()).expect_err("missing data should error");
-        assert!(
-            matches!(err, Error::Parse(_, ref field, _) if field == "market_depth_data"),
-            "got {err:?}"
-        );
+        assert_missing_field(decode_market_depth_proto(&msg.encode_to_vec()), "market_depth_data", "MarketDepth");
+    }
+
+    #[test]
+    fn test_decode_market_depth_l2_proto_missing_data() {
+        let msg = crate::proto::MarketDepthL2 {
+            req_id: Some(9000),
+            market_depth_data: None,
+        };
+        assert_missing_field(decode_market_depth_l2_proto(&msg.encode_to_vec()), "market_depth_data", "MarketDepthL2");
     }
 
     #[test]
