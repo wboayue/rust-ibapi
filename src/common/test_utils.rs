@@ -291,6 +291,19 @@ pub mod helpers {
         }
     }
 
+    /// Asserts that a decoder failed on an absent required submessage, via
+    /// `proto::decoders::required`: `Error::Parse` naming the field and the
+    /// message that should have carried it.
+    pub fn assert_missing_field<T: std::fmt::Debug>(result: Result<T, crate::Error>, field: &str, message: &str) {
+        match result {
+            Err(crate::Error::Parse(_, name, reason)) => {
+                assert_eq!(name, field);
+                assert_eq!(reason, format!("missing in {message}"));
+            }
+            other => panic!("expected Error::Parse for a missing {field} in {message}, got {other:?}"),
+        }
+    }
+
     /// Asserts that a proto-only decoder rejects a text-framed frame of the type
     /// it handles, with [`Error::UnexpectedWireFormat`](crate::Error::UnexpectedWireFormat).
     ///
