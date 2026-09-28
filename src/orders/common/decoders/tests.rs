@@ -521,7 +521,10 @@ fn decode_open_order_proto_rejects_missing_submessages() {
     // this crate has no skip channel, so it errors.
     let full = crate::proto::OpenOrder {
         order_id: Some(42),
-        contract: Some(crate::proto::Contract::default()),
+        contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
+            ..Default::default()
+        }),
         order: Some(crate::proto::Order {
             action: Some("BUY".into()),
             ..Default::default()
@@ -565,7 +568,10 @@ fn decode_completed_order_proto_rejects_missing_submessages() {
     use prost::Message;
 
     let full = crate::proto::CompletedOrder {
-        contract: Some(crate::proto::Contract::default()),
+        contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
+            ..Default::default()
+        }),
         order: Some(crate::proto::Order {
             action: Some("BUY".into()),
             ..Default::default()
@@ -612,7 +618,10 @@ fn decode_execution_data_proto_rejects_missing_submessages() {
     // returns before eWrapper.execDetails(..) when either is null.
     let full = crate::proto::ExecutionDetails {
         req_id: Some(9),
-        contract: Some(crate::proto::Contract::default()),
+        contract: Some(crate::proto::Contract {
+            sec_type: Some("STK".into()),
+            ..Default::default()
+        }),
         execution: Some(crate::proto::Execution {
             side: Some("BOT".into()),
             ..Default::default()

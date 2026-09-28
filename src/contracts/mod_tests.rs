@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 
 #[test]
 fn test_v2_builders() {
@@ -57,34 +58,79 @@ fn test_v2_builders() {
     assert_eq!(option.right, Some(OptionRight::Call));
 }
 
-#[test]
-fn test_security_type_from() {
-    // Test all known security types
-    assert_eq!(SecurityType::from("STK"), SecurityType::Stock, "STK should be Stock");
-    assert_eq!(SecurityType::from("OPT"), SecurityType::Option, "OPT should be Option");
-    assert_eq!(SecurityType::from("FUT"), SecurityType::Future, "FUT should be Future");
-    assert_eq!(
-        SecurityType::from("CONTFUT"),
-        SecurityType::ContinuousFuture,
-        "CONTFUT should be ContinuousFuture"
-    );
-    assert_eq!(SecurityType::from("IND"), SecurityType::Index, "IND should be Index");
-    assert_eq!(SecurityType::from("FOP"), SecurityType::FuturesOption, "FOP should be FuturesOption");
-    assert_eq!(SecurityType::from("CASH"), SecurityType::ForexPair, "CASH should be ForexPair");
-    assert_eq!(SecurityType::from("BAG"), SecurityType::Spread, "BAG should be Spread");
-    assert_eq!(SecurityType::from("WAR"), SecurityType::Warrant, "WAR should be Warrant");
-    assert_eq!(SecurityType::from("BOND"), SecurityType::Bond, "BOND should be Bond");
-    assert_eq!(SecurityType::from("CMDTY"), SecurityType::Commodity, "CMDTY should be Commodity");
-    assert_eq!(SecurityType::from("NEWS"), SecurityType::News, "NEWS should be News");
-    assert_eq!(SecurityType::from("FUND"), SecurityType::MutualFund, "FUND should be MutualFund");
-    assert_eq!(SecurityType::from("CRYPTO"), SecurityType::Crypto, "CRYPTO should be Crypto");
-    assert_eq!(SecurityType::from("CFD"), SecurityType::CFD, "CFD should be CFD");
+/// Every modeled `SecurityType` with its wire string. A new variant stops
+/// `all_security_types_covers_every_variant` compiling until it gets an arm there; give it the
+/// next index, grow `seen`, and add its row here.
+const ALL_SECURITY_TYPES: [(SecurityType, &str); 15] = [
+    (SecurityType::Stock, "STK"),
+    (SecurityType::Option, "OPT"),
+    (SecurityType::Future, "FUT"),
+    (SecurityType::ContinuousFuture, "CONTFUT"),
+    (SecurityType::Index, "IND"),
+    (SecurityType::FuturesOption, "FOP"),
+    (SecurityType::ForexPair, "CASH"),
+    (SecurityType::Spread, "BAG"),
+    (SecurityType::Warrant, "WAR"),
+    (SecurityType::Bond, "BOND"),
+    (SecurityType::Commodity, "CMDTY"),
+    (SecurityType::News, "NEWS"),
+    (SecurityType::MutualFund, "FUND"),
+    (SecurityType::Crypto, "CRYPTO"),
+    (SecurityType::CFD, "CFD"),
+];
 
-    // Test unknown security type
-    match SecurityType::from("UNKNOWN") {
-        SecurityType::Other(name) => assert_eq!(name, "UNKNOWN", "Other should contain original string"),
-        _ => panic!("Expected SecurityType::Other for unknown type"),
+#[test]
+fn security_type_round_trip() {
+    check_wire_enum_round_trip(&ALL_SECURITY_TYPES);
+    // Unrecognized values are preserved verbatim; case-sensitive, so
+    // lowercase lands here rather than on the typed variant.
+    check_wire_enum_round_trip(&[(SecurityType::Other("XYZ".into()), "XYZ"), (SecurityType::Other("stk".into()), "stk")]);
+}
+
+#[test]
+fn security_type_from_str_rejects_empty() {
+    // Open enum: empty is the only input FromStr rejects.
+    check_wire_enum_rejects_unknown::<SecurityType>(&[""]);
+}
+
+/// Guard that `ALL_SECURITY_TYPES` lists every modeled variant. A new variant
+/// has no arm in `modeled_index` and fails to compile. At runtime it fails if
+/// any index below `seen.len()` has no row; a new variant whose row is missing
+/// still passes if `seen` was not grown, so growing `seen` and adding the row
+/// stay manual steps. Same shape as `all_tifs_covers_every_variant` in
+/// `src/orders/tests.rs`.
+#[test]
+fn all_security_types_covers_every_variant() {
+    fn modeled_index(security_type: &SecurityType) -> Option<usize> {
+        match security_type {
+            SecurityType::Stock => Some(0),
+            SecurityType::Option => Some(1),
+            SecurityType::Future => Some(2),
+            SecurityType::ContinuousFuture => Some(3),
+            SecurityType::Index => Some(4),
+            SecurityType::FuturesOption => Some(5),
+            SecurityType::ForexPair => Some(6),
+            SecurityType::Spread => Some(7),
+            SecurityType::Warrant => Some(8),
+            SecurityType::Bond => Some(9),
+            SecurityType::Commodity => Some(10),
+            SecurityType::News => Some(11),
+            SecurityType::MutualFund => Some(12),
+            SecurityType::Crypto => Some(13),
+            SecurityType::CFD => Some(14),
+            // Other carries a raw string, so it has no place in a table of
+            // modeled wire values; `security_type_round_trip` covers it.
+            SecurityType::Other(_) => None,
+        }
     }
+
+    let mut seen = [false; 15];
+    for (variant, _) in &ALL_SECURITY_TYPES {
+        if let Some(index) = modeled_index(variant) {
+            seen[index] = true;
+        }
+    }
+    assert!(seen.iter().all(|&s| s), "ALL_SECURITY_TYPES is missing a SecurityType variant");
 }
 
 #[test]
@@ -280,7 +326,7 @@ fn test_is_bag() {
 
     // Test with an explicitly set BAG security type
     let bag_contract = Contract {
-        security_type: SecurityType::from("BAG"),
+        security_type: "BAG".parse().unwrap(),
         ..Default::default()
     };
     assert!(bag_contract.is_bag(), "BAG contract should be a bag");

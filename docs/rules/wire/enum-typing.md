@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855"]
 memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -30,7 +30,11 @@ parse_optional::<OptionRight>(proto.right.as_deref())?                  // -> Re
 enum only needs `impl FromStr<Err = Error>` — no per-field wrapper.
 
 **The decoder must reject empty or missing input as `Error::Parse`, never fall back to
-`T::default()`.**
+`T::default()`.** This assumes a field the wire always carries. Where the reference client's
+decoder treats an absent field as unset (`tif`, #822: `EDecoderUtils` assigns it only if `HasTif`;
+`sec_type`, #855: `decodeContract` sets it only if `HasSecType` and still delivers the frame),
+absent or empty decodes to that field's unset value (`Order::default().tif`,
+`SecurityType::Other("")`); only a direct `"".parse()` is `Error::Parse`.
 
 An unrecognized **value** is a separate question from a missing one. On a streaming
 decode path — where a parse failure terminates the subscription — a value IBKR adds
@@ -175,3 +179,16 @@ migrations — consult it rather than re-deriving which fields were converted an
   round-trip. An absent `type` is `Error::Parse` (upstream always sets it). The panicking
   `From<i32> for OrderCondition` went rather than taking the `Unknown(i32)` shape: it built
   default-valued conditions, had no caller, and the builders are the construction path.
+- #855 — `SecurityType`, the last inherent `from(&str)` in `src/contracts`. It already preserved
+  an unrecognized value as `Other(String)`, but through a `warn!` outside `FromStr`, so
+  `SecurityType::from` did not resolve like the other wire enums. Moved onto
+  `impl_wire_enum!(SecurityType, fallback Other)`. `sec_type` is the #822-style exception, not a
+  requiredness case: the reference client's `decodeContract` sets `SecType` only `if (HasSecType)`
+  and still delivers the frame, so an absent or empty `sec_type` decodes as `Other("")` through
+  `parse_optional` plus a fallback, as before. Requiring it would end `order_update_stream`,
+  `positions` and every other stream carrying a contract on the first contract without one (the
+  failure #840 fixed), and the #825 `action` precedent does not carry over: an absent `action`
+  became a phantom `Buy`, while an absent `sec_type` is `Other("")`, not `Stock`. The
+  `ContractData` decoder takes #829's `required` for both its submessages, as the reference
+  client's `ContractData` handler in `EDecoder.cs` drops such a frame; the helper now lives in
+  `src/proto/decoders.rs`.
