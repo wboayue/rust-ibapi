@@ -259,6 +259,19 @@ async fn test_create_order_update_subscription_is_unique() {
     assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
 }
 
+/// After shutdown, a new order-update stream is refused rather than stored
+/// as a sender nothing will ever drop (#871).
+#[tokio::test]
+async fn test_create_order_update_subscription_after_shutdown_fails() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    mb.ensure_shutdown().await;
+
+    let err = mb.create_order_update_subscription().await.err().expect("subscribe after shutdown");
+    assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+    assert!(bus.order_update_stream.read().await.is_none());
+}
+
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]

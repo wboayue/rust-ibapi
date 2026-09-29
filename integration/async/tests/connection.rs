@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ibapi::{Client, StartupMessage};
+use ibapi::{Client, Error, StartupMessage};
 use ibapi_test::{rate_limit, ClientId};
 
 #[tokio::test]
@@ -127,4 +127,37 @@ async fn builder_notice_stream_survives_reconnect() {
         captured.lock().unwrap().len(),
         captured.lock().unwrap()
     );
+}
+
+/// Issue #871 (async side): `disconnect()` ends a live `order_update_stream`.
+#[tokio::test]
+async fn order_update_stream_ends_on_disconnect() {
+    use futures::StreamExt;
+
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
+
+    client.disconnect().await;
+
+    let drained = tokio::time::timeout(Duration::from_secs(5), async { while updates.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order_update_stream did not end within 5s of disconnect");
+}
+
+/// Issue #871: after `disconnect()`, `order_update_stream()` is refused
+/// instead of returning a stream nothing will end.
+#[tokio::test]
+async fn order_update_stream_after_disconnect_fails() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    client.disconnect().await;
+
+    match client.order_update_stream().await {
+        Err(Error::Shutdown) => {}
+        other => panic!("expected Err(Shutdown), got: {:?}", other.map(|_| "stream")),
+    }
 }

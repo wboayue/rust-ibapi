@@ -222,30 +222,39 @@ impl SharedChannels {
 /// Fan-out for unrouted notices. Each subscriber gets its own crossbeam
 /// channel; `broadcast` lazily prunes subscribers whose receivers have
 /// been dropped (`Sender::send` returns `Err` once the receiver is gone).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct NoticeBroadcaster {
-    senders: Mutex<Vec<Sender<Notice>>>,
+    /// `None` once closed.
+    senders: Mutex<Option<Vec<Sender<Notice>>>>,
 }
 
 impl NoticeBroadcaster {
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self {
+            senders: Mutex::new(Some(Vec::new())),
+        }
     }
 
+    /// After `close`, the returned receiver is already at end-of-stream,
+    /// like the ones `close` ended.
     pub(crate) fn subscribe(&self) -> Receiver<Notice> {
         let (sender, receiver) = channel::unbounded();
-        self.senders.lock().unwrap().push(sender);
+        if let Some(senders) = self.senders.lock().unwrap().as_mut() {
+            senders.push(sender);
+        }
         receiver
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
-        let mut senders = self.senders.lock().unwrap();
-        senders.retain(|s| s.send(notice.clone()).is_ok());
+        if let Some(senders) = self.senders.lock().unwrap().as_mut() {
+            senders.retain(|s| s.send(notice.clone()).is_ok());
+        }
     }
 
-    /// Drop all senders so existing receivers see channel-closed.
+    /// Drop all senders so existing receivers see channel-closed, and end
+    /// every later subscription on arrival.
     pub(crate) fn close(&self) {
-        self.senders.lock().unwrap().clear();
+        *self.senders.lock().unwrap() = None;
     }
 }
 
@@ -326,6 +335,13 @@ impl<S: Stream> TcpMessageBus<S> {
         // wait `Connection::reconnect` is in.
         self.connection_state.shutdown();
         self.shutdown.request();
+
+        // After the flag: `create_order_update_subscription` checks it under
+        // the same lock, so no stream can register once this slot is emptied.
+        // The subscription holds a sender clone, so only a sent item ends it.
+        if let Some(sender) = self.order_update_stream.lock().unwrap().take() {
+            let _ = sender.send(Error::Shutdown.into());
+        }
 
         // bounded(1) + try_send: if a shutdown is already pending,
         // Err(Full) is the desired no-op (idempotent across duplicate calls).
@@ -880,6 +896,12 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
         let mut order_update_stream = self.order_update_stream.lock().unwrap();
+
+        // Not `ensure_connected`: nothing is written, and the stream may be
+        // created while a reconnect is in progress.
+        if self.is_shutting_down() {
+            return Err(Error::Shutdown);
+        }
 
         if order_update_stream.is_some() {
             return Err(Error::AlreadySubscribed);

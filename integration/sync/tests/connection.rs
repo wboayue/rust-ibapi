@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ibapi::client::blocking::Client;
-use ibapi::StartupMessage;
+use ibapi::{Error, StartupMessage};
 use ibapi_test::{rate_limit, ClientId};
 
 #[test]
@@ -128,4 +128,80 @@ fn builder_notice_stream_survives_reconnect() {
         captured.lock().unwrap().len(),
         captured.lock().unwrap()
     );
+}
+
+/// Issue #871: `disconnect()` must end a blocked `order_update_stream` reader.
+/// The reader thread reports every item it sees and then the end of the
+/// stream; the test fails (rather than hangs) if the end never arrives.
+#[test]
+fn order_update_stream_ends_on_disconnect() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    let updates = client.order_update_stream().expect("order_update_stream failed");
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Some(item) = updates.next() {
+            let _ = tx.send(Some(format!("{item:?}")));
+        }
+        let _ = tx.send(None);
+    });
+
+    client.disconnect();
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let mut seen = Vec::new();
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match rx.recv_timeout(remaining) {
+            Ok(Some(item)) => seen.push(item),
+            Ok(None) => break,
+            Err(_) => panic!("order_update_stream did not end within 5s of disconnect; items seen: {seen:?}"),
+        }
+    }
+
+    assert!(
+        seen.last().is_some_and(|item| item.contains("Shutdown")),
+        "expected the stream to end with Err(Shutdown), items seen: {seen:?}"
+    );
+}
+
+/// Issue #871: after `disconnect()`, `order_update_stream()` is refused
+/// instead of returning a stream nothing will end.
+#[test]
+fn order_update_stream_after_disconnect_fails() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    client.disconnect();
+
+    match client.order_update_stream() {
+        Err(Error::Shutdown) => {}
+        other => panic!("expected Err(Shutdown), got: {:?}", other.map(|_| "stream")),
+    }
+}
+
+/// Issue #871: a notice stream opened after `disconnect()` is already ended,
+/// like the streams the disconnect closed.
+#[test]
+fn notice_stream_after_disconnect_is_ended() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    client.disconnect();
+
+    let notices = client.notice_stream().expect("notice_stream failed");
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(notices.next().map(|n| n.code));
+    });
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(None) => {}
+        Ok(Some(code)) => panic!("unexpected notice after disconnect: {code}"),
+        Err(_) => panic!("notice stream did not end within 5s"),
+    }
 }

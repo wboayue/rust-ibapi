@@ -1035,6 +1035,12 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let mut order_update_stream = self.order_update_stream.write().await;
 
+        // `request_shutdown` sets the flag before emptying this slot under the
+        // same lock, so no stream can register past shutdown.
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
+        }
+
         // A registration with no receivers is a dropped stream whose cleanup
         // signal has not been processed yet (see `remove_if_dead`); replace it
         // rather than refusing, so drop-then-recreate never races the cleanup task.
