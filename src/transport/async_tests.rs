@@ -305,6 +305,21 @@ async fn test_notice_stream_ends_on_request_shutdown_sync() {
     assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
 }
 
+/// `Client::drop` only calls `request_shutdown_sync`; the dispatcher must
+/// finish the shutdown on exit, or a live order-update stream (whose
+/// subscription holds the bus) never ends.
+#[tokio::test]
+async fn test_order_update_stream_ends_on_request_shutdown_sync() {
+    let (_, bus) = make_bus();
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+
+    bus.request_shutdown_sync();
+
+    let drained = tokio::time::timeout(Duration::from_millis(500), async { while updates.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order-update stream did not end");
+}
+
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]

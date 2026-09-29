@@ -195,3 +195,21 @@ async fn notice_stream_after_disconnect_is_ended() {
         Err(_) => panic!("notice stream did not end within 5s"),
     }
 }
+
+/// Issue #871: dropping the client ends a live `order_update_stream`. Drop
+/// only flags shutdown; the dispatcher must finish it on exit.
+#[tokio::test]
+async fn order_update_stream_ends_on_client_drop() {
+    use futures::StreamExt;
+
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
+
+    drop(client);
+
+    let drained = tokio::time::timeout(Duration::from_secs(5), async { while updates.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order_update_stream did not end within 5s of client drop");
+}

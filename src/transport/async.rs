@@ -541,7 +541,6 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                     }
                                     Err(e) => {
                                         error!("Failed to reconnect to TWS/Gateway: {e:?}");
-                                        message_bus.request_shutdown().await;
                                         break;
                                     }
                                 }
@@ -553,13 +552,19 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                             }
                             Err(err) => {
                                 error!("Error processing message (shutting down): {err:?}");
-                                message_bus.request_shutdown().await;
                                 break;
                             }
                         }
                     }
                 }
             }
+
+            // Every exit ends the session, so every exit clears the channels.
+            // `Client::drop` only sets the flag (`request_shutdown_sync` cannot
+            // take the async locks), and a live subscription holds the bus, so
+            // without this its sender would never drop. Idempotent when the
+            // exit path already ran it.
+            message_bus.request_shutdown().await;
         });
 
         // Store the task handle

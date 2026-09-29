@@ -1330,10 +1330,10 @@ fn test_notice_subscribe_after_shutdown_is_closed() {
     let (_, bus) = make_bus();
     bus.ensure_shutdown();
 
-    let notices = bus.notice_subscribe();
-    assert!(notices.next_timeout(TICK).is_none());
+    let notices = bus.connection.notice_broadcaster.subscribe();
     bus.connection.notice_broadcaster.broadcast(Notice::synthesized(-1, "late".into()));
-    assert!(notices.next_timeout(TICK).is_none(), "closed broadcaster must not deliver");
+    let got = notices.recv_timeout(TICK);
+    assert!(matches!(got, Err(crossbeam::channel::RecvTimeoutError::Disconnected)), "{got:?}");
 }
 
 /// Warning code (2104) bound to a real request_id is delivered as a
