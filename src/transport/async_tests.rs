@@ -272,6 +272,39 @@ async fn test_create_order_update_subscription_after_shutdown_fails() {
     assert!(bus.order_update_stream.read().await.is_none());
 }
 
+/// Shutdown ends a live notice stream, and one opened afterwards is already
+/// ended. Before, the connection kept the only sender alive and both waited
+/// forever (#871).
+#[tokio::test]
+async fn test_notice_stream_ends_on_shutdown() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    let mut live = mb.notice_subscribe();
+
+    mb.ensure_shutdown().await;
+
+    let ended = tokio::time::timeout(Duration::from_millis(500), live.next()).await;
+    assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
+
+    let mut late = mb.notice_subscribe();
+    bus.connection.notice_broadcaster.broadcast(Notice::synthesized(-1, "late".into()));
+    let ended = tokio::time::timeout(Duration::from_millis(500), late.next()).await;
+    assert!(matches!(ended, Ok(None)), "late stream: {ended:?}");
+}
+
+/// `request_shutdown_sync` (the `Drop` path) ends notice streams too.
+#[tokio::test]
+async fn test_notice_stream_ends_on_request_shutdown_sync() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    let mut live = mb.notice_subscribe();
+
+    mb.request_shutdown_sync();
+
+    let ended = tokio::time::timeout(Duration::from_millis(500), live.next()).await;
+    assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
+}
+
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]
@@ -1544,7 +1577,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
-    let mut notices = bus.connection.notice_sender.subscribe();
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
 
     bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
 

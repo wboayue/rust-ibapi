@@ -30,7 +30,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame};
@@ -46,6 +46,44 @@ use super::{RoutedItem, SharedCounts, SharedTicket};
 /// more than the capacity, the channel evicts the oldest frames and a data
 /// subscription receives a `SUBSCRIPTION_LAG_CODE` notice naming the count.
 pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
+
+/// Fan-out for unrouted notices, the async counterpart of the sync
+/// `NoticeBroadcaster`. It holds the only `broadcast::Sender`, so `close`
+/// ends every `NoticeStream`, including one pre-bound by the builder.
+#[derive(Debug)]
+pub(crate) struct NoticeBroadcaster {
+    /// `None` once closed.
+    sender: std::sync::Mutex<Option<broadcast::Sender<Notice>>>,
+}
+
+impl NoticeBroadcaster {
+    pub(crate) fn new(sender: broadcast::Sender<Notice>) -> Self {
+        Self {
+            sender: std::sync::Mutex::new(Some(sender)),
+        }
+    }
+
+    /// After `close`, the returned receiver is already at end-of-stream,
+    /// like the ones `close` ended.
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<Notice> {
+        match self.sender.lock().unwrap().as_ref() {
+            Some(sender) => sender.subscribe(),
+            None => broadcast::channel(1).1,
+        }
+    }
+
+    pub(crate) fn broadcast(&self, notice: Notice) {
+        if let Some(sender) = self.sender.lock().unwrap().as_ref() {
+            let _ = sender.send(notice);
+        }
+    }
+
+    /// Drop the sender so existing receivers see channel-closed, and end
+    /// every later subscription on arrival.
+    pub(crate) fn close(&self) {
+        *self.sender.lock().unwrap() = None;
+    }
+}
 
 /// Cleanup signal for removing channels when subscriptions are dropped
 #[derive(Debug, Clone)]
@@ -492,7 +530,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         // Published after the session is live so a consumer
                                         // that resubscribes on it lands on the new session,
                                         // into maps the reset above can no longer wipe.
-                                        let _ = message_bus.connection.notice_sender.send(transport_reconnect_notice());
+                                        message_bus.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
                                     }
                                     // Shutdown was requested while reconnecting:
                                     // not a failure, and the flag is already
@@ -650,6 +688,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             let mut order_update_stream = self.order_update_stream.write().await;
             *order_update_stream = None;
         }
+
+        self.connection.notice_broadcaster.close();
     }
 
     /// Route error message using routing decision
@@ -662,11 +702,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
                 super::common::log_notice(&notice);
-                let _ = self.connection.notice_sender.send(notice);
+                self.connection.notice_broadcaster.broadcast(notice);
             }
             ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
                 super::common::log_notice(&notice);
-                let _ = self.connection.notice_sender.send(notice);
+                self.connection.notice_broadcaster.broadcast(notice);
                 self.fail_one_shot_channels(error).await;
             }
             ErrorDisposition::Route(request_id, item) => {
@@ -861,7 +901,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         } else {
             // Nothing claimed the frame. Silent until now, which is why a
             // desynchronized stream looked identical to an idle one.
-            report_unroutable_frame(&message, &self.connection.notice_sender);
+            report_unroutable_frame(&message, &self.connection.notice_broadcaster);
         }
 
         Ok(())
@@ -1060,7 +1100,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {
-        crate::subscriptions::notice_stream::async_impl::NoticeStream::new(self.connection.notice_sender.subscribe())
+        crate::subscriptions::notice_stream::async_impl::NoticeStream::new(self.connection.notice_broadcaster.subscribe())
     }
 
     async fn ensure_shutdown(&self) {
@@ -1086,9 +1126,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
-        // Both latching and runtime-free: safe from `Drop`.
+        // All three runtime-free: safe from `Drop`.
         self.connection_state.shutdown();
         self.shutdown.request();
+        self.connection.notice_broadcaster.close();
     }
 
     async fn wait_connected(&self) -> Result<(), Error> {

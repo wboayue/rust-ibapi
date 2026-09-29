@@ -14,7 +14,7 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, ShutdownSignal};
+use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, NoticeBroadcaster, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -33,9 +33,9 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Fires on initial handshake *and* every auto-reconnect handshake.
     startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// Fan-out for unrouted notices. Shared with the bus (the bus reads via
-    /// `self.connection.notice_sender`) and any pre-bound `NoticeStream` the
+    /// `self.connection.notice_broadcaster`) and any pre-bound `NoticeStream` the
     /// user obtained from `ClientBuilder::connect_with_notice_stream`.
-    pub(crate) notice_sender: broadcast::Sender<Notice>,
+    pub(crate) notice_broadcaster: NoticeBroadcaster,
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
     max_reconnect_attempts: Option<u32>,
@@ -94,7 +94,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
             startup_callback,
-            notice_sender,
+            notice_broadcaster: NoticeBroadcaster::new(notice_sender),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             shutdown: Arc::new(ShutdownSignal::default()),
         }
@@ -126,7 +126,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     fn handshake_context(&self) -> StartupHandshakeContext<'_> {
         StartupHandshakeContext {
             startup: self.startup_callback.as_deref(),
-            notice_sink: &self.notice_sender,
+            notice_sink: &self.notice_broadcaster,
         }
     }
 

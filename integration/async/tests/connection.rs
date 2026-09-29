@@ -161,3 +161,37 @@ async fn order_update_stream_after_disconnect_fails() {
         other => panic!("expected Err(Shutdown), got: {:?}", other.map(|_| "stream")),
     }
 }
+
+/// A live `notice_stream` ends on `disconnect()`, as it does on the blocking
+/// client. A reader must not wait forever on a client that is gone.
+#[tokio::test]
+async fn notice_stream_ends_on_disconnect() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let mut notices = client.notice_stream().expect("notice_stream failed");
+
+    client.disconnect().await;
+
+    let drained = tokio::time::timeout(Duration::from_secs(5), async { while notices.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "notice_stream did not end within 5s of disconnect");
+}
+
+/// Issue #871: a notice stream opened after `disconnect()` is already ended,
+/// like the streams the disconnect closed.
+#[tokio::test]
+async fn notice_stream_after_disconnect_is_ended() {
+    let client_id = ClientId::get();
+
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    client.disconnect().await;
+
+    let mut notices = client.notice_stream().expect("notice_stream failed");
+    match tokio::time::timeout(Duration::from_secs(5), notices.next()).await {
+        Ok(None) => {}
+        Ok(Some(n)) => panic!("unexpected notice after disconnect: {n:?}"),
+        Err(_) => panic!("notice stream did not end within 5s"),
+    }
+}
