@@ -1297,6 +1297,45 @@ fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
     Ok(())
 }
 
+/// Shutdown ends a live order-update stream with `Error::Shutdown` and frees
+/// the slot. Before #871 the stream got nothing and blocked forever.
+#[test]
+fn test_order_update_stream_ends_on_shutdown() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let updates = bus.create_order_update_subscription()?;
+
+    bus.ensure_shutdown();
+
+    let item = updates.next_timeout_routed(TICK);
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Shutdown))), "got: {item:?}");
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "slot should be released");
+    Ok(())
+}
+
+/// After shutdown, a new order-update stream is refused rather than
+/// returned as a stream nothing will ever end (#871).
+#[test]
+fn test_create_order_update_subscription_after_shutdown_fails() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let err = bus.create_order_update_subscription().expect_err("subscribe after shutdown");
+    assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+}
+
+/// A notice stream opened after shutdown is already at end-of-stream, like
+/// the streams shutdown closed (#871).
+#[test]
+fn test_notice_subscribe_after_shutdown_is_closed() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let notices = bus.connection.notice_broadcaster.subscribe();
+    bus.connection.notice_broadcaster.broadcast(Notice::synthesized(-1, "late".into()));
+    let got = notices.recv_timeout(TICK);
+    assert!(matches!(got, Err(crossbeam::channel::RecvTimeoutError::Disconnected)), "{got:?}");
+}
+
 /// Warning code (2104) bound to a real request_id is delivered as a
 /// `RoutedItem::Notice` to the owning subscription — stream stays open.
 #[test]

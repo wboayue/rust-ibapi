@@ -100,9 +100,9 @@ impl NoticeSink for crate::transport::sync::NoticeBroadcaster {
 }
 
 #[cfg(feature = "async")]
-impl NoticeSink for tokio::sync::broadcast::Sender<Notice> {
+impl NoticeSink for crate::transport::r#async::NoticeBroadcaster {
     fn deliver(&self, notice: Notice) {
-        let _ = self.send(notice);
+        self.broadcast(notice);
     }
 }
 
