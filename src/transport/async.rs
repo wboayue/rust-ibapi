@@ -993,6 +993,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             channels.insert(request_id, route);
         }
 
+        // Owned before the write: a caller that drops this future while the
+        // write is pending (a timeout, a `select!`) drops the subscription with
+        // it, and its cleanup signal releases the registration. Code after the
+        // `await` never runs in that case.
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id));
+        let subscription = match reads {
+            Some(reads) => subscription.counting_reads(reads),
+            None => subscription,
+        };
+
         // The gate can close between `ensure_connected` and the write, so take
         // the registration back out on failure rather than leave a channel no
         // reset will clear. `same_channel` so a newer registration under the
@@ -1008,11 +1018,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             return Err(e);
         }
 
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id));
-        Ok(match reads {
-            Some(reads) => subscription.counting_reads(reads),
-            None => subscription,
-        })
+        Ok(subscription)
     }
 
     /// Store execution_id -> sender mapping for commission report routing
@@ -1130,7 +1136,9 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             channels.insert(order_id, sender.clone());
         }
 
-        // See `send_request`: a failed write takes its registration with it.
+        // See `send_request`: owned before the write, so an abandoned write
+        // releases its registration too; a failed write takes it with it.
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Order(order_id));
         if let Err(e) = self.write_message(&message).await {
             let mut channels = self.order_channels.write().await;
             if channels.get(&order_id).is_some_and(|registered| registered.same_channel(&sender)) {
@@ -1139,11 +1147,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             return Err(e);
         }
 
-        Ok(AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Order(order_id),
-        ))
+        Ok(subscription)
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
@@ -1283,3 +1287,7 @@ pub(crate) mod test_listener;
 #[cfg(test)]
 #[path = "async_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "async_submission_tests.rs"]
+mod submission_tests;

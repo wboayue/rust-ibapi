@@ -375,6 +375,40 @@ async fn test_shutdown_frame_ends_subscriptions_with_executions() {
     assert!(bus.execution_channels.read().await.is_empty());
 }
 
+/// An order-update stream dropped while its cleanup signal is still queued
+/// leaves a sender with no receivers behind. An order frame arriving in that
+/// window fails the order-update send, and routing carries on: the frame still
+/// reaches the order's own subscription.
+#[tokio::test]
+async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_cleanup() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(22, vec![]).await.unwrap();
+    let updates = bus.create_order_update_subscription().await.unwrap();
+
+    // Hold the FIFO cleanup task on a map this routing path does not touch,
+    // so the stream's cleanup signal cannot run before the frame is routed.
+    let cleanup_gate = bus.request_channels.write().await;
+    bus.cleanup_sender.send(CleanupSignal::Request(987_654)).unwrap();
+    drop(updates);
+    assert!(bus.order_update_stream.read().await.is_some(), "the dropped stream is still registered");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(22),
+            status: Some("Filled".into()),
+            ..Default::default()
+        },
+    ));
+    tokio::time::timeout(Duration::from_millis(500), bus.read_and_route_message())
+        .await
+        .expect("routing blocked")
+        .unwrap();
+
+    assert_eq!(next_message(&mut order).await.order_id(), Some(22));
+    drop(cleanup_gate);
+}
+
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]
@@ -1524,7 +1558,7 @@ async fn test_warning_with_orphan_request_id_logs() {
 /// until the cleanup task has processed it. Signals are processed FIFO by a
 /// single task, so once the marker's registration is gone, every signal sent
 /// before it has been handled too.
-async fn drain_cleanup_signals(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) {
+pub(super) async fn drain_cleanup_signals<S: AsyncStream>(bus: &Arc<AsyncTcpMessageBus<S>>) {
     const MARKER_REQUEST_ID: i32 = 987_654;
     let marker = bus.send_request(MARKER_REQUEST_ID, vec![]).await.unwrap();
     drop(marker);
