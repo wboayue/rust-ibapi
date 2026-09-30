@@ -679,6 +679,15 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             channels.clear();
         }
 
+        // Each execution id maps to a clone of the order or request sender
+        // that received it, so its commission report can follow
+        // (`store_execution_mapping`). A clone left here keeps that channel
+        // open past shutdown; sync's shutdown clears its map as well.
+        {
+            let mut channels = self.execution_channels.write().await;
+            channels.clear();
+        }
+
         {
             let mut channels = self.shared_channel_senders.write().await;
             channels.clear();
