@@ -99,6 +99,51 @@ impl Client {
         .or_else(empty_on_end_of_stream)
     }
 
+    /// Prepare bounded contract-details enumeration without I/O or retries.
+    /// See [`ContractQuery`] for an end-to-end example and retirement contract.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # fn prepare(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::{Contract, QueryLimits};
+    /// let query = client.prepare_contract_details(&Contract::stock("SYNTH").build(), QueryLimits::default())?;
+    /// println!("prepared request {}", query.request_id());
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare_contract_details(
+        &self,
+        contract: &Contract,
+        limits: QueryLimits,
+    ) -> Result<enumeration::async_impl::ContractQuery<'_, ContractDetails>, Error> {
+        verify::verify_contract(self.server_version(), contract)?;
+        enumeration::async_impl::ContractQuery::prepare(self, enumeration::details_plan(self.next_request_id(), contract, limits)?)
+    }
+
+    /// Prepare one bounded symbol-samples response without I/O or retries.
+    /// Limits apply to native descriptions before caller filtering, and before
+    /// prost allocates their arrays. An empty frame differs from interruption.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn example(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// let mut query = client.prepare_matching_symbols("AAP", ibapi::contracts::QueryLimits::default())?;
+    /// query.start().await?;
+    /// while let Some(item) = query.next().await? { println!("{item:?}"); }
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare_matching_symbols(
+        &self,
+        pattern: &str,
+        limits: QueryLimits,
+    ) -> Result<enumeration::async_impl::ContractQuery<'_, Vec<ContractDescription>>, Error> {
+        check_version(self.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
+        enumeration::async_impl::ContractQuery::prepare(self, enumeration::symbols_plan(self.next_request_id(), pattern, limits)?)
+    }
+
     /// Requests details about a given market rule.
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.

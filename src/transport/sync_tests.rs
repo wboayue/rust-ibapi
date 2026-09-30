@@ -780,7 +780,7 @@ fn body(text: &str) -> Vec<u8> {
 /// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
 /// binary-text-payload frames from `body()` inputs.
-fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
+pub(super) fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -2876,4 +2876,31 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
     let message = update_sub.next_timeout(TICK).expect("update stream got no message").unwrap();
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
     assert!(order_sub.next_timeout(TICK).is_none());
+}
+
+/// `TcpSocket::reconnect` dials the same address again and moves reads and
+/// writes onto the new stream: after it, a write lands on the second
+/// connection and a read comes from it. A dial that fails is an error.
+#[test]
+fn test_tcp_socket_reconnect_moves_io_to_the_new_stream() {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let socket = TcpSocket::connect(&address, true).unwrap();
+    let (_first, _) = listener.accept().unwrap();
+
+    socket.reconnect().unwrap();
+    let (mut second, _) = listener.accept().unwrap();
+
+    socket.write_all(b"after").unwrap();
+    let mut written = [0u8; 5];
+    second.read_exact(&mut written).unwrap();
+    assert_eq!(&written, b"after");
+
+    second.write_all(&encode_raw_length(b"hello")).unwrap();
+    assert_eq!(socket.read_message().unwrap(), b"hello");
+
+    socket.shutdown_read().unwrap();
+    drop(listener);
+    assert!(socket.reconnect().is_err(), "nothing listens on the address any more");
 }

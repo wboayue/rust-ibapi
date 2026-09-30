@@ -3,6 +3,8 @@
 // Common utilities
 pub(crate) mod common;
 
+pub(crate) mod bounded;
+
 #[cfg(feature = "sync")]
 use std::time::Duration;
 
@@ -142,6 +144,15 @@ impl SharedCounts {
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
+    /// Write a bounded query's request; a failed write retires the session.
+    fn send_bounded(&self, packet: &[u8]) -> Result<(), Error>;
+    /// Register an owned, bounded inbox for `request_id` before any I/O.
+    fn register_bounded(&self, request_id: i32, spec: bounded::RequestSpec) -> Result<bounded::BoundedRead, Error>;
+
+    fn request_shutdown_sync(&self) {
+        self.ensure_shutdown();
+    }
+
     fn send_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;

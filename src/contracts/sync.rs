@@ -179,6 +179,51 @@ impl Client {
         .or_else(empty_on_end_of_stream)
     }
 
+    /// Prepare bounded contract-details enumeration without I/O or retries.
+    /// See [`ContractQuery`] for an end-to-end example and retirement contract.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "sync")]
+    /// # fn prepare(client: &ibapi::client::blocking::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::{Contract, QueryLimits};
+    /// let query = client.prepare_contract_details(&Contract::stock("SYNTH").build(), QueryLimits::default())?;
+    /// println!("prepared request {}", query.request_id());
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare_contract_details(
+        &self,
+        contract: &Contract,
+        limits: QueryLimits,
+    ) -> Result<enumeration::sync_impl::ContractQuery<'_, ContractDetails>, Error> {
+        verify::verify_contract(self.server_version(), contract)?;
+        enumeration::sync_impl::ContractQuery::prepare(self, enumeration::details_plan(self.next_request_id(), contract, limits)?)
+    }
+
+    /// Prepare one bounded symbol-samples response without I/O or retries.
+    /// Native rows/metadata are budgeted before domain allocations/filtering.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "sync")]
+    /// # fn example(client: &ibapi::client::blocking::Client) -> Result<(), ibapi::Error> {
+    /// let mut query = client.prepare_matching_symbols("AAP", ibapi::contracts::QueryLimits::default())?;
+    /// query.start()?;
+    /// let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    /// while let Some(item) = query.next_until(deadline)? { println!("{item:?}"); }
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare_matching_symbols(
+        &self,
+        pattern: &str,
+        limits: QueryLimits,
+    ) -> Result<enumeration::sync_impl::ContractQuery<'_, Vec<ContractDescription>>, Error> {
+        check_version(self.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
+        enumeration::sync_impl::ContractQuery::prepare(self, enumeration::symbols_plan(self.next_request_id(), pattern, limits)?)
+    }
+
     /// Calculates an option's price based on the provided volatility and its underlying's price.
     ///
     /// # Arguments

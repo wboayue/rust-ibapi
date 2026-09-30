@@ -38,6 +38,7 @@ pub mod blocking {
     pub use super::sync::Client;
     pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
     pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
+    pub use crate::contracts::enumeration::sync_impl::ContractQuery;
     pub use crate::subscriptions::notice_stream::sync_impl::{NoticeStream, NoticeStreamIter};
     pub use crate::subscriptions::sync::{Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 }

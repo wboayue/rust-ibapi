@@ -47,6 +47,12 @@ The ten sites where "TWS sent nothing" is a legitimate empty answer chain
 A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
 `request_helpers` so that hand-rolling one is not reachable from a domain module.
 
+An owned, bounded query (`contracts::ContractQuery`, from `prepare_contract_details`,
+`prepare_matching_symbols` or `option_chain(..).prepare`) is not a one-shot and does not go
+through these helpers. Its caller holds the request id before any I/O and owns admission and
+pacing, so `start()` writes exactly once by design; a retry is a new query with a fresh id.
+See [bounded contract queries](../../bounded-contract-queries.md).
+
 Do not reach for `expect_proto` inside `impl StreamDecoder::decode`; see
 [proto-only decoding](proto-only-decoding.md) for what that surface owes instead.
 

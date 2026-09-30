@@ -18,7 +18,9 @@ use crate::ToField;
 // Re-export builder and contract types
 pub use builders::*;
 pub use common::contract_builder::ContractBuilder;
+pub use enumeration::{ContractQuery, QueryDisposition, QueryLimits};
 pub use option_chain_builder::OptionChainBuilder;
+pub mod enumeration;
 pub use types::*;
 
 // Common implementation modules

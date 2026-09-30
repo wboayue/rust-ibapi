@@ -22,6 +22,7 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - [**Architecture Overview**](docs/architecture.md) - System design, components, and module organization
 - [**Feature Flags**](docs/feature-flags.md) - Sync vs async modes and feature guards
 - [**API Patterns**](docs/api-patterns.md) - Builder patterns, protocol versions, and common patterns
+- [**Bounded Contract Queries**](docs/bounded-contract-queries.md) - Owned, limited contract-details / symbol / option-chain queries and their retirement contract
 
 ### Development
 - [**Rule Nodes**](docs/rules/README.md) - Project conventions as linked nodes; indexed below under [Rule index](#rule-index)

@@ -195,6 +195,19 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
+    // The stub routes no responses to an owned inbox, so it offers no
+    // bounded queries; tests of those drive a `MemoryStream`-backed bus.
+    fn send_bounded(&self, _packet: &[u8]) -> Result<(), Error> {
+        Err(Error::NotImplemented)
+    }
+    fn register_bounded(
+        &self,
+        _request_id: i32,
+        _spec: crate::transport::bounded::RequestSpec,
+    ) -> Result<crate::transport::bounded::BoundedRead, Error> {
+        Err(Error::NotImplemented)
+    }
+
     fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
     }
@@ -306,6 +319,18 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
 #[cfg(feature = "async")]
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
+    // See the blocking impl: no bounded queries on the stub.
+    async fn send_bounded(&self, _message: Vec<u8>) -> Result<(), Error> {
+        Err(Error::NotImplemented)
+    }
+    fn register_bounded(
+        &self,
+        _request_id: i32,
+        _spec: crate::transport::bounded::RequestSpec,
+    ) -> Result<crate::transport::bounded::BoundedRead, Error> {
+        Err(Error::NotImplemented)
+    }
+
     async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         Ok(self.seeded_subscription(message))
     }

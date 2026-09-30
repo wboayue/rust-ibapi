@@ -16,7 +16,7 @@ use crate::Error;
 
 /// Builder for an underlying's option chain: one [`OptionChain`] per exchange the
 /// options trade on.
-#[must_use = "OptionChainBuilder does nothing until you call .subscribe()"]
+#[must_use = "OptionChainBuilder does nothing until .subscribe() or .prepare(limits)"]
 pub struct OptionChainBuilder<'a, C> {
     client: &'a C,
     symbol: &'a str,
@@ -50,6 +50,29 @@ impl<'a, C> OptionChainBuilder<'a, C> {
 
 #[cfg(feature = "sync")]
 impl<'a> OptionChainBuilder<'a, crate::client::sync::Client> {
+    /// Prepare an owned, bounded parameter enumeration without writing.
+    /// Stock underlyings must leave `exchange` unset. No Cartesian expansion
+    /// or retry occurs. See the returned query's retirement contract.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "sync")]
+    /// # fn example(client: &ibapi::client::blocking::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::{QueryLimits, SecurityType};
+    /// let mut query = client.option_chain("AAPL", SecurityType::Stock, 265598).prepare(QueryLimits::default())?;
+    /// query.start()?;
+    /// let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    /// while let Some(item) = query.next_until(deadline)? { println!("{item:?}"); }
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare(self, limits: super::QueryLimits) -> Result<super::enumeration::sync_impl::ContractQuery<'a, OptionChain>, Error> {
+        crate::protocol::check_version(self.client.server_version(), crate::protocol::Features::SEC_DEF_OPT_PARAMS_REQ)?;
+        let id = self.client.next_request_id();
+        let packet = super::common::encoders::encode_request_option_chain(id, self.symbol, self.exchange, self.security_type, self.contract_id)?;
+        super::enumeration::sync_impl::ContractQuery::prepare(self.client, super::enumeration::chain_plan(id, packet, limits)?)
+    }
+
     /// Submit the request and return a subscription yielding one [`OptionChain`]
     /// per exchange. The subscription ends when TWS has sent every exchange.
     ///
@@ -86,6 +109,28 @@ impl<'a> OptionChainBuilder<'a, crate::client::sync::Client> {
 
 #[cfg(feature = "async")]
 impl<'a> OptionChainBuilder<'a, crate::client::r#async::Client> {
+    /// Prepare an owned, bounded parameter enumeration without writing.
+    /// Stock underlyings must leave `exchange` unset. No Cartesian expansion
+    /// or retry occurs. See the returned query's retirement contract.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn example(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::{QueryLimits, SecurityType};
+    /// let mut query = client.option_chain("AAPL", SecurityType::Stock, 265598).prepare(QueryLimits::default())?;
+    /// query.start().await?;
+    /// while let Some(item) = query.next().await? { println!("{item:?}"); }
+    /// # Ok(()) }
+    /// ```
+    pub fn prepare(self, limits: super::QueryLimits) -> Result<super::enumeration::async_impl::ContractQuery<'a, OptionChain>, Error> {
+        crate::protocol::check_version(self.client.server_version(), crate::protocol::Features::SEC_DEF_OPT_PARAMS_REQ)?;
+        let id = self.client.next_request_id();
+        let packet = super::common::encoders::encode_request_option_chain(id, self.symbol, self.exchange, self.security_type, self.contract_id)?;
+        super::enumeration::async_impl::ContractQuery::prepare(self.client, super::enumeration::chain_plan(id, packet, limits)?)
+    }
+
     /// Submit the request and return a subscription yielding one [`OptionChain`]
     /// per exchange. The subscription ends when TWS has sent every exchange.
     ///

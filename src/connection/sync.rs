@@ -37,6 +37,7 @@ pub struct Connection<S: Stream> {
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`Connection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
+    write_turn: Mutex<()>,
 }
 
 impl<S: Stream> std::fmt::Debug for Connection<S> {
@@ -95,6 +96,7 @@ impl<S: Stream> Connection<S> {
             startup_callback,
             notice_broadcaster,
             shutdown: Arc::new(ShutdownSignal::default()),
+            write_turn: Mutex::new(()),
         }
     }
 
@@ -222,8 +224,25 @@ impl<S: Stream> Connection<S> {
     /// Write raw bytes with a length prefix
     pub(crate) fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        self.socket.write_all(&packet)?;
-        Ok(())
+        self.write_packet(&packet, false)
+    }
+
+    pub(crate) fn write_bounded(&self, data: &[u8]) -> Result<(), Error> {
+        self.recorder.record_request(data);
+        self.write_packet(&encode_raw_length(data), true)
+    }
+
+    fn write_packet(&self, packet: &[u8], retire_uncertain: bool) -> Result<(), Error> {
+        let _turn = self.write_turn.lock()?;
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
+        }
+        let result = self.socket.write_all(packet);
+        if retire_uncertain && result.is_err() {
+            // Latch before releasing the turn to a queued writer.
+            self.shutdown.request();
+        }
+        result
     }
 
     // sends server handshake
@@ -231,7 +250,7 @@ impl<S: Stream> Connection<S> {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        self.socket.write_all(&handshake)?;
+        self.write_packet(&handshake, false)?;
 
         // Read handshake response as raw text, bypassing parse_raw_message
         // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
@@ -327,6 +346,7 @@ impl<S: Stream> Connection<S> {
             startup_callback: None,
             notice_broadcaster: Arc::new(NoticeBroadcaster::new()),
             shutdown: Arc::new(ShutdownSignal::default()),
+            write_turn: Mutex::new(()),
         }
     }
 

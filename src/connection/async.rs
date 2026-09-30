@@ -19,6 +19,19 @@ use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
 
+struct WriteGuard<'a> {
+    shutdown: &'a ShutdownSignal,
+    armed: bool,
+}
+
+impl Drop for WriteGuard<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            self.shutdown.request();
+        }
+    }
+}
+
 /// Asynchronous connection to TWS, generic over the underlying `AsyncStream`.
 /// The default `AsyncTcpSocket` is the production wiring; tests can substitute
 /// an in-memory stream to drive the bus deterministically.
@@ -42,6 +55,8 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
+    /// Serialize the shutdown check with every write, including handshakes.
+    write_turn: Mutex<()>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -97,6 +112,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             notice_broadcaster: NoticeBroadcaster::new(notice_sender),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             shutdown: Arc::new(ShutdownSignal::default()),
+            write_turn: Mutex::new(()),
         }
     }
 
@@ -238,7 +254,27 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// Write raw bytes with a length prefix
     pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        self.socket.write_all(&packet).await?;
+        self.write_packet(&packet, false).await
+    }
+
+    /// Opt-in uncertain-write retirement. The guard drops before the write
+    /// turn is released: a queued writer cannot append to a partial frame.
+    pub(crate) async fn write_bounded(&self, data: &[u8]) -> Result<(), Error> {
+        self.recorder.record_request(data);
+        self.write_packet(&encode_raw_length(data), true).await
+    }
+
+    async fn write_packet(&self, packet: &[u8], retire_uncertain: bool) -> Result<(), Error> {
+        let _turn = self.write_turn.lock().await;
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
+        }
+        let mut guard = WriteGuard {
+            shutdown: &self.shutdown,
+            armed: retire_uncertain,
+        };
+        self.socket.write_all(packet).await?;
+        guard.armed = false;
         Ok(())
     }
 
@@ -247,7 +283,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        self.socket.write_all(&handshake).await?;
+        self.write_packet(&handshake, false).await?;
 
         // Read handshake response as raw text, bypassing parse_raw_message
         // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).

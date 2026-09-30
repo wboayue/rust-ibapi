@@ -97,6 +97,11 @@ pub enum CleanupSignal {
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
+    /// Write a bounded query's request; a failed or abandoned write retires the session.
+    async fn send_bounded(&self, message: Vec<u8>) -> Result<(), Error>;
+    /// Register an owned, bounded inbox for `request_id` before any I/O.
+    fn register_bounded(&self, request_id: i32, spec: super::bounded::RequestSpec) -> Result<super::bounded::BoundedRead, Error>;
+
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
@@ -318,6 +323,9 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     connection: Arc<AsyncConnection<S>>,
     /// Maps request IDs to their response channels
     request_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
+    /// Owned, bounded request registrations (`contracts::ContractQuery`);
+    /// checked before `request_channels` when routing by request id.
+    bounded_requests: super::bounded::Registry,
     /// Maps IncomingMessages to broadcast senders (like sync does)
     shared_channel_senders: Arc<RwLock<HashMap<IncomingMessages, Vec<BroadcastSender>>>>,
     /// Maps OutgoingMessages to receivers for client subscription
@@ -395,6 +403,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
+            bounded_requests: super::bounded::Registry::default(),
             shared_channel_senders: Arc::new(RwLock::new(shared_channel_senders)),
             shared_channel_receivers: Arc::new(RwLock::new(shared_channel_receivers)),
             shared_counts: Mutex::new(SharedCounts::default()),
@@ -631,6 +640,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
 
+        self.bounded_requests.reset();
         for sender in self.request_channels.read().await.values() {
             let _ = sender.send(Error::ConnectionReset.into());
         }
@@ -664,6 +674,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // with `Error::Shutdown`, and the shutdown flag stops the dispatcher.
         self.connection_state.shutdown();
         self.shutdown.request();
+        self.bounded_requests.close();
 
         // Clear all channels - dropping the senders will close the channels
         // and cause all receivers to get RecvError::Closed. This diverges
@@ -699,7 +710,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Route error message using routing decision
     async fn route_error_message(&self, payload: DecodedError) -> Result<(), Error> {
-        let id_owned_by_data_request = self.request_channels.read().await.contains_key(&payload.request_id);
+        let id_owned_by_data_request =
+            self.bounded_requests.get(payload.request_id).is_some() || self.request_channels.read().await.contains_key(&payload.request_id);
         let sent_to_update_stream = match order_update_notice(&payload, id_owned_by_data_request) {
             Some(notice) => self.send_order_update_item(RoutedItem::Notice(notice)).await,
             None => false,
@@ -739,6 +751,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Tries the request-channel first, falls back to the order-channel for
     /// notices/errors that arrive bound to an order_id.
     async fn deliver_to_request_id(&self, request_id: i32, item: RoutedItem, sent_to_update_stream: bool) {
+        if let Some(inbox) = self.bounded_requests.get(request_id) {
+            inbox.push(item);
+            return;
+        }
         {
             let channels = self.request_channels.read().await;
             if let Some(sender) = channels.get(&request_id) {
@@ -760,6 +776,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Route message to request-specific channel
     async fn route_to_request_channel(&self, request_id: i32, message: ResponseMessage) -> Result<(), Error> {
+        if let Some(inbox) = self.bounded_requests.get(request_id) {
+            inbox.push(message.into());
+            return Ok(());
+        }
         let channels = self.request_channels.read().await;
         if let Some(sender) = channels.get(&request_id) {
             let _ = sender.send(message.into());
@@ -969,6 +989,20 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
+    /// A bounded query's write: through the send gate like every bus write,
+    /// then the connection's bounded path, which retires the session if the
+    /// write fails or is abandoned partway (see `AsyncConnection::write_bounded`).
+    async fn send_bounded(&self, message: Vec<u8>) -> Result<(), Error> {
+        self.ensure_connected()?;
+        self.connection.write_bounded(&message).await
+    }
+    fn register_bounded(&self, request_id: i32, spec: super::bounded::RequestSpec) -> Result<super::bounded::BoundedRead, Error> {
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
+        }
+        self.bounded_requests.register(request_id, spec)
+    }
+
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.ensure_connected()?;
 
@@ -1131,10 +1165,11 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
-        // All three runtime-free: safe from `Drop`.
+        // All four runtime-free: safe from `Drop`.
         self.connection_state.shutdown();
         self.shutdown.request();
         self.connection.notice_broadcaster.close();
+        self.bounded_requests.close();
     }
 
     async fn wait_connected(&self) -> Result<(), Error> {
@@ -1161,3 +1196,11 @@ pub(crate) mod test_listener;
 #[cfg(test)]
 #[path = "async_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "async_enumeration_tests.rs"]
+mod enumeration_tests;
+
+#[cfg(test)]
+#[path = "async_bounded_write_tests.rs"]
+mod bounded_write_tests;

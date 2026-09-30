@@ -116,6 +116,16 @@ pub enum Error {
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
 
+    /// A caller-selected response budget was exceeded. Previously observed
+    /// rows remain valid; this is not a broker rate limit or a wire end marker.
+    #[error("response {resource} limit exceeded ({limit})")]
+    ResponseLimitExceeded {
+        /// The bounded resource, such as frames, bytes or metadata entries.
+        resource: &'static str,
+        /// The configured maximum.
+        limit: usize,
+    },
+
     /// A frame arrived whose length prefix cannot describe a TWS message:
     /// shorter than the 4-byte message id, or larger than the 16 MiB ceiling
     /// (`0x00FFFFFF`) that the official client enforces as
@@ -307,6 +317,7 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::ResponseLimitExceeded { resource, limit } => Error::ResponseLimitExceeded { resource, limit: *limit },
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,

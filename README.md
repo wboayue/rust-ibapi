@@ -133,6 +133,8 @@ See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive doc
 
 For a complete list of contract attributes, explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html).
 
+To enumerate contract details, symbol matches or option-chain parameters with a request id known before any I/O, local row/byte limits and an explicit cancel and drain, see [Bounded Contract Queries](docs/bounded-contract-queries.md).
+
 ### Requesting Historical Market Data
 
 #### Sync Example

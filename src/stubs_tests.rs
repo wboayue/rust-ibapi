@@ -351,3 +351,40 @@ fn routed_items_classifies_dispatcher_intercepted_types() {
     assert!(matches!(&items[2], RoutedItem::Notice(n) if n.code == 2104), "got {:?}", items[2]);
     assert!(matches!(items[3], RoutedItem::Error(Error::Shutdown)), "got {:?}", items[3]);
 }
+
+/// The stub routes nothing to an owned inbox, so it refuses bounded queries
+/// rather than accept one it could never answer.
+#[cfg(feature = "sync")]
+#[test]
+fn stub_offers_no_bounded_queries() {
+    let stub = MessageBusStub::default();
+    let spec = crate::transport::bounded::RequestSpec {
+        data: crate::messages::IncomingMessages::SymbolSamples,
+        end: crate::messages::IncomingMessages::SymbolSamples,
+        limits: crate::transport::bounded::RawLimits {
+            frames: 1,
+            frame_bytes: 64,
+            total_bytes: 64,
+        },
+    };
+    assert!(matches!(MessageBus::register_bounded(&stub, 1, spec), Err(Error::NotImplemented)));
+    assert!(matches!(MessageBus::send_bounded(&stub, &[]), Err(Error::NotImplemented)));
+}
+
+/// See `stub_offers_no_bounded_queries`.
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_stub_offers_no_bounded_queries() {
+    let stub = MessageBusStub::default();
+    let spec = crate::transport::bounded::RequestSpec {
+        data: crate::messages::IncomingMessages::SymbolSamples,
+        end: crate::messages::IncomingMessages::SymbolSamples,
+        limits: crate::transport::bounded::RawLimits {
+            frames: 1,
+            frame_bytes: 64,
+            total_bytes: 64,
+        },
+    };
+    assert!(matches!(AsyncMessageBus::register_bounded(&stub, 1, spec), Err(Error::NotImplemented)));
+    assert!(matches!(AsyncMessageBus::send_bounded(&stub, vec![]).await, Err(Error::NotImplemented)));
+}

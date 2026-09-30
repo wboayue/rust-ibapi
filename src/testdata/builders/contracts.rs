@@ -795,3 +795,41 @@ pub fn smart_components() -> SmartComponentsResponse {
 pub fn option_chain() -> OptionChainResponse {
     OptionChainResponse::default()
 }
+
+/// Field-minimal native completion for contract-details fixtures.
+pub fn contract_data_end(request_id: i32) -> ContractDataEndResponse {
+    ContractDataEndResponse { request_id }
+}
+
+/// Field-minimal native completion for option-parameter fixtures.
+pub fn option_chain_end(request_id: i32) -> OptionChainEndResponse {
+    OptionChainEndResponse { request_id }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ContractDataEndResponse {
+    pub request_id: i32,
+}
+
+impl ResponseProtoEncoder for ContractDataEndResponse {
+    type Proto = proto::ContractDataEnd;
+    fn to_proto(&self) -> Self::Proto {
+        proto::ContractDataEnd {
+            req_id: Some(self.request_id),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OptionChainEndResponse {
+    pub request_id: i32,
+}
+
+impl ResponseProtoEncoder for OptionChainEndResponse {
+    type Proto = proto::SecDefOptParameterEnd;
+    fn to_proto(&self) -> Self::Proto {
+        proto::SecDefOptParameterEnd {
+            req_id: Some(self.request_id),
+        }
+    }
+}
