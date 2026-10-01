@@ -321,6 +321,60 @@ async fn test_order_update_stream_ends_on_request_shutdown_sync() {
     assert!(drained.is_ok(), "order-update stream did not end");
 }
 
+/// A `place_order` or `executions` subscription that has received an
+/// execution is also held in the execution-id map, so the commission report
+/// that follows can reach it. Shutdown must drop that alias too: a sender left
+/// there kept the channel open, and the subscription's reader waited forever
+/// after `Client::drop`.
+#[tokio::test]
+async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(7, vec![]).await.unwrap();
+    let mut executions = bus.send_request(99, vec![]).await.unwrap();
+
+    // Mapped by order id, and by request id where no order channel matches.
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_body(99, 0, "exec-request"));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+    for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
+        let message = next_message(sub).await;
+        assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData, "{name}");
+    }
+    assert_eq!(bus.execution_channels.read().await.len(), 2, "both executions mapped");
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.request_shutdown_sync();
+
+    for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
+        let drained = tokio::time::timeout(Duration::from_millis(500), async { while sub.next().await.is_some() {} }).await;
+        assert!(drained.is_ok(), "{name} subscription with an execution did not end");
+    }
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
+/// A frame with message id `-2` is `IncomingMessages::Shutdown`: the router
+/// shuts the bus down and the dispatcher exits. Like `Client::drop`, that path
+/// reaches `request_shutdown` with no reconnect reset before it, so it must
+/// drop execution-id aliases as well.
+#[tokio::test]
+async fn test_shutdown_frame_ends_subscriptions_with_executions() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+    let message = next_message(&mut order).await;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData);
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    stream.push_inbound((crate::messages::IncomingMessages::Shutdown as i32).to_be_bytes().to_vec());
+
+    let drained = tokio::time::timeout(Duration::from_millis(500), async { while order.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order subscription with an execution did not end");
+    assert!(!bus.is_connected());
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]

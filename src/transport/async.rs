@@ -776,6 +776,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             channels.clear();
         }
 
+        // Execution aliases hold sender clones; clear them or the channels stay open.
+        {
+            let mut channels = self.execution_channels.write().await;
+            channels.clear();
+        }
+
         {
             let mut channels = self.shared_channel_senders.write().await;
             channels.clear();
