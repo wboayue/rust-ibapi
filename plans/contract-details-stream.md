@@ -12,7 +12,7 @@ and the existing `Subscription` types instead of a parallel query API.
 | Local row bound | `.take(n)` on the iterator / stream, then drop |
 | Bounded memory for a stalled reader | `.buffer_limit(n)`: fails closed on overflow (part 3) |
 | Confirmed cleanup within a deadline | `Subscription::cancel_and_drain(deadline)` (part 4) |
-| Know how the request ended | `None` = native end; `Err(..)` = error / notice / reset |
+| Know how the request ended | `None` = end (native end marker, or a closed channel); `Err(..)` = error / notice / reset |
 | No hidden retry | `.subscribe()` sends once; `matching_symbols` retry documented (part 2) |
 
 Parts 1–2 ship first ([PR 1 plan](contract-details-stream-pr1.md)). Parts 3–4 are independent follow-up PRs, each a generic
@@ -311,7 +311,7 @@ Semantics:
 
 ## Open questions
 
-- **What TWS sends after `cancelContractData`: answered live (2026-10-01,
+- **What TWS sends after `cancelContractData`: answered live (2026-09-30,
   server 225).** SPY calls for 202611 (714 rows): after reading 3 rows and
   sending the cancel, TWS still sent the remaining 711 rows over about 1.1s,
   then `ContractDataEnd`. That's the same count and timing as with no cancel.
@@ -319,7 +319,7 @@ Semantics:
   marker does still arrive. For part 4, `cancel_and_drain` should normally
   return `Ended` after discarding the tail; `DeadlineElapsed` means a stalled
   request, not the normal case.
-- **Unfiltered query (all SPY options), read to the end, 2026-10-01.** TWS
+- **Unfiltered query (all SPY options), read to the end, 2026-09-30.** TWS
   produces it incrementally: first row at 8.4s, 4,340 rows by about 113s,
   then nothing for 60s (end marker not seen in that window). The gateway
   stayed healthy. Earlier, four such runs killed mid-stream within a few

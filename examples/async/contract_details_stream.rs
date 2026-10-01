@@ -20,13 +20,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
-    // SPY calls for one expiry month: a few hundred rows. Read the first few, then stop.
+    // SPY calls for one expiry month two months out: hundreds of rows. Read the first few, then stop.
     let contract = Contract {
         symbol: Symbol::from("SPY"),
         security_type: SecurityType::Option,
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "202611".into(),
+        last_trade_date_or_contract_month: contract_month_from_now(2),
         right: Some(OptionRight::Call),
         ..Default::default()
     };
@@ -51,4 +51,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// The contract month `months` ahead of the current UTC month, as `YYYYMM`.
+fn contract_month_from_now(months: i32) -> String {
+    let today = time::OffsetDateTime::now_utc();
+    let index = today.year() * 12 + (today.month() as i32 - 1) + months;
+    format!("{:04}{:02}", index / 12, index % 12 + 1)
 }

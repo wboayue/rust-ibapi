@@ -1,7 +1,7 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
 use serial_test::serial;
 
 #[test]
@@ -53,13 +53,13 @@ fn contract_details_stream_early_drop_leaves_client_usable() {
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
-    // SPY calls for one expiry month: far more rows than we read.
+    // SPY calls for one expiry month two months out: far more rows than we read.
     let broad = Contract {
         symbol: Symbol::from("SPY"),
         security_type: SecurityType::Option,
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "202611".into(),
+        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
         right: Some(OptionRight::Call),
         ..Default::default()
     };

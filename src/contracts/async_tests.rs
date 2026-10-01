@@ -748,3 +748,34 @@ async fn contract_details_stream_surfaces_no_definition_error() {
     assert_tws_error_message(err, 200, "No security definition found");
     assert!(subscription.next().await.is_none());
 }
+
+#[tokio::test]
+async fn contract_details_writes_no_cancel_after_end() {
+    let (client, message_bus) = stream_client(
+        vec![detail_row(1), contract_data_end(TEST_REQ_ID_FIRST)],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+
+    let details = client.contract_details(&Contract::stock("AAPL").build()).await.unwrap();
+
+    assert_eq!(details.len(), 1);
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert_eq!(request_message_count(&message_bus), 1, "only the request");
+}
+
+#[tokio::test]
+async fn contract_details_cancels_after_tws_error() {
+    // Like any subscription dropped after an error, the collector writes the
+    // native cancel; main's send_raw path wrote nothing.
+    let (client, message_bus) = stream_client(
+        vec![proto_error_response(TEST_REQ_ID_FIRST, 200, "No security definition found")],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+
+    let err = client.contract_details(&Contract::stock("INVALID").build()).await.unwrap_err();
+
+    assert_tws_error_message(err, 200, "No security definition found");
+    wait_for_requests(&message_bus, 2).await;
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(TEST_REQ_ID_FIRST));
+}

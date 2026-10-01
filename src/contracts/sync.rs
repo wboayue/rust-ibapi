@@ -49,14 +49,14 @@ impl Client {
         Ok(contract_details)
     }
 
-    /// Requests contract information as a stream: one [ContractDetails] per
-    /// matching contract.
+    /// Build a contract-details request whose subscription yields one
+    /// [ContractDetails] per matching contract.
     ///
     /// Use this over [Client::contract_details] to read rows as they arrive,
     /// stop reading early, or know the request id before anything is sent.
     /// Dropping the subscription before the end sends TWS's native cancel
     /// (server 215+); rows TWS sends after that are discarded.
-    /// Terminal: [ContractDetailsBuilder::subscribe].
+    /// Terminal: [`ContractDetailsBuilder::subscribe`].
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
@@ -312,9 +312,6 @@ impl Client {
     }
 }
 
-/// Request an underlying's option chain. Reached through
-/// [`OptionChainBuilder::subscribe`]; the flat arguments are the builder-fed
-/// param-budget exception.
 /// Send a contract-details request with a pre-allocated id. Reached through
 /// [`ContractDetailsBuilder::subscribe`].
 pub(in crate::contracts) fn contract_details_stream(
@@ -327,6 +324,9 @@ pub(in crate::contracts) fn contract_details_stream(
     client.request_with_id(request_id).send(packet)
 }
 
+/// Request an underlying's option chain. Reached through
+/// [`OptionChainBuilder::subscribe`]; the flat arguments are the builder-fed
+/// param-budget exception.
 pub(in crate::contracts) fn option_chain(
     client: &Client,
     symbol: &str,

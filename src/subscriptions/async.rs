@@ -364,7 +364,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
 
         let id = self.request_id.or(self.order_id);
-        let message = self.cancel_message(id);
+        let message = self.pending_cancel(id);
         if let Err(e) = send_cancel(&self.message_bus, id, self.shared, message).await {
             log_cancel_error("subscription", &e);
         }
@@ -375,7 +375,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 impl<T: StreamDecoder<T>> Subscription<T> {
     /// The cancel to write, if any. `None` once a request-id stream has seen
     /// its end marker: the cancel would name a request TWS already finished.
-    fn cancel_message(&self, id: Option<i32>) -> Option<Vec<u8>> {
+    fn pending_cancel(&self, id: Option<i32>) -> Option<Vec<u8>> {
         if self.request_id.is_some() && self.ended_natively.load(Ordering::Relaxed) {
             return None;
         }
@@ -427,7 +427,7 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
         // release, an id-routed one has nothing to do.
         let id = self.request_id.or(self.order_id);
         let shared = self.shared;
-        let message = self.cancel_message(id);
+        let message = self.pending_cancel(id);
         // Nothing to send and no count to release: nothing to spawn.
         if message.is_none() && shared.is_none() {
             return;

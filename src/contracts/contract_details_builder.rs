@@ -15,10 +15,10 @@ use crate::Error;
 /// which collects every row, the subscription can be read incrementally and
 /// dropped early, and its request id is known before the request is sent.
 ///
-/// Dropping it before the end sends TWS's native cancel (server 215+). The
-/// cancel is not guaranteed to stop delivery: observed live, TWS sends a
-/// result it has already prepared in full anyway. Rows arriving after the
-/// drop are discarded.
+/// Dropping the subscription before TWS's end marker has been read sends the
+/// native cancel (server 215+); dropping the builder sends nothing. The cancel
+/// is not guaranteed to stop delivery: observed live, TWS sends a result it has
+/// already prepared in full anyway. Rows arriving after the drop are discarded.
 #[must_use = "ContractDetailsBuilder does nothing until you call .subscribe()"]
 pub struct ContractDetailsBuilder<'a, C> {
     client: &'a C,

@@ -44,6 +44,14 @@ pub fn yyyymmdd_from_now(days: i64) -> String {
     format!("{:04}{:02}{:02}", date.year(), date.month() as u8, date.day())
 }
 
+/// The contract month `months` ahead of the current UTC month, as `YYYYMM`:
+/// an option expiry that stays in the future however long the test lives.
+pub fn yyyymm_months_from_now(months: i32) -> String {
+    let today = time::OffsetDateTime::now_utc();
+    let index = today.year() * 12 + (today.month() as i32 - 1) + months;
+    format!("{:04}{:02}", index / 12, index % 12 + 1)
+}
+
 /// Panics if US equity markets are closed (outside Mon-Fri 9:30-16:00 Eastern).
 /// Does not account for holidays.
 pub fn require_market_open() {
