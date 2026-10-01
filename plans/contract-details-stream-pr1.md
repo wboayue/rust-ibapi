@@ -220,7 +220,7 @@ recurring). Sync and async each get:
 | code 200 | `Err(Error::Notice)` with code 200, then `None` |
 | async clones (async only) | clone A reads to end, clone B dropped first → no cancel (shared flag) |
 | shared subscription unaffected | an `EndOfStream` shared stream (open orders) still releases its count on drop |
-| Vec regression | existing `contract_details` tests pass unchanged |
+| Vec regression | existing `contract_details` tests pass; the undeclared-type case now expects `UnexpectedEndOfStream` |
 
 Integration (`integration/{sync,async}/tests/contracts.rs`):
 
@@ -249,17 +249,16 @@ the integration crates (`-p` each separately,
 [[feedback_integration_crate_feature_unification]]); then self-review
 ([[feedback_self_review]]).
 
-## Out of scope (found while planning)
+## Bond contract details (found while planning, fixed in this PR)
 
-**Bond contract details are silently dropped.** C# `EDecoder.cs:111` handles
-`BondContractData` (msg 18) under protobuf: the same `protobuf.ContractData`
-payload, decoded with `isBond = true`. We don't route 18 by request id (only
-`messages/tests.rs:109` mentions it). A bond `contract_details` therefore
-likely returns `Ok(vec![])` once `ContractDataEnd` arrives. Our
-`request_bond_contract_details` test feeds a `ContractData` (10) frame, so it
-doesn't catch this. Open a separate issue and fix it with a live bond
-capture; don't fold it into this PR. Once fixed, `BondContractData` joins this
-decoder's `RESPONSE_MESSAGE_IDS`.
+C# `EDecoder.cs:111` handles `BondContractData` (msg 18) under protobuf: the
+same `protobuf.ContractData` payload, decoded with `isBond = true`. We didn't
+route 18 by request id. Confirmed live (2026-09-30): a `US-T` query got 1,155
+msg-18 frames and returned `Ok(vec![])`. Fixed by routing 18, adding it to the
+decoder's `RESPONSE_MESSAGE_IDS`, and porting C#'s bond split of the last
+trade date into `maturity`/`last_trade_time`/`time_zone_id`. This account's
+bond frames carry no symbol, last trade date or coupon (probably data
+permissions), so the split is covered only by unit tests.
 
 ## Size
 
