@@ -38,11 +38,16 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
 }
 
 impl StreamDecoder<ContractDetails> for ContractDetails {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ContractData, IncomingMessages::ContractDataEnd];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::ContractData,
+        IncomingMessages::BondContractData,
+        IncomingMessages::ContractDataEnd,
+    ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<ContractDetails, Error> {
         match message.message_type() {
             IncomingMessages::ContractData => decoders::decode_contract_details(message),
+            IncomingMessages::BondContractData => decoders::decode_bond_contract_details(message),
             IncomingMessages::ContractDataEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }

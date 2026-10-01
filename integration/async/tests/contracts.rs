@@ -83,6 +83,29 @@ async fn contract_details_stream_early_drop_leaves_client_usable() {
 }
 
 #[tokio::test]
+async fn contract_details_bond() {
+    // TWS answers bond queries with BondContractData (msg 18); until #876's fix
+    // every row was dropped and this returned an empty Vec.
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    let bonds = Contract {
+        symbol: Symbol::from("AAPL"),
+        security_type: SecurityType::Bond,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        ..Default::default()
+    };
+
+    rate_limit();
+    let details = client.contract_details(&bonds).await.expect("contract_details failed");
+
+    assert!(!details.is_empty(), "bond query returned no rows");
+    assert!(details.iter().all(|d| d.contract.security_type == SecurityType::Bond));
+}
+
+#[tokio::test]
 async fn contract_details_futures() {
     let client_id = ClientId::get();
     rate_limit();

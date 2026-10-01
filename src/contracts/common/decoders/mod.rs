@@ -19,6 +19,36 @@ pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -
     decode_contract_data_proto(message.require_proto()?)
 }
 
+/// TWS answers a bond query with `BondContractData` (msg 18): the same
+/// `ContractData` proto as other securities, decoded with C#'s bond-only
+/// handling of the last trade date (`EDecoderUtils.SetLastTradeDate`).
+pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
+    let mut details = decode_contract_data_proto(message.require_proto()?)?;
+    split_bond_last_trade_date(&mut details);
+    Ok(details)
+}
+
+/// A bond's `last_trade_date_or_contract_month` carries `maturity [time [zone]]`,
+/// split on `-` if present, otherwise on whitespace. The contract field itself
+/// is left as sent, as C# does for bonds.
+fn split_bond_last_trade_date(details: &mut ContractDetails) {
+    let raw = &details.contract.last_trade_date_or_contract_month;
+    let parts: Vec<String> = if raw.contains('-') {
+        raw.split('-').map(str::to_string).collect()
+    } else {
+        raw.split_whitespace().map(str::to_string).collect()
+    };
+    if let Some(maturity) = parts.first() {
+        details.maturity = maturity.clone();
+    }
+    if let Some(time) = parts.get(1) {
+        details.last_trade_time = time.clone();
+    }
+    if let Some(zone) = parts.get(2) {
+        details.time_zone_id = zone.clone();
+    }
+}
+
 pub(in crate::contracts) fn decode_option_chain(message: &ResponseMessage) -> Result<OptionChain, Error> {
     decode_option_chain_proto(message.require_proto()?)
 }

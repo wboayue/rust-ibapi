@@ -231,8 +231,9 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 ..Default::default()
             },
             ordered_responses: vec![
+                // TWS answers a bond query with BondContractData (msg 18), not ContractData.
                 proto_response(
-                    IncomingMessages::ContractData,
+                    IncomingMessages::BondContractData,
                     contract_data()
                         .request_id(9001)
                         .contract_id(12345)
@@ -264,6 +265,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
                 assert_eq!(contracts[0].industry, "Government");
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20420815");
+                assert_eq!(contracts[0].maturity, "20420815");
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].market_name, "US Treasury Bond");
             }),
