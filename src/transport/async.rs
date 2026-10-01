@@ -996,7 +996,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // Owned before the write: a caller that drops this future while the
         // write is pending (a timeout, a `select!`) drops the subscription with
         // it, and its cleanup signal releases the registration. Code after the
-        // `await` never runs in that case.
+        // `await` never runs in that case. On a failed write below, the drop
+        // sends a second, harmless signal: `remove_if_dead` spares a live
+        // replacement.
         let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id));
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),

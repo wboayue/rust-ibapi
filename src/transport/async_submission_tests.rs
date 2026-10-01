@@ -2,7 +2,7 @@
 //! that abandons `send_request` / `send_request_bounded` /
 //! `send_order_request` mid-write leaves behind.
 
-use super::tests::drain_cleanup_signals;
+use super::tests::{bound, drain_cleanup_signals};
 use super::*;
 use crate::messages::encode_raw_length;
 use std::sync::Mutex;
@@ -84,13 +84,7 @@ impl Registration {
     async fn submit(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Result<AsyncInternalSubscription, Error> {
         match self {
             Self::Request => bus.send_request(ID, packet()).await,
-            Self::BoundedRequest => {
-                let bound = BufferBound {
-                    limit: 8,
-                    end: crate::messages::IncomingMessages::ContractDataEnd,
-                };
-                bus.send_request_bounded(ID, packet(), bound).await
-            }
+            Self::BoundedRequest => bus.send_request_bounded(ID, packet(), bound(8)).await,
             Self::Order => bus.send_order_request(ID, packet()).await,
         }
     }

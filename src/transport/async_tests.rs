@@ -1973,7 +1973,7 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
 // ---- buffer_limit: bounded request routes ------------------------------------
 
 /// A cap of `limit`, ending on `ContractDataEnd`.
-fn bound(limit: usize) -> BufferBound {
+pub(super) fn bound(limit: usize) -> BufferBound {
     BufferBound {
         limit,
         end: IncomingMessages::ContractDataEnd,
