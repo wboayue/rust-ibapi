@@ -1,15 +1,17 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_tws_error_message, proto_error_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+    assert_request, assert_tws_error_message, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::common::test_tables::*;
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::{DecoderContext, StreamDecoder};
+use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
 use crate::testdata::builders::contracts::{
-    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data_request, market_rule_request,
-    matching_symbols_request, option_chain_request, smart_components_request,
+    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_request,
+    market_rule_request, matching_symbols_request, option_chain_request, smart_components_request,
 };
+use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 
 #[test]
@@ -500,4 +502,123 @@ fn test_calculate_implied_volatility_returns_eof_on_empty_stream() {
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
+}
+
+// ---- contract_details_stream ----------------------------------------------
+
+fn detail_row(contract_id: i32) -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::ContractData,
+        contract_data()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract_id(contract_id)
+            .symbol("AAPL")
+            .encode_proto(),
+    )
+}
+
+fn stream_client(responses: Vec<crate::messages::ResponseMessage>, server_version: i32) -> (Client, Arc<MessageBusStub>) {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+    (Client::stubbed(message_bus.clone(), server_version), message_bus)
+}
+
+#[test]
+fn contract_details_stream_request_id_known_before_send() {
+    let (client, message_bus) = stream_client(vec![contract_data_end(TEST_REQ_ID_FIRST)], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let request = client.contract_details_stream(&contract);
+    let request_id = request.request_id();
+    assert_eq!(request_message_count(&message_bus), 0, "building the request sends nothing");
+
+    let _subscription = request.subscribe().expect("subscribe failed");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &contract_data_request().request_id(request_id).contract(&contract));
+}
+
+#[test]
+fn contract_details_stream_unsent_builder_sends_nothing() {
+    let (client, message_bus) = stream_client(vec![], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let first = client.contract_details_stream(&contract).request_id();
+    let second = client.contract_details_stream(&contract).request_id();
+
+    assert!(second > first, "a dropped builder skips its id");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[test]
+fn contract_details_stream_validation_error_sends_nothing() {
+    let (client, message_bus) = stream_client(vec![], server_versions::SIZE_RULES);
+    let contract = Contract {
+        issuer_id: "ISSUER".into(),
+        ..Contract::stock("AAPL").build()
+    };
+
+    let result = client.contract_details_stream(&contract).subscribe();
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "expected a version error");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[test]
+fn contract_details_stream_yields_rows_then_ends_without_cancel() {
+    let (client, message_bus) = stream_client(
+        vec![detail_row(1), detail_row(2), contract_data_end(TEST_REQ_ID_FIRST)],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+    let contract = Contract::stock("AAPL").build();
+
+    let subscription = client.contract_details_stream(&contract).subscribe().unwrap();
+    let mut ids = Vec::new();
+    while let Some(item) = subscription.next() {
+        match item.expect("row") {
+            SubscriptionItem::Data(details) => ids.push(details.contract.contract_id),
+            SubscriptionItem::Notice(notice) => panic!("unexpected notice {notice:?}"),
+        }
+    }
+    assert_eq!(ids, vec![1, 2]);
+
+    drop(subscription);
+    assert_eq!(request_message_count(&message_bus), 1, "no cancel after ContractDataEnd");
+}
+
+#[test]
+fn contract_details_stream_early_drop_cancels() {
+    let (client, message_bus) = stream_client(vec![detail_row(1), detail_row(2), detail_row(3)], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let subscription = client.contract_details_stream(&contract).subscribe().unwrap();
+    let request_id = subscription.request_id().expect("request id");
+    assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Data(_)))));
+    drop(subscription);
+
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(request_id));
+}
+
+#[test]
+fn contract_details_stream_early_drop_on_old_server_sends_no_cancel() {
+    let (client, message_bus) = stream_client(vec![detail_row(1), detail_row(2)], server_versions::CANCEL_CONTRACT_DATA - 1);
+    let contract = Contract::stock("AAPL").build();
+
+    let subscription = client.contract_details_stream(&contract).subscribe().unwrap();
+    assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Data(_)))));
+    drop(subscription);
+
+    assert_eq!(request_message_count(&message_bus), 1, "no native cancel below server 215");
+}
+
+#[test]
+fn contract_details_stream_surfaces_no_definition_error() {
+    let (client, _message_bus) = stream_client(
+        vec![proto_error_response(TEST_REQ_ID_FIRST, 200, "No security definition found")],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+    let contract = Contract::stock("INVALID").build();
+
+    let subscription = client.contract_details_stream(&contract).subscribe().unwrap();
+    let err = subscription.next().expect("an item").unwrap_err();
+    assert_tws_error_message(err, 200, "No security definition found");
+    assert!(subscription.next().is_none());
 }

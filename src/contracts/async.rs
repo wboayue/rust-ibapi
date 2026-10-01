@@ -4,15 +4,19 @@ use super::common::{decoders, encoders, verify};
 use super::*;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{StreamDecoder, Subscription};
+use crate::subscriptions::{StreamDecoder, Subscription, SubscriptionItem};
 use crate::{Client, Error};
+use futures::StreamExt;
 
 impl Client {
     /// Requests contract information.
     ///
     /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains.
+    ///
+    /// Collects every row before returning. To read rows as they arrive, stop reading early, or know the
+    /// request id up front, use [Client::contract_details_stream].
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
@@ -36,40 +40,76 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-        verify::verify_contract(self.server_version(), contract)?;
+        let mut subscription = self.contract_details_stream(contract).subscribe().await?;
 
-        let builder = self.request();
-        let request_id = builder.request_id();
-        let packet = encoders::encode_request_contract_data(request_id, contract)?;
-
-        let mut responses = builder.send_raw(packet).await?;
-
-        let mut contract_details: Vec<ContractDetails> = Vec::default();
-
-        while let Some(response_result) = responses.next().await {
-            match response_result {
-                Ok(response) => {
-                    log::debug!("response: {response:#?}");
-                    match response.message_type() {
-                        IncomingMessages::ContractData => {
-                            let decoded = decoders::decode_contract_details(&response)?;
-                            contract_details.push(decoded);
-                        }
-                        IncomingMessages::ContractDataEnd => return Ok(contract_details),
-                        _ => return Err(Error::unexpected_response(&response)),
-                    }
-                }
-                Err(e) => return Err(e),
+        let mut contract_details = Vec::new();
+        while let Some(item) = subscription.next().await {
+            match item? {
+                SubscriptionItem::Data(details) => contract_details.push(details),
+                SubscriptionItem::Notice(notice) => log::warn!("contract details notice: {notice}"),
             }
         }
 
-        Err(Error::UnexpectedEndOfStream)
+        if !subscription.ended_natively() {
+            return Err(Error::UnexpectedEndOfStream);
+        }
+        Ok(contract_details)
+    }
+
+    /// Requests contract information as a stream: one [ContractDetails] per
+    /// matching contract.
+    ///
+    /// Use this over [Client::contract_details] to read rows as they arrive,
+    /// stop reading early, or know the request id before anything is sent.
+    /// Dropping the subscription before the end sends TWS's native cancel
+    /// (server 215+); rows TWS sends after that are discarded.
+    /// Terminal: [ContractDetailsBuilder::subscribe].
+    ///
+    /// # Arguments
+    /// * `contract` - The [Contract] used as sample to query the available contracts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let request = client.contract_details_stream(&contract);
+    ///     let request_id = request.request_id(); // known before anything is sent
+    ///
+    ///     let subscription = request.subscribe().await.expect("request failed");
+    ///     let mut details = subscription.filter_data().take(5);
+    ///     while let Some(details) = details.next().await {
+    ///         match details {
+    ///             Ok(details) => println!("[{request_id}] {} on {}", details.contract.symbol, details.contract.exchange),
+    ///             Err(e) => {
+    ///                 eprintln!("error: {e}");
+    ///                 break;
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub fn contract_details_stream<'a>(&'a self, contract: &'a Contract) -> ContractDetailsBuilder<'a, Self> {
+        ContractDetailsBuilder::new(self, contract, self.next_request_id())
     }
 
     /// Requests matching stock symbols.
     ///
     /// # Arguments
     /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
+    ///
+    /// # Retries
+    ///
+    /// If the connection resets mid-request, this waits for the reconnect and
+    /// sends the request again with a fresh request id, up to 3 times (4
+    /// attempts in all). Other errors are not retried. A caller pacing requests
+    /// against TWS limits should count each reconnect (see the notice stream) as
+    /// a possible extra request.
     ///
     /// # Examples
     ///
@@ -254,7 +294,8 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     // `request_id` is the id used to launch the original contract_details request.
+    ///     // `request_id` is the id of the request to cancel, e.g. from `ContractDetailsBuilder::request_id`.
+    ///     // Dropping a `contract_details_stream` subscription already cancels it.
     ///     client.cancel_contract_details(42).await.expect("cancel failed");
     /// }
     /// ```
@@ -307,6 +348,18 @@ impl Client {
 /// Request an underlying's option chain. Reached through
 /// [`OptionChainBuilder::subscribe`]; the flat arguments are the builder-fed
 /// param-budget exception.
+/// Send a contract-details request with a pre-allocated id. Reached through
+/// [`ContractDetailsBuilder::subscribe`].
+pub(in crate::contracts) async fn contract_details_stream(
+    client: &Client,
+    contract: &Contract,
+    request_id: i32,
+) -> Result<Subscription<ContractDetails>, Error> {
+    verify::verify_contract(client.server_version(), contract)?;
+    let packet = encoders::encode_request_contract_data(request_id, contract)?;
+    client.request_with_id(request_id).send(packet).await
+}
+
 pub(in crate::contracts) async fn option_chain(
     client: &Client,
     symbol: &str,

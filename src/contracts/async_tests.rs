@@ -7,7 +7,7 @@ use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::{DecoderContext, StreamDecoder};
+use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
 use crate::testdata::builders::contracts::{
     calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_request,
     market_rule_request, matching_symbols_request, option_chain_request, smart_components_request,
@@ -540,13 +540,14 @@ async fn contract_details_returns_server_error() {
 }
 
 #[tokio::test]
-async fn contract_details_rejects_unexpected_message() {
+async fn contract_details_skips_undeclared_message() {
+    // Skipped as undeclared by the subscription; the stub then closes.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("79|9000|0|")]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
 
     let err = client.contract_details(&contract).await.unwrap_err();
-    assert!(matches!(err, crate::Error::UnexpectedResponse(_)), "got {err:?}");
+    assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
 #[tokio::test]
@@ -682,4 +683,134 @@ async fn cancel_contract_details_rejects_old_server_version() {
     let result = client.cancel_contract_details(42).await;
     assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
     assert_eq!(request_message_count(&message_bus), 0);
+}
+
+// ---- contract_details_stream ----------------------------------------------
+
+fn detail_row(contract_id: i32) -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::ContractData,
+        contract_data()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract_id(contract_id)
+            .symbol("AAPL")
+            .encode_proto(),
+    )
+}
+
+fn stream_client(responses: Vec<crate::messages::ResponseMessage>, server_version: i32) -> (Client, Arc<MessageBusStub>) {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+    (Client::stubbed(message_bus.clone(), server_version), message_bus)
+}
+
+/// Drop's cancel is spawned on the bus runtime; wait for it to land.
+async fn wait_for_requests(message_bus: &MessageBusStub, count: usize) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while request_message_count(message_bus) < count && std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
+}
+
+#[tokio::test]
+async fn contract_details_stream_request_id_known_before_send() {
+    let (client, message_bus) = stream_client(vec![contract_data_end(TEST_REQ_ID_FIRST)], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let request = client.contract_details_stream(&contract);
+    let request_id = request.request_id();
+    assert_eq!(request_message_count(&message_bus), 0, "building the request sends nothing");
+
+    let _subscription = request.subscribe().await.expect("subscribe failed");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &contract_data_request().request_id(request_id).contract(&contract));
+}
+
+#[tokio::test]
+async fn contract_details_stream_unsent_builder_sends_nothing() {
+    let (client, message_bus) = stream_client(vec![], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let first = client.contract_details_stream(&contract).request_id();
+    let second = client.contract_details_stream(&contract).request_id();
+
+    assert!(second > first, "a dropped builder skips its id");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn contract_details_stream_validation_error_sends_nothing() {
+    let (client, message_bus) = stream_client(vec![], server_versions::SIZE_RULES);
+    let contract = Contract {
+        issuer_id: "ISSUER".into(),
+        ..Contract::stock("AAPL").build()
+    };
+
+    let result = client.contract_details_stream(&contract).subscribe().await;
+    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "expected a version error");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn contract_details_stream_yields_rows_then_ends_without_cancel() {
+    let (client, message_bus) = stream_client(
+        vec![detail_row(1), detail_row(2), contract_data_end(TEST_REQ_ID_FIRST)],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+    let contract = Contract::stock("AAPL").build();
+
+    let mut subscription = client.contract_details_stream(&contract).subscribe().await.unwrap();
+    let mut ids = Vec::new();
+    while let Some(item) = subscription.next().await {
+        match item.expect("row") {
+            SubscriptionItem::Data(details) => ids.push(details.contract.contract_id),
+            SubscriptionItem::Notice(notice) => panic!("unexpected notice {notice:?}"),
+        }
+    }
+    assert_eq!(ids, vec![1, 2]);
+
+    drop(subscription);
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert_eq!(request_message_count(&message_bus), 1, "no cancel after ContractDataEnd");
+}
+
+#[tokio::test]
+async fn contract_details_stream_early_drop_cancels() {
+    let (client, message_bus) = stream_client(vec![detail_row(1), detail_row(2), detail_row(3)], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let mut subscription = client.contract_details_stream(&contract).subscribe().await.unwrap();
+    let request_id = subscription.request_id().expect("request id");
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))));
+    drop(subscription);
+
+    wait_for_requests(&message_bus, 2).await;
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(request_id));
+}
+
+#[tokio::test]
+async fn contract_details_stream_early_drop_on_old_server_sends_no_cancel() {
+    let (client, message_bus) = stream_client(vec![detail_row(1), detail_row(2)], server_versions::CANCEL_CONTRACT_DATA - 1);
+    let contract = Contract::stock("AAPL").build();
+
+    let mut subscription = client.contract_details_stream(&contract).subscribe().await.unwrap();
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))));
+    drop(subscription);
+
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert_eq!(request_message_count(&message_bus), 1, "no native cancel below server 215");
+}
+
+#[tokio::test]
+async fn contract_details_stream_surfaces_no_definition_error() {
+    let (client, _message_bus) = stream_client(
+        vec![proto_error_response(TEST_REQ_ID_FIRST, 200, "No security definition found")],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
+    let contract = Contract::stock("INVALID").build();
+
+    let mut subscription = client.contract_details_stream(&contract).subscribe().await.unwrap();
+    let err = subscription.next().await.expect("an item").unwrap_err();
+    assert_tws_error_message(err, 200, "No security definition found");
+    assert!(subscription.next().await.is_none());
 }
