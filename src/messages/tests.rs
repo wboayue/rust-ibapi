@@ -183,6 +183,8 @@ fn test_routes_by_request_id() {
     // Sample of the allow-list — full registration check happens via
     // request_id() round-trips, not exhaustive enumeration here.
     assert!(routes_by_request_id(IncomingMessages::ContractData));
+    // Bond queries answer with BondContractData; unrouted, every row was dropped.
+    assert!(routes_by_request_id(IncomingMessages::BondContractData));
     assert!(routes_by_request_id(IncomingMessages::TickByTick));
     assert!(routes_by_request_id(IncomingMessages::SymbolSamples));
     assert!(routes_by_request_id(IncomingMessages::ExecutionData));
@@ -208,6 +210,7 @@ fn test_routes_by_request_id() {
 fn test_text_request_id_field() {
     // Field-1 messages (request_id immediately after message-type tag).
     assert_eq!(text_request_id_field(IncomingMessages::ContractData), Some(1));
+    assert_eq!(text_request_id_field(IncomingMessages::BondContractData), Some(1));
     assert_eq!(text_request_id_field(IncomingMessages::TickByTick), Some(1));
 
     // Field-2 messages (request_id after a version field).

@@ -318,3 +318,86 @@ fn test_declared_type_with_no_decode_arm_terminates() {
         "a declared-but-unhandled type must surface, not vanish"
     );
 }
+
+// --- cancel after the native end marker ----------------------------------
+
+/// A request-id subscription whose frames come from `items`, plus the stub bus
+/// so a test can see whether a cancel was written.
+fn request_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscription<T>, Arc<MessageBusStub>) {
+    let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _signaler_rx) = channel::unbounded();
+    for item in items {
+        sender.send(item).unwrap();
+    }
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let stub = Arc::new(MessageBusStub::default());
+    (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub)
+}
+
+#[test]
+fn test_decoded_end_skips_cancel_on_drop() {
+    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![data(1)]);
+
+    assert!(sub.next().is_none());
+    assert!(sub.ended_natively());
+
+    sub.cancel();
+    drop(sub);
+    assert!(bus.request_messages().is_empty(), "no cancel after the end marker");
+}
+
+#[test]
+fn test_routed_end_skips_cancel_on_drop() {
+    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::EndOfStream)]);
+
+    assert!(sub.next().is_none());
+    assert!(sub.ended_natively());
+
+    drop(sub);
+    assert!(bus.request_messages().is_empty(), "no cancel after a routed end");
+}
+
+#[test]
+fn test_error_end_still_cancels() {
+    // Only the end marker proves TWS finished; after an error the cancel goes out as before.
+    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+
+    assert!(matches!(sub.next(), Some(Err(Error::ConnectionReset))));
+    assert!(!sub.ended_natively());
+
+    drop(sub);
+    assert_eq!(bus.request_messages().len(), 1, "cancel written after an error end");
+}
+
+// --- collect_to_end ------------------------------------------------------
+
+#[test]
+fn test_collect_to_end_returns_items_and_skips_notices() {
+    use crate::messages::Notice;
+
+    let notice = RoutedItem::Notice(Notice {
+        request_id: None,
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    });
+    let (sub, _keep) = collect_subscription(vec![data(10), notice, data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert_eq!(sub.collect_to_end().unwrap(), vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[test]
+fn test_collect_to_end_returns_terminal_error() {
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(sub.collect_to_end(), Err(Error::ConnectionReset)));
+}
+
+#[test]
+fn test_collect_to_end_without_end_marker_is_unexpected_end() {
+    // Channel closes after the last item, with no end marker.
+    let (sub, _keep) = collect_subscription(vec![data(10)], false);
+
+    assert!(matches!(sub.collect_to_end(), Err(Error::UnexpectedEndOfStream)));
+}

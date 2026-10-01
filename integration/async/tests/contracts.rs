@@ -1,8 +1,9 @@
 use futures::StreamExt;
-use ibapi::contracts::{Contract, SecurityType};
+use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
+use ibapi::subscriptions::SubscriptionItem;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
 use serial_test::serial;
 
 #[tokio::test]
@@ -17,6 +18,91 @@ async fn contract_details_stock() {
 
     assert!(!details.is_empty());
     assert_eq!(details[0].contract.symbol.0, "AAPL");
+}
+
+#[tokio::test]
+async fn contract_details_stream_matches_collect() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+
+    rate_limit();
+    let collected = client.contract_details(&contract).await.expect("contract_details failed");
+
+    rate_limit();
+    let request = client.contract_details_stream(&contract);
+    let request_id = request.request_id();
+    let mut subscription = request.subscribe().await.expect("subscribe failed");
+    assert_eq!(subscription.request_id(), Some(request_id));
+
+    let mut streamed = Vec::new();
+    while let Some(item) = subscription.next().await {
+        match item.expect("stream item") {
+            SubscriptionItem::Data(details) => streamed.push(details.contract.contract_id),
+            SubscriptionItem::Notice(notice) => eprintln!("notice: {notice}"),
+        }
+    }
+
+    let collected: Vec<i32> = collected.iter().map(|d| d.contract.contract_id).collect();
+    assert!(!streamed.is_empty());
+    assert_eq!(streamed, collected);
+}
+
+#[tokio::test]
+async fn contract_details_stream_early_drop_leaves_client_usable() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    // SPY calls for one expiry month two months out: far more rows than we read.
+    let broad = Contract {
+        symbol: Symbol::from("SPY"),
+        security_type: SecurityType::Option,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
+        right: Some(OptionRight::Call),
+        ..Default::default()
+    };
+
+    rate_limit();
+    let subscription = client.contract_details_stream(&broad).subscribe().await.expect("subscribe failed");
+    let mut data = subscription.filter_data();
+    for _ in 0..5 {
+        data.next().await.expect("a row").expect("row");
+    }
+    drop(data); // writes cancelContractData
+
+    rate_limit();
+    let details = client
+        .contract_details(&Contract::stock("AAPL").build())
+        .await
+        .expect("client unusable after early drop");
+    assert!(!details.is_empty());
+}
+
+#[tokio::test]
+async fn contract_details_bond() {
+    // TWS answers bond queries with BondContractData (msg 18); until #876's fix
+    // every row was dropped and this returned an empty Vec.
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    let bonds = Contract {
+        symbol: Symbol::from("AAPL"),
+        security_type: SecurityType::Bond,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        ..Default::default()
+    };
+
+    rate_limit();
+    let details = client.contract_details(&bonds).await.expect("contract_details failed");
+
+    assert!(!details.is_empty(), "bond query returned no rows");
+    assert!(details.iter().all(|d| d.contract.security_type == SecurityType::Bond));
 }
 
 #[tokio::test]

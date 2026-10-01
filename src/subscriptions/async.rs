@@ -94,6 +94,10 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// Shared across clones — set once a snapshot-end sentinel is observed, so drop/cancel
     /// skips the redundant cancel for an already-completed snapshot (mirrors the sync side).
     snapshot_ended: Arc<AtomicBool>,
+    /// Shared across clones — set only by the native end marker, not by errors:
+    /// once any clone has seen it, TWS has finished the request and there is
+    /// nothing left to cancel.
+    ended_natively: Arc<AtomicBool>,
     /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
     /// on one clone must not short-circuit other clones' polls.
     stream_ended: AtomicBool,
@@ -113,6 +117,7 @@ impl<T: StreamDecoder<T>> Clone for Subscription<T> {
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
             snapshot_ended: self.snapshot_ended.clone(),
+            ended_natively: self.ended_natively.clone(),
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
             stream_ended: AtomicBool::new(false),
             message_bus: self.message_bus.clone(),
@@ -147,6 +152,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
             snapshot_ended: Arc::new(AtomicBool::new(false)),
+            ended_natively: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
             message_bus,
             phantom: PhantomData,
@@ -265,6 +271,26 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         }
         collected
     }
+
+    /// Collects every data item until TWS's end marker. Notices are logged at
+    /// `warn!`. A terminal error is returned as is; a stream that ends without
+    /// the end marker (a closed channel) is `Error::UnexpectedEndOfStream`.
+    ///
+    /// For request-scoped streams that end, such as contract details. Waits
+    /// until the end, so not for open-ended subscriptions like market data.
+    pub(crate) async fn collect_to_end(&mut self) -> Result<Vec<T>, Error> {
+        let mut collected = Vec::new();
+        while let Some(item) = self.next().await {
+            match item? {
+                SubscriptionItem::Data(value) => collected.push(value),
+                SubscriptionItem::Notice(notice) => warn!("ib notice on subscription: {notice}"),
+            }
+        }
+        if !self.ended_natively() {
+            return Err(Error::UnexpectedEndOfStream);
+        }
+        Ok(collected)
+    }
 }
 
 #[allow(private_bounds)]
@@ -286,6 +312,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
             context,
             stream_ended,
             snapshot_ended,
+            ended_natively,
             ..
         } = this;
         // Drain the BroadcastStream synchronously while items are ready, so
@@ -315,6 +342,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         }
                         Err(Error::EndOfStream) => {
                             stream_ended.store(true, Ordering::Relaxed);
+                            ended_natively.store(true, Ordering::Relaxed);
                             return Poll::Ready(None);
                         }
                         Err(err) => {
@@ -326,6 +354,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                 RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
                 RoutedItem::Error(Error::EndOfStream) => {
                     stream_ended.store(true, Ordering::Relaxed);
+                    ended_natively.store(true, Ordering::Relaxed);
                     return Poll::Ready(None);
                 }
                 RoutedItem::Error(e) => {
@@ -355,10 +384,28 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
 
         let id = self.request_id.or(self.order_id);
-        let message = T::cancel_message(self.context.server_version, id, Some(&self.context)).ok();
+        let message = self.pending_cancel(id);
         if let Err(e) = send_cancel(&self.message_bus, id, self.shared, message).await {
             log_cancel_error("subscription", &e);
         }
+    }
+}
+
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T>> Subscription<T> {
+    /// The cancel to write, if any. `None` once a request-id stream has seen
+    /// its end marker: the cancel would name a request TWS already finished.
+    fn pending_cancel(&self, id: Option<i32>) -> Option<Vec<u8>> {
+        if self.request_id.is_some() && self.ended_natively.load(Ordering::Relaxed) {
+            return None;
+        }
+        T::cancel_message(self.context.server_version, id, Some(&self.context)).ok()
+    }
+
+    /// Whether the stream ended with TWS's end marker, as opposed to an
+    /// error or a closed channel (both of which also end the stream).
+    pub(crate) fn ended_natively(&self) -> bool {
+        self.ended_natively.load(Ordering::Relaxed)
     }
 }
 
@@ -400,7 +447,7 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
         // release, an id-routed one has nothing to do.
         let id = self.request_id.or(self.order_id);
         let shared = self.shared;
-        let message = T::cancel_message(self.context.server_version, id, Some(&self.context)).ok();
+        let message = self.pending_cancel(id);
         // Nothing to send and no count to release: nothing to spawn.
         if message.is_none() && shared.is_none() {
             return;

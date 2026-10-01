@@ -678,6 +678,37 @@ async fn test_shared_subscription_without_cancel_message_releases_count() {
     assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1, "only the request was written");
 }
 
+/// A shared subscription that reads its end marker still releases its count on
+/// drop: the cancel-after-end guard applies only to request-id subscriptions.
+#[tokio::test]
+async fn test_shared_subscription_ended_natively_still_releases_count() {
+    use crate::orders::Orders;
+
+    let (stream, bus) = make_bus();
+    let count = || async { bus.shared_counts.lock().await.live(OutgoingMessages::RequestOpenOrders) };
+
+    let internal = bus
+        .send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
+        .await
+        .unwrap();
+    let mut sub = Subscription::<Orders>::new_from_internal_simple(internal, bus.clone(), DecoderContext::default());
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrderEnd as i32,
+        &crate::proto::OpenOrdersEnd {},
+    ));
+    bus.read_and_route_message().await.unwrap();
+    assert!(next_item(&mut sub).await.is_none(), "OpenOrderEnd ends the stream");
+    assert!(sub.ended_natively());
+
+    drop(sub);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while count().await != 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(count().await, 0, "count leaked after a natural end");
+}
+
 type PositionsSubscription = Subscription<crate::accounts::PositionUpdate>;
 
 async fn positions_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) -> PositionsSubscription {

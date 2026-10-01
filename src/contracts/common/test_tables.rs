@@ -113,7 +113,7 @@ const STK_VALID_EXCHANGES: &str =
 const FUT_ORDER_TYPES: &str = "ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IOC,LIT,LMT,LOC,MIT,MKT,MOC,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,PEGMID,PEGSTK,POSTONLY,PREOPGRTH,REL,RPI,RTH,SCALE,SCALEODD,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF";
 const AMEX_ORDER_TYPES: &str = "ACTIVETIM,AD,ADJUST,ALERT,ALLOC,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,IOC,LIT,LMT,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF";
 
-fn contract_data_end(request_id: i32) -> ResponseMessage {
+pub fn contract_data_end(request_id: i32) -> ResponseMessage {
     text_response(format!("52|1|{request_id}|"))
 }
 
@@ -231,8 +231,9 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 ..Default::default()
             },
             ordered_responses: vec![
+                // TWS answers a bond query with BondContractData (msg 18), not ContractData.
                 proto_response(
-                    IncomingMessages::ContractData,
+                    IncomingMessages::BondContractData,
                     contract_data()
                         .request_id(9001)
                         .contract_id(12345)
@@ -264,6 +265,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
                 assert_eq!(contracts[0].industry, "Government");
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20420815");
+                assert_eq!(contracts[0].maturity, "20420815");
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].market_name, "US Treasury Bond");
             }),
@@ -965,11 +967,12 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
             expected_count: 0,
         },
         ContractDetailsErrorTestCase {
-            name: "unexpected message type",
+            // Skipped as undeclared by the subscription; the stub then closes.
+            name: "undeclared message type skipped",
             contract: Contract::stock("AAPL").build(),
             ordered_responses: vec![text_response("79|9000|0|")],
             should_error: true,
-            error_contains: Some("UnexpectedResponse"),
+            error_contains: Some("UnexpectedEndOfStream"),
             expected_count: 0,
         },
         ContractDetailsErrorTestCase {
