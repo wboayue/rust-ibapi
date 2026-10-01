@@ -125,9 +125,6 @@ impl Client {
 
     /// Submits an Order (fire-and-forget).
     ///
-    /// Dropping this future can still send the order; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
-    ///
     /// # Examples
     ///
     /// ```no_run
@@ -158,9 +155,6 @@ impl Client {
     }
 
     /// Submits an Order with a subscription for updates.
-    ///
-    /// Dropping this future can still send the order; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     ///
     /// # Examples
     ///

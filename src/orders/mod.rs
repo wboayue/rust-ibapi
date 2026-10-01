@@ -30,20 +30,6 @@
 //! parameters. [`OrderBuilder`](crate::orders::OrderBuilder), reached through `Client::order`, provides a fluent API
 //! for constructing complex orders; the `order_builder` module holds free functions
 //! that return preset `Order` values.
-//!
-//! ## Dropping an async order future
-//!
-//! On the async client, dropping an order future (a `timeout`, a losing
-//! `select!`) does not retract an order whose write has started: it may still
-//! reach TWS, and a `place_order` subscription's updates are lost with the
-//! future. An order still waiting behind another write is not sent. Check
-//! `open_orders` before retrying under a new id.
-//!
-//! Calls that send several orders stop where the drop lands:
-//! - a bracket's `submit_all` sends the parent and take-profit with
-//!   `transmit` off, so a partial bracket is held at TWS, not live;
-//! - `submit_oca_orders` transmits each order as it goes, so a partial group
-//!   is live.
 
 // Common implementation modules
 pub(crate) mod common;

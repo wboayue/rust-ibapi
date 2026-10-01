@@ -1102,9 +1102,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         };
 
-        // The lock spans the write so the count and the wire agree, unless
-        // the caller is dropped mid-write: the frame still goes out (the
-        // `AsyncIo::write_all` contract) but is never counted (#882).
+        // The lock spans the write so the count and the wire agree.
         let ticket = {
             let mut counts = self.shared_counts.lock().await;
             counts.check_account_updates(account)?;

@@ -31,13 +31,13 @@ impl AsyncIo for SubmissionStream {
         self.inner.read_message().await
     }
 
-    async fn write_all(&self, bytes: Vec<u8>) -> Result<(), Error> {
-        self.attempts.lock().unwrap().push(bytes.clone());
+    async fn write_all(&self, bytes: &[u8]) -> Result<(), Error> {
+        self.attempts.lock().unwrap().push(bytes.to_vec());
         let mode = *self.mode.lock().unwrap();
         match mode {
             WriteMode::Succeed => self.inner.write_all(bytes).await,
             WriteMode::Pending => {
-                self.inner.write_all(bytes[..2].to_vec()).await?;
+                self.inner.write_all(&bytes[..2]).await?;
                 std::future::pending().await
             }
         }

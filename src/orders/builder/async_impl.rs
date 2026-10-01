@@ -10,9 +10,6 @@ use crate::subscriptions::SubscriptionItemStreamExt;
 impl<'a> OrderBuilder<'a, Client> {
     /// Submit the order asynchronously
     /// Returns the order ID assigned to the submitted order
-    ///
-    /// Dropping this future can still send the order; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     pub async fn submit(self) -> Result<OrderId, Error> {
         let client = self.client;
         let contract = self.contract;
@@ -58,9 +55,6 @@ impl<'a> OrderBuilder<'a, Client> {
 impl<'a> BracketOrderBuilder<'a, Client> {
     /// Submit bracket orders asynchronously
     /// Returns BracketOrderIds containing all three order IDs
-    ///
-    /// Dropping this future can leave a partial set sent; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let client = self.parent_builder.client;
         let contract = self.parent_builder.contract;
@@ -100,9 +94,6 @@ impl<'a> AttachedOrdersBuilder<'a, Client> {
     /// place-order request. Fire-and-forget: whether TWS attached the children shows up only
     /// on the order update stream — see [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
     ///
-    /// Dropping this future can still send the order; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
-    ///
     /// # Examples
     ///
     /// ```no_run
@@ -139,9 +130,6 @@ impl Client {
     /// Submit multiple OCA (One-Cancels-All) orders
     ///
     /// When one order in the group is filled, all others are automatically cancelled.
-    ///
-    /// Dropping this future can leave a partial set sent; see
-    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     ///
     /// # Example
     /// ```no_run
