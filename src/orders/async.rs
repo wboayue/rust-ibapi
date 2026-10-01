@@ -125,6 +125,12 @@ impl Client {
 
     /// Submits an Order (fire-and-forget).
     ///
+    /// # Cancellation
+    ///
+    /// Dropping this future (a `timeout`, a losing `select!`) does not retract
+    /// an order whose write has started: it may still reach TWS. Check
+    /// [`open_orders`](Self::open_orders) before retrying under a new id.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -155,6 +161,12 @@ impl Client {
     }
 
     /// Submits an Order with a subscription for updates.
+    ///
+    /// # Cancellation
+    ///
+    /// Dropping this future (a `timeout`, a losing `select!`) does not retract
+    /// an order whose write has started: it may still reach TWS. Check
+    /// [`open_orders`](Self::open_orders) before retrying under a new id.
     ///
     /// # Examples
     ///

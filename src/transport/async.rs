@@ -716,22 +716,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// The one funnel for every bus-originated write, so no send can reach a
     /// socket the session no longer owns. The dispatcher's own reconnect
     /// handshake writes through `AsyncConnection`, not here.
-    ///
-    /// The write runs as its own task. A socket write is not cancel-safe: a
-    /// caller that drops this future mid-frame (a `timeout`, a losing
-    /// `select!`) would leave a partial frame on the wire, and every later
-    /// frame would parse as garbage on the TWS side. Detached, the frame always
-    /// finishes; an abandoned request may still reach TWS.
     async fn write_message(&self, message: &[u8]) -> Result<(), Error> {
         self.ensure_connected()?;
-        let connection = self.connection.clone();
-        let message = message.to_vec();
-        match task::spawn(async move { connection.write_message(&message).await }).await {
-            Ok(written) => written,
-            Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
-            // Cancelled only by runtime shutdown.
-            Err(_) => Err(Error::Shutdown),
-        }
+        self.connection.write_message(message).await
     }
 
     /// Fail all registered channels with `Error::ConnectionReset`, before a
@@ -1115,7 +1102,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         };
 
-        // The lock spans the write so the count and the wire agree.
+        // The lock spans the write so the count and the wire agree, unless
+        // the caller is dropped mid-write: the frame still goes out (see
+        // `AsyncTcpSocket::write_all`) but is never counted.
         let ticket = {
             let mut counts = self.shared_counts.lock().await;
             counts.check_account_updates(account)?;

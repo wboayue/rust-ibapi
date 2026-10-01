@@ -4,12 +4,14 @@
 //! method-async via `#[async_trait]`. Frame-level: `read_message` returns the
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::runtime::Handle;
 use tokio::sync::Mutex;
 
 use crate::errors::Error;
@@ -39,7 +41,10 @@ pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static +
 #[derive(Debug)]
 pub(crate) struct AsyncTcpSocket {
     reader: Mutex<OwnedReadHalf>,
-    writer: Mutex<OwnedWriteHalf>,
+    /// Shared with the task that finishes a write; see `write_all`.
+    writer: Arc<Mutex<OwnedWriteHalf>>,
+    /// The runtime the client was connected on, which runs those tasks.
+    runtime: Handle,
     connection_url: String,
     tcp_no_delay: bool,
     /// Byte-level capture of the inbound stream. Disabled unless
@@ -54,7 +59,8 @@ impl AsyncTcpSocket {
         let (read_half, write_half) = stream.into_split();
         Ok(Self {
             reader: Mutex::new(read_half),
-            writer: Mutex::new(write_half),
+            writer: Arc::new(Mutex::new(write_half)),
+            runtime: Handle::current(),
             connection_url: address.to_string(),
             tcp_no_delay,
             tap: RawFrameTap::from_env(),
@@ -89,11 +95,24 @@ impl AsyncIo for AsyncTcpSocket {
         read_framed_message(&mut *reader, &self.tap).await
     }
 
+    /// Lock, then detach. A caller dropped while it waits for the writer (a
+    /// `timeout`, a losing `select!`) sends nothing. Once it holds the writer,
+    /// the write runs as its own task: `write_all` is not cancel-safe, and a
+    /// frame abandoned midway would leave a fragment that every later frame
+    /// follows, which TWS misreads. A started write always finishes.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let mut writer = self.writer.lock().await;
-        writer.write_all(buf).await?;
-        writer.flush().await?;
-        Ok(())
+        let mut writer = self.writer.clone().lock_owned().await;
+        let buf = buf.to_vec();
+        let write = self.runtime.spawn(async move {
+            writer.write_all(&buf).await?;
+            writer.flush().await
+        });
+        match write.await {
+            Ok(written) => Ok(written?),
+            Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+            // Never aborted, so cancelled only when the client's runtime shuts down.
+            Err(_) => Err(Error::Shutdown),
+        }
     }
 }
 
