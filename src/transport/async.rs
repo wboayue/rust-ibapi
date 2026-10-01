@@ -716,9 +716,22 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// The one funnel for every bus-originated write, so no send can reach a
     /// socket the session no longer owns. The dispatcher's own reconnect
     /// handshake writes through `AsyncConnection`, not here.
+    ///
+    /// The write runs as its own task. A socket write is not cancel-safe: a
+    /// caller that drops this future mid-frame (a `timeout`, a losing
+    /// `select!`) would leave a partial frame on the wire, and every later
+    /// frame would parse as garbage on the TWS side. Detached, the frame always
+    /// finishes; an abandoned request may still reach TWS.
     async fn write_message(&self, message: &[u8]) -> Result<(), Error> {
         self.ensure_connected()?;
-        self.connection.write_message(message).await
+        let connection = self.connection.clone();
+        let message = message.to_vec();
+        match task::spawn(async move { connection.write_message(&message).await }).await {
+            Ok(written) => written,
+            Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+            // Cancelled only by runtime shutdown.
+            Err(_) => Err(Error::Shutdown),
+        }
     }
 
     /// Fail all registered channels with `Error::ConnectionReset`, before a
@@ -996,7 +1009,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // Owned before the write: a caller that drops this future while the
         // write is pending (a timeout, a `select!`) drops the subscription with
         // it, and its cleanup signal releases the registration. Code after the
-        // `await` never runs in that case.
+        // `await` never runs in that case. On a failed write below, the drop
+        // sends a second, harmless signal: `remove_if_dead` spares a live
+        // replacement.
         let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id));
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),

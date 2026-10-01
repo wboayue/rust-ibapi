@@ -2,7 +2,7 @@
 //! that abandons `send_request` / `send_request_bounded` /
 //! `send_order_request` mid-write leaves behind.
 
-use super::tests::drain_cleanup_signals;
+use super::tests::{bound, drain_cleanup_signals};
 use super::*;
 use crate::messages::encode_raw_length;
 use std::sync::Mutex;
@@ -13,6 +13,8 @@ enum WriteMode {
     Succeed,
     /// Writes a prefix of the frame, then never completes.
     Pending,
+    /// Writes a prefix of the frame, then the rest once `resume` is notified.
+    Paused,
 }
 
 /// A stream whose writes can be held pending after a partial frame, the way a
@@ -22,6 +24,7 @@ enum WriteMode {
 struct SubmissionStream {
     inner: MemoryStream,
     mode: Arc<Mutex<WriteMode>>,
+    resume: Arc<tokio::sync::Notify>,
     attempts: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
@@ -39,6 +42,11 @@ impl AsyncIo for SubmissionStream {
             WriteMode::Pending => {
                 self.inner.write_all(&bytes[..2]).await?;
                 std::future::pending().await
+            }
+            WriteMode::Paused => {
+                self.inner.write_all(&bytes[..2]).await?;
+                self.resume.notified().await;
+                self.inner.write_all(&bytes[2..]).await
             }
         }
     }
@@ -84,13 +92,7 @@ impl Registration {
     async fn submit(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Result<AsyncInternalSubscription, Error> {
         match self {
             Self::Request => bus.send_request(ID, packet()).await,
-            Self::BoundedRequest => {
-                let bound = BufferBound {
-                    limit: 8,
-                    end: crate::messages::IncomingMessages::ContractDataEnd,
-                };
-                bus.send_request_bounded(ID, packet(), bound).await
-            }
+            Self::BoundedRequest => bus.send_request_bounded(ID, packet(), bound(8)).await,
             Self::Order => bus.send_order_request(ID, packet()).await,
         }
     }
@@ -103,6 +105,18 @@ fn make_bus(mode: WriteMode) -> (SubmissionStream, Arc<AsyncTcpMessageBus<Submis
     (stream, Arc::new(AsyncTcpMessageBus::new(connection).unwrap()))
 }
 
+/// Yield until the stream has captured `len` bytes. The write runs as its own
+/// task, so it progresses only while the test yields.
+async fn wait_for_captured(stream: &SubmissionStream, len: usize) {
+    let progressed = tokio::time::timeout(Duration::from_secs(1), async {
+        while stream.inner.captured().len() < len {
+            task::yield_now().await;
+        }
+    })
+    .await;
+    assert!(progressed.is_ok(), "write stalled at {} of {len} bytes", stream.inner.captured().len());
+}
+
 /// A caller that drops the submission while its write is pending (a timeout,
 /// a losing `select!` branch) leaves no registration behind.
 #[tokio::test]
@@ -112,6 +126,7 @@ async fn test_dropping_a_pending_write_releases_its_registration() {
         let mut submitting = Box::pin(kind.submit(&bus));
         assert!(futures::poll!(submitting.as_mut()).is_pending());
         assert!(kind.registered(&bus).await.is_some(), "{kind:?}: registered before the write");
+        wait_for_captured(&stream, 2).await;
         assert_eq!(
             stream.inner.captured(),
             encode_raw_length(&packet())[..2].to_vec(),
@@ -142,6 +157,7 @@ async fn test_abandoned_write_cleanup_preserves_a_newer_registration() {
 
         let mut submitting = Box::pin(kind.submit(&bus));
         assert!(futures::poll!(submitting.as_mut()).is_pending());
+        wait_for_captured(&stream, 2).await;
         drop(submitting);
         *stream.mode.lock().unwrap() = WriteMode::Succeed;
         let mut replacement = kind.submit(&bus).await.unwrap();
@@ -172,5 +188,27 @@ async fn test_a_completed_write_hands_cleanup_to_the_subscription() {
         drop(subscription);
         drain_cleanup_signals(&bus).await;
         assert!(kind.registered(&bus).await.is_none(), "{kind:?}: dropped subscription leaked");
+    }
+}
+
+/// A submission dropped mid-frame still finishes the frame, so the next one
+/// starts on a frame boundary rather than inside a partial frame TWS would
+/// misparse.
+#[tokio::test]
+async fn test_dropping_a_submission_mid_frame_finishes_the_frame() {
+    let frame = encode_raw_length(&packet());
+    for kind in KINDS {
+        let (stream, bus) = make_bus(WriteMode::Paused);
+        let mut submitting = Box::pin(kind.submit(&bus));
+        assert!(futures::poll!(submitting.as_mut()).is_pending());
+        wait_for_captured(&stream, 2).await;
+
+        drop(submitting);
+        stream.resume.notify_one();
+        wait_for_captured(&stream, frame.len()).await;
+
+        *stream.mode.lock().unwrap() = WriteMode::Succeed;
+        let _next = kind.submit(&bus).await.unwrap();
+        assert_eq!(stream.inner.captured(), [frame.clone(), frame.clone()].concat(), "{kind:?}");
     }
 }
