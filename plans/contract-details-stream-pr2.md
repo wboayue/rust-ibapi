@@ -46,7 +46,8 @@ let subscription = client
   return `InvalidArgument` before anything is written. The cap exists because
   tokio's `broadcast::channel` allocates its slots up front, rounded to a power
   of two: a huge limit is a huge allocation, and `capacity > usize::MAX / 2`
-  panics. Proposal: `MAX_BUFFER_LIMIT = 65_536`, a `pub const` next to the
+  panics. Shipped as `MAX_BUFFER_LIMIT = 65_535` (so `limit + 1` is a power of
+  two, with no rounding up to 131,072 slots); proposed as 65,536, a `pub const` next to the
   builder, documented.
 - **Overflow is terminal.** When `n` items sit unread and another frame
   arrives for the request, the dispatcher delivers
@@ -128,9 +129,9 @@ struct Bound { limit: usize, overflowed: AtomicBool }
   reserved for the terminal error, so delivering it never evicts a row (and so
   never emits a `-6` lag notice).
 - **`route_to_request_channel` / `deliver_to_request_id`**: the same logic as
-  sync, using `broadcast::Sender::len()`. That counts values not yet seen by
-  every live receiver, so with clones the slowest clone governs the limit;
-  document that.
+  sync, with unread counted as sent minus the original subscription's reads
+  (see "As built" above). Clones don't count, so if the original stops reading
+  the stream overflows even when a clone keeps up; documented.
 - **The dispatcher is the only producer** for request channels, so
   check-then-send can't race.
 - **`reset_channels` / shutdown** skip overflowed routes. For a route at
@@ -138,6 +139,21 @@ struct Bound { limit: usize, overflowed: AtomicBool }
 - **Cleanup**: `remove_if_unreferenced` and the cleanup signal key on `id` and
   the sender. Check that they compile against `RequestRoute` unchanged
   semantically.
+
+### Terminal items pass the cap (as built, after review)
+
+The first version counted TWS's end marker like a row, so a result exactly
+`limit` rows long, read late, ended in `BufferLimitExceeded` instead of
+`None`, and the drop then cancelled a finished request. It also turned a sync
+`cancel()` at the cap into an overflow, since `Cancelled` went through the
+bounded send.
+
+Now the route knows the request's end marker: `send_request_bounded` takes a
+`BufferBound { limit, end }`. `BoundState::admit` (in `transport/mod.rs`,
+shared by both buses) always lets the end marker and errors through, then
+closes the route. Anything else past the cap overflows, which also closes it,
+and a closed route discards later frames. So at most one item ever goes past
+the cap, and the async channel's spare slot covers it. Notices count as items.
 
 ### Overflowed routes
 

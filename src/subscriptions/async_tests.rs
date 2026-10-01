@@ -839,16 +839,6 @@ fn drain_deadline() -> tokio::time::Instant {
     tokio::time::Instant::now() + Duration::from_secs(2)
 }
 
-fn notice_200() -> Notice {
-    Notice {
-        request_id: Some(123),
-        code: 200,
-        message: "No security definition".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
-
 fn drain_fixture() -> Fixture<CancellableEndItem> {
     subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default())
 }
@@ -879,11 +869,15 @@ async fn test_drain_cancels_then_sees_end() {
 #[tokio::test]
 async fn test_drain_reports_tws_error() {
     let f = drain_fixture();
-    f.tx.send(RoutedItem::Error(Error::Notice(notice_200()))).unwrap();
+    f.tx.send(RoutedItem::Error(Error::Notice(crate::messages::Notice::synthesized(
+        200,
+        "No security definition".to_string(),
+    ))))
+    .unwrap();
 
     assert_eq!(
         f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(),
-        Drained::Rejected(notice_200())
+        Drained::Rejected(crate::messages::Notice::synthesized(200, "No security definition".to_string()))
     );
 }
 
@@ -955,4 +949,27 @@ async fn test_drain_on_one_clone_leaves_others_reading() {
     drop(other);
     settle().await;
     assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel across clones");
+}
+
+#[tokio::test]
+async fn test_drain_after_snapshot_end_writes_nothing() {
+    let mut f = subscription_with::<CancellableSnapshotItem>(Some(123), None, DecoderContext::default());
+    f.tx.send(int_frame(-1)).unwrap();
+    assert!(matches!(
+        f.subscription.next().await,
+        Some(Ok(SubscriptionItem::Data(CancellableSnapshotItem(-1))))
+    ));
+
+    let started = std::time::Instant::now();
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait after a finished snapshot");
+    settle().await;
+    assert!(f.bus.request_messages().is_empty());
+}
+
+#[tokio::test]
+async fn test_drain_without_request_id_returns_unconfirmed() {
+    let f = subscription_with::<CancellableEndItem>(None, None, DecoderContext::default());
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Unconfirmed);
 }

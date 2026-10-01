@@ -5,7 +5,6 @@
 use std::collections::{HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -23,7 +22,9 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder};
+use super::{
+    Admit, BoundState, BufferBound, InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder,
+};
 use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
@@ -701,16 +702,14 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
-    fn open_request(&self, request_id: i32, message: &[u8], limit: Option<usize>) -> Result<InternalSubscription, Error> {
+    fn open_request(&self, request_id: i32, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
-        match limit {
-            Some(limit) => self
-                .requests
-                .insert_bounded(request_id, sender, limit, |limit| Error::BufferLimitExceeded { limit }.into()),
+        match bound {
+            Some(bound) => self.requests.insert_bounded(request_id, sender, bound),
             None => self.requests.insert(request_id, sender),
         };
 
@@ -861,8 +860,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.open_request(request_id, message, None)
     }
 
-    fn send_request_bounded(&self, request_id: i32, message: &[u8], limit: usize) -> Result<InternalSubscription, Error> {
-        self.open_request(request_id, message, Some(limit))
+    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, Some(bound))
     }
 
     fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
@@ -982,26 +981,16 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 }
 
-/// A route's optional unread-item cap (`buffer_limit`). Only request routes
-/// opened with `send_request_bounded` carry one.
-#[derive(Debug)]
-struct Bound<V> {
-    limit: usize,
-    /// Builds the terminal item delivered when the cap is hit.
-    overflow: fn(usize) -> V,
-    /// Set once the overflow item was sent; later items are discarded.
-    overflowed: AtomicBool,
-}
-
 #[derive(Debug)]
 struct Entry<V> {
     sender: Sender<V>,
-    bound: Option<Bound<V>>,
+    /// The unread-item cap of a route opened with `send_request_bounded`.
+    bound: Option<BoundState>,
 }
 
 impl<V> Entry<V> {
-    fn overflowed(&self) -> bool {
-        self.bound.as_ref().is_some_and(|bound| bound.overflowed.load(Ordering::Relaxed))
+    fn closed(&self) -> bool {
+        self.bound.as_ref().is_some_and(BoundState::closed)
     }
 }
 
@@ -1017,35 +1006,6 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
-    /// Deliver `message` to `id`'s channel. A bounded route holding `limit`
-    /// unread items gets its overflow item instead, once; after that its
-    /// items are discarded until the subscription drops. Never blocks.
-    pub fn send(&self, id: &K, message: V) -> Result<(), Error> {
-        let senders = self.senders.read().unwrap();
-        debug!("senders: {senders:?}");
-        let Some(entry) = senders.get(id) else {
-            warn!("no recipient found for: {id:?}, {message:?}");
-            return Ok(());
-        };
-        let message = match &entry.bound {
-            Some(bound) if bound.overflowed.load(Ordering::Relaxed) => {
-                trace!("discarding item for overflowed route {id:?}");
-                return Ok(());
-            }
-            Some(bound) if entry.sender.len() >= bound.limit => {
-                bound.overflowed.store(true, Ordering::Relaxed);
-                (bound.overflow)(bound.limit)
-            }
-            _ => message,
-        };
-        if let Err(err) = entry.sender.send(message) {
-            warn!("error sending: {id:?}, {err}")
-        } else {
-            warn_if_backlogged(format_args!("subscription queue for {id:?}"), entry.sender.len());
-        }
-        Ok(())
-    }
-
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         let senders = self.senders.read().unwrap();
         senders.get(&id).map(|entry| entry.sender.clone())
@@ -1056,15 +1016,14 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         senders.insert(id, Entry { sender, bound: None }).map(|entry| entry.sender)
     }
 
-    /// Like [`insert`](Self::insert), with an unread-item cap: see [`send`](Self::send).
-    pub fn insert_bounded(&self, id: K, sender: Sender<V>, limit: usize, overflow: fn(usize) -> V) -> Option<Sender<V>> {
-        let bound = Bound {
-            limit,
-            overflow,
-            overflowed: AtomicBool::new(false),
+    /// Like [`insert`](Self::insert), with an unread-item cap: see [`BoundState::admit`].
+    pub fn insert_bounded(&self, id: K, sender: Sender<V>, bound: BufferBound) -> Option<Sender<V>> {
+        let entry = Entry {
+            sender,
+            bound: Some(BoundState::new(bound)),
         };
         let mut senders = self.senders.write().unwrap();
-        senders.insert(id, Entry { sender, bound: Some(bound) }).map(|entry| entry.sender)
+        senders.insert(id, entry).map(|entry| entry.sender)
     }
 
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
@@ -1099,15 +1058,45 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         let mut senders = self.senders.write().unwrap();
         senders.clear();
     }
+}
 
-    /// Send `message_fn()` to every route, skipping overflowed ones: their
-    /// stream already ended with the overflow error.
+impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
+    /// Deliver `message` to `id`'s channel, subject to a bounded route's cap
+    /// ([`BoundState::admit`]). Never blocks.
+    pub fn send(&self, id: &K, message: RoutedItem) -> Result<(), Error> {
+        let senders = self.senders.read().unwrap();
+        debug!("senders: {senders:?}");
+        let Some(entry) = senders.get(id) else {
+            warn!("no recipient found for: {id:?}, {message:?}");
+            return Ok(());
+        };
+        let message = match &entry.bound {
+            Some(bound) => match bound.admit(&message, entry.sender.len()) {
+                Admit::Deliver => message,
+                Admit::Overflow => bound.overflow_error(),
+                Admit::Discard => {
+                    trace!("discarding item for closed route {id:?}");
+                    return Ok(());
+                }
+            },
+            None => message,
+        };
+        if let Err(err) = entry.sender.send(message) {
+            warn!("error sending: {id:?}, {err}")
+        } else {
+            warn_if_backlogged(format_args!("subscription queue for {id:?}"), entry.sender.len());
+        }
+        Ok(())
+    }
+
+    /// Send `message_fn()` to every route, skipping closed bounded ones: their
+    /// stream already ended.
     pub fn notify_all<F>(&self, message_fn: F)
     where
-        F: Fn() -> V,
+        F: Fn() -> RoutedItem,
     {
         let senders = self.senders.read().unwrap();
-        for entry in senders.values().filter(|entry| !entry.overflowed()) {
+        for entry in senders.values().filter(|entry| !entry.closed()) {
             if let Err(e) = entry.sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }

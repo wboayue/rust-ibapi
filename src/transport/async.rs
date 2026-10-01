@@ -15,7 +15,7 @@ pub(crate) use io::{AsyncStream, AsyncTcpSocket};
 pub(crate) use shutdown::ShutdownSignal;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -39,7 +39,7 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{RoutedItem, SharedCounts, SharedTicket};
+use super::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
 
 /// Default capacity for broadcast channels. Subscription-data channels take
 /// the per-client override from `ClientBuilder::channel_capacity`; the notice
@@ -100,10 +100,10 @@ pub enum CleanupSignal {
 pub trait AsyncMessageBus: Send + Sync {
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
-    /// [`send_request`](Self::send_request) with a cap of `limit` unread
-    /// items: one more frame delivers `Error::BufferLimitExceeded` instead,
-    /// and later frames for the request are discarded.
-    async fn send_request_bounded(&self, request_id: i32, message: Vec<u8>, limit: usize) -> Result<AsyncInternalSubscription, Error>;
+    /// [`send_request`](Self::send_request) with a cap on unread items: see
+    /// [`BoundState::admit`](super::BoundState::admit). Past the cap the route
+    /// queues `Error::BufferLimitExceeded` and discards later frames.
+    async fn send_request_bounded(&self, request_id: i32, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
@@ -331,59 +331,13 @@ struct RequestRoute {
 
 #[derive(Debug)]
 struct RouteBound {
-    limit: usize,
+    state: BoundState,
     /// Items sent to the channel, and items the subscription has read (its
     /// `AsyncInternalSubscription::reads`): the difference is unread.
+    /// `Sender::len()` can't stand in, since it counts values the
+    /// never-reading `template_receiver` hasn't seen.
     sent: AtomicUsize,
     reads: Arc<AtomicUsize>,
-    /// Set once the overflow error was sent; later items are discarded.
-    overflowed: AtomicBool,
-}
-
-impl RequestRoute {
-    fn unbounded(sender: BroadcastSender) -> Self {
-        Self { sender, bound: None }
-    }
-
-    /// The channel for a bounded route has one slot more than `limit`, kept
-    /// for the overflow error so sending it never evicts a queued item.
-    /// `reads` is the subscription's read counter.
-    fn bounded(sender: BroadcastSender, limit: usize, reads: Arc<AtomicUsize>) -> Self {
-        let bound = RouteBound {
-            limit,
-            sent: AtomicUsize::new(0),
-            reads,
-            overflowed: AtomicBool::new(false),
-        };
-        Self { sender, bound: Some(bound) }
-    }
-
-    fn overflowed(&self) -> bool {
-        self.bound.as_ref().is_some_and(|bound| bound.overflowed.load(Ordering::Relaxed))
-    }
-
-    /// Send `item`, or for a bounded route holding `limit` unread items, the
-    /// overflow error instead, once; after that items are discarded until the
-    /// subscription drops. The dispatcher is the only producer, so the
-    /// unread check cannot race another send. Never blocks.
-    fn deliver(&self, request_id: i32, item: RoutedItem) {
-        let item = match &self.bound {
-            Some(bound) if bound.overflowed.load(Ordering::Relaxed) => {
-                trace!("discarding item for overflowed request {request_id}");
-                return;
-            }
-            Some(bound) if bound.unread() >= bound.limit => {
-                bound.overflowed.store(true, Ordering::Relaxed);
-                Error::BufferLimitExceeded { limit: bound.limit }.into()
-            }
-            Some(bound) => {
-                bound.sent.fetch_add(1, Ordering::Relaxed);
-                item
-            }
-            None => item,
-        };
-        let _ = self.sender.send(item);
-    }
 }
 
 impl RouteBound {
@@ -392,20 +346,47 @@ impl RouteBound {
     }
 }
 
-/// What [`remove_if_dead`] needs from a registration.
-trait Receivers {
-    fn receivers(&self) -> usize;
-}
-
-impl Receivers for BroadcastSender {
-    fn receivers(&self) -> usize {
-        self.receiver_count()
+impl RequestRoute {
+    fn unbounded(sender: BroadcastSender) -> Self {
+        Self { sender, bound: None }
     }
-}
 
-impl Receivers for RequestRoute {
-    fn receivers(&self) -> usize {
-        self.sender.receiver_count()
+    /// A bounded route's channel has one slot more than `bound.limit`, for the
+    /// one terminal item (end marker, error, or overflow error) that may
+    /// arrive with the cap full, so sending it never evicts a queued item.
+    /// `reads` is the subscription's read counter.
+    fn bounded(sender: BroadcastSender, bound: BufferBound, reads: Arc<AtomicUsize>) -> Self {
+        let bound = RouteBound {
+            state: BoundState::new(bound),
+            sent: AtomicUsize::new(0),
+            reads,
+        };
+        Self { sender, bound: Some(bound) }
+    }
+
+    fn closed(&self) -> bool {
+        self.bound.as_ref().is_some_and(|bound| bound.state.closed())
+    }
+
+    /// Send `item`, subject to a bounded route's cap ([`BoundState::admit`]).
+    /// The dispatcher is the only producer, so the unread check cannot race
+    /// another send. Never blocks.
+    fn deliver(&self, request_id: i32, item: RoutedItem) {
+        let item = match &self.bound {
+            Some(bound) => match bound.state.admit(&item, bound.unread()) {
+                Admit::Deliver => {
+                    bound.sent.fetch_add(1, Ordering::Relaxed);
+                    item
+                }
+                Admit::Overflow => bound.state.overflow_error(),
+                Admit::Discard => {
+                    trace!("discarding item for closed request {request_id}");
+                    return;
+                }
+            },
+            None => item,
+        };
+        let _ = self.sender.send(item);
     }
 }
 
@@ -415,10 +396,10 @@ impl Receivers for RequestRoute {
 /// replacement's own drop signal performs the eventual removal. The count is
 /// authoritative because a dropping subscription detaches its receivers
 /// before signalling (`AsyncInternalSubscription::detach_receivers`).
-async fn remove_if_dead<V: Receivers>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &str) {
+async fn remove_if_dead<V>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &str, sender: fn(&V) -> &BroadcastSender) {
     let mut channels = channels.write().await;
     let removed = match channels.entry(id) {
-        std::collections::hash_map::Entry::Occupied(entry) if entry.get().receivers() == 0 => {
+        std::collections::hash_map::Entry::Occupied(entry) if sender(entry.get()).receiver_count() == 0 => {
             entry.remove();
             true
         }
@@ -537,8 +518,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
                 match signal {
-                    CleanupSignal::Request(request_id) => remove_if_dead(&request_channels, request_id, "request").await,
-                    CleanupSignal::Order(order_id) => remove_if_dead(&order_channels, order_id, "order").await,
+                    CleanupSignal::Request(request_id) => remove_if_dead(&request_channels, request_id, "request", |route| &route.sender).await,
+                    CleanupSignal::Order(order_id) => remove_if_dead(&order_channels, order_id, "order", |sender| sender).await,
                     CleanupSignal::Shared(ticket) => {
                         // Shared channels are persistent and should not be removed
                         // They are created at initialization and reused across multiple requests
@@ -745,9 +726,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
 
-        // An overflowed route's stream already ended with its overflow error.
-        // A bounded route at its limit still has the reserved slot for this.
-        for route in self.request_channels.read().await.values().filter(|route| !route.overflowed()) {
+        // A closed bounded route's stream already ended. An open one at its
+        // cap still has the spare slot for this.
+        for route in self.request_channels.read().await.values().filter(|route| !route.closed()) {
             let _ = route.sender.send(Error::ConnectionReset.into());
         }
         for sender in self.order_channels.read().await.values() {
@@ -988,17 +969,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         Ok(())
     }
 
-    /// Store execution_id -> sender mapping for commission report routing
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
-    async fn open_request(&self, request_id: i32, message: Vec<u8>, limit: Option<usize>) -> Result<AsyncInternalSubscription, Error> {
+    async fn open_request(&self, request_id: i32, message: Vec<u8>, bound: Option<BufferBound>) -> Result<AsyncInternalSubscription, Error> {
         self.ensure_connected()?;
 
-        let capacity = limit.map_or(self.channel_capacity, |limit| limit + 1);
+        let capacity = bound.map_or(self.channel_capacity, |bound| bound.limit + 1);
         let (sender, receiver) = broadcast::channel(capacity);
-        let reads = limit.map(|_| Arc::new(AtomicUsize::new(0)));
-        let route = match (limit, &reads) {
-            (Some(limit), Some(reads)) => RequestRoute::bounded(sender.clone(), limit, reads.clone()),
+        let reads = bound.map(|_| Arc::new(AtomicUsize::new(0)));
+        let route = match (bound, &reads) {
+            (Some(bound), Some(reads)) => RequestRoute::bounded(sender.clone(), bound, reads.clone()),
             _ => RequestRoute::unbounded(sender.clone()),
         };
 
@@ -1029,6 +1009,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         })
     }
 
+    /// Store execution_id -> sender mapping for commission report routing
     async fn store_execution_mapping(&self, message: &ResponseMessage, sender: &BroadcastSender) {
         if let Some(execution_id) = message.execution_id() {
             let mut exec_channels = self.execution_channels.write().await;
@@ -1129,8 +1110,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         self.open_request(request_id, message, None).await
     }
 
-    async fn send_request_bounded(&self, request_id: i32, message: Vec<u8>, limit: usize) -> Result<AsyncInternalSubscription, Error> {
-        self.open_request(request_id, message, Some(limit)).await
+    async fn send_request_bounded(&self, request_id: i32, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error> {
+        self.open_request(request_id, message, Some(bound)).await
     }
 
     async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {

@@ -1,7 +1,7 @@
 use super::*;
 use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
-use crate::subscriptions::Drained;
+use crate::subscriptions::{Drained, SubscriptionItem};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -419,6 +419,10 @@ impl StreamDecoder<DrainItem> for DrainItem {
     fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         Ok(drain_cancel_frame())
     }
+
+    fn is_snapshot_end(&self) -> bool {
+        self.0 == -1
+    }
 }
 
 fn drain_cancel_frame() -> Vec<u8> {
@@ -442,16 +446,6 @@ fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(2)
 }
 
-fn notice_200() -> crate::messages::Notice {
-    crate::messages::Notice {
-        request_id: Some(1),
-        code: 200,
-        message: "No security definition".into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
-
 #[test]
 fn test_drain_after_end_writes_nothing() {
     let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(1), RoutedItem::Error(Error::EndOfStream)]);
@@ -471,9 +465,18 @@ fn test_drain_cancels_then_sees_end() {
 
 #[test]
 fn test_drain_reports_tws_error() {
-    let (sub, _bus, _tx) = drain_subscription::<DrainItem>(vec![data(1), RoutedItem::Error(Error::Notice(notice_200()))]);
+    let (sub, _bus, _tx) = drain_subscription::<DrainItem>(vec![
+        data(1),
+        RoutedItem::Error(Error::Notice(crate::messages::Notice::synthesized(
+            200,
+            "No security definition".to_string(),
+        ))),
+    ]);
 
-    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Rejected(notice_200()));
+    assert_eq!(
+        sub.cancel_and_drain(deadline()).unwrap(),
+        Drained::Rejected(crate::messages::Notice::synthesized(200, "No security definition".to_string()))
+    );
 }
 
 #[test]
@@ -514,4 +517,27 @@ fn test_drain_without_cancel_message_waits_for_natural_end() {
 
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
     assert!(bus.request_messages().is_empty());
+}
+
+#[test]
+fn test_drain_after_snapshot_end_writes_nothing() {
+    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(-1)]);
+    assert!(matches!(sub.next(), Some(Ok(SubscriptionItem::Data(DrainItem(-1))))));
+
+    let started = Instant::now();
+    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait after a finished snapshot");
+    assert!(bus.request_messages().is_empty());
+}
+
+#[test]
+fn test_drain_without_request_id_cancels_and_returns_unconfirmed() {
+    let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _signaler_rx) = channel::unbounded();
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
+    let bus = Arc::new(MessageBusStub::default());
+    let sub: Subscription<DrainItem> = Subscription::new(bus.clone(), internal, DecoderContext::default());
+
+    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Unconfirmed);
+    drop(sender);
 }

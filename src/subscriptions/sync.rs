@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{debug_assert_request_id_routable, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem};
+use super::common::{
+    debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem,
+};
 use super::{log_cancel_error, StreamDecoder};
 use crate::errors::Error;
 use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
@@ -150,7 +152,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// | Outcome | Meaning |
     /// | --- | --- |
-    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it had already arrived. |
+    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it (or a snapshot's end) had already arrived. |
     /// | [`Drained::Rejected`] | TWS answered with an error for the request. |
     /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
     /// | `Err` | The connection reset or the client shut down meanwhile. |
@@ -183,12 +185,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// match subscription.cancel_and_drain(Instant::now() + Duration::from_secs(10)) {
     ///     Ok(Drained::Ended) | Ok(Drained::Rejected(_)) => println!("request finished at TWS"),
-    ///     Ok(_) => println!("not confirmed; don't reuse the request slot yet"),
+    ///     Ok(Drained::Unconfirmed) => println!("not confirmed; don't reuse the request slot yet"),
     ///     Err(e) => eprintln!("session error: {e}"),
     /// }
     /// ```
     pub fn cancel_and_drain(self, deadline: Instant) -> Result<Drained, Error> {
-        if self.ended_natively() {
+        // A finished snapshot is complete at TWS too, and `cancel()` skips it.
+        if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
         // Ended with an error already: nothing more can arrive to confirm
@@ -218,10 +221,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 return Ok(Drained::Unconfirmed);
             }
             match self.next_timeout(remaining) {
-                Some(Ok(_)) => {}
-                Some(Err(Error::Notice(notice))) => return Ok(Drained::Rejected(notice)),
-                Some(Err(e @ (Error::ConnectionReset | Error::Shutdown))) => return Err(e),
-                Some(Err(_)) => return Ok(Drained::Unconfirmed),
+                Some(item) => {
+                    if let Some(outcome) = drain_outcome(item) {
+                        return outcome;
+                    }
+                }
                 None if self.ended_natively() => return Ok(Drained::Ended),
                 // The deadline passed; the loop returns `Unconfirmed`. The
                 // channel can't close under us: the subscription holds a sender.

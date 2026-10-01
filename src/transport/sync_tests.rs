@@ -12,6 +12,7 @@ use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
+use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::raw_capture::{test_support, RawFrameTap};
@@ -2880,6 +2881,28 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
 
 // ---- buffer_limit: bounded request routes ------------------------------------
 
+/// A cap of `limit`, ending on `ContractDataEnd`.
+fn bound(limit: usize) -> BufferBound {
+    BufferBound {
+        limit,
+        end: IncomingMessages::ContractDataEnd,
+    }
+}
+
+fn contract_row(contract_id: i32) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractData as i32,
+        &contract_data().request_id(9000).contract_id(contract_id).to_proto(),
+    )
+}
+
+fn contract_end() -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractDataEnd as i32,
+        &crate::proto::ContractDataEnd { req_id: Some(9000) },
+    )
+}
+
 fn histogram(request_id: i32) -> Vec<u8> {
     // HistogramData (msg_id 89): request_id at field index 1.
     body(&format!("89|{request_id}|payload|"))
@@ -2896,7 +2919,7 @@ fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize
 #[test]
 fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(100, &[], 2)?;
+    let sub = bus.send_request_bounded(100, &[], bound(2))?;
 
     route(&stream, &bus, 4, 100)?;
 
@@ -2910,7 +2933,7 @@ fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
 #[test]
 fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(100, &[], 2)?;
+    let sub = bus.send_request_bounded(100, &[], bound(2))?;
 
     for _ in 0..6 {
         route(&stream, &bus, 1, 100)?;
@@ -2922,8 +2945,8 @@ fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
 #[test]
 fn test_reset_skips_overflowed_route() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let overflowed = bus.send_request_bounded(100, &[], 1)?;
-    let at_limit = bus.send_request_bounded(200, &[], 1)?;
+    let overflowed = bus.send_request_bounded(100, &[], bound(1))?;
+    let at_limit = bus.send_request_bounded(200, &[], bound(1))?;
 
     route(&stream, &bus, 2, 100)?;
     route(&stream, &bus, 1, 200)?;
@@ -2945,22 +2968,12 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     use crate::subscriptions::DecoderContext;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(9000, &[], 1)?;
+    let internal = bus.send_request_bounded(9000, &[], bound(1))?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
     for contract_id in [1, 2] {
-        stream.push_inbound(binary_proto(
-            IncomingMessages::ContractData as i32,
-            &crate::proto::ContractData {
-                req_id: Some(9000),
-                contract: Some(crate::proto::Contract {
-                    con_id: Some(contract_id),
-                    ..Default::default()
-                }),
-                contract_details: Some(Default::default()),
-            },
-        ));
+        stream.push_inbound(contract_row(contract_id));
         bus.dispatch()?;
     }
 
@@ -3004,10 +3017,7 @@ fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
             while count_frames(&stream.captured(), &cancel) == 0 && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(1));
             }
-            stream.push_inbound(binary_proto(
-                IncomingMessages::ContractDataEnd as i32,
-                &crate::proto::ContractDataEnd { req_id: Some(9000) },
-            ));
+            stream.push_inbound(contract_end());
             bus.dispatch()
         })
     };
@@ -3017,5 +3027,39 @@ fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
 
     assert_eq!(outcome, Drained::Ended);
     assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
+    // A result exactly `limit` rows long, read late: the end marker gets
+    // through past the cap, so the stream ends normally.
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
+
+    for frame in [contract_row(1), contract_end(), contract_row(2)] {
+        stream.push_inbound(frame);
+        bus.dispatch()?;
+    }
+
+    assert_eq!(sub.next_timeout(TICK).expect("row")?.message_type(), IncomingMessages::ContractData);
+    assert_eq!(sub.next_timeout(TICK).expect("end")?.message_type(), IncomingMessages::ContractDataEnd);
+    assert!(sub.try_next().is_none(), "frames after the end marker are discarded");
+    Ok(())
+}
+
+#[test]
+fn test_cancel_at_limit_reports_cancelled() -> Result<(), Error> {
+    // `Cancelled` is an error, so it gets through a full cap rather than
+    // turning into an overflow.
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
+    stream.push_inbound(contract_row(1));
+    bus.dispatch()?;
+
+    bus.cancel_subscription(9000, &[])?;
+
+    assert!(sub.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::Cancelled))));
     Ok(())
 }

@@ -11,7 +11,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
 
-use super::common::{filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem};
+use super::common::{drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
@@ -301,7 +301,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     ///
     /// | Outcome | Meaning |
     /// | --- | --- |
-    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it had already arrived. |
+    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it (or a snapshot's end) had already arrived. |
     /// | [`Drained::Rejected`] | TWS answered with an error for the request. |
     /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
     /// | `Err` | The connection reset or the client shut down meanwhile. |
@@ -317,8 +317,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// without a request id (shared streams) are cancelled as by
     /// [`cancel`](Self::cancel) and return `Unconfirmed` immediately.
     ///
-    /// Dropping the returned future mid-drain is safe: the cancel was already
-    /// written, the subscription drops, and nothing is written twice.
+    /// Dropping the returned future mid-drain is safe: the cancel write runs in
+    /// its own task and completes, the subscription drops, and nothing is
+    /// written twice.
     ///
     /// # Examples
     ///
@@ -337,13 +338,14 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     ///
     ///     match subscription.cancel_and_drain(Instant::now() + Duration::from_secs(10)).await {
     ///         Ok(Drained::Ended) | Ok(Drained::Rejected(_)) => println!("request finished at TWS"),
-    ///         Ok(_) => println!("not confirmed; don't reuse the request slot yet"),
+    ///         Ok(Drained::Unconfirmed) => println!("not confirmed; don't reuse the request slot yet"),
     ///         Err(e) => eprintln!("session error: {e}"),
     ///     }
     /// }
     /// ```
     pub async fn cancel_and_drain(mut self, deadline: tokio::time::Instant) -> Result<Drained, Error> {
-        if self.ended_natively() {
+        // A finished snapshot is complete at TWS too, and `cancel()` skips it.
+        if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
         // Ended with an error already: nothing more can arrive to confirm
@@ -357,23 +359,32 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         }
 
         // Write the cancel and keep reading: the route stays until the
-        // subscription drops, so TWS's end marker can still reach us.
+        // subscription drops, so TWS's end marker can still reach us. The
+        // write runs in its own task, as `Drop`'s does, so dropping this
+        // future mid-write can't lose it: `cancelled` is already set.
         if !self.cancelled.swap(true, Ordering::Relaxed) {
             if let Some(message) = self.pending_cancel(self.request_id) {
-                if let Err(e) = self.message_bus.send_message(message).await {
-                    log_cancel_error("subscription", &e);
-                }
+                let message_bus = self.message_bus.clone();
+                let write = self.message_bus.runtime_handle().spawn(async move {
+                    if let Err(e) = message_bus.send_message(message).await {
+                        log_cancel_error("subscription", &e);
+                    }
+                });
+                let _ = write.await;
             }
         }
 
         loop {
             match tokio::time::timeout_at(deadline, self.next()).await {
                 Err(_elapsed) => return Ok(Drained::Unconfirmed),
-                Ok(Some(Ok(_))) => {}
-                Ok(Some(Err(Error::Notice(notice)))) => return Ok(Drained::Rejected(notice)),
-                Ok(Some(Err(e @ (Error::ConnectionReset | Error::Shutdown)))) => return Err(e),
-                Ok(Some(Err(_))) => return Ok(Drained::Unconfirmed),
+                Ok(Some(item)) => {
+                    if let Some(outcome) = drain_outcome(item) {
+                        return outcome;
+                    }
+                }
                 Ok(None) if self.ended_natively() => return Ok(Drained::Ended),
+                // Async shutdown closes the channels without an error.
+                Ok(None) if !self.message_bus.is_connected() => return Err(Error::Shutdown),
                 // The channel closed without an end marker.
                 Ok(None) => return Ok(Drained::Unconfirmed),
             }

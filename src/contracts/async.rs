@@ -345,7 +345,13 @@ pub(in crate::contracts) async fn contract_details_stream(
     let packet = encoders::encode_request_contract_data(request_id, contract)?;
     let request = client.request_with_id(request_id);
     match buffer_limit {
-        Some(limit) => request.send_bounded(packet, limit).await,
+        Some(limit) => {
+            let bound = crate::transport::BufferBound {
+                limit,
+                end: crate::messages::IncomingMessages::ContractDataEnd,
+            };
+            request.send_bounded(packet, bound).await
+        }
         None => request.send(packet).await,
     }
 }

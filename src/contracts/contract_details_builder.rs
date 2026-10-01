@@ -9,8 +9,9 @@ use crate::contracts::{Contract, ContractDetails};
 use crate::Error;
 
 /// The largest [`ContractDetailsBuilder::buffer_limit`]. The async client
-/// allocates the channel's slots up front, so the cap bounds that allocation.
-pub const MAX_BUFFER_LIMIT: usize = 65_536;
+/// allocates its channel's slots up front: `limit + 1`, rounded up to a power
+/// of two. At this maximum that is 65,536 slots, a few MiB.
+pub const MAX_BUFFER_LIMIT: usize = 65_535;
 
 /// Builder for a contract-details request that yields one [`ContractDetails`]
 /// per matching contract.
@@ -48,13 +49,15 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
         self.request_id
     }
 
-    /// Fail the stream instead of queueing more than `limit` unread rows.
+    /// Fail the stream instead of queueing more than `limit` unread items.
     ///
-    /// When `limit` rows are waiting to be read and another arrives, the
-    /// subscription yields every queued row, then
-    /// [`Error::BufferLimitExceeded`], then ends; rows TWS sends after that
-    /// are discarded. A reader that keeps up never hits it, however many rows
-    /// the query returns. Use it when the reader can stall (a slow sink,
+    /// Items are rows and any TWS notices for the request. When `limit` are
+    /// waiting to be read and another row or notice arrives, the subscription
+    /// yields every queued item, then [`Error::BufferLimitExceeded`], then
+    /// ends; anything TWS sends after that is discarded. TWS's end marker and
+    /// errors always get through, so a result that fills the cap exactly still
+    /// ends normally. A reader that keeps up never hits the cap, however many
+    /// rows the query returns. Use it when the reader can stall (a slow sink,
     /// batching) and unbounded queueing is not acceptable.
     ///
     /// Without it, queueing is unbounded on the sync client, and on the async
@@ -62,9 +65,11 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
     /// dropped (reported as a lag notice).
     ///
     /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`]; otherwise `subscribe`
-    /// returns [`Error::InvalidArgument`] without sending. On the async client
-    /// the count follows the original subscription's reads; clones made from
-    /// it are not counted.
+    /// returns [`Error::InvalidArgument`] without sending.
+    ///
+    /// On the async client only the original subscription's reads count. A
+    /// clone's reads don't: if the original stops reading (or is dropped), the
+    /// stream overflows after `limit` more items even when a clone keeps up.
     ///
     /// # Examples
     #[cfg_attr(

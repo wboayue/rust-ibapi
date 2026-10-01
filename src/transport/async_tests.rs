@@ -15,6 +15,7 @@ use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_acco
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
+use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -1883,6 +1884,28 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
 
 // ---- buffer_limit: bounded request routes ------------------------------------
 
+/// A cap of `limit`, ending on `ContractDataEnd`.
+fn bound(limit: usize) -> BufferBound {
+    BufferBound {
+        limit,
+        end: IncomingMessages::ContractDataEnd,
+    }
+}
+
+fn contract_row(contract_id: i32) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractData as i32,
+        &contract_data().request_id(9000).contract_id(contract_id).to_proto(),
+    )
+}
+
+fn contract_end() -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractDataEnd as i32,
+        &crate::proto::ContractDataEnd { req_id: Some(9000) },
+    )
+}
+
 async fn route_histograms(stream: &MemoryStream, bus: &AsyncTcpMessageBus<MemoryStream>, frames: usize, request_id: i32) {
     for n in 0..frames {
         // HistogramData (msg_id 89): request_id at field index 1, `n` at 2.
@@ -1899,7 +1922,7 @@ async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedIt
 #[tokio::test]
 async fn test_bounded_request_fails_after_limit_unread() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(100, vec![], 2).await.unwrap();
+    let mut sub = bus.send_request_bounded(100, vec![], bound(2)).await.unwrap();
 
     route_histograms(&stream, &bus, 4, 100).await;
 
@@ -1922,7 +1945,7 @@ async fn test_bounded_request_fails_after_limit_unread() {
 #[tokio::test]
 async fn test_bounded_request_counts_unread_not_total() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(100, vec![], 2).await.unwrap();
+    let mut sub = bus.send_request_bounded(100, vec![], bound(2)).await.unwrap();
 
     for _ in 0..6 {
         route_histograms(&stream, &bus, 1, 100).await;
@@ -1936,8 +1959,8 @@ async fn test_bounded_request_counts_unread_not_total() {
 #[tokio::test]
 async fn test_reset_skips_overflowed_route() {
     let (stream, bus) = make_bus();
-    let mut overflowed = bus.send_request_bounded(100, vec![], 1).await.unwrap();
-    let mut at_limit = bus.send_request_bounded(200, vec![], 1).await.unwrap();
+    let mut overflowed = bus.send_request_bounded(100, vec![], bound(1)).await.unwrap();
+    let mut at_limit = bus.send_request_bounded(200, vec![], bound(1)).await.unwrap();
 
     route_histograms(&stream, &bus, 2, 100).await;
     route_histograms(&stream, &bus, 1, 200).await;
@@ -1963,7 +1986,7 @@ async fn test_overflowed_subscription_cancels_on_drop() {
     use crate::contracts::ContractDetails;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(9000, vec![], 1).await.unwrap();
+    let internal = bus.send_request_bounded(9000, vec![], bound(1)).await.unwrap();
     let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -1973,17 +1996,7 @@ async fn test_overflowed_subscription_cancels_on_drop() {
     );
 
     for contract_id in [1, 2] {
-        stream.push_inbound(binary_proto(
-            crate::messages::IncomingMessages::ContractData as i32,
-            &crate::proto::ContractData {
-                req_id: Some(9000),
-                contract: Some(crate::proto::Contract {
-                    con_id: Some(contract_id),
-                    ..Default::default()
-                }),
-                contract_details: Some(Default::default()),
-            },
-        ));
+        stream.push_inbound(contract_row(contract_id));
         bus.read_and_route_message().await.unwrap();
     }
 
@@ -1997,4 +2010,52 @@ async fn test_overflowed_subscription_cancels_on_drop() {
     let cancel =
         <ContractDetails as StreamDecoder<ContractDetails>>::cancel_message(server_versions::CANCEL_CONTRACT_DATA, Some(9000), None).unwrap();
     assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "overflow leaves the cancel to drop");
+}
+
+#[tokio::test]
+async fn test_bounded_request_end_marker_at_limit_still_ends() {
+    // A result exactly `limit` rows long, read late: the end marker takes the
+    // spare slot, so the stream ends normally and nothing is evicted.
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(9000, vec![], bound(1)).await.unwrap();
+
+    for frame in [contract_row(1), contract_end(), contract_row(2)] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractData),
+        other => panic!("expected the row, got {other:?}"),
+    }
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractDataEnd),
+        other => panic!("expected the end marker, got {other:?}"),
+    }
+    assert!(try_next_routed(&mut sub).await.is_none(), "frames after the end marker are discarded");
+}
+
+/// Async shutdown closes the request channels without sending an error; the
+/// drain reports it as `Err(Shutdown)`, as the sync drain does.
+#[tokio::test]
+async fn test_drain_reports_shutdown() {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::Drained;
+
+    let (_stream, bus) = make_bus();
+    let internal = bus.send_request(9000, vec![]).await.unwrap();
+    let subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
+        internal,
+        bus.clone(),
+        Some(9000),
+        None,
+        DecoderContext::new(server_versions::CANCEL_CONTRACT_DATA),
+    );
+
+    let drain = tokio::spawn(subscription.cancel_and_drain(tokio::time::Instant::now() + Duration::from_secs(5)));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    bus.request_shutdown().await;
+
+    let outcome: Result<Drained, Error> = drain.await.unwrap();
+    assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
 }

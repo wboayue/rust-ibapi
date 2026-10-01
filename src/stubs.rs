@@ -203,8 +203,8 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
-    fn send_request_bounded(&self, request_id: i32, message: &[u8], limit: usize) -> Result<InternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(limit);
+    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: crate::transport::BufferBound) -> Result<InternalSubscription, Error> {
+        self.buffer_limits.write().unwrap().push(bound.limit);
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
@@ -319,8 +319,13 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(self.seeded_subscription(message))
     }
 
-    async fn send_request_bounded(&self, _request_id: i32, message: Vec<u8>, limit: usize) -> Result<AsyncInternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(limit);
+    async fn send_request_bounded(
+        &self,
+        _request_id: i32,
+        message: Vec<u8>,
+        bound: crate::transport::BufferBound,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.buffer_limits.write().unwrap().push(bound.limit);
         Ok(self.seeded_subscription(message))
     }
 

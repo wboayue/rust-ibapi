@@ -1,5 +1,6 @@
 //! Asynchronous builder implementations
 
+use crate::transport::BufferBound;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -56,15 +57,15 @@ impl<'a> RequestBuilder<'a> {
             .await
     }
 
-    /// [`send`](Self::send) with a cap of `limit` unread items.
-    pub async fn send_bounded<T>(self, message: Vec<u8>, limit: usize) -> Result<Subscription<T>, Error>
+    /// [`send`](Self::send) with a cap on unread items.
+    pub async fn send_bounded<T>(self, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
         let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id_bounded(self.request_id, message, limit)
+            .send_with_request_id_bounded(self.request_id, message, bound)
             .await
     }
 
@@ -248,13 +249,13 @@ where
         ))
     }
 
-    /// [`send_with_request_id`](Self::send_with_request_id) with a cap of
-    /// `limit` unread items (`AsyncMessageBus::send_request_bounded`).
-    pub async fn send_with_request_id_bounded(self, request_id: i32, message: Vec<u8>, limit: usize) -> Result<Subscription<T>, Error>
+    /// [`send_with_request_id`](Self::send_with_request_id) with a cap on
+    /// unread items (`AsyncMessageBus::send_request_bounded`).
+    pub async fn send_with_request_id_bounded(self, request_id: i32, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
-        let subscription = self.message_bus.send_request_bounded(request_id, message, limit).await?;
+        let subscription = self.message_bus.send_request_bounded(request_id, message, bound).await?;
 
         Ok(Subscription::new_from_internal(
             subscription,
