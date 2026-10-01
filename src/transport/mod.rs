@@ -27,6 +27,79 @@ pub mod r#async;
 #[cfg(any(feature = "sync", feature = "async"))]
 pub(crate) use crate::subscriptions::common::RoutedItem;
 
+/// A request route's unread-item cap (`buffer_limit`), opened with
+/// `send_request_bounded`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferBound {
+    /// The most unread items the route queues.
+    pub limit: usize,
+    /// The request's end marker. It always gets through, like an error, so a
+    /// result that fills the cap exactly still ends normally.
+    pub end: crate::messages::IncomingMessages,
+}
+
+/// What a bounded route does with the next item.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Admit {
+    /// Queue the item.
+    Deliver,
+    /// Queue `Error::BufferLimitExceeded` instead; the route is now closed.
+    Overflow,
+    /// Drop the item: the route already delivered a terminal item.
+    Discard,
+}
+
+/// The shared bookkeeping for a bounded route. Each transport supplies its
+/// own count of unread items.
+#[derive(Debug)]
+pub(crate) struct BoundState {
+    bound: BufferBound,
+    /// Set once a terminal item (end marker, error, or the overflow error)
+    /// was queued: the stream has ended, so later items are discarded and
+    /// at most one item ever uses the slot past the cap.
+    closed: std::sync::atomic::AtomicBool,
+}
+
+impl BoundState {
+    pub(crate) fn new(bound: BufferBound) -> Self {
+        Self {
+            bound,
+            closed: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    pub(crate) fn closed(&self) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Decide `item`'s fate with `unread` items queued. End markers and
+    /// errors always get through; anything else past the cap overflows.
+    pub(crate) fn admit(&self, item: &RoutedItem, unread: usize) -> Admit {
+        use std::sync::atomic::Ordering;
+        if self.closed() {
+            return Admit::Discard;
+        }
+        let terminal = match item {
+            RoutedItem::Error(_) => true,
+            RoutedItem::Response(message) => message.message_type() == self.bound.end,
+            RoutedItem::Notice(_) => false,
+        };
+        if terminal {
+            self.closed.store(true, Ordering::Relaxed);
+            Admit::Deliver
+        } else if unread >= self.bound.limit {
+            self.closed.store(true, Ordering::Relaxed);
+            Admit::Overflow
+        } else {
+            Admit::Deliver
+        }
+    }
+
+    pub(crate) fn overflow_error(&self) -> RoutedItem {
+        Error::BufferLimitExceeded { limit: self.bound.limit }.into()
+    }
+}
+
 // Result type for the connection read path (parse / I/O outcome).
 #[allow(dead_code)]
 pub(crate) type Response = Result<ResponseMessage, Error>;
@@ -143,6 +216,11 @@ impl SharedCounts {
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
     fn send_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
+
+    /// [`send_request`](Self::send_request) with a cap on unread items: see
+    /// [`BoundState::admit`]. Past the cap the route queues
+    /// `Error::BufferLimitExceeded` and discards later frames.
+    fn send_request_bounded(&self, request_id: i32, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
 
     fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 

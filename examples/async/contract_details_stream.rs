@@ -1,8 +1,8 @@
 //! Contract details stream example: read a broad query row by row and stop early.
 //!
 //! Dropping the subscription before TWS has sent every row sends the native
-//! cancel (server 215+). TWS may still send the rest of a result it has
-//! already prepared; those rows are discarded.
+//! cancel (server 215+). TWS keeps sending the rest anyway; those rows are
+//! discarded.
 //!
 //! # Usage
 //!

@@ -10,7 +10,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crossbeam::channel::{self, Receiver, Sender};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 
 use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
@@ -22,7 +22,9 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder};
+use super::{
+    Admit, BoundState, BufferBound, InternalSubscription, MessageBus, Response, RoutedItem, SharedCounts, SharedTicket, Signal, SubscriptionBuilder,
+};
 use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
@@ -698,6 +700,38 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 
+    /// Register `request_id`'s channel, optionally with an unread-item cap,
+    /// then write the request.
+    fn open_request(&self, request_id: i32, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
+        let (sender, receiver) = channel::unbounded();
+        let sender_copy = sender.clone();
+
+        match bound {
+            Some(bound) => self.requests.insert_bounded(request_id, sender, bound),
+            None => self.requests.insert(request_id, sender),
+        };
+
+        // The gate can close between `ensure_connected` and the write, so take
+        // the registration back out on failure rather than leave a channel no
+        // reset will clear. `remove_if_same` so a newer registration under the
+        // same id survives.
+        if let Err(e) = self.write_message(message) {
+            self.requests.remove_if_same(&request_id, &sender_copy);
+            return Err(e);
+        }
+
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender_copy)
+            .signaler(self.signals_send.clone())
+            .request_id(request_id)
+            .build();
+
+        Ok(subscription)
+    }
+
     fn store_execution_mapping_orders(&self, message: &ResponseMessage, order_id: i32) {
         if let Some(sender) = self.orders.copy_sender(order_id) {
             if let Some(execution_id) = message.execution_id() {
@@ -823,30 +857,11 @@ impl<S: Stream> TcpMessageBus<S> {
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.ensure_connected()?;
+        self.open_request(request_id, message, None)
+    }
 
-        let (sender, receiver) = channel::unbounded();
-        let sender_copy = sender.clone();
-
-        self.requests.insert(request_id, sender);
-
-        // The gate can close between `ensure_connected` and the write, so take
-        // the registration back out on failure rather than leave a channel no
-        // reset will clear. `remove_if_same` so a newer registration under the
-        // same id survives.
-        if let Err(e) = self.write_message(message) {
-            self.requests.remove_if_same(&request_id, &sender_copy);
-            return Err(e);
-        }
-
-        let subscription = SubscriptionBuilder::new()
-            .receiver(receiver)
-            .sender(sender_copy)
-            .signaler(self.signals_send.clone())
-            .request_id(request_id)
-            .build();
-
-        Ok(subscription)
+    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, Some(bound))
     }
 
     fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
@@ -967,8 +982,21 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 }
 
 #[derive(Debug)]
+struct Entry<V> {
+    sender: Sender<V>,
+    /// The unread-item cap of a route opened with `send_request_bounded`.
+    bound: Option<BoundState>,
+}
+
+impl<V> Entry<V> {
+    fn closed(&self) -> bool {
+        self.bound.as_ref().is_some_and(BoundState::closed)
+    }
+}
+
+#[derive(Debug)]
 struct SenderHash<K, V> {
-    senders: RwLock<HashMap<K, Sender<V>>>,
+    senders: RwLock<HashMap<K, Entry<V>>>,
 }
 
 impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
@@ -978,34 +1006,29 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
-    pub fn send(&self, id: &K, message: V) -> Result<(), Error> {
-        let senders = self.senders.read().unwrap();
-        debug!("senders: {senders:?}");
-        if let Some(sender) = senders.get(id) {
-            if let Err(err) = sender.send(message) {
-                warn!("error sending: {id:?}, {err}")
-            } else {
-                warn_if_backlogged(format_args!("subscription queue for {id:?}"), sender.len());
-            }
-        } else {
-            warn!("no recipient found for: {id:?}, {message:?}")
-        }
-        Ok(())
-    }
-
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         let senders = self.senders.read().unwrap();
-        senders.get(&id).cloned()
+        senders.get(&id).map(|entry| entry.sender.clone())
     }
 
-    pub fn insert(&self, id: K, message: Sender<V>) -> Option<Sender<V>> {
+    pub fn insert(&self, id: K, sender: Sender<V>) -> Option<Sender<V>> {
         let mut senders = self.senders.write().unwrap();
-        senders.insert(id, message)
+        senders.insert(id, Entry { sender, bound: None }).map(|entry| entry.sender)
+    }
+
+    /// Like [`insert`](Self::insert), with an unread-item cap: see [`BoundState::admit`].
+    pub fn insert_bounded(&self, id: K, sender: Sender<V>, bound: BufferBound) -> Option<Sender<V>> {
+        let entry = Entry {
+            sender,
+            bound: Some(BoundState::new(bound)),
+        };
+        let mut senders = self.senders.write().unwrap();
+        senders.insert(id, entry).map(|entry| entry.sender)
     }
 
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
         let mut senders = self.senders.write().unwrap();
-        senders.remove(id)
+        senders.remove(id).map(|entry| entry.sender)
     }
 
     /// Remove the entry for `id` only if it is the same channel as `sender`.
@@ -1013,7 +1036,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     /// stale signal cannot remove a newer registration under the same key.
     pub fn remove_if_same(&self, id: &K, sender: &Sender<V>) -> bool {
         let mut senders = self.senders.write().unwrap();
-        if senders.get(id).is_some_and(|registered| registered.same_channel(sender)) {
+        if senders.get(id).is_some_and(|registered| registered.sender.same_channel(sender)) {
             senders.remove(id);
             true
         } else {
@@ -1035,14 +1058,46 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         let mut senders = self.senders.write().unwrap();
         senders.clear();
     }
+}
 
+impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
+    /// Deliver `message` to `id`'s channel, subject to a bounded route's cap
+    /// ([`BoundState::admit`]). Never blocks.
+    pub fn send(&self, id: &K, message: RoutedItem) -> Result<(), Error> {
+        let senders = self.senders.read().unwrap();
+        debug!("senders: {senders:?}");
+        let Some(entry) = senders.get(id) else {
+            warn!("no recipient found for: {id:?}, {message:?}");
+            return Ok(());
+        };
+        let message = match &entry.bound {
+            Some(bound) => match bound.admit(&message, entry.sender.len()) {
+                Admit::Deliver => message,
+                Admit::Overflow => bound.overflow_error(),
+                Admit::Discard => {
+                    trace!("discarding item for closed route {id:?}");
+                    return Ok(());
+                }
+            },
+            None => message,
+        };
+        if let Err(err) = entry.sender.send(message) {
+            warn!("error sending: {id:?}, {err}")
+        } else {
+            warn_if_backlogged(format_args!("subscription queue for {id:?}"), entry.sender.len());
+        }
+        Ok(())
+    }
+
+    /// Send `message_fn()` to every route, skipping closed bounded ones: their
+    /// stream already ended.
     pub fn notify_all<F>(&self, message_fn: F)
     where
-        F: Fn() -> V,
+        F: Fn() -> RoutedItem,
     {
         let senders = self.senders.read().unwrap();
-        for sender in senders.values() {
-            if let Err(e) = sender.send(message_fn()) {
+        for entry in senders.values().filter(|entry| !entry.closed()) {
+            if let Err(e) = entry.sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }
         }

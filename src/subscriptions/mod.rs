@@ -36,8 +36,8 @@ pub(crate) fn log_cancel_error(what: &str, error: &Error) {
 }
 
 pub(crate) mod common;
-pub use common::SubscriptionItem;
 pub(crate) use common::{DecoderContext, StreamDecoder};
+pub use common::{Drained, SubscriptionItem};
 
 #[doc(hidden)]
 #[cfg(feature = "sync")]

@@ -11,7 +11,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
 
-use super::common::{filter_notice, is_undeclared, DecoderContext, RoutedItem, SubscriptionItem};
+use super::common::{drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
@@ -290,6 +290,105 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
             return Err(Error::UnexpectedEndOfStream);
         }
         Ok(collected)
+    }
+
+    /// Cancel the request and wait, up to `deadline`, for TWS to confirm it
+    /// is over, discarding anything that arrives meanwhile.
+    ///
+    /// Use it when the request id must be known finished before it's reused,
+    /// or before the next request under strict pacing. Dropping the
+    /// subscription also cancels, but doesn't wait for TWS.
+    ///
+    /// | Outcome | Meaning |
+    /// | --- | --- |
+    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it (or a snapshot's end) had already arrived. |
+    /// | [`Drained::Rejected`] | TWS answered with an error for the request. |
+    /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
+    /// | `Err` | The connection reset or the client shut down meanwhile. |
+    ///
+    /// The cancel is TWS's native one, where the request type has one (contract
+    /// details: server 215+); otherwise nothing is written and the drain waits
+    /// for a natural end. Observed live (server 225), TWS kept sending contract
+    /// details after the cancel: the rest of a prepared 714-row result, then
+    /// the end marker; and 8,000+ rows over 150 s of an unfiltered option
+    /// query with no end marker yet. So the drain usually waits out the whole
+    /// result: size `deadline` for it, and prefer narrow queries. A stream with
+    /// no end marker (market data) always ends `Unconfirmed`. Subscriptions
+    /// without a request id (shared streams) are cancelled as by
+    /// [`cancel`](Self::cancel) and return `Unconfirmed` immediately.
+    ///
+    /// Dropping the returned future mid-drain is safe: the cancel write runs in
+    /// its own task and completes, the subscription drops, and nothing is
+    /// written twice.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use tokio::time::{Duration, Instant};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let mut subscription = client.contract_details_stream(&contract).subscribe().await.expect("request failed");
+    ///     let first = subscription.next().await;
+    ///     println!("first row: {first:?}");
+    ///
+    ///     match subscription.cancel_and_drain(Instant::now() + Duration::from_secs(10)).await {
+    ///         Ok(Drained::Ended) | Ok(Drained::Rejected(_)) => println!("request finished at TWS"),
+    ///         Ok(Drained::Unconfirmed) => println!("not confirmed; don't reuse the request slot yet"),
+    ///         Err(e) => eprintln!("session error: {e}"),
+    ///     }
+    /// }
+    /// ```
+    pub async fn cancel_and_drain(mut self, deadline: tokio::time::Instant) -> Result<Drained, Error> {
+        // A finished snapshot is complete at TWS too, and `cancel()` skips it.
+        if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
+            return Ok(Drained::Ended);
+        }
+        // Ended with an error already: nothing more can arrive to confirm
+        // TWS's state. Drop writes the cancel, as for any errored stream.
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return Ok(Drained::Unconfirmed);
+        }
+        if self.request_id.is_none() {
+            self.cancel().await;
+            return Ok(Drained::Unconfirmed);
+        }
+
+        // Write the cancel and keep reading: the route stays until the
+        // subscription drops, so TWS's end marker can still reach us. The
+        // write runs in its own task, as `Drop`'s does, so dropping this
+        // future mid-write can't lose it: `cancelled` is already set.
+        if !self.cancelled.swap(true, Ordering::Relaxed) {
+            if let Some(message) = self.pending_cancel(self.request_id) {
+                let message_bus = self.message_bus.clone();
+                let write = self.message_bus.runtime_handle().spawn(async move {
+                    if let Err(e) = message_bus.send_message(message).await {
+                        log_cancel_error("subscription", &e);
+                    }
+                });
+                let _ = write.await;
+            }
+        }
+
+        loop {
+            match tokio::time::timeout_at(deadline, self.next()).await {
+                Err(_elapsed) => return Ok(Drained::Unconfirmed),
+                Ok(Some(item)) => {
+                    if let Some(outcome) = drain_outcome(item) {
+                        return outcome;
+                    }
+                }
+                Ok(None) if self.ended_natively() => return Ok(Drained::Ended),
+                // Async shutdown closes the channels without an error.
+                Ok(None) if !self.message_bus.is_connected() => return Err(Error::Shutdown),
+                // The channel closed without an end marker.
+                Ok(None) => return Ok(Drained::Unconfirmed),
+            }
+        }
     }
 }
 

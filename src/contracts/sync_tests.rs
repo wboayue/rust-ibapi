@@ -651,3 +651,38 @@ fn contract_details_cancels_after_tws_error() {
     assert_eq!(request_message_count(&message_bus), 2);
     assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(TEST_REQ_ID_FIRST));
 }
+
+// ---- buffer_limit ----------------------------------------------------------
+
+#[test]
+fn contract_details_stream_buffer_limit_reaches_the_bus() {
+    let (client, message_bus) = stream_client(vec![contract_data_end(TEST_REQ_ID_FIRST)], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    let _bounded = client.contract_details_stream(&contract).buffer_limit(64).subscribe().unwrap();
+    let _unbounded = client.contract_details_stream(&contract).subscribe().unwrap();
+
+    assert_eq!(
+        *message_bus.buffer_limits.read().unwrap(),
+        vec![64],
+        "only the bounded request carries a limit"
+    );
+    assert_eq!(request_message_count(&message_bus), 2);
+}
+
+#[test]
+fn contract_details_stream_rejects_out_of_range_buffer_limit() {
+    let (client, message_bus) = stream_client(vec![], server_versions::CANCEL_CONTRACT_DATA);
+    let contract = Contract::stock("AAPL").build();
+
+    for limit in [0, crate::contracts::MAX_BUFFER_LIMIT + 1] {
+        let result = client.contract_details_stream(&contract).buffer_limit(limit).subscribe();
+        assert!(matches!(result, Err(crate::Error::InvalidArgument(_))), "limit {limit} must be rejected");
+    }
+    let _max = client
+        .contract_details_stream(&contract)
+        .buffer_limit(crate::contracts::MAX_BUFFER_LIMIT)
+        .subscribe()
+        .unwrap();
+    assert_eq!(request_message_count(&message_bus), 1, "only the in-range request is sent");
+}
