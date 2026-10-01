@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Client::contract_details_stream(&contract)` returns a `ContractDetailsBuilder`: `request_id()` is known before anything is sent, and `subscribe()` sends once (no retry) and returns a `Subscription<ContractDetails>`. Rows can be read as they arrive; dropping the subscription early sends the native `cancelContractData` (server 215+), and rows TWS sends after that are discarded. `contract_details` now collects over this stream. See `examples/{sync,async}/contract_details_stream.rs` (#876).
 - Preset attached orders: `OrderBuilder::preset_stop_loss()` / `preset_profit_taker()` ask TWS to attach a stop-loss / profit-taker priced from its order presets, and `AttachedOrdersBuilder::submit()` returns the parent and child ids as `AttachedOrderIds`. The raw path is the new `Order` fields below. Requires server version 218; below it, placing such an order fails with `Error::ServerVersion`. If no preset is defined, TWS discards the parent as well (error 10355). See `examples/async/preset_attached_orders.rs` (#842).
 - `Error::AccountUpdatesInUse { active, requested }`, returned by `account_updates` (#847).
 - `From<market_data::historical::HistoricalParseError> for Error`, so `s.parse::<BarSize>()?` (and `Duration`, `WhatToShow`) works in a function returning `ibapi::Error` (#838).
 
 ### Changed
 
+- Dropping or cancelling a request-id subscription after TWS's end marker no longer writes a cancel for the finished request. After an error or a reset the cancel is still sent (#876).
+- `contract_details` skips a frame of a type the request doesn't expect (logged at `trace!`) rather than failing with `Error::UnexpectedResponse`; TWS warning notices on the request are logged at `warn!` (#876).
+- `matching_symbols` docs describe its retry: on a connection reset it waits for the reconnect and retries with a fresh request id, up to 3 times (#876).
 - `account_updates` for a second account while one is live returns `Error::AccountUpdatesInUse` and sends nothing. TWS keeps one account-updates stream per connection, so the request used to switch every live subscription to the new account's data, and since #836 a live subscription could keep receiving it after the request that switched it ended. The same account again still shares the stream; cancel every subscription to switch accounts (async: `cancel().await`, since a drop releases in a spawned task), or use `account_updates_multi` for several accounts at once (#847).
 - `orders::Order` gains `preset_stop_loss_order_id` and `preset_profit_taker_order_id` (`Option<i32>`, default `None`), sent as `PlaceOrderRequest.attached_orders`. Exhaustive `Order` struct literals need the two fields. See `docs/migration-4.0.md` §21 (#842).
 - `orders::OrderCondition` gains `Unknown(UnknownCondition)`: a condition type this crate does not model (IB leaves `2` unassigned) keeps its type code and every wire field instead of decoding as a zeroed `PriceCondition`, and goes back out unchanged, so an order read from TWS and placed again keeps its condition. Exhaustive matches need the new arm. See `docs/migration-4.0.md` §16 (#827).

@@ -278,6 +278,11 @@ path = "examples/async/contract_details.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_contract_details_stream"
+path = "examples/async/contract_details_stream.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_contract_news"
 path = "examples/async/contract_news.rs"
 required-features = ["async"]
@@ -446,6 +451,11 @@ required-features = ["sync"]
 [[example]]
 name = "contract_details"
 path = "examples/sync/contract_details.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "contract_details_stream"
+path = "examples/sync/contract_details_stream.rs"
 required-features = ["sync"]
 
 [[example]]
