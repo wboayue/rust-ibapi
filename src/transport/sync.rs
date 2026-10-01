@@ -5,12 +5,13 @@
 use std::collections::{HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crossbeam::channel::{self, Receiver, Sender};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 
 use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
@@ -698,6 +699,40 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 
+    /// Register `request_id`'s channel, optionally with an unread-item cap,
+    /// then write the request.
+    fn open_request(&self, request_id: i32, message: &[u8], limit: Option<usize>) -> Result<InternalSubscription, Error> {
+        self.ensure_connected()?;
+
+        let (sender, receiver) = channel::unbounded();
+        let sender_copy = sender.clone();
+
+        match limit {
+            Some(limit) => self
+                .requests
+                .insert_bounded(request_id, sender, limit, |limit| Error::BufferLimitExceeded { limit }.into()),
+            None => self.requests.insert(request_id, sender),
+        };
+
+        // The gate can close between `ensure_connected` and the write, so take
+        // the registration back out on failure rather than leave a channel no
+        // reset will clear. `remove_if_same` so a newer registration under the
+        // same id survives.
+        if let Err(e) = self.write_message(message) {
+            self.requests.remove_if_same(&request_id, &sender_copy);
+            return Err(e);
+        }
+
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender_copy)
+            .signaler(self.signals_send.clone())
+            .request_id(request_id)
+            .build();
+
+        Ok(subscription)
+    }
+
     fn store_execution_mapping_orders(&self, message: &ResponseMessage, order_id: i32) {
         if let Some(sender) = self.orders.copy_sender(order_id) {
             if let Some(execution_id) = message.execution_id() {
@@ -823,30 +858,11 @@ impl<S: Stream> TcpMessageBus<S> {
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.ensure_connected()?;
+        self.open_request(request_id, message, None)
+    }
 
-        let (sender, receiver) = channel::unbounded();
-        let sender_copy = sender.clone();
-
-        self.requests.insert(request_id, sender);
-
-        // The gate can close between `ensure_connected` and the write, so take
-        // the registration back out on failure rather than leave a channel no
-        // reset will clear. `remove_if_same` so a newer registration under the
-        // same id survives.
-        if let Err(e) = self.write_message(message) {
-            self.requests.remove_if_same(&request_id, &sender_copy);
-            return Err(e);
-        }
-
-        let subscription = SubscriptionBuilder::new()
-            .receiver(receiver)
-            .sender(sender_copy)
-            .signaler(self.signals_send.clone())
-            .request_id(request_id)
-            .build();
-
-        Ok(subscription)
+    fn send_request_bounded(&self, request_id: i32, message: &[u8], limit: usize) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, Some(limit))
     }
 
     fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
@@ -966,9 +982,32 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 }
 
+/// A route's optional unread-item cap (`buffer_limit`). Only request routes
+/// opened with `send_request_bounded` carry one.
+#[derive(Debug)]
+struct Bound<V> {
+    limit: usize,
+    /// Builds the terminal item delivered when the cap is hit.
+    overflow: fn(usize) -> V,
+    /// Set once the overflow item was sent; later items are discarded.
+    overflowed: AtomicBool,
+}
+
+#[derive(Debug)]
+struct Entry<V> {
+    sender: Sender<V>,
+    bound: Option<Bound<V>>,
+}
+
+impl<V> Entry<V> {
+    fn overflowed(&self) -> bool {
+        self.bound.as_ref().is_some_and(|bound| bound.overflowed.load(Ordering::Relaxed))
+    }
+}
+
 #[derive(Debug)]
 struct SenderHash<K, V> {
-    senders: RwLock<HashMap<K, Sender<V>>>,
+    senders: RwLock<HashMap<K, Entry<V>>>,
 }
 
 impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
@@ -978,34 +1017,59 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
+    /// Deliver `message` to `id`'s channel. A bounded route holding `limit`
+    /// unread items gets its overflow item instead, once; after that its
+    /// items are discarded until the subscription drops. Never blocks.
     pub fn send(&self, id: &K, message: V) -> Result<(), Error> {
         let senders = self.senders.read().unwrap();
         debug!("senders: {senders:?}");
-        if let Some(sender) = senders.get(id) {
-            if let Err(err) = sender.send(message) {
-                warn!("error sending: {id:?}, {err}")
-            } else {
-                warn_if_backlogged(format_args!("subscription queue for {id:?}"), sender.len());
+        let Some(entry) = senders.get(id) else {
+            warn!("no recipient found for: {id:?}, {message:?}");
+            return Ok(());
+        };
+        let message = match &entry.bound {
+            Some(bound) if bound.overflowed.load(Ordering::Relaxed) => {
+                trace!("discarding item for overflowed route {id:?}");
+                return Ok(());
             }
+            Some(bound) if entry.sender.len() >= bound.limit => {
+                bound.overflowed.store(true, Ordering::Relaxed);
+                (bound.overflow)(bound.limit)
+            }
+            _ => message,
+        };
+        if let Err(err) = entry.sender.send(message) {
+            warn!("error sending: {id:?}, {err}")
         } else {
-            warn!("no recipient found for: {id:?}, {message:?}")
+            warn_if_backlogged(format_args!("subscription queue for {id:?}"), entry.sender.len());
         }
         Ok(())
     }
 
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         let senders = self.senders.read().unwrap();
-        senders.get(&id).cloned()
+        senders.get(&id).map(|entry| entry.sender.clone())
     }
 
-    pub fn insert(&self, id: K, message: Sender<V>) -> Option<Sender<V>> {
+    pub fn insert(&self, id: K, sender: Sender<V>) -> Option<Sender<V>> {
         let mut senders = self.senders.write().unwrap();
-        senders.insert(id, message)
+        senders.insert(id, Entry { sender, bound: None }).map(|entry| entry.sender)
+    }
+
+    /// Like [`insert`](Self::insert), with an unread-item cap: see [`send`](Self::send).
+    pub fn insert_bounded(&self, id: K, sender: Sender<V>, limit: usize, overflow: fn(usize) -> V) -> Option<Sender<V>> {
+        let bound = Bound {
+            limit,
+            overflow,
+            overflowed: AtomicBool::new(false),
+        };
+        let mut senders = self.senders.write().unwrap();
+        senders.insert(id, Entry { sender, bound: Some(bound) }).map(|entry| entry.sender)
     }
 
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
         let mut senders = self.senders.write().unwrap();
-        senders.remove(id)
+        senders.remove(id).map(|entry| entry.sender)
     }
 
     /// Remove the entry for `id` only if it is the same channel as `sender`.
@@ -1013,7 +1077,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     /// stale signal cannot remove a newer registration under the same key.
     pub fn remove_if_same(&self, id: &K, sender: &Sender<V>) -> bool {
         let mut senders = self.senders.write().unwrap();
-        if senders.get(id).is_some_and(|registered| registered.same_channel(sender)) {
+        if senders.get(id).is_some_and(|registered| registered.sender.same_channel(sender)) {
             senders.remove(id);
             true
         } else {
@@ -1036,13 +1100,15 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         senders.clear();
     }
 
+    /// Send `message_fn()` to every route, skipping overflowed ones: their
+    /// stream already ended with the overflow error.
     pub fn notify_all<F>(&self, message_fn: F)
     where
         F: Fn() -> V,
     {
         let senders = self.senders.read().unwrap();
-        for sender in senders.values() {
-            if let Err(e) = sender.send(message_fn()) {
+        for entry in senders.values().filter(|entry| !entry.overflowed()) {
+            if let Err(e) = entry.sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }
         }

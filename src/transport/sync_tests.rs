@@ -2877,3 +2877,102 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
     assert!(order_sub.next_timeout(TICK).is_none());
 }
+
+// ---- buffer_limit: bounded request routes ------------------------------------
+
+fn histogram(request_id: i32) -> Vec<u8> {
+    // HistogramData (msg_id 89): request_id at field index 1.
+    body(&format!("89|{request_id}|payload|"))
+}
+
+fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize, request_id: i32) -> Result<(), Error> {
+    for _ in 0..frames {
+        stream.push_inbound(histogram(request_id));
+        bus.dispatch()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(100, &[], 2)?;
+
+    route(&stream, &bus, 4, 100)?;
+
+    assert!(sub.next_timeout(TICK).expect("first row")?.peek_int(1)? == 100);
+    assert!(sub.next_timeout(TICK).expect("second row").is_ok());
+    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::BufferLimitExceeded { limit: 2 }))));
+    assert!(sub.try_next().is_none(), "frames after the overflow are discarded");
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(100, &[], 2)?;
+
+    for _ in 0..6 {
+        route(&stream, &bus, 1, 100)?;
+        assert!(sub.next_timeout(TICK).expect("row").is_ok(), "a reader that keeps up never overflows");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_reset_skips_overflowed_route() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let overflowed = bus.send_request_bounded(100, &[], 1)?;
+    let at_limit = bus.send_request_bounded(200, &[], 1)?;
+
+    route(&stream, &bus, 2, 100)?;
+    route(&stream, &bus, 1, 200)?;
+    bus.reset();
+
+    assert!(overflowed.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(overflowed.next_timeout(TICK), Some(Err(Error::BufferLimitExceeded { .. }))));
+    assert!(overflowed.try_next().is_none(), "no second terminal error after reset");
+
+    assert!(at_limit.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(at_limit.next_timeout(TICK), Some(Err(Error::ConnectionReset))));
+    Ok(())
+}
+
+#[test]
+fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::DecoderContext;
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request_bounded(9000, &[], 1)?;
+    let subscription: Subscription<ContractDetails> =
+        Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
+
+    for contract_id in [1, 2] {
+        stream.push_inbound(binary_proto(
+            IncomingMessages::ContractData as i32,
+            &crate::proto::ContractData {
+                req_id: Some(9000),
+                contract: Some(crate::proto::Contract {
+                    con_id: Some(contract_id),
+                    ..Default::default()
+                }),
+                contract_details: Some(Default::default()),
+            },
+        ));
+        bus.dispatch()?;
+    }
+
+    assert!(matches!(subscription.next(), Some(Ok(_))));
+    assert!(matches!(subscription.next(), Some(Err(Error::BufferLimitExceeded { limit: 1 }))));
+    drop(subscription);
+
+    let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
+        crate::server_versions::CANCEL_CONTRACT_DATA,
+        Some(9000),
+        None,
+    )?;
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1, "overflow leaves the cancel to drop");
+    Ok(())
+}

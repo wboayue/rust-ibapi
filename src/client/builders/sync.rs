@@ -52,6 +52,14 @@ impl<'a> RequestBuilder<'a> {
         SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
 
+    /// [`send`](Self::send) with a cap of `limit` unread items.
+    pub fn send_bounded<T>(self, message: Vec<u8>, limit: usize) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T>,
+    {
+        SubscriptionBuilder::new(self.client).send_with_request_id_bounded(self.request_id, message, limit)
+    }
+
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
@@ -218,6 +226,14 @@ where
     /// Sends a request with a specific request ID and builds the subscription
     pub fn send_with_request_id(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_request(request_id, message)?;
+        Ok(self.build(subscription))
+    }
+
+    /// [`send_with_request_id`](Self::send_with_request_id) with a cap of
+    /// `limit` unread items (`MessageBus::send_request_bounded`).
+    pub fn send_with_request_id_bounded(self, request_id: i32, message: Vec<u8>, limit: usize) -> Result<Subscription<T>, Error> {
+        log::debug!("send_message({request_id:?}), buffer limit {limit}");
+        let subscription = self.client.message_bus.send_request_bounded(request_id, &message, limit)?;
         Ok(self.build(subscription))
     }
 

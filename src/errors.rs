@@ -116,6 +116,15 @@ pub enum Error {
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
 
+    /// A subscription with a buffer limit had `limit` unread items when
+    /// another arrived. Terminal: every item queued before it was delivered,
+    /// and later frames for the request are discarded. Not a TWS error.
+    #[error("subscription buffer limit exceeded ({limit} unread items)")]
+    BufferLimitExceeded {
+        /// The configured maximum of unread items.
+        limit: usize,
+    },
+
     /// A frame arrived whose length prefix cannot describe a TWS message:
     /// shorter than the 4-byte message id, or larger than the 16 MiB ceiling
     /// (`0x00FFFFFF`) that the official client enforces as
@@ -307,6 +316,7 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::BufferLimitExceeded { limit } => Error::BufferLimitExceeded { limit: *limit },
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),
             Error::AlreadySubscribed => Error::AlreadySubscribed,

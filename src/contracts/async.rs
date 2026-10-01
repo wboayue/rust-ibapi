@@ -332,15 +332,22 @@ impl Client {
 }
 
 /// Send a contract-details request with a pre-allocated id. Reached through
-/// [`ContractDetailsBuilder::subscribe`].
+/// [`ContractDetailsBuilder::subscribe`]; the flat arguments are the
+/// builder-fed param-budget exception.
 pub(in crate::contracts) async fn contract_details_stream(
     client: &Client,
     contract: &Contract,
     request_id: i32,
+    buffer_limit: Option<usize>,
 ) -> Result<Subscription<ContractDetails>, Error> {
+    let buffer_limit = contract_details_builder::validate_buffer_limit(buffer_limit)?;
     verify::verify_contract(client.server_version(), contract)?;
     let packet = encoders::encode_request_contract_data(request_id, contract)?;
-    client.request_with_id(request_id).send(packet).await
+    let request = client.request_with_id(request_id);
+    match buffer_limit {
+        Some(limit) => request.send_bounded(packet, limit).await,
+        None => request.send(packet).await,
+    }
 }
 
 /// Request an underlying's option chain. Reached through

@@ -61,7 +61,7 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2).unwrap());
 
     let _sub = bus.send_request(1, vec![]).await.unwrap();
-    let sender = bus.request_channels.read().await.get(&1).unwrap().clone();
+    let sender = bus.request_channels.read().await.get(&1).unwrap().sender.clone();
     for _ in 0..3 {
         sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
     }
@@ -1879,4 +1879,122 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
     let message = next_message(&mut update_sub).await;
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
     assert!(tokio::time::timeout(TICK, order_sub.next()).await.is_err());
+}
+
+// ---- buffer_limit: bounded request routes ------------------------------------
+
+async fn route_histograms(stream: &MemoryStream, bus: &AsyncTcpMessageBus<MemoryStream>, frames: usize, request_id: i32) {
+    for n in 0..frames {
+        // HistogramData (msg_id 89): request_id at field index 1, `n` at 2.
+        stream.push_inbound(body(&format!("89|{request_id}|{n}|")));
+        bus.read_and_route_message().await.unwrap();
+    }
+}
+
+/// The next routed item, or `None` if nothing arrives within `TICK`.
+async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedItem> {
+    tokio::time::timeout(TICK, sub.next_routed()).await.ok().flatten()
+}
+
+#[tokio::test]
+async fn test_bounded_request_fails_after_limit_unread() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(100, vec![], 2).await.unwrap();
+
+    route_histograms(&stream, &bus, 4, 100).await;
+
+    // The first frame was not evicted: the overflow error took the reserved slot.
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.peek_int(2).unwrap(), 0),
+        other => panic!("expected the first row, got {other:?}"),
+    }
+    assert!(matches!(try_next_routed(&mut sub).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut sub).await,
+        Some(RoutedItem::Error(Error::BufferLimitExceeded { limit: 2 }))
+    ));
+    assert!(
+        try_next_routed(&mut sub).await.is_none(),
+        "no lag notice, and frames after the overflow are discarded"
+    );
+}
+
+#[tokio::test]
+async fn test_bounded_request_counts_unread_not_total() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(100, vec![], 2).await.unwrap();
+
+    for _ in 0..6 {
+        route_histograms(&stream, &bus, 1, 100).await;
+        assert!(
+            matches!(try_next_routed(&mut sub).await, Some(RoutedItem::Response(_))),
+            "a reader that keeps up never overflows"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_reset_skips_overflowed_route() {
+    let (stream, bus) = make_bus();
+    let mut overflowed = bus.send_request_bounded(100, vec![], 1).await.unwrap();
+    let mut at_limit = bus.send_request_bounded(200, vec![], 1).await.unwrap();
+
+    route_histograms(&stream, &bus, 2, 100).await;
+    route_histograms(&stream, &bus, 1, 200).await;
+    bus.reset_channels().await;
+
+    assert!(matches!(try_next_routed(&mut overflowed).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut overflowed).await,
+        Some(RoutedItem::Error(Error::BufferLimitExceeded { .. }))
+    ));
+    assert!(try_next_routed(&mut overflowed).await.is_none(), "no second terminal error after reset");
+
+    // At its limit but not overflowed: the reset error uses the reserved slot, evicting nothing.
+    assert!(matches!(try_next_routed(&mut at_limit).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut at_limit).await,
+        Some(RoutedItem::Error(Error::ConnectionReset))
+    ));
+}
+
+#[tokio::test]
+async fn test_overflowed_subscription_cancels_on_drop() {
+    use crate::contracts::ContractDetails;
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request_bounded(9000, vec![], 1).await.unwrap();
+    let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
+        internal,
+        bus.clone(),
+        Some(9000),
+        None,
+        DecoderContext::new(server_versions::CANCEL_CONTRACT_DATA),
+    );
+
+    for contract_id in [1, 2] {
+        stream.push_inbound(binary_proto(
+            crate::messages::IncomingMessages::ContractData as i32,
+            &crate::proto::ContractData {
+                req_id: Some(9000),
+                contract: Some(crate::proto::Contract {
+                    con_id: Some(contract_id),
+                    ..Default::default()
+                }),
+                contract_details: Some(Default::default()),
+            },
+        ));
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert!(matches!(next_item(&mut subscription).await, Some(Ok(_))));
+    assert!(matches!(
+        next_item(&mut subscription).await,
+        Some(Err(Error::BufferLimitExceeded { limit: 1 }))
+    ));
+    drop(subscription);
+
+    let cancel =
+        <ContractDetails as StreamDecoder<ContractDetails>>::cancel_message(server_versions::CANCEL_CONTRACT_DATA, Some(9000), None).unwrap();
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "overflow leaves the cancel to drop");
 }

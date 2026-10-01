@@ -8,6 +8,10 @@
 use crate::contracts::{Contract, ContractDetails};
 use crate::Error;
 
+/// The largest [`ContractDetailsBuilder::buffer_limit`]. The async client
+/// allocates the channel's slots up front, so the cap bounds that allocation.
+pub const MAX_BUFFER_LIMIT: usize = 65_536;
+
 /// Builder for a contract-details request that yields one [`ContractDetails`]
 /// per matching contract.
 ///
@@ -24,6 +28,7 @@ pub struct ContractDetailsBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,
     request_id: i32,
+    buffer_limit: Option<usize>,
 }
 
 impl<'a, C> ContractDetailsBuilder<'a, C> {
@@ -32,6 +37,7 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
             client,
             contract,
             request_id,
+            buffer_limit: None,
         }
     }
 
@@ -39,6 +45,79 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
     /// made; nothing has been written yet. A dropped builder skips the id.
     pub fn request_id(&self) -> i32 {
         self.request_id
+    }
+
+    /// Fail the stream instead of queueing more than `limit` unread rows.
+    ///
+    /// When `limit` rows are waiting to be read and another arrives, the
+    /// subscription yields every queued row, then
+    /// [`Error::BufferLimitExceeded`], then ends; rows TWS sends after that
+    /// are discarded. A reader that keeps up never hits it, however many rows
+    /// the query returns. Use it when the reader can stall (a slow sink,
+    /// batching) and unbounded queueing is not acceptable.
+    ///
+    /// Without it, queueing is unbounded on the sync client, and on the async
+    /// client capped by `ClientBuilder::channel_capacity` with the oldest rows
+    /// dropped (reported as a lag notice).
+    ///
+    /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`]; otherwise `subscribe`
+    /// returns [`Error::InvalidArgument`] without sending. On the async client
+    /// the count follows the original subscription's reads; clones made from
+    /// it are not counted.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Error;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().expect("request failed");
+    /// for details in subscription.iter_data() {
+    ///     match details {
+    ///         Ok(details) => println!("{}", details.contract.contract_id),
+    ///         Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use ibapi::Error;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().await.expect("request failed");
+    ///     let mut details = subscription.filter_data();
+    ///     while let Some(details) = details.next().await {
+    ///         match details {
+    ///             Ok(details) => println!("{}", details.contract.contract_id),
+    ///             Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
+    ///             Err(e) => eprintln!("error: {e}"),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub fn buffer_limit(mut self, limit: usize) -> Self {
+        self.buffer_limit = Some(limit);
+        self
+    }
+}
+
+/// `limit` if it is a valid [`ContractDetailsBuilder::buffer_limit`].
+pub(crate) fn validate_buffer_limit(limit: Option<usize>) -> Result<Option<usize>, Error> {
+    match limit {
+        Some(limit) if !(1..=MAX_BUFFER_LIMIT).contains(&limit) => Err(Error::InvalidArgument(format!(
+            "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
+        ))),
+        limit => Ok(limit),
     }
 }
 
@@ -84,7 +163,7 @@ impl<'a> ContractDetailsBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<ContractDetails>, Error> {
-        crate::contracts::sync::contract_details_stream(self.client, self.contract, self.request_id)
+        crate::contracts::sync::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit)
     }
 }
 
@@ -131,6 +210,6 @@ impl<'a> ContractDetailsBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<ContractDetails>, Error> {
-        crate::contracts::r#async::contract_details_stream(self.client, self.contract, self.request_id).await
+        crate::contracts::r#async::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit).await
     }
 }

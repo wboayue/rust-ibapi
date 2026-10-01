@@ -144,6 +144,11 @@ impl SharedCounts {
 pub(crate) trait MessageBus: Send + Sync {
     fn send_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
+    /// [`send_request`](Self::send_request) with a cap of `limit` unread
+    /// items: one more frame delivers `Error::BufferLimitExceeded` instead,
+    /// and later frames for the request are discarded.
+    fn send_request_bounded(&self, request_id: i32, packet: &[u8], limit: usize) -> Result<InternalSubscription, Error>;
+
     fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
