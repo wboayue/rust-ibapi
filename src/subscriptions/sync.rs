@@ -45,6 +45,9 @@ pub struct Subscription<T: StreamDecoder<T>> {
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
     stream_ended: AtomicBool,
+    /// Set only by the native end marker, not by errors: TWS has finished the
+    /// request, so there is nothing left to cancel.
+    ended_natively: AtomicBool,
     subscription: InternalSubscription,
 }
 
@@ -73,6 +76,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
             stream_ended: AtomicBool::new(false),
+            ended_natively: AtomicBool::new(false),
         }
     }
 
@@ -91,6 +95,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
 
         if let Some(request_id) = self.request_id {
+            // A cancel after the end marker would name a request TWS already finished.
+            if self.ended_natively.load(Ordering::Relaxed) {
+                return;
+            }
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_subscription(request_id, &message) {
                     log_cancel_error("subscription", &e);
@@ -119,6 +127,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Returns the request ID associated with this subscription.
     pub fn request_id(&self) -> Option<i32> {
         self.request_id
+    }
+
+    /// Whether the stream ended with TWS's end marker, as opposed to an
+    /// error or a closed channel (both of which also end iteration).
+    pub(crate) fn ended_natively(&self) -> bool {
+        self.ended_natively.load(Ordering::Relaxed)
     }
 
     /// Returns the next item, blocking until one is available.
@@ -173,6 +187,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
                 Err(Error::EndOfStream) => {
                     self.stream_ended.store(true, Ordering::Relaxed);
+                    self.ended_natively.store(true, Ordering::Relaxed);
                     NextAction::Return(None)
                 }
                 Err(err) => {
@@ -187,6 +202,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice)))),
             Some(RoutedItem::Error(Error::EndOfStream)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
+                self.ended_natively.store(true, Ordering::Relaxed);
                 NextAction::Return(None)
             }
             Some(RoutedItem::Error(e)) => {

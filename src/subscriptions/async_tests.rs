@@ -105,6 +105,26 @@ impl StreamDecoder<CancellableSnapshotItem> for CancellableSnapshotItem {
     }
 }
 
+/// Ends the stream on `-1` (the native end marker, like `ContractDataEnd`) and
+/// has a cancel message, so a test can observe that no cancel follows the end.
+#[derive(Debug)]
+struct CancellableEndItem(i32);
+
+impl StreamDecoder<CancellableEndItem> for CancellableEndItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<CancellableEndItem, Error> {
+        match msg.peek_int(1)? {
+            -1 => Err(Error::EndOfStream),
+            value => Ok(CancellableEndItem(value)),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        Ok(cancel_frame())
+    }
+}
+
 fn cancel_frame() -> Vec<u8> {
     encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])
 }
@@ -713,4 +733,70 @@ async fn test_collect_for_filters_notices() {
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
     assert_eq!(collected, vec![IntItem(10), IntItem(20)]);
+}
+
+// ---- Cancel after the native end marker -------------------------------------
+
+/// Drop's cancel is spawned; give it time to land before asserting it didn't.
+async fn settle() {
+    tokio::time::sleep(Duration::from_millis(10)).await;
+}
+
+#[tokio::test]
+async fn test_decoded_end_skips_cancel_on_cancel_and_drop() {
+    let mut f = subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default());
+
+    f.tx.send(int_frame(1)).unwrap();
+    f.tx.send(int_frame(-1)).unwrap();
+    assert!(matches!(
+        f.subscription.next().await,
+        Some(Ok(SubscriptionItem::Data(CancellableEndItem(1))))
+    ));
+    assert!(f.subscription.next().await.is_none());
+    assert!(f.subscription.ended_natively());
+
+    f.subscription.cancel().await;
+    drop(f.subscription);
+    settle().await;
+    assert!(f.bus.request_messages().is_empty(), "no cancel after the end marker");
+}
+
+#[tokio::test]
+async fn test_routed_end_skips_cancel_on_drop() {
+    let mut f = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
+
+    f.tx.send(RoutedItem::Error(Error::EndOfStream)).unwrap();
+    assert!(f.subscription.next().await.is_none());
+    assert!(f.subscription.ended_natively());
+
+    drop(f.subscription);
+    settle().await;
+    assert!(f.bus.request_messages().is_empty(), "no cancel after a routed end");
+}
+
+#[tokio::test]
+async fn test_error_end_still_cancels() {
+    // Only the end marker proves TWS finished; after an error the cancel goes out as before.
+    let mut f = subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default());
+
+    f.tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+    assert!(matches!(f.subscription.next().await, Some(Err(Error::ConnectionReset))));
+    assert!(!f.subscription.ended_natively());
+
+    f.subscription.cancel().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
+}
+
+#[tokio::test]
+async fn test_end_seen_by_one_clone_skips_cancel_from_another() {
+    // The flag is shared: once any clone has seen the end, TWS is done with the request.
+    let mut f = subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default());
+    let other = f.subscription.clone();
+
+    f.tx.send(int_frame(-1)).unwrap();
+    assert!(f.subscription.next().await.is_none());
+
+    drop(other);
+    settle().await;
+    assert!(f.bus.request_messages().is_empty(), "unread clone must not cancel a finished request");
 }
