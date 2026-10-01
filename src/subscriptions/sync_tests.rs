@@ -368,3 +368,36 @@ fn test_error_end_still_cancels() {
     drop(sub);
     assert_eq!(bus.request_messages().len(), 1, "cancel written after an error end");
 }
+
+// --- collect_to_end ------------------------------------------------------
+
+#[test]
+fn test_collect_to_end_returns_items_and_skips_notices() {
+    use crate::messages::Notice;
+
+    let notice = RoutedItem::Notice(Notice {
+        request_id: None,
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    });
+    let (sub, _keep) = collect_subscription(vec![data(10), notice, data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert_eq!(sub.collect_to_end().unwrap(), vec![CollectItem(10), CollectItem(20)]);
+}
+
+#[test]
+fn test_collect_to_end_returns_terminal_error() {
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(sub.collect_to_end(), Err(Error::ConnectionReset)));
+}
+
+#[test]
+fn test_collect_to_end_without_end_marker_is_unexpected_end() {
+    // Channel closes after the last item, with no end marker.
+    let (sub, _keep) = collect_subscription(vec![data(10)], false);
+
+    assert!(matches!(sub.collect_to_end(), Err(Error::UnexpectedEndOfStream)));
+}

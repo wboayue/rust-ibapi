@@ -6,9 +6,8 @@ use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{StreamDecoder, Subscription, SubscriptionItem};
+use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
-use futures::StreamExt;
 
 impl Client {
     /// Requests contract information.
@@ -40,20 +39,7 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-        let mut subscription = self.contract_details_stream(contract).subscribe().await?;
-
-        let mut contract_details = Vec::new();
-        while let Some(item) = subscription.next().await {
-            match item? {
-                SubscriptionItem::Data(details) => contract_details.push(details),
-                SubscriptionItem::Notice(notice) => log::warn!("contract details notice: {notice}"),
-            }
-        }
-
-        if !subscription.ended_natively() {
-            return Err(Error::UnexpectedEndOfStream);
-        }
-        Ok(contract_details)
+        self.contract_details_stream(contract).subscribe().await?.collect_to_end().await
     }
 
     /// Build a contract-details request whose subscription yields one

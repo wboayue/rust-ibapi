@@ -271,6 +271,26 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         }
         collected
     }
+
+    /// Collects every data item until TWS's end marker. Notices are logged at
+    /// `warn!`. A terminal error is returned as is; a stream that ends without
+    /// the end marker (a closed channel) is `Error::UnexpectedEndOfStream`.
+    ///
+    /// For request-scoped streams that end, such as contract details. Waits
+    /// until the end, so not for open-ended subscriptions like market data.
+    pub(crate) async fn collect_to_end(&mut self) -> Result<Vec<T>, Error> {
+        let mut collected = Vec::new();
+        while let Some(item) = self.next().await {
+            match item? {
+                SubscriptionItem::Data(value) => collected.push(value),
+                SubscriptionItem::Notice(notice) => warn!("ib notice on subscription: {notice}"),
+            }
+        }
+        if !self.ended_natively() {
+            return Err(Error::UnexpectedEndOfStream);
+        }
+        Ok(collected)
+    }
 }
 
 #[allow(private_bounds)]

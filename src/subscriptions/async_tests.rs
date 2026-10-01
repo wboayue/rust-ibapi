@@ -800,3 +800,35 @@ async fn test_end_seen_by_one_clone_skips_cancel_from_another() {
     settle().await;
     assert!(f.bus.request_messages().is_empty(), "unread clone must not cancel a finished request");
 }
+
+// ---- collect_to_end ---------------------------------------------------------
+
+#[tokio::test]
+async fn test_collect_to_end_returns_items_and_skips_notices() {
+    let (mut sub, tx) = subscription::<IntItem>();
+    tx.send(int_frame(10)).unwrap();
+    tx.send(RoutedItem::Notice(test_notice(2104, "Market data farm OK"))).unwrap();
+    tx.send(int_frame(20)).unwrap();
+    tx.send(RoutedItem::Error(Error::EndOfStream)).unwrap();
+
+    assert_eq!(sub.collect_to_end().await.unwrap(), vec![IntItem(10), IntItem(20)]);
+}
+
+#[tokio::test]
+async fn test_collect_to_end_returns_terminal_error() {
+    let (mut sub, tx) = subscription::<IntItem>();
+    tx.send(int_frame(10)).unwrap();
+    tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+
+    assert!(matches!(sub.collect_to_end().await, Err(Error::ConnectionReset)));
+}
+
+#[tokio::test]
+async fn test_collect_to_end_without_end_marker_is_unexpected_end() {
+    // Sender dropped after the last item: the channel closes with no end marker.
+    let (mut sub, tx) = subscription::<IntItem>();
+    tx.send(int_frame(10)).unwrap();
+    drop(tx);
+
+    assert!(matches!(sub.collect_to_end().await, Err(Error::UnexpectedEndOfStream)));
+}
