@@ -4,7 +4,6 @@
 //! method-async via `#[async_trait]`. Frame-level: `read_message` returns the
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ use log::warn;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{watch, Mutex};
 
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
@@ -24,13 +23,17 @@ pub(crate) trait AsyncIo {
     async fn read_message(&self) -> Result<Vec<u8>, Error>;
     /// Write `buf` whole. A caller dropped before any byte is written sends
     /// nothing. A write that stops partway (its caller dropped, or a failure)
-    /// must not be followed by more frames on that connection, which TWS would
-    /// read from the middle of the cut-off one.
+    /// leaves the connection unusable, since TWS would read any later frame
+    /// from the middle of the cut-off one: later writes must fail, and reads
+    /// must fail with a connection-lost error (pending ones included), because
+    /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
 
 #[async_trait]
 pub(crate) trait AsyncReconnect {
+    /// Replace the connection, clearing a break left by a cut-off write (see
+    /// [`AsyncIo::write_all`]).
     async fn reconnect(&self) -> Result<(), Error>;
     /// Wait out the reconnect backoff, returning early once `shutdown` is
     /// requested. In-memory test streams return immediately.
@@ -46,12 +49,10 @@ pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static +
 pub(crate) struct AsyncTcpSocket {
     reader: Mutex<OwnedReadHalf>,
     writer: Mutex<OwnedWriteHalf>,
-    /// Set when a write stops mid-frame (see [`FrameProgress`]); cleared by
+    /// True once a write stops mid-frame (see [`FrameProgress`]); cleared by
     /// `reconnect`. Writes refuse and reads fail while it is set, so the
     /// dispatcher reconnects.
-    broken: AtomicBool,
-    /// Wakes a pending `read_message` when `broken` is set.
-    broken_notify: Notify,
+    broken: watch::Sender<bool>,
     connection_url: String,
     tcp_no_delay: bool,
     /// Byte-level capture of the inbound stream. Disabled unless
@@ -67,17 +68,15 @@ impl AsyncTcpSocket {
         Ok(Self {
             reader: Mutex::new(read_half),
             writer: Mutex::new(write_half),
-            broken: AtomicBool::new(false),
-            broken_notify: Notify::new(),
+            broken: watch::Sender::new(false),
             connection_url: address.to_string(),
             tcp_no_delay,
             tap: RawFrameTap::from_env(),
         })
     }
 
-    fn break_connection(&self) {
-        self.broken.store(true, Ordering::Release);
-        self.broken_notify.notify_waiters();
+    fn is_broken(&self) -> bool {
+        *self.broken.borrow()
     }
 }
 
@@ -86,15 +85,18 @@ impl AsyncTcpSocket {
 /// the wire now ends mid-frame, and the next frame would be misread from there.
 struct FrameProgress<'a> {
     socket: &'a AsyncTcpSocket,
-    written: usize,
     len: usize,
+    /// The bytes not yet written; `write_all_buf` advances it as it goes,
+    /// cancelled or not.
+    remaining: &'a [u8],
 }
 
 impl Drop for FrameProgress<'_> {
     fn drop(&mut self) {
-        if self.written > 0 && self.written < self.len {
-            warn!("write stopped after {} of {} bytes; resetting the connection", self.written, self.len);
-            self.socket.break_connection();
+        let written = self.len - self.remaining.len();
+        if written > 0 && !self.remaining.is_empty() {
+            warn!("write stopped after {written} of {} bytes; resetting the connection", self.len);
+            self.socket.broken.send_replace(true);
         }
     }
 }
@@ -123,37 +125,27 @@ where
 impl AsyncIo for AsyncTcpSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock().await;
-        // Registered before the check, so a break in between still wakes it.
-        let broken = self.broken_notify.notified();
-        tokio::pin!(broken);
-        broken.as_mut().enable();
-        if self.broken.load(Ordering::Acquire) {
-            return Err(Error::ConnectionReset);
-        }
+        let mut broken = self.broken.subscribe();
         tokio::select! {
+            biased;
+            _ = broken.wait_for(|broken| *broken) => Err(Error::ConnectionReset),
             read = read_framed_message(&mut *reader, &self.tap) => read,
-            _ = broken => Err(Error::ConnectionReset),
         }
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let mut writer = self.writer.lock().await;
-        if self.broken.load(Ordering::Acquire) {
+        if self.is_broken() {
             return Err(Error::ConnectionReset);
         }
         // Declared after `writer`, so it drops first: a break lands while the
         // writer is still held, and cannot interleave with `reconnect`.
         let mut progress = FrameProgress {
             socket: self,
-            written: 0,
             len: buf.len(),
+            remaining: buf,
         };
-        while progress.written < buf.len() {
-            match writer.write(&buf[progress.written..]).await? {
-                0 => return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into()),
-                n => progress.written += n,
-            }
-        }
+        writer.write_all_buf(&mut progress.remaining).await?;
         writer.flush().await?;
         Ok(())
     }
@@ -169,7 +161,7 @@ impl AsyncReconnect for AsyncTcpSocket {
         {
             let mut writer = self.writer.lock().await;
             *writer = new_writer;
-            self.broken.store(false, Ordering::Release);
+            self.broken.send_replace(false);
         }
         // One capture file per TCP stream: splicing two of them would read back
         // as a desync at the seam that never happened.

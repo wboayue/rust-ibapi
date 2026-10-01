@@ -77,7 +77,7 @@ async fn test_write_cut_off_mid_frame_breaks_the_connection() {
     let reader = read_to_end(peer);
     drop(socket);
     let received = reader.await.unwrap();
-    assert!(received.len() < LARGE, "the cut-off frame completed");
+    assert!(!received.is_empty() && received.len() < LARGE, "no fragment: {} bytes", received.len());
     assert!(received.iter().all(|&b| b == 0xAA), "bytes followed the fragment");
 }
 
@@ -93,8 +93,14 @@ async fn test_write_abandoned_before_it_starts_sends_nothing() {
         let large = large.clone();
         async move { socket.write_all(&large).await }
     });
-    // Let the large write take the writer and stall on the full buffer.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Wait until the large write holds the writer (and stalls on the full buffer).
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while socket.writer.try_lock().is_ok() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("large write never took the writer");
     abandon_write(&socket, &[0xBB; 3]).await;
 
     let reader = read_to_end(peer);
