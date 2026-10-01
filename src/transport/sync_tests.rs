@@ -2976,3 +2976,46 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     assert_eq!(count_frames(&stream.captured(), &cancel), 1, "overflow leaves the cancel to drop");
     Ok(())
 }
+
+/// `cancel_and_drain` writes the cancel without unregistering the route, so
+/// TWS's end marker, dispatched after the cancel, still reaches the drain.
+/// (`cancel()` goes through `cancel_subscription`, which removes the route.)
+#[test]
+fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::{DecoderContext, Drained};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(9000, &[])?;
+    let subscription: Subscription<ContractDetails> =
+        Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
+    let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
+        crate::server_versions::CANCEL_CONTRACT_DATA,
+        Some(9000),
+        None,
+    )?;
+
+    let dispatcher = {
+        let (stream, bus, cancel) = (stream.clone(), bus.clone(), cancel.clone());
+        std::thread::spawn(move || -> Result<(), Error> {
+            // Dispatch the end only once the drain's cancel is on the wire.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while count_frames(&stream.captured(), &cancel) == 0 && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            stream.push_inbound(binary_proto(
+                IncomingMessages::ContractDataEnd as i32,
+                &crate::proto::ContractDataEnd { req_id: Some(9000) },
+            ));
+            bus.dispatch()
+        })
+    };
+
+    let outcome = subscription.cancel_and_drain(Instant::now() + Duration::from_secs(2))?;
+    dispatcher.join().expect("dispatcher panicked")?;
+
+    assert_eq!(outcome, Drained::Ended);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    Ok(())
+}

@@ -37,6 +37,20 @@ impl<T> SubscriptionItem<T> {
     }
 }
 
+/// How a request ended, as observed by `Subscription::cancel_and_drain`.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Drained {
+    /// TWS sent the end marker: the request is over at TWS.
+    Ended,
+    /// TWS sent an error for the request: the request is over at TWS.
+    Rejected(Notice),
+    /// No terminal evidence: the deadline passed, or the stream had already
+    /// ended with an error (such as a buffer overflow), after which TWS's state
+    /// can't be observed. Treat the request id as possibly still live.
+    Unconfirmed,
+}
+
 /// Maps `Ok(Notice)` to `None` (logged at `warn!`); passes `Data` and `Err`
 /// through unchanged.
 pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Option<Result<T, Error>> {

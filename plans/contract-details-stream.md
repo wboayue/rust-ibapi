@@ -177,6 +177,8 @@ rule-sanctioned opt-out. Don't add `.no_retry()` speculatively.
 
 ## Part 3: fail-closed `buffer_limit` (follow-up PR)
 
+> Shipped in PR 2; see [PR 2 plan](contract-details-stream-pr2.md), which supersedes this sketch where they differ (e.g. `Drained::Unconfirmed` replaces `DeadlineElapsed`).
+
 The memory bound for a reader that stalls. Today the async channels are bounded
 but lossy: global `BROADCAST_CHANNEL_CAPACITY` = 1024, drop-oldest, with a
 non-terminal lag notice `-6` (#779 step 1). The sync channels are unbounded.
@@ -237,6 +239,8 @@ let subscription = client
 - `buffer_limit(0)` → `InvalidArgument`, nothing written
 
 ## Part 4: `Subscription::cancel_and_drain(deadline)` (follow-up PR)
+
+> Shipped in PR 2; see [PR 2 plan](contract-details-stream-pr2.md), which supersedes this sketch where they differ (e.g. `Drained::Unconfirmed` replaces `DeadlineElapsed`).
 
 Confirmed cleanup. A caller that pools request slots, or keeps strict pacing,
 needs to know TWS has finished with a request before reusing the slot. Drop's
@@ -323,9 +327,10 @@ Semantics:
   produces it incrementally: first row at 8.4s, 4,340 rows by about 113s,
   then nothing for 60s (end marker not seen in that window). The gateway
   stayed healthy. Earlier, four such runs killed mid-stream within a few
-  minutes wedged it until restart. Open for part 4: does a cancel stop an
-  incremental result? Test it once (read ~100 rows, cancel, watch for the
-  tail and the end), and keep unfiltered queries out of CI.
+  minutes wedged it until restart. Keep unfiltered queries out of CI.
+- **Does a cancel stop an incremental result? No** (2026-09-30): 100 rows
+  read, cancel, then 8,316 more rows over 150s with no end marker before the
+  deadline.
 - **`BondContractData` (msg 18).** C# decodes it under protobuf (the same
   `ContractData` proto, `isBond = true`); we don't route it, so bond results are
   likely dropped silently. This is a separate issue; see

@@ -20,9 +20,10 @@ pub const MAX_BUFFER_LIMIT: usize = 65_536;
 /// dropped early, and its request id is known before the request is sent.
 ///
 /// Dropping the subscription before TWS's end marker has been read sends the
-/// native cancel (server 215+); dropping the builder sends nothing. The cancel
-/// is not guaranteed to stop delivery: observed live, TWS sends a result it has
-/// already prepared in full anyway. Rows arriving after the drop are discarded.
+/// native cancel (server 215+); dropping the builder sends nothing. Observed
+/// live, TWS keeps sending after the cancel, so the cancel saves no gateway
+/// work; rows arriving after the drop are discarded. To know when TWS is done
+/// with the request, use `cancel_and_drain` instead of dropping.
 #[must_use = "ContractDetailsBuilder does nothing until you call .subscribe()"]
 pub struct ContractDetailsBuilder<'a, C> {
     client: &'a C,
@@ -66,45 +67,53 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
     /// it are not counted.
     ///
     /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::Error;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().expect("request failed");
-    /// for details in subscription.iter_data() {
-    ///     match details {
-    ///         Ok(details) => println!("{}", details.contract.contract_id),
-    ///         Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
-    ///         Err(e) => eprintln!("error: {e}"),
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// ```no_run
-    /// use ibapi::prelude::*;
-    /// use ibapi::Error;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
-    ///     let contract = Contract::stock("AAPL").build();
-    ///     let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().await.expect("request failed");
-    ///     let mut details = subscription.filter_data();
-    ///     while let Some(details) = details.next().await {
-    ///         match details {
-    ///             Ok(details) => println!("{}", details.contract.contract_id),
-    ///             Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
-    ///             Err(e) => eprintln!("error: {e}"),
-    ///         }
-    ///     }
-    /// }
-    /// ```
+    #[cfg_attr(
+        feature = "sync",
+        doc = r#"
+```no_run
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use ibapi::Error;
+
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+
+let contract = Contract::stock("AAPL").build();
+let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().expect("request failed");
+for details in subscription.iter_data() {
+    match details {
+        Ok(details) => println!("{}", details.contract.contract_id),
+        Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
+        Err(e) => eprintln!("error: {e}"),
+    }
+}
+```
+"#
+    )]
+    #[cfg_attr(
+        feature = "async",
+        doc = r#"
+```no_run
+use ibapi::prelude::*;
+use ibapi::Error;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.contract_details_stream(&contract).buffer_limit(64).subscribe().await.expect("request failed");
+    let mut details = subscription.filter_data();
+    while let Some(details) = details.next().await {
+        match details {
+            Ok(details) => println!("{}", details.contract.contract_id),
+            Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} rows behind; stopping"),
+            Err(e) => eprintln!("error: {e}"),
+        }
+    }
+}
+```
+"#
+    )]
     pub fn buffer_limit(mut self, limit: usize) -> Self {
         self.buffer_limit = Some(limit);
         self

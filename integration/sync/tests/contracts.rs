@@ -1,6 +1,7 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
-use ibapi::subscriptions::SubscriptionItem;
+use ibapi::subscriptions::{Drained, SubscriptionItem};
+use ibapi::Error;
 use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -53,16 +54,7 @@ fn contract_details_stream_early_drop_leaves_client_usable() {
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
-    // SPY calls for one expiry month two months out: far more rows than we read.
-    let broad = Contract {
-        symbol: Symbol::from("SPY"),
-        security_type: SecurityType::Option,
-        exchange: Exchange::from("SMART"),
-        currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
-        right: Some(OptionRight::Call),
-        ..Default::default()
-    };
+    let broad = spy_calls_one_month();
 
     rate_limit();
     let subscription = client.contract_details_stream(&broad).subscribe().expect("subscribe failed");
@@ -75,6 +67,70 @@ fn contract_details_stream_early_drop_leaves_client_usable() {
         .contract_details(&Contract::stock("AAPL").build())
         .expect("client unusable after early drop");
     assert!(!details.is_empty());
+}
+
+/// SPY calls for one expiry month two months out: several hundred rows, which
+/// TWS prepares in full before sending.
+fn spy_calls_one_month() -> Contract {
+    Contract {
+        symbol: Symbol::from("SPY"),
+        security_type: SecurityType::Option,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
+        right: Some(OptionRight::Call),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn contract_details_stream_buffer_limit_fails_a_stalled_reader() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let subscription = client
+        .contract_details_stream(&spy_calls_one_month())
+        .buffer_limit(5)
+        .subscribe()
+        .expect("subscribe failed");
+    std::thread::sleep(std::time::Duration::from_secs(2)); // stall: let TWS send far more than 5 rows
+
+    let mut rows = 0;
+    let outcome = loop {
+        match subscription.next() {
+            Some(Ok(SubscriptionItem::Data(_))) => rows += 1,
+            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
+            other => break other,
+        }
+    };
+    // At least the 5 queued rows; more if TWS was still sending when the
+    // reader woke and freed slots before the overflow.
+    assert!(rows >= 5, "every queued row is delivered before the error, got {rows}");
+    assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 5 }))), "got {outcome:?}");
+}
+
+#[test]
+fn contract_details_stream_cancel_and_drain_ends() {
+    // Observed live: TWS sends the rest of the result after the cancel, then
+    // the end marker, so the drain ends with `Ended`.
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let subscription = client
+        .contract_details_stream(&spy_calls_one_month())
+        .subscribe()
+        .expect("subscribe failed");
+    for _ in 0..3 {
+        subscription.next().expect("a row").expect("row");
+    }
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let outcome = subscription.cancel_and_drain(deadline).expect("drain failed");
+    assert_eq!(outcome, Drained::Ended);
 }
 
 #[test]

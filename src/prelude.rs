@@ -72,7 +72,7 @@ pub use crate::accounts::{
 // Subscription types (canonical home: crate::subscriptions)
 #[cfg(feature = "async")]
 pub use crate::subscriptions::SubscriptionItemStreamExt;
-pub use crate::subscriptions::{NoticeStream, Subscription, SubscriptionItem};
+pub use crate::subscriptions::{Drained, NoticeStream, Subscription, SubscriptionItem};
 
 // Async-specific imports
 #[cfg(feature = "async")]

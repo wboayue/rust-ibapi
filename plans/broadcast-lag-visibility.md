@@ -52,6 +52,13 @@ Converge both transports on the same behavior per channel class:
   bounded + lossy + gap-notice everywhere. Dropping *oldest* under lag is the
   right policy; the defect was only the silence.
 
+- **Enumeration-class** (request-scoped streams that end, e.g. contract
+  details; opt-in via `buffer_limit`, #876): completeness *and* bounded
+  memory, so bounded + lossless + fail-closed. Shipped on both transports:
+  past the cap the stream ends with `Error::BufferLimitExceeded`, and nothing
+  is evicted (async keeps a spare slot for the error). Unset, a request keeps
+  its transport's default class.
+
 **Open question blocking step 2**: is sync becoming lossy on market-data
 channels acceptable? It is a real behavior change (sync users today never
 drop, they accumulate). Fallback if not: leave sync unbounded but loudly

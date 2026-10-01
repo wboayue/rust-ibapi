@@ -2,8 +2,8 @@ use super::*;
 use crate::messages::{encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
-use crate::subscriptions::SubscriptionItem;
 use crate::subscriptions::SubscriptionItemStreamExt;
+use crate::subscriptions::{Drained, SubscriptionItem};
 use futures::StreamExt;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -831,4 +831,128 @@ async fn test_collect_to_end_without_end_marker_is_unexpected_end() {
     drop(tx);
 
     assert!(matches!(sub.collect_to_end().await, Err(Error::UnexpectedEndOfStream)));
+}
+
+// ---- cancel_and_drain -------------------------------------------------------
+
+fn drain_deadline() -> tokio::time::Instant {
+    tokio::time::Instant::now() + Duration::from_secs(2)
+}
+
+fn notice_200() -> Notice {
+    Notice {
+        request_id: Some(123),
+        code: 200,
+        message: "No security definition".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+fn drain_fixture() -> Fixture<CancellableEndItem> {
+    subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default())
+}
+
+#[tokio::test]
+async fn test_drain_after_end_writes_nothing() {
+    let mut f = drain_fixture();
+    f.tx.send(int_frame(1)).unwrap();
+    f.tx.send(int_frame(-1)).unwrap();
+    while f.subscription.next().await.is_some() {}
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    settle().await;
+    assert!(f.bus.request_messages().is_empty());
+}
+
+#[tokio::test]
+async fn test_drain_cancels_then_sees_end() {
+    let f = drain_fixture();
+    f.tx.send(int_frame(1)).unwrap();
+    f.tx.send(int_frame(-1)).unwrap();
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[tokio::test]
+async fn test_drain_reports_tws_error() {
+    let f = drain_fixture();
+    f.tx.send(RoutedItem::Error(Error::Notice(notice_200()))).unwrap();
+
+    assert_eq!(
+        f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(),
+        Drained::Rejected(notice_200())
+    );
+}
+
+#[tokio::test]
+async fn test_drain_deadline_is_unconfirmed() {
+    let f = drain_fixture();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(50);
+    assert_eq!(f.subscription.cancel_and_drain(deadline).await.unwrap(), Drained::Unconfirmed);
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[tokio::test]
+async fn test_drain_after_error_is_unconfirmed_and_cancels_on_drop() {
+    let mut f = drain_fixture();
+    f.tx.send(RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })).unwrap();
+    assert!(matches!(f.subscription.next().await, Some(Err(Error::BufferLimitExceeded { .. }))));
+
+    let started = std::time::Instant::now();
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Unconfirmed);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait for evidence that can't arrive");
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "the drop writes the cancel");
+}
+
+#[tokio::test]
+async fn test_drain_session_error_is_err() {
+    let f = drain_fixture();
+    f.tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+
+    assert!(matches!(
+        f.subscription.cancel_and_drain(drain_deadline()).await,
+        Err(Error::ConnectionReset)
+    ));
+}
+
+#[tokio::test]
+async fn test_drain_closed_channel_is_unconfirmed() {
+    let f = drain_fixture();
+    drop(f.tx);
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Unconfirmed);
+}
+
+#[tokio::test]
+async fn test_drain_future_dropped_mid_wait_cancels_once() {
+    let f = drain_fixture();
+
+    let far = tokio::time::Instant::now() + Duration::from_secs(60);
+    assert!(tokio::time::timeout(Duration::from_millis(20), f.subscription.cancel_and_drain(far))
+        .await
+        .is_err());
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
+}
+
+#[tokio::test]
+async fn test_drain_on_one_clone_leaves_others_reading() {
+    let f = drain_fixture();
+    let mut other = f.subscription.clone();
+    f.tx.send(int_frame(1)).unwrap();
+    f.tx.send(int_frame(-1)).unwrap();
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    assert!(matches!(other.next().await, Some(Ok(SubscriptionItem::Data(CancellableEndItem(1))))));
+    assert!(other.next().await.is_none(), "the other clone still sees the end");
+
+    drop(other);
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel across clones");
 }
