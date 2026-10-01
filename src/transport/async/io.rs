@@ -22,7 +22,11 @@ use crate::transport::raw_capture::RawFrameTap;
 #[async_trait]
 pub(crate) trait AsyncIo {
     async fn read_message(&self) -> Result<Vec<u8>, Error>;
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    /// Write `buf` whole. Cancellation contract, which the bus relies on: a
+    /// caller dropped before the write starts sends nothing; once it has
+    /// started, `buf` goes out in full even if the caller is dropped. A partial
+    /// frame would leave every later frame misread on the TWS side.
+    async fn write_all(&self, buf: Vec<u8>) -> Result<(), Error>;
 }
 
 #[async_trait]
@@ -95,14 +99,11 @@ impl AsyncIo for AsyncTcpSocket {
         read_framed_message(&mut *reader, &self.tap).await
     }
 
-    /// Lock, then detach. A caller dropped while it waits for the writer (a
-    /// `timeout`, a losing `select!`) sends nothing. Once it holds the writer,
-    /// the write runs as its own task: `write_all` is not cancel-safe, and a
-    /// frame abandoned midway would leave a fragment that every later frame
-    /// follows, which TWS misreads. A started write always finishes.
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    /// Lock, then detach: waiting for the writer stays cancellable, and once
+    /// it is held the write runs as its own task, because tokio's `write_all`
+    /// is not cancel-safe.
+    async fn write_all(&self, buf: Vec<u8>) -> Result<(), Error> {
         let mut writer = self.writer.clone().lock_owned().await;
-        let buf = buf.to_vec();
         let write = self.runtime.spawn(async move {
             writer.write_all(&buf).await?;
             writer.flush().await

@@ -40,7 +40,7 @@ async fn socket_pair() -> (AsyncTcpSocket, TcpStream) {
 
 /// Write `bytes` with a caller that gives up after 100ms; the write must not
 /// have completed by then.
-async fn abandon_write(socket: &AsyncTcpSocket, bytes: &[u8]) {
+async fn abandon_write(socket: &AsyncTcpSocket, bytes: Vec<u8>) {
     let written = tokio::time::timeout(Duration::from_millis(100), socket.write_all(bytes)).await;
     assert!(written.is_err(), "write completed; the peer should not be reading yet");
 }
@@ -54,43 +54,36 @@ fn read_to_end(mut peer: TcpStream) -> tokio::task::JoinHandle<Vec<u8>> {
     })
 }
 
-fn assert_received(received: &[u8], expected: &[u8]) {
-    assert!(
-        received == expected,
-        "received {} bytes, expected {}; first difference at byte {:?}",
-        received.len(),
-        expected.len(),
-        received.iter().zip(expected).position(|(a, b)| a != b)
-    );
-}
-
-/// A write abandoned mid-frame still finishes the frame, so the next one
-/// follows it whole instead of a fragment TWS would misread.
+/// The `AsyncIo::write_all` cancellation contract on a real socket, with the
+/// peer not reading so the first write stalls mid-frame:
+/// - a write abandoned mid-frame still finishes the frame, so the next one
+///   follows it whole instead of a fragment TWS would misread;
+/// - a write abandoned while it waits for the writer never reaches the wire.
 #[tokio::test]
-async fn test_write_abandoned_mid_frame_finishes_the_frame() {
-    let (socket, peer) = socket_pair().await;
+async fn test_abandoned_writes_keep_the_stream_framed() {
     let large = vec![0xAA; LARGE];
+    let cases: [(&str, Vec<Vec<u8>>); 2] = [
+        ("abandoned mid-frame", vec![large.clone()]),
+        ("abandoned before it starts", vec![large.clone(), vec![0xBB; 3]]),
+    ];
 
-    abandon_write(&socket, &large).await;
-    let reader = read_to_end(peer);
-    socket.write_all(&[0xCC; 3]).await.unwrap();
-    drop(socket);
+    for (name, abandoned) in cases {
+        let (socket, peer) = socket_pair().await;
+        for bytes in abandoned {
+            abandon_write(&socket, bytes).await;
+        }
+        let reader = read_to_end(peer);
+        socket.write_all(vec![0xCC; 3]).await.unwrap();
+        drop(socket);
 
-    assert_received(&reader.await.unwrap(), &[large, vec![0xCC; 3]].concat());
-}
-
-/// A write abandoned while it waits for the writer never reaches the wire:
-/// only a started write is detached.
-#[tokio::test]
-async fn test_write_abandoned_before_it_starts_sends_nothing() {
-    let (socket, peer) = socket_pair().await;
-    let large = vec![0xAA; LARGE];
-
-    abandon_write(&socket, &large).await;
-    abandon_write(&socket, &[0xBB; 3]).await;
-    let reader = read_to_end(peer);
-    socket.write_all(&[0xCC; 3]).await.unwrap();
-    drop(socket);
-
-    assert_received(&reader.await.unwrap(), &[large, vec![0xCC; 3]].concat());
+        let received = reader.await.unwrap();
+        let expected = [large.clone(), vec![0xCC; 3]].concat();
+        assert!(
+            received == expected,
+            "{name}: received {} bytes, expected {}; first difference at byte {:?}",
+            received.len(),
+            expected.len(),
+            received.iter().zip(&expected).position(|(a, b)| a != b)
+        );
+    }
 }

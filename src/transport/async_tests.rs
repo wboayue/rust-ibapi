@@ -1916,7 +1916,7 @@ impl AsyncIo for FailingWriteStream {
         self.0.read_message().await
     }
 
-    async fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
+    async fn write_all(&self, _buf: Vec<u8>) -> Result<(), Error> {
         Err(Error::ConnectionReset)
     }
 }

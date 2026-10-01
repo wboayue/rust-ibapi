@@ -92,8 +92,8 @@ impl AsyncIo for MemoryStream {
         }
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.inner.lock().unwrap().outbound.extend_from_slice(buf);
+    async fn write_all(&self, buf: Vec<u8>) -> Result<(), Error> {
+        self.inner.lock().unwrap().outbound.extend(buf);
         Ok(())
     }
 }

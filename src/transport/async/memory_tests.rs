@@ -22,7 +22,7 @@ async fn round_trip_frame() {
     assert_eq!(body, b"hello");
     push.await.unwrap();
 
-    stream.write_all(b"out").await.unwrap();
+    stream.write_all(b"out".to_vec()).await.unwrap();
     assert_eq!(stream.captured(), b"out");
 
     stream.close();

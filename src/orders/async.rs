@@ -125,11 +125,8 @@ impl Client {
 
     /// Submits an Order (fire-and-forget).
     ///
-    /// # Cancellation
-    ///
-    /// Dropping this future (a `timeout`, a losing `select!`) does not retract
-    /// an order whose write has started: it may still reach TWS. Check
-    /// [`open_orders`](Self::open_orders) before retrying under a new id.
+    /// Dropping this future can still send the order; see
+    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     ///
     /// # Examples
     ///
@@ -162,11 +159,8 @@ impl Client {
 
     /// Submits an Order with a subscription for updates.
     ///
-    /// # Cancellation
-    ///
-    /// Dropping this future (a `timeout`, a losing `select!`) does not retract
-    /// an order whose write has started: it may still reach TWS. Check
-    /// [`open_orders`](Self::open_orders) before retrying under a new id.
+    /// Dropping this future can still send the order; see
+    /// [dropping an async order future](crate::orders#dropping-an-async-order-future).
     ///
     /// # Examples
     ///

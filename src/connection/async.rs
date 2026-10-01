@@ -238,7 +238,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// Write raw bytes with a length prefix
     pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        self.socket.write_all(&packet).await?;
+        self.socket.write_all(packet).await?;
         Ok(())
     }
 
@@ -247,7 +247,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        self.socket.write_all(&handshake).await?;
+        self.socket.write_all(handshake).await?;
 
         // Read handshake response as raw text, bypassing parse_raw_message
         // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
