@@ -299,6 +299,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
             },
             Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice)))),
+            Some(RoutedItem::Error(Error::Notice(notice))) if T::is_nonterminal_notice(&notice) => {
+                NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice))))
+            }
             Some(RoutedItem::Error(Error::EndOfStream)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 self.ended_natively.store(true, Ordering::Relaxed);

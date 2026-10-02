@@ -451,6 +451,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                     }
                 }
                 RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
+                RoutedItem::Error(Error::Notice(notice)) if T::is_nonterminal_notice(&notice) => {
+                    return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice))));
+                }
                 RoutedItem::Error(Error::EndOfStream) => {
                     stream_ended.store(true, Ordering::Relaxed);
                     ended_natively.store(true, Ordering::Relaxed);
