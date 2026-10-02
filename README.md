@@ -569,6 +569,12 @@ Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flo
 
 ## Handling notifications
 
+Scanner subscriptions treat IB 165 messages containing "no items retrieved" as
+nonterminal `SubscriptionItem::Notice` values. The continuous request stays open;
+the notice does not synthesize an empty batch. Completed empty `ScannerData`
+responses still yield empty vectors. Code 165 remains terminal for other request
+types, and other scanner errors retain their existing behavior.
+
 TWS emits two flavors of notification alongside subscription data:
 
 - **Per-subscription notices** — warning codes 2100..=2199 and order-cancel code

@@ -181,6 +181,12 @@ pub(crate) trait StreamDecoder<T> {
     /// handshake is their only caller now.
     fn decode(context: &DecoderContext, message: &ResponseMessage) -> Result<T, Error>;
 
+    /// Keep a request-specific error notice nonterminal when this decoder knows
+    /// the request remains active. Other decoders retain terminal error behavior.
+    fn is_nonterminal_notice(_notice: &Notice) -> bool {
+        false
+    }
+
     /// Generate a cancellation message for this stream
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         Err(Error::NotImplemented)
