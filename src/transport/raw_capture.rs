@@ -33,8 +33,8 @@
 //!
 //! The tap sees a prefix or body only once it is complete. A read that times out
 //! partway keeps its bytes and resumes (#892), so a split frame is captured
-//! byte-exact; a frame cut short by EOF or a hard socket error leaves only its
-//! completed parts, and the capture ends there.
+//! byte-exact. A frame cut short by EOF, a hard socket error, or the mid-frame
+//! stall limit leaves only its completed parts, and the capture ends there.
 //!
 //! # Cost
 //!

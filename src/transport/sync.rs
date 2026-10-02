@@ -40,7 +40,8 @@ const MID_FRAME_STALL: Duration = Duration::from_secs(30);
 
 /// [`MID_FRAME_STALL`] in read timeouts: [`FrameRead`] counts timeouts rather
 /// than reading a clock.
-const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_secs() / TWS_READ_TIMEOUT.as_secs()) as u32;
+const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
+const _: () = assert!(MID_FRAME_TIMEOUT_LIMIT > 0, "MID_FRAME_STALL must exceed TWS_READ_TIMEOUT");
 
 /// Queue depth at which (and at every further multiple of which) a growing
 /// sync channel logs a warning. Sync channels are unbounded — they never drop,
@@ -1251,7 +1252,8 @@ impl<'a, R: Read> FrameRead<'a, R> {
         let mut filled = 0;
         while filled < buf.len() {
             match self.reader.read(&mut buf[filled..]) {
-                Ok(0) => return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into()),
+                // `read_exact`'s message, which the handshake surfaces in `ConnectionRejected`.
+                Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "failed to fill whole buffer").into()),
                 Ok(n) => {
                     filled += n;
                     self.started = true;

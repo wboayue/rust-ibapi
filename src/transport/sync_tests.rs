@@ -2829,12 +2829,16 @@ fn timed_out() -> std::io::Result<Vec<u8>> {
 
 const FRAME_BODY: [u8; 5] = [0, 0, 0, 9, 42];
 
+/// The split frame also lands in the raw capture byte-exact.
 #[test]
 fn test_read_message_keeps_prefix_bytes_across_a_timeout() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let tap = RawFrameTap::capturing_to(dir.path());
     let framed = encode_raw_length(&FRAME_BODY);
     let mut reader = ScriptedReader::new([Ok(framed[..2].to_vec()), timed_out(), Ok(framed[2..4].to_vec()), Ok(framed[4..].to_vec())]);
 
-    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+    assert_eq!(read_message(&mut reader, &tap).unwrap(), FRAME_BODY);
+    assert_eq!(test_support::frames(dir.path()), framed);
 }
 
 /// The frame after a split one still decodes: framing stayed aligned.
@@ -2857,12 +2861,16 @@ fn test_read_message_keeps_body_bytes_across_a_timeout() {
 
 /// A timeout before any byte of the frame is still idle: the dispatcher polls
 /// its shutdown flag and the handshake fails fast.
+/// Both kinds: Unix reports an `SO_RCVTIMEO` expiry as `WouldBlock`, Windows
+/// as `TimedOut`.
 #[test]
 fn test_read_message_returns_timeout_before_the_first_byte() {
-    let mut reader = ScriptedReader::new([timed_out()]);
+    for kind in [std::io::ErrorKind::WouldBlock, std::io::ErrorKind::TimedOut] {
+        let mut reader = ScriptedReader::new([Err(kind.into())]);
 
-    let err = read_message(&mut reader, &RawFrameTap::disabled()).expect_err("idle read must time out");
-    assert!(err.is_read_timeout(), "got {err:?}");
+        let err = read_message(&mut reader, &RawFrameTap::disabled()).expect_err("idle read must time out");
+        assert!(err.is_read_timeout(), "{kind:?}: got {err:?}");
+    }
 }
 
 #[test]
@@ -2912,16 +2920,23 @@ fn test_read_message_mid_frame_stall_limit() {
     assert!(err.is_connection_lost(), "a stalled frame must reconnect");
 }
 
-/// A frame split by a timeout lands in the raw capture byte-exact.
-#[test]
-fn test_read_message_taps_a_frame_split_by_a_timeout() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let tap = RawFrameTap::capturing_to(dir.path());
-    let framed = encode_raw_length(&FRAME_BODY);
-    let mut reader = ScriptedReader::new([Ok(framed[..2].to_vec()), timed_out(), Ok(framed[2..4].to_vec()), Ok(framed[4..].to_vec())]);
-
-    read_message(&mut reader, &tap).unwrap();
-    assert_eq!(test_support::frames(dir.path()), framed);
+/// Connect to a peer thread that runs `peer` on the accepted socket. The client
+/// gets `read_timeout`; `ready` fires once the peer has sent its first bytes, so
+/// the client's first read can't time out before anything was sent.
+fn socket_pair(
+    read_timeout: Duration,
+    peer: impl FnOnce(std::net::TcpStream, &std::sync::mpsc::Sender<()>) + Send + 'static,
+) -> (std::net::TcpStream, std::sync::mpsc::Receiver<()>, std::thread::JoinHandle<()>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (ready_send, ready) = std::sync::mpsc::channel();
+    let handle = std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        peer(socket, &ready_send);
+    });
+    let client = std::net::TcpStream::connect(address).unwrap();
+    client.set_read_timeout(Some(read_timeout)).unwrap();
+    (client, ready, handle)
 }
 
 /// The #892 repro on a real socket: the peer sends half a length prefix, stalls
@@ -2930,27 +2945,57 @@ fn test_read_message_taps_a_frame_split_by_a_timeout() {
 #[test]
 fn test_read_message_survives_a_socket_read_timeout_mid_frame() {
     let read_timeout = Duration::from_millis(50);
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-
     let first = encode_raw_length(&FRAME_BODY);
     let second = encode_raw_length(&[0, 0, 0, 7]);
     let (head, rest) = first.split_at(2);
     let (head, mut rest) = (head.to_vec(), rest.to_vec());
     rest.extend_from_slice(&second);
-    let peer = std::thread::spawn(move || {
-        let (mut socket, _) = listener.accept().unwrap();
+
+    let (mut client, ready, peer) = socket_pair(read_timeout, move |mut socket, ready| {
         socket.write_all(&head).unwrap();
-        socket.flush().unwrap();
+        ready.send(()).unwrap();
         std::thread::sleep(read_timeout * 3);
         socket.write_all(&rest).unwrap();
     });
-
-    let mut client = std::net::TcpStream::connect(address).unwrap();
-    client.set_read_timeout(Some(read_timeout)).unwrap();
+    ready.recv().unwrap();
 
     assert_eq!(read_message(&mut client, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
     assert_eq!(read_message(&mut client, &RawFrameTap::disabled()).unwrap(), [0, 0, 0, 7]);
+    peer.join().unwrap();
+}
+
+/// `shutdown_read` still breaks a read that is waiting out a stalled frame: the
+/// read ends as a lost connection right away, not after the stall limit.
+#[test]
+fn test_shutdown_read_breaks_a_mid_frame_wait() {
+    let read_timeout = Duration::from_millis(50);
+    let (release_send, release) = std::sync::mpsc::channel::<()>();
+    let (mut client, ready, peer) = socket_pair(read_timeout, move |mut socket, ready| {
+        socket.write_all(&[0, 0]).unwrap();
+        ready.send(()).unwrap();
+        // Hold the connection open, mid-frame, until the test is done.
+        let _ = release.recv();
+    });
+    ready.recv().unwrap();
+
+    let shutdown_handle = client.try_clone().unwrap();
+    let shutdown = std::thread::spawn(move || {
+        std::thread::sleep(read_timeout * 3);
+        shutdown_handle.shutdown(std::net::Shutdown::Read).unwrap();
+    });
+
+    let started = Instant::now();
+    let err = read_message(&mut client, &RawFrameTap::disabled()).expect_err("shutdown must end the read");
+    let elapsed = started.elapsed();
+    assert!(err.is_connection_lost(), "got {err:?}");
+    let stall_limit = read_timeout * MID_FRAME_TIMEOUT_LIMIT;
+    assert!(
+        elapsed < stall_limit,
+        "read ended after {elapsed:?}, not before the {stall_limit:?} stall limit"
+    );
+
+    shutdown.join().unwrap();
+    drop(release_send);
     peer.join().unwrap();
 }
 
