@@ -2772,10 +2772,9 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
 /// The blocking frame reader taps the wire, and taps it *below* validation.
 ///
 /// Both halves matter. A capture that only holds frames the reader accepted
-/// would be missing the one byte sequence worth capturing: the desync in
-/// #891 announces itself as a length
-/// prefix that cannot describe a frame, and that prefix is rejected before any
-/// caller sees it.
+/// would be missing the one byte sequence worth capturing: the desync in #891
+/// announces itself as a length prefix that cannot describe a frame, and that
+/// prefix is rejected before any caller sees it.
 #[test]
 fn test_read_message_taps_raw_bytes_including_rejected_prefixes() {
     let dir = tempfile::TempDir::new().unwrap();
@@ -2791,6 +2790,168 @@ fn test_read_message_taps_raw_bytes_including_rejected_prefixes() {
     let mut expected = good.clone();
     expected.extend_from_slice(&bad_prefix);
     assert_eq!(test_support::frames(dir.path()), expected);
+}
+
+// ---- frame reads across socket read timeouts (#892) ----
+
+/// A `Read` that replays one scripted result per `read` call. Each `Ok` chunk
+/// must fit the caller's buffer; a test that splits differently has a bug.
+struct ScriptedReader(VecDeque<std::io::Result<Vec<u8>>>);
+
+impl ScriptedReader {
+    fn new(script: impl IntoIterator<Item = std::io::Result<Vec<u8>>>) -> Self {
+        Self(script.into_iter().collect())
+    }
+}
+
+impl std::io::Read for ScriptedReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.0.pop_front() {
+            Some(Ok(chunk)) => {
+                assert!(
+                    chunk.len() <= buf.len(),
+                    "scripted chunk of {} exceeds the {}-byte read",
+                    chunk.len(),
+                    buf.len()
+                );
+                buf[..chunk.len()].copy_from_slice(&chunk);
+                Ok(chunk.len())
+            }
+            Some(Err(e)) => Err(e),
+            None => Ok(0),
+        }
+    }
+}
+
+fn timed_out() -> std::io::Result<Vec<u8>> {
+    Err(std::io::ErrorKind::WouldBlock.into())
+}
+
+const FRAME_BODY: [u8; 5] = [0, 0, 0, 9, 42];
+
+#[test]
+fn test_read_message_keeps_prefix_bytes_across_a_timeout() {
+    let framed = encode_raw_length(&FRAME_BODY);
+    let mut reader = ScriptedReader::new([Ok(framed[..2].to_vec()), timed_out(), Ok(framed[2..4].to_vec()), Ok(framed[4..].to_vec())]);
+
+    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+}
+
+/// The frame after a split one still decodes: framing stayed aligned.
+#[test]
+fn test_read_message_keeps_body_bytes_across_a_timeout() {
+    let first = encode_raw_length(&FRAME_BODY);
+    let second = encode_raw_length(&[0, 0, 0, 7]);
+    let mut reader = ScriptedReader::new([
+        Ok(first[..4].to_vec()),
+        Ok(first[4..6].to_vec()),
+        Err(std::io::ErrorKind::TimedOut.into()),
+        Ok(first[6..].to_vec()),
+        Ok(second[..4].to_vec()),
+        Ok(second[4..].to_vec()),
+    ]);
+
+    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), [0, 0, 0, 7]);
+}
+
+/// A timeout before any byte of the frame is still idle: the dispatcher polls
+/// its shutdown flag and the handshake fails fast.
+#[test]
+fn test_read_message_returns_timeout_before_the_first_byte() {
+    let mut reader = ScriptedReader::new([timed_out()]);
+
+    let err = read_message(&mut reader, &RawFrameTap::disabled()).expect_err("idle read must time out");
+    assert!(err.is_read_timeout(), "got {err:?}");
+}
+
+#[test]
+fn test_read_message_eof_mid_frame_is_connection_lost() {
+    let framed = encode_raw_length(&FRAME_BODY);
+    let mut reader = ScriptedReader::new([Ok(framed[..4].to_vec()), Ok(framed[4..6].to_vec())]);
+
+    let err = read_message(&mut reader, &RawFrameTap::disabled()).expect_err("truncated frame must fail");
+    assert!(err.is_connection_lost(), "got {err:?}");
+}
+
+#[test]
+fn test_read_message_retries_interrupted_reads() {
+    let framed = encode_raw_length(&FRAME_BODY);
+    let mut reader = ScriptedReader::new([
+        Ok(framed[..3].to_vec()),
+        Err(std::io::ErrorKind::Interrupted.into()),
+        Ok(framed[3..4].to_vec()),
+        Ok(framed[4..].to_vec()),
+    ]);
+
+    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+}
+
+/// The stall budget belongs to the frame: timeouts in the prefix and the body
+/// count together, and only progress resets them.
+#[test]
+fn test_read_message_mid_frame_stall_limit() {
+    let framed = encode_raw_length(&FRAME_BODY);
+    let stalls = |n: u32| (0..n).map(|_| timed_out());
+    let limit = MID_FRAME_TIMEOUT_LIMIT;
+
+    // At the limit, split across prefix and body around a progress reset: reads.
+    let script = std::iter::once(Ok(framed[..2].to_vec()))
+        .chain(stalls(limit))
+        .chain([Ok(framed[2..4].to_vec())])
+        .chain(stalls(limit))
+        .chain([Ok(framed[4..].to_vec())]);
+    let mut reader = ScriptedReader::new(script);
+    assert_eq!(read_message(&mut reader, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+
+    // One past the limit without progress: the frame is abandoned.
+    let script = std::iter::once(Ok(framed[..2].to_vec())).chain(stalls(limit + 1));
+    let mut reader = ScriptedReader::new(script);
+    let err = read_message(&mut reader, &RawFrameTap::disabled()).expect_err("stalled frame must fail");
+    assert!(matches!(err, Error::InvalidFrame(_)), "got {err:?}");
+    assert!(err.is_connection_lost(), "a stalled frame must reconnect");
+}
+
+/// A frame split by a timeout lands in the raw capture byte-exact.
+#[test]
+fn test_read_message_taps_a_frame_split_by_a_timeout() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let tap = RawFrameTap::capturing_to(dir.path());
+    let framed = encode_raw_length(&FRAME_BODY);
+    let mut reader = ScriptedReader::new([Ok(framed[..2].to_vec()), timed_out(), Ok(framed[2..4].to_vec()), Ok(framed[4..].to_vec())]);
+
+    read_message(&mut reader, &tap).unwrap();
+    assert_eq!(test_support::frames(dir.path()), framed);
+}
+
+/// The #892 repro on a real socket: the peer sends half a length prefix, stalls
+/// past the read timeout, then sends the rest and a second frame. Both frames
+/// must read intact.
+#[test]
+fn test_read_message_survives_a_socket_read_timeout_mid_frame() {
+    let read_timeout = Duration::from_millis(50);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+
+    let first = encode_raw_length(&FRAME_BODY);
+    let second = encode_raw_length(&[0, 0, 0, 7]);
+    let (head, rest) = first.split_at(2);
+    let (head, mut rest) = (head.to_vec(), rest.to_vec());
+    rest.extend_from_slice(&second);
+    let peer = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket.write_all(&head).unwrap();
+        socket.flush().unwrap();
+        std::thread::sleep(read_timeout * 3);
+        socket.write_all(&rest).unwrap();
+    });
+
+    let mut client = std::net::TcpStream::connect(address).unwrap();
+    client.set_read_timeout(Some(read_timeout)).unwrap();
+
+    assert_eq!(read_message(&mut client, &RawFrameTap::disabled()).unwrap(), FRAME_BODY);
+    assert_eq!(read_message(&mut client, &RawFrameTap::disabled()).unwrap(), [0, 0, 0, 7]);
+    peer.join().unwrap();
 }
 
 /// Blocking twin of the async unknown-message-id test. This path already had an

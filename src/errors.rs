@@ -309,10 +309,11 @@ impl Error {
         }
     }
 
-    /// Returns `true` if a read timed out with no data, which both dispatchers
-    /// treat as "nothing yet" rather than a failure — the socket is fine and the
-    /// next poll continues. Distinct from [`Self::is_connection_lost`], which
-    /// means the socket is gone.
+    /// Returns `true` if a read timed out before any byte of the next frame
+    /// arrived, which both dispatchers treat as "nothing yet" rather than a
+    /// failure — the socket is fine and the next poll continues. A timeout
+    /// mid-frame never surfaces: the frame reader waits it out. Distinct from
+    /// [`Self::is_connection_lost`], which means the socket is gone.
     pub(crate) fn is_read_timeout(&self) -> bool {
         use std::io::ErrorKind;
         matches!(self, Error::Io(io_err) if matches!(io_err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut))
