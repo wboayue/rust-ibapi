@@ -15,4 +15,4 @@ give it a section in `docs/migration-5.0.md`.
   no public `From<prost::DecodeError>`; decoders use
   `proto::decoders::DecodeProto::decode_proto`. `ParseTime` keeps
   `time::error::Parse` (time is a vocabulary dep); its clone is now lossless.
-  Plan: `plans/hide-foreign-error-types.md`. migration-5.0.md §15.
+  Plan in #888's history. migration-5.0.md §15.
