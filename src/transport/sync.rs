@@ -33,6 +33,16 @@ use crate::Error;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// How long a frame may stall after its first byte before the read gives up
+/// and the dispatcher reconnects. A healthy gateway never pauses this long
+/// inside a frame.
+const MID_FRAME_STALL: Duration = Duration::from_secs(30);
+
+/// [`MID_FRAME_STALL`] in read timeouts: [`FrameRead`] counts timeouts rather
+/// than reading a clock.
+const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
+const _: () = assert!(MID_FRAME_TIMEOUT_LIMIT > 0, "MID_FRAME_STALL must exceed TWS_READ_TIMEOUT");
+
 /// Queue depth at which (and at every further multiple of which) a growing
 /// sync channel logs a warning. Sync channels are unbounded — they never drop,
 /// so the failure mode of a stalled consumer is silent memory growth. The
@@ -1213,23 +1223,77 @@ pub(crate) trait Reconnect {
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
 impl Stream for TcpSocket {}
 
+/// Reads one frame's bytes, keeping partial progress across read timeouts.
+///
+/// `read_exact` drops the bytes it consumed when a read times out, and the
+/// dispatcher treats a timeout as idle, so a frame straddling the socket's
+/// read timeout used to desync the stream for good (#892). Here a timeout
+/// before the frame's first byte is returned as-is (idle: the dispatcher
+/// polls its shutdown flag, the handshake fails fast); after it, timeouts are
+/// waited out, up to [`MID_FRAME_TIMEOUT_LIMIT`] in a row for the frame.
+struct FrameRead<'a, R> {
+    reader: &'a mut R,
+    /// Any byte of this frame consumed.
+    started: bool,
+    /// Consecutive timeouts since the last progress, across prefix and body.
+    timeouts: u32,
+}
+
+impl<'a, R: Read> FrameRead<'a, R> {
+    fn new(reader: &'a mut R) -> Self {
+        Self {
+            reader,
+            started: false,
+            timeouts: 0,
+        }
+    }
+
+    fn fill(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+        let mut filled = 0;
+        while filled < buf.len() {
+            match self.reader.read(&mut buf[filled..]) {
+                // `read_exact`'s message, which the handshake surfaces in `ConnectionRejected`.
+                Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "failed to fill whole buffer").into()),
+                Ok(n) => {
+                    filled += n;
+                    self.started = true;
+                    self.timeouts = 0;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+                    if !self.started {
+                        return Err(e.into());
+                    }
+                    self.timeouts += 1;
+                    if self.timeouts > MID_FRAME_TIMEOUT_LIMIT {
+                        return Err(Error::InvalidFrame(format!("frame stalled mid-read for {} read timeouts", self.timeouts)));
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Read the 4-byte big-endian length prefix, taps it, then validates it.
 ///
 /// The tap runs *before* [`validate_frame_length`] on purpose — a prefix that
 /// fails validation is exactly the byte sequence a framing desync leaves
 /// behind, so it has to reach the capture even though it never reaches a
 /// caller. See [`RawFrameTap`].
-fn read_header(reader: &mut impl Read, tap: &RawFrameTap) -> Result<usize, Error> {
+fn read_header(frame: &mut FrameRead<'_, impl Read>, tap: &RawFrameTap) -> Result<usize, Error> {
     let mut buffer = [0_u8; 4];
-    reader.read_exact(&mut buffer)?;
+    frame.fill(&mut buffer)?;
     tap.record_length_prefix(&buffer);
     validate_frame_length(u32::from_be_bytes(buffer) as usize)
 }
 
 pub(crate) fn read_message(reader: &mut impl Read, tap: &RawFrameTap) -> Result<Vec<u8>, Error> {
-    let message_size = read_header(reader, tap)?;
+    let mut frame = FrameRead::new(reader);
+    let message_size = read_header(&mut frame, tap)?;
     let mut data = vec![0_u8; message_size];
-    reader.read_exact(&mut data)?;
+    frame.fill(&mut data)?;
     tap.record_body(&data);
     Ok(data)
 }

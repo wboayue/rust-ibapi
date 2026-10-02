@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Blocking client: a frame that straddled the 1 s socket read timeout lost the bytes already read, and every later frame was misread with no error (wrong prices, as in #891). Reads now keep partial progress across the timeout. A frame stalled more than 30 s after its first byte fails with `Error::InvalidFrame` and the client reconnects (#892).
 - Dropping an order or `executions` subscription releases the execution-id entries that route commission reports to it. They used to stay until reconnect or shutdown, one per fill, each holding the dropped subscription's channel open (#880).
 - Cloning an `Error::ParseTime` keeps the variant and its payload; it used to become an `Error::Simple` with the same message (#885).
 - Scanner subscriptions keep receiving after IB 165 messages containing "no items retrieved". Both clients surface the message as a nonterminal notice without synthesizing an empty batch; actual empty `ScannerData` responses still produce empty batches. Other scanner errors and 165 on other request types remain terminal (#886).

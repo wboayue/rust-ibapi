@@ -31,12 +31,10 @@
 //!
 //! # Limits
 //!
-//! Bytes consumed by a `read_exact` that then *fails* never reach the tap — the
-//! read has taken them off the socket and dropped them before returning. So a
-//! `.bin` is byte-exact only for reads that completed. A desync caused that way
-//! is still visible (the next prefix in the capture is the shifted one), but the
-//! lost bytes are simply absent, and the capture will not replay against the
-//! wire byte for byte. See #892.
+//! The tap sees a prefix or body only once it is complete. A read that times out
+//! partway keeps its bytes and resumes (#892), so a split frame is captured
+//! byte-exact. A frame cut short by EOF, a hard socket error, or the mid-frame
+//! stall limit leaves only its completed parts, and the capture ends there.
 //!
 //! # Cost
 //!
