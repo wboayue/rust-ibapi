@@ -20,7 +20,7 @@ mod r#async;
 // Public types - always available regardless of feature flags
 
 /// News provider information including code and name.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NewsProvider {
     /// The provider code identifier.
@@ -30,7 +30,7 @@ pub struct NewsProvider {
 }
 
 /// IB News Bulletin
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NewsBulletin {
     /// The unique identifier of the news bulletin.
@@ -49,7 +49,7 @@ pub struct NewsBulletin {
 }
 
 /// Returns news headlines for requested contracts.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NewsArticle {
     /// The article's published time.
@@ -65,7 +65,7 @@ pub struct NewsArticle {
 }
 
 /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
 pub enum ArticleType {
     /// plain text or html
@@ -86,7 +86,7 @@ impl From<i32> for ArticleType {
 }
 
 /// News article body containing the full article content.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
 pub struct NewsArticleBody {
     /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)

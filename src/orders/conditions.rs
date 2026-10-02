@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// Determines which price feed to use when evaluating price conditions.
 /// The codes are IB's, listed at
 /// <https://www.interactivebrokers.com/docs/tws-api/doc/orders/trigger-methods>.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggerMethod {
     /// Default method (last for most securities, double bid/ask for OTC and options). Wire code `0`.
@@ -98,7 +98,7 @@ impl crate::ToField for TriggerMethod {
 ///
 /// let order_condition = OrderCondition::Price(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PriceCondition {
     /// Contract identifier for the instrument to monitor.
@@ -179,7 +179,7 @@ where
 ///
 /// let order_condition = OrderCondition::Time(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TimeCondition {
     /// Time in format "YYYYMMDD HH:MM:SS TZ".
@@ -220,7 +220,7 @@ pub struct TimeCondition {
 ///
 /// let order_condition = OrderCondition::Margin(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MarginCondition {
     /// Margin cushion percentage threshold (0-100).
@@ -258,7 +258,7 @@ pub struct MarginCondition {
 ///
 /// let order_condition = OrderCondition::Execution(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionCondition {
     /// Symbol of the contract to monitor for executions.
@@ -297,7 +297,7 @@ pub struct ExecutionCondition {
 ///
 /// let order_condition = OrderCondition::Volume(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct VolumeCondition {
     /// Contract identifier for the instrument to monitor.
@@ -341,7 +341,7 @@ pub struct VolumeCondition {
 ///
 /// let order_condition = OrderCondition::PercentChange(condition);
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PercentChangeCondition {
     /// Contract identifier for the instrument to monitor.
@@ -366,7 +366,7 @@ pub struct PercentChangeCondition {
 /// for the modeled conditions, and is sent back explicitly.
 ///
 /// Decoders construct this; the condition builders do not.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UnknownCondition {
     /// The unrecognized condition type discriminator.

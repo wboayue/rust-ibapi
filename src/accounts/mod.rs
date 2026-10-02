@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 // Public types - always available regardless of feature flags
 
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 /// Account information as it appears in the TWS' Account Summary Window
 pub struct AccountSummary {
@@ -140,7 +140,7 @@ impl AccountSummaryTags {
 }
 
 /// Result of an account summary request emitted by the [Client](crate::client::Client).
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
@@ -150,7 +150,7 @@ pub enum AccountSummaryResult {
 }
 
 /// Aggregated profit and loss metrics for the entire account.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
     /// DailyPnL for the position
@@ -162,7 +162,7 @@ pub struct PnL {
 }
 
 /// Real-time profit and loss metrics for a single position.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnLSingle {
     /// Current size of the position
@@ -178,7 +178,7 @@ pub struct PnLSingle {
 }
 
 /// Open position held within the account.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Position {
     /// Account holding position
@@ -193,7 +193,7 @@ pub struct Position {
 
 /// Messages emitted while streaming position updates.
 #[allow(clippy::large_enum_variant)]
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdate {
     /// Update for a position in the account
@@ -204,7 +204,7 @@ pub enum PositionUpdate {
 
 /// Messages emitted while streaming model-code scoped position updates.
 #[allow(clippy::large_enum_variant)]
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdateMulti {
     /// Position update scoped to a specific account/model code pair.
@@ -214,7 +214,7 @@ pub enum PositionUpdateMulti {
 }
 
 /// Position scoped to a specific account and model code.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PositionMulti {
     /// Account holding position
@@ -230,7 +230,7 @@ pub struct PositionMulti {
 }
 
 /// Family code assigned to a group of accounts.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyCode {
     /// Account ID for the account family
@@ -241,7 +241,7 @@ pub struct FamilyCode {
 
 /// Account update events delivered while streaming high-level account data.
 #[allow(clippy::large_enum_variant)]
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountUpdate {
     /// Key/value update describing an account metric.
@@ -255,7 +255,7 @@ pub enum AccountUpdate {
 }
 
 /// Single account value update emitted by the API.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountValue {
     /// Key describing the value
@@ -269,7 +269,7 @@ pub struct AccountValue {
 }
 
 /// Aggregated valuation details for a single contract within the account.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountPortfolioValue {
     /// Contract for the position
@@ -291,7 +291,7 @@ pub struct AccountPortfolioValue {
 }
 
 /// Timestamp wrapper for account update streams.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountUpdateTime {
     /// Timestamp of the last account update
@@ -299,7 +299,7 @@ pub struct AccountUpdateTime {
 }
 
 /// Account update events scoped to an account/model code pair.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
     /// Key/value update for a specific account/model code pair.
@@ -309,7 +309,7 @@ pub enum AccountUpdateMulti {
 }
 
 /// Key/value pair returned for a specific account/model code pair.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
     /// Account ID
@@ -325,7 +325,7 @@ pub struct AccountMultiValue {
 }
 
 /// User identity information returned by `Client::user_info`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserInfo {
     /// White branding identifier, if applicable.
@@ -333,7 +333,7 @@ pub struct UserInfo {
 }
 
 /// Financial Advisor configuration data type.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FaDataType {
     /// Account groups configuration.
@@ -370,7 +370,7 @@ impl FaDataType {
 impl_wire_enum!(FaDataType);
 
 /// Financial Advisor configuration data returned by `Client::request_fa`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FaConfig {
     /// Which FA dataset this configuration represents (echoed from the request).
@@ -380,7 +380,7 @@ pub struct FaConfig {
 }
 
 /// Confirmation returned by `Client::replace_fa`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplaceFaResult {
     /// Confirmation text from the server.
@@ -388,7 +388,7 @@ pub struct ReplaceFaResult {
 }
 
 /// Server-side log verbosity level for TWS API diagnostics.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerLogLevel {
     /// System-level messages.
@@ -429,7 +429,7 @@ impl ServerLogLevel {
 impl_wire_enum!(ServerLogLevel);
 
 /// API verification data returned by `Client::verify_request`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerificationChallenge {
     /// The API data string from the verification response.
@@ -437,7 +437,7 @@ pub struct VerificationChallenge {
 }
 
 /// Result of a `Client::verify_message` call.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerificationResult {
     /// Whether the verification was successful.

@@ -8,7 +8,7 @@ pub mod realtime;
 use serde::{Deserialize, Serialize};
 
 /// Specifies whether to include only regular trading hours or extended hours
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TradingHours {
     /// Regular Trading Hours only (RTH)
@@ -41,7 +41,7 @@ impl TradingHours {
 /// the `.bid_ask(...)` terminals of
 /// [`HistoricalTicksBuilder`](crate::market_data::historical::HistoricalTicksBuilder)
 /// and [`TickByTickBuilder`](crate::market_data::realtime::TickByTickBuilder).
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IgnoreSize {
     /// Tick sizes are omitted from the response.
@@ -56,7 +56,7 @@ pub enum IgnoreSize {
 /// reporting exchanges. `No` requests single-exchange depth (the default).
 /// Used by
 /// [`MarketDepthBuilder`](crate::market_data::realtime::MarketDepthBuilder).
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SmartDepth {
     /// Aggregate the order book across exchanges.
@@ -67,7 +67,7 @@ pub enum SmartDepth {
 }
 
 /// Market data type for switching between real-time and frozen/delayed.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataType {
     /// Sentinel for values not recognized by this client (forward compatibility).

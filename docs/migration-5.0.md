@@ -162,13 +162,13 @@ let bracket = BracketOrderIds::try_from(ids)?;
 
 ### 14. The `utoipa` feature is renamed `utoipa-6` and requires utoipa 6
 
-With the feature enabled, public types derive `utoipa::ToSchema`, so utoipa is part of the public API. 5.0 moves from utoipa 5 to utoipa 6, and the feature is renamed after the utoipa major it targets, so a later major can be added as a feature of its own rather than as another breaking change. The two versions' `ToSchema` traits are distinct, so a crate still on utoipa 5 that names `ibapi` types in a `#[derive(OpenApi)]` or `#[schema(...)]` no longer compiles: our types implement utoipa 6's `ToSchema`, not the one it imports.
+With the feature enabled, public types derive `utoipa::ToSchema`, so utoipa is part of the public API. 5.0 moves from utoipa 5 to utoipa 6 and renames the feature after the utoipa major it targets. A later major will arrive as a new `utoipa-<major>` feature in a minor release, leaving `utoipa-6` in place; if several are enabled in one build, the newest wins. The two versions' `ToSchema` traits are distinct, so a crate still on utoipa 5 that names `ibapi` types in a `#[derive(OpenApi)]` or `#[schema(...)]` no longer compiles: our types implement utoipa 6's `ToSchema`, not the one it imports.
 
 Rename the feature, and move your own utoipa dependency and any utoipa integration crates to versions built on utoipa 6:
 
 ```toml
 # Cargo.toml
-# 4.x
+# 4.2
 ibapi = { version = "4", features = ["utoipa"] }
 utoipa = "5"
 
@@ -177,7 +177,7 @@ ibapi = { version = "5", features = ["utoipa-6"] }
 utoipa = "6"
 ```
 
-utoipa 6 needs Rust 1.88 or later. The schemas `ibapi` produces are unchanged. Users without the feature are not affected.
+Enabling `utoipa` alone, as 4.x did, now fails to compile with a message naming `utoipa-6`: the name remains as an internal switch. utoipa 6 needs Rust 1.88 or later. Users without the feature are not affected.
 
 ## Behavioral changes
 

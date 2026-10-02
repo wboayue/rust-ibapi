@@ -1066,7 +1066,7 @@ impl ResponseMessage {
 }
 
 /// An error message from the TWS API.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Notice {
     /// Request or order ID that originated the notice.

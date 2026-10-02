@@ -14,7 +14,7 @@
 
 - **`async`** (default): Tokio-based, non-blocking client and supporting types.
 - **`sync`**: Threaded client using crossbeam channels, plus blocking subscription helpers.
-- **`utoipa-6`**: Derives `utoipa::ToSchema` (utoipa 6) on public data types for OpenAPI schema generation. Named for the utoipa major it targets; combines with either client.
+- **`utoipa-6`**: Derives `utoipa::ToSchema` (utoipa 6) on public data types for OpenAPI schema generation. Named for the utoipa major it targets; a later major gets its own `utoipa-<major>` feature, and if several are enabled the newest wins. Combines with either client. (`utoipa` itself is an internal switch; enabling it alone fails to compile.)
 
 ## Feature Guard Patterns
 

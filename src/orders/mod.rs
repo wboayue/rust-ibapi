@@ -68,7 +68,7 @@ use crate::contracts::TagValue;
 
 pub(crate) const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
 
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Order describes the order.
 pub struct Order {
@@ -685,7 +685,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum Action {
     #[default]
@@ -847,14 +847,14 @@ impl_wire_enum!(OrderStatusKind, fallback Unknown);
 // The utoipa schema is hand-written for the same reason — the derive
 // mirrors serde's *default* representation, which is not what the manual
 // impls emit. The schema is exactly a string.
-#[cfg(feature = "utoipa-6")]
+#[cfg(feature = "utoipa")]
 impl utoipa::PartialSchema for OrderStatusKind {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         String::schema()
     }
 }
 
-#[cfg(feature = "utoipa-6")]
+#[cfg(feature = "utoipa")]
 impl utoipa::ToSchema for OrderStatusKind {}
 
 impl Serialize for OrderStatusKind {
@@ -947,14 +947,14 @@ impl_wire_enum!(TimeInForce, fallback Unknown);
 // derive would produce for the one payload variant. This also keeps the JSON
 // stable against Rust-side renames — see `OrderStatusKind` for the same
 // reasoning, including why the utoipa schema is hand-written.
-#[cfg(feature = "utoipa-6")]
+#[cfg(feature = "utoipa")]
 impl utoipa::PartialSchema for TimeInForce {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         String::schema()
     }
 }
 
-#[cfg(feature = "utoipa-6")]
+#[cfg(feature = "utoipa")]
 impl utoipa::ToSchema for TimeInForce {}
 
 impl Serialize for TimeInForce {
@@ -987,7 +987,7 @@ impl From<&str> for TimeInForce {
 }
 
 /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OcaType {
     /// Not part of OCA group. Wire code `0`.
@@ -1034,7 +1034,7 @@ impl From<i32> for OcaType {
 }
 
 /// The order's origin. Identifies the type of customer from which the order originated.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderOrigin {
     /// Customer order. Wire code `0`.
@@ -1073,7 +1073,7 @@ impl From<i32> for OrderOrigin {
 }
 
 /// Specifies the short sale slot (for institutional short sales).
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShortSaleSlot {
     /// Not a short sale. Wire code `0`.
@@ -1116,7 +1116,7 @@ impl From<i32> for ShortSaleSlot {
 }
 
 /// Volatility type for VOL orders.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VolatilityType {
     /// Daily volatility. Wire code `1`.
@@ -1160,7 +1160,7 @@ impl From<i32> for VolatilityType {
 }
 
 /// Reference price type for VOL orders.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReferencePriceType {
     /// Average of National Best Bid/Offer. Wire code `1`.
@@ -1204,7 +1204,7 @@ impl From<i32> for ReferencePriceType {
 }
 
 /// NYSE Rule 80A designations for institutional trading.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Rule80A {
     /// Individual customer.
@@ -1275,7 +1275,7 @@ impl Rule80A {
 impl_wire_enum!(Rule80A, fallback Unknown);
 
 /// Represents the price component of a combo leg order.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderComboLeg {
     /// The price for this combo leg.
@@ -1286,7 +1286,7 @@ pub struct OrderComboLeg {
 ///
 /// Each variant wraps a specific condition type that defines when the order
 /// should be activated or canceled based on market conditions.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderCondition {
     /// Price-based condition that triggers when a contract reaches a specified price.
@@ -1334,7 +1334,7 @@ impl OrderCondition {
 }
 
 /// Stores Soft Dollar Tier information.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SoftDollarTier {
     /// Soft dollar tier name.
@@ -1346,7 +1346,7 @@ pub struct SoftDollarTier {
 }
 
 /// Contains order information including the order, contract, and order state.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderData {
     /// The order's unique id
@@ -1360,7 +1360,7 @@ pub struct OrderData {
 }
 
 /// Provides an active order's current state.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderState {
     /// The order's current status. See [`OrderStatusKind`].
@@ -1427,7 +1427,7 @@ pub struct OrderState {
 }
 
 /// Allocation of an order across accounts.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderAllocation {
     /// Allocation account
@@ -1450,7 +1450,7 @@ pub struct OrderAllocation {
 /// Available for institutional clients to determine if this order is to open or close a position.
 /// When Action = "BUY" and OpenClose = "O" this will open a new position.
 /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderOpenClose {
     /// Open a new position.
@@ -1533,7 +1533,7 @@ impl_wire_enum!(OrderOpenClose, fallback Unknown);
 ///     println!("{} shares, commission {}", execution.shares, report.commission);
 /// }
 /// ```
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
 pub struct CommissionReport {
     /// The [`Execution::execution_id`] this commission belongs to. Use it to
@@ -1553,7 +1553,7 @@ pub struct CommissionReport {
 }
 
 /// Liquidity types for executions.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
     /// No liquidity information. Wire code `0`.
@@ -1582,7 +1582,7 @@ impl From<i32> for Liquidity {
 }
 
 /// Describes an order's execution.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
 pub struct Execution {
     /// The API client's order Id. May not be unique to an account.
@@ -1635,7 +1635,7 @@ pub struct Execution {
 }
 
 /// Contains execution information including the request ID, contract, and execution details.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
     /// The request ID associated with this execution.
@@ -1647,7 +1647,7 @@ pub struct ExecutionData {
 }
 
 /// Responses from placing an order.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum PlaceOrder {
@@ -1663,7 +1663,7 @@ pub enum PlaceOrder {
 
 /// Updates received when monitoring order activity.
 /// This enum is used by `order_update_stream` to deliver real-time order updates.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum OrderUpdate {
@@ -1683,7 +1683,7 @@ pub enum OrderUpdate {
 ///
 /// API order IDs are scoped to `client_id`. This notification does not grant
 /// another API client permission to modify or cancel the order.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrderBound {
     /// Permanent order ID assigned by TWS.
@@ -1695,7 +1695,7 @@ pub struct OrderBound {
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct OrderStatus {
     /// The order's client id.
@@ -1724,7 +1724,7 @@ pub struct OrderStatus {
 }
 
 /// Enumerates possible results from cancelling an order.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum CancelOrder {
     /// Order status information.
@@ -1732,7 +1732,7 @@ pub enum CancelOrder {
 }
 
 /// Enumerates possible results from querying an [Order].
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Orders {
@@ -1751,7 +1751,7 @@ pub enum Orders {
 ///
 /// No `Default` — [`ExecutionFilter::side`] carries the no-filter state via
 /// `None`. `#[non_exhaustive]` leaves headroom for IBKR vocabulary additions.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ExecutionFilterSide {
@@ -1798,7 +1798,7 @@ impl_wire_enum!(ExecutionFilterSide);
 /// placeholder [`Execution::default()`] instances built when an upstream
 /// `ExecutionDetails` proto omits its inner `execution` field. Real
 /// fills always set the variant from the wire.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ExecutionSide {
     /// Buy fill — IBKR wire value `"BOT"`.
@@ -1828,7 +1828,7 @@ impl ExecutionSide {
 
 impl_wire_enum!(ExecutionSide);
 
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 /// Filter criteria used to determine which execution reports are returned.
 pub struct ExecutionFilter {
@@ -1855,7 +1855,7 @@ pub struct ExecutionFilter {
 }
 
 /// Enumerates possible results from querying an [Execution].
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Executions {
@@ -1866,7 +1866,7 @@ pub enum Executions {
 }
 
 /// Exercise action for options.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy)]
 pub enum ExerciseAction {
     /// Exercise the option.
@@ -1876,7 +1876,7 @@ pub enum ExerciseAction {
 }
 
 /// Responses from exercising options.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum ExerciseOptions {

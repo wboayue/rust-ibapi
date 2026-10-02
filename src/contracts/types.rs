@@ -9,7 +9,7 @@ use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 mod tests;
 
 /// Strong type for trading symbols
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Symbol(pub String);
 
@@ -61,7 +61,7 @@ impl_str_partial_eq!(Symbol);
 ///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
 /// around exchange codes.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Exchange(pub String);
 
@@ -124,7 +124,7 @@ impl_str_partial_eq!(Exchange);
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
 /// wrapper around currency codes.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Currency(pub String);
 
@@ -182,7 +182,7 @@ impl_str_partial_eq!(Currency);
 ///
 /// No `Default` — `Contract.right: Option<OptionRight>` carries the no-right
 /// state via `None`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum OptionRight {
@@ -216,7 +216,7 @@ impl_wire_enum!(OptionRight);
 ///
 /// No `Default` — `Contract.security_id_type: Option<SecurityIdType>` carries
 /// the no-identifier state via `None`.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SecurityIdType {
     /// CUSIP — North American security identifier.
@@ -266,7 +266,7 @@ impl SecurityIdType {
 impl_wire_enum!(SecurityIdType, fallback Unknown);
 
 /// Validated strike price (must be positive)
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Strike(f64);
 
@@ -292,7 +292,7 @@ impl Strike {
 }
 
 /// Date for option expiration
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpirationDate {
     year: u16,
@@ -388,7 +388,7 @@ impl fmt::Display for ExpirationDate {
 }
 
 /// Contract month for futures
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractMonth {
     year: u16,
@@ -463,7 +463,7 @@ impl fmt::Display for ContractMonth {
 }
 
 /// CUSIP identifier
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cusip(pub String);
 
@@ -504,7 +504,7 @@ impl fmt::Display for Cusip {
 }
 
 /// ISIN identifier
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isin(pub String);
 
@@ -558,7 +558,7 @@ impl fmt::Display for Isin {
 }
 
 /// Bond identifier type
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BondIdentifier {
     /// A bond identified by a CUSIP code.
@@ -571,7 +571,7 @@ pub enum BondIdentifier {
 /// `BUY` / `SELL` / `SSHORT`. `SLONG` is not accepted on combo legs — only the
 /// SSHORT short-sale form is gated (`SSHORT_COMBO_LEGS = 35`, well below our
 /// floor of 210), so all three variants are unconditionally valid.
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum LegAction {

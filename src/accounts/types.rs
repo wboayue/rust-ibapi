@@ -4,7 +4,7 @@ use std::fmt;
 use std::ops::Deref;
 
 /// Account identifier
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccountId(pub String);
 
@@ -35,7 +35,7 @@ impl From<&str> for AccountId {
 }
 
 /// Model code identifier
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModelCode(pub String);
 
@@ -66,7 +66,7 @@ impl From<&str> for ModelCode {
 }
 
 /// Contract identifier
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ContractId(pub i32);
 
@@ -92,7 +92,7 @@ impl From<i32> for ContractId {
 // pub struct ModelCode(pub String);
 
 /// Account group for filtering
-#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountGroup(pub String);
 
