@@ -602,6 +602,10 @@ let bracket = BracketOrderIds::from(ids);
 let bracket = BracketOrderIds::try_from(ids)?;
 ```
 
+### 28. `OrderAnalysis` is removed
+
+`orders::builder::OrderAnalysis` was the planned return type of `OrderBuilder::analyze()`, which has returned `orders::OrderState` since the builder was added (#311). No API produced or accepted it. Use `OrderState`: its `initial_margin_after`, `maintenance_margin_after`, `commission`, `commission_currency` and `warning_text` carry the same figures.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -650,7 +654,8 @@ No code changes required, but observable at runtime:
 25. Replace `SecurityType::from(s)` with `s.parse::<SecurityType>()?` — see [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages).
 26. Remove references to `historical::WhatToShowParseError`, `realtime::BarSize` and `RealtimeBarSize` — see [§26](#26-unused-market_data-items-are-removed).
 27. Replace `BracketOrderIds::from(vec)` with `BracketOrderIds::try_from(vec)?` — see [§27](#27-bracketorderids-converts-from-veci32-through-tryfrom).
-28. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+28. Replace `orders::builder::OrderAnalysis` with `orders::OrderState` — see [§28](#28-orderanalysis-is-removed).
+29. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
