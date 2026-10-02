@@ -2,7 +2,7 @@
 #
 # Validates the docs/rules/ knowledge graph and its index in AGENTS.md.
 #
-#   1. every markdown link in AGENTS.md, docs/rules/**, and plans/*.md resolves
+#   1. every markdown link in AGENTS.md and docs/rules/** resolves
 #      to a real file
 #   2. every node's frontmatter `id` matches its filename stem
 #   3. every `related:` id names an existing node
@@ -14,9 +14,6 @@
 #
 # `memory:` entries are deliberately NOT validated — that directory lives
 # outside the repo and is specific to one maintainer.
-#
-# plans/*.md is in scope for check 1 because plan files cite nodes by relative
-# path; those links were hand-verified once and would otherwise rot unwatched.
 
 set -uo pipefail
 
@@ -71,7 +68,7 @@ done
 
 # --- 1. markdown links resolve ----------------------------------------------
 
-for file in $INDEX $(nodes) "$RULES_DIR/README.md" $(find plans -name '*.md' | sort); do
+for file in $INDEX $(nodes) "$RULES_DIR/README.md"; do
     dir="$(dirname "$file")"
     grep -o '](\([^) ]*\))' "$file" 2>/dev/null | sed 's/^](//; s/)$//' | while read -r link; do
         case "$link" in

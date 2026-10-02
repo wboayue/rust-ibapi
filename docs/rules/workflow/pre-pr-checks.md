@@ -36,7 +36,7 @@ cargo build --examples --no-default-features --features sync
 `just test` does not build `examples/`, and a signature change breaks examples as readily as it
 breaks callers — that is a whole caller surface the test suite never touches.
 
-Add `just rules-check` when the change touches `AGENTS.md`, `docs/rules/`, or `plans/`, and the
+Add `just rules-check` when the change touches `AGENTS.md` or `docs/rules/`, and the
 [integration crate builds](integration-crate-builds.md) when it touches a wire surface.
 
 ## Why

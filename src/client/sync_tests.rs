@@ -120,7 +120,7 @@ fn connect_handshakes_against_real_socket() {
 /// frame-reading free function, and what it writes has to be the wire bytes
 /// with their length prefixes intact. That prefix is the field
 /// `MessageRecorder` discards and the one a framing desync corrupts — see
-/// `plans/tick-by-tick-reconnect-decode-desync.md`.
+/// #891.
 ///
 /// Serial: `temp_env` mutates the process environment, so a parallel test that
 /// opened a connection would write into this directory too.

@@ -22,3 +22,5 @@ Cargo.lock
 
 # Claude Code local state
 .claude/
+# Local implementation plans (see docs/rules/workflow/plans-and-issues.md)
+/plans/

@@ -373,7 +373,7 @@ fn test_contract_builder_defaults() {
 /// fails to compile, forcing the developer to add a setter and wire it in
 /// here before the workspace goes green again.
 ///
-/// See `plans/v3-api-ergonomics.md` §1 for the rationale.
+/// See #608 (v3 API ergonomics, §1) for the rationale.
 #[test]
 fn setter_parity_with_contract_fields() {
     let date = time::macros::date!(2024 - 12 - 20);

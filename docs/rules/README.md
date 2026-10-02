@@ -87,8 +87,8 @@ Checks that every markdown link resolves, every `id` matches its filename, every
 id names a real node, that `AGENTS.md` contains no `@`-imports, and that no node cites a
 `file.rs:NNN` line number.
 
-Link resolution covers `AGENTS.md`, `docs/rules/**`, **and `plans/*.md`** — plan files cite
-nodes by relative path, and those links rot as readily as the ones inside the graph.
+Link resolution covers `AGENTS.md` and `docs/rules/**`. `plans/` is untracked and out of
+scope; see [plans and issues](workflow/plans-and-issues.md).
 
 **Cite names, not line numbers.** `src/protocol_tests.rs:5` is accurate until the next edit
 to that file and nothing recomputes it — the same silent decay that made rule numbers

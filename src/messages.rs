@@ -1319,7 +1319,7 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 /// the eviction and now, and re-derive it (a connection-state authority
 /// re-baselines its link state and re-establishes subscriptions). This is
 /// the notice-stream instance of [`SUBSCRIPTION_LAG_CODE`], closing the
-/// step-1 leftover in `plans/broadcast-lag-visibility.md` (#779). The sync
+/// step-1 leftover of #779. The sync
 /// notice fan-out is unbounded and cannot lag.
 pub const NOTICE_STREAM_LAG_CODE: i32 = -7;
 

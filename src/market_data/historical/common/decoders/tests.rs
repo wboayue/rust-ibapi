@@ -249,7 +249,7 @@ fn test_decode_historical_data_end_accepted_renderings() {
 #[test]
 fn test_decode_historical_data_end_rejected_renderings() {
     // Unverified shapes fail loudly instead of being resolved in a guessed zone
-    // (plans/historical-data-end-renderings.md). A malformed clock is a parse error;
+    // (#904). A malformed clock is a parse error;
     // only a well-formed clock with an unknown zone is UnsupportedTimeZone, and the
     // error carries the whole zone name.
     let parse_errors = [

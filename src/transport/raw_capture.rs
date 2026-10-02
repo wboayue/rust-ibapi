@@ -9,7 +9,7 @@
 //! and an unrecognised message id has already collapsed to `NotValid`.
 //!
 //! That distinction is the whole point. The failure under investigation in
-//! `plans/tick-by-tick-reconnect-decode-desync.md` is a *framing* desync: a
+//! #891 is a *framing* desync: a
 //! length prefix that does not describe the frame that follows, after which
 //! every subsequent read starts mid-message. A recorder-based capture cannot
 //! contain the evidence, because the corrupted field is the one it discards.
@@ -36,8 +36,7 @@
 //! `.bin` is byte-exact only for reads that completed. A desync caused that way
 //! is still visible (the next prefix in the capture is the shifted one), but the
 //! lost bytes are simply absent, and the capture will not replay against the
-//! wire byte for byte. See F8 in
-//! `plans/tick-by-tick-reconnect-decode-desync.md`.
+//! wire byte for byte. See #892.
 //!
 //! # Cost
 //!
