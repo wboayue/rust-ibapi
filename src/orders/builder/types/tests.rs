@@ -99,6 +99,7 @@ fn test_bracket_order_ids_wrong_length() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_order_analysis_default() {
     let analysis = OrderAnalysis {
         initial_margin: Some(1000.0),
