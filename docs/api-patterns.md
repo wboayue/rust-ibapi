@@ -6,8 +6,9 @@
 crate-root `Client` (async when the `async` feature is on, blocking otherwise),
 `Contract` + the typed contract wrappers, the order-side `Action` enum, the
 `Subscription` / `SubscriptionItem` / `Notice` / `NoticeCategory` types, and
-the historical/realtime `BarSize` / `WhatToShow` enums (disambiguated as
-`HistoricalBarSize` / `RealtimeBarSize` etc. — see the
+the historical `BarSize` and the historical/realtime `WhatToShow` enums
+(disambiguated as `HistoricalBarSize` / `HistoricalWhatToShow` /
+`RealtimeWhatToShow` — see the
 [`prelude` rustdoc](https://docs.rs/ibapi/latest/ibapi/prelude/) for the full
 list and the naming convention for the BarSize/WhatToShow disambiguation).
 

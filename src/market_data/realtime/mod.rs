@@ -42,27 +42,6 @@ use crate::contracts::tick_types::TickType;
 
 // === Models ===
 
-/// Bar size for real-time bars.
-///
-/// Note: Currently only 5-second bars are supported for real-time data.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Copy, Serialize, Deserialize, PartialEq)]
-pub enum BarSize {
-    // Sec,
-    /// 5-second bars.
-    Sec5,
-    // Sec15,
-    // Sec30,
-    // Min,
-    // Min2,
-    // Min3,
-    // Min5,
-    // Min15,
-    // Min30,
-    // Hour,
-    // Day,
-}
-
 /// Represents `BidAsk` tick by tick realtime tick.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
