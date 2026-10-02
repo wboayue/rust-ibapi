@@ -408,6 +408,22 @@ async fn remove_if_dead<V>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &s
     debug!("cleanup {kind} channel {id}: removed={removed}");
 }
 
+/// Drop every execution-id alias whose channel has no receivers left, so a
+/// dropped subscription's sender (and anything buffered in it) is released.
+/// Same liveness rule as [`remove_if_dead`]. Not gated on that removal: a
+/// stale or clone signal, or a drop after `cancel_*` already removed the
+/// entry, still owns aliases to sweep. It also catches other dead
+/// subscriptions whose signals are still queued.
+async fn prune_dead_aliases(aliases: &RwLock<HashMap<String, BroadcastSender>>) {
+    if aliases.read().await.is_empty() {
+        return;
+    }
+    let mut aliases = aliases.write().await;
+    let before = aliases.len();
+    aliases.retain(|_, sender| sender.receiver_count() > 0);
+    debug!("pruned {} execution aliases", before - aliases.len());
+}
+
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     connection: Arc<AsyncConnection<S>>,
@@ -421,7 +437,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     shared_counts: Mutex<SharedCounts>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
-    /// Maps execution IDs to their response channels (for commission reports)
+    /// Maps execution IDs to their response channels (for commission reports).
+    /// Pruned when the owning request or order subscription is cleaned up.
     execution_channels: Arc<RwLock<HashMap<String, BroadcastSender>>>,
     /// Optional channel for order update stream
     order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
@@ -508,6 +525,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // Start cleanup task
         let request_channels = message_bus.request_channels.clone();
         let order_channels = message_bus.order_channels.clone();
+        let execution_channels = message_bus.execution_channels.clone();
         let order_update_stream = message_bus.order_update_stream.clone();
 
         // A signal can be processed arbitrarily long after the drop that sent
@@ -518,8 +536,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
                 match signal {
-                    CleanupSignal::Request(request_id) => remove_if_dead(&request_channels, request_id, "request", |route| &route.sender).await,
-                    CleanupSignal::Order(order_id) => remove_if_dead(&order_channels, order_id, "order", |sender| sender).await,
+                    CleanupSignal::Request(request_id) => {
+                        remove_if_dead(&request_channels, request_id, "request", |route| &route.sender).await;
+                        prune_dead_aliases(&execution_channels).await;
+                    }
+                    CleanupSignal::Order(order_id) => {
+                        remove_if_dead(&order_channels, order_id, "order", |sender| sender).await;
+                        prune_dead_aliases(&execution_channels).await;
+                    }
                     CleanupSignal::Shared(ticket) => {
                         // Shared channels are persistent and should not be removed
                         // They are created at initialization and reused across multiple requests

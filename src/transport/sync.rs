@@ -405,18 +405,29 @@ impl<S: Stream> TcpMessageBus<S> {
     // be processed arbitrarily late, and unconditional removal would take out
     // a newer registration under the same key (place then cancel on one order
     // id, or an order update stream recreated after a reconnect reset).
+    //
+    // `clean_request` and `clean_order` also drop the subscription's
+    // execution-id aliases, matched by channel rather than key, so a stale
+    // signal still releases its own aliases and never a newer registration's.
+    // Not gated on `removed`: a stale signal, or a drop after `cancel_*`
+    // already removed the entry, still owns aliases to release.
 
     fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
         let removed = self.requests.remove_if_same(&request_id, sender);
+        let aliases = self.executions.remove_all_same(sender);
         debug!(
-            "cleanup request_id {request_id}: removed={removed}, requests.len()={}",
+            "cleanup request_id {request_id}: removed={removed}, aliases={aliases}, requests.len()={}",
             self.requests.len()
         );
     }
 
     fn clean_order(&self, order_id: i32, sender: &Sender<RoutedItem>) {
         let removed = self.orders.remove_if_same(&order_id, sender);
-        debug!("cleanup order_id {order_id}: removed={removed}, orders.len()={}", self.orders.len());
+        let aliases = self.executions.remove_all_same(sender);
+        debug!(
+            "cleanup order_id {order_id}: removed={removed}, aliases={aliases}, orders.len()={}",
+            self.orders.len()
+        );
     }
 
     fn clear_order_update_stream(&self, sender: &Sender<RoutedItem>) {
@@ -622,7 +633,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 // Try order_id channel first, then request_id, storing execution_id mapping
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
-                        self.store_execution_mapping_orders(&message, order_id);
+                        self.store_execution_mapping(&message, &self.orders, order_id);
                         if let Err(e) = self.orders.send(&order_id, message.into()) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
@@ -631,7 +642,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
                 if let Some(request_id) = message.request_id() {
                     if self.requests.contains(&request_id) {
-                        self.store_execution_mapping_requests(&message, request_id);
+                        self.store_execution_mapping(&message, &self.requests, request_id);
                         if let Err(e) = self.requests.send(&request_id, message.into()) {
                             warn!("error routing message for request_id({request_id}): {e}");
                         }
@@ -732,19 +743,12 @@ impl<S: Stream> TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    fn store_execution_mapping_orders(&self, message: &ResponseMessage, order_id: i32) {
-        if let Some(sender) = self.orders.copy_sender(order_id) {
-            if let Some(execution_id) = message.execution_id() {
-                self.executions.insert(execution_id, sender);
-            }
-        }
-    }
-
-    fn store_execution_mapping_requests(&self, message: &ResponseMessage, request_id: i32) {
-        if let Some(sender) = self.requests.copy_sender(request_id) {
-            if let Some(execution_id) = message.execution_id() {
-                self.executions.insert(execution_id, sender);
-            }
+    /// Alias the execution id to `id`'s channel in `channels`. The insert runs
+    /// under `channels`' read lock, so a concurrent cleanup either removes the
+    /// registration first (no alias is stored) or prunes the alias after it.
+    fn store_execution_mapping(&self, message: &ResponseMessage, channels: &SenderHash<i32, RoutedItem>, id: i32) {
+        if let Some(execution_id) = message.execution_id() {
+            channels.with_sender(&id, |sender| self.executions.insert(execution_id, sender.clone()));
         }
     }
 
@@ -1006,9 +1010,17 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
+    #[cfg(test)]
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         let senders = self.senders.read().unwrap();
         senders.get(&id).map(|entry| entry.sender.clone())
+    }
+
+    /// Run `f` on `id`'s sender while holding the read lock, so no removal can
+    /// land between the lookup and `f`.
+    pub fn with_sender<R>(&self, id: &K, f: impl FnOnce(&Sender<V>) -> R) -> Option<R> {
+        let senders = self.senders.read().unwrap();
+        senders.get(id).map(|entry| f(&entry.sender))
     }
 
     pub fn insert(&self, id: K, sender: Sender<V>) -> Option<Sender<V>> {
@@ -1042,6 +1054,15 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         } else {
             false
         }
+    }
+
+    /// Remove every entry on the same channel as `sender`. Returns how many
+    /// were removed.
+    pub fn remove_all_same(&self, sender: &Sender<V>) -> usize {
+        let mut senders = self.senders.write().unwrap();
+        let before = senders.len();
+        senders.retain(|_, registered| !registered.sender.same_channel(sender));
+        before - senders.len()
     }
 
     pub fn contains(&self, id: &K) -> bool {

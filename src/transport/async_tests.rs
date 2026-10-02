@@ -1441,6 +1441,95 @@ async fn test_commission_report_without_mapping_dropped() {
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an unmapped commission");
 }
 
+/// #880: an execution-id alias holds a sender clone, so it must go when the
+/// order or request subscription that owns it is dropped.
+#[tokio::test]
+async fn test_execution_aliases_pruned_when_subscriptions_drop() {
+    let (stream, bus) = make_bus();
+    let order = bus.send_order_request(7, vec![]).await.unwrap();
+    let executions = bus.send_request(99, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_body(99, 0, "exec-request"));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+    assert_eq!(bus.execution_channels.read().await.len(), 2, "both executions mapped");
+
+    drop(order);
+    drain_cleanup_signals(&bus).await;
+    {
+        let aliases = bus.execution_channels.read().await;
+        assert!(!aliases.contains_key("exec-order"), "order alias leaked");
+        assert!(aliases.contains_key("exec-request"), "live request alias pruned");
+    }
+
+    drop(executions);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty(), "request alias leaked");
+}
+
+/// `cancel_order_subscription` removes the registration but not its aliases;
+/// the drop that follows finds nothing to remove and must still sweep them.
+#[tokio::test]
+async fn test_execution_aliases_pruned_on_drop_after_cancel() {
+    let (stream, bus) = make_bus();
+    let order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+    bus.cancel_order_subscription(7, vec![]).await.unwrap();
+    assert_eq!(bus.execution_channels.read().await.len(), 1, "cancel left the alias for the drop");
+
+    drop(order);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty(), "alias leaked after cancel then drop");
+}
+
+/// Each clone sends its own cleanup signal; the alias stays while any clone
+/// can still read the channel and goes with the last one.
+#[tokio::test]
+async fn test_execution_alias_kept_while_a_clone_is_alive() {
+    let (stream, bus) = make_bus();
+    let order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+
+    let clone = order.clone();
+    drop(order);
+    drain_cleanup_signals(&bus).await;
+    assert!(
+        bus.execution_channels.read().await.contains_key("exec-order"),
+        "alias pruned while a clone is alive"
+    );
+
+    drop(clone);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty(), "alias leaked");
+}
+
+/// A stale drop signal releases the old subscription's aliases and keeps those
+/// of a newer registration under the same order id.
+#[tokio::test]
+async fn test_stale_cleanup_keeps_newer_execution_aliases() {
+    let (stream, bus) = make_bus();
+    let sub_a = bus.send_order_request(42, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 42, "exec-a"));
+    bus.read_and_route_message().await.unwrap();
+    let sub_b = bus.send_order_request(42, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 42, "exec-b"));
+    bus.read_and_route_message().await.unwrap();
+
+    drop(sub_a);
+    drain_cleanup_signals(&bus).await;
+    {
+        let aliases = bus.execution_channels.read().await;
+        assert!(!aliases.contains_key("exec-a"), "stale subscription's alias leaked");
+        assert!(aliases.contains_key("exec-b"), "newer subscription's alias pruned");
+    }
+
+    drop(sub_b);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
 #[tokio::test]
 async fn test_completed_order_routes_to_shared_channel() {
     let (stream, bus) = make_bus();
