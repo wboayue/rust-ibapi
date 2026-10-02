@@ -2,7 +2,7 @@
 
 use crate::common::test_utils::helpers::{proto_error_response, proto_response, TEST_REQ_ID_FIRST};
 use crate::contracts::Symbol;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
+use crate::messages::{IncomingMessages, Notice, NoticeCategory, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
 use crate::scanner::{ScannerData, ScannerSubscription};
 use crate::testdata::builders::scanner::{scanner_data, scanner_data_row};
 use crate::testdata::builders::ResponseProtoEncoder;
@@ -41,30 +41,31 @@ pub(crate) fn no_items_then_batches() -> Vec<ResponseMessage> {
     vec![
         proto_error_response(TEST_REQ_ID_FIRST, HMDS_QUERY_MESSAGE_CODE, NO_ITEMS_MESSAGE),
         proto_response(IncomingMessages::ScannerData, filled.clone()),
-        proto_response(
-            IncomingMessages::ScannerData,
-            scanner_data().request_id(TEST_REQ_ID_FIRST).rows(vec![]).encode_proto(),
-        ),
+        empty_batch(),
         proto_error_response(TEST_REQ_ID_FIRST, REJECTION_CODE, "No security definition"),
         proto_response(IncomingMessages::ScannerData, filled),
     ]
 }
 
+fn empty_batch() -> ResponseMessage {
+    proto_response(
+        IncomingMessages::ScannerData,
+        scanner_data().request_id(TEST_REQ_ID_FIRST).rows(vec![]).encode_proto(),
+    )
+}
+
 /// An error frame followed by an empty batch the ended stream must not yield.
 pub(crate) fn error_then_empty_batch(code: i32, message: &str) -> Vec<ResponseMessage> {
-    vec![
-        proto_error_response(TEST_REQ_ID_FIRST, code, message),
-        proto_response(
-            IncomingMessages::ScannerData,
-            scanner_data().request_id(TEST_REQ_ID_FIRST).rows(vec![]).encode_proto(),
-        ),
-    ]
+    vec![proto_error_response(TEST_REQ_ID_FIRST, code, message), empty_batch()]
 }
 
 pub(crate) fn assert_no_items_notice(notice: &Notice) {
     assert_eq!(notice.request_id, Some(TEST_REQ_ID_FIRST));
     assert_eq!(notice.code, HMDS_QUERY_MESSAGE_CODE);
     assert_eq!(notice.message, NO_ITEMS_MESSAGE);
+    // Delivered as a notice, but not reclassified: see `classify`.
+    assert_eq!(notice.category(), NoticeCategory::Error);
+    assert!(!notice.is_informational());
 }
 
 pub(crate) fn assert_filled_batch(rows: &[ScannerData]) {

@@ -1576,6 +1576,11 @@ impl Notice {
     ///
     /// Informational notices include cancellation confirmations, warnings,
     /// system/connectivity messages, and data advisories.
+    ///
+    /// A scanner subscription also yields TWS code 165 "no items retrieved"
+    /// (an empty scan) as a `SubscriptionItem::Notice` and stays open, although
+    /// that notice is not informational; don't end a scanner loop on
+    /// `!is_informational()` alone.
     pub fn is_informational(&self) -> bool {
         is_informational_code(self.code, &self.message)
     }
