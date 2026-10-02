@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The `utoipa` feature requires utoipa 6 (was 5). Public types derive utoipa 6's `ToSchema`, which a crate on utoipa 5 can't use in its `#[derive(OpenApi)]`; upgrade to utoipa 6 (Rust 1.88+). See `docs/migration-5.0.md` §1 (#870).
 - `contract_details` now collects over `contract_details_stream`. On server 215+ it writes no cancel after TWS's end marker, but does write `cancelContractData` when TWS answers with an error (e.g. 200), as dropping any subscription after an error does; the old path wrote neither. The guard that skips a cancel after the end marker sits in `Subscription` but changes no other existing stream (#876).
 - `contract_details` skips a frame of a type the request doesn't expect (logged at `trace!`) rather than failing with `Error::UnexpectedResponse`; TWS warning notices on the request are logged at `warn!` (#876).
 - `matching_symbols` docs describe its retry: on a connection reset it waits for the reconnect and retries with a fresh request id, up to 3 times (#876).
