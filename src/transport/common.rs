@@ -75,7 +75,7 @@ pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
 ///
 /// The blocking transport logged both at `info` and the async transport logged
 /// neither, which is how the incident in
-/// `plans/tick-by-tick-reconnect-decode-desync.md` produced farm notices and no
+/// #891 produced farm notices and no
 /// decode error.
 pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &dyn NoticeSink) {
     if message.message_type() == IncomingMessages::NotValid {

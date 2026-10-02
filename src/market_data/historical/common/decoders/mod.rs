@@ -80,7 +80,7 @@ fn parse_yyyymmdd(text: &str) -> Result<Date, Error> {
 ///
 /// Anything else is rejected loudly rather than guessed at: a zone-less wall clock
 /// resolved in the wrong zone is a silently wrong instant. Candidate shapes seen on
-/// other messages or older APIs are tracked in `plans/historical-data-end-renderings.md`.
+/// other messages or older APIs are tracked in #904.
 fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Error> {
     let text = text.trim();
     if let Ok(utc) = PrimitiveDateTime::parse(text, DASHED_DATE_TIME) {

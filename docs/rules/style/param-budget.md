@@ -52,9 +52,8 @@ the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
 The open violation inventory — four internal helpers and one client method, with a
-per-signature verdict on each — lives in
-[plans/code-consistency-followups.md](../../../plans/code-consistency-followups.md). Take one
-when you are already in the file.
+per-signature verdict on each — is tracked in #901. Take one when you are already in the
+file.
 
 ## Precedents
 

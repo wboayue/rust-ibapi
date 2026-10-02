@@ -37,7 +37,7 @@ const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 /// sync channel logs a warning. Sync channels are unbounded — they never drop,
 /// so the failure mode of a stalled consumer is silent memory growth. The
 /// watermark makes it loud without changing the lossless semantics; see
-/// `plans/broadcast-lag-visibility.md` (#779).
+/// #779 and #896.
 const BACKLOG_WATERMARK: usize = 10_000;
 
 /// `true` exactly when `depth` sits on a watermark multiple — one warning per

@@ -2773,7 +2773,7 @@ fn test_read_message_rejects_out_of_range_length_prefix() {
 ///
 /// Both halves matter. A capture that only holds frames the reader accepted
 /// would be missing the one byte sequence worth capturing: the desync in
-/// `plans/tick-by-tick-reconnect-decode-desync.md` announces itself as a length
+/// #891 announces itself as a length
 /// prefix that cannot describe a frame, and that prefix is rejected before any
 /// caller sees it.
 #[test]

@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 /// Two claims in one: the reader rejects a length prefix that cannot describe a
 /// frame, and the tap sees that prefix anyway. The second is the one worth a
 /// test — a capture holding only frames the reader accepted would omit the byte
-/// sequence in `plans/tick-by-tick-reconnect-decode-desync.md` that an operator
+/// sequence in #891 that an operator
 /// opens the capture to find.
 #[tokio::test]
 async fn test_read_framed_message_taps_raw_bytes_including_rejected_prefixes() {

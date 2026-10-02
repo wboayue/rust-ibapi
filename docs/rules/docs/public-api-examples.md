@@ -42,12 +42,9 @@ than the other examples in the same file. See [doc parity audit](doc-parity-audi
 
 ## Coverage today
 
-132 of 152 `impl Client` methods carry `# Examples`. The gap is inventoried in
-[plans/code-consistency-followups.md](../../../plans/code-consistency-followups.md) — nine
-sites across seven methods (`exercise_options`, `market_rule`, `family_codes`,
-`server_time_millis`, `cancel_historical_ticks`, `cancel_contract_details`, and async
-`market_data`), plus eleven trivial client accessors that are exempt. Take one when you are
-already in the file.
+#751 closed the backfill: re-counted then as 143 of 154 `impl Client` methods with
+`# Examples`, the other eleven being trivial client accessors that are exempt. A new method
+ships with its example.
 
 ## Precedents
 
