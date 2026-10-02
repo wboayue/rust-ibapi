@@ -93,11 +93,8 @@ fn test_validation_error_display() {
 #[test]
 fn test_bracket_order_ids_wrong_length() {
     for ids in [vec![], vec![100, 101], vec![100, 101, 102, 103]] {
-        let n = ids.len();
-        match BracketOrderIds::try_from(ids) {
-            Err(ValidationError::InvalidBracketOrder(msg)) => assert_eq!(msg, format!("expected 3 order ids, got {n}")),
-            other => panic!("expected InvalidBracketOrder, got {other:?}"),
-        }
+        let expected = Err(ValidationError::InvalidBracketOrder(format!("expected 3 order ids, got {}", ids.len())));
+        assert_eq!(BracketOrderIds::try_from(ids), expected);
     }
 }
 

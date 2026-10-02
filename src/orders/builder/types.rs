@@ -52,6 +52,8 @@ pub struct AttachedOrderIds {
 }
 
 /// Represents the order IDs for a bracket order
+///
+/// Converts from `[i32; 3]` with `From`, and from `Vec<i32>` with `TryFrom`, which fails unless the `Vec` holds exactly three ids.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BracketOrderIds {
