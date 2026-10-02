@@ -179,6 +179,30 @@ utoipa = "6"
 
 Enabling `utoipa` alone, as 4.x did, now fails to compile with a message naming `utoipa-6`: the name remains as an internal switch. utoipa 6 needs Rust 1.88 or later. Users without the feature are not affected.
 
+### 15. `Error::ProtobufDecode` carries `errors::ProtobufDecodeError`
+
+`Error::ProtobufDecode` held a `prost::DecodeError`, and `Error` implemented `From<prost::DecodeError>`. prost is pre-1.0, so each prost minor release would have been a breaking change to `ibapi` through this variant, its only public exposure. The payload is now the opaque `ibapi::errors::ProtobufDecodeError` (`Debug`, `Clone`, `Display`, `std::error::Error`, `Send + Sync`), and the `From` impl is removed.
+
+- **The variant and its `Display` text are unchanged** (`protobuf decode error: ...`), so matching `Error::ProtobufDecode(_)` and printing the error still work.
+- **Code that named `prost::DecodeError` from the payload, or converted one with `?` / `.into()`, no longer compiles.** Use the payload's `Display`, or map your own prost errors into your own error type (`Error::Simple(e.to_string())` if it must be an `ibapi::Error`).
+- **`ProtobufDecodeError` has no public constructor**, so code outside the crate can't build an `Error::ProtobufDecode` (e.g. in tests); use another variant.
+- **`source()` on `Error::ProtobufDecode` now returns `None`.** The decode detail was in both the message and the source, so chain printers (`anyhow`'s `{:#}`) showed it twice; it stays in the message.
+
+```rust,ignore
+// 4.2
+if let Err(Error::ProtobufDecode(e)) = result {
+    let e: prost::DecodeError = e;
+    eprintln!("{e}");
+}
+
+// 5.0
+if let Err(Error::ProtobufDecode(e)) = result {
+    eprintln!("{e}"); // ibapi::errors::ProtobufDecodeError
+}
+```
+
+`Error::ParseTime` keeps its `time::error::Parse` payload: `time` is part of the API through `OffsetDateTime` and `Date`, so wrapping its error would gain nothing.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -203,7 +227,8 @@ No code changes required, but observable at runtime:
 12. Replace `BracketOrderIds::from(vec)` with `BracketOrderIds::try_from(vec)?` — see [§12](#12-bracketorderids-converts-from-veci32-through-tryfrom).
 13. Replace `orders::builder::OrderAnalysis` with `orders::OrderState` — see [§13](#13-orderanalysis-is-removed).
 14. If you enable the `utoipa` feature, rename it to `utoipa-6` and upgrade to utoipa 6 — see [§14](#14-the-utoipa-feature-is-renamed-utoipa-6-and-requires-utoipa-6).
-15. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+15. Replace uses of `prost::DecodeError` from `Error::ProtobufDecode`, and any `From<prost::DecodeError> for ibapi::Error` conversion — see [§15](#15-errorprotobufdecode-carries-errorsprotobufdecodeerror).
+16. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

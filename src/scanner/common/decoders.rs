@@ -1,4 +1,4 @@
-use prost::Message;
+use crate::proto::decoders::DecodeProto;
 
 use crate::messages::ResponseMessage;
 use crate::Error;
@@ -20,7 +20,7 @@ pub(in crate::scanner) fn decode_scanner_data(message: &ResponseMessage) -> Resu
 }
 
 pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
-    let p = crate::proto::ScannerData::decode(bytes)?;
+    let p = crate::proto::ScannerData::decode_proto(bytes)?;
 
     let mut results = Vec::with_capacity(p.scanner_data_element.len());
     for elem in p.scanner_data_element {

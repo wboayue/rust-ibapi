@@ -3,6 +3,7 @@ use crate::common::test_utils::helpers::tws_error_notice;
 use crate::market_data::historical::HistoricalParseError;
 use crate::messages::ResponseMessage;
 use crate::orders::builder::ValidationError;
+use crate::proto::decoders::DecodeProto;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;
 use std::io;
@@ -14,9 +15,8 @@ fn parse_time_error() -> time::error::Parse {
     Time::parse("2021-13-01", format_description!("[year]-[month]-[day]")).unwrap_err()
 }
 
-fn protobuf_decode_error() -> prost::DecodeError {
-    let bad_bytes: &[u8] = &[0xff, 0xff];
-    prost::Message::decode(bad_bytes).map(|_: crate::proto::TickPrice| ()).unwrap_err()
+fn protobuf_decode_error() -> Error {
+    crate::proto::TickPrice::decode_proto(&[0xff, 0xff]).unwrap_err()
 }
 
 #[test]
@@ -104,9 +104,8 @@ fn unexpected_wire_format_display_includes_message_debug() {
 #[test]
 fn unexpected_wire_format_survives_clone() {
     // `clone_preserves_payloaded_variants` only compares Display, which a
-    // collapse to Error::Simple would survive (see
-    // `clone_collapses_parse_time_to_simple`). This pins the discriminant, which
-    // is what the dispatcher matches on.
+    // collapse to Error::Simple would survive. This pins the discriminant,
+    // which is what the dispatcher matches on.
     let msg = ResponseMessage::from("50\0\09000\0");
     assert!(matches!(Error::unexpected_wire_format(&msg).clone(), Error::UnexpectedWireFormat(_)));
 }
@@ -157,10 +156,29 @@ fn from_historical_parse_error() {
 }
 
 #[test]
-fn from_protobuf_decode_error() {
-    let error: Error = protobuf_decode_error().into();
+fn decode_proto_failure_builds_protobuf_decode() {
+    let error = protobuf_decode_error();
     assert!(matches!(error, Error::ProtobufDecode(_)));
     assert!(error.to_string().contains("protobuf decode error"));
+}
+
+#[test]
+fn protobuf_decode_has_no_source() {
+    // The decode detail is already in Display; returning it from source() too
+    // would print it twice in error-chain reports.
+    let error = protobuf_decode_error();
+    let Error::ProtobufDecode(ref inner) = error else {
+        panic!("expected ProtobufDecode, got {error:?}");
+    };
+    assert!(error.source().is_none());
+    assert!(error.to_string().ends_with(&inner.to_string()));
+}
+
+#[test]
+fn error_types_are_send_sync_static() {
+    crate::tests::assert_send_and_sync::<Error>();
+    crate::tests::assert_send_and_sync::<ProtobufDecodeError>();
+    let _: Box<dyn StdError + Send + Sync + 'static> = Box::new(protobuf_decode_error());
 }
 
 #[test]
@@ -256,7 +274,8 @@ fn clone_preserves_payloaded_variants() {
         Error::InvalidFrame("frame length 0 is shorter than the 4-byte message id".into()),
         tws_error_notice(404, "nope"),
         Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
-        Error::ProtobufDecode(protobuf_decode_error()),
+        protobuf_decode_error(),
+        Error::ParseTime(parse_time_error()),
         Error::AccountUpdatesInUse {
             active: AccountId("DU1".into()),
             requested: AccountId("DU2".into()),
@@ -271,11 +290,9 @@ fn clone_preserves_payloaded_variants() {
 }
 
 #[test]
-fn clone_collapses_parse_time_to_simple() {
+fn clone_preserves_parse_time() {
     let original = Error::ParseTime(parse_time_error());
-    let display = original.to_string();
-    let cloned = original.clone();
-    assert!(matches!(cloned, Error::Simple(ref s) if *s == display));
+    assert!(matches!(original.clone(), Error::ParseTime(e) if e == parse_time_error()));
 }
 
 #[test]

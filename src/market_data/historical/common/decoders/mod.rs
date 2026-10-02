@@ -99,13 +99,13 @@ fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Err
 
 // === Protobuf decoders ===
 
-use prost::Message;
+use crate::proto::decoders::DecodeProto;
 
 use crate::proto;
 use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, ts};
 
 pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
-    let msg = proto::HistoricalData::decode(bytes)?;
+    let msg = proto::HistoricalData::decode_proto(bytes)?;
     // Sized up front rather than `.collect::<Result<Vec<_>, _>>()`: collecting into
     // a Result goes through `process_results`, whose `size_hint` lower bound is 0
     // (it may short-circuit), so the Vec would grow by doubling. Bar responses run
@@ -140,7 +140,7 @@ pub(crate) fn decode_head_timestamp_proto(msg: crate::proto::HeadTimestamp) -> R
 }
 
 pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    let msg = proto::HistoricalTicks::decode(bytes)?;
+    let msg = proto::HistoricalTicks::decode_proto(bytes)?;
 
     let mut ticks = Vec::with_capacity(msg.historical_ticks.len());
     for t in &msg.historical_ticks {
@@ -155,7 +155,7 @@ pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMid
 }
 
 pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<TickLast>, bool), Error> {
-    let msg = proto::HistoricalTicksLast::decode(bytes)?;
+    let msg = proto::HistoricalTicksLast::decode_proto(bytes)?;
 
     let mut ticks = Vec::with_capacity(msg.historical_ticks_last.len());
     for t in msg.historical_ticks_last {
@@ -177,7 +177,7 @@ pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<Ti
 }
 
 pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec<TickBidAsk>, bool), Error> {
-    let msg = proto::HistoricalTicksBidAsk::decode(bytes)?;
+    let msg = proto::HistoricalTicksBidAsk::decode_proto(bytes)?;
 
     let mut ticks = Vec::with_capacity(msg.historical_ticks_bid_ask.len());
     for t in &msg.historical_ticks_bid_ask {
@@ -199,7 +199,7 @@ pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec
 }
 
 pub(crate) fn decode_historical_data_end_proto(bytes: &[u8]) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
-    let p = proto::HistoricalDataEnd::decode(bytes)?;
+    let p = proto::HistoricalDataEnd::decode_proto(bytes)?;
     let start = parse_historical_data_end_timestamp(p.start_date_str.as_deref().unwrap_or(""))?;
     let end = parse_historical_data_end_timestamp(p.end_date_str.as_deref().unwrap_or(""))?;
     Ok((start, end))
@@ -241,7 +241,7 @@ pub(crate) fn decode_historical_schedule_proto(p: crate::proto::HistoricalSchedu
 }
 
 pub(crate) fn decode_historical_data_update_proto(bytes: &[u8]) -> Result<Bar, Error> {
-    let p = proto::HistoricalDataUpdate::decode(bytes)?;
+    let p = proto::HistoricalDataUpdate::decode_proto(bytes)?;
     decode_historical_data_bar(&p.historical_data_bar.unwrap_or_default(), 0)
 }
 

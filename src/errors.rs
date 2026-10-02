@@ -173,9 +173,31 @@ pub enum Error {
     #[error("HistoricalParseError: {0}")]
     HistoricalParseError(#[from] HistoricalParseError),
 
-    /// Failed to decode a protobuf message.
+    /// Failed to decode a protobuf message. The decode detail is in
+    /// `Display`; [`source`](std::error::Error::source) is `None`.
     #[error("protobuf decode error: {0}")]
-    ProtobufDecode(#[from] prost::DecodeError),
+    ProtobufDecode(ProtobufDecodeError),
+}
+
+/// A protobuf message from TWS failed to decode. Payload of
+/// [`Error::ProtobufDecode`].
+///
+/// Opaque: the `Display` text is its only content, and the `Debug` format is
+/// not a stable contract. The underlying decoder is an implementation detail,
+/// so its error type is not part of this crate's API.
+#[derive(Debug, Clone)]
+pub struct ProtobufDecodeError(prost::DecodeError);
+
+impl std::fmt::Display for ProtobufDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for ProtobufDecodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
 }
 
 impl From<crate::transport::routing::DecodedError> for Error {
@@ -189,6 +211,13 @@ impl From<crate::transport::routing::DecodedError> for Error {
 }
 
 impl Error {
+    /// Build an [`Error::ProtobufDecode`]. Crate-private so the prost error
+    /// type stays out of the public API; decoders reach it through
+    /// `crate::proto::decoders::DecodeProto`.
+    pub(crate) fn protobuf_decode(err: prost::DecodeError) -> Error {
+        Error::ProtobufDecode(ProtobufDecodeError(err))
+    }
+
     /// Build an [`Error::UnexpectedResponse`] from an internal `ResponseMessage`.
     /// Captures the `Debug` repr in the variant's `String` payload — the
     /// structured envelope is no longer exposed publicly. Crate-private; the
@@ -290,16 +319,14 @@ impl Error {
     }
 }
 
-// Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.
-// `ParseTime` is lossy: it collapses to `Error::Simple` and a cloned value
-// no longer matches `Error::ParseTime(_)`.
+// Manual Clone because `std::io::Error` doesn't implement it.
 impl Clone for Error {
     fn clone(&self) -> Self {
         match self {
             Error::Io(e) => Error::Io(std::io::Error::new(e.kind(), e.to_string())),
             Error::ParseInt(e) => Error::ParseInt(e.clone()),
             Error::FromUtf8(e) => Error::FromUtf8(e.clone()),
-            Error::ParseTime(_) => Error::Simple(self.to_string()),
+            Error::ParseTime(e) => Error::ParseTime(*e),
             Error::Poison(s) => Error::Poison(s.clone()),
             Error::NotImplemented => Error::NotImplemented,
             Error::Parse(i, v, m) => Error::Parse(*i, v.clone(), m.clone()),

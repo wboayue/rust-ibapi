@@ -3,6 +3,7 @@ use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
 use crate::testdata::builders::display_groups::display_group_updated;
 use crate::testdata::builders::ResponseProtoEncoder;
+use prost::Message;
 
 #[test]
 fn test_decode_display_group_updated_proto() {

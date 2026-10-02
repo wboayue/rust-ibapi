@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
+use prost::Message;
 
 #[test]
 fn test_decode_wsh_metadata_proto() {

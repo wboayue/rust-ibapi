@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Error::ProtobufDecode` carries the opaque `errors::ProtobufDecodeError` instead of `prost::DecodeError`, and `Error` no longer implements `From<prost::DecodeError>`, so prost upgrades no longer break `ibapi`'s API. `Display` is unchanged; `source()` is now `None`, since the decode detail is already in the message. See `docs/migration-5.0.md` §15 (#885).
 - The `utoipa` feature is renamed `utoipa-6` and requires utoipa 6 (was 5). Public types derive utoipa 6's `ToSchema`, which a crate on utoipa 5 can't use in its `#[derive(OpenApi)]`; enable `utoipa-6` and upgrade to utoipa 6 (Rust 1.88+). A later utoipa major will be a new `utoipa-<major>` feature in a minor release; if several are enabled, the newest wins. See `docs/migration-5.0.md` §14 (#884).
 - `contract_details` now collects over `contract_details_stream`. On server 215+ it writes no cancel after TWS's end marker, but does write `cancelContractData` when TWS answers with an error (e.g. 200), as dropping any subscription after an error does; the old path wrote neither. The guard that skips a cancel after the end marker sits in `Subscription` but changes no other existing stream (#876).
 - `contract_details` skips a frame of a type the request doesn't expect (logged at `trace!`) rather than failing with `Error::UnexpectedResponse`; TWS warning notices on the request are logged at `warn!` (#876).
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cloning an `Error::ParseTime` keeps the variant and its payload; it used to become an `Error::Simple` with the same message (#885).
 - Scanner subscriptions keep receiving after IB 165 messages containing "no items retrieved". Both clients surface the message as a nonterminal notice without synthesizing an empty batch; actual empty `ScannerData` responses still produce empty batches. Other scanner errors and 165 on other request types remain terminal (#886).
 - Bond contract details: `contract_details` for a bond returned an empty `Vec`. TWS answers bond queries with `BondContractData` (msg 18), which was never routed to the request, so every row was dropped. It is now routed and decoded, and, as in the C# client, a bond's `maturity`, `last_trade_time` and `time_zone_id` are filled from `last_trade_date_or_contract_month` when TWS sends it (#876).
 - Gateway time zone names resolve by exact match. The lookup was a substring match that took whichever containing zone hashed first, so `PST` resolved to `PST8PDT`, `MST` to either `MST` or `MST7MDT`, and a partial name to an unrelated zone. The US abbreviations `EST`/`EDT`, `CST`/`CDT`, `MST`/`MDT` and `PST`/`PDT` now map to `America/New_York`, `America/Chicago`, `America/Denver` and `America/Los_Angeles`, so `Client::time_zone()` names the same DST-observing zone whichever season the client connected in (it was fixed-offset `EST` for a winter connection). A name that only partially matches a zone is now unrecognized; map it with `register_timezone_alias` or `IBAPI_TIMEZONE_ALIASES` (#809).
