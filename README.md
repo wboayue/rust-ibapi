@@ -569,17 +569,17 @@ Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flo
 
 ## Handling notifications
 
-Scanner subscriptions treat IB 165 messages containing "no items retrieved" as
-nonterminal `SubscriptionItem::Notice` values. The continuous request stays open;
-the notice does not synthesize an empty batch. Completed empty `ScannerData`
-responses still yield empty vectors. Code 165 remains terminal for other request
-types, and other scanner errors retain their existing behavior.
-
 TWS emits two flavors of notification alongside subscription data:
 
 - **Per-subscription notices** — warning codes 2100..=2199 and order-cancel code
   202 carry a `request_id` that maps back to a specific subscription. They arrive
   on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
+  - **Scanner "no items retrieved"** — an empty scan (common before regular
+    hours) reports error code 165 with that text. A scanner subscription
+    delivers it as `SubscriptionItem::Notice(_)` and stays open; later batches,
+    including empty ones, still arrive. The notice's `category()` is still
+    `Error`, so don't end a scanner loop on `!notice.is_informational()` alone.
+    On other requests, and with any other text, 165 still ends the stream.
 - **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status
   codes (2104/2105/2106/2107/2108) have no `request_id`. They are not delivered
   to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.

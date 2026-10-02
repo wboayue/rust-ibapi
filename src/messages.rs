@@ -1092,6 +1092,11 @@ pub const ORDER_CANCELLED_CODE: i32 = 202;
 /// Generic order-message code whose text determines whether TWS reports a warning or an error.
 pub const ORDER_MESSAGE_CODE: i32 = 399;
 
+/// "Historical Market Data Service query message". Classified `Error`, but a
+/// scanner subscription keeps its "no items retrieved" form nonterminal; see
+/// [`classify`].
+pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
+
 /// Range of error codes that are considered warnings: the whole `21xx` band.
 ///
 /// IB's published table stops at 2169, but the gateway keeps adding codes above
@@ -1116,6 +1121,14 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 /// The single owner of the precedence chain documented on [`NoticeCategory`];
 /// [`Notice::category`] and [`is_informational_code`] both derive from it, so
 /// routing and the public partition cannot disagree.
+///
+/// One exception sits downstream of routing:
+/// [`StreamDecoder::is_nonterminal_notice`](crate::subscriptions::common::StreamDecoder::is_nonterminal_notice)
+/// lets a subscription deliver a request-bound `Error` notice as
+/// `SubscriptionItem::Notice` instead of ending. The notice keeps its `Error`
+/// category. Only the scanner uses it, for [`HMDS_QUERY_MESSAGE_CODE`] "no items
+/// retrieved" (#886); making 165 informational here would also reach one-shot
+/// requests, which would wait for an answer that never comes.
 pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
     if code == ORDER_CANCELLED_CODE {
         NoticeCategory::Cancellation

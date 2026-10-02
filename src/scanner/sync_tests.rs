@@ -3,6 +3,8 @@ use crate::client::blocking::Client;
 use crate::common::test_utils::helpers::{assert_request, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::IncomingMessages;
+use crate::messages::HMDS_QUERY_MESSAGE_CODE;
+use crate::scanner::common::test_tables::*;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
@@ -14,90 +16,58 @@ use std::sync::Arc;
 
 #[test]
 fn test_scanner165_noitems_keeps_queued_batches() {
-    for scan_code in ["TOP_PRICE_RANGE", "TOP_OPEN_PERC_GAIN"] {
-        let no_items = "Historical Market Data Service query message:no items retrieved";
-        // The stub queues the entire burst before the first subscription poll.
-        let filled = scanner_data()
-            .request_id(TEST_REQ_ID_FIRST)
-            .rows(vec![scanner_data_row(0, 4815747, "NVDA")]);
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-            proto_error_response(TEST_REQ_ID_FIRST, 165, no_items),
-            proto_response(IncomingMessages::ScannerData, filled.encode_proto()),
-            proto_response(
-                IncomingMessages::ScannerData,
-                scanner_data().request_id(TEST_REQ_ID_FIRST).rows(vec![]).encode_proto(),
-            ),
-            proto_error_response(TEST_REQ_ID_FIRST, 200, "No security definition"),
-            proto_response(IncomingMessages::ScannerData, filled.encode_proto()),
-        ]));
-        let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-        let parameters = ScannerSubscription {
-            instrument: Some("STK".into()),
-            location_code: Some("STK.US".into()),
-            scan_code: Some(scan_code.into()),
-            ..Default::default()
-        };
-        let subscription = client.scanner_subscription(&parameters, &[]).unwrap();
-        match subscription.next() {
-            Some(Ok(SubscriptionItem::Notice(notice))) => {
-                assert_eq!(notice.request_id, Some(TEST_REQ_ID_FIRST));
-                assert_eq!(notice.code, 165);
-                assert_eq!(notice.message, no_items);
-            }
-            other => panic!("expected nonterminal no-items notice, got {other:?}"),
-        }
-        match subscription.next() {
-            Some(Ok(SubscriptionItem::Data(rows))) => {
-                assert_eq!(rows.len(), 1);
-                assert_eq!(rows[0].rank, 0);
-                assert_eq!(rows[0].contract_details.contract.contract_id, 4815747);
-                assert_eq!(rows[0].contract_details.contract.symbol, Symbol::from("NVDA"));
-            }
-            other => panic!("expected queued scanner data, got {other:?}"),
-        }
-        assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Data(rows))) if rows.is_empty()));
-        assert!(matches!(subscription.next(), Some(Err(crate::Error::Notice(notice))) if notice.code == 200));
-        assert!(subscription.next().is_none(), "a genuine rejection still ends the stream");
-        assert_eq!(request_message_count(&message_bus), 1, "no scanner re-registration");
-        assert_request(
-            &message_bus,
-            0,
-            &scanner_subscription_request().request_id(TEST_REQ_ID_FIRST).subscription(&parameters),
-        );
-        subscription.cancel();
-        assert_eq!(request_message_count(&message_bus), 2);
-        assert_request(&message_bus, 1, &cancel_scanner_subscription_request().request_id(TEST_REQ_ID_FIRST));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(no_items_then_batches()));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let parameters = no_items_parameters();
+    let subscription = client.scanner_subscription(&parameters, &[]).unwrap();
+
+    match subscription.next() {
+        Some(Ok(SubscriptionItem::Notice(notice))) => assert_no_items_notice(&notice),
+        other => panic!("expected nonterminal no-items notice, got {other:?}"),
     }
+    match subscription.next() {
+        Some(Ok(SubscriptionItem::Data(rows))) => assert_filled_batch(&rows),
+        other => panic!("expected queued scanner data, got {other:?}"),
+    }
+    assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Data(rows))) if rows.is_empty()));
+    assert!(matches!(subscription.next(), Some(Err(crate::Error::Notice(notice))) if notice.code == REJECTION_CODE));
+    assert!(subscription.next().is_none(), "a genuine rejection still ends the stream");
+
+    assert_eq!(request_message_count(&message_bus), 1, "no scanner re-registration");
+    assert_request(
+        &message_bus,
+        0,
+        &scanner_subscription_request().request_id(TEST_REQ_ID_FIRST).subscription(&parameters),
+    );
+    subscription.cancel();
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(&message_bus, 1, &cancel_scanner_subscription_request().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[test]
 fn test_scanner165_other_failures_remain_terminal() {
-    for (code, message) in [(165, "Different query failure"), (309, "Maximum number of scanner subscriptions reached")] {
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-            proto_error_response(TEST_REQ_ID_FIRST, code, message),
-            proto_response(
-                IncomingMessages::ScannerData,
-                scanner_data().request_id(TEST_REQ_ID_FIRST).rows(vec![]).encode_proto(),
-            ),
-        ]));
+    for &(code, message) in TERMINAL_SCANNER_ERRORS {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(error_then_empty_batch(code, message)));
         let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
         let subscription = client.scanner_subscription(&ScannerSubscription::default(), &[]).unwrap();
-        assert!(matches!(subscription.next(), Some(Err(crate::Error::Notice(notice))) if notice.code == code && notice.message == message));
+        assert!(
+            matches!(subscription.next(), Some(Err(crate::Error::Notice(notice))) if notice.code == code && notice.message == message),
+            "code {code} must end the stream"
+        );
         assert!(subscription.next().is_none());
     }
 }
 
 #[test]
 fn test_scanner165_noitems_remains_terminal_for_other_requests() {
-    let message = "Historical Market Data Service query message:no items retrieved";
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         TEST_REQ_ID_FIRST,
-        165,
-        message,
+        HMDS_QUERY_MESSAGE_CODE,
+        NO_ITEMS_MESSAGE,
     )]));
     let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
     let error = client.contract_details(&crate::contracts::Contract::stock("NVDA").build()).unwrap_err();
-    assert!(matches!(error, crate::Error::Notice(notice) if notice.code == 165 && notice.message == message));
+    assert!(matches!(error, crate::Error::Notice(notice) if notice.code == HMDS_QUERY_MESSAGE_CODE && notice.message == NO_ITEMS_MESSAGE));
 }
 
 #[test]
