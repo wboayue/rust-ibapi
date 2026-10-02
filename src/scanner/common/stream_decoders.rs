@@ -1,4 +1,4 @@
-use crate::messages::{IncomingMessages, Notice, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
 use crate::scanner::common::decoders;
 use crate::scanner::common::encoders;
 use crate::scanner::ScannerData;
@@ -11,7 +11,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     fn is_nonterminal_notice(notice: &Notice) -> bool {
         // An empty scanner query can report 165 while its continuous request
         // remains active. Only ScannerData itself represents a completed batch.
-        notice.code == 165 && notice.message.to_ascii_lowercase().contains("no items retrieved")
+        notice.code == HMDS_QUERY_MESSAGE_CODE && notice.message.to_ascii_lowercase().contains("no items retrieved")
     }
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {

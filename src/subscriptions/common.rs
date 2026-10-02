@@ -181,8 +181,12 @@ pub(crate) trait StreamDecoder<T> {
     /// handshake is their only caller now.
     fn decode(context: &DecoderContext, message: &ResponseMessage) -> Result<T, Error>;
 
-    /// Keep a request-specific error notice nonterminal when this decoder knows
-    /// the request remains active. Other decoders retain terminal error behavior.
+    /// Keep a request-bound error notice nonterminal when this decoder knows
+    /// the request remains active: the subscription yields it as
+    /// `SubscriptionItem::Notice` and keeps reading. The notice keeps its
+    /// `Error` category (`is_informational()` stays `false`). Default: terminal.
+    /// See [`classify`](crate::messages::classify) for why this is not a
+    /// classification change.
     fn is_nonterminal_notice(_notice: &Notice) -> bool {
         false
     }
