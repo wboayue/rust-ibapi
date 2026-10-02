@@ -31,12 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `ContractData` frame with no `contract` or no `contract_details` submessage fails to decode with `Error::Parse` naming the missing submessage, instead of yielding a default-constructed contract or details; the reference client (`EDecoder.cs`) drops such a frame. See `docs/migration-4.0.md` §25 (#855).
 - A `Position`, `PositionMulti` or `PortfolioValue` frame with no `contract` submessage fails to decode with `Error::Parse` instead of decoding with `Contract::default()`; `positions`, `positions_multi` and `account_updates` yield the error and end. See `docs/migration-4.0.md` Behavioral changes (#863).
 
-### Deprecated
-
-- `orders::builder::OrderAnalysis`. Nothing produces it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState` (#869).
-
 ### Removed
 
+- `orders::builder::OrderAnalysis`. No API produced or accepted it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState`. See `docs/migration-4.0.md` §28 (#883).
 - `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-4.0.md` §16 (#827).
 - `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-4.0.md` §17 (#838).
 - `market_data::realtime::Trade::tick_type`. It held the wire code `"1"` / `"2"` and was constant per stream; the method that opened the stream (`tick_by_tick(..).last()` / `.all_last()`) names the feed. See `docs/migration-4.0.md` §18 (#844).
