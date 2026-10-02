@@ -588,7 +588,7 @@ What changes for compiling code:
 ### 26. Unused `market_data` items are removed
 
 - **`market_data::historical::WhatToShowParseError`** is gone. No API returns it, so no caller can hold one: `FromStr for WhatToShow` fails with `HistoricalParseError`, and `s.parse::<WhatToShow>()` is unchanged. Delete any `use`, impl or match arm naming it.
-- **`market_data::realtime::BarSize`** and its prelude alias `RealtimeBarSize` are gone. No API has accepted it since 3.0 dropped the 2.x `realtime_bars` argument (`Client` method and async free function) — see [3.0 §7](migration-3.0.md#7-clientrealtime_bars-is-a-builder); real-time bars are always 5 seconds. Delete any `use` of either name. `market_data::historical::BarSize` and its alias `HistoricalBarSize` are unchanged.
+- **`market_data::realtime::BarSize`** and its prelude alias `RealtimeBarSize` are gone. No API has accepted it since 3.0 turned `realtime_bars` into a builder ([3.0 §7](migration-3.0.md#7-clientrealtime_bars-is-a-builder)). Real-time bars are always 5 seconds. Delete any `use` of either name. `market_data::historical::BarSize` and its alias `HistoricalBarSize` are unchanged.
 
 ## Behavioral changes
 
