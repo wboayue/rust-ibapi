@@ -6,10 +6,6 @@ give it a section in `docs/migration-5.0.md`.
 ## Done
 
 - utoipa 5 → 6 (#870): bumped, hand-written `OrderStatusKind`/`TimeInForce`
-  schemas verified still `{"type":"string"}`, migration-5.0.md §1.
-
-## Release prep
-
-- `docs/migration-4.0.md` §16–§28 are listed as "Unreleased" but ship in 5.0,
-  not a 4.x minor. Before tagging, move them into `migration-5.0.md` (renumber,
-  fix CHANGELOG `§N` pointers) or relabel them in 4.0's release table.
+  schemas verified still `{"type":"string"}`, migration-5.0.md §14.
+- migration-4.0.md §16–§28 + three behavioral bullets moved to
+  migration-5.0.md §1–§13; CHANGELOG pointers updated.
