@@ -1,6 +1,6 @@
 # Migration Guide: 2.x to 3.0
 
-Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md). Upgrading past 3.x? The 4.x breaking changes are covered separately in [`migration-4.0.md`](migration-4.0.md).
+Version 3.0 is a breaking release. This guide walks through the changes required to upgrade from `ibapi` 2.x to 3.0. For 1.x → 2.x, see [`MIGRATION.md`](../MIGRATION.md). Upgrading past 3.x? The 4.x breaking changes are covered separately in [`migration-4.0.md`](migration-4.0.md), and 5.0's in [`migration-5.0.md`](migration-5.0.md).
 
 ## Highlights
 
@@ -310,7 +310,7 @@ If you match on the field, swap `if contract.right == "C"` for `if contract.righ
 
 ### 11. `Contract.security_id_type` typed as `Option<SecurityIdType>`
 
-`Contract.security_id_type` was `String` in 2.x (empty string meant "no identifier scheme"). In 3.0 it is typed as `Option<SecurityIdType>` — `None` on contracts without an external identifier, `Some(SecurityIdType::Isin)` / `::Cusip` / `::Sedol` / `::Ric` / `::Figi` when one is paired with `security_id`. The decoder rejects unknown wire values as `Error::Parse` rather than silently storing them as raw strings. (4.x reverses this: unknown values decode as `SecurityIdType::Unknown(raw)`; see [migration-4.0.md §22](migration-4.0.md#22-securityidtype-gains-unknownstring-and-loses-copy).)
+`Contract.security_id_type` was `String` in 2.x (empty string meant "no identifier scheme"). In 3.0 it is typed as `Option<SecurityIdType>` — `None` on contracts without an external identifier, `Some(SecurityIdType::Isin)` / `::Cusip` / `::Sedol` / `::Ric` / `::Figi` when one is paired with `security_id`. The decoder rejects unknown wire values as `Error::Parse` rather than silently storing them as raw strings. (5.0 reverses this: unknown values decode as `SecurityIdType::Unknown(raw)`; see [migration-5.0.md §7](migration-5.0.md#7-securityidtype-gains-unknownstring-and-loses-copy).)
 
 `SecurityIdType` is `#[non_exhaustive]` (IBKR's catalogue grows over time) and implements `Display` returning the canonical uppercase wire string and `FromStr<Err = Error>`. `FromStr` is case-sensitive; lowercase forms now produce `Err`.
 
