@@ -405,18 +405,29 @@ impl<S: Stream> TcpMessageBus<S> {
     // be processed arbitrarily late, and unconditional removal would take out
     // a newer registration under the same key (place then cancel on one order
     // id, or an order update stream recreated after a reconnect reset).
+    //
+    // `clean_request` and `clean_order` also drop the subscription's execution-id aliases, matched by
+    // channel rather than key, so a stale signal still releases its own
+    // aliases and never a newer registration's. Not gated on `removed` for
+    // the same reason. An alias stored by a frame routed concurrently with
+    // the cleanup can survive until the next reset.
 
     fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
         let removed = self.requests.remove_if_same(&request_id, sender);
+        let aliases = self.executions.remove_all_same(sender);
         debug!(
-            "cleanup request_id {request_id}: removed={removed}, requests.len()={}",
+            "cleanup request_id {request_id}: removed={removed}, aliases={aliases}, requests.len()={}",
             self.requests.len()
         );
     }
 
     fn clean_order(&self, order_id: i32, sender: &Sender<RoutedItem>) {
         let removed = self.orders.remove_if_same(&order_id, sender);
-        debug!("cleanup order_id {order_id}: removed={removed}, orders.len()={}", self.orders.len());
+        let aliases = self.executions.remove_all_same(sender);
+        debug!(
+            "cleanup order_id {order_id}: removed={removed}, aliases={aliases}, orders.len()={}",
+            self.orders.len()
+        );
     }
 
     fn clear_order_update_stream(&self, sender: &Sender<RoutedItem>) {
@@ -1042,6 +1053,15 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         } else {
             false
         }
+    }
+
+    /// Remove every entry on the same channel as `sender`. Returns how many
+    /// were removed.
+    pub fn remove_all_same(&self, sender: &Sender<V>) -> usize {
+        let mut senders = self.senders.write().unwrap();
+        let before = senders.len();
+        senders.retain(|_, registered| !registered.sender.same_channel(sender));
+        before - senders.len()
     }
 
     pub fn contains(&self, id: &K) -> bool {

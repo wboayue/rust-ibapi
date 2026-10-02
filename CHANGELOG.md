@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dropping an order or `executions` subscription releases the execution-id entries that route commission reports to it. They used to stay until reconnect or shutdown, one per fill, each holding the dropped subscription's channel open (#880).
 - Cloning an `Error::ParseTime` keeps the variant and its payload; it used to become an `Error::Simple` with the same message (#885).
 - Scanner subscriptions keep receiving after IB 165 messages containing "no items retrieved". Both clients surface the message as a nonterminal notice without synthesizing an empty batch; actual empty `ScannerData` responses still produce empty batches. Other scanner errors and 165 on other request types remain terminal (#886).
 - Bond contract details: `contract_details` for a bond returned an empty `Vec`. TWS answers bond queries with `BondContractData` (msg 18), which was never routed to the request, so every row was dropped. It is now routed and decoded, and, as in the C# client, a bond's `maturity`, `last_trade_time` and `time_zone_id` are filled from `last_trade_date_or_contract_month` when TWS sends it (#876).

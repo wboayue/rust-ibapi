@@ -2606,6 +2606,63 @@ fn test_commission_report_without_mapping_dropped() -> Result<(), Error> {
     Ok(())
 }
 
+/// #880: an execution-id alias holds a sender clone, so it must go when the
+/// order or request subscription that owns it is dropped.
+#[test]
+fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let order = bus.send_order_request(7, &[])?;
+    let executions = bus.send_request(99, &[])?;
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_body(99, 0, "exec-request"));
+    bus.dispatch()?;
+    bus.dispatch()?;
+    assert_eq!(bus.executions.len(), 2, "both executions mapped");
+
+    drop(order);
+    drain_cleanup_signals(&bus);
+    assert!(!bus.executions.contains(&"exec-order".to_string()), "order alias leaked");
+    assert!(bus.executions.contains(&"exec-request".to_string()), "live request alias pruned");
+
+    drop(executions);
+    drain_cleanup_signals(&bus);
+    assert_eq!(bus.executions.len(), 0, "request alias leaked");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+/// A stale drop signal releases the old subscription's aliases and keeps those
+/// of a newer registration under the same order id.
+#[test]
+fn test_stale_cleanup_keeps_newer_execution_aliases() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let sub_a = bus.send_order_request(42, &[])?;
+    stream.push_inbound(execution_data_body(0, 42, "exec-a"));
+    bus.dispatch()?;
+    let sub_b = bus.send_order_request(42, &[])?;
+    stream.push_inbound(execution_data_body(0, 42, "exec-b"));
+    bus.dispatch()?;
+
+    drop(sub_a);
+    drain_cleanup_signals(&bus);
+    assert!(!bus.executions.contains(&"exec-a".to_string()), "stale subscription's alias leaked");
+    assert!(bus.executions.contains(&"exec-b".to_string()), "newer subscription's alias pruned");
+
+    drop(sub_b);
+    drain_cleanup_signals(&bus);
+    assert_eq!(bus.executions.len(), 0);
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// `process_response_with_id` orders-fallback: a non-order message
 /// (HistogramData) whose request_id collides with an order subscription's id
 /// still gets routed to the order channel.
