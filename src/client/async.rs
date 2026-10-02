@@ -221,7 +221,8 @@ impl Client {
     /// and any other unrouted error/warning).
     ///
     /// Each call returns a fresh, independent [`NoticeStream`](crate::subscriptions::NoticeStream);
-    /// late subscribers do not see prior notices. The stream ends when the client disconnects.
+    /// late subscribers do not see prior notices. The stream ends when the client shuts
+    /// down; one created after shutdown is already ended.
     ///
     /// Per-subscription notices (codes carrying a real `request_id`) are not
     /// delivered here — they reach their owning subscription as

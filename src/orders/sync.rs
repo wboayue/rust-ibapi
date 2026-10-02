@@ -467,6 +467,10 @@ impl Client {
     ///   `None`. A frame that fails to decode is a bug in TWS or this crate,
     ///   so it is surfaced rather than skipped.
     ///
+    /// Client shutdown (disconnect, drop, or a reconnect that gives up) also
+    /// ends the stream; after it, `order_update_stream` returns
+    /// [`Error::Shutdown`].
+    ///
     /// After an error, drop the ended subscription and call
     /// `order_update_stream` again; while the old one is held, a second call
     /// returns [`Error::AlreadySubscribed`].

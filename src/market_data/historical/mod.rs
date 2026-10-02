@@ -645,16 +645,6 @@ impl std::fmt::Display for WhatToShow {
     }
 }
 
-/// Error returned when parsing an invalid `WhatToShow` value.
-#[derive(Debug)]
-pub struct WhatToShowParseError;
-
-impl fmt::Display for WhatToShowParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid WhatToShow string")
-    }
-}
-
 impl FromStr for WhatToShow {
     type Err = HistoricalParseError;
 

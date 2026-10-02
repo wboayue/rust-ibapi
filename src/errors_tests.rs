@@ -53,6 +53,10 @@ fn error_display() {
         (Error::Shutdown, "Shutdown"),
         (Error::EndOfStream, "EndOfStream"),
         (Error::UnexpectedEndOfStream, "UnexpectedEndOfStream"),
+        (
+            Error::BufferLimitExceeded { limit: 5 },
+            "subscription buffer limit exceeded (5 unread items)",
+        ),
         (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
@@ -257,6 +261,7 @@ fn clone_preserves_payloaded_variants() {
             active: AccountId("DU1".into()),
             requested: AccountId("DU2".into()),
         },
+        Error::BufferLimitExceeded { limit: 5 },
     ];
 
     for original in originals {

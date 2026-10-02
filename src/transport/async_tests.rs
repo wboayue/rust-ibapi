@@ -15,6 +15,7 @@ use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_acco
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
+use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -61,7 +62,7 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2).unwrap());
 
     let _sub = bus.send_request(1, vec![]).await.unwrap();
-    let sender = bus.request_channels.read().await.get(&1).unwrap().clone();
+    let sender = bus.request_channels.read().await.get(&1).unwrap().sender.clone();
     for _ in 0..3 {
         sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
     }
@@ -257,6 +258,155 @@ async fn test_create_order_update_subscription_is_unique() {
     let _first = mb.create_order_update_subscription().await.unwrap();
     let err = mb.create_order_update_subscription().await.err().expect("duplicate fails");
     assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
+}
+
+/// After shutdown, a new order-update stream is refused rather than stored
+/// as a sender nothing will ever drop (#871).
+#[tokio::test]
+async fn test_create_order_update_subscription_after_shutdown_fails() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    mb.ensure_shutdown().await;
+
+    let err = mb.create_order_update_subscription().await.err().expect("subscribe after shutdown");
+    assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+    assert!(bus.order_update_stream.read().await.is_none());
+}
+
+/// Shutdown ends a live notice stream, and one opened afterwards is already
+/// ended. Before, the connection kept the only sender alive and both waited
+/// forever (#871).
+#[tokio::test]
+async fn test_notice_stream_ends_on_shutdown() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    let mut live = mb.notice_subscribe();
+
+    mb.ensure_shutdown().await;
+
+    let ended = tokio::time::timeout(Duration::from_millis(500), live.next()).await;
+    assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
+
+    let mut late = mb.notice_subscribe();
+    bus.connection.notice_broadcaster.broadcast(Notice::synthesized(-1, "late".into()));
+    let ended = tokio::time::timeout(Duration::from_millis(500), late.next()).await;
+    assert!(matches!(ended, Ok(None)), "late stream: {ended:?}");
+}
+
+/// `request_shutdown_sync` (the `Drop` path) ends notice streams too.
+#[tokio::test]
+async fn test_notice_stream_ends_on_request_shutdown_sync() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    let mut live = mb.notice_subscribe();
+
+    mb.request_shutdown_sync();
+
+    let ended = tokio::time::timeout(Duration::from_millis(500), live.next()).await;
+    assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
+}
+
+/// `Client::drop` only calls `request_shutdown_sync`; the dispatcher must
+/// finish the shutdown on exit, or a live order-update stream (whose
+/// subscription holds the bus) never ends.
+#[tokio::test]
+async fn test_order_update_stream_ends_on_request_shutdown_sync() {
+    let (_, bus) = make_bus();
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+
+    bus.request_shutdown_sync();
+
+    let drained = tokio::time::timeout(Duration::from_millis(500), async { while updates.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order-update stream did not end");
+}
+
+/// A `place_order` or `executions` subscription that has received an
+/// execution is also held in the execution-id map, so the commission report
+/// that follows can reach it. Shutdown must drop that alias too: a sender left
+/// there kept the channel open, and the subscription's reader waited forever
+/// after `Client::drop`.
+#[tokio::test]
+async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(7, vec![]).await.unwrap();
+    let mut executions = bus.send_request(99, vec![]).await.unwrap();
+
+    // Mapped by order id, and by request id where no order channel matches.
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_body(99, 0, "exec-request"));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+    for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
+        let message = next_message(sub).await;
+        assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData, "{name}");
+    }
+    assert_eq!(bus.execution_channels.read().await.len(), 2, "both executions mapped");
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.request_shutdown_sync();
+
+    for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
+        let drained = tokio::time::timeout(Duration::from_millis(500), async { while sub.next().await.is_some() {} }).await;
+        assert!(drained.is_ok(), "{name} subscription with an execution did not end");
+    }
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
+/// A frame with message id `-2` is `IncomingMessages::Shutdown`: the router
+/// shuts the bus down and the dispatcher exits. Like `Client::drop`, that path
+/// reaches `request_shutdown` with no reconnect reset before it, so it must
+/// drop execution-id aliases as well.
+#[tokio::test]
+async fn test_shutdown_frame_ends_subscriptions_with_executions() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+    let message = next_message(&mut order).await;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData);
+
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    stream.push_inbound((crate::messages::IncomingMessages::Shutdown as i32).to_be_bytes().to_vec());
+
+    let drained = tokio::time::timeout(Duration::from_millis(500), async { while order.next().await.is_some() {} }).await;
+    assert!(drained.is_ok(), "order subscription with an execution did not end");
+    assert!(!bus.is_connected());
+    assert!(bus.execution_channels.read().await.is_empty());
+}
+
+/// An order-update stream dropped while its cleanup signal is still queued
+/// leaves a sender with no receivers behind. An order frame arriving in that
+/// window fails the order-update send, and routing carries on: the frame still
+/// reaches the order's own subscription.
+#[tokio::test]
+async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_cleanup() {
+    let (stream, bus) = make_bus();
+    let mut order = bus.send_order_request(22, vec![]).await.unwrap();
+    let updates = bus.create_order_update_subscription().await.unwrap();
+
+    // Hold the FIFO cleanup task on a map this routing path does not touch,
+    // so the stream's cleanup signal cannot run before the frame is routed.
+    let cleanup_gate = bus.request_channels.write().await;
+    bus.cleanup_sender.send(CleanupSignal::Request(987_654)).unwrap();
+    drop(updates);
+    assert!(bus.order_update_stream.read().await.is_some(), "the dropped stream is still registered");
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(22),
+            status: Some("Filled".into()),
+            ..Default::default()
+        },
+    ));
+    tokio::time::timeout(Duration::from_millis(500), bus.read_and_route_message())
+        .await
+        .expect("routing blocked")
+        .unwrap();
+
+    assert_eq!(next_message(&mut order).await.order_id(), Some(22));
+    drop(cleanup_gate);
 }
 
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
@@ -615,6 +765,37 @@ async fn test_shared_subscription_without_cancel_message_releases_count() {
     }
     assert_eq!(count().await, 0, "count leaked for a type with no cancel message");
     assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1, "only the request was written");
+}
+
+/// A shared subscription that reads its end marker still releases its count on
+/// drop: the cancel-after-end guard applies only to request-id subscriptions.
+#[tokio::test]
+async fn test_shared_subscription_ended_natively_still_releases_count() {
+    use crate::orders::Orders;
+
+    let (stream, bus) = make_bus();
+    let count = || async { bus.shared_counts.lock().await.live(OutgoingMessages::RequestOpenOrders) };
+
+    let internal = bus
+        .send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
+        .await
+        .unwrap();
+    let mut sub = Subscription::<Orders>::new_from_internal_simple(internal, bus.clone(), DecoderContext::default());
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrderEnd as i32,
+        &crate::proto::OpenOrdersEnd {},
+    ));
+    bus.read_and_route_message().await.unwrap();
+    assert!(next_item(&mut sub).await.is_none(), "OpenOrderEnd ends the stream");
+    assert!(sub.ended_natively());
+
+    drop(sub);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while count().await != 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(count().await, 0, "count leaked after a natural end");
 }
 
 type PositionsSubscription = Subscription<crate::accounts::PositionUpdate>;
@@ -1377,7 +1558,7 @@ async fn test_warning_with_orphan_request_id_logs() {
 /// until the cleanup task has processed it. Signals are processed FIFO by a
 /// single task, so once the marker's registration is gone, every signal sent
 /// before it has been handled too.
-async fn drain_cleanup_signals(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) {
+pub(super) async fn drain_cleanup_signals<S: AsyncStream>(bus: &Arc<AsyncTcpMessageBus<S>>) {
     const MARKER_REQUEST_ID: i32 = 987_654;
     let marker = bus.send_request(MARKER_REQUEST_ID, vec![]).await.unwrap();
     drop(marker);
@@ -1531,7 +1712,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
     stream.push_inbound(managed_accounts_frame("DU1234567"));
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
-    let mut notices = bus.connection.notice_sender.subscribe();
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
 
     bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
 
@@ -1787,4 +1968,182 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
     let message = next_message(&mut update_sub).await;
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
     assert!(tokio::time::timeout(TICK, order_sub.next()).await.is_err());
+}
+
+// ---- buffer_limit: bounded request routes ------------------------------------
+
+/// A cap of `limit`, ending on `ContractDataEnd`.
+pub(super) fn bound(limit: usize) -> BufferBound {
+    BufferBound {
+        limit,
+        end: IncomingMessages::ContractDataEnd,
+    }
+}
+
+fn contract_row(contract_id: i32) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractData as i32,
+        &contract_data().request_id(9000).contract_id(contract_id).to_proto(),
+    )
+}
+
+fn contract_end() -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractDataEnd as i32,
+        &crate::proto::ContractDataEnd { req_id: Some(9000) },
+    )
+}
+
+async fn route_histograms(stream: &MemoryStream, bus: &AsyncTcpMessageBus<MemoryStream>, frames: usize, request_id: i32) {
+    for n in 0..frames {
+        // HistogramData (msg_id 89): request_id at field index 1, `n` at 2.
+        stream.push_inbound(body(&format!("89|{request_id}|{n}|")));
+        bus.read_and_route_message().await.unwrap();
+    }
+}
+
+/// The next routed item, or `None` if nothing arrives within `TICK`.
+async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedItem> {
+    tokio::time::timeout(TICK, sub.next_routed()).await.ok().flatten()
+}
+
+#[tokio::test]
+async fn test_bounded_request_fails_after_limit_unread() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(100, vec![], bound(2)).await.unwrap();
+
+    route_histograms(&stream, &bus, 4, 100).await;
+
+    // The first frame was not evicted: the overflow error took the reserved slot.
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.peek_int(2).unwrap(), 0),
+        other => panic!("expected the first row, got {other:?}"),
+    }
+    assert!(matches!(try_next_routed(&mut sub).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut sub).await,
+        Some(RoutedItem::Error(Error::BufferLimitExceeded { limit: 2 }))
+    ));
+    assert!(
+        try_next_routed(&mut sub).await.is_none(),
+        "no lag notice, and frames after the overflow are discarded"
+    );
+}
+
+#[tokio::test]
+async fn test_bounded_request_counts_unread_not_total() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(100, vec![], bound(2)).await.unwrap();
+
+    for _ in 0..6 {
+        route_histograms(&stream, &bus, 1, 100).await;
+        assert!(
+            matches!(try_next_routed(&mut sub).await, Some(RoutedItem::Response(_))),
+            "a reader that keeps up never overflows"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_reset_skips_overflowed_route() {
+    let (stream, bus) = make_bus();
+    let mut overflowed = bus.send_request_bounded(100, vec![], bound(1)).await.unwrap();
+    let mut at_limit = bus.send_request_bounded(200, vec![], bound(1)).await.unwrap();
+
+    route_histograms(&stream, &bus, 2, 100).await;
+    route_histograms(&stream, &bus, 1, 200).await;
+    bus.reset_channels().await;
+
+    assert!(matches!(try_next_routed(&mut overflowed).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut overflowed).await,
+        Some(RoutedItem::Error(Error::BufferLimitExceeded { .. }))
+    ));
+    assert!(try_next_routed(&mut overflowed).await.is_none(), "no second terminal error after reset");
+
+    // At its limit but not overflowed: the reset error uses the reserved slot, evicting nothing.
+    assert!(matches!(try_next_routed(&mut at_limit).await, Some(RoutedItem::Response(_))));
+    assert!(matches!(
+        try_next_routed(&mut at_limit).await,
+        Some(RoutedItem::Error(Error::ConnectionReset))
+    ));
+}
+
+#[tokio::test]
+async fn test_overflowed_subscription_cancels_on_drop() {
+    use crate::contracts::ContractDetails;
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request_bounded(9000, vec![], bound(1)).await.unwrap();
+    let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
+        internal,
+        bus.clone(),
+        Some(9000),
+        None,
+        DecoderContext::new(server_versions::CANCEL_CONTRACT_DATA),
+    );
+
+    for contract_id in [1, 2] {
+        stream.push_inbound(contract_row(contract_id));
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert!(matches!(next_item(&mut subscription).await, Some(Ok(_))));
+    assert!(matches!(
+        next_item(&mut subscription).await,
+        Some(Err(Error::BufferLimitExceeded { limit: 1 }))
+    ));
+    drop(subscription);
+
+    let cancel =
+        <ContractDetails as StreamDecoder<ContractDetails>>::cancel_message(server_versions::CANCEL_CONTRACT_DATA, Some(9000), None).unwrap();
+    assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "overflow leaves the cancel to drop");
+}
+
+#[tokio::test]
+async fn test_bounded_request_end_marker_at_limit_still_ends() {
+    // A result exactly `limit` rows long, read late: the end marker takes the
+    // spare slot, so the stream ends normally and nothing is evicted.
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request_bounded(9000, vec![], bound(1)).await.unwrap();
+
+    for frame in [contract_row(1), contract_end(), contract_row(2)] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractData),
+        other => panic!("expected the row, got {other:?}"),
+    }
+    match try_next_routed(&mut sub).await {
+        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractDataEnd),
+        other => panic!("expected the end marker, got {other:?}"),
+    }
+    assert!(try_next_routed(&mut sub).await.is_none(), "frames after the end marker are discarded");
+}
+
+/// Async shutdown closes the request channels without sending an error; the
+/// drain reports it as `Err(Shutdown)`, as the sync drain does.
+#[tokio::test]
+async fn test_drain_reports_shutdown() {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::Drained;
+
+    let (_stream, bus) = make_bus();
+    let internal = bus.send_request(9000, vec![]).await.unwrap();
+    let subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
+        internal,
+        bus.clone(),
+        Some(9000),
+        None,
+        DecoderContext::new(server_versions::CANCEL_CONTRACT_DATA),
+    );
+
+    let drain = tokio::spawn(subscription.cancel_and_drain(tokio::time::Instant::now() + Duration::from_secs(5)));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    bus.request_shutdown().await;
+
+    let outcome: Result<Drained, Error> = drain.await.unwrap();
+    assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
 }

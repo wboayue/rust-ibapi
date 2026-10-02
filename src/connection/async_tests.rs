@@ -150,7 +150,7 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
 
     // Subscribe to the per-connection broadcaster BEFORE the handshake — same
     // shape as ClientBuilder::connect_with_notice_stream's pre-bind.
-    let mut notice_rx = connection.notice_sender.subscribe();
+    let mut notice_rx = connection.notice_broadcaster.subscribe();
 
     // OpenOrderEnd is a unit marker (no payload to decode), so the typed
     // callback fires regardless of wire framing.

@@ -12,6 +12,7 @@ use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
+use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::raw_capture::{test_support, RawFrameTap};
@@ -1295,6 +1296,45 @@ fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
     let err = mb.create_order_update_subscription().expect_err("duplicate fails");
     assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
     Ok(())
+}
+
+/// Shutdown ends a live order-update stream with `Error::Shutdown` and frees
+/// the slot. Before #871 the stream got nothing and blocked forever.
+#[test]
+fn test_order_update_stream_ends_on_shutdown() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let updates = bus.create_order_update_subscription()?;
+
+    bus.ensure_shutdown();
+
+    let item = updates.next_timeout_routed(TICK);
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Shutdown))), "got: {item:?}");
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "slot should be released");
+    Ok(())
+}
+
+/// After shutdown, a new order-update stream is refused rather than
+/// returned as a stream nothing will ever end (#871).
+#[test]
+fn test_create_order_update_subscription_after_shutdown_fails() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let err = bus.create_order_update_subscription().expect_err("subscribe after shutdown");
+    assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+}
+
+/// A notice stream opened after shutdown is already at end-of-stream, like
+/// the streams shutdown closed (#871).
+#[test]
+fn test_notice_subscribe_after_shutdown_is_closed() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let notices = bus.connection.notice_broadcaster.subscribe();
+    bus.connection.notice_broadcaster.broadcast(Notice::synthesized(-1, "late".into()));
+    let got = notices.recv_timeout(TICK);
+    assert!(matches!(got, Err(crossbeam::channel::RecvTimeoutError::Disconnected)), "{got:?}");
 }
 
 /// Warning code (2104) bound to a real request_id is delivered as a
@@ -2837,4 +2877,189 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
     let message = update_sub.next_timeout(TICK).expect("update stream got no message").unwrap();
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
     assert!(order_sub.next_timeout(TICK).is_none());
+}
+
+// ---- buffer_limit: bounded request routes ------------------------------------
+
+/// A cap of `limit`, ending on `ContractDataEnd`.
+fn bound(limit: usize) -> BufferBound {
+    BufferBound {
+        limit,
+        end: IncomingMessages::ContractDataEnd,
+    }
+}
+
+fn contract_row(contract_id: i32) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractData as i32,
+        &contract_data().request_id(9000).contract_id(contract_id).to_proto(),
+    )
+}
+
+fn contract_end() -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::ContractDataEnd as i32,
+        &crate::proto::ContractDataEnd { req_id: Some(9000) },
+    )
+}
+
+fn histogram(request_id: i32) -> Vec<u8> {
+    // HistogramData (msg_id 89): request_id at field index 1.
+    body(&format!("89|{request_id}|payload|"))
+}
+
+fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize, request_id: i32) -> Result<(), Error> {
+    for _ in 0..frames {
+        stream.push_inbound(histogram(request_id));
+        bus.dispatch()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(100, &[], bound(2))?;
+
+    route(&stream, &bus, 4, 100)?;
+
+    assert!(sub.next_timeout(TICK).expect("first row")?.peek_int(1)? == 100);
+    assert!(sub.next_timeout(TICK).expect("second row").is_ok());
+    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::BufferLimitExceeded { limit: 2 }))));
+    assert!(sub.try_next().is_none(), "frames after the overflow are discarded");
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(100, &[], bound(2))?;
+
+    for _ in 0..6 {
+        route(&stream, &bus, 1, 100)?;
+        assert!(sub.next_timeout(TICK).expect("row").is_ok(), "a reader that keeps up never overflows");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_reset_skips_overflowed_route() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let overflowed = bus.send_request_bounded(100, &[], bound(1))?;
+    let at_limit = bus.send_request_bounded(200, &[], bound(1))?;
+
+    route(&stream, &bus, 2, 100)?;
+    route(&stream, &bus, 1, 200)?;
+    bus.reset();
+
+    assert!(overflowed.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(overflowed.next_timeout(TICK), Some(Err(Error::BufferLimitExceeded { .. }))));
+    assert!(overflowed.try_next().is_none(), "no second terminal error after reset");
+
+    assert!(at_limit.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(at_limit.next_timeout(TICK), Some(Err(Error::ConnectionReset))));
+    Ok(())
+}
+
+#[test]
+fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::DecoderContext;
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request_bounded(9000, &[], bound(1))?;
+    let subscription: Subscription<ContractDetails> =
+        Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
+
+    for contract_id in [1, 2] {
+        stream.push_inbound(contract_row(contract_id));
+        bus.dispatch()?;
+    }
+
+    assert!(matches!(subscription.next(), Some(Ok(_))));
+    assert!(matches!(subscription.next(), Some(Err(Error::BufferLimitExceeded { limit: 1 }))));
+    drop(subscription);
+
+    let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
+        crate::server_versions::CANCEL_CONTRACT_DATA,
+        Some(9000),
+        None,
+    )?;
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1, "overflow leaves the cancel to drop");
+    Ok(())
+}
+
+/// `cancel_and_drain` writes the cancel without unregistering the route, so
+/// TWS's end marker, dispatched after the cancel, still reaches the drain.
+/// (`cancel()` goes through `cancel_subscription`, which removes the route.)
+#[test]
+fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::{DecoderContext, Drained};
+
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(9000, &[])?;
+    let subscription: Subscription<ContractDetails> =
+        Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
+    let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
+        crate::server_versions::CANCEL_CONTRACT_DATA,
+        Some(9000),
+        None,
+    )?;
+
+    let dispatcher = {
+        let (stream, bus, cancel) = (stream.clone(), bus.clone(), cancel.clone());
+        std::thread::spawn(move || -> Result<(), Error> {
+            // Dispatch the end only once the drain's cancel is on the wire.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while count_frames(&stream.captured(), &cancel) == 0 && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            stream.push_inbound(contract_end());
+            bus.dispatch()
+        })
+    };
+
+    let outcome = subscription.cancel_and_drain(Instant::now() + Duration::from_secs(2))?;
+    dispatcher.join().expect("dispatcher panicked")?;
+
+    assert_eq!(outcome, Drained::Ended);
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    Ok(())
+}
+
+#[test]
+fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
+    // A result exactly `limit` rows long, read late: the end marker gets
+    // through past the cap, so the stream ends normally.
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
+
+    for frame in [contract_row(1), contract_end(), contract_row(2)] {
+        stream.push_inbound(frame);
+        bus.dispatch()?;
+    }
+
+    assert_eq!(sub.next_timeout(TICK).expect("row")?.message_type(), IncomingMessages::ContractData);
+    assert_eq!(sub.next_timeout(TICK).expect("end")?.message_type(), IncomingMessages::ContractDataEnd);
+    assert!(sub.try_next().is_none(), "frames after the end marker are discarded");
+    Ok(())
+}
+
+#[test]
+fn test_cancel_at_limit_reports_cancelled() -> Result<(), Error> {
+    // `Cancelled` is an error, so it gets through a full cap rather than
+    // turning into an overflow.
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
+    stream.push_inbound(contract_row(1));
+    bus.dispatch()?;
+
+    bus.cancel_subscription(9000, &[])?;
+
+    assert!(sub.next_timeout(TICK).expect("row").is_ok());
+    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::Cancelled))));
+    Ok(())
 }

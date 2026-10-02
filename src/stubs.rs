@@ -37,6 +37,9 @@ pub(crate) struct MessageBusStub {
     /// Pre-built responses, served in order. When non-empty, supersedes
     /// `response_messages`.
     pub ordered_responses: Vec<ResponseMessage>,
+    /// The `limit` of each `send_request_bounded` call, in order. The stub
+    /// doesn't enforce it; overflow is tested on the real buses.
+    pub buffer_limits: RwLock<Vec<usize>>,
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
     connection_resets: AtomicUsize,
@@ -58,6 +61,7 @@ impl Default for MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![],
             ordered_responses: vec![],
+            buffer_limits: RwLock::new(vec![]),
             connection_resets: AtomicUsize::new(0),
             #[cfg(feature = "async")]
             runtime: tokio::runtime::Handle::try_current().ok(),
@@ -199,6 +203,11 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
+    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: crate::transport::BufferBound) -> Result<InternalSubscription, Error> {
+        self.buffer_limits.write().unwrap().push(bound.limit);
+        Ok(mock_request(self, Some(request_id), None, message))
+    }
+
     fn cancel_subscription(&self, _request_id: i32, packet: &[u8]) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(packet.to_vec());
         Ok(())
@@ -307,6 +316,16 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
     async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        Ok(self.seeded_subscription(message))
+    }
+
+    async fn send_request_bounded(
+        &self,
+        _request_id: i32,
+        message: Vec<u8>,
+        bound: crate::transport::BufferBound,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.buffer_limits.write().unwrap().push(bound.limit);
         Ok(self.seeded_subscription(message))
     }
 

@@ -1,6 +1,8 @@
 use ibapi::client::blocking::Client;
-use ibapi::contracts::{Contract, SecurityType};
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
+use ibapi::subscriptions::{Drained, SubscriptionItem};
+use ibapi::Error;
+use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
 use serial_test::serial;
 
 #[test]
@@ -15,6 +17,143 @@ fn contract_details_stock() {
 
     assert!(!details.is_empty());
     assert_eq!(details[0].contract.symbol.0, "AAPL");
+}
+
+#[test]
+fn contract_details_stream_matches_collect() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+
+    rate_limit();
+    let collected = client.contract_details(&contract).expect("contract_details failed");
+
+    rate_limit();
+    let request = client.contract_details_stream(&contract);
+    let request_id = request.request_id();
+    let subscription = request.subscribe().expect("subscribe failed");
+    assert_eq!(subscription.request_id(), Some(request_id));
+
+    let mut streamed = Vec::new();
+    while let Some(item) = subscription.next() {
+        match item.expect("stream item") {
+            SubscriptionItem::Data(details) => streamed.push(details.contract.contract_id),
+            SubscriptionItem::Notice(notice) => eprintln!("notice: {notice}"),
+        }
+    }
+
+    let collected: Vec<i32> = collected.iter().map(|d| d.contract.contract_id).collect();
+    assert!(!streamed.is_empty());
+    assert_eq!(streamed, collected);
+}
+
+#[test]
+fn contract_details_stream_early_drop_leaves_client_usable() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    let broad = spy_calls_one_month();
+
+    rate_limit();
+    let subscription = client.contract_details_stream(&broad).subscribe().expect("subscribe failed");
+    let rows = subscription.iter_data().take(5).collect::<Result<Vec<_>, _>>().expect("rows");
+    assert_eq!(rows.len(), 5);
+    drop(subscription); // writes cancelContractData
+
+    rate_limit();
+    let details = client
+        .contract_details(&Contract::stock("AAPL").build())
+        .expect("client unusable after early drop");
+    assert!(!details.is_empty());
+}
+
+/// SPY calls for one expiry month two months out: several hundred rows, which
+/// TWS prepares in full before sending.
+fn spy_calls_one_month() -> Contract {
+    Contract {
+        symbol: Symbol::from("SPY"),
+        security_type: SecurityType::Option,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
+        right: Some(OptionRight::Call),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn contract_details_stream_buffer_limit_fails_a_stalled_reader() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let subscription = client
+        .contract_details_stream(&spy_calls_one_month())
+        .buffer_limit(5)
+        .subscribe()
+        .expect("subscribe failed");
+    std::thread::sleep(std::time::Duration::from_secs(2)); // stall: let TWS send far more than 5 rows
+
+    let mut rows = 0;
+    let outcome = loop {
+        match subscription.next() {
+            Some(Ok(SubscriptionItem::Data(_))) => rows += 1,
+            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
+            other => break other,
+        }
+    };
+    // At least the 5 queued rows; more if TWS was still sending when the
+    // reader woke and freed slots before the overflow.
+    assert!(rows >= 5, "every queued row is delivered before the error, got {rows}");
+    assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 5 }))), "got {outcome:?}");
+}
+
+#[test]
+fn contract_details_stream_cancel_and_drain_ends() {
+    // Observed live: TWS sends the rest of the result after the cancel, then
+    // the end marker, so the drain ends with `Ended`.
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let subscription = client
+        .contract_details_stream(&spy_calls_one_month())
+        .subscribe()
+        .expect("subscribe failed");
+    for _ in 0..3 {
+        subscription.next().expect("a row").expect("row");
+    }
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let outcome = subscription.cancel_and_drain(deadline).expect("drain failed");
+    assert_eq!(outcome, Drained::Ended);
+}
+
+#[test]
+fn contract_details_bond() {
+    // TWS answers bond queries with BondContractData (msg 18); until #876's fix
+    // every row was dropped and this returned an empty Vec.
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    let bonds = Contract {
+        symbol: Symbol::from("AAPL"),
+        security_type: SecurityType::Bond,
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
+        ..Default::default()
+    };
+
+    rate_limit();
+    let details = client.contract_details(&bonds).expect("contract_details failed");
+
+    assert!(!details.is_empty(), "bond query returned no rows");
+    assert!(details.iter().all(|d| d.contract.security_type == SecurityType::Bond));
 }
 
 #[test]

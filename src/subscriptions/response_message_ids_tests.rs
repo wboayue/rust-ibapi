@@ -142,7 +142,7 @@ fn check_tick<T: TickDecoder<T>>(roster: &mut Roster) {
 /// kept honest by [`test_decoder_roster_is_complete`].
 fn check_all() -> Roster {
     use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-    use crate::contracts::{OptionChain, OptionComputation};
+    use crate::contracts::{ContractDetails, OptionChain, OptionComputation};
     use crate::display_groups::DisplayGroupUpdate;
     use crate::market_data::historical::{HistoricalBarUpdate, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
@@ -160,6 +160,7 @@ fn check_all() -> Roster {
     check_stream::<PnLSingle>(&mut roster);
     check_stream::<PositionUpdate>(&mut roster);
     check_stream::<PositionUpdateMulti>(&mut roster);
+    check_stream::<ContractDetails>(&mut roster);
     check_stream::<OptionChain>(&mut roster);
     check_stream::<OptionComputation>(&mut roster);
     check_stream::<DisplayGroupUpdate>(&mut roster);
