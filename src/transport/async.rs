@@ -410,10 +410,14 @@ async fn remove_if_dead<V>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &s
 
 /// Drop every execution-id alias whose channel has no receivers left, so a
 /// dropped subscription's sender (and anything buffered in it) is released.
-/// Same liveness rule as [`remove_if_dead`]. Unconditional: it also sweeps
-/// aliases of dead subscriptions whose own signals are still queued, and an
-/// alias stored by a frame routed concurrently with this cleanup.
+/// Same liveness rule as [`remove_if_dead`]. Not gated on that removal: a
+/// stale or clone signal, or a drop after `cancel_*` already removed the
+/// entry, still owns aliases to sweep. It also catches other dead
+/// subscriptions whose signals are still queued.
 async fn prune_dead_aliases(aliases: &RwLock<HashMap<String, BroadcastSender>>) {
+    if aliases.read().await.is_empty() {
+        return;
+    }
     let mut aliases = aliases.write().await;
     let before = aliases.len();
     aliases.retain(|_, sender| sender.receiver_count() > 0);

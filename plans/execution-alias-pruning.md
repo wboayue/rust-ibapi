@@ -35,12 +35,12 @@ a live capture confirms (see memory: verify wire before constraining).
   reasoning as sync; also sweeps aliases of other dead subs whose signals are still queued.
 - O(n) per cleanup signal; n is now bounded by live subscriptions' fills.
 
-### Known residual race (document, don't fix)
+### Concurrent routing race (fixed in review)
 
-Dispatcher copies the order/request sender, cleanup thread/task removes channel + prunes,
-dispatcher then inserts the alias → one dead alias until the next cleanup (async: swept by
-the next signal's dead-sender pass) or reset (sync). Bounded to the in-flight frame; note it
-in a comment at the prune site.
+Sync `copy_sender` dropped the read lock before `executions.insert`, so cleanup could land
+in between and leave a dead alias until reset. Fixed: `SenderHash::with_sender` inserts
+under the registration's read lock (order: orders/requests read → executions write; cleanup
+never nests them). Async already held the guard across `store_execution_mapping`.
 
 ## Tests
 

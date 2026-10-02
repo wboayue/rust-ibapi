@@ -2635,6 +2635,28 @@ fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> 
     Ok(())
 }
 
+/// `cancel_order_subscription` removes the registration but not its aliases;
+/// the drop that follows finds nothing to remove and must still release them.
+#[test]
+fn test_execution_aliases_pruned_on_drop_after_cancel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let order = bus.send_order_request(7, &[])?;
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.dispatch()?;
+    bus.cancel_order_subscription(7, &[])?;
+    assert_eq!(bus.executions.len(), 1, "cancel left the alias for the drop");
+
+    drop(order);
+    drain_cleanup_signals(&bus);
+    assert_eq!(bus.executions.len(), 0, "alias leaked after cancel then drop");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// A stale drop signal releases the old subscription's aliases and keeps those
 /// of a newer registration under the same order id.
 #[test]

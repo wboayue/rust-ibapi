@@ -1467,6 +1467,44 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
     assert!(bus.execution_channels.read().await.is_empty(), "request alias leaked");
 }
 
+/// `cancel_order_subscription` removes the registration but not its aliases;
+/// the drop that follows finds nothing to remove and must still sweep them.
+#[tokio::test]
+async fn test_execution_aliases_pruned_on_drop_after_cancel() {
+    let (stream, bus) = make_bus();
+    let order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+    bus.cancel_order_subscription(7, vec![]).await.unwrap();
+    assert_eq!(bus.execution_channels.read().await.len(), 1, "cancel left the alias for the drop");
+
+    drop(order);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty(), "alias leaked after cancel then drop");
+}
+
+/// Each clone sends its own cleanup signal; the alias stays while any clone
+/// can still read the channel and goes with the last one.
+#[tokio::test]
+async fn test_execution_alias_kept_while_a_clone_is_alive() {
+    let (stream, bus) = make_bus();
+    let order = bus.send_order_request(7, vec![]).await.unwrap();
+    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    bus.read_and_route_message().await.unwrap();
+
+    let clone = order.clone();
+    drop(order);
+    drain_cleanup_signals(&bus).await;
+    assert!(
+        bus.execution_channels.read().await.contains_key("exec-order"),
+        "alias pruned while a clone is alive"
+    );
+
+    drop(clone);
+    drain_cleanup_signals(&bus).await;
+    assert!(bus.execution_channels.read().await.is_empty(), "alias leaked");
+}
+
 /// A stale drop signal releases the old subscription's aliases and keeps those
 /// of a newer registration under the same order id.
 #[tokio::test]
