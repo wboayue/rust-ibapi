@@ -783,7 +783,7 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
 fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
     use crate::messages::IncomingMessages;
 
-    // Garbage proto bytes for AccountValue: prost::DecodeError surfaces as a synthesized notice.
+    // Garbage proto bytes for AccountValue: Error::ProtobufDecode surfaces as a synthesized notice.
     let mut message = proto_response(IncomingMessages::AccountValue, vec![0xFF, 0xFF, 0xFF]);
 
     let cb_fired = Arc::new(Mutex::new(false));

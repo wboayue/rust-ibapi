@@ -18,7 +18,7 @@ pub(crate) fn decode_order_status(message: &ResponseMessage) -> Result<OrderStat
 }
 
 pub(crate) fn decode_order_bound(message: &ResponseMessage) -> Result<OrderBound, Error> {
-    let p: crate::proto::OrderBound = DecodeProto::decode_proto(message.require_proto()?)?;
+    let p = crate::proto::OrderBound::decode_proto(message.require_proto()?)?;
     Ok(OrderBound {
         perm_id: required(p.perm_id, "perm_id", "OrderBound")?,
         client_id: required(p.client_id, "client_id", "OrderBound")?,
@@ -41,7 +41,7 @@ pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderD
 // === Protobuf decoders ===
 
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
-    let p: crate::proto::OpenOrder = DecodeProto::decode_proto(bytes)?;
+    let p = crate::proto::OpenOrder::decode_proto(bytes)?;
 
     Ok(OrderData {
         order_id: p.order_id.unwrap_or_default(),
@@ -52,7 +52,7 @@ pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> 
 }
 
 pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Error> {
-    let p: crate::proto::OrderStatus = DecodeProto::decode_proto(bytes)?;
+    let p = crate::proto::OrderStatus::decode_proto(bytes)?;
 
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
@@ -70,7 +70,7 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
 }
 
 pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData, Error> {
-    let p: crate::proto::ExecutionDetails = DecodeProto::decode_proto(bytes)?;
+    let p = crate::proto::ExecutionDetails::decode_proto(bytes)?;
 
     Ok(ExecutionData {
         request_id: p.req_id.unwrap_or_default(),
@@ -80,7 +80,7 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
 }
 
 pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
-    let p: crate::proto::CompletedOrder = DecodeProto::decode_proto(bytes)?;
+    let p = crate::proto::CompletedOrder::decode_proto(bytes)?;
     let contract = crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "CompletedOrder")?)?;
     let order = crate::proto::decoders::decode_order(required(p.order.as_ref(), "order", "CompletedOrder")?)?;
     let order_state = crate::proto::decoders::decode_order_state(required(p.order_state.as_ref(), "order_state", "CompletedOrder")?)?;
@@ -96,7 +96,7 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
 }
 
 pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionReport, Error> {
-    let p: crate::proto::CommissionAndFeesReport = DecodeProto::decode_proto(bytes)?;
+    let p = crate::proto::CommissionAndFeesReport::decode_proto(bytes)?;
 
     Ok(CommissionReport {
         execution_id: p.exec_id.unwrap_or_default(),

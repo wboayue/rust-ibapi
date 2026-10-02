@@ -171,6 +171,7 @@ fn protobuf_decode_has_no_source() {
         panic!("expected ProtobufDecode, got {error:?}");
     };
     assert!(error.source().is_none());
+    assert!(inner.source().is_none());
     assert!(error.to_string().ends_with(&inner.to_string()));
 }
 
