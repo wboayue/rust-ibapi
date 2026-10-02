@@ -129,7 +129,7 @@ fn test_message_format() {
 
 ## Running Tests for Every Configuration
 
-Three configurations, not two — async-only, sync-only, and both-plus-`utoipa`. A type or impl
+Three configurations, not two — async-only, sync-only, and both-plus-`utoipa-6`. A type or impl
 can compile in two of them and fail the third:
 
 ```bash
@@ -139,7 +139,7 @@ just test
 # Or manually
 cargo test                                          # async only (default)
 cargo test --no-default-features --features sync     # sync only
-cargo test --all-features                            # sync + async + utoipa
+cargo test --all-features                            # sync + async + utoipa-6
 
 # Test everything (tests + clippy + fmt)
 cargo fmt --check && \

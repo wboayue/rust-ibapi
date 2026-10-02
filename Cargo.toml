@@ -41,9 +41,10 @@ async = ["dep:tokio", "dep:tokio-stream", "dep:futures", "dep:async-trait"]
 ## `async`, it lives at `client::blocking::Client`.
 sync = ["dep:crossbeam"]
 
-## Derive `utoipa::ToSchema` on public data types to participate in OpenAPI
-## schema generation for downstream HTTP services.
-utoipa = ["dep:utoipa"]
+## Derive `utoipa::ToSchema` (utoipa 6) on public data types to participate in
+## OpenAPI schema generation for downstream HTTP services. Named for the utoipa
+## major so a later one can be added beside it without a breaking change.
+utoipa-6 = ["dep:utoipa"]
 
 [dependencies]
 byteorder = "1.5.0"

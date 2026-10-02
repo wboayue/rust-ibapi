@@ -160,18 +160,24 @@ let bracket = BracketOrderIds::try_from(ids)?;
 
 `orders::builder::OrderAnalysis` was the planned return type of `OrderBuilder::analyze()`, which has returned `orders::OrderState` since the builder was added (#311). No API produced or accepted it. Use `OrderState`: its `initial_margin_after`, `maintenance_margin_after`, `commission`, `commission_currency` and `warning_text` carry the same figures.
 
-### 14. The `utoipa` feature requires utoipa 6
+### 14. The `utoipa` feature is renamed `utoipa-6` and requires utoipa 6
 
-With the `utoipa` feature enabled, public types derive `utoipa::ToSchema`, so utoipa is part of the public API. 5.0 moves from utoipa 5 to utoipa 6. The two versions' `ToSchema` traits are distinct, so a crate still on utoipa 5 that names `ibapi` types in a `#[derive(OpenApi)]` or `#[schema(...)]` no longer compiles: our types implement utoipa 6's `ToSchema`, not the one it imports.
+With the feature enabled, public types derive `utoipa::ToSchema`, so utoipa is part of the public API. 5.0 moves from utoipa 5 to utoipa 6, and the feature is renamed after the utoipa major it targets, so a later major can be added as a feature of its own rather than as another breaking change. The two versions' `ToSchema` traits are distinct, so a crate still on utoipa 5 that names `ibapi` types in a `#[derive(OpenApi)]` or `#[schema(...)]` no longer compiles: our types implement utoipa 6's `ToSchema`, not the one it imports.
 
-Move your own utoipa dependency, and any utoipa integration crates, to versions built on utoipa 6:
+Rename the feature, and move your own utoipa dependency and any utoipa integration crates to versions built on utoipa 6:
 
 ```toml
 # Cargo.toml
+# 4.x
+ibapi = { version = "4", features = ["utoipa"] }
+utoipa = "5"
+
+# 5.0
+ibapi = { version = "5", features = ["utoipa-6"] }
 utoipa = "6"
 ```
 
-utoipa 6 needs Rust 1.88 or later. The schemas `ibapi` produces are unchanged. Users without the `utoipa` feature are not affected.
+utoipa 6 needs Rust 1.88 or later. The schemas `ibapi` produces are unchanged. Users without the feature are not affected.
 
 ## Behavioral changes
 
@@ -196,7 +202,7 @@ No code changes required, but observable at runtime:
 11. Remove references to `historical::WhatToShowParseError`, `realtime::BarSize` and `RealtimeBarSize` — see [§11](#11-unused-market_data-items-are-removed).
 12. Replace `BracketOrderIds::from(vec)` with `BracketOrderIds::try_from(vec)?` — see [§12](#12-bracketorderids-converts-from-veci32-through-tryfrom).
 13. Replace `orders::builder::OrderAnalysis` with `orders::OrderState` — see [§13](#13-orderanalysis-is-removed).
-14. If you enable the `utoipa` feature, upgrade to utoipa 6 — see [§14](#14-the-utoipa-feature-requires-utoipa-6).
+14. If you enable the `utoipa` feature, rename it to `utoipa-6` and upgrade to utoipa 6 — see [§14](#14-the-utoipa-feature-is-renamed-utoipa-6-and-requires-utoipa-6).
 15. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?

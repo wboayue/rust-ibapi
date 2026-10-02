@@ -35,7 +35,7 @@ test:
     @echo "Running sync-only tests..."
     cargo test --no-default-features --features sync
     @echo ""
-    @echo "Running all-features tests (sync + async + utoipa)..."
+    @echo "Running all-features tests (sync + async + utoipa-6)..."
     cargo test --all-features
 
 # Run sync integration tests (requires running gateway)

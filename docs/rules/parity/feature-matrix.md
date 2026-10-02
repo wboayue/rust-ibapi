@@ -19,7 +19,7 @@ Three configurations must compile **and** pass tests when you touch feature-gate
 ```bash
 cargo test                                            # default: async only
 cargo test --no-default-features --features sync      # sync only
-cargo test --all-features                             # sync + async + utoipa
+cargo test --all-features                             # sync + async + utoipa-6
 ```
 
 **`--features sync` does not give you the sync-only build.** `default = ["async"]`, and

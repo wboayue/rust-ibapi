@@ -30,7 +30,7 @@ mod sync;
 mod r#async;
 
 /// A snapshot of the TWS/Gateway configuration.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Lock-and-exit (auto-logoff) settings.
@@ -44,7 +44,7 @@ pub struct Config {
 }
 
 /// Auto-logoff / lock-and-exit configuration.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LockAndExit {
     /// Time of day at which the gateway auto-logs off.
@@ -56,7 +56,7 @@ pub struct LockAndExit {
 }
 
 /// A single configurable API message prompt.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageSetting {
     /// Message identifier.
@@ -72,7 +72,7 @@ pub struct MessageSetting {
 }
 
 /// API-level configuration.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiConfig {
     /// Order-precaution bypass flags.
@@ -83,7 +83,7 @@ pub struct ApiConfig {
 
 /// Order-precaution bypass flags. Each `Some(true)` means the corresponding
 /// safety confirmation is bypassed.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiPrecautions {
     /// Bypass order precautions.
@@ -109,7 +109,7 @@ pub struct ApiPrecautions {
 }
 
 /// General API settings reported by the gateway.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiSettings {
     /// Read-only API mode.
@@ -187,7 +187,7 @@ pub struct ApiSettings {
 }
 
 /// Order-handling configuration.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrdersConfig {
     /// Smart-routing configuration.
@@ -195,7 +195,7 @@ pub struct OrdersConfig {
 }
 
 /// Smart-routing configuration.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrdersSmartRouting {
     /// Seek price improvement.
@@ -214,7 +214,7 @@ pub struct OrdersSmartRouting {
 /// If `warnings` is non-empty, the edit was not applied — re-submit the same
 /// edit with each warning echoed via
 /// [`UpdateConfigBuilder::accept_warning`] to proceed.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateConfigResponse {
     /// Outcome status reported by the gateway.
@@ -232,7 +232,7 @@ pub struct UpdateConfigResponse {
 
 /// A warning raised by the gateway while validating an
 /// [`update_config`](crate::Client::update_config) edit.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigWarning {
     /// Identifier of the message prompt this warning corresponds to.

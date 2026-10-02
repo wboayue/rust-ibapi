@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Represents a unique order identifier
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OrderId(pub i32);
 
@@ -40,7 +40,7 @@ impl From<OrderId> for i32 {
 ///
 /// A leg is `Some` when it was requested, which doesn't mean TWS created it — see
 /// [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttachedOrderIds {
     /// The parent order ID
@@ -54,7 +54,7 @@ pub struct AttachedOrderIds {
 /// Represents the order IDs for a bracket order
 ///
 /// Converts from `[i32; 3]` with `From`, and from `Vec<i32>` with `TryFrom`, which fails unless the `Vec` holds exactly three ids.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BracketOrderIds {
     /// The parent order ID
@@ -115,7 +115,7 @@ impl From<[i32; 3]> for BracketOrderIds {
 }
 
 /// Represents a quantity of shares/contracts
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Quantity(f64);
 
@@ -138,7 +138,7 @@ impl Quantity {
 }
 
 /// Represents a price value
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Price(f64);
 
@@ -158,7 +158,7 @@ impl Price {
 }
 
 /// Order types supported by Interactive Brokers
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderType {
     // Basic Orders

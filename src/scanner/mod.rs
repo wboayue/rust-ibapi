@@ -19,7 +19,7 @@ mod r#async;
 // Public types - always available regardless of feature flags
 
 /// Scanner subscription parameters.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScannerSubscription {
     /// The number of rows to be returned for the query
@@ -95,7 +95,7 @@ impl Default for ScannerSubscription {
 }
 
 /// Provides the data resulting from the market scanner request.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "utoipa-6", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ScannerData {
     /// The ranking position of the contract in the scanner sort.

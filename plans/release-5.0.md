@@ -6,6 +6,6 @@ give it a section in `docs/migration-5.0.md`.
 ## Done
 
 - utoipa 5 → 6 (#870): bumped, hand-written `OrderStatusKind`/`TimeInForce`
-  schemas verified still `{"type":"string"}`, migration-5.0.md §14.
+  schemas verified still `{"type":"string"}`, migration-5.0.md §14; feature renamed `utoipa-6`.
 - migration-4.0.md §16–§28 + three behavioral bullets moved to
   migration-5.0.md §1–§13; CHANGELOG pointers updated.
