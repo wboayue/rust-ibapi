@@ -23,14 +23,11 @@ The transports sit at opposite corners, both silent:
 
 ## Step 1 — visibility only (shipped)
 
-Async lag becomes an in-band `SUBSCRIPTION_LAG_CODE` (`-6`) notice in
-`AsyncInternalSubscription::poll_next_routed`, `NoticeStream` lag likewise as
-`NOTICE_STREAM_LAG_CODE` (`-7`); `ClientBuilder::channel_capacity` is one global
-knob. Sync warns at queue-depth watermarks. Semantics untouched.
-
+Async lag surfaces as non-terminal notices (`SUBSCRIPTION_LAG_CODE` `-6`,
+`NOTICE_STREAM_LAG_CODE` `-7`); sync warns at queue-depth watermarks.
 Non-terminal is deliberate: a terminal error on lag would let a transient blip
-kill market-data subscriptions. A non-terminal `Err` item was ruled out — it
-breaks the "Err is terminal" contract everywhere.
+kill market-data subscriptions, and a non-terminal `Err` item breaks the "Err
+is terminal" contract.
 
 Step-1 leftovers, deliberately excluded (fold into step 2 or do piecemeal):
 

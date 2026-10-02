@@ -4,12 +4,8 @@ PR #810 (issues #805, #806) made `messages::classify` the single owner of the
 notice precedence chain and derived `Notice::category()` and
 `is_informational_code` from it. These are the /simplify and altitude findings
 deferred from that PR because each changes observable behaviour or public API
-shape beyond the two issues.
-
-## 1. Derive log severity from `NoticeCategory`
-
-**Done in #846**: `transport::common::log_notice` is the one mapping, dispatched
-on `notice.category()` from the unrouted and handshake sites.
+shape beyond the two issues. §1 (log severity from `NoticeCategory`) shipped
+in #846 as `transport::common::log_notice`; numbering kept.
 
 ## 2. Narrow or rename the band predicates
 
@@ -19,9 +15,9 @@ category". The overlap (2188 is a warning by band and an advisory by category;
 317 is an order rejection by band and an advisory by category) is documented on
 each predicate rather than carried by the name. Options: rename to
 `in_warning_band` / `in_order_rejection_band`, or derive them from `category()`.
-Deriving today would regress follow-up 1's sites (2188 would log at `error`),
-so land 1 first (done: `log_notice` dispatches on `category()`). Public
-API change — needs a migration note.
+Logging no longer depends on these predicates (`log_notice` dispatches on
+`category()`), so deriving is unblocked. Public API change — needs a
+migration note.
 
 ## 3. `ORDER_REJECTION_CODE_RANGE` conflates request errors with rejections
 

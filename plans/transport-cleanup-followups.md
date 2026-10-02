@@ -4,6 +4,7 @@ Deferred from the #773/#778 fix (identity/liveness-gated drop-signal cleanup)
 and its /simplify pass. Context: async cleanup removes a registration only when
 its channel has `receiver_count() == 0`; sync signals carry the dropped
 subscription's sender and remove only the `same_channel` match.
+§2 (`execution_channels` never pruned, #880) shipped in #889; numbering kept.
 
 ## 1. Cancel paths still remove by key unconditionally
 
@@ -15,16 +16,6 @@ deleting it. Latent today because no order decoder overrides `cancel_message`
 `cancel_message`, #773 reopens through this untested path. Fix needs the
 `MessageBus` trait to receive the caller's identity (or the async liveness
 check); that signature change is why it was deferred.
-
-## 2. `execution_channels` has no cleanup at all
-
-Entries are inserted per execution id (`store_execution_mapping`) and removed
-only by `reset_channels`/shutdown: unbounded growth over a connection's life,
-and each entry holds a *strong* clone of an order channel's sender — keeping
-that broadcast channel open after its subscription drops, contradicting the
-"channel closes when senders drop" termination contract cited on
-`AsyncInternalSubscription`. Same registration-outlives-subscription shape;
-needs its own cleanup signal or a weak handle.
 
 ## 3. Unify the two mechanisms once tokio MSRV allows
 
