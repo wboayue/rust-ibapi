@@ -12,6 +12,17 @@ use crate::Error;
 
 // === Helper functions ===
 
+/// Decode a protobuf message, mapping a failure to [`Error::ProtobufDecode`].
+/// Use this instead of `prost::Message::decode(..)?`: `Error` has no public
+/// `From<prost::DecodeError>`, so prost upgrades stay out of the crate's API.
+pub(crate) trait DecodeProto: prost::Message + Default {
+    fn decode_proto(buf: &[u8]) -> Result<Self, Error> {
+        Self::decode(buf).map_err(Error::protobuf_decode)
+    }
+}
+
+impl<M: prost::Message + Default> DecodeProto for M {}
+
 pub(crate) fn s(opt: &Option<String>) -> String {
     opt.clone().unwrap_or_default()
 }

@@ -55,12 +55,12 @@ pub(in crate::contracts) fn decode_option_chain(message: &ResponseMessage) -> Re
 
 // === Protobuf decoders ===
 
-use prost::Message;
+use crate::proto::decoders::DecodeProto;
 
 use crate::contracts::PriceIncrement;
 
 pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
-    let p: crate::proto::ContractData = Message::decode(bytes)?;
+    let p = crate::proto::ContractData::decode_proto(bytes)?;
     let proto_contract = crate::proto::decoders::required(p.contract.as_ref(), "contract", "ContractData")?;
     let proto_details = crate::proto::decoders::required(p.contract_details.as_ref(), "contract_details", "ContractData")?;
     crate::proto::decoders::decode_contract_details(proto_contract, proto_details)
@@ -99,7 +99,7 @@ pub(crate) fn decode_market_rule_proto(p: crate::proto::MarketRule) -> Result<Ma
 }
 
 pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Error> {
-    let p: crate::proto::SecDefOptParameter = Message::decode(bytes)?;
+    let p = crate::proto::SecDefOptParameter::decode_proto(bytes)?;
     Ok(OptionChain {
         exchange: p.exchange.unwrap_or_default(),
         underlying_contract_id: p.underlying_con_id.unwrap_or_default(),

@@ -1,6 +1,6 @@
 //! Decoders for display group messages.
 
-use prost::Message;
+use crate::proto::decoders::DecodeProto;
 
 use crate::messages::ResponseMessage;
 use crate::Error;
@@ -13,7 +13,7 @@ pub(crate) fn decode_display_group_updated(message: &ResponseMessage) -> Result<
 }
 
 pub(crate) fn decode_display_group_updated_proto(bytes: &[u8]) -> Result<DisplayGroupUpdate, Error> {
-    let p = crate::proto::DisplayGroupUpdated::decode(bytes)?;
+    let p = crate::proto::DisplayGroupUpdated::decode_proto(bytes)?;
     Ok(DisplayGroupUpdate::new(p.contract_info.unwrap_or_default()))
 }
 

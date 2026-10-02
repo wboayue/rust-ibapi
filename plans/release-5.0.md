@@ -11,3 +11,8 @@ give it a section in `docs/migration-5.0.md`.
   `cfg` on the `extern crate` aliases in `lib.rs`. Close #870 by hand.
 - migration-4.0.md §16–§28 + three behavioral bullets moved to
   migration-5.0.md §1–§13; CHANGELOG pointers updated.
+- Hide prost from `Error` (#885): `ProtobufDecode(errors::ProtobufDecodeError)`,
+  no public `From<prost::DecodeError>`; decoders use
+  `proto::decoders::DecodeProto::decode_proto`. `ParseTime` keeps
+  `time::error::Parse` (time is a vocabulary dep); its clone is now lossless.
+  Plan in #888's history. migration-5.0.md §15.

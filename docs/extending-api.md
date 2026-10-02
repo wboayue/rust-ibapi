@@ -173,8 +173,11 @@ pub(in crate::<module>) fn decode_my_response(message: &ResponseMessage) -> Resu
     decode_my_response_proto(message.require_proto()?)
 }
 
+// `decode_proto` (trait `crate::proto::decoders::DecodeProto`) maps prost's
+// error to `Error::ProtobufDecode`; `Error` deliberately has no public
+// `From<prost::DecodeError>`, so `prost::Message::decode(..)?` won't compile.
 pub(crate) fn decode_my_response_proto(bytes: &[u8]) -> Result<MyData, Error> {
-    let p = crate::proto::MyResponse::decode(bytes)?;
+    let p = crate::proto::MyResponse::decode_proto(bytes)?;
     Ok(MyData {
         field: p.field.unwrap_or_default(),
     })

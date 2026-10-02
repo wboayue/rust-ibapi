@@ -216,17 +216,17 @@ impl ConnectionProtocol for ConnectionHandler {
         message: &mut ResponseMessage,
         ctx: &StartupHandshakeContext<'_>,
     ) -> Result<AccountInfo, Self::Error> {
-        use prost::Message;
+        use crate::proto::decoders::DecodeProto;
 
         let mut info = AccountInfo::default();
 
         match message.message_type() {
             IncomingMessages::NextValidId => {
-                let proto = crate::proto::NextValidId::decode(message.require_proto()?)?;
+                let proto = crate::proto::NextValidId::decode_proto(message.require_proto()?)?;
                 info.next_order_id = proto.order_id;
             }
             IncomingMessages::ManagedAccounts => {
-                let proto = crate::proto::ManagedAccounts::decode(message.require_proto()?)?;
+                let proto = crate::proto::ManagedAccounts::decode_proto(message.require_proto()?)?;
                 info.managed_accounts = proto.accounts_list;
             }
             _ => dispatch_unsolicited_message(server_version, message, ctx),

@@ -1,6 +1,7 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
 use crate::messages::ResponseMessage;
+use crate::proto::decoders::DecodeProto;
 use crate::proto::payload::ProtoPayload;
 use crate::Error;
 
@@ -89,7 +90,7 @@ where
 {
     move |message| {
         let bytes = message.expect_type(P::MESSAGE_ID)?.require_proto()?;
-        decode(P::decode(bytes)?)
+        decode(P::decode_proto(bytes)?)
     }
 }
 

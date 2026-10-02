@@ -8,21 +8,8 @@ shape beyond the two issues.
 
 ## 1. Derive log severity from `NoticeCategory`
 
-**Done in #846.** `transport::common::log_notice` is the one mapping; the unrouted
-and handshake sites both call it. Advisories log at `warn`, 202 and farm
-inactive/connecting at `info`, and the handshake path now grades 1100 and 1300 at `error` where it logged them at `info`.
-
-`transport::common::log_unrouted_notice` grades an unrouted notice by
-`is_warning()` plus one exact code, and `connection::common` logs handshake
-notices by `is_warning() || is_system_message()`. Both hand-roll an
-approximation of "informational". After #810 an unrouted 2188 logs at `warn`
-(it is inside `WARNING_CODE_RANGE`) while 317 and the 10xxx advisories log at
-`error` — the same `DataAdvisory` category at two severities depending on the
-numeric band.
-
-Fix: one severity mapping on `NoticeCategory` (or a `match` in one place) and
-both call sites dispatch on `notice.category()`. Behaviour change: advisories
-drop from `error` to `warn`/`info` in logs. Do this before follow-up 2.
+**Done in #846**: `transport::common::log_notice` is the one mapping, dispatched
+on `notice.category()` from the unrouted and handshake sites.
 
 ## 2. Narrow or rename the band predicates
 

@@ -11,6 +11,7 @@ use crate::testdata::builders::market_data::{
     TickSizeResponse, TickStringResponse, TradeTickResponse,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use prost::Message;
 use time::OffsetDateTime;
 
 mod realtime_bar_tests {

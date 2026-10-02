@@ -1,4 +1,4 @@
-use prost::Message;
+use crate::proto::decoders::DecodeProto;
 
 use crate::contracts::OptionComputation;
 use crate::messages::ResponseMessage;
@@ -66,7 +66,7 @@ pub(crate) fn decode_market_data_type(message: &ResponseMessage) -> Result<Marke
 // === Protobuf decoders ===
 
 pub(crate) fn decode_realtime_bar_proto(bytes: &[u8]) -> Result<Bar, Error> {
-    let msg = crate::proto::RealTimeBarTick::decode(bytes)?;
+    let msg = crate::proto::RealTimeBarTick::decode_proto(bytes)?;
     Ok(Bar {
         date: ts(msg.time.unwrap_or_default()),
         open: msg.open.unwrap_or_default(),
@@ -80,7 +80,7 @@ pub(crate) fn decode_realtime_bar_proto(bytes: &[u8]) -> Result<Bar, Error> {
 }
 
 pub(crate) fn decode_trade_tick_proto(bytes: &[u8]) -> Result<Trade, Error> {
-    let msg = crate::proto::TickByTickData::decode(bytes)?;
+    let msg = crate::proto::TickByTickData::decode_proto(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if !(tick_type == 1 || tick_type == 2) {
         return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
@@ -103,7 +103,7 @@ pub(crate) fn decode_trade_tick_proto(bytes: &[u8]) -> Result<Trade, Error> {
 }
 
 pub(crate) fn decode_bid_ask_tick_proto(bytes: &[u8]) -> Result<BidAsk, Error> {
-    let msg = crate::proto::TickByTickData::decode(bytes)?;
+    let msg = crate::proto::TickByTickData::decode_proto(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 3 {
         return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
@@ -126,7 +126,7 @@ pub(crate) fn decode_bid_ask_tick_proto(bytes: &[u8]) -> Result<BidAsk, Error> {
 }
 
 pub(crate) fn decode_mid_point_tick_proto(bytes: &[u8]) -> Result<MidPoint, Error> {
-    let msg = crate::proto::TickByTickData::decode(bytes)?;
+    let msg = crate::proto::TickByTickData::decode_proto(bytes)?;
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 4 {
         return Err(Error::parse_field(tick_type.to_string(), "Unexpected tick_type"));
@@ -154,12 +154,12 @@ pub(crate) fn decode_market_depth_exchanges_proto(p: crate::proto::MarketDepthEx
 }
 
 pub(crate) fn decode_market_data_type_proto(bytes: &[u8]) -> Result<MarketDataType, Error> {
-    let msg = crate::proto::MarketDataType::decode(bytes)?;
+    let msg = crate::proto::MarketDataType::decode_proto(bytes)?;
     Ok(MarketDataType::from(msg.market_data_type.unwrap_or_default()))
 }
 
 pub(crate) fn decode_tick_request_parameters_proto(bytes: &[u8]) -> Result<TickRequestParameters, Error> {
-    let msg = crate::proto::TickReqParams::decode(bytes)?;
+    let msg = crate::proto::TickReqParams::decode_proto(bytes)?;
     Ok(TickRequestParameters {
         // min_tick is StringToDoubleMax upstream, not StringToDecimal; the extra
         // integer sentinels are unreachable here (no price tick is 2147483647).
@@ -170,7 +170,7 @@ pub(crate) fn decode_tick_request_parameters_proto(bytes: &[u8]) -> Result<TickR
 }
 
 pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> {
-    let msg = crate::proto::TickPrice::decode(bytes)?;
+    let msg = crate::proto::TickPrice::decode_proto(bytes)?;
 
     let tick_type = TickType::from(msg.tick_type.unwrap_or_default());
     let price = msg.price.unwrap_or_default();
@@ -210,7 +210,7 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
 }
 
 pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
-    let msg = crate::proto::TickSize::decode(bytes)?;
+    let msg = crate::proto::TickSize::decode_proto(bytes)?;
 
     Ok(TickSize {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -219,7 +219,7 @@ pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
 }
 
 pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error> {
-    let msg = crate::proto::TickString::decode(bytes)?;
+    let msg = crate::proto::TickString::decode_proto(bytes)?;
 
     Ok(TickString {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -228,7 +228,7 @@ pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error
 }
 
 pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Error> {
-    let msg = crate::proto::TickGeneric::decode(bytes)?;
+    let msg = crate::proto::TickGeneric::decode_proto(bytes)?;
 
     Ok(TickGeneric {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -237,7 +237,7 @@ pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Err
 }
 
 pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<OptionComputation, Error> {
-    let msg = crate::proto::TickOptionComputation::decode(bytes)?;
+    let msg = crate::proto::TickOptionComputation::decode_proto(bytes)?;
 
     Ok(OptionComputation {
         field: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -254,7 +254,7 @@ pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<Optio
 }
 
 pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
-    let msg = crate::proto::MarketDepth::decode(bytes)?;
+    let msg = crate::proto::MarketDepth::decode_proto(bytes)?;
     let data = required(msg.market_depth_data, "market_depth_data", "MarketDepth")?;
 
     Ok(MarketDepth {
@@ -267,7 +267,7 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
 }
 
 pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2, Error> {
-    let msg = crate::proto::MarketDepthL2::decode(bytes)?;
+    let msg = crate::proto::MarketDepthL2::decode_proto(bytes)?;
     let data = required(msg.market_depth_data, "market_depth_data", "MarketDepthL2")?;
 
     Ok(MarketDepthL2 {
