@@ -88,11 +88,12 @@ compile_error!(
 );
 
 // The derives emit bare `utoipa::` paths, so the selected utoipa major is
-// aliased to `utoipa` at the crate root. One major at a time: when a newer
-// `utoipa-<N>` feature is added, it takes precedence, e.g.
-// `#[cfg(all(feature = "utoipa-6", not(feature = "utoipa-7")))]`.
+// aliased to `utoipa` at the crate root. One major at a time: adding
+// `utoipa-<N>` takes precedence over older ones, e.g. the alias below becomes
+// `#[cfg(all(feature = "utoipa-6", not(feature = "utoipa-7")))]`, and the guard
+// `not(any(feature = "utoipa-6", feature = "utoipa-7"))`.
 #[cfg(all(feature = "utoipa", not(feature = "utoipa-6")))]
-compile_error!("the `utoipa` feature is internal; enable `utoipa-6` instead");
+compile_error!("the `utoipa` feature is internal; enable a `utoipa-<major>` feature such as `utoipa-6`");
 
 #[cfg(feature = "utoipa-6")]
 extern crate utoipa6 as utoipa;

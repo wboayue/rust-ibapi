@@ -6,7 +6,7 @@ status: active
 triggers:
   - removing or renaming anything public
   - changing a public field's type or a return type's shape
-  - adding a builder method or feature flag a 2.x user would search for
+  - adding a builder method or feature flag a user upgrading would search for
   - about to grep for a name you just renamed
 symbols: [README.md, migration-5.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
@@ -27,7 +27,7 @@ Update `docs/migration-5.0.md` when the PR:
 - changes a public field's type (`String` → typed enum, `bool` → mode enum);
 - changes the shape of a return type (a `Subscription<T>::next()` envelope, a new `Result`
   variant);
-- adds or removes a public builder method, callback hook, or feature flag that a 2.x user
+- adds or removes a public builder method, callback hook, or feature flag that a user upgrading
   would find by searching.
 
 Update `README.md` when the PR touches code shown in a README example, removes a variant its
