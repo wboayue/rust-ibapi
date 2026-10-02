@@ -27,7 +27,7 @@ fn test_bracket_order_ids() {
     let i32_vec = ids.as_i32_vec();
     assert_eq!(i32_vec, vec![100, 101, 102]);
 
-    let ids2 = BracketOrderIds::from(vec![200, 201, 202]);
+    let ids2 = BracketOrderIds::try_from(vec![200, 201, 202]).unwrap();
     assert_eq!(ids2.parent.value(), 200);
 
     let ids3 = BracketOrderIds::from([300, 301, 302]);
@@ -91,9 +91,11 @@ fn test_validation_error_display() {
 }
 
 #[test]
-#[should_panic]
 fn test_bracket_order_ids_wrong_length() {
-    let _ = BracketOrderIds::from(vec![100, 101]); // Should panic with wrong length
+    for ids in [vec![], vec![100, 101], vec![100, 101, 102, 103]] {
+        let expected = Err(ValidationError::InvalidBracketOrder(format!("expected 3 order ids, got {}", ids.len())));
+        assert_eq!(BracketOrderIds::try_from(ids), expected);
+    }
 }
 
 #[test]

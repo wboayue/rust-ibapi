@@ -21,7 +21,7 @@ Section numbers are stable; new sections are appended as later 4.x releases brea
 | 4.0.0 | [§1](#1-market-data-sizes-are-optionf64), [§2](#2-liquidity-gains-unknowni32), [§3](#3-wsh-event-data-goes-through-builders), [§4](#4-clientcheck_server_version-is-crate-private), [§5](#5-notice-gains-request_id), [§7](#7-marketdatabuilder-moves-to-market_datarealtime), [§8](#8-the-realtimesyncmarket_data-free-function-is-crate-private), [§9](#9-orderstatuskind-gains-unknownstring), [§10](#10-option_chain-goes-through-a-builder) |
 | 4.1.0 | [§6](#6-data_advisory_codes-is-a-i32-slice), [§11](#11-orderupdate-gains-orderbound) |
 | 4.2.0 | [§12](#12-the-async-subscriptionnewreceiver-constructor-is-removed), [§13](#13-one-timeinforce-ordersbuildertimeinforce-is-removed-and-the-variants-are-spelled-till), [§14](#14-order-enums-parse-through-fromstr-and-preserve-unrecognized-wire-values), [§15](#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed) |
-| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed), [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages), [§26](#26-unused-market_data-items-are-removed) |
+| Unreleased | [§16](#16-ordercondition-gains-unknownunknowncondition), [§17](#17-historical-barsize-duration-and-whattoshow-parse-through-fromstr-only), [§18](#18-tradetick_type-is-removed), [§19](#19-the-blocking-clients-shareschannel-marker-trait-is-removed), [§20](#20-price-volume-and-percent-change-conditions-take-impl-intocontractid), [§21](#21-order-gains-preset_stop_loss_order_id-and-preset_profit_taker_order_id), [§22](#22-securityidtype-gains-unknownstring-and-loses-copy), [§23](#23-parser_registry-is-removed), [§24](#24-the-trace-module-is-removed), [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages), [§26](#26-unused-market_data-items-are-removed), [§27](#27-bracketorderids-converts-from-veci32-through-tryfrom) |
 
 ## Breaking changes
 
@@ -590,6 +590,18 @@ What changes for compiling code:
 - **`market_data::historical::WhatToShowParseError`** is gone. No API returns it, so no caller can hold one: `FromStr for WhatToShow` fails with `HistoricalParseError`, and `s.parse::<WhatToShow>()` is unchanged. Delete any `use`, impl or match arm naming it.
 - **`market_data::realtime::BarSize`** and its prelude alias `RealtimeBarSize` are gone. No API has accepted it since 3.0 turned `realtime_bars` into a builder ([3.0 §7](migration-3.0.md#7-clientrealtime_bars-is-a-builder)). Real-time bars are always 5 seconds. Delete any `use` of either name. `market_data::historical::BarSize` and its alias `HistoricalBarSize` are unchanged.
 
+### 27. `BracketOrderIds` converts from `Vec<i32>` through `TryFrom`
+
+`From<Vec<i32>> for BracketOrderIds` asserted on the length, so an infallible conversion panicked on any `Vec` that did not hold exactly three ids. It is replaced by `TryFrom<Vec<i32>>`, which returns `ValidationError::InvalidBracketOrder` for any other length; `ibapi::Error` implements `From<ValidationError>`, so `?` works in a function returning `Result<_, ibapi::Error>`. `From<[i32; 3]>`, `BracketOrderIds::new` and the three public fields are unchanged.
+
+```rust,ignore
+// 4.2 - panicked unless ids.len() == 3
+let bracket = BracketOrderIds::from(ids);
+
+// Unreleased - Err(ValidationError::InvalidBracketOrder) unless ids.len() == 3
+let bracket = BracketOrderIds::try_from(ids)?;
+```
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -637,7 +649,8 @@ No code changes required, but observable at runtime:
 24. Delete calls into `ibapi::trace`; `last_interaction()` has returned `None` since 3.0 — see [§24](#24-the-trace-module-is-removed).
 25. Replace `SecurityType::from(s)` with `s.parse::<SecurityType>()?` — see [§25](#25-securitytype-parses-through-fromstr-and-contractdata-needs-both-submessages).
 26. Remove references to `historical::WhatToShowParseError`, `realtime::BarSize` and `RealtimeBarSize` — see [§26](#26-unused-market_data-items-are-removed).
-27. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+27. Replace `BracketOrderIds::from(vec)` with `BracketOrderIds::try_from(vec)?` — see [§27](#27-bracketorderids-converts-from-veci32-through-tryfrom).
+28. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
