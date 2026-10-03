@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `orders::order_builder::auction_limit`, which built the same `Order` as `limit_order` once 4.2 dropped its strategy parameter. Routing the contract to `BOX` is what makes it an auction order. Also `orders::builder::OrderType::AuctionLimit` and `AuctionRelative`, which sent `LMT` and `REL` just like `Limit` and `Relative`. See `docs/migration-5.0.md` §17 (#903).
 - `orders::builder::OrderAnalysis`. No API produced or accepted it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState`. See `docs/migration-5.0.md` §13 (#883).
 - `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-5.0.md` §1 (#827).
 - `From<&str>` and `From<String>` for `market_data::historical::BarSize`, `Duration` and `WhatToShow`. Each called `from_str(..).unwrap()`, so an unrecognized string panicked through an infallible conversion. Use `s.parse()?` (the `FromStr` impls are unchanged). See `docs/migration-5.0.md` §2 (#838).
