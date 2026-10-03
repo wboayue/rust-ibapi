@@ -20,6 +20,7 @@ use crate::transport::sync::NoticeBroadcaster;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 
 use super::id_generator::ClientIdManager;
+use super::ids::{OrderId, RequestId};
 
 // Client
 
@@ -131,7 +132,7 @@ impl Client {
             time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
-            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)),
+            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)?),
         };
 
         Ok(client)
@@ -144,19 +145,24 @@ impl Client {
 
     /// Returns the next request ID.
     pub fn next_request_id(&self) -> i32 {
-        self.id_manager.next_request_id()
+        self.id_manager.next_request_id().raw()
     }
 
     /// Returns and increments the order ID.
     ///
     /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.
     pub fn next_order_id(&self) -> i32 {
-        self.id_manager.next_order_id()
+        self.id_manager.next_order_id().raw()
+    }
+
+    /// Allocates a request ID for a request this crate sends.
+    pub(crate) fn mint_request_id(&self) -> RequestId {
+        self.id_manager.next_request_id()
     }
 
     /// Raises the order-ID generator to at least the given value; never
     /// lowers it below locally allocated order IDs.
-    pub(crate) fn raise_next_order_id(&self, order_id: i32) {
+    pub(crate) fn raise_next_order_id(&self, order_id: OrderId) {
         self.id_manager.raise_order_id(order_id);
     }
 
@@ -293,16 +299,16 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            id_manager: Arc::new(ClientIdManager::new(9000)),
+            id_manager: Arc::new(ClientIdManager::new(9000).expect("sub-floor test seed")),
         }
     }
 
-    pub(crate) fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<InternalSubscription, Error> {
+    pub(crate) fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         debug!("send_message({request_id:?})");
         self.message_bus.send_request(request_id, &message)
     }
 
-    pub(crate) fn send_order(&self, order_id: i32, message: Vec<u8>) -> Result<InternalSubscription, Error> {
+    pub(crate) fn send_order(&self, order_id: OrderId, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         debug!("send_order({order_id:?})");
         self.message_bus.send_order_request(order_id, &message)
     }

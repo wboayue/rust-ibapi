@@ -2,6 +2,7 @@
 
 use log::warn;
 
+use crate::client::ids::WireId;
 use crate::errors::Error;
 use crate::messages::{is_informational_code, routes_by_request_id, IncomingMessages, Notice, ResponseMessage};
 
@@ -188,10 +189,11 @@ pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 /// Notice to copy onto the order-update stream for an error frame, or `None`
 /// when the frame is not order-bound: request-less frames and frames whose id
-/// is owned by a data-request subscription carry nothing an order consumer
-/// should see.
-pub(crate) fn order_update_notice(payload: &DecodedError, id_owned_by_data_request: bool) -> Option<Notice> {
-    (payload.request_id != UNSPECIFIED_REQUEST_ID && !id_owned_by_data_request).then(|| Notice::from(payload.clone()))
+/// is in the request range carry nothing an order consumer should see. Decided
+/// by the id's range alone ([`WireId::classify`]), so whether a request
+/// happens to be registered under the number cannot change the answer.
+pub(crate) fn order_update_notice(payload: &DecodedError) -> Option<Notice> {
+    matches!(WireId::classify(payload.request_id), Some(WireId::Order(_))).then(|| Notice::from(payload.clone()))
 }
 
 /// The outcome of classifying an inbound error frame.
@@ -205,8 +207,8 @@ pub(crate) enum ErrorDisposition {
     /// `NoticeStream` + fail-fast fan-out to in-flight one-shot shared
     /// requests (request-less hard error).
     NoticeAndFailOneShots(Notice, Error),
-    /// Deliver `RoutedItem` to the subscription that owns `request_id`.
-    Route(i32, RoutedItem),
+    /// Deliver `RoutedItem` to the request or order subscription the id names.
+    Route(WireId, RoutedItem),
 }
 
 /// Classify an inbound error frame into the action each transport must take.
@@ -214,27 +216,29 @@ pub(crate) enum ErrorDisposition {
 /// Extracts the common four-arm policy so that `sync::route_error_message` and
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
-    let request_id = payload.request_id;
     // Informational frames (the same rule as `Notice::is_informational`) are
     // delivered as a `Notice`: they neither terminate the subscription nor,
     // when request-less, fail the pending one-shots. Code 0 - a code-less
     // frame, or the fallback for an undecodable one - is informational.
     let is_informational = is_informational_code(payload.error_code, &payload.error_message);
 
-    if request_id == UNSPECIFIED_REQUEST_ID {
-        let notice = Notice::from(payload.clone());
-        if is_informational {
-            ErrorDisposition::NoticeOnly(notice)
-        } else {
-            ErrorDisposition::NoticeAndFailOneShots(notice, Error::from(payload))
+    match WireId::classify(payload.request_id) {
+        None => {
+            let notice = Notice::from(payload.clone());
+            if is_informational {
+                ErrorDisposition::NoticeOnly(notice)
+            } else {
+                ErrorDisposition::NoticeAndFailOneShots(notice, Error::from(payload))
+            }
         }
-    } else {
-        let item = if is_informational {
-            RoutedItem::Notice(Notice::from(payload))
-        } else {
-            RoutedItem::Error(Error::from(payload))
-        };
-        ErrorDisposition::Route(request_id, item)
+        Some(id) => {
+            let item = if is_informational {
+                RoutedItem::Notice(Notice::from(payload))
+            } else {
+                RoutedItem::Error(Error::from(payload))
+            };
+            ErrorDisposition::Route(id, item)
+        }
     }
 }
 

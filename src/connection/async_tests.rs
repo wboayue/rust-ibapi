@@ -7,6 +7,7 @@ use tokio::sync::Semaphore;
 use time_tz::timezones;
 
 use super::*;
+use crate::client::ids::RequestId;
 use crate::client::r#async::Client;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
@@ -532,7 +533,10 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
         .expect("process_messages");
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
 
-    let mut subscription = message_bus.send_request(9000, b"req-bytes".to_vec()).await.expect("send_request");
+    let mut subscription = message_bus
+        .send_request(RequestId::nth(0), b"req-bytes".to_vec())
+        .await
+        .expect("send_request");
 
     // Break the read: the dispatcher enters reconnect and blocks on the gated
     // connect, which only `release` below completes.

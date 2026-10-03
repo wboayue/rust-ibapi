@@ -10,6 +10,7 @@ use std::{
 use crossbeam::channel;
 
 use crate::accounts::types::AccountId;
+use crate::client::ids::{OrderId, RequestId};
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::routing::{classify_error, determine_routing, ErrorDisposition, RoutingDecision};
 use crate::transport::{RoutedItem, SharedTicket};
@@ -199,17 +200,22 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
-    fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
-        Ok(mock_request(self, Some(request_id), None, message))
+    fn send_request(&self, request_id: RequestId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
 
-    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: crate::transport::BufferBound) -> Result<InternalSubscription, Error> {
+    fn send_request_bounded(
+        &self,
+        request_id: RequestId,
+        message: &[u8],
+        bound: crate::transport::BufferBound,
+    ) -> Result<InternalSubscription, Error> {
         self.buffer_limits.write().unwrap().push(bound.limit);
-        Ok(mock_request(self, Some(request_id), None, message))
+        Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
 
-    fn send_order_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
-        Ok(mock_request(self, Some(request_id), None, message))
+    fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        Ok(mock_request(self, MockRoute::Order(order_id), message))
     }
 
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
@@ -241,7 +247,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
-        Ok(mock_request(self, None, Some(message_type), message))
+        Ok(mock_request(self, MockRoute::Shared(message_type), message))
     }
 
     fn send_account_updates_request(&self, _account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -278,7 +284,14 @@ impl MessageBus for MessageBusStub {
 }
 
 #[cfg(feature = "sync")]
-fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Option<OutgoingMessages>, message: &[u8]) -> InternalSubscription {
+enum MockRoute {
+    Request(RequestId),
+    Order(OrderId),
+    Shared(OutgoingMessages),
+}
+
+#[cfg(feature = "sync")]
+fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> InternalSubscription {
     stub.request_messages.write().unwrap().push(message.to_vec());
 
     let (sender, receiver) = channel::unbounded();
@@ -288,26 +301,25 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
         sender.send(item).unwrap();
     }
 
-    let mut subscription = SubscriptionBuilder::new().signaler(s1);
-    if let Some(request_id) = request_id {
-        subscription = subscription.receiver(receiver).request_id(request_id);
-    } else if let Some(message_type) = message_type {
-        subscription = subscription.receiver(receiver).shared(SharedTicket { message_type, generation: 0 });
+    let subscription = SubscriptionBuilder::new().signaler(s1).receiver(receiver);
+    match route {
+        MockRoute::Request(request_id) => subscription.request_id(request_id),
+        MockRoute::Order(order_id) => subscription.order_id(order_id),
+        MockRoute::Shared(message_type) => subscription.shared(SharedTicket { message_type, generation: 0 }),
     }
-
-    subscription.build()
+    .build()
 }
 
 #[cfg(feature = "async")]
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
-    async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_request(&self, _request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         Ok(self.seeded_subscription(message))
     }
 
     async fn send_request_bounded(
         &self,
-        _request_id: i32,
+        _request_id: RequestId,
         message: Vec<u8>,
         bound: crate::transport::BufferBound,
     ) -> Result<AsyncInternalSubscription, Error> {
@@ -315,7 +327,7 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(self.seeded_subscription(message))
     }
 
-    async fn send_order_request(&self, _order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_order_request(&self, _order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         Ok(self.seeded_subscription(message))
     }
 

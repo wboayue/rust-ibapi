@@ -96,31 +96,64 @@ fn test_id_generator_thread_safe() {
 #[test]
 fn test_request_id_generator() {
     let gen = IdGenerator::new_request_id_generator();
-    assert_eq!(gen.current(), INITIAL_REQUEST_ID);
-    assert_eq!(gen.next(), INITIAL_REQUEST_ID);
-    assert_eq!(gen.next(), INITIAL_REQUEST_ID + 1);
+    assert_eq!(gen.current(), REQUEST_ID_FLOOR);
+    assert_eq!(gen.next(), REQUEST_ID_FLOOR);
+    assert_eq!(gen.next(), REQUEST_ID_FLOOR + 1);
+}
+
+#[test]
+fn test_next_up_to_stops_at_max() {
+    let gen = IdGenerator::new(9);
+    assert_eq!(gen.next_up_to(10), Some(9));
+    assert_eq!(gen.next_up_to(10), Some(10));
+    assert_eq!(gen.next_up_to(10), None);
+    assert_eq!(gen.current(), 11, "a refused id leaves the counter put");
 }
 
 #[test]
 fn test_client_id_manager() {
-    let manager = ClientIdManager::new(50);
+    let manager = ClientIdManager::new(50).unwrap();
 
     // Test request IDs
-    assert_eq!(manager.current_request_id(), INITIAL_REQUEST_ID);
-    assert_eq!(manager.next_request_id(), INITIAL_REQUEST_ID);
-    assert_eq!(manager.next_request_id(), INITIAL_REQUEST_ID + 1);
+    assert_eq!(manager.current_request_id(), REQUEST_ID_FLOOR);
+    assert_eq!(manager.next_request_id(), RequestId::nth(0));
+    assert_eq!(manager.next_request_id(), RequestId::nth(1));
 
     // Test order IDs
     assert_eq!(manager.current_order_id(), 50);
-    assert_eq!(manager.next_order_id(), 50);
-    assert_eq!(manager.next_order_id(), 51);
+    assert_eq!(manager.next_order_id(), OrderId::from(50));
+    assert_eq!(manager.next_order_id(), OrderId::from(51));
 
     // Test order ID raise
-    manager.raise_order_id(100);
-    assert_eq!(manager.next_order_id(), 100);
-    assert_eq!(manager.next_order_id(), 101);
+    manager.raise_order_id(OrderId::from(100));
+    assert_eq!(manager.next_order_id(), OrderId::from(100));
+    assert_eq!(manager.next_order_id(), OrderId::from(101));
 
     // Raising below the allocated high-water mark must not reissue IDs.
-    manager.raise_order_id(100);
-    assert_eq!(manager.next_order_id(), 102);
+    manager.raise_order_id(OrderId::from(100));
+    assert_eq!(manager.next_order_id(), OrderId::from(102));
+}
+
+/// A seed in the request range would put every order the session places on
+/// request ids (#789).
+#[test]
+fn test_client_id_manager_rejects_seed_in_request_range() {
+    assert!(ClientIdManager::new(REQUEST_ID_FLOOR - 1).is_ok());
+    let err = ClientIdManager::new(REQUEST_ID_FLOOR).unwrap_err();
+    assert!(
+        matches!(&err, Error::ConnectionRejected(m) if m.contains(&REQUEST_ID_FLOOR.to_string())),
+        "{err:?}"
+    );
+}
+
+/// Request ids never reach the order range, and stop before `i32::MAX`, whose
+/// error frames TWS sends without an id.
+#[test]
+fn test_request_ids_stop_at_ceiling() {
+    let manager = ClientIdManager::new(0).unwrap();
+    manager.request_ids.raise(REQUEST_ID_CEILING);
+    assert_eq!(manager.next_request_id().raw(), REQUEST_ID_CEILING);
+
+    let exhausted = std::panic::catch_unwind(|| manager.next_request_id());
+    assert!(exhausted.is_err(), "allocator handed out an id past the ceiling");
 }

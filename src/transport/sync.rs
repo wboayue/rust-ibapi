@@ -14,6 +14,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
+use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
@@ -275,8 +276,8 @@ impl NoticeBroadcaster {
 pub struct TcpMessageBus<S: Stream> {
     connection: Connection<S>,
     handles: Mutex<Vec<JoinHandle<()>>>,
-    requests: SenderHash<i32, RoutedItem>,
-    orders: SenderHash<i32, RoutedItem>,
+    requests: SenderHash<RequestId, RoutedItem>,
+    orders: SenderHash<OrderId, RoutedItem>,
     executions: SenderHash<String, RoutedItem>,
     shared_channels: SharedChannels,
     signals_send: Sender<Signal>,
@@ -423,7 +424,7 @@ impl<S: Stream> TcpMessageBus<S> {
     // signal still releases its own aliases and never a newer registration's.
     // Not gated on `removed`: a stale signal still owns aliases to release.
 
-    fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
+    fn clean_request(&self, request_id: RequestId, sender: &Sender<RoutedItem>) {
         let removed = self.requests.remove_if_same(&request_id, sender);
         let aliases = self.executions.remove_all_same(sender);
         debug!(
@@ -432,7 +433,7 @@ impl<S: Stream> TcpMessageBus<S> {
         );
     }
 
-    fn clean_order(&self, order_id: i32, sender: &Sender<RoutedItem>) {
+    fn clean_order(&self, order_id: OrderId, sender: &Sender<RoutedItem>) {
         let removed = self.orders.remove_if_same(&order_id, sender);
         let aliases = self.executions.remove_all_same(sender);
         debug!(
@@ -520,7 +521,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 // as live so a caller gating on `is_connected()` cannot
                 // allocate below the new floor.
                 if let Some(order_ids) = self.order_ids.get() {
-                    order_ids.raise_order_id(self.connection.connection_metadata().next_order_id);
+                    order_ids.raise_order_id(OrderId::from(self.connection.connection_metadata().next_order_id));
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
@@ -571,7 +572,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 self.process_orders(message);
             }
             RoutingDecision::ByRequestId(id) => {
-                self.process_response_with_id(id, message, false);
+                self.process_response_with_id(WireId::classify(id), message, false);
             }
             _ => {
                 // All other messages
@@ -583,8 +584,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Route an error frame by severity and request id. Mirrors the async
     /// transport's `route_error_message`.
     fn route_error_message(&self, payload: DecodedError) {
-        let sent_to_update_stream = order_update_notice(&payload, self.requests.contains(&payload.request_id))
-            .is_some_and(|notice| self.send_order_update_item(RoutedItem::Notice(notice)));
+        let sent_to_update_stream = order_update_notice(&payload).is_some_and(|notice| self.send_order_update_item(RoutedItem::Notice(notice)));
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
                 super::common::log_notice(&notice);
@@ -595,39 +595,50 @@ impl<S: Stream> TcpMessageBus<S> {
                 self.connection.notice_broadcaster.broadcast(notice);
                 self.shared_channels.fail_one_shot_channels(|| RoutedItem::Error(error.clone()));
             }
-            ErrorDisposition::Route(request_id, item) => {
-                self.deliver_to_request_id(request_id, item, sent_to_update_stream);
+            ErrorDisposition::Route(id, item) => {
+                self.deliver(id, item, sent_to_update_stream);
             }
         }
     }
 
     fn process_response(&self, message: ResponseMessage, routed: bool) {
-        let request_id = message.request_id().unwrap_or(-1);
-        self.process_response_with_id(request_id, message, routed);
+        let id = message.request_id().and_then(WireId::classify);
+        self.process_response_with_id(id, message, routed);
     }
 
-    fn process_response_with_id(&self, request_id: i32, message: ResponseMessage, routed: bool) {
-        if self.requests.contains(&request_id) {
-            self.requests.send(&request_id, message.into()).unwrap();
-        } else if self.orders.contains(&request_id) {
-            self.orders.send(&request_id, message.into()).unwrap();
-        } else if self.shared_channels.is_shared_response(message.message_type()) {
+    /// The id's range picks the table: a request and an order can never be
+    /// confused, whatever is registered under the number.
+    fn process_response_with_id(&self, id: Option<WireId>, message: ResponseMessage, routed: bool) {
+        match id {
+            Some(WireId::Request(request_id)) if self.requests.contains(&request_id) => {
+                self.requests.send(&request_id, message.into()).unwrap();
+                return;
+            }
+            Some(WireId::Order(order_id)) if self.orders.contains(&order_id) => {
+                self.orders.send(&order_id, message.into()).unwrap();
+                return;
+            }
+            _ => {}
+        }
+        if self.shared_channels.is_shared_response(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
             report_unroutable_frame(&message, &*self.connection.notice_broadcaster);
         }
     }
 
-    /// Deliver a pre-classified Notice or Error to its owning subscription.
-    /// Tries the request-channel first, falls back to the order-channel for
-    /// notices/errors that arrive bound to an order_id.
-    fn deliver_to_request_id(&self, request_id: i32, item: RoutedItem, sent_to_update_stream: bool) {
-        if self.requests.contains(&request_id) {
-            let _ = self.requests.send(&request_id, item);
-        } else if self.orders.contains(&request_id) {
-            let _ = self.orders.send(&request_id, item);
-        } else if !sent_to_update_stream {
-            log_orphan(request_id, &item);
+    /// Deliver a pre-classified Notice or Error to the request or order
+    /// subscription its id names.
+    fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
+        match id {
+            WireId::Request(request_id) if self.requests.contains(&request_id) => {
+                let _ = self.requests.send(&request_id, item);
+            }
+            WireId::Order(order_id) if self.orders.contains(&order_id) => {
+                let _ = self.orders.send(&order_id, item);
+            }
+            _ if sent_to_update_stream => {}
+            _ => log_orphan(id, &item),
         }
     }
 
@@ -642,7 +653,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 // Try order_id channel first, then request_id, storing execution_id mapping
-                if let Some(order_id) = message.order_id() {
+                if let Some(order_id) = message.order_id().map(OrderId::from) {
                     if self.orders.contains(&order_id) {
                         self.store_execution_mapping(&message, &self.orders, order_id);
                         if let Err(e) = self.orders.send(&order_id, message.into()) {
@@ -651,7 +662,7 @@ impl<S: Stream> TcpMessageBus<S> {
                         return;
                     }
                 }
-                if let Some(request_id) = message.request_id() {
+                if let Some(request_id) = message.request_id().and_then(RequestId::from_raw) {
                     if self.requests.contains(&request_id) {
                         self.store_execution_mapping(&message, &self.requests, request_id);
                         if let Err(e) = self.requests.send(&request_id, message.into()) {
@@ -665,7 +676,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                if let Some(order_id) = message.order_id() {
+                if let Some(order_id) = message.order_id().map(OrderId::from) {
                     if self.orders.contains(&order_id) {
                         if let Err(e) = self.orders.send(&order_id, message.into()) {
                             warn!("error routing message for order_id({order_id}): {e}");
@@ -673,7 +684,7 @@ impl<S: Stream> TcpMessageBus<S> {
                         return;
                     }
                 }
-                if let Some(request_id) = message.request_id() {
+                if let Some(request_id) = message.request_id().and_then(RequestId::from_raw) {
                     if self.requests.contains(&request_id) {
                         if let Err(e) = self.requests.send(&request_id, message.into()) {
                             warn!("error routing message for request_id({request_id}): {e}");
@@ -686,7 +697,7 @@ impl<S: Stream> TcpMessageBus<S> {
             OrderRoutingStrategy::OrderOrShared => {
                 let sent_to_update_stream = self.send_order_update(&message);
 
-                if let Some(order_id) = message.order_id() {
+                if let Some(order_id) = message.order_id().map(OrderId::from) {
                     if self.orders.contains(&order_id) {
                         if let Err(e) = self.orders.send(&order_id, message.into()) {
                             warn!("error routing message for order_id({order_id}): {e}");
@@ -724,7 +735,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
-    fn open_request(&self, request_id: i32, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+    fn open_request(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -757,7 +768,12 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Alias the execution id to `id`'s channel in `channels`. The insert runs
     /// under `channels`' read lock, so a concurrent cleanup either removes the
     /// registration first (no alias is stored) or prunes the alias after it.
-    fn store_execution_mapping(&self, message: &ResponseMessage, channels: &SenderHash<i32, RoutedItem>, id: i32) {
+    fn store_execution_mapping<K: std::hash::Hash + Eq + std::fmt::Debug>(
+        &self,
+        message: &ResponseMessage,
+        channels: &SenderHash<K, RoutedItem>,
+        id: K,
+    ) {
         if let Some(execution_id) = message.execution_id() {
             channels.with_sender(&id, |sender| self.executions.insert(execution_id, sender.clone()));
         }
@@ -872,15 +888,15 @@ impl<S: Stream> TcpMessageBus<S> {
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
-    fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: RequestId, message: &[u8]) -> Result<InternalSubscription, Error> {
         self.open_request(request_id, message, None)
     }
 
-    fn send_request_bounded(&self, request_id: i32, message: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error> {
+    fn send_request_bounded(&self, request_id: RequestId, message: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error> {
         self.open_request(request_id, message, Some(bound))
     }
 
-    fn send_order_request(&self, order_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
+    fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();

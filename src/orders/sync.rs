@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
+use crate::client::ids::OrderId;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
@@ -119,7 +120,8 @@ impl Client {
             )?
         }
 
-        let request = encoders::encode_cancel_order(order_id, manual_order_cancel_time)?;
+        let order_id = OrderId::from(order_id).checked()?;
+        let request = encoders::encode_cancel_order(order_id.raw(), manual_order_cancel_time)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -183,9 +185,9 @@ impl Client {
     /// }
     /// ```
     pub fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
-        let request_id = self.next_request_id();
+        let request_id = self.mint_request_id();
 
-        let request = encoders::encode_executions(request_id, &filter)?;
+        let request = encoders::encode_executions(request_id.raw(), &filter)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -243,8 +245,9 @@ impl Client {
             expect_proto(decoders::decode_next_valid_id_proto),
         )?;
 
+        let next_order_id = OrderId::from(next_order_id).checked()?;
         self.raise_next_order_id(next_order_id);
-        Ok(next_order_id)
+        Ok(next_order_id.raw())
     }
 
     /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -311,11 +314,12 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id, order)?;
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(order_id, contract, order)?;
-        let subscription = self.send_order(order_id, request)?;
+        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let subscription = self.send_order(checked_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
@@ -373,10 +377,11 @@ impl Client {
     /// # }
     /// ```
     pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &super::Order) -> Result<(), Error> {
+        let checked_id = verify::verify_order_ids(order_id, order)?;
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(order_id, contract, order)?;
+        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
         self.send_message(request)?;
 
         Ok(())
@@ -539,9 +544,17 @@ impl Client {
         ovrd: bool,
         manual_order_time: Option<OffsetDateTime>,
     ) -> Result<Subscription<ExerciseOptions>, Error> {
-        let order_id = self.next_order_id();
+        let order_id = OrderId::from(self.next_order_id()).checked()?;
 
-        let request = encoders::encode_exercise_options(order_id, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)?;
+        let request = encoders::encode_exercise_options(
+            order_id.raw(),
+            contract,
+            exercise_action,
+            exercise_quantity,
+            account,
+            ovrd,
+            manual_order_time,
+        )?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))

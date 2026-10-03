@@ -117,8 +117,8 @@ impl Client {
     ) -> Result<Subscription<NewsArticle>, Error> {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
-        let request_id = self.next_request_id();
-        let request = encoders::encode_request_historical_news(request_id, contract_id, provider_codes, start_time, end_time, total_results)?;
+        let request_id = self.mint_request_id();
+        let request = encoders::encode_request_historical_news(request_id.raw(), contract_id, provider_codes, start_time, end_time, total_results)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -179,8 +179,8 @@ impl Client {
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.next_request_id();
-        let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
+        let request_id = self.mint_request_id();
+        let request = common::encode_contract_news_request(request_id.raw(), contract, provider_codes)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -207,8 +207,8 @@ impl Client {
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.next_request_id();
-        let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
+        let request_id = self.mint_request_id();
+        let request = common::encode_broad_tape_news_request(request_id.raw(), provider_code)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))

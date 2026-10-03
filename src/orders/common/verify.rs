@@ -1,6 +1,24 @@
+use crate::client::ids::OrderId;
 use crate::contracts::Contract;
 use crate::orders::Order;
 use crate::{server_versions, Error};
+
+/// `order_id` as an [`OrderId`], after checking it and every order id `order`
+/// carries against the request-id range ([`OrderId::checked`]). TWS creates
+/// the preset attached orders under their ids, so their status and errors
+/// route by them; `parent_id` (when set) names an existing order.
+pub(crate) fn verify_order_ids(order_id: i32, order: &Order) -> Result<OrderId, Error> {
+    let order_id = OrderId::from(order_id).checked()?;
+    let carried = [
+        order.preset_stop_loss_order_id,
+        order.preset_profit_taker_order_id,
+        Some(order.parent_id).filter(|&id| id != 0),
+    ];
+    for id in carried.into_iter().flatten() {
+        OrderId::from(id).checked()?;
+    }
+    Ok(order_id)
+}
 
 pub(crate) trait VersionedClient {
     fn check_version(&self, version: i32, message: &str) -> Result<(), Error>;
@@ -236,3 +254,7 @@ pub(crate) fn verify_order_contract(client: &impl VersionedClient, contract: &Co
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "verify_tests.rs"]
+mod tests;

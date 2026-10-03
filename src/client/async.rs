@@ -19,6 +19,7 @@ use crate::transport::{
 use crate::Error;
 
 use super::id_generator::ClientIdManager;
+use super::ids::{OrderId, RequestId};
 
 /// Asynchronous TWS API Client
 pub struct Client {
@@ -134,7 +135,7 @@ impl Client {
             time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
-            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)),
+            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)?),
         };
 
         Ok(client)
@@ -269,17 +270,22 @@ impl Client {
 
     /// Returns the next order ID
     pub fn next_order_id(&self) -> i32 {
-        self.id_manager.next_order_id()
+        self.id_manager.next_order_id().raw()
     }
 
     /// Returns the next request ID
     pub fn next_request_id(&self) -> i32 {
+        self.id_manager.next_request_id().raw()
+    }
+
+    /// Allocates a request ID for a request this crate sends.
+    pub(crate) fn mint_request_id(&self) -> RequestId {
         self.id_manager.next_request_id()
     }
 
     /// Raises the order-ID generator to at least the given value; never
     /// lowers it below locally allocated order IDs.
-    pub(crate) fn raise_next_order_id(&self, order_id: i32) {
+    pub(crate) fn raise_next_order_id(&self, order_id: OrderId) {
         self.id_manager.raise_order_id(order_id);
     }
 
@@ -291,7 +297,7 @@ impl Client {
         Ok(())
     }
 
-    pub(crate) async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.message_bus.send_request(request_id, message).await
     }
 
@@ -299,7 +305,7 @@ impl Client {
         self.message_bus.send_shared_request(message_type, message).await
     }
 
-    pub(crate) async fn send_order(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn send_order(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.message_bus.send_order_request(order_id, message).await
     }
 

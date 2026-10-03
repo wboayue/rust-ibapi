@@ -53,7 +53,7 @@ pub(crate) fn log_notice(notice: &Notice) {
 /// Log a routed notice/error that arrived bound to an id with no matching
 /// request or order channel. The dispatcher only constructs `Notice` and
 /// `Error` variants for this path; `Response` is unreachable here.
-pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
+pub(crate) fn log_orphan(request_id: impl std::fmt::Display, item: &RoutedItem) {
     match item {
         RoutedItem::Notice(n) => info!("no recipient for notice (id={request_id}): {n}"),
         RoutedItem::Error(e) => info!("no recipient for error (id={request_id}): {e}"),

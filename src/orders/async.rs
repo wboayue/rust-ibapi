@@ -2,6 +2,7 @@
 
 use time::OffsetDateTime;
 
+use crate::client::ids::OrderId;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
@@ -145,10 +146,11 @@ impl Client {
     /// }
     /// ```
     pub async fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+        let checked_id = verify::verify_order_ids(order_id, order)?;
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(order_id, contract, order)?;
+        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
         self.send_message(request).await?;
 
         Ok(())
@@ -180,11 +182,12 @@ impl Client {
     /// }
     /// ```
     pub async fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id, order)?;
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(order_id, contract, order)?;
-        let internal_subscription = self.send_order(order_id, request).await?;
+        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let internal_subscription = self.send_order(checked_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
             internal_subscription,
@@ -228,7 +231,8 @@ impl Client {
             check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
         }
 
-        let request = encoders::encode_cancel_order(order_id, manual_order_cancel_time)?;
+        let order_id = OrderId::from(order_id).checked()?;
+        let request = encoders::encode_cancel_order(order_id.raw(), manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
@@ -288,8 +292,9 @@ impl Client {
         )
         .await?;
 
+        let next_order_id = OrderId::from(next_order_id).checked()?;
         self.raise_next_order_id(next_order_id);
-        Ok(next_order_id)
+        Ok(next_order_id.raw())
     }
 
     /// Requests completed [Order]s.
@@ -444,8 +449,8 @@ impl Client {
     /// }
     /// ```
     pub async fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
-        let request_id = self.next_request_id();
-        let request = encoders::encode_executions(request_id, &filter)?;
+        let request_id = self.mint_request_id();
+        let request = encoders::encode_executions(request_id.raw(), &filter)?;
         let internal_subscription = self.send_request(request_id, request).await?;
         Ok(Subscription::new_from_internal_simple(
             internal_subscription,
@@ -489,8 +494,16 @@ impl Client {
         ovrd: bool,
         manual_order_time: Option<OffsetDateTime>,
     ) -> Result<Subscription<ExerciseOptions>, Error> {
-        let order_id = self.next_order_id();
-        let request = encoders::encode_exercise_options(order_id, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)?;
+        let order_id = OrderId::from(self.next_order_id()).checked()?;
+        let request = encoders::encode_exercise_options(
+            order_id.raw(),
+            contract,
+            exercise_action,
+            exercise_quantity,
+            account,
+            ovrd,
+            manual_order_time,
+        )?;
         let internal_subscription = self.send_order(order_id, request).await?;
         Ok(Subscription::new_from_internal_simple(
             internal_subscription,

@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use serial_test::serial;
 
 use super::*;
+use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::{encode_raw_length, IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -31,7 +32,7 @@ fn accessors_round_trip() {
     let r2 = client.next_request_id();
     assert!(r2 > r1, "request ids should increment");
 
-    client.raise_next_order_id(9000);
+    client.raise_next_order_id(OrderId::from(9000));
     let o1 = client.next_order_id();
     let o2 = client.next_order_id();
     assert_eq!(o1, 9000);
@@ -65,8 +66,8 @@ fn send_helpers_round_trip_through_bus() {
     let bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(bus.clone(), SERVER_VERSION);
 
-    client.send_request(1, vec![0x01]).expect("send_request");
-    client.send_order(2, vec![0x02]).expect("send_order");
+    client.send_request(RequestId::nth(1), vec![0x01]).expect("send_request");
+    client.send_order(OrderId::from(2), vec![0x02]).expect("send_order");
     client.send_message(vec![0x03]).expect("send_message");
     client
         .send_shared_request(OutgoingMessages::RequestCurrentTime, vec![0x04])

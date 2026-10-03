@@ -5,6 +5,7 @@
 //! request id is allocated when the builder is made, so a caller can record it
 //! before anything is written; `subscribe` sends once and never retries.
 
+use crate::client::ids::RequestId;
 use crate::contracts::{Contract, ContractDetails};
 use crate::Error;
 
@@ -29,12 +30,12 @@ pub const MAX_BUFFER_LIMIT: usize = 65_535;
 pub struct ContractDetailsBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,
-    request_id: i32,
+    request_id: RequestId,
     buffer_limit: Option<usize>,
 }
 
 impl<'a, C> ContractDetailsBuilder<'a, C> {
-    pub(crate) fn new(client: &'a C, contract: &'a Contract, request_id: i32) -> Self {
+    pub(crate) fn new(client: &'a C, contract: &'a Contract, request_id: RequestId) -> Self {
         Self {
             client,
             contract,
@@ -46,7 +47,7 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
     /// The request id `subscribe` will send. Allocated when the builder was
     /// made; nothing has been written yet. A dropped builder skips the id.
     pub fn request_id(&self) -> i32 {
-        self.request_id
+        self.request_id.raw()
     }
 
     /// Fail the stream instead of queueing more than `limit` unread items.

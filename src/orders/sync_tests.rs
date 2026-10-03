@@ -17,6 +17,7 @@ use crate::testdata::builders::orders::{
 use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
 use super::*;
+use crate::client::ids::OrderId;
 use crate::orders::common::order_builder;
 
 #[test]
@@ -877,7 +878,7 @@ fn analyze_returns_order_state_for_the_matching_order() {
         IncomingMessages::OpenOrder,
         open_order().order_id(9090).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.raise_next_order_id(9090);
+    client.raise_next_order_id(OrderId::from(9090));
     let contract = Contract::stock("AAPL").build();
 
     let state = client.order(&contract).buy(100).limit(50.0).analyze().expect("analyze should succeed");
@@ -904,7 +905,7 @@ fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[test]
 fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_blocking_test_client();
-    client.raise_next_order_id(9100);
+    client.raise_next_order_id(OrderId::from(9100));
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client.order(&contract).buy(100).limit(50.0).submit().expect("submit should succeed");
@@ -938,7 +939,7 @@ fn submit_rejects_an_invalid_order_before_sending() {
 #[test]
 fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_blocking_test_client();
-    client.raise_next_order_id(9200);
+    client.raise_next_order_id(OrderId::from(9200));
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -990,7 +991,7 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[test]
 fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_blocking_test_client();
-    client.raise_next_order_id(9300);
+    client.raise_next_order_id(OrderId::from(9300));
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
@@ -1101,7 +1102,7 @@ fn order_update_stream_delivers_order_binding() {
 #[test]
 fn preset_legs_submit_one_request_with_attached_ids() {
     let (client, bus) = crate::common::test_utils::helpers::create_blocking_test_client_with_version(server_versions::ATTACHED_ORDERS);
-    client.raise_next_order_id(9400);
+    client.raise_next_order_id(OrderId::from(9400));
     let contract = Contract::stock("AAPL").build();
 
     let ids = client

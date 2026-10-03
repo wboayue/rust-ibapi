@@ -1,6 +1,7 @@
 use prost::Message;
 
 use super::*;
+use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers::{error_envelope, proto_response};
 use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
 
@@ -226,7 +227,7 @@ fn test_classify_error_order_cancelled_routed_is_notice() {
     };
 
     match classify_error(payload) {
-        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+        ErrorDisposition::Route(id, RoutedItem::Notice(notice)) if id == WireId::Order(OrderId::from(42)) => {
             assert_eq!(notice.code, crate::messages::ORDER_CANCELLED_CODE);
             assert!(notice.is_cancellation());
             assert!(notice.is_informational());
@@ -286,7 +287,7 @@ fn test_classify_error_routed_system_message_is_notice() {
     };
 
     match classify_error(payload) {
-        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+        ErrorDisposition::Route(id, RoutedItem::Notice(notice)) if id == WireId::Order(OrderId::from(42)) => {
             assert_eq!(notice.code, crate::messages::CONNECTIVITY_LOST_CODE);
             assert!(notice.is_system_message());
         }
@@ -294,6 +295,9 @@ fn test_classify_error_routed_system_message_is_notice() {
     }
 }
 
+/// The order-update copy is decided by the id's range alone (#789): an
+/// order-range id is order-bound, a request-range or unspecified id is not,
+/// whatever happens to be registered under the number.
 #[test]
 fn test_order_update_notice_gating() {
     let payload = DecodedError {
@@ -304,19 +308,42 @@ fn test_order_update_notice_gating() {
         advanced_order_reject_json: String::new(),
     };
 
-    let notice = order_update_notice(&payload, false).expect("order-bound error should produce a notice");
+    let notice = order_update_notice(&payload).expect("order-bound error should produce a notice");
     assert_eq!(notice.request_id, Some(42));
     assert_eq!(notice.code, 201);
 
-    // Owned by a data-request subscription: nothing for the order stream.
-    assert!(order_update_notice(&payload, true).is_none());
+    let request_bound = DecodedError {
+        request_id: RequestId::nth(0).raw(),
+        ..payload.clone()
+    };
+    assert!(order_update_notice(&request_bound).is_none());
 
-    // Request-less: nothing for the order stream regardless of ownership.
     let request_less = DecodedError {
         request_id: UNSPECIFIED_REQUEST_ID,
         ..payload
     };
-    assert!(order_update_notice(&request_less, false).is_none());
+    assert!(order_update_notice(&request_less).is_none());
+}
+
+/// An error frame's id picks the request or order side by range.
+#[test]
+fn test_classify_error_routes_by_id_range() {
+    let error = |request_id| DecodedError {
+        request_id,
+        error_code: 200,
+        error_message: "No security definition".into(),
+        ..Default::default()
+    };
+
+    let request_id = RequestId::nth(3);
+    assert!(matches!(
+        classify_error(error(request_id.raw())),
+        ErrorDisposition::Route(WireId::Request(id), RoutedItem::Error(_)) if id == request_id
+    ));
+    assert!(matches!(
+        classify_error(error(42)),
+        ErrorDisposition::Route(WireId::Order(id), RoutedItem::Error(_)) if id == OrderId::from(42)
+    ));
 }
 
 #[test]
@@ -396,7 +423,7 @@ fn test_classify_error_codeless_routed_is_notice() {
     };
 
     match classify_error(payload) {
-        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+        ErrorDisposition::Route(id, RoutedItem::Notice(notice)) if id == WireId::Order(OrderId::from(42)) => {
             assert_eq!(notice.code, 0);
         }
         other => panic!("expected routed Notice, got {other:?}"),
@@ -413,7 +440,7 @@ fn test_classify_error_routed_warning_is_notice() {
     };
 
     match classify_error(payload) {
-        ErrorDisposition::Route(42, RoutedItem::Notice(notice)) => {
+        ErrorDisposition::Route(id, RoutedItem::Notice(notice)) if id == WireId::Order(OrderId::from(42)) => {
             assert_eq!(notice.code, 2104);
             assert_eq!(notice.message, "Farm OK");
         }
@@ -431,7 +458,7 @@ fn test_classify_error_routed_hard_error_is_error() {
     };
 
     match classify_error(payload) {
-        ErrorDisposition::Route(7, RoutedItem::Error(crate::Error::Notice(notice))) => {
+        ErrorDisposition::Route(id, RoutedItem::Error(crate::Error::Notice(notice))) if id == WireId::Order(OrderId::from(7)) => {
             assert_eq!(notice.code, 200);
             assert_eq!(notice.message, "No security");
         }

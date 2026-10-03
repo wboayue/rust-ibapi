@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::ids::{OrderId, RequestId};
 use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
 use crate::connection::sync::Connection;
 use crate::tests::assert_send_and_sync;
@@ -343,7 +344,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     connection.establish_connection()?;
     let bus = Arc::new(TcpMessageBus::new(connection)?);
 
-    let subscription = bus.send_order_request(5, &request)?;
+    let subscription = bus.send_order_request(OrderId::from(5), &request)?;
 
     bus.dispatch()?;
     bus.dispatch()?;
@@ -540,7 +541,7 @@ fn test_reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
     connection.establish_connection()?;
     let bus = TcpMessageBus::new(connection)?;
 
-    let order_ids = Arc::new(ClientIdManager::new(100));
+    let order_ids = Arc::new(ClientIdManager::new(100)?);
     bus.set_order_ids(order_ids.clone());
 
     bus.dispatch()?; // reads "\0", reconnects, handshake re-receives NextValidId(5000)
@@ -562,9 +563,10 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let sv = handler.min_version;
 
     let start_api_bytes = handler.format_start_api(28, sv);
-    let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
+    let request_id = RequestId::nth(0);
+    let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
-    let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
+    let expected_response = &format!("10|{request_id}|{AAPL_CONTRACT_RESPONSE}");
 
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
@@ -578,7 +580,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
         ), // RESTART
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(start_api_bytes, vec![managed_accounts_response("DU1234567"), next_valid_id_response(1)]),
-        Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
+        Exchange::request(packet.clone(), &[expected_response, &format!("52|1|{}|", RequestId::nth(1))]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -588,7 +590,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
 
     bus.dispatch()?;
 
-    let subscription = bus.send_request(9000, &packet)?;
+    let subscription = bus.send_request(request_id, &packet)?;
 
     bus.dispatch()?;
     bus.dispatch()?;
@@ -608,7 +610,8 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let sv = handler.min_version;
 
     let start_api_bytes = handler.format_start_api(28, sv);
-    let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
+    let request_id = RequestId::nth(0);
+    let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
@@ -628,7 +631,7 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
 
     let notices = bus.connection.notice_broadcaster.subscribe();
 
-    let subscription = bus.send_request(9000, &packet)?;
+    let subscription = bus.send_request(request_id, &packet)?;
 
     bus.dispatch()?;
 
@@ -661,7 +664,8 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     let sv = handler.min_version;
 
     let start_api_bytes = handler.format_start_api(28, sv);
-    let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
+    let request_id = RequestId::nth(0);
+    let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
@@ -704,7 +708,8 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     let start_api_bytes = handler.format_start_api(28, sv);
     let contract = &Contract::stock("AAPL").build();
 
-    let packet = encode_request_contract_data(sv, 9000, contract)?;
+    // The stubbed client allocates the first request id.
+    let packet = encode_request_contract_data(sv, RequestId::nth(0).raw(), contract)?;
 
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
@@ -798,20 +803,21 @@ const TICK: Duration = Duration::from_millis(100);
 fn test_request_id_correlation_with_interleaved_responses() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    let sub_a = bus.send_request(100, &[])?;
-    let sub_b = bus.send_request(200, &[])?;
+    let (id_a, id_b) = (RequestId::nth(100), RequestId::nth(200));
+    let sub_a = bus.send_request(id_a, &[])?;
+    let sub_b = bus.send_request(id_b, &[])?;
 
     // HistogramData (msg_id 89): request_id at field index 1.
-    stream.push_inbound(body("89|200|payload-b|"));
-    stream.push_inbound(body("89|100|payload-a|"));
+    stream.push_inbound(body(&format!("89|{id_b}|payload-b|")));
+    stream.push_inbound(body(&format!("89|{id_a}|payload-a|")));
 
     bus.dispatch()?;
     bus.dispatch()?;
 
     let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
     let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
-    assert_eq!(msg_a.peek_int(1)?, 100);
-    assert_eq!(msg_b.peek_int(1)?, 200);
+    assert_eq!(msg_a.peek_int(1)?, id_a.raw());
+    assert_eq!(msg_b.peek_int(1)?, id_b.raw());
 
     // No cross-talk.
     assert!(sub_a.try_next().is_none(), "sub_a received an extra message");
@@ -825,8 +831,8 @@ fn test_request_id_correlation_with_interleaved_responses() -> Result<(), Error>
 fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    let sub_a = bus.send_order_request(11, &[])?;
-    let sub_b = bus.send_order_request(22, &[])?;
+    let sub_a = bus.send_order_request(OrderId::from(11), &[])?;
+    let sub_b = bus.send_order_request(OrderId::from(22), &[])?;
 
     // OrderStatus carries `order_id` at proto tag 1.
     stream.push_inbound(binary_proto(
@@ -921,7 +927,7 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 #[test]
 fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(100, &[])?;
+    let sub = bus.send_request(RequestId::nth(100), &[])?;
 
     stream.close();
     let err = bus.dispatch().expect_err("dispatch should surface an error");
@@ -976,8 +982,9 @@ fn test_dispatcher_thread_exits_promptly_on_shutdown() {
 fn test_cancel_notifies_and_unregisters() -> Result<(), Error> {
     let (_, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
-    let request = bus.send_request(100, &[])?;
-    let order = bus.send_order_request(42, &[])?;
+    let (request_id, order_id) = (RequestId::nth(100), OrderId::from(42));
+    let request = bus.send_request(request_id, &[])?;
+    let order = bus.send_order_request(order_id, &[])?;
 
     request.cancel();
     order.cancel();
@@ -987,8 +994,8 @@ fn test_cancel_notifies_and_unregisters() -> Result<(), Error> {
         assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
     }
     drain_cleanup_signals(&bus);
-    assert!(!bus.requests.contains(&100), "request route outlived its cancel");
-    assert!(!bus.orders.contains(&42), "order route outlived its cancel");
+    assert!(!bus.requests.contains(&request_id), "request route outlived its cancel");
+    assert!(!bus.orders.contains(&order_id), "order route outlived its cancel");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -1003,17 +1010,18 @@ fn test_cancel_preserves_newer_subscription_under_same_id() -> Result<(), Error>
     let (_, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let request_a = bus.send_request(100, &[])?;
-    let request_b = bus.send_request(100, &[])?;
-    let order_a = bus.send_order_request(42, &[])?;
-    let order_b = bus.send_order_request(42, &[])?;
+    let (request_id, order_id) = (RequestId::nth(100), OrderId::from(42));
+    let request_a = bus.send_request(request_id, &[])?;
+    let request_b = bus.send_request(request_id, &[])?;
+    let order_a = bus.send_order_request(order_id, &[])?;
+    let order_b = bus.send_order_request(order_id, &[])?;
 
     request_a.cancel();
     order_a.cancel();
     drain_cleanup_signals(&bus);
 
-    assert!(bus.requests.contains(&100), "cancel removed the newer request registration");
-    assert!(bus.orders.contains(&42), "cancel removed the newer order registration");
+    assert!(bus.requests.contains(&request_id), "cancel removed the newer request registration");
+    assert!(bus.orders.contains(&order_id), "cancel removed the newer order registration");
     assert!(request_b.try_next_routed().is_none(), "cancel notified the newer request subscription");
     assert!(order_b.try_next_routed().is_none(), "cancel notified the newer order subscription");
 
@@ -1357,16 +1365,16 @@ fn test_notice_subscribe_after_shutdown_is_closed() {
 #[test]
 fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let sub = bus.send_request(request_id, &[])?;
 
-    // Old-format Error: msg_id=4, version=2, request_id=42, code=2104, message=...
-    stream.push_inbound(error_frame(42, 2104, FARM_OK_MSG));
+    stream.push_inbound(error_frame(request_id.raw(), 2104, FARM_OK_MSG));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
     match item {
         RoutedItem::Notice(notice) => {
-            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.request_id, Some(request_id.raw()));
             assert_eq!(notice.code, 2104);
             assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
         }
@@ -1374,7 +1382,7 @@ fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
     }
 
     // Stream stays open: a follow-up send delivers normally.
-    stream.push_inbound(body("89|42|payload|"));
+    stream.push_inbound(body(&format!("89|{request_id}|payload|")));
     bus.dispatch()?;
     let item = sub.next_timeout_routed(TICK).expect("follow-up message lost");
     assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
@@ -1388,10 +1396,11 @@ fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
 #[test]
 fn test_data_advisory_with_request_id_keeps_stream_open() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let sub = bus.send_request(request_id, &[])?;
 
     let code = 10167; // data advisory: "Displaying delayed market data."
-    stream.push_inbound(error_frame(42, code, "Displaying delayed market data."));
+    stream.push_inbound(error_frame(request_id.raw(), code, "Displaying delayed market data."));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
@@ -1404,7 +1413,7 @@ fn test_data_advisory_with_request_id_keeps_stream_open() -> Result<(), Error> {
     }
 
     // Stream stays open: the delayed data the advisory promised arrives.
-    stream.push_inbound(body("89|42|payload|"));
+    stream.push_inbound(body(&format!("89|{request_id}|payload|")));
     bus.dispatch()?;
     let item = sub.next_timeout_routed(TICK).expect("delayed data lost");
     assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
@@ -1417,15 +1426,16 @@ fn test_data_advisory_with_request_id_keeps_stream_open() -> Result<(), Error> {
 #[test]
 fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let sub = bus.send_request(request_id, &[])?;
 
-    stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    stream.push_inbound(error_frame(request_id.raw(), 200, "No security definition found"));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("error not delivered");
     match item {
         RoutedItem::Error(Error::Notice(notice)) => {
-            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.request_id, Some(request_id.raw()));
             assert_eq!(notice.code, 200);
             assert_eq!(notice.message, "No security definition found");
         }
@@ -1439,7 +1449,7 @@ fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error
 #[test]
 fn test_warning_with_unspecified_id_is_log_only() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(42, &[])?;
+    let sub = bus.send_request(RequestId::nth(42), &[])?;
 
     stream.push_inbound(error_frame(-1, 2104, FARM_OK_MSG));
     bus.dispatch()?;
@@ -1821,13 +1831,12 @@ fn test_reset_unregisters_shared_subscriptions() -> Result<(), Error> {
     Ok(())
 }
 
-/// Order-channel fallback: a notice arrives bound to an `order_id` that
-/// matches an order subscription (not a request subscription). The
-/// `deliver_to_request_id` helper should fall back to the order channel.
+/// A notice bound to an id below the request floor is an order's: it goes to
+/// the order subscription for that id.
 #[test]
-fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error> {
+fn test_warning_with_order_id_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_order_request(7, &[])?;
+    let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(error_frame(7, 2104, "Order warning"));
     bus.dispatch()?;
@@ -1855,7 +1864,7 @@ const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has bee
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
 
 fn farm_ok_frame_42() -> Vec<u8> {
-    error_frame(42, 2104, FARM_OK_MSG)
+    error_frame(RequestId::nth(42).raw(), 2104, FARM_OK_MSG)
 }
 
 fn farm_ok_frame_unrouted() -> Vec<u8> {
@@ -1886,27 +1895,27 @@ type NoticeFixture = (
     crate::subscriptions::sync::Subscription<NoticeTestData>,
 );
 
-fn make_request_subscription(request_id: i32) -> Result<NoticeFixture, Error> {
+fn make_request_subscription(request_id: RequestId) -> Result<NoticeFixture, Error> {
     let (stream, bus) = make_bus();
     let internal = bus.send_request(request_id, &[])?;
     let sub = wrap_subscription(bus.clone(), internal);
     Ok((stream, bus, sub))
 }
 
-fn make_order_subscription(order_id: i32) -> Result<NoticeFixture, Error> {
+fn make_order_subscription(order_id: OrderId) -> Result<NoticeFixture, Error> {
     let (stream, bus) = make_bus();
     let internal = bus.send_order_request(order_id, &[])?;
     let sub = wrap_subscription(bus.clone(), internal);
     Ok((stream, bus, sub))
 }
 
-/// Code 2104 + request_id=42 surfaces as `SubscriptionItem::Notice` without
+/// Code 2104 on a request id surfaces as `SubscriptionItem::Notice` without
 /// terminating; a follow-up data message arrives normally on the same stream.
 #[test]
 fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
     use crate::subscriptions::SubscriptionItem;
 
-    let (stream, bus, subscription) = make_request_subscription(42)?;
+    let (stream, bus, subscription) = make_request_subscription(RequestId::nth(42))?;
 
     stream.push_inbound(farm_ok_frame_42());
     bus.dispatch()?;
@@ -1919,7 +1928,7 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
         other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
     }
 
-    stream.push_inbound(body("89|42|payload|"));
+    stream.push_inbound(body(&format!("89|{}|payload|", RequestId::nth(42))));
     bus.dispatch()?;
     match subscription.next_timeout(TICK) {
         Some(Ok(SubscriptionItem::Data(_))) => {}
@@ -1938,10 +1947,11 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
     use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let internal = bus.send_request(request_id, &[])?;
     let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
     let computation = tick_option_computation()
-        .request_id(42)
+        .request_id(request_id.raw())
         .tick_type(TickType::DelayedModelOption as i32)
         .tick_attrib(0)
         .delta(0.5)
@@ -1949,14 +1959,14 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
 
     // Both frames are dispatched before polling: the error must not hide
     // an already-queued computation on the same request.
-    stream.push_inbound(error_frame(42, 10091, "Synthetic partial-entitlement advisory"));
+    stream.push_inbound(error_frame(request_id.raw(), 10091, "Synthetic partial-entitlement advisory"));
     stream.push_inbound(binary_proto(IncomingMessages::TickOptionComputation as i32, &computation));
     bus.dispatch()?;
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.request_id, Some(request_id.raw()));
             assert_eq!(notice.code, 10091);
             assert_eq!(notice.message, "Synthetic partial-entitlement advisory");
             assert!(notice.is_data_advisory());
@@ -1985,10 +1995,11 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let internal = bus.send_request(request_id, &[])?;
     let subscription = wrap_subscription::<MarketDepths>(bus.clone(), internal);
     let row = market_depth_response()
-        .request_id(42)
+        .request_id(request_id.raw())
         .position(0)
         .operation(0)
         .side(1)
@@ -1999,7 +2010,7 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
     // Both frames are dispatched before polling: the reset must not hide the
     // first row of the rebuilt book.
     stream.push_inbound(error_frame(
-        42,
+        request_id.raw(),
         317,
         "Market depth data has been RESET. Please empty deep book contents before applying any new entries.",
     ));
@@ -2009,7 +2020,7 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
 
     match subscription.next_timeout(TICK) {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.request_id, Some(42));
+            assert_eq!(notice.request_id, Some(request_id.raw()));
             assert_eq!(notice.code, 317);
             assert!(notice.is_data_advisory());
         }
@@ -2031,10 +2042,11 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[test]
 fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
-    let (stream, bus, subscription) = make_request_subscription(42)?;
+    let (stream, bus, subscription) = make_request_subscription(RequestId::nth(42))?;
 
-    stream.push_inbound(error_frame(42, 200, "No security definition found"));
-    stream.push_inbound(body("89|42|payload|"));
+    let request_id = RequestId::nth(42);
+    stream.push_inbound(error_frame(request_id.raw(), 200, "No security definition found"));
+    stream.push_inbound(body(&format!("89|{request_id}|payload|")));
     bus.dispatch()?;
     bus.dispatch()?;
 
@@ -2050,12 +2062,12 @@ fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
     Ok(())
 }
 
-/// Order-keyed notice via `deliver_to_request_id`'s order-channel fallback.
+/// Order-keyed notice: an id below the request floor reaches the order subscription.
 #[test]
 fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
     use crate::subscriptions::SubscriptionItem;
 
-    let (stream, bus, subscription) = make_order_subscription(7)?;
+    let (stream, bus, subscription) = make_order_subscription(OrderId::from(7))?;
 
     stream.push_inbound(error_frame(7, 2109, "Outside RTH order warning"));
     bus.dispatch()?;
@@ -2073,7 +2085,7 @@ fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
 /// Unrouted notice (UNSPECIFIED request_id) is log-only; no channel write.
 #[test]
 fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
-    let (stream, bus, subscription) = make_request_subscription(42)?;
+    let (stream, bus, subscription) = make_request_subscription(RequestId::nth(42))?;
 
     stream.push_inbound(farm_ok_frame_unrouted());
     bus.dispatch()?;
@@ -2088,11 +2100,12 @@ fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
 /// `iter_data()` filters `SubscriptionItem::Notice` and yields only data.
 #[test]
 fn test_subscription_iter_data_filters_notices() -> Result<(), Error> {
-    let (stream, bus, subscription) = make_request_subscription(42)?;
+    let (stream, bus, subscription) = make_request_subscription(RequestId::nth(42))?;
 
-    stream.push_inbound(body("89|42|first|"));
+    let request_id = RequestId::nth(42);
+    stream.push_inbound(body(&format!("89|{request_id}|first|")));
     stream.push_inbound(farm_ok_frame_42());
-    stream.push_inbound(body("89|42|second|"));
+    stream.push_inbound(body(&format!("89|{request_id}|second|")));
     for _ in 0..3 {
         bus.dispatch()?;
     }
@@ -2164,7 +2177,7 @@ fn test_notice_stream_receives_unrouted_hard_error() -> Result<(), Error> {
 fn test_notice_stream_skips_routed_notices() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notice_stream = bus.notice_subscribe();
-    let request_sub = bus.send_request(42, &[])?;
+    let request_sub = bus.send_request(RequestId::nth(42), &[])?;
 
     stream.push_inbound(farm_ok_frame_42());
     bus.dispatch()?;
@@ -2229,9 +2242,9 @@ fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Ve
 #[test]
 fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_order_request(7, &[])?;
+    let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
@@ -2243,20 +2256,21 @@ fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
 #[test]
 fn test_execution_data_falls_back_to_request_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(99, &[])?;
+    let request_id = RequestId::nth(99);
+    let sub = bus.send_request(request_id, &[])?;
 
-    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    stream.push_inbound(execution_data_body(request_id.raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
-    assert_eq!(msg.request_id(), Some(99));
+    assert_eq!(msg.request_id(), Some(request_id.raw()));
     Ok(())
 }
 
 #[test]
 fn test_execution_data_end_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_order_request(7, &[])?;
+    let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::ExecutionDataEnd as i32,
@@ -2270,16 +2284,19 @@ fn test_execution_data_end_routes_to_order_channel() -> Result<(), Error> {
 }
 
 /// ExecutionDataEnd's `req_id` doubles as the order_id key for the router; a
-/// request subscription on the same id catches it via the order-channel-miss
-/// fallback to the request channel.
+/// request-range id misses the order channel and falls back to the request
+/// channel.
 #[test]
 fn test_execution_data_end_falls_back_to_request_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request(7, &[])?;
+    let request_id = RequestId::nth(7);
+    let sub = bus.send_request(request_id, &[])?;
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::ExecutionDataEnd as i32,
-        &crate::proto::ExecutionDetailsEnd { req_id: Some(7) },
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(request_id.raw()),
+        },
     ));
     bus.dispatch()?;
 
@@ -2293,9 +2310,9 @@ fn test_execution_data_end_falls_back_to_request_channel() -> Result<(), Error> 
 #[test]
 fn test_commission_report_routes_via_execution_id_mapping() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_order_request(7, &[])?;
+    let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_body(99, 7, "exec-abc"));
+    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -2346,7 +2363,7 @@ fn test_completed_orders_end_routes_to_shared_channel() -> Result<(), Error> {
 #[test]
 fn test_order_update_stream_receives_open_order() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let order_sub = bus.send_order_request(42, &[])?;
+    let order_sub = bus.send_order_request(OrderId::from(42), &[])?;
     let stream_sub = bus.create_order_update_subscription()?;
 
     stream.push_inbound(binary_proto(
@@ -2398,15 +2415,16 @@ fn test_order_update_stream_receives_order_error_as_notice() -> Result<(), Error
     Ok(())
 }
 
-/// An error owned by a data-request subscription stays on that subscription:
+/// An error with a request-range id stays on that request's subscription:
 /// the order-update stream must not receive a copy.
 #[test]
 fn test_order_update_stream_skips_data_request_error() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let stream_sub = bus.create_order_update_subscription()?;
-    let sub = bus.send_request(42, &[])?;
+    let request_id = RequestId::nth(42);
+    let sub = bus.send_request(request_id, &[])?;
 
-    stream.push_inbound(error_frame(42, 200, "No security definition found"));
+    stream.push_inbound(error_frame(request_id.raw(), 200, "No security definition found"));
     bus.dispatch()?;
 
     let item = sub.next_timeout_routed(TICK).expect("error not delivered");
@@ -2426,8 +2444,9 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
     let (_, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let req = bus.send_request(42, &[])?;
-    let order = bus.send_order_request(99, &[])?;
+    let (request_id, order_id) = (RequestId::nth(42), OrderId::from(99));
+    let req = bus.send_request(request_id, &[])?;
+    let order = bus.send_order_request(order_id, &[])?;
     let stream_sub = bus.create_order_update_subscription()?;
 
     drop(req);
@@ -2436,8 +2455,8 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
 
     drain_cleanup_signals(&bus);
 
-    assert!(!bus.requests.contains(&42), "request 42 not cleaned");
-    assert!(!bus.orders.contains(&99), "order 99 not cleaned");
+    assert!(!bus.requests.contains(&request_id), "request not cleaned");
+    assert!(!bus.orders.contains(&order_id), "order not cleaned");
     assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream not cleared");
 
     bus.request_shutdown();
@@ -2461,7 +2480,7 @@ fn backlog_watermark_fires_on_multiples_only() {
 /// thread, so once the marker's registration is gone, every signal sent
 /// before it has been handled too.
 fn drain_cleanup_signals(bus: &Arc<TcpMessageBus<MemoryStream>>) {
-    const MARKER_REQUEST_ID: i32 = 987_654;
+    const MARKER_REQUEST_ID: RequestId = RequestId::nth(987_654);
     let marker = bus.send_request(MARKER_REQUEST_ID, &[]).expect("marker request failed");
     drop(marker);
 
@@ -2484,13 +2503,14 @@ fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> 
     let (_, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let sub_a = bus.send_order_request(42, &[])?;
-    let sub_b = bus.send_order_request(42, &[])?;
+    let order_id = OrderId::from(42);
+    let sub_a = bus.send_order_request(order_id, &[])?;
+    let sub_b = bus.send_order_request(order_id, &[])?;
     drop(sub_a);
 
     drain_cleanup_signals(&bus);
 
-    let sender = bus.orders.copy_sender(42).expect("stale cleanup removed the newer subscription");
+    let sender = bus.orders.copy_sender(order_id).expect("stale cleanup removed the newer subscription");
     sender
         .send(RoutedItem::Error(Error::Cancelled))
         .expect("send to registered channel failed");
@@ -2501,7 +2521,7 @@ fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> 
     // The replacement's own drop still cleans up.
     drop(sub_b);
     drain_cleanup_signals(&bus);
-    assert!(!bus.orders.contains(&42), "order channel leaked");
+    assert!(!bus.orders.contains(&order_id), "order channel leaked");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -2514,13 +2534,14 @@ fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> 
 fn test_cleanup_identity_guards() -> Result<(), Error> {
     let (_, bus) = make_bus();
 
-    let _order_sub = bus.send_order_request(7, &[])?;
+    let order_id = OrderId::from(7);
+    let _order_sub = bus.send_order_request(order_id, &[])?;
     let (foreign, _foreign_rx) = crossbeam::channel::unbounded();
-    bus.clean_order(7, &foreign);
-    assert!(bus.orders.contains(&7), "foreign sender removed a live order registration");
-    let registered = bus.orders.copy_sender(7).unwrap();
-    bus.clean_order(7, &registered);
-    assert!(!bus.orders.contains(&7), "matching sender failed to remove the registration");
+    bus.clean_order(order_id, &foreign);
+    assert!(bus.orders.contains(&order_id), "foreign sender removed a live order registration");
+    let registered = bus.orders.copy_sender(order_id).unwrap();
+    bus.clean_order(order_id, &registered);
+    assert!(!bus.orders.contains(&order_id), "matching sender failed to remove the registration");
 
     let _stream_sub = bus.create_order_update_subscription()?;
     bus.clear_order_update_stream(&foreign);
@@ -2535,15 +2556,74 @@ fn test_cleanup_identity_guards() -> Result<(), Error> {
     Ok(())
 }
 
+/// #789: an order's error is not swallowed by a request registered alongside it.
+#[test]
+fn test_issue_789_order_error_reaches_order_side() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_id = OrderId::from(7);
+    let request = bus.send_request(RequestId::nth(order_id.raw()), &[])?;
+    let order = bus.send_order_request(order_id, &[])?;
+    let updates = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(error_frame(order_id.raw(), 202, "Order Canceled"));
+    stream.push_inbound(error_frame(order_id.raw(), 201, "Order rejected"));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match order.next_timeout_routed(TICK) {
+        Some(RoutedItem::Notice(notice)) => assert_eq!(notice.code, 202),
+        other => panic!("expected the 202 notice, got {other:?}"),
+    }
+    match order.next_timeout_routed(TICK) {
+        Some(RoutedItem::Error(Error::Notice(notice))) => assert_eq!(notice.code, 201),
+        other => panic!("expected the 201 error, got {other:?}"),
+    }
+    for code in [202, 201] {
+        match updates.next_timeout_routed(TICK) {
+            Some(RoutedItem::Notice(notice)) => {
+                assert_eq!(notice.request_id, Some(order_id.raw()));
+                assert_eq!(notice.code, code);
+            }
+            other => panic!("expected the {code} notice on the order-update stream, got {other:?}"),
+        }
+    }
+    assert!(request.try_next_routed().is_none(), "request received an order's error");
+    Ok(())
+}
+
+/// #789: an error for a request that is gone is not published as order-bound.
+#[test]
+fn test_issue_789_late_request_error_stays_off_order_stream() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+    let request_id = RequestId::nth(5);
+    drop(bus.send_request(request_id, &[])?);
+    drain_cleanup_signals(&bus);
+    assert!(!bus.requests.contains(&request_id), "request still registered");
+    let updates = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(error_frame(request_id.raw(), 200, "No security definition found"));
+    bus.dispatch()?;
+
+    assert!(
+        updates.next_timeout_routed(TICK).is_none(),
+        "late request error reached the order-update stream"
+    );
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// Routed-but-orphan notice (real request_id, no matching sub) takes the
 /// `log_orphan` path, NOT the global notice stream.
 #[test]
 fn test_warning_with_orphan_request_id_logs() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let unrelated = bus.send_request(42, &[])?;
+    let unrelated = bus.send_request(RequestId::nth(42), &[])?;
     let notice_stream = bus.notice_subscribe();
 
-    stream.push_inbound(error_frame(99, 2104, "orphan warning"));
+    stream.push_inbound(error_frame(RequestId::nth(99).raw(), 2104, "orphan warning"));
     bus.dispatch()?;
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got the notice");
@@ -2565,9 +2645,9 @@ fn test_is_connected_reflects_shutdown() {
 #[test]
 fn test_execution_data_orphan_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let unrelated = bus.send_request(42, &[])?;
+    let unrelated = bus.send_request(RequestId::nth(42), &[])?;
 
-    stream.push_inbound(execution_data_body(99, 7, "exec-1"));
+    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan message");
@@ -2577,11 +2657,13 @@ fn test_execution_data_orphan_dropped() -> Result<(), Error> {
 #[test]
 fn test_execution_data_end_orphan_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let unrelated = bus.send_request(42, &[])?;
+    let unrelated = bus.send_request(RequestId::nth(42), &[])?;
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::ExecutionDataEnd as i32,
-        &crate::proto::ExecutionDetailsEnd { req_id: Some(999) },
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(RequestId::nth(999).raw()),
+        },
     ));
     bus.dispatch()?;
 
@@ -2592,7 +2674,7 @@ fn test_execution_data_end_orphan_dropped() -> Result<(), Error> {
 #[test]
 fn test_commission_report_without_mapping_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let unrelated = bus.send_order_request(7, &[])?;
+    let unrelated = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
@@ -2614,10 +2696,10 @@ fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> 
     let (stream, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let order = bus.send_order_request(7, &[])?;
-    let executions = bus.send_request(99, &[])?;
+    let order = bus.send_order_request(OrderId::from(7), &[])?;
+    let executions = bus.send_request(RequestId::nth(99), &[])?;
     stream.push_inbound(execution_data_body(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_body(99, 0, "exec-request"));
+    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 0, "exec-request"));
     bus.dispatch()?;
     bus.dispatch()?;
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
@@ -2643,12 +2725,13 @@ fn test_execution_aliases_pruned_on_cancel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let order = bus.send_order_request(7, &[])?;
+    let order_id = OrderId::from(7);
+    let order = bus.send_order_request(order_id, &[])?;
     stream.push_inbound(execution_data_body(0, 7, "exec-order"));
     bus.dispatch()?;
     order.cancel();
     drain_cleanup_signals(&bus);
-    assert!(!bus.orders.contains(&7), "order route outlived its cancel");
+    assert!(!bus.orders.contains(&order_id), "order route outlived its cancel");
     assert_eq!(bus.executions.len(), 0, "alias leaked after cancel");
 
     drop(order);
@@ -2667,10 +2750,10 @@ fn test_stale_cleanup_keeps_newer_execution_aliases() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
-    let sub_a = bus.send_order_request(42, &[])?;
+    let sub_a = bus.send_order_request(OrderId::from(42), &[])?;
     stream.push_inbound(execution_data_body(0, 42, "exec-a"));
     bus.dispatch()?;
-    let sub_b = bus.send_order_request(42, &[])?;
+    let sub_b = bus.send_order_request(OrderId::from(42), &[])?;
     stream.push_inbound(execution_data_body(0, 42, "exec-b"));
     bus.dispatch()?;
 
@@ -2688,13 +2771,13 @@ fn test_stale_cleanup_keeps_newer_execution_aliases() -> Result<(), Error> {
     Ok(())
 }
 
-/// `process_response_with_id` orders-fallback: a non-order message
-/// (HistogramData) whose request_id collides with an order subscription's id
-/// still gets routed to the order channel.
+/// `process_response_with_id` routes by range: a non-order message
+/// (HistogramData) whose id is below the request floor goes to the order
+/// subscription for that id.
 #[test]
-fn test_response_falls_back_to_order_channel() -> Result<(), Error> {
+fn test_response_with_order_range_id_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let order_sub = bus.send_order_request(7, &[])?;
+    let order_sub = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(body("89|7|payload|"));
     bus.dispatch()?;
@@ -2706,9 +2789,9 @@ fn test_response_falls_back_to_order_channel() -> Result<(), Error> {
 #[test]
 fn test_response_with_no_recipient_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let unrelated = bus.send_request(42, &[])?;
+    let unrelated = bus.send_request(RequestId::nth(42), &[])?;
 
-    stream.push_inbound(body("89|999|payload|"));
+    stream.push_inbound(body(&format!("89|{}|payload|", RequestId::nth(999))));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got a stray message");
@@ -2724,8 +2807,9 @@ fn test_response_with_no_recipient_dropped() -> Result<(), Error> {
 fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
     let (_, bus) = make_bus();
 
-    let req = bus.send_request(100, &[])?;
-    let order = bus.send_order_request(200, &[])?;
+    let (request_id, order_id) = (RequestId::nth(100), OrderId::from(200));
+    let req = bus.send_request(request_id, &[])?;
+    let order = bus.send_order_request(order_id, &[])?;
     let shared = bus.send_shared_request(OutgoingMessages::RequestAccountData, &[])?;
 
     bus.reset();
@@ -2739,8 +2823,8 @@ fn test_reset_notifies_all_channel_categories() -> Result<(), Error> {
         "shared subscription received the reset more than once"
     );
 
-    assert!(!bus.requests.contains(&100));
-    assert!(!bus.orders.contains(&200));
+    assert!(!bus.requests.contains(&request_id));
+    assert!(!bus.orders.contains(&order_id));
     Ok(())
 }
 
@@ -3035,8 +3119,11 @@ fn test_sends_are_refused_while_disconnected() {
 
     bus.connection_state.set_disconnected();
 
-    assert!(matches!(mb.send_request(100, b"req-bytes"), Err(Error::ConnectionReset)));
-    assert!(matches!(mb.send_order_request(42, b"order-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(mb.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(
+        mb.send_order_request(OrderId::from(42), b"order-bytes"),
+        Err(Error::ConnectionReset)
+    ));
     assert!(matches!(
         mb.send_shared_request(OutgoingMessages::RequestManagedAccounts, b"shared-bytes"),
         Err(Error::ConnectionReset)
@@ -3054,7 +3141,7 @@ fn test_sends_are_refused_while_disconnected() {
 
     // The same send goes through once the handshake has put the session back.
     bus.connection_state.set_connected();
-    assert!(mb.send_request(100, b"req-bytes").is_ok());
+    assert!(mb.send_request(RequestId::nth(100), b"req-bytes").is_ok());
     assert!(!stream.captured().is_empty());
 }
 
@@ -3069,7 +3156,8 @@ fn test_cancel_while_disconnected_clears_the_registration() -> Result<(), Error>
 
     let (_stream, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
-    let internal = bus.send_request(100, &[])?;
+    let request_id = RequestId::nth(100);
+    let internal = bus.send_request(request_id, &[])?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
@@ -3079,7 +3167,7 @@ fn test_cancel_while_disconnected_clears_the_registration() -> Result<(), Error>
     // The marker request `drain_cleanup_signals` sends needs a connection.
     bus.connection_state.set_connected();
     drain_cleanup_signals(&bus);
-    assert!(!bus.requests.contains(&100), "cancel must clear the registration anyway");
+    assert!(!bus.requests.contains(&request_id), "cancel must clear the registration anyway");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -3148,10 +3236,10 @@ fn test_failed_write_leaves_no_registration() {
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
     let mb: &dyn MessageBus = bus.as_ref();
 
-    assert!(mb.send_request(100, b"req-bytes").is_err());
+    assert!(mb.send_request(RequestId::nth(100), b"req-bytes").is_err());
     assert_eq!(bus.requests.len(), 0, "a failed write must leave no request registered");
 
-    assert!(mb.send_order_request(42, b"order-bytes").is_err());
+    assert!(mb.send_order_request(OrderId::from(42), b"order-bytes").is_err());
     assert_eq!(bus.orders.len(), 0, "a failed write must leave no order registered");
 
     assert!(mb.send_shared_request(OutgoingMessages::RequestPositions, b"positions").is_err());
@@ -3165,7 +3253,7 @@ fn test_failed_write_leaves_no_registration() {
 #[test]
 fn order_binding_reaches_updates_without_using_raw_order_id() {
     let (stream, bus) = make_bus();
-    let order_sub = bus.send_order_request(42, &[]).unwrap();
+    let order_sub = bus.send_order_request(OrderId::from(42), &[]).unwrap();
     let update_sub = bus.create_order_update_subscription().unwrap();
     stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
     bus.dispatch().unwrap();
@@ -3184,26 +3272,31 @@ fn bound(limit: usize) -> BufferBound {
     }
 }
 
+/// The request id `contract_row` and `contract_end` frames carry.
+const CONTRACT_REQUEST_ID: RequestId = RequestId::nth(0);
+
 fn contract_row(contract_id: i32) -> Vec<u8> {
     binary_proto(
         IncomingMessages::ContractData as i32,
-        &contract_data().request_id(9000).contract_id(contract_id).to_proto(),
+        &contract_data().request_id(CONTRACT_REQUEST_ID.raw()).contract_id(contract_id).to_proto(),
     )
 }
 
 fn contract_end() -> Vec<u8> {
     binary_proto(
         IncomingMessages::ContractDataEnd as i32,
-        &crate::proto::ContractDataEnd { req_id: Some(9000) },
+        &crate::proto::ContractDataEnd {
+            req_id: Some(CONTRACT_REQUEST_ID.raw()),
+        },
     )
 }
 
-fn histogram(request_id: i32) -> Vec<u8> {
+fn histogram(request_id: RequestId) -> Vec<u8> {
     // HistogramData (msg_id 89): request_id at field index 1.
     body(&format!("89|{request_id}|payload|"))
 }
 
-fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize, request_id: i32) -> Result<(), Error> {
+fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize, request_id: RequestId) -> Result<(), Error> {
     for _ in 0..frames {
         stream.push_inbound(histogram(request_id));
         bus.dispatch()?;
@@ -3214,11 +3307,11 @@ fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize
 #[test]
 fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(100, &[], bound(2))?;
+    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
 
-    route(&stream, &bus, 4, 100)?;
+    route(&stream, &bus, 4, RequestId::nth(100))?;
 
-    assert!(sub.next_timeout(TICK).expect("first row")?.peek_int(1)? == 100);
+    assert!(sub.next_timeout(TICK).expect("first row")?.peek_int(1)? == RequestId::nth(100).raw());
     assert!(sub.next_timeout(TICK).expect("second row").is_ok());
     assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::BufferLimitExceeded { limit: 2 }))));
     assert!(sub.try_next().is_none(), "frames after the overflow are discarded");
@@ -3228,10 +3321,10 @@ fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
 #[test]
 fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(100, &[], bound(2))?;
+    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
 
     for _ in 0..6 {
-        route(&stream, &bus, 1, 100)?;
+        route(&stream, &bus, 1, RequestId::nth(100))?;
         assert!(sub.next_timeout(TICK).expect("row").is_ok(), "a reader that keeps up never overflows");
     }
     Ok(())
@@ -3240,11 +3333,11 @@ fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
 #[test]
 fn test_reset_skips_overflowed_route() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let overflowed = bus.send_request_bounded(100, &[], bound(1))?;
-    let at_limit = bus.send_request_bounded(200, &[], bound(1))?;
+    let overflowed = bus.send_request_bounded(RequestId::nth(100), &[], bound(1))?;
+    let at_limit = bus.send_request_bounded(RequestId::nth(200), &[], bound(1))?;
 
-    route(&stream, &bus, 2, 100)?;
-    route(&stream, &bus, 1, 200)?;
+    route(&stream, &bus, 2, RequestId::nth(100))?;
+    route(&stream, &bus, 1, RequestId::nth(200))?;
     bus.reset();
 
     assert!(overflowed.next_timeout(TICK).expect("row").is_ok());
@@ -3263,7 +3356,7 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     use crate::subscriptions::DecoderContext;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(9000, &[], bound(1))?;
+    let internal = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
@@ -3278,7 +3371,7 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
 
     let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
         crate::server_versions::CANCEL_CONTRACT_DATA,
-        Some(9000),
+        Some(CONTRACT_REQUEST_ID.raw()),
         None,
     )?;
     assert_eq!(count_frames(&stream.captured(), &cancel), 1, "overflow leaves the cancel to drop");
@@ -3295,12 +3388,12 @@ fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
     use crate::subscriptions::{DecoderContext, Drained};
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request(9000, &[])?;
+    let internal = bus.send_request(CONTRACT_REQUEST_ID, &[])?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
     let cancel = <ContractDetails as crate::subscriptions::StreamDecoder<ContractDetails>>::cancel_message(
         crate::server_versions::CANCEL_CONTRACT_DATA,
-        Some(9000),
+        Some(CONTRACT_REQUEST_ID.raw()),
         None,
     )?;
 
@@ -3330,7 +3423,7 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     // A result exactly `limit` rows long, read late: the end marker gets
     // through past the cap, so the stream ends normally.
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
+    let sub = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);
