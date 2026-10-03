@@ -7,14 +7,13 @@ name = "ibapi"
 version = "4.2.0"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsblabs.com>"]
-description = "A Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity and performance."
+description = "An unofficial Rust client for the Interactive Brokers TWS API. Async (Tokio) and blocking clients for TWS and IB Gateway."
 readme = "README.md"
-homepage = "https://github.com/wboayue/rust-ibapi/"
 repository = "https://github.com/wboayue/rust-ibapi/"
 documentation = "https://docs.rs/ibapi/latest/ibapi/"
 license = "MIT"
-keywords = ["algo-trading", "interactive-brokers", "tws"]
-categories = ["finance", "api-bindings"]
+keywords = ["interactive-brokers", "ibkr", "tws", "algo-trading", "trading"]
+categories = ["finance", "api-bindings", "asynchronous"]
 exclude = [
     "justfile",
     "assets/",
