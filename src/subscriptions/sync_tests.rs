@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::ids::RequestId;
+use crate::client::ids::{OrderId, RequestId};
 use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{Drained, SubscriptionItem};
@@ -173,7 +173,7 @@ fn test_no_retries_after_end_of_stream() {
 // --- collect_for / collect_until ----------------------------------------
 
 use crate::subscriptions::common::RoutedItem;
-use crate::transport::SubscriptionBuilder;
+use crate::transport::{Signal, SubscriptionBuilder};
 use crossbeam::channel;
 use std::time::Duration;
 
@@ -335,26 +335,36 @@ fn test_declared_type_with_no_decode_arm_terminates() {
 
 // --- cancel after the native end marker ----------------------------------
 
-/// A request-id subscription whose frames come from `items`, plus the stub bus
-/// so a test can see whether a cancel was written.
-fn request_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscription<T>, Arc<MessageBusStub>) {
+/// A subscription routed as `builder` says (request or order id), fed `items`,
+/// plus the stub bus (to see whether a cancel was written) and the cleanup
+/// signals (to see whether it unregistered). It holds its sender, as
+/// production's does, so cancelling can send the signal.
+fn routed_subscription<T: StreamDecoder<T>>(
+    builder: SubscriptionBuilder,
+    items: Vec<RoutedItem>,
+) -> (Subscription<T>, Arc<MessageBusStub>, channel::Receiver<Signal>) {
     let (sender, receiver) = channel::unbounded::<RoutedItem>();
-    let (signaler, _signaler_rx) = channel::unbounded();
+    let (signaler, signals) = channel::unbounded();
     for item in items {
         sender.send(item).unwrap();
     }
-    let internal = SubscriptionBuilder::new()
-        .receiver(receiver)
-        .signaler(signaler)
-        .request_id(RequestId::nth(1))
-        .build();
+    let internal = builder.receiver(receiver).sender(sender).signaler(signaler).build();
     let stub = Arc::new(MessageBusStub::default());
-    (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub)
+    (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub, signals)
+}
+
+fn request_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscription<T>, Arc<MessageBusStub>, channel::Receiver<Signal>) {
+    routed_subscription(SubscriptionBuilder::new().request_id(RequestId::nth(1)), items)
+}
+
+/// Whether `cancel()` sent the cleanup signal for request id 1.
+fn unregistered_request(signals: &channel::Receiver<Signal>) -> bool {
+    matches!(signals.try_recv(), Ok(Signal::Request(id, _)) if id == RequestId::nth(1))
 }
 
 #[test]
 fn test_decoded_end_skips_cancel_on_drop() {
-    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![data(1)]);
+    let (sub, bus, _signals) = request_subscription::<EndOfStreamItem>(vec![data(1)]);
 
     assert!(sub.next().is_none());
     assert!(sub.ended_natively());
@@ -366,7 +376,7 @@ fn test_decoded_end_skips_cancel_on_drop() {
 
 #[test]
 fn test_routed_end_skips_cancel_on_drop() {
-    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::EndOfStream)]);
+    let (sub, bus, _signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::EndOfStream)]);
 
     assert!(sub.next().is_none());
     assert!(sub.ended_natively());
@@ -378,13 +388,59 @@ fn test_routed_end_skips_cancel_on_drop() {
 #[test]
 fn test_error_end_still_cancels() {
     // Only the end marker proves TWS finished; after an error the cancel goes out as before.
-    let (sub, bus) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+    let (sub, bus, _signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
 
     assert!(matches!(sub.next(), Some(Err(Error::ConnectionReset))));
     assert!(!sub.ended_natively());
 
     drop(sub);
     assert_eq!(bus.request_messages().len(), 1, "cancel written after an error end");
+}
+
+// --- cancel releases the route ------------------------------------------
+// The cancel message is optional; unregistering is not, so a handle kept
+// after `cancel()` stops collecting frames.
+
+#[test]
+fn test_cancel_without_cancel_message_unregisters() {
+    let (sub, bus, signals) = request_subscription::<CollectItem>(vec![]);
+
+    sub.cancel();
+    assert!(bus.request_messages().is_empty(), "the type has no cancel message");
+    assert!(unregistered_request(&signals), "route kept after cancel");
+    assert!(matches!(sub.next(), Some(Err(Error::Cancelled))));
+}
+
+#[test]
+fn test_cancel_after_end_marker_unregisters() {
+    let (sub, bus, signals) = request_subscription::<EndOfStreamItem>(vec![data(1)]);
+    assert!(sub.next().is_none());
+
+    sub.cancel();
+    assert!(bus.request_messages().is_empty(), "no cancel after the end marker");
+    assert!(unregistered_request(&signals), "route kept after cancel");
+}
+
+#[test]
+fn test_cancel_after_snapshot_end_unregisters() {
+    let (sub, bus, signals) = request_subscription::<DrainItem>(vec![data(-1)]);
+    assert!(matches!(sub.next(), Some(Ok(SubscriptionItem::Data(DrainItem(-1))))));
+
+    sub.cancel();
+    assert!(bus.request_messages().is_empty(), "no cancel after the snapshot end");
+    assert!(unregistered_request(&signals), "route kept after cancel");
+}
+
+#[test]
+fn test_order_subscription_cancel_unregisters() {
+    let (sub, bus, signals) = routed_subscription::<CollectItem>(SubscriptionBuilder::new().order_id(OrderId::from(7)), vec![]);
+
+    sub.cancel();
+    assert!(bus.request_messages().is_empty(), "order streams have no cancel message");
+    assert!(
+        matches!(signals.try_recv(), Ok(Signal::Order(id, _)) if id == OrderId::from(7)),
+        "route kept after cancel"
+    );
 }
 
 // --- collect_to_end ------------------------------------------------------

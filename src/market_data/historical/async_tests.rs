@@ -914,6 +914,23 @@ async fn test_tick_subscription_drop_after_done_does_not_cancel() {
 }
 
 #[tokio::test]
+async fn test_tick_subscription_cancel_after_done_writes_nothing() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+
+    let (_tx, rx) = tokio::sync::broadcast::channel(16);
+    let internal = AsyncInternalSubscription::new(rx);
+    let mut subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9103, message_bus.clone());
+    subscription.done = true;
+
+    subscription.cancel().await;
+    drop(subscription);
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 0, "completed subscription should not send cancel");
+}
+
+#[tokio::test]
 async fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 

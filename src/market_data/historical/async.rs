@@ -457,7 +457,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
         }
     }
 
-    /// Cancel the historical-ticks request. Safe to call after completion (no-op).
+    /// Cancel the historical-ticks request. After completion nothing is written.
     /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
     ///
     /// # Examples
@@ -474,7 +474,8 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
     /// # }
     /// ```
     pub async fn cancel(&self) {
-        if self.cancelled.swap(true, Ordering::Relaxed) {
+        // After the last batch TWS has finished the request: nothing to write.
+        if self.done || self.cancelled.swap(true, Ordering::Relaxed) {
             return;
         }
 
