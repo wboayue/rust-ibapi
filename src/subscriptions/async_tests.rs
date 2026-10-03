@@ -472,11 +472,39 @@ async fn test_subscription_cancel_without_cancel_message_sends_nothing() {
     assert!(f.bus.request_messages().is_empty());
 }
 
+/// The next item, failing rather than hanging when a regression leaves the
+/// stream waiting on the channel after `cancel()`.
+async fn next_after_cancel<T: StreamDecoder<T> + Send + 'static>(sub: &mut Subscription<T>) -> Option<Result<SubscriptionItem<T>, Error>> {
+    tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("stream hung after cancel")
+}
+
+/// `cancel()` ends the stream locally whatever is written: each clone yields
+/// `Err(Cancelled)` once, skipping frames not yet read, then ends. Covers the
+/// paths that write nothing: no cancel message, and an order id.
 #[tokio::test]
-async fn test_completed_snapshot_skips_cancel_on_cancel_and_drop() {
-    // A snapshot that ran to its sentinel has no live request left to cancel,
-    // so neither `cancel()` nor `Drop` sends one — even though this decoder
-    // does define a cancel message. Mirrors the sync drop behavior.
+async fn test_cancel_stops_every_clone() {
+    for (request_id, order_id) in [(Some(123), None), (None, Some(7))] {
+        let Fixture { mut subscription, tx, bus } = subscription_with::<IntItem>(request_id, order_id, DecoderContext::default());
+        let mut clone = subscription.clone();
+        tx.send(int_frame(1)).unwrap();
+
+        subscription.cancel().await;
+        assert!(bus.request_messages().is_empty(), "IntItem has no cancel message");
+        for sub in [&mut subscription, &mut clone] {
+            assert!(
+                matches!(next_after_cancel(sub).await, Some(Err(Error::Cancelled))),
+                "{request_id:?}/{order_id:?}"
+            );
+            assert!(next_after_cancel(sub).await.is_none(), "stream must end after Cancelled");
+        }
+    }
+}
+
+/// A snapshot run to its sentinel, ready for `cancel()` or `Drop`. Its
+/// decoder defines a cancel message, so a skipped write is the snapshot check.
+async fn completed_snapshot() -> Fixture<CancellableSnapshotItem> {
     let mut f = subscription_with::<CancellableSnapshotItem>(Some(123), None, DecoderContext::default());
 
     f.tx.send(int_frame(-1)).unwrap();
@@ -488,14 +516,25 @@ async fn test_completed_snapshot_skips_cancel_on_cancel_and_drop() {
         f.subscription.snapshot_ended.load(Ordering::Relaxed),
         "sentinel must latch snapshot_ended"
     );
+    f
+}
+
+#[tokio::test]
+async fn test_completed_snapshot_cancel_writes_nothing_and_stops() {
+    let mut f = completed_snapshot().await;
 
     f.subscription.cancel().await;
     assert!(f.bus.request_messages().is_empty(), "completed snapshot must not send a cancel");
-    // `cancel()` returned before latching `cancelled`, so Drop re-runs the same check.
-    assert!(!f.subscription.cancelled.load(Ordering::Relaxed));
+    assert!(matches!(next_after_cancel(&mut f.subscription).await, Some(Err(Error::Cancelled))));
+    assert!(next_after_cancel(&mut f.subscription).await.is_none());
+}
+
+#[tokio::test]
+async fn test_completed_snapshot_skips_cancel_on_drop() {
+    let f = completed_snapshot().await;
 
     drop(f.subscription);
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    settle().await;
     assert!(
         f.bus.request_messages().is_empty(),
         "dropping a completed snapshot must not send a cancel"

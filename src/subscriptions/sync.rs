@@ -42,7 +42,6 @@ pub struct Subscription<T: StreamDecoder<T>> {
     context: DecoderContext,
     message_bus: Arc<dyn MessageBus>,
     request_id: Option<i32>,
-    order_id: Option<i32>,
     shared: Option<SharedTicket>,
     phantom: PhantomData<T>,
     cancelled: AtomicBool,
@@ -65,7 +64,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         // Raw from here on: the public accessor and the decoders' cancel
         // messages speak `i32`.
         let request_id = subscription.request_id.map(RequestId::raw);
-        let order_id = subscription.order_id.map(|id| id.value());
         let shared = subscription.shared;
 
         debug_assert_request_id_routable::<T, T>(request_id);
@@ -74,7 +72,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             context,
             message_bus,
             request_id,
-            order_id,
             shared,
             subscription,
             phantom: PhantomData,
@@ -99,27 +96,22 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return;
         }
 
-        // Id-routed: the cancel is written only while TWS may still be running
-        // the request, and goes whether or not it reaches TWS. The registration
-        // is released by `InternalSubscription::cancel` either way, so a handle
-        // kept after `cancel()` stops collecting frames.
-        if self.request_id.is_some() || self.order_id.is_some() {
-            if let Some(message) = self.pending_cancel() {
-                if let Err(e) = self.message_bus.send_message(&message) {
-                    log_cancel_error("subscription", &e);
-                }
-            }
-            self.subscription.cancel();
-        } else if let Some(ticket) = self.shared {
+        if let Some(ticket) = self.shared {
             // The count is released whether or not the type has a cancel message.
             let message = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)).ok();
             if let Err(e) = self.message_bus.cancel_shared_subscription(ticket, message.as_deref()) {
                 log_cancel_error("shared subscription", &e);
             }
-            self.subscription.cancel();
-        } else {
-            debug!("Could not determine cancel method")
+        } else if let Some(message) = self.pending_cancel() {
+            // Id-routed, while TWS may still be running the request. The write
+            // goes whether or not it reaches TWS.
+            if let Err(e) = self.message_bus.send_message(&message) {
+                log_cancel_error("subscription", &e);
+            }
         }
+        // Released either way (`order_update_stream`, which has no id, included),
+        // so a handle kept after `cancel()` stops collecting frames.
+        self.subscription.cancel();
     }
 
     /// Returns the request ID associated with this subscription.
@@ -133,7 +125,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.ended_natively.load(Ordering::Relaxed)
     }
 
-    /// The cancel an id-routed subscription writes, if any. `None` when the
+    /// The cancel a subscription that isn't shared writes, if any. `None` when the
     /// type has none, or once the stream has seen its end marker or snapshot
     /// end: the cancel would name a request TWS already finished.
     fn pending_cancel(&self) -> Option<Vec<u8>> {
@@ -165,7 +157,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// query with no end marker yet. So the drain usually waits out the whole
     /// result: size `deadline` for it, and prefer narrow queries. A stream with
     /// no end marker (market data) always ends `Unconfirmed`. Subscriptions
-    /// without a request id (shared streams) are cancelled as by
+    /// without a request id (shared, order and order-update streams) are cancelled as by
     /// [`cancel`](Self::cancel) and return `Unconfirmed` immediately.
     ///
     /// # Examples
@@ -190,7 +182,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// }
     /// ```
     pub fn cancel_and_drain(self, deadline: Instant) -> Result<Drained, Error> {
-        // A finished snapshot is complete at TWS too, and `cancel()` skips it.
+        // A finished snapshot is complete at TWS too; `cancel()` writes nothing for it.
         if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
