@@ -1210,7 +1210,7 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 ///
 /// A slice rather than an array so that adding a code is not a type change
 /// for callers that bind the constant explicitly.
-pub const DATA_ADVISORY_CODES: &[i32] = &[317, 2188, 10089, 10090, 10091, 10167];
+pub const DATA_ADVISORY_CODES: &[i32] = &[MARKET_DEPTH_RESET_CODE, 2188, 10089, 10090, 10091, 10167];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].

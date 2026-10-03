@@ -13,13 +13,7 @@ fn test_what_to_show_display() {
 /// other data advisories, stay `Notice` (#899).
 #[test]
 fn test_market_depths_data_from_notice() {
-    let notice = |code| Notice {
-        request_id: Some(9000),
-        code,
-        message: String::new(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    };
+    let notice = |code| Notice::synthesized(code, String::new());
 
     assert_eq!(
         <MarketDepths as StreamDecoder<MarketDepths>>::data_from_notice(&notice(317)),
