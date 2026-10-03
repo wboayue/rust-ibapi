@@ -10,11 +10,11 @@ use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
 use crate::messages::{
     encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE,
-    HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
+    HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, PROTOBUF_MSG_ID,
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
-use crate::transport::common::{log_notice, MIN_FRAME_LENGTH};
+use crate::transport::common::NoticeSink;
 
 /// Domain-typed messages delivered to the startup callback during the
 /// connection handshake (initial connect *and* auto-reconnect).
@@ -81,28 +81,6 @@ impl StartupMessage {
             StartupMessage::ExecutionDataEnd => IncomingMessages::ExecutionDataEnd,
             StartupMessage::CompletedOrdersEnd => IncomingMessages::CompletedOrdersEnd,
         }
-    }
-}
-
-/// Sink for unrouted notices observed during the handshake. Production impls
-/// forward to the per-feature notice broadcaster owned by `Connection`, so
-/// handshake-time notices reach any pre-bound `NoticeStream` the user obtained
-/// from `ClientBuilder::connect_with_notice_stream`.
-pub(crate) trait NoticeSink: Send + Sync {
-    fn deliver(&self, notice: Notice);
-}
-
-#[cfg(feature = "sync")]
-impl NoticeSink for crate::transport::sync::NoticeBroadcaster {
-    fn deliver(&self, notice: Notice) {
-        self.broadcast(notice);
-    }
-}
-
-#[cfg(feature = "async")]
-impl NoticeSink for crate::transport::r#async::NoticeBroadcaster {
-    fn deliver(&self, notice: Notice) {
-        self.broadcast(notice);
     }
 }
 
@@ -282,7 +260,7 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
     match kind {
         IncomingMessages::Error => {
             let notice = Notice::from(&*message);
-            log_notice(&notice);
+            notice.log();
             ctx.notice_sink.deliver(notice);
         }
         IncomingMessages::OpenOrder => dispatch_typed(ctx, kind, || decode_open_order(message), StartupMessage::OpenOrder),
@@ -385,7 +363,7 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
 /// stream fixtures, which supply bodies directly and skip the length prefix
 /// entirely. It used to index straight past the end and panic the dispatcher.
 pub fn parse_raw_message(data: &[u8]) -> Result<ResponseMessage, Error> {
-    let Some((header, payload)) = data.split_first_chunk::<MIN_FRAME_LENGTH>() else {
+    let Some((header, payload)) = data.split_first_chunk::<MESSAGE_ID_LEN>() else {
         return Err(Error::InvalidFrame(format!(
             "frame body of {} bytes cannot hold a message id",
             data.len()

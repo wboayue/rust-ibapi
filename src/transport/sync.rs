@@ -251,6 +251,12 @@ pub(crate) struct NoticeBroadcaster {
     senders: Mutex<Option<Vec<Sender<Notice>>>>,
 }
 
+impl super::common::NoticeSink for NoticeBroadcaster {
+    fn deliver(&self, notice: Notice) {
+        self.broadcast(notice);
+    }
+}
+
 impl NoticeBroadcaster {
     pub(crate) fn new() -> Self {
         Self {
@@ -596,11 +602,11 @@ impl<S: Stream> TcpMessageBus<S> {
         let sent_to_update_stream = order_update_notice(&payload).is_some_and(|notice| self.send_order_update_item(RoutedItem::Notice(notice)));
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
-                super::common::log_notice(&notice);
+                notice.log();
                 self.connection.notice_broadcaster.broadcast(notice);
             }
             ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
-                super::common::log_notice(&notice);
+                notice.log();
                 self.connection.notice_broadcaster.broadcast(notice);
                 self.shared_channels.fail_one_shot_channels(|| RoutedItem::Error(error.clone()));
             }

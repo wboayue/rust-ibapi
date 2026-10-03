@@ -22,6 +22,10 @@ mod tests;
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
 
+/// Width of the big-endian message id that opens every frame body:
+/// `[4-byte BE msg_id][payload]`.
+pub(crate) const MESSAGE_ID_LEN: usize = 4;
+
 /// Messages emitted by TWS/Gateway over the market data socket.
 #[derive(Debug, Default, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
@@ -688,7 +692,7 @@ pub(crate) fn encode_length(message: &str) -> Vec<u8> {
 
 /// Encode a protobuf outbound message: 4-byte BE (msg_id + 200) + proto bytes.
 pub(crate) fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(4 + proto_bytes.len());
+    let mut buf = Vec::with_capacity(MESSAGE_ID_LEN + proto_bytes.len());
     buf.write_i32::<BigEndian>(msg_id + PROTOBUF_MSG_ID).unwrap();
     buf.extend_from_slice(proto_bytes);
     buf
@@ -1731,6 +1735,46 @@ impl Notice {
     /// ```
     pub fn connectivity_status(&self) -> Option<ConnectivityStatus> {
         ConnectivityStatus::from_code(self.code)
+    }
+
+    /// Log severity for this notice, derived from [`Notice::category`] so that
+    /// every code in a category logs alike regardless of which numeric band it
+    /// sits in.
+    ///
+    /// Informational categories log at `warn` (the caller may want to act:
+    /// a fallback engaged, a book must be cleared), with two exceptions at `info`:
+    /// the cancellation confirmation, and data-farm notices that need no action.
+    /// A farm that is OK, `Inactive` ("…available upon demand") or `Connecting` is
+    /// routine on nearly every connect; only `Broken` warns.
+    /// System connectivity codes are graded by how much they matter: 1102
+    /// (restored, data maintained) → info; 1101 (restored, data lost —
+    /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
+    /// reset) → error. Request errors, order rejections and errors log at `error`.
+    fn log_level(&self) -> log::Level {
+        use log::Level;
+        match self.category() {
+            NoticeCategory::Cancellation => Level::Info,
+            NoticeCategory::Warning
+                if matches!(
+                    self.connectivity_status(),
+                    Some(ConnectivityStatus::Ok | ConnectivityStatus::Inactive | ConnectivityStatus::Connecting)
+                ) =>
+            {
+                Level::Info
+            }
+            NoticeCategory::Warning | NoticeCategory::DataAdvisory => Level::Warn,
+            NoticeCategory::SystemMessage => match self.code {
+                CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE => Level::Info,
+                CONNECTIVITY_RESTORED_DATA_LOST_CODE => Level::Warn,
+                _ => Level::Error,
+            },
+            NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
+        }
+    }
+
+    /// Log this notice at [`Notice::log_level`].
+    pub(crate) fn log(&self) {
+        log::log!(self.log_level(), "{self}");
     }
 }
 

@@ -550,9 +550,7 @@ fn test_parse_raw_message_binary_id_text_payload() {
 /// dispatcher thread, in async the dispatcher task.
 #[test]
 fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
-    use crate::transport::common::MIN_FRAME_LENGTH;
-
-    for length in 0..MIN_FRAME_LENGTH {
+    for length in 0..MESSAGE_ID_LEN {
         let data = vec![0_u8; length];
         let err = parse_raw_message(&data).expect_err("a body too short for a message id must be rejected");
         assert!(matches!(err, Error::InvalidFrame(_)), "short body must raise InvalidFrame, got {err:?}");

@@ -58,6 +58,12 @@ pub(crate) struct NoticeBroadcaster {
     sender: std::sync::Mutex<Option<broadcast::Sender<Notice>>>,
 }
 
+impl super::common::NoticeSink for NoticeBroadcaster {
+    fn deliver(&self, notice: Notice) {
+        self.broadcast(notice);
+    }
+}
+
 impl NoticeBroadcaster {
     pub(crate) fn new(sender: broadcast::Sender<Notice>) -> Self {
         Self {
@@ -832,11 +838,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         };
         match classify_error(payload) {
             ErrorDisposition::NoticeOnly(notice) => {
-                super::common::log_notice(&notice);
+                notice.log();
                 self.connection.notice_broadcaster.broadcast(notice);
             }
             ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
-                super::common::log_notice(&notice);
+                notice.log();
                 self.connection.notice_broadcaster.broadcast(notice);
                 self.fail_one_shot_channels(error).await;
             }

@@ -1439,3 +1439,53 @@ fn expect_type_narrows_or_rejects() {
     let err = message.expect_type(IncomingMessages::UserInfo).expect_err("mismatched type is rejected");
     assert!(matches!(err, Error::UnexpectedResponse(_)), "got {err:?}");
 }
+
+#[test]
+fn test_log_level_follows_category() {
+    use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, ORDER_MESSAGE_CODE, SOCKET_PORT_RESET_CODE};
+
+    // Farm OK/inactive/connecting, 1102 (restored, data maintained) and the
+    // cancellation confirmation: info.
+    for code in FARM_OK_CODES
+        .into_iter()
+        .chain(FARM_INACTIVE_CODES)
+        .chain(FARM_CONNECTING_CODES)
+        .chain([CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE])
+    {
+        assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Info, "code {code}");
+    }
+    // Broken farms, the rest of the warning band, code-less frames (0), every
+    // data advisory, and 1101: warn. The advisories are the point - 317 and the
+    // 10xxx codes used to log at error while 2188 logged at warn, the same
+    // category twice.
+    for code in [
+        0,
+        *WARNING_CODE_RANGE.start(),
+        *WARNING_CODE_RANGE.end(),
+        CONNECTIVITY_RESTORED_DATA_LOST_CODE,
+    ]
+    .into_iter()
+    .chain(FARM_BROKEN_CODES)
+    .chain(DATA_ADVISORY_CODES.iter().copied())
+    {
+        assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Warn, "code {code}");
+    }
+    // 399 grades by its text: a `Warning:` line warns, anything else is a rejection.
+    let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
+    assert_eq!(order_warning.log_level(), log::Level::Warn);
+    assert_eq!(Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into()).log_level(), log::Level::Error);
+    // Connectivity lost, socket reset, request errors (316, 354), order
+    // rejections (200, 201) and errors: error.
+    for code in [
+        CONNECTIVITY_LOST_CODE,
+        SOCKET_PORT_RESET_CODE,
+        200,
+        201,
+        316,
+        354,
+        *WARNING_CODE_RANGE.end() + 1,
+        10000,
+    ] {
+        assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Error, "code {code}");
+    }
+}
