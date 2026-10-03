@@ -93,10 +93,10 @@ pub mod helpers {
         message_bus.request_messages.read().unwrap().len()
     }
 
-    /// Decodes a protobuf request message (skips 4-byte msg_id header)
+    /// Decodes a protobuf request message (skips the msg_id header)
     pub fn decode_request_proto<T: prost::Message + Default>(message_bus: &MessageBusStub, index: usize) -> T {
         let request_messages = message_bus.request_messages.read().unwrap();
-        T::decode(&request_messages[index][4..]).unwrap()
+        T::decode(&request_messages[index][crate::messages::MESSAGE_ID_LEN..]).unwrap()
     }
 
     /// Asserts that the nth request matches the expected message id AND decodes to `expected`.
@@ -237,19 +237,22 @@ pub mod helpers {
     /// Re-export constants at module level for easier access
     pub use constants::*;
 
-    /// Asserts the first 4 bytes of a protobuf-encoded message match the expected OutgoingMessages variant + 200 offset.
-    pub fn assert_proto_msg_id(bytes: &[u8], expected: crate::messages::OutgoingMessages) {
-        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        assert_eq!(msg_id, expected as i32 + 200);
+    /// The raw msg_id header of an encoded message, `None` if too short to hold one.
+    fn wire_msg_id(bytes: &[u8]) -> Option<i32> {
+        bytes
+            .split_first_chunk::<{ crate::messages::MESSAGE_ID_LEN }>()
+            .map(|(header, _)| i32::from_be_bytes(*header))
     }
 
-    /// Counts how many messages in `messages` carry the given protobuf message id (variant + 200 offset).
+    /// Asserts the msg_id header of a protobuf-encoded message matches the expected OutgoingMessages variant + `PROTOBUF_MSG_ID` offset.
+    pub fn assert_proto_msg_id(bytes: &[u8], expected: crate::messages::OutgoingMessages) {
+        assert_eq!(wire_msg_id(bytes), Some(expected as i32 + crate::messages::PROTOBUF_MSG_ID));
+    }
+
+    /// Counts how many messages in `messages` carry the given protobuf message id (variant + `PROTOBUF_MSG_ID` offset).
     pub fn count_proto_msgs(messages: &[Vec<u8>], expected: crate::messages::OutgoingMessages) -> usize {
-        let target = expected as i32 + 200;
-        messages
-            .iter()
-            .filter(|m| m.len() >= 4 && i32::from_be_bytes([m[0], m[1], m[2], m[3]]) == target)
-            .count()
+        let target = Some(expected as i32 + crate::messages::PROTOBUF_MSG_ID);
+        messages.iter().filter(|m| wire_msg_id(m) == target).count()
     }
 
     /// Builds an `Error::Notice` carrying a synthesized [`Notice`](crate::messages::Notice)
