@@ -730,8 +730,9 @@ fn test_notice_is_warning() {
         assert!(!notice.is_error());
     }
 
-    // Codes outside WARNING_CODE_RANGE are not warnings
-    let non_warning_codes = [*WARNING_CODE_RANGE.start() - 1, *WARNING_CODE_RANGE.end() + 1, 200, 202, 1000];
+    // Codes outside WARNING_CODE_RANGE are not warnings, nor is the advisory
+    // 2188 inside it.
+    let non_warning_codes = [*WARNING_CODE_RANGE.start() - 1, *WARNING_CODE_RANGE.end() + 1, 200, 202, 1000, 2188];
     for code in non_warning_codes {
         let notice = notice_with_code(code);
         assert!(!notice.is_warning(), "Code {} should not be a warning", code);
@@ -810,7 +811,7 @@ fn test_notice_is_informational() {
     }
 
     // Non-informational (actual errors)
-    let error_codes = [100, 200, 201, 321, 502, 10000];
+    let error_codes = [100, 200, 201, 316, 321, 354, 502, 10000];
     for code in error_codes {
         let notice = notice_with_code(code);
         assert!(!notice.is_informational(), "Code {} should not be informational", code);
@@ -870,12 +871,64 @@ fn test_notice_is_order_rejection() {
     let start = *ORDER_REJECTION_CODE_RANGE.start();
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
-    for code in [start, start + 1, ORDER_CANCELLED_CODE, end - 1, end] {
+    for code in [201, 203, 355, end - 1, end] {
         assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
     }
 
-    for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
+    // The band's edges, plus the codes inside it that an earlier category claims.
+    for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000]
+        .into_iter()
+        .chain([ORDER_CANCELLED_CODE, MARKET_DEPTH_RESET_CODE])
+        .chain(REQUEST_ERROR_CODES.iter().copied())
+    {
         assert!(!notice_with_code(code).is_order_rejection(), "code {code} should not be order rejection");
+    }
+    let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
+    assert!(!order_warning.is_order_rejection());
+}
+
+#[test]
+fn test_notice_is_request_error() {
+    for &code in REQUEST_ERROR_CODES {
+        let notice = notice_with_code(code);
+        assert!(notice.is_request_error(), "code {code} should be a request error");
+        assert!(
+            ORDER_REJECTION_CODE_RANGE.contains(&code),
+            "code {code} outside the band it is carved from"
+        );
+        assert!(notice.is_error(), "code {code} should be terminal");
+        assert!(!notice.is_order_rejection());
+    }
+    for code in [201, 202, 317, 355, 399, 502, 2104, 10000] {
+        assert!(!notice_with_code(code).is_request_error(), "code {code} should not be a request error");
+    }
+}
+
+/// Every category predicate is `category() == X`: at most one is true, and it
+/// names the category. `Error` has no predicate of its own.
+#[test]
+fn test_notice_category_predicates_are_disjoint() {
+    let messages = ["", "Order Message:\nWarning: outside RTH"];
+    for code in -10..=11000 {
+        for message in messages {
+            let notice = Notice::synthesized(code, message.to_string());
+            let hits: Vec<NoticeCategory> = [
+                (notice.is_cancellation(), NoticeCategory::Cancellation),
+                (notice.is_data_advisory(), NoticeCategory::DataAdvisory),
+                (notice.is_warning(), NoticeCategory::Warning),
+                (notice.is_system_message(), NoticeCategory::SystemMessage),
+                (notice.is_request_error(), NoticeCategory::RequestError),
+                (notice.is_order_rejection(), NoticeCategory::OrderRejection),
+            ]
+            .into_iter()
+            .filter_map(|(hit, category)| hit.then_some(category))
+            .collect();
+            let expected: Vec<NoticeCategory> = match notice.category() {
+                NoticeCategory::Error => vec![],
+                category => vec![category],
+            };
+            assert_eq!(hits, expected, "code {code} message {message:?}");
+        }
     }
 }
 
@@ -889,12 +942,16 @@ fn test_notice_category_partition() {
         (SYSTEM_MESSAGE_CODES[0], NoticeCategory::SystemMessage),
         (SYSTEM_MESSAGE_CODES[3], NoticeCategory::SystemMessage),
         (*WARNING_CODE_RANGE.end() + 1, NoticeCategory::Error),
-        (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200
-        (*ORDER_REJECTION_CODE_RANGE.start() + 1, NoticeCategory::OrderRejection), // 201 — hard rejection
-        (316, NoticeCategory::OrderRejection), // depth HALTED — terminal; the label is the band's, not a real order rejection
+        (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::RequestError), // 200 — no security definition
+        (201, NoticeCategory::OrderRejection),                               // hard rejection
+        (316, NoticeCategory::RequestError),                                 // depth HALTED
+        (321, NoticeCategory::RequestError),                                 // server error validating a request
+        (354, NoticeCategory::RequestError),                                 // market data not subscribed
+        (366, NoticeCategory::RequestError),                                 // no historical query
+        (355, NoticeCategory::OrderRejection),                               // order size vs market rule
         (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection), // 399
-        (317, NoticeCategory::DataAdvisory),   // precedence over the 200..=399 band (#806)
-        (2188, NoticeCategory::DataAdvisory),  // precedence over the 21xx band
+        (317, NoticeCategory::DataAdvisory),                                 // precedence over the 200..=399 band (#806)
+        (2188, NoticeCategory::DataAdvisory),                                // precedence over the 21xx band
         (10089, NoticeCategory::DataAdvisory),
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),

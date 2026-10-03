@@ -250,6 +250,29 @@ match depth? {
 
 If you matched `SubscriptionItem::Notice` with code 317 on a depth subscription, move that handling to the `Reset` arm.
 
+### 19. `NoticeCategory::RequestError`; notice predicates follow `category()`
+
+Every code in 200..=399 not claimed by an earlier rule was `NoticeCategory::OrderRejection`, although some are failed requests that have nothing to do with orders: 316 (depth HALTED), 354 (market data not subscribed), 366 (no historical query), 200 (no security definition). Those codes, listed in `REQUEST_ERROR_CODES`, are now `NoticeCategory::RequestError`, with `Notice::is_request_error()`. They still end the request, as before. `NoticeCategory` is `#[non_exhaustive]`, so a match needs no new arm, but a wildcard arm will now see these codes (#898).
+
+`Notice::is_warning()` and `Notice::is_order_rejection()` tested a code range; every `is_*` category predicate is now `category() == X` for its variant `X`, so they never overlap:
+
+| Predicate | No longer `true` for |
+|---|---|
+| `is_warning()` | 2188 (a `DataAdvisory`) |
+| `is_order_rejection()` | 202 (`Cancellation`), 317 (`DataAdvisory`), 399 with a `Warning:` line (`Warning`), `REQUEST_ERROR_CODES` (`RequestError`) |
+
+If you need the old range test, use the constant:
+
+```rust,ignore
+// 4.x
+if notice.is_order_rejection() { /* any 200..=399 */ }
+
+// 5.0
+if ibapi::ORDER_REJECTION_CODE_RANGE.contains(&notice.code) { /* any 200..=399 */ }
+// or, usually what was meant:
+if notice.is_order_rejection() || notice.is_request_error() { /* failed */ }
+```
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -280,7 +303,8 @@ No code changes required, but observable at runtime:
 16. Where an order id argument is converted with `.try_into()`, `.into()`, `.parse()` or `Default::default()`, name the target type (`i32::try_from(..)`, `.parse::<i32>()`) — see [§16](#16-order-methods-take-impl-intoorderid).
 17. Replace `auction_limit(..)` with `limit_order(..)` (same arguments), and `OrderType::AuctionLimit` / `AuctionRelative` with `OrderType::Limit` / `Relative` — see [§17](#17-order_builderauction_limit-and-the-ordertype-auction-variants-are-removed).
 18. Add a `MarketDepths::Reset` arm that empties your book to exhaustive matches on `MarketDepths`, and drop any code-317 notice handling on depth subscriptions — see [§18](#18-marketdepths-gains-reset).
-19. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+19. Check code that treats `NoticeCategory::OrderRejection` or `is_order_rejection()` as "any 200..=399 failure": request errors now come as `RequestError` / `is_request_error()`, and `is_warning()` is false for 2188 — see [§19](#19-noticecategoryrequesterror-notice-predicates-follow-category).
+20. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

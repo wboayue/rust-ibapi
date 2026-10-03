@@ -38,11 +38,13 @@ fn test_notice_log_level_follows_category() {
         notice_log_level(&Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into())),
         Level::Error
     );
-    // Connectivity lost, socket reset, order rejections and errors: error.
+    // Connectivity lost, socket reset, request errors (200, 354), order
+    // rejections (201) and errors: error.
     for code in [
         CONNECTIVITY_LOST_CODE,
         SOCKET_PORT_RESET_CODE,
         200,
+        201,
         354,
         *WARNING_CODE_RANGE.end() + 1,
         10000,
