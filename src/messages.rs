@@ -333,9 +333,9 @@ pub(crate) fn routes_by_request_id(kind: IncomingMessages) -> bool {
 /// The table remains because tests still construct text-framed
 /// [`ResponseMessage`] fixtures for many proto-only message types.
 /// `ExecutionData{,End}` are present because the order router falls back to
-/// the request_id channel after a missed order_id lookup; `OpenOrder` is
-/// `OrderOrShared` and reaches request_id-routing only when the channel
-/// happens to hold its id, which is harmless.
+/// the request_id channel after a missed order_id lookup. `OpenOrder` routes
+/// as an order message before request-id routing is considered, so its entry
+/// here never routes it.
 pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary

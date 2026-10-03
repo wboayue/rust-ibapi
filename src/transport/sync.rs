@@ -521,7 +521,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 // as live so a caller gating on `is_connected()` cannot
                 // allocate below the new floor.
                 if let Some(order_ids) = self.order_ids.get() {
-                    order_ids.raise_order_id(OrderId::from(self.connection.connection_metadata().next_order_id));
+                    order_ids.raise_order_id_from_server(self.connection.connection_metadata().next_order_id);
                 }
 
                 info!("successfully reconnected to TWS/Gateway");

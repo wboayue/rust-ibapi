@@ -118,6 +118,18 @@ impl ClientIdManager {
         self.order_ids.raise(order_id.raw());
     }
 
+    /// Raises the order ID from a reconnect handshake's next valid ID. A value
+    /// in the request range is still applied — the server will not accept
+    /// lower ids — but logged, since every order placed from it will be
+    /// rejected ([`OrderId::checked`]).
+    pub(crate) fn raise_order_id_from_server(&self, next_valid_id: i32) {
+        let order_id = OrderId::from(next_valid_id);
+        if order_id.checked().is_err() {
+            log::error!("server's next valid order id {next_valid_id} is at or above {REQUEST_ID_FLOOR}, which is reserved for request ids; orders will be rejected");
+        }
+        self.raise_order_id(order_id);
+    }
+
     /// Gets the current order ID without incrementing
     #[allow(dead_code)]
     pub(crate) fn current_order_id(&self) -> i32 {

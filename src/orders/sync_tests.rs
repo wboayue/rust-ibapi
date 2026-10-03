@@ -17,7 +17,7 @@ use crate::testdata::builders::orders::{
 use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
 use super::*;
-use crate::client::ids::OrderId;
+use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
 use crate::orders::common::order_builder;
 
 #[test]
@@ -1145,4 +1145,50 @@ fn preset_legs_rejected_below_attached_orders_gate() {
         other => panic!("expected ServerVersion error, got {other:?}"),
     }
     assert_eq!(request_message_count(&bus), 0);
+}
+
+/// Order ids in the request range are refused before anything is sent: their
+/// frames would route as a request's (#789).
+#[test]
+fn order_entry_points_reject_request_range_ids() {
+    let floor = REQUEST_ID_FLOOR;
+    let (client, message_bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::market_order(Action::Buy, 100.0);
+    let with_parent = crate::orders::Order {
+        parent_id: floor,
+        ..order.clone()
+    };
+    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+
+    rejected(client.place_order(floor, &contract, &order).map(|_| ()), "place_order");
+    rejected(client.place_order(1, &contract, &with_parent).map(|_| ()), "place_order parent_id");
+    rejected(client.submit_order(floor, &contract, &order), "submit_order");
+    rejected(client.cancel_order(floor, "").map(|_| ()), "cancel_order");
+
+    client.raise_next_order_id(OrderId::from(floor));
+    rejected(
+        client
+            .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
+            .map(|_| ()),
+        "exercise_options",
+    );
+
+    assert_eq!(request_message_count(&message_bus), 0, "nothing reaches the wire");
+}
+
+/// A server answer in the request range is refused, and does not raise the
+/// local order-id generator into it (#789).
+#[test]
+fn next_valid_order_id_rejects_request_range() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        prost::Message::encode_to_vec(&crate::proto::NextValidId {
+            order_id: Some(REQUEST_ID_FLOOR),
+        }),
+    )]);
+
+    let result = client.next_valid_order_id();
+    assert!(matches!(result, Err(Error::InvalidArgument(_))), "{result:?}");
+    assert!(client.next_order_id() < REQUEST_ID_FLOOR, "generator raised into the request range");
 }

@@ -184,8 +184,7 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRou
     }
 }
 
-/// Request ID for unspecified errors
-pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
+pub(crate) use crate::client::ids::UNSPECIFIED_REQUEST_ID;
 
 /// Notice to copy onto the order-update stream for an error frame, or `None`
 /// when the frame is not order-bound: request-less frames and frames whose id

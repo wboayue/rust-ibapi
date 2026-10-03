@@ -633,7 +633,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         // the new floor.
                                         if let Some(order_ids) = message_bus.order_ids.get() {
                                             let metadata = message_bus.connection.connection_metadata().await;
-                                            order_ids.raise_order_id(OrderId::from(metadata.next_order_id));
+                                            order_ids.raise_order_id_from_server(metadata.next_order_id);
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");
@@ -702,7 +702,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         // Use common routing logic
         match determine_routing(&message) {
-            RoutingDecision::ByRequestId(id) => self.route_by_wire_id(id, message).await,
+            RoutingDecision::ByRequestId(id) => self.route_to_request_channel(id, message).await,
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
@@ -882,22 +882,15 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
     }
 
-    /// Route a frame by its id. The id's range picks the table, so a request
-    /// and an order can never be confused, whatever is registered under the
-    /// number.
-    async fn route_by_wire_id(&self, id: i32, message: ResponseMessage) -> Result<(), Error> {
-        match WireId::classify(id) {
-            Some(WireId::Request(request_id)) => {
-                if let Some(route) = self.request_channels.read().await.get(&request_id) {
-                    route.deliver(request_id, message.into());
-                }
-            }
-            Some(WireId::Order(order_id)) => {
-                if let Some(sender) = self.order_channels.read().await.get(&order_id) {
-                    let _ = sender.send(message.into());
-                }
-            }
-            None => {}
+    /// Route a frame to the request its id names. Only a request-range id
+    /// can name one ([`RequestId::from_raw`]); the types routed here are data
+    /// messages, which no order subscription reads.
+    async fn route_to_request_channel(&self, id: i32, message: ResponseMessage) -> Result<(), Error> {
+        let Some(request_id) = RequestId::from_raw(id) else {
+            return Ok(());
+        };
+        if let Some(route) = self.request_channels.read().await.get(&request_id) {
+            route.deliver(request_id, message.into());
         }
         Ok(())
     }

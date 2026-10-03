@@ -98,6 +98,22 @@ fn handshake_frames() -> Vec<Vec<u8>> {
     ]
 }
 
+/// A server whose next valid order id is already in the request range is
+/// refused at connect: every order the session placed would collide with
+/// request ids (#789).
+#[test]
+fn connect_rejects_next_valid_id_in_request_range() {
+    let mut frames = handshake_frames();
+    frames[1] = next_valid_id_frame(crate::client::ids::REQUEST_ID_FLOOR);
+    let (addr, _h) = spawn_handshake_listener(frames);
+
+    match Client::connect(&addr.to_string(), 100) {
+        Err(Error::ConnectionRejected(message)) => assert!(message.contains("next valid order id"), "{message}"),
+        Err(other) => panic!("expected ConnectionRejected, got {other:?}"),
+        Ok(_) => panic!("connect accepted a next valid order id in the request range"),
+    }
+}
+
 fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     let mut data = Vec::with_capacity(4 + payload.len());
     data.extend_from_slice(&msg_id.to_be_bytes());

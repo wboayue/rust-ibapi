@@ -273,7 +273,12 @@ impl Client {
         self.id_manager.next_order_id().raw()
     }
 
-    /// Returns the next request ID
+    /// Returns the next request ID.
+    ///
+    /// # Panics
+    ///
+    /// After about 647 million request IDs in one process: IDs are never
+    /// reused, and the range below 1,500,000,000 belongs to order IDs.
     pub fn next_request_id(&self) -> i32 {
         self.id_manager.next_request_id().raw()
     }
@@ -328,7 +333,7 @@ impl Client {
 
         let connection_metadata = ConnectionMetadata {
             client_id: 100,
-            next_order_id: 9000,
+            next_order_id: crate::common::test_utils::helpers::TEST_ORDER_ID_SEED,
             server_version,
             managed_accounts: String::new(),
             connection_time: None,

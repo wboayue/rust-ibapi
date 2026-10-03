@@ -1598,7 +1598,10 @@ async fn test_order_update_stream_skips_data_request_error() {
     );
 }
 
-/// #789: an order's error is not swallowed by a request registered alongside it.
+/// #789: an order-range error id reaches the order subscription and the
+/// order-update stream, never a request. A range-routing guard: the request
+/// below sits at the same small number plus the floor, so the ids cannot
+/// collide; the collision itself is what the floor rules out.
 #[tokio::test]
 async fn test_issue_789_order_error_reaches_order_side() {
     let (stream, bus) = make_bus();

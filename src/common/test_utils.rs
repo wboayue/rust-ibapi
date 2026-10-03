@@ -228,6 +228,10 @@ pub mod helpers {
         /// First request_id assigned by `Client::next_request_id()`: the
         /// request-range floor (`client::ids::REQUEST_ID_FLOOR`).
         pub const TEST_REQ_ID_FIRST: i32 = crate::client::ids::REQUEST_ID_FLOOR;
+
+        /// Order-id seed of `Client::stubbed`; any value below the request-id
+        /// floor works.
+        pub const TEST_ORDER_ID_SEED: i32 = 9000;
     }
 
     /// Re-export constants at module level for easier access

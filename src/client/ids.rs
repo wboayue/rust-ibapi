@@ -8,7 +8,6 @@
 
 use std::fmt;
 
-use crate::transport::routing::UNSPECIFIED_REQUEST_ID;
 use crate::Error;
 
 /// First request id. Every request id is at or above it; every order id is
@@ -20,6 +19,9 @@ pub(crate) const REQUEST_ID_FLOOR: i32 = 1_500_000_000;
 /// frames at `i32::MAX`, which would make an error for that request
 /// unroutable.
 pub(crate) const REQUEST_ID_CEILING: i32 = i32::MAX - 1;
+
+/// Id TWS sends on error frames that belong to no request or order.
+pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 /// A request id, minted by `ClientIdManager`. Always at or above
 /// [`REQUEST_ID_FLOOR`].

@@ -144,6 +144,11 @@ impl Client {
     }
 
     /// Returns the next request ID.
+    ///
+    /// # Panics
+    ///
+    /// After about 647 million request IDs in one process: IDs are never
+    /// reused, and the range below 1,500,000,000 belongs to order IDs.
     pub fn next_request_id(&self) -> i32 {
         self.id_manager.next_request_id().raw()
     }
@@ -299,7 +304,7 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            id_manager: Arc::new(ClientIdManager::new(9000).expect("sub-floor test seed")),
+            id_manager: Arc::new(ClientIdManager::new(crate::common::test_utils::helpers::TEST_ORDER_ID_SEED).expect("sub-floor test seed")),
         }
     }
 

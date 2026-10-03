@@ -2556,7 +2556,10 @@ fn test_cleanup_identity_guards() -> Result<(), Error> {
     Ok(())
 }
 
-/// #789: an order's error is not swallowed by a request registered alongside it.
+/// #789: an order-range error id reaches the order subscription and the
+/// order-update stream, never a request. A range-routing guard: the request
+/// below sits at the same small number plus the floor, so the ids cannot
+/// collide; the collision itself is what the floor rules out.
 #[test]
 fn test_issue_789_order_error_reaches_order_side() -> Result<(), Error> {
     let (stream, bus) = make_bus();
