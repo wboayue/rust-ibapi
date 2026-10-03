@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `Client::next_request_id()` (blocking and async). It minted a request id no request used, and no API accepts a caller-chosen request id. Use `Subscription::request_id()` or `ContractDetailsBuilder::request_id()` for a live request's id. See `docs/migration-5.0.md` §20.
 - `orders::order_builder::auction_limit`, which built the same `Order` as `limit_order` once 4.2 dropped its strategy parameter. Routing the contract to `BOX` is what makes it an auction order. Also `orders::builder::OrderType::AuctionLimit` and `AuctionRelative`, which sent `LMT` and `REL` just like `Limit` and `Relative`. See `docs/migration-5.0.md` §17 (#903).
 - `orders::builder::OrderAnalysis`. No API produced or accepted it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState`. See `docs/migration-5.0.md` §13 (#883).
 - `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-5.0.md` §1 (#827).

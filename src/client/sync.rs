@@ -143,16 +143,6 @@ impl Client {
         self.client_id
     }
 
-    /// Returns the next request ID.
-    ///
-    /// # Panics
-    ///
-    /// After about 647 million request IDs in one process: IDs are never
-    /// reused, and the range below 1,500,000,000 belongs to order IDs.
-    pub fn next_request_id(&self) -> i32 {
-        self.id_manager.next_request_id().raw()
-    }
-
     /// Returns and increments the order ID.
     ///
     /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.

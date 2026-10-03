@@ -34,11 +34,3 @@ async fn next_order_id_increments() {
     let second = client.next_order_id();
     assert!(second > first);
 }
-
-#[tokio::test]
-async fn next_request_id_is_positive() {
-    let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
-    assert!(client.next_request_id() > 0);
-}

@@ -85,12 +85,16 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// // `request_id` is the id the in-flight `contract_details` call was issued with;
-    /// // cancelling one that has already completed is harmless.
-    /// let request_id = client.next_request_id();
+    /// let contract = Contract::stock("AAPL").build();
+    /// let builder = client.contract_details_stream(&contract);
+    /// let request_id = builder.request_id();
+    /// let _subscription = builder.subscribe().expect("request failed");
+    ///
+    /// // Cancelling a request that has already completed is harmless.
     /// client.cancel_contract_details(request_id).expect("cancel failed");
     /// ```
     pub fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {

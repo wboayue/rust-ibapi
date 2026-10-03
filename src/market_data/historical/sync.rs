@@ -198,7 +198,8 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// // `request_id` is the id the in-flight `historical_ticks` request was issued with.
-    /// let request_id = client.next_request_id();
+    /// // Dropping its subscription already cancels it.
+    /// # let request_id = 0;
     /// client.cancel_historical_ticks(request_id).expect("cancel failed");
     /// ```
     pub fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {

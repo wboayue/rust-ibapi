@@ -273,16 +273,6 @@ impl Client {
         self.id_manager.next_order_id().value()
     }
 
-    /// Returns the next request ID.
-    ///
-    /// # Panics
-    ///
-    /// After about 647 million request IDs in one process: IDs are never
-    /// reused, and the range below 1,500,000,000 belongs to order IDs.
-    pub fn next_request_id(&self) -> i32 {
-        self.id_manager.next_request_id().raw()
-    }
-
     /// Allocates a request ID for a request this crate sends.
     pub(crate) fn mint_request_id(&self) -> RequestId {
         self.id_manager.next_request_id()
