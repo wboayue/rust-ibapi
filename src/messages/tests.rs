@@ -1474,8 +1474,6 @@ fn expect_type_narrows_or_rejects() {
 
 #[test]
 fn test_log_level_follows_category() {
-    use crate::messages::{DATA_ADVISORY_CODES, ORDER_CANCELLED_CODE, ORDER_MESSAGE_CODE, SOCKET_PORT_RESET_CODE};
-
     // Farm OK/inactive/connecting, 1102 (restored, data maintained) and the
     // cancellation confirmation: info.
     for code in FARM_OK_CODES
