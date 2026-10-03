@@ -54,6 +54,8 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Adding a `ResponseMessage` accessor, or a public API on a proto inbound message type** →
   [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md)
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
+- **Accepting an order id, minting a request id, or routing by an inbound id** →
+  [id partition](docs/rules/wire/id-partition.md)
 - **Adding a one-shot client method, or passing a processor to a `one_shot_*` helper** →
   [one-shot narrowing](docs/rules/wire/one-shot-narrowing.md) — the `(message type, decoder)`
   pair lives on the payload's `ProtoPayload` impl, so the call site names neither

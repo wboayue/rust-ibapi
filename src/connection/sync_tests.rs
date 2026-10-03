@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use time_tz::timezones;
 
 use super::*;
+use crate::client::ids::RequestId;
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
@@ -523,7 +524,7 @@ fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
     bus.process_messages(server_version).expect("process_messages");
     let message_bus: &dyn MessageBus = bus.as_ref();
 
-    let subscription = message_bus.send_request(9000, b"req-bytes").expect("send_request");
+    let subscription = message_bus.send_request(RequestId::nth(0), b"req-bytes").expect("send_request");
 
     // Break the read: the dispatcher enters reconnect and blocks on the gated
     // connect, which only `release` below completes.

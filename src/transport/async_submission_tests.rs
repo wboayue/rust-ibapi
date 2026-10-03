@@ -4,6 +4,7 @@
 
 use super::tests::{bound, drain_cleanup_signals};
 use super::*;
+use crate::client::ids::{OrderId, RequestId};
 use crate::messages::encode_raw_length;
 use std::sync::Mutex;
 
@@ -76,16 +77,21 @@ impl Registration {
     /// The sender registered under `ID`, if any.
     async fn registered(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Option<BroadcastSender> {
         match self {
-            Self::Request | Self::BoundedRequest => bus.request_channels.read().await.get(&ID).map(|route| route.sender.clone()),
-            Self::Order => bus.order_channels.read().await.get(&ID).cloned(),
+            Self::Request | Self::BoundedRequest => bus
+                .request_channels
+                .read()
+                .await
+                .get(&RequestId::nth(ID))
+                .map(|route| route.sender.clone()),
+            Self::Order => bus.order_channels.read().await.get(&OrderId::from(ID)).cloned(),
         }
     }
 
     async fn submit(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Result<AsyncInternalSubscription, Error> {
         match self {
-            Self::Request => bus.send_request(ID, packet()).await,
-            Self::BoundedRequest => bus.send_request_bounded(ID, packet(), bound(8)).await,
-            Self::Order => bus.send_order_request(ID, packet()).await,
+            Self::Request => bus.send_request(RequestId::nth(ID), packet()).await,
+            Self::BoundedRequest => bus.send_request_bounded(RequestId::nth(ID), packet(), bound(8)).await,
+            Self::Order => bus.send_order_request(OrderId::from(ID), packet()).await,
         }
     }
 }

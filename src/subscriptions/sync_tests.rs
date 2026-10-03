@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::ids::RequestId;
 use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{Drained, SubscriptionItem};
@@ -48,7 +49,7 @@ fn test_subscription_skips_undeclared_messages_without_limit() {
     let message_bus = Arc::new(stub);
 
     let sub: Subscription<DeclaresTickPrice> = {
-        let internal = message_bus.send_request(1, &[]).unwrap();
+        let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
         Subscription::new(message_bus.clone(), internal, DecoderContext::default())
     };
 
@@ -81,7 +82,11 @@ fn test_routed_item_error_terminates_subscription() {
     let (signaler, _) = channel::unbounded();
     sender.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(1))
+        .build();
 
     let stub = Arc::new(MessageBusStub::default());
     let sub: Subscription<DataItem> = Subscription::new(stub, internal, DecoderContext::default());
@@ -124,7 +129,11 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
         .unwrap();
     sender.send(RoutedItem::Response(ResponseMessage::from("1\0data\0"))).unwrap();
 
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(1))
+        .build();
     let stub = Arc::new(MessageBusStub::default());
     let sub: Subscription<DataItem> = Subscription::new(stub, internal, DecoderContext::default());
 
@@ -149,7 +158,7 @@ fn test_no_retries_after_end_of_stream() {
     let message_bus = Arc::new(stub);
 
     let sub: Subscription<EndOfStreamItem> = {
-        let internal = message_bus.send_request(1, &[]).unwrap();
+        let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
         Subscription::new(message_bus.clone(), internal, DecoderContext::default())
     };
 
@@ -194,7 +203,11 @@ fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscriptio
     for item in items {
         sender.send(item).unwrap();
     }
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(1))
+        .build();
     let stub = Arc::new(MessageBusStub::default());
     let sub = Subscription::new(stub, internal, DecoderContext::default());
     let keep = if keep_open { Some(sender) } else { None };
@@ -310,7 +323,7 @@ fn test_declared_type_with_no_decode_arm_terminates() {
 
     let message_bus = Arc::new(MessageBusStub::with_responses(vec!["2|declared but unhandled".to_string()]));
     let sub: Subscription<DeclaresMoreThanItHandles> = {
-        let internal = message_bus.send_request(1, &[]).unwrap();
+        let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
         Subscription::new(message_bus.clone(), internal, DecoderContext::default())
     };
 
@@ -330,7 +343,11 @@ fn request_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscri
     for item in items {
         sender.send(item).unwrap();
     }
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(1))
+        .build();
     let stub = Arc::new(MessageBusStub::default());
     (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub)
 }
@@ -437,7 +454,11 @@ fn drain_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscript
     for item in items {
         sender.send(item).unwrap();
     }
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(1))
+        .build();
     let stub = Arc::new(MessageBusStub::default());
     (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub, sender)
 }

@@ -1,5 +1,6 @@
 //! Synchronous builder implementations
 
+use crate::client::ids::{OrderId, RequestId};
 use crate::transport::BufferBound;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ use crate::transport::InternalSubscription;
 #[allow(dead_code)]
 pub(crate) struct RequestBuilder<'a> {
     client: &'a Client,
-    request_id: i32,
+    request_id: RequestId,
 }
 
 #[allow(dead_code)]
@@ -25,18 +26,18 @@ impl<'a> RequestBuilder<'a> {
     pub fn new(client: &'a Client) -> Self {
         Self {
             client,
-            request_id: client.next_request_id(),
+            request_id: client.mint_request_id(),
         }
     }
 
     /// Create a new request builder with a specific request ID
-    pub fn with_id(client: &'a Client, request_id: i32) -> Self {
+    pub fn with_id(client: &'a Client, request_id: RequestId) -> Self {
         Self { client, request_id }
     }
 
     /// Get the request ID
     pub fn request_id(&self) -> i32 {
-        self.request_id
+        self.request_id.raw()
     }
 
     /// Check server version requirement
@@ -125,7 +126,7 @@ impl<'a> SharedRequestBuilder<'a> {
 #[allow(dead_code)]
 pub(crate) struct OrderRequestBuilder<'a> {
     client: &'a Client,
-    order_id: i32,
+    order_id: OrderId,
 }
 
 #[allow(dead_code)]
@@ -134,18 +135,18 @@ impl<'a> OrderRequestBuilder<'a> {
     pub fn new(client: &'a Client) -> Self {
         Self {
             client,
-            order_id: client.next_order_id(),
+            order_id: OrderId::from(client.next_order_id()),
         }
     }
 
     /// Create a new order request builder with a specific order ID
-    pub fn with_id(client: &'a Client, order_id: i32) -> Self {
+    pub fn with_id(client: &'a Client, order_id: OrderId) -> Self {
         Self { client, order_id }
     }
 
     /// Get the order ID
     pub fn order_id(&self) -> i32 {
-        self.order_id
+        self.order_id.raw()
     }
 
     /// Check server version requirement
@@ -225,14 +226,14 @@ where
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub fn send_with_request_id(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error> {
+    pub fn send_with_request_id(self, request_id: RequestId, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_request(request_id, message)?;
         Ok(self.build(subscription))
     }
 
     /// [`send_with_request_id`](Self::send_with_request_id) with a cap on
     /// unread items (`MessageBus::send_request_bounded`).
-    pub fn send_with_request_id_bounded(self, request_id: i32, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error> {
+    pub fn send_with_request_id_bounded(self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error> {
         log::debug!("send_message({request_id:?}), buffer limit {}", bound.limit);
         let subscription = self.client.message_bus.send_request_bounded(request_id, &message, bound)?;
         Ok(self.build(subscription))
@@ -245,7 +246,7 @@ where
     }
 
     /// Sends an order request and builds the subscription
-    pub fn send_order(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error> {
+    pub fn send_order(self, order_id: OrderId, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_order(order_id, message)?;
         Ok(self.build(subscription))
     }
@@ -258,7 +259,7 @@ pub(crate) trait ClientRequestBuilders {
     fn request(&self) -> RequestBuilder<'_>;
 
     /// Create a request builder with a specific request ID
-    fn request_with_id(&self, request_id: i32) -> RequestBuilder<'_>;
+    fn request_with_id(&self, request_id: RequestId) -> RequestBuilder<'_>;
 
     /// Create a shared request builder
     fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_>;
@@ -267,7 +268,7 @@ pub(crate) trait ClientRequestBuilders {
     fn order_request(&self) -> OrderRequestBuilder<'_>;
 
     /// Create an order request builder with a specific order ID
-    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder<'_>;
+    fn order_request_with_id(&self, order_id: OrderId) -> OrderRequestBuilder<'_>;
 
     /// Create a simple message builder
     fn message(&self) -> MessageBuilder<'_>;
@@ -279,7 +280,7 @@ impl ClientRequestBuilders for Client {
         RequestBuilder::new(self)
     }
 
-    fn request_with_id(&self, request_id: i32) -> RequestBuilder<'_> {
+    fn request_with_id(&self, request_id: RequestId) -> RequestBuilder<'_> {
         RequestBuilder::with_id(self, request_id)
     }
 
@@ -291,7 +292,7 @@ impl ClientRequestBuilders for Client {
         OrderRequestBuilder::new(self)
     }
 
-    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder<'_> {
+    fn order_request_with_id(&self, order_id: OrderId) -> OrderRequestBuilder<'_> {
         OrderRequestBuilder::with_id(self, order_id)
     }
 

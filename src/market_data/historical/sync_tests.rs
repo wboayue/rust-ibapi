@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::blocking::Client;
+use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::{
     assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, assert_tws_error_message, count_proto_msgs,
     create_blocking_test_client_with_ordered_proto_responses, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
@@ -47,8 +48,12 @@ fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubsc
         sender.send(item).unwrap();
     }
     drop(sender);
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(9300).build();
-    let subscription = TickSubscription::new(internal, 9300, Arc::new(MessageBusStub::default()));
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .request_id(RequestId::nth(300))
+        .build();
+    let subscription = TickSubscription::new(internal, RequestId::nth(300).raw(), Arc::new(MessageBusStub::default()));
     (subscription, signal_rx)
 }
 
@@ -929,10 +934,10 @@ fn test_historical_data_streaming_error_response() {
 fn test_tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
-    let internal = message_bus.send_request(9100, &[]).unwrap();
+    let internal = message_bus.send_request(RequestId::nth(100), &[]).unwrap();
 
     {
-        let _subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9100, message_bus.clone());
+        let _subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(100).raw(), message_bus.clone());
         // subscription dropped here, !done so cancel should fire
     }
 
@@ -945,10 +950,10 @@ fn test_tick_subscription_sends_cancel_on_drop() {
 fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
-    let internal = message_bus.send_request(9101, &[]).unwrap();
+    let internal = message_bus.send_request(RequestId::nth(101), &[]).unwrap();
 
     {
-        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9101, message_bus.clone());
+        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(101).raw(), message_bus.clone());
         subscription.cancel();
     }
 
@@ -964,10 +969,10 @@ fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
 fn test_tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
-    let internal = message_bus.send_request(9102, &[]).unwrap();
+    let internal = message_bus.send_request(RequestId::nth(102), &[]).unwrap();
 
     {
-        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9102, message_bus.clone());
+        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(102).raw(), message_bus.clone());
         subscription.done.store(true, std::sync::atomic::Ordering::Relaxed);
         // drop with done=true → no cancel
     }

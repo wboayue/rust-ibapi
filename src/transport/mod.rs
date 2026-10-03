@@ -9,6 +9,8 @@ use std::time::Duration;
 #[cfg(feature = "sync")]
 use crossbeam::channel::{Receiver, Sender};
 
+#[cfg(feature = "sync")]
+use crate::client::ids::{OrderId, RequestId};
 use crate::errors::Error;
 use crate::messages::ResponseMessage;
 
@@ -215,12 +217,12 @@ impl SharedCounts {
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
-    fn send_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
+    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// [`send_request`](Self::send_request) with a cap on unread items: see
     /// [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_bounded(&self, request_id: i32, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
+    fn send_request_bounded(&self, request_id: RequestId, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
@@ -233,7 +235,7 @@ pub(crate) trait MessageBus: Send + Sync {
     /// releases the count.
     fn cancel_shared_subscription(&self, ticket: SharedTicket, packet: Option<&[u8]>) -> Result<(), Error>;
 
-    fn send_order_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
+    fn send_order_request(&self, order_id: OrderId, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     fn send_message(&self, packet: &[u8]) -> Result<(), Error>;
 
@@ -254,12 +256,12 @@ pub(crate) trait MessageBus: Send + Sync {
 #[cfg(feature = "sync")]
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<RoutedItem>>,  // this subscription's own queue
-    sender: Option<Sender<RoutedItem>>,      // feeds `receiver`; the drop signal's identity
-    signaler: Option<Sender<Signal>>,        // for client to signal termination
-    pub(crate) request_id: Option<i32>,      // initiating request id
-    pub(crate) order_id: Option<i32>,        // initiating order id
-    pub(crate) shared: Option<SharedTicket>, // shared-channel identity, when routed by message type
+    receiver: Option<Receiver<RoutedItem>>,   // this subscription's own queue
+    sender: Option<Sender<RoutedItem>>,       // feeds `receiver`; the drop signal's identity
+    signaler: Option<Sender<Signal>>,         // for client to signal termination
+    pub(crate) request_id: Option<RequestId>, // initiating request id
+    pub(crate) order_id: Option<OrderId>,     // initiating order id
+    pub(crate) shared: Option<SharedTicket>,  // shared-channel identity, when routed by message type
 }
 
 #[cfg(feature = "sync")]
@@ -392,9 +394,9 @@ impl Drop for InternalSubscription {
 // when it is `same_channel` with it, so a stale signal cannot remove a newer
 // registration under the same key.
 #[cfg(feature = "sync")]
-pub enum Signal {
-    Request(i32, Sender<RoutedItem>),
-    Order(i32, Sender<RoutedItem>),
+pub(crate) enum Signal {
+    Request(RequestId, Sender<RoutedItem>),
+    Order(OrderId, Sender<RoutedItem>),
     OrderUpdateStream(Sender<RoutedItem>),
     Shared(Sender<RoutedItem>),
 }
@@ -405,8 +407,8 @@ pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<RoutedItem>>,
     sender: Option<Sender<RoutedItem>>,
     signaler: Option<Sender<Signal>>,
-    order_id: Option<i32>,
-    request_id: Option<i32>,
+    order_id: Option<OrderId>,
+    request_id: Option<RequestId>,
     shared: Option<SharedTicket>,
 }
 
@@ -438,12 +440,12 @@ impl SubscriptionBuilder {
         self
     }
 
-    pub(crate) fn order_id(mut self, order_id: i32) -> Self {
+    pub(crate) fn order_id(mut self, order_id: OrderId) -> Self {
         self.order_id = Some(order_id);
         self
     }
 
-    pub(crate) fn request_id(mut self, request_id: i32) -> Self {
+    pub(crate) fn request_id(mut self, request_id: RequestId) -> Self {
         self.request_id = Some(request_id);
         self
     }

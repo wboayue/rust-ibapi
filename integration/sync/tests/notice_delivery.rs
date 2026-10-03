@@ -17,6 +17,7 @@ use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{order_builder, Action};
 use ibapi::subscriptions::SubscriptionItem;
+use ibapi::Error;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -52,6 +53,30 @@ fn invalid_contract_terminates_with_error() {
     }
 
     assert!(saw_error, "expected an Err for invalid contract");
+}
+
+/// Request ids start at 1,500,000,000 (`REQUEST_ID_FLOOR`, crate-private) so
+/// they never share a number with an order id (#789). TWS must echo an id
+/// that large on an error frame, or the error could not be routed back to the
+/// request.
+#[test]
+fn error_frame_routes_at_request_id_floor() {
+    const REQUEST_ID_FLOOR: i32 = 1_500_000_000;
+
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let contract = Contract::stock("DOES_NOT_EXIST_XYZ").build();
+    let request = client.contract_details_stream(&contract);
+    assert!(request.request_id() >= REQUEST_ID_FLOOR, "request id {}", request.request_id());
+    let subscription = request.subscribe().expect("subscribe failed");
+
+    match subscription.next() {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, 200, "{notice}"),
+        other => panic!("expected the code-200 error on the request, got {other:?}"),
+    }
 }
 
 /// Place a non-transmit outside-RTH market order. TWS commonly emits an

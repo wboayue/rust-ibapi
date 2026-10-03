@@ -11,6 +11,7 @@ use super::common::{
     debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
+use crate::client::ids::{OrderId, RequestId};
 use crate::errors::Error;
 use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 
@@ -61,8 +62,10 @@ enum NextAction<T> {
 #[allow(private_bounds)]
 impl<T: StreamDecoder<T>> Subscription<T> {
     pub(crate) fn new(message_bus: Arc<dyn MessageBus>, subscription: InternalSubscription, context: DecoderContext) -> Self {
-        let request_id = subscription.request_id;
-        let order_id = subscription.order_id;
+        // Raw from here on: the public accessor and the decoders' cancel
+        // messages speak `i32`.
+        let request_id = subscription.request_id.map(RequestId::raw);
+        let order_id = subscription.order_id.map(OrderId::raw);
         let shared = subscription.shared;
 
         debug_assert_request_id_routable::<T, T>(request_id);

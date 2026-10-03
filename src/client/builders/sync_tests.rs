@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::client::ids::{OrderId, RequestId};
 use crate::market_data::realtime::Bar;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -9,7 +10,7 @@ use crate::subscriptions::DecoderContext;
 
 fn create_test_client() -> Client {
     let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF_SCAN_DATA);
-    client.raise_next_order_id(9000);
+    client.raise_next_order_id(OrderId::from(9000));
     client
 }
 
@@ -17,15 +18,15 @@ fn create_test_client() -> Client {
 fn test_request_builder_new() {
     let client = create_test_client();
     let builder = RequestBuilder::new(&client);
-    assert!(builder.request_id > 0);
+    assert!(builder.request_id >= RequestId::nth(0));
 }
 
 #[test]
 fn test_request_builder_with_id() {
     let client = create_test_client();
-    let request_id = 42;
+    let request_id = RequestId::nth(42);
     let builder = RequestBuilder::with_id(&client, request_id);
-    assert_eq!(builder.request_id(), request_id);
+    assert_eq!(builder.request_id(), request_id.raw());
 }
 
 #[test]
@@ -63,15 +64,15 @@ fn test_shared_request_builder_check_version() {
 fn test_order_request_builder_new() {
     let client = create_test_client();
     let builder = OrderRequestBuilder::new(&client);
-    assert!(builder.order_id > 0);
+    assert!(builder.order_id > OrderId::from(0));
 }
 
 #[test]
 fn test_order_request_builder_with_id() {
     let client = create_test_client();
-    let order_id = 12345;
+    let order_id = OrderId::from(12345);
     let builder = OrderRequestBuilder::with_id(&client, order_id);
-    assert_eq!(builder.order_id(), order_id);
+    assert_eq!(builder.order_id(), order_id.raw());
 }
 
 #[test]
@@ -122,11 +123,11 @@ fn test_client_request_builders_trait() {
 
     // Test request()
     let request_builder = client.request();
-    assert!(request_builder.request_id > 0);
+    assert!(request_builder.request_id >= RequestId::nth(0));
 
     // Test request_with_id()
-    let request_builder = client.request_with_id(99);
-    assert_eq!(request_builder.request_id(), 99);
+    let request_builder = client.request_with_id(RequestId::nth(99));
+    assert_eq!(request_builder.request_id(), RequestId::nth(99).raw());
 
     // Test shared_request()
     let shared_builder = client.shared_request(OutgoingMessages::RequestMarketData);
@@ -134,10 +135,10 @@ fn test_client_request_builders_trait() {
 
     // Test order_request()
     let order_builder = client.order_request();
-    assert!(order_builder.order_id > 0);
+    assert!(order_builder.order_id > OrderId::from(0));
 
     // Test order_request_with_id()
-    let order_builder = client.order_request_with_id(999);
+    let order_builder = client.order_request_with_id(OrderId::from(999));
     assert_eq!(order_builder.order_id(), 999);
 
     // Test message()
@@ -168,7 +169,7 @@ fn test_builder_patterns_table_driven() {
             request_id: None,
             order_id: None,
             message_type: None,
-            expected_id_min: 1,
+            expected_id_min: RequestId::nth(0).raw(),
         },
         TestCase {
             name: "specific_request_id",
@@ -197,10 +198,10 @@ fn test_builder_patterns_table_driven() {
         let client = create_test_client();
 
         if let Some(request_id) = tc.request_id {
-            let builder = client.request_with_id(request_id);
-            assert_eq!(builder.request_id(), request_id, "test case '{}' failed", tc.name);
+            let builder = client.request_with_id(RequestId::nth(request_id));
+            assert_eq!(builder.request_id(), RequestId::nth(request_id).raw(), "test case '{}' failed", tc.name);
         } else if let Some(order_id) = tc.order_id {
-            let builder = client.order_request_with_id(order_id);
+            let builder = client.order_request_with_id(OrderId::from(order_id));
             assert_eq!(builder.order_id(), order_id, "test case '{}' failed", tc.name);
         } else if let Some(message_type) = tc.message_type {
             let builder = client.shared_request(message_type);

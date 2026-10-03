@@ -77,7 +77,7 @@ fn open_order_end_default() {
 
 #[test]
 fn execution_data_end_default() {
-    assert_eq!(execution_data_end().encode_pipe(), "55|1|9000|");
+    assert_eq!(execution_data_end().encode_pipe(), format!("55|1|{TEST_REQ_ID_FIRST}|"));
 }
 
 #[test]

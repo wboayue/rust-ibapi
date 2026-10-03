@@ -23,6 +23,7 @@
 
 pub(crate) mod builders;
 pub(crate) mod id_generator;
+pub(crate) mod ids;
 
 #[doc(hidden)]
 #[cfg(feature = "sync")]

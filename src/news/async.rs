@@ -106,14 +106,14 @@ impl Client {
     ) -> Result<Subscription<NewsArticle>, Error> {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
-        let request_id = self.next_request_id();
-        let request = encoders::encode_request_historical_news(request_id, contract_id, provider_codes, start_time, end_time, total_results)?;
+        let request_id = self.mint_request_id();
+        let request = encoders::encode_request_historical_news(request_id.raw(), contract_id, provider_codes, start_time, end_time, total_results)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
-            Some(request_id),
+            Some(request_id.raw()),
             None,
             self.decoder_context(),
         ))
@@ -166,14 +166,14 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.next_request_id();
-        let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
+        let request_id = self.mint_request_id();
+        let request = common::encode_contract_news_request(request_id.raw(), contract, provider_codes)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
-            Some(request_id),
+            Some(request_id.raw()),
             None,
             self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
         ))
@@ -197,14 +197,14 @@ impl Client {
     /// }
     /// ```
     pub async fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.next_request_id();
-        let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
+        let request_id = self.mint_request_id();
+        let request = common::encode_broad_tape_news_request(request_id.raw(), provider_code)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal(
             internal_subscription,
             self.message_bus.clone(),
-            Some(request_id),
+            Some(request_id.raw()),
             None,
             self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
         ))

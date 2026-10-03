@@ -111,20 +111,20 @@ mod sync_tests {
     #[test]
     fn send_request_captures_message_and_yields_responses() {
         let stub = MessageBusStub::with_responses(vec!["1|9001|hi".to_string()]);
-        let sub = MessageBus::send_request(&stub, 42, b"req-bytes").expect("send_request");
+        let sub = MessageBus::send_request(&stub, RequestId::nth(42), b"req-bytes").expect("send_request");
 
         assert_eq!(stub.request_messages(), vec![b"req-bytes".to_vec()]);
-        assert_eq!(sub.request_id, Some(42));
+        assert_eq!(sub.request_id, Some(RequestId::nth(42)));
         assert_eq!(drain_subscription(&sub).len(), 1);
     }
 
     #[test]
     fn send_order_request_captures_and_yields() {
         let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
-        let sub = MessageBus::send_order_request(&stub, 7, b"order-bytes").expect("send_order_request");
+        let sub = MessageBus::send_order_request(&stub, OrderId::from(7), b"order-bytes").expect("send_order_request");
 
         assert_eq!(stub.request_messages(), vec![b"order-bytes".to_vec()]);
-        assert_eq!(sub.request_id, Some(7));
+        assert_eq!(sub.order_id, Some(OrderId::from(7)));
         assert_eq!(drain_subscription(&sub).len(), 1);
     }
 
@@ -206,7 +206,9 @@ mod async_tests {
     #[tokio::test]
     async fn send_request_captures_and_yields() {
         let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
-        let mut sub = AsyncMessageBus::send_request(&stub, 1, b"req".to_vec()).await.expect("send_request");
+        let mut sub = AsyncMessageBus::send_request(&stub, RequestId::nth(1), b"req".to_vec())
+            .await
+            .expect("send_request");
 
         assert_eq!(stub.request_messages(), vec![b"req".to_vec()]);
         assert_eq!(drain_async(&mut sub).await.len(), 1);
@@ -215,7 +217,7 @@ mod async_tests {
     #[tokio::test]
     async fn send_order_request_captures_and_yields() {
         let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
-        let mut sub = AsyncMessageBus::send_order_request(&stub, 2, b"order".to_vec())
+        let mut sub = AsyncMessageBus::send_order_request(&stub, OrderId::from(2), b"order".to_vec())
             .await
             .expect("send_order_request");
 

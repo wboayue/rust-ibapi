@@ -133,8 +133,8 @@ impl Client {
     pub fn market_depth(&self, contract: &Contract, num_rows: i32) 
         -> Result<Subscription<MarketDepth>, Error> 
     {
-        let request_id = self.next_request_id();
-        let request = encode_market_depth(request_id, contract, num_rows)?;
+        let request_id = self.mint_request_id(); // `RequestId`, see docs/rules/wire/id-partition.md
+        let request = encode_market_depth(request_id.raw(), contract, num_rows)?;
         
         self.subscription::<MarketDepth>()
             .with_smart_depth(true)
