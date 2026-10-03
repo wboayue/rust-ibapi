@@ -208,11 +208,6 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
-    fn cancel_subscription(&self, _request_id: i32, packet: &[u8]) -> Result<(), Error> {
-        self.request_messages.write().unwrap().push(packet.to_vec());
-        Ok(())
-    }
-
     fn send_order_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
     }
@@ -243,15 +238,6 @@ impl MessageBus for MessageBusStub {
         let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
 
         Ok(subscription)
-    }
-
-    fn cancel_order_subscription(&self, _request_id: i32, packet: &[u8]) -> Result<(), Error> {
-        self.request_messages.write().unwrap().push(packet.to_vec());
-
-        let stub_id = self as *const _ as usize;
-        ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
-
-        Ok(())
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -350,15 +336,6 @@ impl AsyncMessageBus for MessageBusStub {
         if let Some(message) = message {
             self.request_messages.write().unwrap().push(message);
         }
-        Ok(())
-    }
-
-    async fn cancel_subscription(&self, _request_id: i32, message: Vec<u8>) -> Result<(), Error> {
-        self.request_messages.write().unwrap().push(message);
-        Ok(())
-    }
-
-    async fn cancel_order_subscription(&self, _order_id: i32, _message: Vec<u8>) -> Result<(), Error> {
         Ok(())
     }
 

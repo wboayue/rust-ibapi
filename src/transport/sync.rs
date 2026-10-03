@@ -92,7 +92,8 @@ struct SharedChannels {
     // types is a shared response whether or not anybody is subscribed.
     response_types: HashSet<IncomingMessages>,
     // Live subscriptions, added in `send_shared_request` and removed by the
-    // cleanup thread on drop or, lazily, when a send finds the queue gone.
+    // cleanup thread on cancel or drop or, lazily, when a send finds the
+    // queue gone.
     subscribers: Mutex<Vec<SharedSubscriber>>,
     // Live subscriptions per request type; see `SharedCounts`.
     counts: Mutex<SharedCounts>,
@@ -411,16 +412,16 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     // The three cleanup handlers below remove a registration only when it is
-    // `same_channel` with the dropped subscription's sender: a drop signal can
-    // be processed arbitrarily late, and unconditional removal would take out
-    // a newer registration under the same key (place then cancel on one order
-    // id, or an order update stream recreated after a reconnect reset).
+    // `same_channel` with the cancelled or dropped subscription's sender: a
+    // signal can be processed arbitrarily late, and unconditional removal
+    // would take out a newer registration under the same key (place then
+    // cancel on one order id, or an order update stream recreated after a
+    // reconnect reset).
     //
     // `clean_request` and `clean_order` also drop the subscription's
     // execution-id aliases, matched by channel rather than key, so a stale
     // signal still releases its own aliases and never a newer registration's.
-    // Not gated on `removed`: a stale signal, or a drop after `cancel_*`
-    // already removed the entry, still owns aliases to release.
+    // Not gated on `removed`: a stale signal still owns aliases to release.
 
     fn clean_request(&self, request_id: i32, sender: &Sender<RoutedItem>) {
         let removed = self.requests.remove_if_same(&request_id, sender);
@@ -782,9 +783,10 @@ impl<S: Stream> TcpMessageBus<S> {
         false
     }
 
-    // The cleanup thread receives signals as subscribers are dropped and
-    // releases the sender channels. Exits promptly on shutdown via select!
-    // over the signal channel and the shutdown-notify channel — no polling.
+    // The cleanup thread receives signals as subscribers are cancelled or
+    // dropped and releases the sender channels. Exits promptly on shutdown via
+    // select! over the signal channel and the shutdown-notify channel — no
+    // polling.
     fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
@@ -878,21 +880,6 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.open_request(request_id, message, Some(bound))
     }
 
-    fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
-        // The local registration goes whether or not the cancel reaches TWS:
-        // a cancel that cannot be sent is one whose session is already
-        // gone, and leaving the entry behind would outlive the subscription.
-        let written = self.write_message(message);
-
-        if let Err(e) = self.requests.send(&request_id, Error::Cancelled.into()) {
-            info!("error sending cancel notification: {e}");
-        }
-
-        self.requests.remove(&request_id);
-
-        written
-    }
-
     fn send_order_request(&self, order_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         self.ensure_connected()?;
 
@@ -949,19 +936,6 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .build();
 
         Ok(subscription)
-    }
-
-    fn cancel_order_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
-        // See `cancel_subscription`: the local registration goes either way.
-        let written = self.write_message(message);
-
-        if let Err(e) = self.orders.send(&request_id, Error::Cancelled.into()) {
-            info!("error sending cancel notification: {e}");
-        }
-
-        self.orders.remove(&request_id);
-
-        written
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -1046,11 +1020,6 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         };
         let mut senders = self.senders.write().unwrap();
         senders.insert(id, entry).map(|entry| entry.sender)
-    }
-
-    pub fn remove(&self, id: &K) -> Option<Sender<V>> {
-        let mut senders = self.senders.write().unwrap();
-        senders.remove(id).map(|entry| entry.sender)
     }
 
     /// Remove the entry for `id` only if it is the same channel as `sender`.

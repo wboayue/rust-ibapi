@@ -846,6 +846,54 @@ async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     assert_eq!(messages.len(), 1, "should send cancel only once");
 }
 
+/// `cancel()` ends the stream locally: ticks already decoded drain first, then
+/// `Err(Cancelled)` once, then `None`; a batch still unread in the channel is
+/// skipped. The bus no longer injects `Cancelled` into the route, which it
+/// could only find by id (#894).
+#[tokio::test]
+async fn test_tick_subscription_cancel_reports_cancelled_then_ends() {
+    // The sender stays open: a regression polls the channel and must time out
+    // rather than hang.
+    async fn next(subscription: &mut TickSubscription<TickLast>) -> Option<Result<SubscriptionItem<TickLast>, Error>> {
+        tokio::time::timeout(tokio::time::Duration::from_secs(1), subscription.next())
+            .await
+            .expect("stream hung after cancel")
+    }
+    let batch = |time: i64| {
+        RoutedItem::Response(proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                .ticks(vec![
+                    historical_tick_last(time, 15.00, 100.0, "NYSE"),
+                    historical_tick_last(time + 1, 15.01, 100.0, "NYSE"),
+                ])
+                .done(false)
+                .encode_proto(),
+        ))
+    };
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+
+    let (tx, rx) = tokio::sync::broadcast::channel(16);
+    tx.send(batch(1_678_838_400)).unwrap();
+    let mut subscription: TickSubscription<TickLast> = TickSubscription::new(AsyncInternalSubscription::new(rx), 9103, message_bus.clone());
+
+    assert!(matches!(next(&mut subscription).await, Some(Ok(SubscriptionItem::Data(_)))));
+    tx.send(batch(1_678_838_500)).unwrap();
+    subscription.cancel().await;
+
+    assert!(
+        matches!(next(&mut subscription).await, Some(Ok(SubscriptionItem::Data(_)))),
+        "decoded tick drains first"
+    );
+    let item = next(&mut subscription).await;
+    assert!(matches!(item, Some(Err(Error::Cancelled))), "unread batch must be skipped, got: {item:?}");
+    assert!(next(&mut subscription).await.is_none(), "stream must end after Cancelled");
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 1, "cancel written once");
+    assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalTicks);
+}
+
 #[tokio::test]
 async fn test_tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));

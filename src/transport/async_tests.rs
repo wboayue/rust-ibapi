@@ -208,34 +208,6 @@ async fn test_read_and_route_surfaces_eof() {
     );
 }
 
-/// `AsyncMessageBus::cancel_subscription` writes the cancel bytes through and
-/// drops the in-flight request channel so it stops accepting routes.
-#[tokio::test]
-async fn test_cancel_subscription_writes_and_clears_channel() {
-    let (stream, bus) = make_bus();
-    let mb: &dyn AsyncMessageBus = bus.as_ref();
-
-    let _sub = mb.send_request(100, b"req-bytes".to_vec()).await.unwrap();
-    mb.cancel_subscription(100, b"cancel-bytes".to_vec()).await.unwrap();
-
-    let captured = stream.captured();
-    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
-}
-
-/// `AsyncMessageBus::cancel_order_subscription` mirrors cancel_subscription on
-/// the orders channel.
-#[tokio::test]
-async fn test_cancel_order_subscription_writes_through() {
-    let (stream, bus) = make_bus();
-    let mb: &dyn AsyncMessageBus = bus.as_ref();
-
-    let _sub = mb.send_order_request(42, b"order-bytes".to_vec()).await.unwrap();
-    mb.cancel_order_subscription(42, b"cancel-bytes".to_vec()).await.unwrap();
-
-    let captured = stream.captured();
-    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
-}
-
 /// `AsyncMessageBus::send_message` writes through to the connection.
 #[tokio::test]
 async fn test_send_message_writes_through() {
@@ -1467,22 +1439,6 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
     assert!(bus.execution_channels.read().await.is_empty(), "request alias leaked");
 }
 
-/// `cancel_order_subscription` removes the registration but not its aliases;
-/// the drop that follows finds nothing to remove and must still sweep them.
-#[tokio::test]
-async fn test_execution_aliases_pruned_on_drop_after_cancel() {
-    let (stream, bus) = make_bus();
-    let order = bus.send_order_request(7, vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
-    bus.read_and_route_message().await.unwrap();
-    bus.cancel_order_subscription(7, vec![]).await.unwrap();
-    assert_eq!(bus.execution_channels.read().await.len(), 1, "cancel left the alias for the drop");
-
-    drop(order);
-    drain_cleanup_signals(&bus).await;
-    assert!(bus.execution_channels.read().await.is_empty(), "alias leaked after cancel then drop");
-}
-
 /// Each clone sends its own cleanup signal; the alias stays while any clone
 /// can still read the channel and goes with the last one.
 #[tokio::test]
@@ -1869,17 +1825,6 @@ async fn test_reconnect_raises_order_ids_from_handshake() {
 }
 
 #[tokio::test]
-async fn test_cancel_unknown_subscription_writes_through() {
-    let (stream, bus) = make_bus();
-    let mb: &dyn AsyncMessageBus = bus.as_ref();
-
-    mb.cancel_subscription(7777, b"cancel-bytes".to_vec()).await.unwrap();
-
-    let captured = stream.captured();
-    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
-}
-
-#[tokio::test]
 async fn test_send_shared_request_unsupported_returns_error() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
@@ -1949,29 +1894,6 @@ async fn test_sends_are_refused_while_disconnected() {
     bus.connection_state.set_connected();
     assert!(mb.send_request(100, b"req-bytes".to_vec()).await.is_ok());
     assert!(!stream.captured().is_empty());
-}
-
-/// A cancel that cannot be written is not an error the caller has to handle:
-/// the session that held the subscription is gone. The local registration goes
-/// either way, so nothing is left behind.
-#[tokio::test]
-async fn test_cancel_while_disconnected_clears_the_registration() {
-    let (_stream, bus) = make_bus();
-    let mb: &dyn AsyncMessageBus = bus.as_ref();
-    let mut sub = mb.send_request(100, b"req-bytes".to_vec()).await.expect("send_request");
-    assert_eq!(bus.request_channels.read().await.len(), 1);
-
-    bus.connection_state.set_disconnected();
-
-    let result = mb.cancel_subscription(100, b"cancel-bytes".to_vec()).await;
-    assert!(matches!(result, Err(Error::ConnectionReset)), "got: {result:?}");
-    assert!(bus.request_channels.read().await.is_empty(), "cancel must clear the registration anyway");
-
-    let item = tokio::time::timeout(TICK, sub.next())
-        .await
-        .expect("subscription got no notification")
-        .expect("subscription channel closed");
-    assert!(matches!(item, Err(Error::Cancelled)), "got: {item:?}");
 }
 
 /// `wait_connected` holds the one-shot retry until the session is back, and a

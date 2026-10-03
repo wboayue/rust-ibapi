@@ -970,40 +970,55 @@ fn test_dispatcher_thread_exits_promptly_on_shutdown() {
     assert!(elapsed < Duration::from_millis(500), "ensure_shutdown took {elapsed:?}, expected <500ms");
 }
 
-/// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
-/// notifies the in-flight subscription with `Error::Cancelled`.
+/// `cancel()` notifies the subscription's own queue with `Error::Cancelled`
+/// and unregisters its route through the cleanup thread.
 #[test]
-fn test_cancel_subscription_notifies_in_flight() -> Result<(), Error> {
-    let (stream, bus) = make_bus();
-    let mb: &dyn MessageBus = bus.as_ref();
-    let sub = mb.send_request(100, b"req-bytes")?;
+fn test_cancel_notifies_and_unregisters() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+    let request = bus.send_request(100, &[])?;
+    let order = bus.send_order_request(42, &[])?;
 
-    mb.cancel_subscription(100, b"cancel-bytes")?;
+    request.cancel();
+    order.cancel();
 
-    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
-    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    for sub in [&request, &order] {
+        let resp = sub.next_timeout(TICK).expect("subscription got no notification");
+        assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    }
+    drain_cleanup_signals(&bus);
+    assert!(!bus.requests.contains(&100), "request route outlived its cancel");
+    assert!(!bus.orders.contains(&42), "order route outlived its cancel");
 
-    let captured = stream.captured();
-    assert!(captured.windows(b"req-bytes".len()).any(|w| w == b"req-bytes"), "request not written");
-    assert!(
-        captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"),
-        "cancel not written"
-    );
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
     Ok(())
 }
 
-/// `MessageBus::cancel_order_subscription` mirrors cancel_subscription but on
-/// the orders channel.
+/// Regression test for #894: cancelling an old subscription must neither
+/// notify nor unregister a newer one under the same id (cancel used to send
+/// `Cancelled` to, then remove, whatever was registered under the key).
 #[test]
-fn test_cancel_order_subscription_notifies_in_flight() -> Result<(), Error> {
+fn test_cancel_preserves_newer_subscription_under_same_id() -> Result<(), Error> {
     let (_, bus) = make_bus();
-    let mb: &dyn MessageBus = bus.as_ref();
-    let sub = mb.send_order_request(42, b"order-bytes")?;
+    let handle = bus.start_cleanup_thread();
 
-    mb.cancel_order_subscription(42, b"cancel-bytes")?;
+    let request_a = bus.send_request(100, &[])?;
+    let request_b = bus.send_request(100, &[])?;
+    let order_a = bus.send_order_request(42, &[])?;
+    let order_b = bus.send_order_request(42, &[])?;
 
-    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
-    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    request_a.cancel();
+    order_a.cancel();
+    drain_cleanup_signals(&bus);
+
+    assert!(bus.requests.contains(&100), "cancel removed the newer request registration");
+    assert!(bus.orders.contains(&42), "cancel removed the newer order registration");
+    assert!(request_b.try_next_routed().is_none(), "cancel notified the newer request subscription");
+    assert!(order_b.try_next_routed().is_none(), "cancel notified the newer order subscription");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
     Ok(())
 }
 
@@ -2545,20 +2560,6 @@ fn test_is_connected_reflects_shutdown() {
     assert!(!bus.is_connected());
 }
 
-/// Cancel for an unknown id still writes the cancel bytes through (no-op
-/// otherwise — there's no in-flight subscription to notify).
-#[test]
-fn test_cancel_unknown_subscription_writes_through() -> Result<(), Error> {
-    let (stream, bus) = make_bus();
-    let mb: &dyn MessageBus = bus.as_ref();
-
-    mb.cancel_subscription(7777, b"cancel-bytes")?;
-
-    let captured = stream.captured();
-    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
-    Ok(())
-}
-
 /// `ExecutionData` with no matching order or request subscription falls
 /// through both branches; an unrelated subscription must not see it.
 #[test]
@@ -2635,22 +2636,24 @@ fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> 
     Ok(())
 }
 
-/// `cancel_order_subscription` removes the registration but not its aliases;
-/// the drop that follows finds nothing to remove and must still release them.
+/// `cancel()` releases the registration and its aliases; the drop that
+/// follows finds nothing left to release.
 #[test]
-fn test_execution_aliases_pruned_on_drop_after_cancel() -> Result<(), Error> {
+fn test_execution_aliases_pruned_on_cancel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let handle = bus.start_cleanup_thread();
 
     let order = bus.send_order_request(7, &[])?;
     stream.push_inbound(execution_data_body(0, 7, "exec-order"));
     bus.dispatch()?;
-    bus.cancel_order_subscription(7, &[])?;
-    assert_eq!(bus.executions.len(), 1, "cancel left the alias for the drop");
+    order.cancel();
+    drain_cleanup_signals(&bus);
+    assert!(!bus.orders.contains(&7), "order route outlived its cancel");
+    assert_eq!(bus.executions.len(), 0, "alias leaked after cancel");
 
     drop(order);
     drain_cleanup_signals(&bus);
-    assert_eq!(bus.executions.len(), 0, "alias leaked after cancel then drop");
+    assert_eq!(bus.executions.len(), 0);
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -3060,19 +3063,26 @@ fn test_sends_are_refused_while_disconnected() {
 /// either way, so nothing is left behind.
 #[test]
 fn test_cancel_while_disconnected_clears_the_registration() -> Result<(), Error> {
+    use crate::contracts::ContractDetails;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::DecoderContext;
+
     let (_stream, bus) = make_bus();
-    let mb: &dyn MessageBus = bus.as_ref();
-    let sub = mb.send_request(100, b"req-bytes")?;
-    assert_eq!(bus.requests.len(), 1);
+    let handle = bus.start_cleanup_thread();
+    let internal = bus.send_request(100, &[])?;
+    let subscription: Subscription<ContractDetails> =
+        Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
     bus.connection_state.set_disconnected();
+    subscription.cancel();
 
-    let result = mb.cancel_subscription(100, b"cancel-bytes");
-    assert!(matches!(result, Err(Error::ConnectionReset)), "got: {result:?}");
-    assert_eq!(bus.requests.len(), 0, "cancel must clear the registration anyway");
+    // The marker request `drain_cleanup_signals` sends needs a connection.
+    bus.connection_state.set_connected();
+    drain_cleanup_signals(&bus);
+    assert!(!bus.requests.contains(&100), "cancel must clear the registration anyway");
 
-    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
-    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
     Ok(())
 }
 
@@ -3277,7 +3287,7 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
 
 /// `cancel_and_drain` writes the cancel without unregistering the route, so
 /// TWS's end marker, dispatched after the cancel, still reaches the drain.
-/// (`cancel()` goes through `cancel_subscription`, which removes the route.)
+/// (`cancel()` unregisters the route.)
 #[test]
 fn test_drain_route_survives_its_cancel() -> Result<(), Error> {
     use crate::contracts::ContractDetails;
@@ -3330,21 +3340,5 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     assert_eq!(sub.next_timeout(TICK).expect("row")?.message_type(), IncomingMessages::ContractData);
     assert_eq!(sub.next_timeout(TICK).expect("end")?.message_type(), IncomingMessages::ContractDataEnd);
     assert!(sub.try_next().is_none(), "frames after the end marker are discarded");
-    Ok(())
-}
-
-#[test]
-fn test_cancel_at_limit_reports_cancelled() -> Result<(), Error> {
-    // `Cancelled` is an error, so it gets through a full cap rather than
-    // turning into an overflow.
-    let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
-    stream.push_inbound(contract_row(1));
-    bus.dispatch()?;
-
-    bus.cancel_subscription(9000, &[])?;
-
-    assert!(sub.next_timeout(TICK).expect("row").is_ok());
-    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::Cancelled))));
     Ok(())
 }

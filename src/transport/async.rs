@@ -120,11 +120,6 @@ pub trait AsyncMessageBus: Send + Sync {
     /// still releases the count.
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error>;
 
-    #[allow(dead_code)]
-    async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error>;
-    #[allow(dead_code)]
-    async fn cancel_order_subscription(&self, order_id: i32, message: Vec<u8>) -> Result<(), Error>;
-
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream;
@@ -411,9 +406,8 @@ async fn remove_if_dead<V>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &s
 /// Drop every execution-id alias whose channel has no receivers left, so a
 /// dropped subscription's sender (and anything buffered in it) is released.
 /// Same liveness rule as [`remove_if_dead`]. Not gated on that removal: a
-/// stale or clone signal, or a drop after `cancel_*` already removed the
-/// entry, still owns aliases to sweep. It also catches other dead
-/// subscriptions whose signals are still queued.
+/// stale or clone signal still owns aliases to sweep. It also catches other
+/// dead subscriptions whose signals are still queued.
 async fn prune_dead_aliases(aliases: &RwLock<HashMap<String, BroadcastSender>>) {
     if aliases.read().await.is_empty() {
         return;
@@ -1197,36 +1191,6 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.write_message(&message).await
-    }
-
-    async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error> {
-        // The local registration goes whether or not the cancel reaches TWS:
-        // a cancel that cannot be sent is one whose session is already
-        // gone, and leaving the entry behind would outlive the subscription.
-        let written = self.write_message(&message).await;
-
-        // Single write lock: the previous version held a read guard while
-        // awaiting the write upgrade and self-deadlocked on the same task.
-        let mut channels = self.request_channels.write().await;
-        if let Some(route) = channels.get(&request_id) {
-            let _ = route.sender.send(Error::Cancelled.into());
-        }
-        channels.remove(&request_id);
-
-        written
-    }
-
-    async fn cancel_order_subscription(&self, order_id: i32, message: Vec<u8>) -> Result<(), Error> {
-        // See `cancel_subscription`: the local registration goes either way.
-        let written = self.write_message(&message).await;
-
-        let mut channels = self.order_channels.write().await;
-        if let Some(sender) = channels.get(&order_id) {
-            let _ = sender.send(Error::Cancelled.into());
-        }
-        channels.remove(&order_id);
-
-        written
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
