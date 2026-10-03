@@ -5,6 +5,7 @@ use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
 use crate::orders::conditions::TriggerMethod;
+use crate::orders::OrderId;
 use crate::orders::{
     Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce,
     VolatilityType,
@@ -510,8 +511,8 @@ impl<'a, C> OrderBuilder<'a, C> {
     }
 
     /// Set parent order ID for attached orders
-    pub fn parent(mut self, parent_id: i32) -> Self {
-        self.parent_id = Some(parent_id);
+    pub fn parent(mut self, parent_id: impl Into<OrderId>) -> Self {
+        self.parent_id = Some(parent_id.into().value());
         self
     }
 

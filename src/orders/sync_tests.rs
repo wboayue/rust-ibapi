@@ -1195,3 +1195,26 @@ fn next_valid_order_id_rejects_request_range() {
     );
     assert!(client.next_order_id() < REQUEST_ID_FLOOR, "generator raised into the request range");
 }
+
+/// The order methods take `impl Into<OrderId>`: ids from `BracketOrderIds`
+/// and `AttachedOrderIds` pass straight in, as do plain `i32`s.
+#[test]
+fn order_methods_accept_typed_order_ids() {
+    let (client, message_bus) = create_blocking_test_client();
+    let contract = Contract::stock("AAPL").build();
+    let ids = crate::orders::BracketOrderIds::new(41, 42, 43);
+    let order = order_builder::market_order(Action::Buy, 100.0);
+
+    client.submit_order(ids.parent, &contract, &order).expect("submit_order");
+    let _cancel = client.cancel_order(ids.take_profit, "").expect("cancel_order");
+    let _placed = client.place_order(ids.stop_loss, &contract, &order).expect("place_order");
+
+    let placed_id = |index| decode_request_proto::<crate::proto::PlaceOrderRequest>(&message_bus, index).order_id;
+    assert_eq!(placed_id(0), Some(41), "submit_order");
+    assert_request(&message_bus, 1, &cancel_order_request().order_id(42));
+    assert_eq!(placed_id(2), Some(43), "place_order");
+
+    assert_eq!(order_builder::market_f_hedge(ids.parent, Action::Sell).parent_id, 41);
+    let bracket = order_builder::bracket_order(ids.parent, Action::Buy, 100.0, 50.0, 55.0, 45.0);
+    assert_eq!(bracket[1].parent_id, 41, "bracket_order");
+}

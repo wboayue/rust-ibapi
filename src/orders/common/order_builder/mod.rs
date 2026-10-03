@@ -40,7 +40,7 @@
 //! `.buy()` / `.sell()` instead.
 
 use crate::orders::builder::ValidationError;
-use crate::orders::{Action, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -429,13 +429,15 @@ pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_pric
 /// stop order and a low side buy limit order.
 /// Products: CFD, BAG, FOP, CASH, FUT, OPT, STK, WAR
 pub fn bracket_order(
-    parent_order_id: i32,
+    parent_order_id: impl Into<OrderId>,
     action: Action,
     quantity: f64,
     limit_price: f64,
     take_profit_limit_price: f64,
     stop_loss_price: f64,
 ) -> Vec<Order> {
+    let parent_order_id = parent_order_id.into().value();
+
     //This will be our main or "parent" order
     let parent = Order {
         order_id: parent_order_id,
@@ -741,10 +743,10 @@ pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volati
 }
 
 /// Create an FX hedge order tied to the specified parent order id.
-pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
+pub fn market_f_hedge(parent_order_id: impl Into<OrderId>, action: Action) -> Order {
     //FX Hedge orders can only have a quantity of 0
     let mut order = market_order(action, 0.0);
-    order.parent_id = parent_order_id;
+    order.parent_id = parent_order_id.into().value();
     order.hedge_type = "F".to_owned();
 
     order

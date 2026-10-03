@@ -3,10 +3,10 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
-use crate::client::ids::OrderId;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
+use crate::orders::OrderId;
 use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 
@@ -115,7 +115,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+    pub fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
         if !manual_order_cancel_time.is_empty() {
             self.check_server_version(
                 server_versions::MANUAL_ORDER_TIME,
@@ -123,8 +123,8 @@ impl Client {
             )?
         }
 
-        let order_id = OrderId::from(order_id).checked()?;
-        let request = encoders::encode_cancel_order(order_id.raw(), manual_order_cancel_time)?;
+        let order_id = order_id.into().checked()?;
+        let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -253,7 +253,7 @@ impl Client {
 
         let next_order_id = OrderId::from(next_order_id).checked()?;
         self.raise_next_order_id(next_order_id);
-        Ok(next_order_id.raw())
+        Ok(next_order_id.value())
     }
 
     /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -322,12 +322,12 @@ impl Client {
     /// }
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
-        let checked_id = verify::verify_order_ids(order_id, order)?;
-        verify::verify_order(self, order, order_id)?;
-        verify::verify_order_contract(self, contract, order_id)?;
+    pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
+        verify::verify_order(self, order, checked_id.value())?;
+        verify::verify_order_contract(self, contract, checked_id.value())?;
 
-        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -388,12 +388,12 @@ impl Client {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &super::Order) -> Result<(), Error> {
-        let checked_id = verify::verify_order_ids(order_id, order)?;
-        verify::verify_order(self, order, order_id)?;
-        verify::verify_order_contract(self, contract, order_id)?;
+    pub fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<(), Error> {
+        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
+        verify::verify_order(self, order, checked_id.value())?;
+        verify::verify_order_contract(self, contract, checked_id.value())?;
 
-        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request)?;
 
         Ok(())
@@ -562,7 +562,7 @@ impl Client {
         let order_id = OrderId::from(self.next_order_id()).checked()?;
 
         let request = encoders::encode_exercise_options(
-            order_id.raw(),
+            order_id.value(),
             contract,
             exercise_action,
             exercise_quantity,

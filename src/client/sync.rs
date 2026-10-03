@@ -157,7 +157,7 @@ impl Client {
     ///
     /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.
     pub fn next_order_id(&self) -> i32 {
-        self.id_manager.next_order_id().raw()
+        self.id_manager.next_order_id().value()
     }
 
     /// Allocates a request ID for a request this crate sends.

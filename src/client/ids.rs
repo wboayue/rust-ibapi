@@ -8,6 +8,8 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::Error;
 
 /// First request id. Every request id is at or above it; every order id is
@@ -53,13 +55,23 @@ impl fmt::Display for RequestId {
     }
 }
 
-/// An order id. Converts from any `i32`; [`checked`](Self::checked) enforces
-/// the partition where an id enters the crate.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub(crate) struct OrderId(i32);
+/// An order identifier.
+///
+/// Converts from any `i32`. Order ids must stay below 1,500,000,000, the
+/// range reserved for request ids: the order methods return
+/// [`Error::OrderIdInRequestRange`] for one at or above it.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct OrderId(pub i32);
 
 impl OrderId {
-    pub(crate) fn raw(self) -> i32 {
+    /// Creates a new OrderId
+    pub fn new(id: i32) -> Self {
+        Self(id)
+    }
+
+    /// Returns the inner i32 value
+    pub fn value(&self) -> i32 {
         self.0
     }
 
@@ -74,15 +86,21 @@ impl OrderId {
     }
 }
 
+impl fmt::Display for OrderId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl From<i32> for OrderId {
     fn from(id: i32) -> Self {
         Self(id)
     }
 }
 
-impl fmt::Display for OrderId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+impl From<OrderId> for i32 {
+    fn from(id: OrderId) -> i32 {
+        id.0
     }
 }
 

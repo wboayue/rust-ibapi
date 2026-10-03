@@ -1,9 +1,10 @@
 use futures::StreamExt;
 
 use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, OrderBuilder};
-use super::types::{AttachedOrderIds, BracketOrderIds, OrderId};
+use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
+use crate::orders::OrderId;
 use crate::orders::PlaceOrder;
 use crate::subscriptions::SubscriptionItemStreamExt;
 

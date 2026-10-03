@@ -439,6 +439,20 @@ fn test_parent_id() {
 }
 
 #[test]
+fn test_parent_id_accepts_order_id() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.00)
+        .parent(OrderId::from(7))
+        .build()
+        .unwrap();
+    assert_eq!(order.parent_id, 7);
+}
+
+#[test]
 fn test_oca_group_settings() {
     let client = MockClient;
     let contract = create_test_contract();

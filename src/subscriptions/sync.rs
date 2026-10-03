@@ -11,7 +11,7 @@ use super::common::{
     debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
-use crate::client::ids::{OrderId, RequestId};
+use crate::client::ids::RequestId;
 use crate::errors::Error;
 use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 
@@ -65,7 +65,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         // Raw from here on: the public accessor and the decoders' cancel
         // messages speak `i32`.
         let request_id = subscription.request_id.map(RequestId::raw);
-        let order_id = subscription.order_id.map(OrderId::raw);
+        let order_id = subscription.order_id.map(|id| id.value());
         let shared = subscription.shared;
 
         debug_assert_request_id_routable::<T, T>(request_id);

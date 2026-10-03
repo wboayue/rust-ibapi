@@ -14,11 +14,11 @@ fn verify_order_ids_accepts_order_range() {
         ..Order::default()
     };
     assert_eq!(
-        verify_order_ids(REQUEST_ID_FLOOR - 1, &order).unwrap(),
+        verify_order_ids(OrderId::from(REQUEST_ID_FLOOR - 1), &order).unwrap(),
         OrderId::from(REQUEST_ID_FLOOR - 1)
     );
     // `parent_id` 0 means no parent.
-    assert!(verify_order_ids(1, &Order::default()).is_ok());
+    assert!(verify_order_ids(OrderId::from(1), &Order::default()).is_ok());
 }
 
 /// Every order id an `Order` carries is checked: TWS routes frames for the
@@ -26,23 +26,23 @@ fn verify_order_ids_accepts_order_range() {
 #[test]
 fn verify_order_ids_rejects_request_range() {
     let floor = REQUEST_ID_FLOOR;
-    assert_rejected(verify_order_ids(floor, &Order::default()), "order id");
+    assert_rejected(verify_order_ids(OrderId::from(floor), &Order::default()), "order id");
 
     let parent = Order {
         parent_id: floor,
         ..Order::default()
     };
-    assert_rejected(verify_order_ids(1, &parent), "parent_id");
+    assert_rejected(verify_order_ids(OrderId::from(1), &parent), "parent_id");
 
     let stop_loss = Order {
         preset_stop_loss_order_id: Some(floor),
         ..Order::default()
     };
-    assert_rejected(verify_order_ids(1, &stop_loss), "preset_stop_loss_order_id");
+    assert_rejected(verify_order_ids(OrderId::from(1), &stop_loss), "preset_stop_loss_order_id");
 
     let profit_taker = Order {
         preset_profit_taker_order_id: Some(floor),
         ..Order::default()
     };
-    assert_rejected(verify_order_ids(1, &profit_taker), "preset_profit_taker_order_id");
+    assert_rejected(verify_order_ids(OrderId::from(1), &profit_taker), "preset_profit_taker_order_id");
 }

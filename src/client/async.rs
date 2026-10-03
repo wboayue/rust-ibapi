@@ -270,7 +270,7 @@ impl Client {
 
     /// Returns the next order ID
     pub fn next_order_id(&self) -> i32 {
-        self.id_manager.next_order_id().raw()
+        self.id_manager.next_order_id().value()
     }
 
     /// Returns the next request ID.
