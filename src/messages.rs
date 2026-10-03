@@ -1702,7 +1702,7 @@ impl Notice {
 
     /// Returns `true` if this notice was synthesized client-side during the
     /// connection handshake — i.e. carries either
-    /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] (an `IncomingMessages` kind with no
+    /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] (a recognized `IncomingMessages` kind with no
     /// typed `StartupMessage` variant) or [`HANDSHAKE_DECODE_FAILURE_CODE`]
     /// (a typed decoder failed on a known kind).
     ///

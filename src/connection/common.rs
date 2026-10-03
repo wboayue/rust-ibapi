@@ -222,9 +222,10 @@ impl ConnectionProtocol for ConnectionHandler {
 /// typed frames (`OpenOrder` / `OrderStatus` / account-update / execution /
 /// commission / completed-order, plus the corresponding end markers) decode
 /// into typed [`StartupMessage`] values for the optional startup callback.
-/// Decode failures and unknown frame kinds route to the notice sink with
-/// synthesized codes ([`HANDSHAKE_DECODE_FAILURE_CODE`] and
-/// [`HANDSHAKE_UNKNOWN_FRAME_CODE`]) so observers via
+/// Decode failures, recognized kinds with no typed variant, and unrecognized
+/// message ids route to the notice sink with synthesized codes
+/// ([`HANDSHAKE_DECODE_FAILURE_CODE`], [`HANDSHAKE_UNKNOWN_FRAME_CODE`] and
+/// [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::UNKNOWN_MESSAGE_TYPE_CODE)) so observers via
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
 pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;

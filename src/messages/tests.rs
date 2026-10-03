@@ -1061,6 +1061,7 @@ fn test_is_handshake_synthetic() {
         *ORDER_REJECTION_CODE_RANGE.end(),
         -2, // shutdown sentinel — distinct sentinel, must not be confused with handshake-synthetic
         -1,
+        UNKNOWN_MESSAGE_TYPE_CODE, // synthesized, but not handshake-specific
         100,
     ] {
         assert!(
@@ -1079,6 +1080,10 @@ fn test_is_client_synthesized() {
         SUBSCRIPTION_LAG_CODE,
         NOTICE_STREAM_LAG_CODE,
         TRANSPORT_RECONNECT_CODE,
+        // Any negative code, named or not.
+        -1,
+        -2,
+        i32::MIN,
     ] {
         assert!(notice_with_code(code).is_client_synthesized(), "code {code}");
     }
@@ -1518,4 +1523,17 @@ fn test_log_level_follows_category() {
     ] {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Error, "code {code}");
     }
+}
+
+#[test]
+fn test_unknown_message_type_notice_names_the_id_or_its_absence() {
+    let notice = unknown_message_type_notice(&ResponseMessage::from("9999\0"));
+    assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
+    assert!(notice.message.contains("message id 9999"), "{:?}", notice.message);
+
+    // Unreachable off the wire (parse_raw_message always yields an id), but
+    // the notice must not invent one.
+    let notice = unknown_message_type_notice(&ResponseMessage::default());
+    assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
+    assert!(notice.message.contains("no message id"), "{:?}", notice.message);
 }
