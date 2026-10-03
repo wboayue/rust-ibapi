@@ -637,7 +637,7 @@ async fn make_request_subscription(request_id: RequestId) -> (MemoryStream, Arc<
 async fn make_order_subscription(order_id: OrderId) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
     let internal = bus.send_order_request(order_id, vec![]).await.unwrap();
-    let sub = Subscription::new_from_internal(internal, bus.clone(), None, Some(order_id.raw()), DecoderContext::default());
+    let sub = Subscription::new_from_internal(internal, bus.clone(), None, Some(order_id.value()), DecoderContext::default());
     (stream, bus, sub)
 }
 
@@ -1606,12 +1606,12 @@ async fn test_order_update_stream_skips_data_request_error() {
 async fn test_issue_789_order_error_reaches_order_side() {
     let (stream, bus) = make_bus();
     let order_id = OrderId::from(7);
-    let mut request = bus.send_request(RequestId::nth(order_id.raw()), vec![]).await.unwrap();
+    let mut request = bus.send_request(RequestId::nth(order_id.value()), vec![]).await.unwrap();
     let mut order = bus.send_order_request(order_id, vec![]).await.unwrap();
     let mut updates = bus.create_order_update_subscription().await.unwrap();
 
-    stream.push_inbound(error_frame(order_id.raw(), 202, "Order Canceled"));
-    stream.push_inbound(error_frame(order_id.raw(), 201, "Order rejected"));
+    stream.push_inbound(error_frame(order_id.value(), 202, "Order Canceled"));
+    stream.push_inbound(error_frame(order_id.value(), 201, "Order rejected"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
@@ -1626,7 +1626,7 @@ async fn test_issue_789_order_error_reaches_order_side() {
     for code in [202, 201] {
         match next_routed(&mut updates).await {
             RoutedItem::Notice(notice) => {
-                assert_eq!(notice.request_id, Some(order_id.raw()));
+                assert_eq!(notice.request_id, Some(order_id.value()));
                 assert_eq!(notice.code, code);
             }
             other => panic!("expected the {code} notice on the order-update stream, got {other:?}"),

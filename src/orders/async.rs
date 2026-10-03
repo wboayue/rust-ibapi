@@ -148,12 +148,12 @@ impl Client {
     ///     client.submit_order(order_id, &contract, &order).await.expect("submit failed");
     /// }
     /// ```
-    pub async fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-        let checked_id = verify::verify_order_ids(order_id, order)?;
-        verify::verify_order(self, order, order_id)?;
-        verify::verify_order_contract(self, contract, order_id)?;
+    pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
+        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
+        verify::verify_order(self, order, checked_id.value())?;
+        verify::verify_order_contract(self, contract, checked_id.value())?;
 
-        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
 
         Ok(())
@@ -187,12 +187,12 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
-        let checked_id = verify::verify_order_ids(order_id, order)?;
-        verify::verify_order(self, order, order_id)?;
-        verify::verify_order_contract(self, contract, order_id)?;
+    pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
+        verify::verify_order(self, order, checked_id.value())?;
+        verify::verify_order_contract(self, contract, checked_id.value())?;
 
-        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
@@ -235,13 +235,13 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+    pub async fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
         if !manual_order_cancel_time.is_empty() {
             check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
         }
 
-        let order_id = OrderId::from(order_id).checked()?;
-        let request = encoders::encode_cancel_order(order_id.raw(), manual_order_cancel_time)?;
+        let order_id = order_id.into().checked()?;
+        let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
@@ -306,7 +306,7 @@ impl Client {
 
         let next_order_id = OrderId::from(next_order_id).checked()?;
         self.raise_next_order_id(next_order_id);
-        Ok(next_order_id.raw())
+        Ok(next_order_id.value())
     }
 
     /// Requests completed [Order]s.
@@ -511,7 +511,7 @@ impl Client {
     ) -> Result<Subscription<ExerciseOptions>, Error> {
         let order_id = OrderId::from(self.next_order_id()).checked()?;
         let request = encoders::encode_exercise_options(
-            order_id.raw(),
+            order_id.value(),
             contract,
             exercise_action,
             exercise_quantity,

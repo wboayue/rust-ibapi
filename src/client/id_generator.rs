@@ -115,7 +115,7 @@ impl ClientIdManager {
     /// Raises the order ID to at least the given value (e.g., from the server's
     /// next valid ID response); never lowers it below locally allocated IDs.
     pub(crate) fn raise_order_id(&self, order_id: OrderId) {
-        self.order_ids.raise(order_id.raw());
+        self.order_ids.raise(order_id.value());
     }
 
     /// Raises the order ID from a reconnect handshake's next valid ID. A value

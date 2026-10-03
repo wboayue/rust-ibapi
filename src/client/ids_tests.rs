@@ -25,8 +25,8 @@ fn request_id_from_raw_rejects_below_floor() {
 
 #[test]
 fn order_id_checked_rejects_request_range() {
-    assert_eq!(OrderId::from(REQUEST_ID_FLOOR - 1).checked().unwrap().raw(), REQUEST_ID_FLOOR - 1);
-    assert_eq!(OrderId::from(-5).checked().unwrap().raw(), -5);
+    assert_eq!(OrderId::from(REQUEST_ID_FLOOR - 1).checked().unwrap().value(), REQUEST_ID_FLOOR - 1);
+    assert_eq!(OrderId::from(-5).checked().unwrap().value(), -5);
 
     let err = OrderId::from(REQUEST_ID_FLOOR).checked().unwrap_err();
     assert!(

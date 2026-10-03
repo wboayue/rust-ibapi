@@ -7,8 +7,8 @@ use crate::{server_versions, Error};
 /// carries against the request-id range ([`OrderId::checked`]). TWS creates
 /// the preset attached orders under their ids, so their status and errors
 /// route by them; `parent_id` (when set) names an existing order.
-pub(crate) fn verify_order_ids(order_id: i32, order: &Order) -> Result<OrderId, Error> {
-    let order_id = OrderId::from(order_id).checked()?;
+pub(crate) fn verify_order_ids(order_id: OrderId, order: &Order) -> Result<OrderId, Error> {
+    let order_id = order_id.checked()?;
     let carried = [
         order.preset_stop_loss_order_id,
         order.preset_profit_taker_order_id,

@@ -2564,12 +2564,12 @@ fn test_cleanup_identity_guards() -> Result<(), Error> {
 fn test_issue_789_order_error_reaches_order_side() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let order_id = OrderId::from(7);
-    let request = bus.send_request(RequestId::nth(order_id.raw()), &[])?;
+    let request = bus.send_request(RequestId::nth(order_id.value()), &[])?;
     let order = bus.send_order_request(order_id, &[])?;
     let updates = bus.create_order_update_subscription()?;
 
-    stream.push_inbound(error_frame(order_id.raw(), 202, "Order Canceled"));
-    stream.push_inbound(error_frame(order_id.raw(), 201, "Order rejected"));
+    stream.push_inbound(error_frame(order_id.value(), 202, "Order Canceled"));
+    stream.push_inbound(error_frame(order_id.value(), 201, "Order rejected"));
     bus.dispatch()?;
     bus.dispatch()?;
 
@@ -2584,7 +2584,7 @@ fn test_issue_789_order_error_reaches_order_side() -> Result<(), Error> {
     for code in [202, 201] {
         match updates.next_timeout_routed(TICK) {
             Some(RoutedItem::Notice(notice)) => {
-                assert_eq!(notice.request_id, Some(order_id.raw()));
+                assert_eq!(notice.request_id, Some(order_id.value()));
                 assert_eq!(notice.code, code);
             }
             other => panic!("expected the {code} notice on the order-update stream, got {other:?}"),

@@ -1,6 +1,7 @@
 use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
+use crate::client::ids::OrderId;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
@@ -510,8 +511,8 @@ impl<'a, C> OrderBuilder<'a, C> {
     }
 
     /// Set parent order ID for attached orders
-    pub fn parent(mut self, parent_id: i32) -> Self {
-        self.parent_id = Some(parent_id);
+    pub fn parent(mut self, parent_id: impl Into<OrderId>) -> Self {
+        self.parent_id = Some(parent_id.into().value());
         self
     }
 

@@ -25,10 +25,11 @@ which yields a `RequestId`. Pass `request_id.raw()` to the encoder and the
 `RequestId` to the bus. Never mint through the public `next_request_id()`, which
 returns a bare `i32`.
 
-**Accepting an order id from a caller** → convert at the entry point:
-`verify::verify_order_ids(order_id, &order)?` for anything that places an
-order (it also checks `parent_id` and the preset attached-order ids, since TWS
-routes frames for those orders by them), or `OrderId::from(id).checked()?`
+**Accepting an order id from a caller** → take `impl Into<OrderId>`
+(`orders::OrderId`, public; `i32` converts), then check at the entry point:
+`verify::verify_order_ids(order_id.into(), &order)?` for anything that places
+an order (it also checks `parent_id` and the preset attached-order ids, since
+TWS routes frames for those orders by them), or `order_id.into().checked()?`
 for a bare id (`cancel_order`). Both return `Error::OrderIdInRequestRange`.
 The check runs where the id crosses into the crate, never at `OrderId`
 construction. An `Order` field that names another

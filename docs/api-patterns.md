@@ -118,8 +118,8 @@ order's routing entry:
 
 ```rust
 impl Client {
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
-        let checked_id = verify::verify_order_ids(order_id, order)?; // `OrderId`
+    pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;  // .await for async
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -127,7 +127,7 @@ impl Client {
 }
 ```
 
-A bare id with nothing attached (`cancel_order`) uses `OrderId::from(id).checked()?`.
+A bare id with nothing attached (`cancel_order`) uses `order_id.into().checked()?`.
 
 ### Subscription Context
 

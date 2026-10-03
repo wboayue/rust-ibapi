@@ -40,7 +40,7 @@
 //! `.buy()` / `.sell()` instead.
 
 use crate::orders::builder::ValidationError;
-use crate::orders::{Action, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -741,10 +741,10 @@ pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volati
 }
 
 /// Create an FX hedge order tied to the specified parent order id.
-pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
+pub fn market_f_hedge(parent_order_id: impl Into<OrderId>, action: Action) -> Order {
     //FX Hedge orders can only have a quantity of 0
     let mut order = market_order(action, 0.0);
-    order.parent_id = parent_order_id;
+    order.parent_id = parent_order_id.into().value();
     order.hedge_type = "F".to_owned();
 
     order
