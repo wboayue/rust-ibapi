@@ -96,16 +96,19 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return;
         }
 
-        if let Some(request_id) = self.request_id {
+        // Id-routed: the write goes whether or not it reaches TWS, and the
+        // registration is released by `InternalSubscription::cancel` either
+        // way — a cancel that cannot be sent is one whose session is gone.
+        if self.request_id.is_some() {
             if let Some(message) = self.request_cancel_message() {
-                if let Err(e) = self.message_bus.cancel_subscription(request_id, &message) {
+                if let Err(e) = self.message_bus.send_message(&message) {
                     log_cancel_error("subscription", &e);
                 }
                 self.subscription.cancel();
             }
-        } else if let Some(order_id) = self.order_id {
+        } else if self.order_id.is_some() {
             if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
-                if let Err(e) = self.message_bus.cancel_order_subscription(order_id, &message) {
+                if let Err(e) = self.message_bus.send_message(&message) {
                     log_cancel_error("order subscription", &e);
                 }
                 self.subscription.cancel();
@@ -205,7 +208,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
 
         // Write the cancel but keep the route: `cancel()` would unregister it
-        // (`MessageBus::cancel_subscription`), and then TWS's end marker could
+        // (`InternalSubscription::cancel`), and then TWS's end marker could
         // not reach us. The route goes when the subscription drops.
         if !self.cancelled.swap(true, Ordering::Relaxed) {
             if let Some(message) = self.request_cancel_message() {

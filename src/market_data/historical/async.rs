@@ -480,7 +480,9 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
         match encoders::encode_cancel_historical_ticks(self.request_id) {
             Ok(message) => {
-                if let Err(e) = self.message_bus.cancel_subscription(self.request_id, message).await {
+                // The registration is released at drop, by liveness: removing
+                // it here by key could take out a newer request under the id.
+                if let Err(e) = self.message_bus.send_message(message).await {
                     log_cancel_error("historical ticks subscription", &e);
                 }
             }
@@ -508,6 +510,12 @@ impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
             // either ends it once the buffer is drained.
             if this.done || this.stream_ended {
                 return Poll::Ready(None);
+            }
+
+            // `cancel()` ends the stream locally, reporting it once.
+            if this.cancelled.load(Ordering::Relaxed) {
+                this.stream_ended = true;
+                return Poll::Ready(Some(Err(Error::Cancelled)));
             }
 
             // Lag is converted to an in-band gap notice inside
@@ -547,7 +555,7 @@ impl<T: TickDecoder<T> + Send> Drop for TickSubscription<T> {
         let message_bus = self.message_bus.clone();
         if let Ok(message) = encoders::encode_cancel_historical_ticks(request_id) {
             self.message_bus.runtime_handle().spawn(async move {
-                if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
+                if let Err(e) = message_bus.send_message(message).await {
                     log_cancel_error("historical ticks subscription", &e);
                 }
             });

@@ -452,7 +452,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
         match encoders::encode_cancel_historical_ticks(self.request_id) {
             Ok(message) => {
-                if let Err(e) = self.message_bus.cancel_subscription(self.request_id, &message) {
+                if let Err(e) = self.message_bus.send_message(&message) {
                     log_cancel_error("historical ticks subscription", &e);
                 }
                 self.messages.cancel();

@@ -846,6 +846,44 @@ async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     assert_eq!(messages.len(), 1, "should send cancel only once");
 }
 
+/// `cancel()` ends the stream locally: ticks already decoded drain first, then
+/// `Err(Cancelled)` once, then `None`. The bus no longer injects `Cancelled`
+/// into the route, which it could only find by id (#894).
+#[tokio::test]
+async fn test_tick_subscription_cancel_reports_cancelled_then_ends() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+
+    let (tx, rx) = tokio::sync::broadcast::channel(16);
+    tx.send(RoutedItem::Response(proto_response(
+        IncomingMessages::HistoricalTickLast,
+        historical_ticks_last_response()
+            .ticks(vec![
+                historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"),
+                historical_tick_last(1_678_838_401, 15.01, 100.0, "NYSE"),
+            ])
+            .done(false)
+            .encode_proto(),
+    )))
+    .unwrap();
+    let mut subscription: TickSubscription<TickLast> = TickSubscription::new(AsyncInternalSubscription::new(rx), 9103, message_bus.clone());
+
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))));
+    subscription.cancel().await;
+
+    assert!(
+        matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))),
+        "decoded tick drains first"
+    );
+    let item = subscription.next().await;
+    assert!(matches!(item, Some(Err(Error::Cancelled))), "got: {item:?}");
+    assert!(subscription.next().await.is_none(), "stream must end after Cancelled");
+    drop(tx);
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 1, "cancel written once");
+    assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalTicks);
+}
+
 #[tokio::test]
 async fn test_tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
