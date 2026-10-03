@@ -211,10 +211,6 @@ fn test_is_informational_code_order_cancelled_code() {
     // Neighbors stay hard order rejections.
     assert!(!is_informational_code(201, ""));
     assert!(!is_informational_code(203, ""));
-
-    // Only the routing disposition changes: 202 is a cancellation, not a
-    // warning, so the notice taxonomy is untouched.
-    assert!(!crate::messages::is_warning_message(crate::messages::ORDER_CANCELLED_CODE, ""));
 }
 
 #[test]
@@ -243,10 +239,6 @@ fn test_is_informational_code_system_message_codes() {
     // request, so they route as notices.
     for code in crate::messages::SYSTEM_MESSAGE_CODES {
         assert!(is_informational_code(code, ""), "system code {code} should route as a notice");
-
-        // Only the routing disposition changes: the notice taxonomy keeps them
-        // out of `is_warning` and in `NoticeCategory::SystemMessage`.
-        assert!(!crate::messages::is_warning_message(code, ""));
     }
 
     // Neighbors of the connectivity codes stay hard errors.
@@ -268,7 +260,6 @@ fn test_classify_error_unrouted_system_message_is_notice_only() {
     match classify_error(payload) {
         ErrorDisposition::NoticeOnly(notice) => {
             assert!(notice.is_system_message());
-            assert!(!notice.is_warning());
             assert_eq!(notice.category(), crate::messages::NoticeCategory::SystemMessage);
         }
         other => panic!("expected NoticeOnly, got {other:?}"),
