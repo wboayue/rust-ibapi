@@ -1321,6 +1321,23 @@ fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
     Ok(())
 }
 
+/// `Subscription::cancel` frees the order-update slot while the handle is
+/// still held, once the cleanup thread processes the signal (#911).
+#[test]
+fn test_order_update_stream_cancel_frees_slot() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let first = wrap_subscription::<crate::orders::OrderUpdate>(bus.clone(), bus.create_order_update_subscription()?);
+    first.cancel();
+    drain_cleanup_signals(&bus);
+    let _second = bus.create_order_update_subscription().expect("slot still taken after cancel");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// Shutdown ends a live order-update stream with `Error::Shutdown` and frees
 /// the slot. Before #871 the stream got nothing and blocked forever.
 #[test]

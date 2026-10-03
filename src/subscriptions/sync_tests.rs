@@ -388,13 +388,14 @@ fn test_routed_end_skips_cancel_on_drop() {
 #[test]
 fn test_error_end_still_cancels() {
     // Only the end marker proves TWS finished; after an error the cancel goes out as before.
-    let (sub, bus, _signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+    let (sub, bus, signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
 
     assert!(matches!(sub.next(), Some(Err(Error::ConnectionReset))));
     assert!(!sub.ended_natively());
 
     drop(sub);
     assert_eq!(bus.request_messages().len(), 1, "cancel written after an error end");
+    assert!(unregistered_request(&signals), "route kept after cancel");
 }
 
 // --- cancel releases the route ------------------------------------------
@@ -441,6 +442,18 @@ fn test_order_subscription_cancel_unregisters() {
         matches!(signals.try_recv(), Ok(Signal::Order(id, _)) if id == OrderId::from(7)),
         "route kept after cancel"
     );
+    assert!(matches!(sub.next(), Some(Err(Error::Cancelled))));
+}
+
+#[test]
+fn test_order_update_stream_cancel_unregisters() {
+    // No request id, order id or shared ticket: the order update stream.
+    let (sub, bus, signals) = routed_subscription::<CollectItem>(SubscriptionBuilder::new(), vec![]);
+
+    sub.cancel();
+    assert!(bus.request_messages().is_empty());
+    assert!(matches!(signals.try_recv(), Ok(Signal::OrderUpdateStream(_))), "route kept after cancel");
+    assert!(matches!(sub.next(), Some(Err(Error::Cancelled))));
 }
 
 // --- collect_to_end ------------------------------------------------------
@@ -502,30 +515,13 @@ fn drain_cancel_frame() -> Vec<u8> {
     encode_protobuf_message(OutgoingMessages::CancelContractData as i32, &[])
 }
 
-/// A request-id subscription fed `items`, with the channel kept open (as
-/// production's is: the subscription holds a sender), and the stub bus.
-fn drain_subscription<T: StreamDecoder<T>>(items: Vec<RoutedItem>) -> (Subscription<T>, Arc<MessageBusStub>, channel::Sender<RoutedItem>) {
-    let (sender, receiver) = channel::unbounded::<RoutedItem>();
-    let (signaler, _signaler_rx) = channel::unbounded();
-    for item in items {
-        sender.send(item).unwrap();
-    }
-    let internal = SubscriptionBuilder::new()
-        .receiver(receiver)
-        .signaler(signaler)
-        .request_id(RequestId::nth(1))
-        .build();
-    let stub = Arc::new(MessageBusStub::default());
-    (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub, sender)
-}
-
 fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(2)
 }
 
 #[test]
 fn test_drain_after_end_writes_nothing() {
-    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(1), RoutedItem::Error(Error::EndOfStream)]);
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1), RoutedItem::Error(Error::EndOfStream)]);
     while sub.next().is_some() {}
 
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
@@ -534,7 +530,7 @@ fn test_drain_after_end_writes_nothing() {
 
 #[test]
 fn test_drain_cancels_then_sees_end() {
-    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(1), data(2), RoutedItem::Error(Error::EndOfStream)]);
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1), data(2), RoutedItem::Error(Error::EndOfStream)]);
 
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
     assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
@@ -542,7 +538,7 @@ fn test_drain_cancels_then_sees_end() {
 
 #[test]
 fn test_drain_reports_tws_error() {
-    let (sub, _bus, _tx) = drain_subscription::<DrainItem>(vec![
+    let (sub, _bus, _signals) = request_subscription::<DrainItem>(vec![
         data(1),
         RoutedItem::Error(Error::Notice(crate::messages::Notice::synthesized(
             200,
@@ -558,7 +554,7 @@ fn test_drain_reports_tws_error() {
 
 #[test]
 fn test_drain_deadline_is_unconfirmed() {
-    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(1)]);
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1)]);
 
     let started = Instant::now();
     assert_eq!(
@@ -571,7 +567,7 @@ fn test_drain_deadline_is_unconfirmed() {
 
 #[test]
 fn test_drain_after_error_is_unconfirmed_and_cancels_on_drop() {
-    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })]);
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })]);
     assert!(matches!(sub.next(), Some(Err(Error::BufferLimitExceeded { .. }))));
 
     let started = Instant::now();
@@ -582,7 +578,7 @@ fn test_drain_after_error_is_unconfirmed_and_cancels_on_drop() {
 
 #[test]
 fn test_drain_session_error_is_err() {
-    let (sub, _bus, _tx) = drain_subscription::<DrainItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+    let (sub, _bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
 
     assert!(matches!(sub.cancel_and_drain(deadline()), Err(Error::ConnectionReset)));
 }
@@ -590,7 +586,7 @@ fn test_drain_session_error_is_err() {
 #[test]
 fn test_drain_without_cancel_message_waits_for_natural_end() {
     // CollectItem has no cancel message (like contract details below server 215).
-    let (sub, bus, _tx) = drain_subscription::<CollectItem>(vec![data(1), RoutedItem::Error(Error::EndOfStream)]);
+    let (sub, bus, _signals) = request_subscription::<CollectItem>(vec![data(1), RoutedItem::Error(Error::EndOfStream)]);
 
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
     assert!(bus.request_messages().is_empty());
@@ -598,7 +594,7 @@ fn test_drain_without_cancel_message_waits_for_natural_end() {
 
 #[test]
 fn test_drain_after_snapshot_end_writes_nothing() {
-    let (sub, bus, _tx) = drain_subscription::<DrainItem>(vec![data(-1)]);
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(-1)]);
     assert!(matches!(sub.next(), Some(Ok(SubscriptionItem::Data(DrainItem(-1))))));
 
     let started = Instant::now();
