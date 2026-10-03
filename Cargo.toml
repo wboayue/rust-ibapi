@@ -17,6 +17,18 @@ keywords = ["algo-trading", "interactive-brokers", "tws"]
 categories = ["finance", "api-bindings"]
 exclude = [
     "justfile",
+    "assets/",
+    ".github/",
+    ".gitignore",
+    ".dockerignore",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "deny.toml",
+    "rustfmt.toml",
+    "rust-toolchain.toml",
+    "tools/",
+    "integration/",
+    "docs/rules/",
 ]
 
 [package.metadata.docs.rs]
