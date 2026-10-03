@@ -643,6 +643,7 @@ async fn test_historical_ticks_trade() {
     assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
     assert!(!tick.tick_attribute_last.unreported, "Wrong unreported");
 
+    assert_eq!(subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
         &message_bus,

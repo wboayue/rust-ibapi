@@ -215,15 +215,17 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     // `request_id` is the id the in-flight `historical_ticks` request was issued with.
-    ///     // Dropping its subscription already cancels it.
-    ///     # let request_id = 0;
-    ///     client.cancel_historical_ticks(request_id).await.expect("cancel failed");
+    ///     let contract = Contract::stock("MSFT").build();
+    ///     let subscription = client.historical_ticks(&contract, 100).trade().await.expect("request failed");
+    ///
+    ///     // Holding the subscription, `subscription.cancel().await` (or dropping it) does the same.
+    ///     client.cancel_historical_ticks(subscription.request_id()).await.expect("cancel failed");
     /// }
     /// ```
     pub async fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
@@ -456,6 +458,12 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
             message_bus,
             cancelled: AtomicBool::new(false),
         }
+    }
+
+    /// The request ID TWS knows this request by, for [`Client::cancel_historical_ticks`](crate::Client::cancel_historical_ticks)
+    /// from code that does not hold the subscription, or to match it in logs.
+    pub fn request_id(&self) -> i32 {
+        self.request_id
     }
 
     /// Cancel the historical-ticks request. After completion nothing is written.

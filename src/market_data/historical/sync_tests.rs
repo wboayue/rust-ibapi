@@ -412,7 +412,7 @@ fn test_historical_ticks_trade() {
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
 
-    let _tick_subscription = client
+    let tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .starting(start)
         .ending(end)
@@ -420,6 +420,7 @@ fn test_historical_ticks_trade() {
         .trade()
         .expect("historical ticks trade request failed");
 
+    assert_eq!(tick_subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
         &message_bus,

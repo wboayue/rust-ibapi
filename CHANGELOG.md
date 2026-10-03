@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `TickSubscription::request_id()` (sync and async): the id of the historical-ticks request, so `cancel_historical_ticks` can be called from code that does not hold the subscription.
 - `rust-version = "1.88"` in `Cargo.toml`, the floor set by `time` 0.3.47+. Cargo now reports an older toolchain up front instead of failing partway through the build, and CI checks the library builds on 1.88.
 - `ContractDetailsBuilder::buffer_limit(n)` caps unread items (rows and notices): when `n` are waiting and another arrives, the subscription yields every queued item, then the new `Error::BufferLimitExceeded { limit }`, then ends, and later rows are discarded. TWS's end marker and errors always get through, so a result that fills the cap exactly still ends normally. Without it nothing changes (async: lossy `channel_capacity`; sync: unbounded). `n` must be `1..=contracts::MAX_BUFFER_LIMIT` (#876).
 - `Subscription::cancel_and_drain(deadline)` (sync and async) writes the native cancel and waits for TWS to finish the request, returning `Drained::Ended`, `Drained::Rejected(notice)` or `Drained::Unconfirmed`; session errors are `Err`. Observed live, TWS keeps sending contract details after a cancel, so the drain usually waits out the whole result (#876).
@@ -41,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- `Client::next_request_id()` (blocking and async). It minted a request id no request used, and no API accepts a caller-chosen request id. Use `Subscription::request_id()` or `ContractDetailsBuilder::request_id()` for a live request's id. See `docs/migration-5.0.md` §20.
+- `Client::next_request_id()` (blocking and async). It minted a request id no request used, and no API accepts a caller-chosen request id. Use `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` for a live request's id. See `docs/migration-5.0.md` §20.
 - `orders::order_builder::auction_limit`, which built the same `Order` as `limit_order` once 4.2 dropped its strategy parameter. Routing the contract to `BOX` is what makes it an auction order. Also `orders::builder::OrderType::AuctionLimit` and `AuctionRelative`, which sent `LMT` and `REL` just like `Limit` and `Relative`. See `docs/migration-5.0.md` §17 (#903).
 - `orders::builder::OrderAnalysis`. No API produced or accepted it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState`. See `docs/migration-5.0.md` §13 (#883).
 - `From<i32> for OrderCondition`, which built a default-valued condition from a type code and panicked on any other. Use the condition builders. Also `ToField for OrderCondition` / `ToField for Option<OrderCondition>`, text-wire leftovers with no caller. See `docs/migration-5.0.md` §1 (#827).

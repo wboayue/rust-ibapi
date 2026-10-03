@@ -275,7 +275,7 @@ if notice.is_order_rejection() || notice.is_request_error() { /* failed */ }
 
 ### 20. `Client::next_request_id()` is removed
 
-`next_request_id()` (blocking and async) handed out a fresh request id that no request used. Nothing in the API accepts a caller-chosen request id, so the value had no use: passing it to `cancel_contract_details` or `cancel_historical_ticks` cancelled nothing. The ids of requests in flight come from `Subscription::request_id()` and `ContractDetailsBuilder::request_id()`, both unchanged. Delete any call; to cancel a request, drop its subscription or call `cancel()` on it.
+`next_request_id()` (blocking and async) handed out a fresh request id that no request used. Nothing in the API accepts a caller-chosen request id, so the value had no use: passing it to `cancel_contract_details` or `cancel_historical_ticks` cancelled nothing. The ids of requests in flight come from `Subscription::request_id()` and `ContractDetailsBuilder::request_id()`, both unchanged, and the new `TickSubscription::request_id()`. Delete any call; to cancel a request, drop its subscription or call `cancel()` on it.
 
 ## Behavioral changes
 
@@ -308,7 +308,7 @@ No code changes required, but observable at runtime:
 17. Replace `auction_limit(..)` with `limit_order(..)` (same arguments), and `OrderType::AuctionLimit` / `AuctionRelative` with `OrderType::Limit` / `Relative` — see [§17](#17-order_builderauction_limit-and-the-ordertype-auction-variants-are-removed).
 18. Add a `MarketDepths::Reset` arm that empties your book to exhaustive matches on `MarketDepths`, and drop any code-317 notice handling on depth subscriptions — see [§18](#18-marketdepths-gains-reset).
 19. Check code that treats `NoticeCategory::OrderRejection` or `is_order_rejection()` as "any 200..=399 failure": request errors now come as `RequestError` / `is_request_error()`, and `is_warning()` is false for 2188 — see [§19](#19-noticecategoryrequesterror-notice-predicates-follow-category).
-20. Delete calls to `Client::next_request_id()`; take a live request's id from `Subscription::request_id()` or `ContractDetailsBuilder::request_id()` — see [§20](#20-clientnext_request_id-is-removed).
+20. Delete calls to `Client::next_request_id()`; take a live request's id from `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` — see [§20](#20-clientnext_request_id-is-removed).
 21. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
