@@ -252,7 +252,7 @@ If you matched `SubscriptionItem::Notice` with code 317 on a depth subscription,
 
 ### 19. `NoticeCategory::RequestError`; notice predicates follow `category()`
 
-Every code in 200..=399 not claimed by an earlier rule was `NoticeCategory::OrderRejection`, although some are failed requests that have nothing to do with orders: 316 (depth HALTED), 354 (market data not subscribed), 366 (no historical query), 200 (no security definition). Those codes, listed in `REQUEST_ERROR_CODES`, are now `NoticeCategory::RequestError`, with `Notice::is_request_error()`. They still end the request, as before. `NoticeCategory` is `#[non_exhaustive]`, so a match needs no new arm, but a wildcard arm will now see these codes (#898).
+Every code in 200..=399 not claimed by an earlier rule was `NoticeCategory::OrderRejection`, although some are failed requests that have nothing to do with orders: 316 (depth HALTED), 354 (market data not subscribed), 366 (no historical query). Those codes, listed in `REQUEST_ERROR_CODES`, are now `NoticeCategory::RequestError`, with `Notice::is_request_error()`. They still end the request, as before. Codes that also answer orders stay `OrderRejection`: 200 (no security definition) and 320-323 (server errors on a request). `NoticeCategory` is `#[non_exhaustive]`, so a match needs no new arm, but a wildcard arm will now see these codes (#898).
 
 `Notice::is_warning()` and `Notice::is_order_rejection()` tested a code range; every `is_*` category predicate is now `category() == X` for its variant `X`, so they never overlap:
 

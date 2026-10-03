@@ -942,16 +942,17 @@ fn test_notice_category_partition() {
         (SYSTEM_MESSAGE_CODES[0], NoticeCategory::SystemMessage),
         (SYSTEM_MESSAGE_CODES[3], NoticeCategory::SystemMessage),
         (*WARNING_CODE_RANGE.end() + 1, NoticeCategory::Error),
-        (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::RequestError), // 200 — no security definition
-        (201, NoticeCategory::OrderRejection),                               // hard rejection
-        (316, NoticeCategory::RequestError),                                 // depth HALTED
-        (321, NoticeCategory::RequestError),                                 // server error validating a request
-        (354, NoticeCategory::RequestError),                                 // market data not subscribed
-        (366, NoticeCategory::RequestError),                                 // no historical query
-        (355, NoticeCategory::OrderRejection),                               // order size vs market rule
-        (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection), // 399
-        (317, NoticeCategory::DataAdvisory),                                 // precedence over the 200..=399 band (#806)
-        (2188, NoticeCategory::DataAdvisory),                                // precedence over the 21xx band
+        (*ORDER_REJECTION_CODE_RANGE.start(), NoticeCategory::OrderRejection), // 200 — also answers orders
+        (201, NoticeCategory::OrderRejection),                                 // hard rejection
+        (316, NoticeCategory::RequestError),                                   // depth HALTED
+        (320, NoticeCategory::OrderRejection),                                 // answers invalid attached orders (#842)
+        (321, NoticeCategory::OrderRejection),                                 // server error validating a request
+        (354, NoticeCategory::RequestError),                                   // market data not subscribed
+        (366, NoticeCategory::RequestError),                                   // no historical query
+        (355, NoticeCategory::OrderRejection),                                 // order size vs market rule
+        (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
+        (317, NoticeCategory::DataAdvisory),                                   // precedence over the 200..=399 band (#806)
+        (2188, NoticeCategory::DataAdvisory),                                  // precedence over the 21xx band
         (10089, NoticeCategory::DataAdvisory),
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),

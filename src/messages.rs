@@ -1215,20 +1215,20 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 pub const DATA_ADVISORY_CODES: &[i32] = &[MARKET_DEPTH_RESET_CODE, 2188, 10089, 10090, 10091, 10167];
 
 /// Request-error codes inside [`ORDER_REJECTION_CODE_RANGE`]: a request other
-/// than an order failed (contract lookup, market data, depth, historical data,
-/// scanner, session setup). Classified [`NoticeCategory::RequestError`], ahead
-/// of the band. Most of the band is order validation, so a band code missing
-/// here stays [`NoticeCategory::OrderRejection`].
-/// - 200: No security definition has been found for the request. Also sent
-///   for an order on an unknown contract; the contract lookup failed, not the
-///   order.
+/// than an order failed (market data, depth, historical data, scanner, session
+/// setup). Classified [`NoticeCategory::RequestError`], ahead of the band.
+///
+/// Only codes that never answer an order are listed. Codes that answer both
+/// orders and other requests stay [`NoticeCategory::OrderRejection`], so
+/// [`Notice::is_order_rejection`] keeps matching them on order streams: 200 (no
+/// security definition) and 320-323 (server error reading, validating or
+/// processing a request; 320 answers an invalid attached order, #842).
 /// - 300: Can't find EId with ticker Id (cancelling unknown market data).
 /// - 301, 302: Invalid ticker action; error parsing stop ticker string.
 /// - 309: Max number of market depth requests has been reached.
 /// - 310: Can't find the subscribed market depth.
 /// - 316: Market depth data has been HALTED. Please re-subscribe.
 /// - 319: Invalid log level.
-/// - 320-323: Server error reading, validating or processing an API client request.
 /// - 326: Client id already in use.
 /// - 327: Only clientId 0 can set the auto bind TWS orders property.
 /// - 330, 331: Managed accounts list needs an FA or STL account with managed accounts.
@@ -1239,9 +1239,7 @@ pub const DATA_ADVISORY_CODES: &[i32] = &[MARKET_DEPTH_RESET_CODE, 2188, 10089, 
 ///
 /// A slice rather than an array so that adding a code is not a type change
 /// for callers that bind the constant explicitly.
-pub const REQUEST_ERROR_CODES: &[i32] = &[
-    200, 300, 301, 302, 309, 310, 316, 319, 320, 321, 322, 323, 326, 327, 330, 331, 354, 357, 365, 366, 385, 386,
-];
+pub const REQUEST_ERROR_CODES: &[i32] = &[300, 301, 302, 309, 310, 316, 319, 326, 327, 330, 331, 354, 357, 365, 366, 385, 386];
 
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
@@ -1457,9 +1455,8 @@ pub enum NoticeCategory {
     /// Order rejection ([`ORDER_REJECTION_CODE_RANGE`], excluding the cases
     /// above it in the precedence chain).
     OrderRejection,
-    /// A request other than an order failed ([`REQUEST_ERROR_CODES`]): contract
-    /// lookup, market data, depth, historical data, scanner, session setup.
-    /// Terminal.
+    /// A request other than an order failed ([`REQUEST_ERROR_CODES`]): market
+    /// data, depth, historical data, scanner, session setup. Terminal.
     RequestError,
     /// Data advisory ([`DATA_ADVISORY_CODES`]): the request is not rejected and
     /// data follows — a fallback, a partial entitlement, or a depth-book reset.
