@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{
-    debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem,
+    debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
@@ -290,10 +290,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     NextAction::Return(Some(Err(err)))
                 }
             },
-            Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice)))),
-            Some(RoutedItem::Error(Error::Notice(notice))) if T::is_nonterminal_notice(&notice) => {
-                NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice))))
-            }
+            Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(notice_item(notice)))),
+            Some(RoutedItem::Error(Error::Notice(notice))) if T::is_nonterminal_notice(&notice) => NextAction::Return(Some(Ok(notice_item(notice)))),
             Some(RoutedItem::Error(Error::EndOfStream)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 self.ended_natively.store(true, Ordering::Relaxed);

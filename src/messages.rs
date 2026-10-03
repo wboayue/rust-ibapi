@@ -1092,6 +1092,10 @@ pub const ORDER_CANCELLED_CODE: i32 = 202;
 /// Generic order-message code whose text determines whether TWS reports a warning or an error.
 pub const ORDER_MESSAGE_CODE: i32 = 399;
 
+/// "Market depth data has been RESET". A [`DATA_ADVISORY_CODES`] entry; a
+/// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
+pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
+
 /// "Historical Market Data Service query message". Classified `Error`, but a
 /// scanner subscription keeps its "no items retrieved" form nonterminal; see
 /// [`classify`].
@@ -1196,8 +1200,8 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 /// delivered), so they are informational notices, not errors. Classifying them
 /// as errors would terminate the subscription before its data arrives.
 /// - 317: Market depth data has been RESET. Please empty deep book contents
-///   before applying any new entries. (Consumer contract on
-///   [`MarketDepths`](crate::market_data::realtime::MarketDepths).)
+///   before applying any new entries. A depth subscription yields it as
+///   [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 /// - 2188: Up-to-the-second historical data requires additional subscription for the API.
 /// - 10089: Requested market data requires additional subscription for API; delayed market data is available.
 /// - 10090: Part of requested market data is not subscribed. Subscription-independent ticks are still active.

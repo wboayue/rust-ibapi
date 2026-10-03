@@ -1071,16 +1071,18 @@ async fn test_subscription_10091_preserves_later_option_computation() {
 }
 
 /// A depth-book reset (317) precedes the rows that rebuild it on the same
-/// request; the notice must not end the depth stream (#806).
+/// request. It must not end the depth stream (#806), and arrives as
+/// `MarketDepths::Reset` so `filter_data()` keeps it (#899).
 #[tokio::test]
-async fn test_subscription_317_preserves_later_market_depth() {
+async fn test_subscription_317_yields_reset_then_rows() {
     use crate::market_data::realtime::MarketDepths;
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(42);
     let internal = bus.send_request(request_id, vec![]).await.unwrap();
-    let mut subscription = Subscription::new_from_internal(internal, bus.clone(), Some(request_id.raw()), None, DecoderContext::default());
+    let subscription: Subscription<MarketDepths> =
+        Subscription::new_from_internal(internal, bus.clone(), Some(request_id.raw()), None, DecoderContext::default());
     let row = market_depth_response()
         .request_id(request_id.raw())
         .position(0)
@@ -1101,16 +1103,13 @@ async fn test_subscription_317_preserves_later_market_depth() {
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
 
-    match next_item(&mut subscription).await {
-        Some(Ok(SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.request_id, Some(request_id.raw()));
-            assert_eq!(notice.code, 317);
-            assert!(notice.is_data_advisory());
-        }
-        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    let mut depths = subscription.filter_data();
+    match depths.next().await {
+        Some(Ok(MarketDepths::Reset)) => {}
+        other => panic!("expected MarketDepths::Reset, got {other:?}"),
     }
-    match next_item(&mut subscription).await {
-        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+    match depths.next().await {
+        Some(Ok(MarketDepths::MarketDepth(depth))) => {
             assert_eq!(depth.position, 0);
             assert_eq!(depth.operation, 0);
             assert_eq!(depth.side, 1);

@@ -11,7 +11,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use log::{debug, warn};
 
-use super::common::{drain_outcome, filter_notice, is_undeclared, DecoderContext, Drained, RoutedItem, SubscriptionItem};
+use super::common::{drain_outcome, filter_notice, is_undeclared, notice_item, DecoderContext, Drained, RoutedItem, SubscriptionItem};
 use super::{log_cancel_error, StreamDecoder};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
@@ -462,9 +462,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         }
                     }
                 }
-                RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
+                RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(notice_item(notice)))),
                 RoutedItem::Error(Error::Notice(notice)) if T::is_nonterminal_notice(&notice) => {
-                    return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice))));
+                    return Poll::Ready(Some(Ok(notice_item(notice))));
                 }
                 RoutedItem::Error(Error::EndOfStream) => {
                     stream_ended.store(true, Ordering::Relaxed);

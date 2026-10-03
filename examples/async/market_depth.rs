@@ -140,6 +140,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     depth.size
                 );
             }
+            MarketDepths::Reset => {
+                // TWS discarded its book: drop ours and rebuild from the rows that follow
+                println!("Book reset");
+                bid_book = [None; 5];
+                ask_book = [None; 5];
+            }
         }
     }
 

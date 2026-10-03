@@ -2003,12 +2003,12 @@ fn test_subscription_10091_preserves_later_option_computation() -> Result<(), Er
 }
 
 /// A depth-book reset (317) precedes the rows that rebuild it on the same
-/// request; the notice must not end the depth stream (#806).
+/// request. It must not end the depth stream (#806), and arrives as
+/// `MarketDepths::Reset` so `iter_data()` keeps it (#899).
 #[test]
-fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
+fn test_subscription_317_yields_reset_then_rows() -> Result<(), Error> {
     use crate::market_data::realtime::MarketDepths;
     use crate::messages::IncomingMessages;
-    use crate::subscriptions::SubscriptionItem;
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
@@ -2035,16 +2035,13 @@ fn test_subscription_317_preserves_later_market_depth() -> Result<(), Error> {
     bus.dispatch()?;
     bus.dispatch()?;
 
-    match subscription.next_timeout(TICK) {
-        Some(Ok(SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.request_id, Some(request_id.raw()));
-            assert_eq!(notice.code, 317);
-            assert!(notice.is_data_advisory());
-        }
-        other => panic!("expected nonterminal 317 notice, got {other:?}"),
+    let mut depths = subscription.timeout_iter_data(TICK);
+    match depths.next() {
+        Some(Ok(MarketDepths::Reset)) => {}
+        other => panic!("expected MarketDepths::Reset, got {other:?}"),
     }
-    match subscription.next_timeout(TICK) {
-        Some(Ok(SubscriptionItem::Data(MarketDepths::MarketDepth(depth)))) => {
+    match depths.next() {
+        Some(Ok(MarketDepths::MarketDepth(depth))) => {
             assert_eq!(depth.position, 0);
             assert_eq!(depth.operation, 0);
             assert_eq!(depth.side, 1);

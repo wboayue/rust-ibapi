@@ -235,6 +235,21 @@ let order = limit_order(Action::Buy, 10.0, 1.25);
 let builder = builder.order_type(OrderType::Limit);
 ```
 
+### 18. `MarketDepths` gains `Reset`
+
+A market-depth subscription used to yield code 317 ("Market depth data has been RESET") as `SubscriptionItem::Notice`, which `filter_data()` / `iter_data()` log and drop. A consumer on those adapters never saw the reset and merged the rebuilt rows into its stale book. The subscription now yields `MarketDepths::Reset` as data instead, so exhaustive matches on `MarketDepths` need the arm. On it, empty the book you hold; the rows that follow rebuild it. Code 316 (depth HALTED) still ends the stream with `Err` (#899).
+
+```rust,ignore
+// 5.0
+match depth? {
+    MarketDepths::MarketDepth(row) => apply(&mut book, row),
+    MarketDepths::MarketDepthL2(row) => apply_l2(&mut book, row),
+    MarketDepths::Reset => book.clear(),
+}
+```
+
+If you matched `SubscriptionItem::Notice` with code 317 on a depth subscription, move that handling to the `Reset` arm.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -264,7 +279,8 @@ No code changes required, but observable at runtime:
 15. Replace uses of `prost::DecodeError` from `Error::ProtobufDecode`, and any `From<prost::DecodeError> for ibapi::Error` conversion — see [§15](#15-errorprotobufdecode-carries-errorsprotobufdecodeerror).
 16. Where an order id argument is converted with `.try_into()`, `.into()`, `.parse()` or `Default::default()`, name the target type (`i32::try_from(..)`, `.parse::<i32>()`) — see [§16](#16-order-methods-take-impl-intoorderid).
 17. Replace `auction_limit(..)` with `limit_order(..)` (same arguments), and `OrderType::AuctionLimit` / `AuctionRelative` with `OrderType::Limit` / `Relative` — see [§17](#17-order_builderauction_limit-and-the-ordertype-auction-variants-are-removed).
-18. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+18. Add a `MarketDepths::Reset` arm that empties your book to exhaustive matches on `MarketDepths`, and drop any code-317 notice handling on depth subscriptions — see [§18](#18-marketdepths-gains-reset).
+19. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
