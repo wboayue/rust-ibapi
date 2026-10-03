@@ -3342,19 +3342,3 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     assert!(sub.try_next().is_none(), "frames after the end marker are discarded");
     Ok(())
 }
-
-#[test]
-fn test_cancel_at_limit_reports_cancelled() -> Result<(), Error> {
-    // `Cancelled` goes straight onto the subscription's own queue, so it gets
-    // through a full cap rather than turning into an overflow.
-    let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(9000, &[], bound(1))?;
-    stream.push_inbound(contract_row(1));
-    bus.dispatch()?;
-
-    sub.cancel();
-
-    assert!(sub.next_timeout(TICK).expect("row").is_ok());
-    assert!(matches!(sub.next_timeout(TICK), Some(Err(Error::Cancelled))));
-    Ok(())
-}

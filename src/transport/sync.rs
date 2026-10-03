@@ -92,7 +92,8 @@ struct SharedChannels {
     // types is a shared response whether or not anybody is subscribed.
     response_types: HashSet<IncomingMessages>,
     // Live subscriptions, added in `send_shared_request` and removed by the
-    // cleanup thread on drop or, lazily, when a send finds the queue gone.
+    // cleanup thread on cancel or drop or, lazily, when a send finds the
+    // queue gone.
     subscribers: Mutex<Vec<SharedSubscriber>>,
     // Live subscriptions per request type; see `SharedCounts`.
     counts: Mutex<SharedCounts>,
@@ -411,10 +412,11 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     // The three cleanup handlers below remove a registration only when it is
-    // `same_channel` with the dropped or cancelled subscription's sender: a
-    // signal can be processed arbitrarily late, and unconditional removal would take out
-    // a newer registration under the same key (place then cancel on one order
-    // id, or an order update stream recreated after a reconnect reset).
+    // `same_channel` with the cancelled or dropped subscription's sender: a
+    // signal can be processed arbitrarily late, and unconditional removal
+    // would take out a newer registration under the same key (place then
+    // cancel on one order id, or an order update stream recreated after a
+    // reconnect reset).
     //
     // `clean_request` and `clean_order` also drop the subscription's
     // execution-id aliases, matched by channel rather than key, so a stale
@@ -781,9 +783,10 @@ impl<S: Stream> TcpMessageBus<S> {
         false
     }
 
-    // The cleanup thread receives signals as subscribers are dropped and
-    // releases the sender channels. Exits promptly on shutdown via select!
-    // over the signal channel and the shutdown-notify channel — no polling.
+    // The cleanup thread receives signals as subscribers are cancelled or
+    // dropped and releases the sender channels. Exits promptly on shutdown via
+    // select! over the signal channel and the shutdown-notify channel — no
+    // polling.
     fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 

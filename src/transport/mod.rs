@@ -323,11 +323,7 @@ impl InternalSubscription {
         // dispatched before the signal is processed still land on the queue,
         // behind `Cancelled`. The signal carries this sender, so cleanup
         // removes only this subscription's registration, never a newer one
-        // under the same id, and the later drop signal is a no-op. The order
-        // update stream has no cancel and is unregistered at drop.
-        if self.request_id.is_none() && self.order_id.is_none() && self.shared.is_none() {
-            return;
-        }
+        // under the same id, and the later drop signal is a no-op.
         if let Some(signaler) = &self.signaler {
             if let Err(e) = signaler.send(self.signal(sender.clone())) {
                 log::warn!("error sending cancel signal: {e}");
@@ -390,9 +386,9 @@ impl Drop for InternalSubscription {
     }
 }
 
-// Signals are used to notify the backend when a subscriber is dropped.
-// This facilitates the cleanup of the SenderHashes. Each signal carries the
-// dropped subscription's data sender; cleanup removes a registration only
+// Signals are used to notify the backend when a subscriber is cancelled or
+// dropped. This facilitates the cleanup of the SenderHashes. Each signal
+// carries the subscription's data sender; cleanup removes a registration only
 // when it is `same_channel` with it, so a stale signal cannot remove a newer
 // registration under the same key.
 #[cfg(feature = "sync")]

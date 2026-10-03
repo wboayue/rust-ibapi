@@ -406,8 +406,8 @@ async fn remove_if_dead<V>(channels: &RwLock<HashMap<i32, V>>, id: i32, kind: &s
 /// Drop every execution-id alias whose channel has no receivers left, so a
 /// dropped subscription's sender (and anything buffered in it) is released.
 /// Same liveness rule as [`remove_if_dead`]. Not gated on that removal: a
-/// stale or clone signal still owns aliases to sweep. It also catches other dead
-/// subscriptions whose signals are still queued.
+/// stale or clone signal still owns aliases to sweep. It also catches other
+/// dead subscriptions whose signals are still queued.
 async fn prune_dead_aliases(aliases: &RwLock<HashMap<String, BroadcastSender>>) {
     if aliases.read().await.is_empty() {
         return;
