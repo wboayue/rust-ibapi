@@ -29,8 +29,9 @@ returns a bare `i32`.
 `verify::verify_order_ids(order_id, &order)?` for anything that places an
 order (it also checks `parent_id` and the preset attached-order ids, since TWS
 routes frames for those orders by them), or `OrderId::from(id).checked()?`
-for a bare id (`cancel_order`). The check runs where the id crosses into the
-crate, never at `OrderId` construction. An `Order` field that names another
+for a bare id (`cancel_order`). Both return `Error::OrderIdInRequestRange`.
+The check runs where the id crosses into the crate, never at `OrderId`
+construction. An `Order` field that names another
 order's id belongs in `verify_order_ids`.
 
 **Routing by an inbound id** → `WireId::classify(id)` and match on the arm:

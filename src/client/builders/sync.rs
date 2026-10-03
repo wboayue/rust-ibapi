@@ -14,13 +14,11 @@ use crate::subscriptions::DecoderContext;
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs
-#[allow(dead_code)]
 pub(crate) struct RequestBuilder<'a> {
     client: &'a Client,
     request_id: RequestId,
 }
 
-#[allow(dead_code)]
 impl<'a> RequestBuilder<'a> {
     /// Create a new request builder with an auto-generated request ID
     pub fn new(client: &'a Client) -> Self {
@@ -38,12 +36,6 @@ impl<'a> RequestBuilder<'a> {
     /// Get the request ID
     pub fn request_id(&self) -> i32 {
         self.request_id.raw()
-    }
-
-    /// Check server version requirement
-    pub fn check_version(self, required_version: i32, feature: &str) -> Result<Self, Error> {
-        self.client.check_server_version(required_version, feature)?;
-        Ok(self)
     }
 
     /// Send the request and create a subscription
@@ -79,41 +71,15 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// Builder for creating shared channel requests (without request IDs)
-#[allow(dead_code)]
 pub(crate) struct SharedRequestBuilder<'a> {
     client: &'a Client,
     message_type: OutgoingMessages,
 }
 
-#[allow(dead_code)]
 impl<'a> SharedRequestBuilder<'a> {
     /// Create a new shared request builder
     pub fn new(client: &'a Client, message_type: OutgoingMessages) -> Self {
         Self { client, message_type }
-    }
-
-    /// Check server version requirement
-    pub fn check_version(self, required_version: i32, feature: &str) -> Result<Self, Error> {
-        self.client.check_server_version(required_version, feature)?;
-        Ok(self)
-    }
-
-    /// Send the request and create a subscription
-    pub fn send<T>(self, message: Vec<u8>) -> Result<Subscription<T>, Error>
-    where
-        T: StreamDecoder<T>,
-    {
-        SubscriptionBuilder::new(self.client).send_shared(self.message_type, message)
-    }
-
-    /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
-    where
-        T: StreamDecoder<T>,
-    {
-        SubscriptionBuilder::new(self.client)
-            .with_context(context)
-            .send_shared(self.message_type, message)
     }
 
     /// Send the request without creating a subscription
@@ -122,40 +88,13 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 }
 
-/// Builder for simple message sends (no response expected)
-#[allow(dead_code)]
-pub(crate) struct MessageBuilder<'a> {
-    client: &'a Client,
-}
-
-#[allow(dead_code)]
-impl<'a> MessageBuilder<'a> {
-    /// Create a new message builder
-    pub fn new(client: &'a Client) -> Self {
-        Self { client }
-    }
-
-    /// Check server version requirement
-    pub fn check_version(self, required_version: i32, feature: &str) -> Result<Self, Error> {
-        self.client.check_server_version(required_version, feature)?;
-        Ok(self)
-    }
-
-    /// Send the message
-    pub fn send(self, message: Vec<u8>) -> Result<(), Error> {
-        self.client.send_message(message)
-    }
-}
-
 /// Builder for creating subscriptions with consistent patterns
-#[allow(dead_code)]
 pub(crate) struct SubscriptionBuilder<'a, T> {
     client: &'a Client,
     context: DecoderContext,
     _phantom: PhantomData<T>,
 }
 
-#[allow(dead_code)]
 impl<'a, T> SubscriptionBuilder<'a, T>
 where
     T: StreamDecoder<T>,
@@ -172,12 +111,6 @@ where
     /// Sets the response context for special handling
     pub fn with_context(mut self, context: DecoderContext) -> Self {
         self.context = context;
-        self
-    }
-
-    /// Sets smart depth flag in the context
-    pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
-        self.context.is_smart_depth = is_smart_depth;
         self
     }
 
@@ -208,7 +141,6 @@ where
 }
 
 /// Extension trait to add builder methods to Client
-#[allow(dead_code)]
 pub(crate) trait ClientRequestBuilders {
     /// Create a request builder with an auto-generated request ID
     fn request(&self) -> RequestBuilder<'_>;
@@ -218,12 +150,8 @@ pub(crate) trait ClientRequestBuilders {
 
     /// Create a shared request builder
     fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_>;
-
-    /// Create a simple message builder
-    fn message(&self) -> MessageBuilder<'_>;
 }
 
-#[allow(dead_code)]
 impl ClientRequestBuilders for Client {
     fn request(&self) -> RequestBuilder<'_> {
         RequestBuilder::new(self)
@@ -235,10 +163,6 @@ impl ClientRequestBuilders for Client {
 
     fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_> {
         SharedRequestBuilder::new(self, message_type)
-    }
-
-    fn message(&self) -> MessageBuilder<'_> {
-        MessageBuilder::new(self)
     }
 }
 

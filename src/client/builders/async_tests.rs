@@ -27,50 +27,10 @@ async fn test_request_builder_with_id() {
 }
 
 #[tokio::test]
-async fn test_request_builder_check_version_success() {
-    let client = create_test_client();
-    let builder = RequestBuilder::new(&client);
-    let result = builder.check_version(100, "test_feature").await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_request_builder_check_version_failure() {
-    let client = create_test_client();
-    let builder = RequestBuilder::new(&client);
-    let result = builder.check_version(999999, "future_feature").await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
 async fn test_shared_request_builder_new() {
     let client = create_test_client();
     let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
     assert_eq!(builder.message_type, OutgoingMessages::RequestMarketData);
-}
-
-#[tokio::test]
-async fn test_shared_request_builder_check_version() {
-    let client = create_test_client();
-    let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
-    let result = builder.check_version(100, "test_feature").await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_message_builder_new() {
-    let client = create_test_client();
-    let builder = MessageBuilder::new(&client);
-    // MessageBuilder doesn't have public fields to test, just ensure it creates
-    let _ = builder;
-}
-
-#[tokio::test]
-async fn test_message_builder_check_version() {
-    let client = create_test_client();
-    let builder = MessageBuilder::new(&client);
-    let result = builder.check_version(100, "test_feature").await;
-    assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -81,28 +41,6 @@ async fn test_subscription_builder_new() {
     let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
     // Builder created successfully
     let _ = builder;
-}
-
-#[tokio::test]
-async fn test_subscription_builder_with_context() {
-    let client = create_test_client();
-    let context = client
-        .decoder_context()
-        .with_smart_depth(true)
-        .with_request_type(OutgoingMessages::RequestMarketData);
-    let message_bus = client.message_bus.clone();
-    let builder: SubscriptionBuilder<Bar> =
-        SubscriptionBuilder::new_with_components(client.decoder_context(), message_bus).with_context(context.clone());
-    assert_eq!(builder.context, context);
-}
-
-#[tokio::test]
-async fn test_subscription_builder_with_smart_depth() {
-    let client = create_test_client();
-    let context = client.decoder_context();
-    let message_bus = client.message_bus.clone();
-    let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus).with_smart_depth(true);
-    assert!(builder.context.is_smart_depth);
 }
 
 #[tokio::test]
@@ -120,9 +58,6 @@ async fn test_client_request_builders_trait() {
     // Test shared_request()
     let shared_builder = client.shared_request(OutgoingMessages::RequestMarketData);
     assert_eq!(shared_builder.message_type, OutgoingMessages::RequestMarketData);
-
-    // Test message()
-    let _message_builder = client.message();
 }
 
 #[tokio::test]
@@ -176,93 +111,6 @@ async fn test_builder_patterns_table_driven() {
             let builder = client.request();
             assert!(builder.request_id() >= tc.expected_id_min, "test case '{}' failed", tc.name);
         }
-    }
-}
-
-#[tokio::test]
-async fn test_response_context_modifications() {
-    struct TestCase {
-        name: &'static str,
-        initial_smart_depth: bool,
-        initial_request_type: Option<OutgoingMessages>,
-        set_smart_depth: Option<bool>,
-        set_request_type: Option<OutgoingMessages>,
-        expected_smart_depth: bool,
-        expected_request_type: Option<OutgoingMessages>,
-    }
-
-    let test_cases = vec![
-        TestCase {
-            name: "default_context",
-            initial_smart_depth: false,
-            initial_request_type: None,
-            set_smart_depth: None,
-            set_request_type: None,
-            expected_smart_depth: false,
-            expected_request_type: None,
-        },
-        TestCase {
-            name: "set_smart_depth_true",
-            initial_smart_depth: false,
-            initial_request_type: None,
-            set_smart_depth: Some(true),
-            set_request_type: None,
-            expected_smart_depth: true,
-            expected_request_type: None,
-        },
-        TestCase {
-            name: "set_request_type",
-            initial_smart_depth: false,
-            initial_request_type: None,
-            set_smart_depth: None,
-            set_request_type: Some(OutgoingMessages::RequestMarketData),
-            expected_smart_depth: false,
-            expected_request_type: Some(OutgoingMessages::RequestMarketData),
-        },
-        TestCase {
-            name: "set_both",
-            initial_smart_depth: false,
-            initial_request_type: None,
-            set_smart_depth: Some(true),
-            set_request_type: Some(OutgoingMessages::CancelMarketData),
-            expected_smart_depth: true,
-            expected_request_type: Some(OutgoingMessages::CancelMarketData),
-        },
-    ];
-
-    for tc in test_cases {
-        let client = create_test_client();
-        let context = client.decoder_context();
-        let message_bus = client.message_bus.clone();
-        let mut builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
-
-        // Set initial context
-        builder.context.is_smart_depth = tc.initial_smart_depth;
-        builder.context.request_type = tc.initial_request_type;
-
-        // Apply modifications
-        if let Some(smart_depth) = tc.set_smart_depth {
-            builder = builder.with_smart_depth(smart_depth);
-        }
-
-        if let Some(request_type) = tc.set_request_type {
-            let context = DecoderContext::new(builder.context.server_version)
-                .with_smart_depth(builder.context.is_smart_depth)
-                .with_request_type(request_type);
-            builder = builder.with_context(context);
-        }
-
-        // Verify expectations
-        assert_eq!(
-            builder.context.is_smart_depth, tc.expected_smart_depth,
-            "test case '{}' failed: smart_depth mismatch",
-            tc.name
-        );
-        assert_eq!(
-            builder.context.request_type, tc.expected_request_type,
-            "test case '{}' failed: request_type mismatch",
-            tc.name
-        );
     }
 }
 

@@ -60,6 +60,10 @@ fn error_display() {
         (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
+            Error::OrderIdInRequestRange { order_id: 7 },
+            "order id 7 is at or above 1500000000, which is reserved for request ids",
+        ),
+        (
             Error::AccountUpdatesInUse {
                 active: AccountId("DU1".into()),
                 requested: AccountId("DU2".into()),
@@ -75,18 +79,6 @@ fn error_display() {
     for (error, expected) in cases {
         assert_eq!(error.to_string(), expected);
     }
-}
-
-#[test]
-fn order_id_in_request_range_display_names_the_floor() {
-    // The `#[error]` string spells the floor out; this keeps it in step with
-    // the constant.
-    let floor = crate::client::ids::REQUEST_ID_FLOOR;
-    let message = Error::OrderIdInRequestRange { order_id: floor }.to_string();
-    assert_eq!(
-        message,
-        format!("order id {floor} is at or above {floor}, which is reserved for request ids")
-    );
 }
 
 #[test]
