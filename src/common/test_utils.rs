@@ -225,7 +225,7 @@ pub mod helpers {
         pub const TEST_TICKER_ID: i32 = 100;
         pub const TEST_TICKER_ID_2: i32 = 200;
 
-        /// First request_id assigned by `Client::next_request_id()`: the
+        /// First request_id assigned by `Client::mint_request_id()`: the
         /// request-range floor (`client::ids::REQUEST_ID_FLOOR`).
         pub const TEST_REQ_ID_FIRST: i32 = crate::client::ids::REQUEST_ID_FLOOR;
 

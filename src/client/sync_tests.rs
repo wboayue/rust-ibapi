@@ -28,8 +28,8 @@ fn accessors_round_trip() {
     assert!(client.time_zone().is_none());
     assert!(client.is_connected());
 
-    let r1 = client.next_request_id();
-    let r2 = client.next_request_id();
+    let r1 = client.mint_request_id();
+    let r2 = client.mint_request_id();
     assert!(r2 > r1, "request ids should increment");
 
     client.raise_next_order_id(OrderId::from(9000));
