@@ -24,7 +24,7 @@ use crate::subscriptions::common::RoutedItem;
 /// System connectivity codes are graded by how much they matter: 1102
 /// (restored, data maintained) → info; 1101 (restored, data lost —
 /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
-/// reset) → error. Order rejections and errors log at `error`.
+/// reset) → error. Request errors, order rejections and errors log at `error`.
 fn notice_log_level(notice: &Notice) -> Level {
     match notice.category() {
         NoticeCategory::Cancellation => Level::Info,
@@ -42,7 +42,7 @@ fn notice_log_level(notice: &Notice) -> Level {
             CONNECTIVITY_RESTORED_DATA_LOST_CODE => Level::Warn,
             _ => Level::Error,
         },
-        NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
+        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
     }
 }
 

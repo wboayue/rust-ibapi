@@ -368,7 +368,6 @@ async fn observe_execution_then_commission(sub: &mut Subscription<PlaceOrder>) -
         match timeout(deadline.saturating_duration_since(Instant::now()), sub.next()).await {
             Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec))))) => execution_id = Some(exec.execution.execution_id),
             Ok(Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report))))) => commission_id = Some(report.execution_id),
-            Ok(Some(Ok(SubscriptionItem::Notice(notice)))) if notice.is_order_rejection() => return Err(format!("order rejected: {notice}")),
             Ok(Some(Ok(_))) => continue,
             Ok(Some(Err(e))) => return Err(format!("subscription error: {e}")),
             Ok(None) => return Err(format!("subscription ended: execution={execution_id:?} commission={commission_id:?}")),

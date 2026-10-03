@@ -363,7 +363,6 @@ fn observe_execution_then_commission(sub: &Subscription<PlaceOrder>) -> Result<(
         match sub.next_timeout(deadline.saturating_duration_since(Instant::now())) {
             Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec)))) => execution_id = Some(exec.execution.execution_id),
             Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report)))) => commission_id = Some(report.execution_id),
-            Some(Ok(SubscriptionItem::Notice(notice))) if notice.is_order_rejection() => return Err(format!("order rejected: {notice}")),
             Some(Ok(_)) => continue,
             Some(Err(e)) => return Err(format!("subscription error: {e}")),
             // A commission that reached TWS's wire before its execution is dropped

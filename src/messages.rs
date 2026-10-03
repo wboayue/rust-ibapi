@@ -1142,6 +1142,8 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
         NoticeCategory::Warning
     } else if SYSTEM_MESSAGE_CODES.contains(&code) {
         NoticeCategory::SystemMessage
+    } else if REQUEST_ERROR_CODES.contains(&code) {
+        NoticeCategory::RequestError
     } else if ORDER_REJECTION_CODE_RANGE.contains(&code) {
         NoticeCategory::OrderRejection
     } else {
@@ -1150,7 +1152,7 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
 }
 
 /// Check if an error code is informational: every [`NoticeCategory`] except
-/// `OrderRejection` and `Error`.
+/// `RequestError`, `OrderRejection` and `Error`.
 ///
 /// For these TWS proceeds with the request, the frame confirms an outcome the
 /// caller asked for, or the frame reports a connection-wide state change
@@ -1169,7 +1171,7 @@ pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
     // routing disposition here, not inherit one from a wildcard.
     match classify(code, message) {
         NoticeCategory::Cancellation | NoticeCategory::DataAdvisory | NoticeCategory::Warning | NoticeCategory::SystemMessage => true,
-        NoticeCategory::OrderRejection | NoticeCategory::Error => false,
+        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => false,
     }
 }
 
@@ -1212,6 +1214,33 @@ pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
 /// for callers that bind the constant explicitly.
 pub const DATA_ADVISORY_CODES: &[i32] = &[MARKET_DEPTH_RESET_CODE, 2188, 10089, 10090, 10091, 10167];
 
+/// Request-error codes inside [`ORDER_REJECTION_CODE_RANGE`]: a request other
+/// than an order failed (market data, depth, historical data, scanner, session
+/// setup). Classified [`NoticeCategory::RequestError`], ahead of the band.
+///
+/// Only codes that never answer an order are listed. Codes that answer both
+/// orders and other requests stay [`NoticeCategory::OrderRejection`], so
+/// [`Notice::is_order_rejection`] keeps matching them on order streams: 200 (no
+/// security definition) and 320-323 (server error reading, validating or
+/// processing a request; 320 answers an invalid attached order, #842).
+/// - 300: Can't find EId with ticker Id (cancelling unknown market data).
+/// - 301, 302: Invalid ticker action; error parsing stop ticker string.
+/// - 309: Max number of market depth requests has been reached.
+/// - 310: Can't find the subscribed market depth.
+/// - 316: Market depth data has been HALTED. Please re-subscribe.
+/// - 319: Invalid log level.
+/// - 326: Client id already in use.
+/// - 327: Only clientId 0 can set the auto bind TWS orders property.
+/// - 330, 331: Managed accounts list needs an FA or STL account with managed accounts.
+/// - 354: Not subscribed to requested market data.
+/// - 357: Client version out of date.
+/// - 365, 366: No scanner subscription / historical data query for the ticker id.
+/// - 385, 386: Duplicate ticker id for scanner subscription / historical data query.
+///
+/// A slice rather than an array so that adding a code is not a type change
+/// for callers that bind the constant explicitly.
+pub const REQUEST_ERROR_CODES: &[i32] = &[300, 301, 302, 309, 310, 316, 319, 326, 327, 330, 331, 354, 357, 365, 366, 385, 386];
+
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
 pub(crate) const FARM_OK_CODES: [i32; 3] = [2104, 2106, 2158];
@@ -1229,14 +1258,12 @@ pub(crate) const FARM_INACTIVE_CODES: [i32; 2] = [2107, 2108];
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Connecting`].
 pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
 
-/// Range of error codes that can represent order rejections from TWS (200-399).
+/// The order-rejection band (200-399): order parameter validation, margin and
+/// risk-check rejections.
 ///
-/// Includes parameter validation, contract-not-found, margin and risk-check
-/// rejections. Note: [`ORDER_CANCELLED_CODE`] (202) is numerically inside this
-/// range but is a *confirmation*, not a rejection; 317 (market depth RESET) is
-/// a [`DATA_ADVISORY_CODES`] entry; code [`ORDER_MESSAGE_CODE`] (399) can
-/// instead carry warning text. See [`Notice::category`] for partition
-/// semantics.
+/// [`Notice::category`] classifies a code in this band as
+/// [`NoticeCategory::OrderRejection`] unless an earlier rule claims it; see
+/// [`NoticeCategory`] for the precedence chain.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
 /// Synthesized notice code emitted when a handshake-time frame's
@@ -1389,9 +1416,15 @@ pub(crate) fn transport_reconnect_notice() -> Notice {
 /// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
 ///    line, or code 0 (a frame whose `error_code` field was absent on the wire).
 /// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
-/// 5. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
+/// 5. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
+///    [`ORDER_REJECTION_CODE_RANGE`], which they sit inside.
+/// 6. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
 ///    excluding the cases above.
-/// 6. [`Error`](Self::Error) — everything else.
+/// 7. [`Error`](Self::Error) — everything else.
+///
+/// Each `Notice::is_*` category predicate ([`Notice::is_cancellation`],
+/// [`Notice::is_warning`], ...) is `category() == X` for its variant `X`, so the
+/// predicates are disjoint too.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
 /// breaking release.
@@ -1403,6 +1436,7 @@ pub(crate) fn transport_reconnect_notice() -> Notice {
 /// # let notice: Notice = unimplemented!();
 /// match notice.category() {
 ///     NoticeCategory::OrderRejection => eprintln!("rejected: {}", notice),
+///     NoticeCategory::RequestError   => eprintln!("failed: {}",   notice),
 ///     NoticeCategory::Warning        => eprintln!("warn: {}",     notice),
 ///     NoticeCategory::Error          => eprintln!("error: {}",    notice),
 ///     _ => {}
@@ -1418,8 +1452,12 @@ pub enum NoticeCategory {
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
-    /// Order rejection (codes 200..=399, excluding informational cases by precedence).
+    /// Order rejection ([`ORDER_REJECTION_CODE_RANGE`], excluding the cases
+    /// above it in the precedence chain).
     OrderRejection,
+    /// A request other than an order failed ([`REQUEST_ERROR_CODES`]): market
+    /// data, depth, historical data, scanner, session setup. Terminal.
+    RequestError,
     /// Data advisory ([`DATA_ADVISORY_CODES`]): the request is not rejected and
     /// data follows — a fallback, a partial entitlement, or a depth-book reset.
     /// Informational.
@@ -1541,18 +1579,17 @@ impl Notice {
     /// Code 202 is sent by TWS to confirm an order cancellation. This is an
     /// informational message, not an error.
     pub fn is_cancellation(&self) -> bool {
-        self.code == ORDER_CANCELLED_CODE
+        self.category() == NoticeCategory::Cancellation
     }
 
     /// Returns `true` if this is a warning message.
     ///
     /// Warnings are [`WARNING_CODE_RANGE`], code 399 with a `Warning:` line, and
     /// code 0 — a frame whose `error_code` field was absent on the wire, which
-    /// IB Gateway sends for informational notices. A range predicate: it is
-    /// also `true` for the advisory 2188, which [`Notice::category`] reports as
-    /// [`NoticeCategory::DataAdvisory`].
+    /// IB Gateway sends for informational notices. Same as
+    /// `category() == NoticeCategory::Warning`.
     pub fn is_warning(&self) -> bool {
-        is_warning_message(self.code, &self.message)
+        self.category() == NoticeCategory::Warning
     }
 
     /// Returns `true` if this is a system/connectivity message (codes 1100-1102, 1300).
@@ -1563,7 +1600,7 @@ impl Notice {
     /// - 1102: Connectivity restored, market data maintained
     /// - 1300: Socket port reset during active connection
     pub fn is_system_message(&self) -> bool {
-        SYSTEM_MESSAGE_CODES.contains(&self.code)
+        self.category() == NoticeCategory::SystemMessage
     }
 
     /// Returns `true` if this is a data advisory ([`DATA_ADVISORY_CODES`]).
@@ -1573,7 +1610,7 @@ impl Notice {
     /// subscription stays open and the notice is informational, not an error.
     /// This does not guarantee that every requested field will arrive.
     pub fn is_data_advisory(&self) -> bool {
-        DATA_ADVISORY_CODES.contains(&self.code)
+        self.category() == NoticeCategory::DataAdvisory
     }
 
     /// Returns `true` if this is an informational notice (not an error).
@@ -1597,12 +1634,8 @@ impl Notice {
         !self.is_informational()
     }
 
-    /// Returns `true` if this notice falls in the order-rejection range (200-399).
-    ///
-    /// Code 202 (cancellation confirmation), 317 (market depth RESET, a data
-    /// advisory) and warning-form code 399 are numerically inside this range;
-    /// this predicate returns `true` for all three. For a disjoint partition,
-    /// use [`Notice::category`].
+    /// Returns `true` if this notice is an order rejection
+    /// ([`NoticeCategory::OrderRejection`]).
     ///
     /// # Examples
     ///
@@ -1614,7 +1647,23 @@ impl Notice {
     /// }
     /// ```
     pub fn is_order_rejection(&self) -> bool {
-        ORDER_REJECTION_CODE_RANGE.contains(&self.code)
+        self.category() == NoticeCategory::OrderRejection
+    }
+
+    /// Returns `true` if a request other than an order failed
+    /// ([`REQUEST_ERROR_CODES`], [`NoticeCategory::RequestError`]).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Notice;
+    /// # let notice: Notice = unimplemented!();
+    /// if notice.is_request_error() {
+    ///     eprintln!("request failed: {}", notice);
+    /// }
+    /// ```
+    pub fn is_request_error(&self) -> bool {
+        self.category() == NoticeCategory::RequestError
     }
 
     /// Returns `true` if this notice was synthesized client-side during the
@@ -1654,7 +1703,7 @@ impl Notice {
     ///     | NoticeCategory::Warning
     ///     | NoticeCategory::DataAdvisory
     ///     | NoticeCategory::SystemMessage => "informational",
-    ///     NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
+    ///     NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
     ///     _ => "unknown",
     /// };
     /// # let _ = kind;
