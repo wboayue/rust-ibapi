@@ -1071,6 +1071,33 @@ fn test_is_handshake_synthetic() {
 }
 
 #[test]
+fn test_is_client_synthesized() {
+    for code in [
+        HANDSHAKE_UNKNOWN_FRAME_CODE,
+        HANDSHAKE_DECODE_FAILURE_CODE,
+        UNKNOWN_MESSAGE_TYPE_CODE,
+        SUBSCRIPTION_LAG_CODE,
+        NOTICE_STREAM_LAG_CODE,
+        TRANSPORT_RECONNECT_CODE,
+    ] {
+        assert!(notice_with_code(code).is_client_synthesized(), "code {code}");
+    }
+
+    // TWS-emitted codes, including the code-less 0.
+    for code in [
+        0,
+        ORDER_CANCELLED_CODE,
+        *WARNING_CODE_RANGE.start(),
+        *WARNING_CODE_RANGE.end(),
+        SYSTEM_MESSAGE_CODES[0],
+        *ORDER_REJECTION_CODE_RANGE.start(),
+        10000,
+    ] {
+        assert!(!notice_with_code(code).is_client_synthesized(), "code {code}");
+    }
+}
+
+#[test]
 fn test_all_incoming_message_conversions() {
     // Test boundary values and ensure all message types are covered
     let test_cases = vec![
@@ -1166,10 +1193,15 @@ fn test_message_type_is_resolved_once_at_construction() {
     assert_eq!(proto.message_type(), IncomingMessages::OpenOrder);
     assert!(proto.fields.is_empty(), "a proto frame allocates no text fields");
 
-    // An unparseable or absent discriminant is NotValid, as before.
-    assert_eq!(ResponseMessage::from("nonsense\0").message_type(), IncomingMessages::NotValid);
-    assert_eq!(ResponseMessage::from("").message_type(), IncomingMessages::NotValid);
-    assert_eq!(ResponseMessage::default().message_type(), IncomingMessages::NotValid);
+    // An unparseable or absent discriminant is NotValid with no id. It used to
+    // be -1 here and 0 from Default - two encodings, and -1 is NotValid's own
+    // discriminant.
+    for message in [ResponseMessage::from("nonsense\0"), ResponseMessage::from(""), ResponseMessage::default()] {
+        assert_eq!(message.message_type(), IncomingMessages::NotValid);
+        assert_eq!(message.message_id(), None);
+    }
+    // An unrecognized id that did parse is kept.
+    assert_eq!(ResponseMessage::from("-1\0").message_id(), Some(-1));
 }
 
 #[test]

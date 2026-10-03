@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
-use log::{info, warn};
+use log::info;
 
 use crate::client::ids::WireId;
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN, UNKNOWN_MESSAGE_TYPE_CODE};
+use crate::messages::{unknown_message_type_notice, IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN};
 use crate::subscriptions::common::RoutedItem;
 
 /// Sink for unrouted notices observed during the handshake. Production impls
@@ -35,7 +35,7 @@ pub(crate) fn log_orphan(id: WireId, item: &RoutedItem) {
 ///
 /// - **Unknown message kind** ([`IncomingMessages::NotValid`]) — nothing can
 ///   ever route this, and it is the shape a framing slip takes. Published to
-///   the notice stream as [`UNKNOWN_MESSAGE_TYPE_CODE`] so a consumer can react
+///   the notice stream as [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::messages::UNKNOWN_MESSAGE_TYPE_CODE) so a consumer can react
 ///   programmatically rather than by reading logs.
 /// - **Known kind, nobody listening** — an ordinary steady-state condition, so
 ///   it stays at `info` and raises no notice.
@@ -46,16 +46,7 @@ pub(crate) fn log_orphan(id: WireId, item: &RoutedItem) {
 /// decode error.
 pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &dyn NoticeSink) {
     if message.message_type() == IncomingMessages::NotValid {
-        // The Debug dump already carries the id; the notice has no such
-        // fallback, so it interpolates.
-        warn!("unroutable frame: message id maps to no known type — the stream may be desynchronized: {message:?}");
-        notice_sink.deliver(Notice::synthesized(
-            UNKNOWN_MESSAGE_TYPE_CODE,
-            format!(
-                "received a frame with message id {}, which maps to no known type; the stream may be desynchronized",
-                message.message_id()
-            ),
-        ));
+        notice_sink.deliver(unknown_message_type_notice(message));
     } else {
         info!("no recipient found for: {message:?}");
     }

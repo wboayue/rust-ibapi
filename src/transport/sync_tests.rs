@@ -3126,6 +3126,29 @@ fn test_unknown_message_id_reaches_the_notice_stream() -> Result<(), Error> {
     Ok(())
 }
 
+/// A frame body too short to hold the message id must send the dispatcher down
+/// its reconnect branch, not kill it. `parse_raw_message` rejects the body as
+/// `InvalidFrame`, which counts as connection lost; before that guard it
+/// indexed past the end and panicked the dispatcher thread (#891).
+#[test]
+fn test_short_frame_body_reconnects() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notices = bus.connection.notice_broadcaster.subscribe();
+
+    stream.push_inbound(b"xx".to_vec());
+    let sv = crate::server_versions::PROTOBUF_REST_MESSAGES_3;
+    stream.push_inbound(format!("{sv}\020240120 12:00:00 EST\0").into_bytes());
+    stream.push_inbound(helpers::next_valid_id_frame(5000));
+    stream.push_inbound(helpers::managed_accounts_frame("DU1234567"));
+
+    bus.dispatch()?;
+
+    let notice = notices.recv_timeout(TICK).expect("no reconnect notice on the notice fan-out");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+    assert!(bus.is_connected());
+    Ok(())
+}
+
 /// Every send is refused while the session is down: nothing reaches the socket
 /// the reconnect is replacing, and nothing is registered on a channel no reset
 /// would clear again.

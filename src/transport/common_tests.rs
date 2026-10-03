@@ -1,4 +1,5 @@
 use super::*;
+use crate::messages::UNKNOWN_MESSAGE_TYPE_CODE;
 
 #[test]
 fn test_validate_frame_length_accepts_the_legal_range() {
