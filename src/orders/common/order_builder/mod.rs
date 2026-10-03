@@ -429,13 +429,15 @@ pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_pric
 /// stop order and a low side buy limit order.
 /// Products: CFD, BAG, FOP, CASH, FUT, OPT, STK, WAR
 pub fn bracket_order(
-    parent_order_id: i32,
+    parent_order_id: impl Into<OrderId>,
     action: Action,
     quantity: f64,
     limit_price: f64,
     take_profit_limit_price: f64,
     stop_loss_price: f64,
 ) -> Vec<Order> {
+    let parent_order_id = parent_order_id.into().value();
+
     //This will be our main or "parent" order
     let parent = Order {
         order_id: parent_order_id,

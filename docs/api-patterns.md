@@ -120,7 +120,7 @@ order's routing entry:
 impl Client {
     pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;  // .await for async
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }

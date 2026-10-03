@@ -3,10 +3,10 @@ use std::sync::Arc;
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
-use crate::client::ids::OrderId;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
+use crate::orders::OrderId;
 use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 

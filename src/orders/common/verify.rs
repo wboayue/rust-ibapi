@@ -1,6 +1,6 @@
-use crate::client::ids::OrderId;
 use crate::contracts::Contract;
 use crate::orders::Order;
+use crate::orders::OrderId;
 use crate::{server_versions, Error};
 
 /// `order_id` as an [`OrderId`], after checking it and every order id `order`

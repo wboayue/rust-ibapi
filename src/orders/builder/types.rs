@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::client::ids::OrderId;
+use crate::orders::OrderId;
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
 ///

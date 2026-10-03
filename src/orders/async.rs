@@ -2,9 +2,9 @@
 
 use time::OffsetDateTime;
 
-use crate::client::ids::OrderId;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
+use crate::orders::OrderId;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};

@@ -203,6 +203,24 @@ if let Err(Error::ProtobufDecode(e)) = result {
 
 `Error::ParseTime` keeps its `time::error::Parse` payload: `time` is part of the API through `OffsetDateTime` and `Date`, so wrapping its error would gain nothing.
 
+### 16. Order methods take `impl Into<OrderId>`
+
+`place_order`, `submit_order`, `cancel_order`, `order_builder::market_f_hedge`, `order_builder::bracket_order` and `OrderBuilder::parent` take `impl Into<OrderId>` instead of `i32`, so the ids in `BracketOrderIds` and `AttachedOrderIds` pass straight in. An `i32` value or literal still compiles. What breaks is an argument whose type was inferred from the old `i32` parameter: with a generic parameter, the compiler can no longer tell what to convert to.
+
+```rust,ignore
+// 4.2: the i32 parameter picked the target type
+client.place_order(row_id.try_into()?, &contract, &order)?; // row_id: i64
+client.cancel_order(text.parse().unwrap(), "")?;
+let cancel = Client::cancel_order;
+
+// 5.0: name the type
+client.place_order(i32::try_from(row_id)?, &contract, &order)?;
+client.cancel_order(text.parse::<i32>().unwrap(), "")?;
+let cancel: fn(&Client, i32, &str) -> _ = Client::cancel_order;
+```
+
+The same applies to `.into()` from a narrower integer and to `Default::default()`. `OrderId::from(..)` works too.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -229,7 +247,8 @@ No code changes required, but observable at runtime:
 13. Replace `orders::builder::OrderAnalysis` with `orders::OrderState` — see [§13](#13-orderanalysis-is-removed).
 14. If you enable the `utoipa` feature, rename it to `utoipa-6` and upgrade to utoipa 6 — see [§14](#14-the-utoipa-feature-is-renamed-utoipa-6-and-requires-utoipa-6).
 15. Replace uses of `prost::DecodeError` from `Error::ProtobufDecode`, and any `From<prost::DecodeError> for ibapi::Error` conversion — see [§15](#15-errorprotobufdecode-carries-errorsprotobufdecodeerror).
-16. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+16. Where an order id argument is converted with `.try_into()`, `.into()`, `.parse()` or `Default::default()`, name the target type (`i32::try_from(..)`, `.parse::<i32>()`) — see [§16](#16-order-methods-take-impl-intoorderid).
+17. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

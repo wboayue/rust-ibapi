@@ -54,7 +54,7 @@ async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .expect("placing order after cancel should succeed");
     assert!(order_id.0 > 0, "new order id should be positive");
     rate_limit();
-    let _ = client.cancel_order(order_id.0, "").await.expect("cleanup cancel failed");
+    let _ = client.cancel_order(order_id, "").await.expect("cleanup cancel failed");
     order_id
 }
 
@@ -196,7 +196,7 @@ async fn order_builder_limit() {
 
     // Cancel the placed order
     rate_limit();
-    let _ = client.cancel_order(order_id.0, "").await.expect("cancel_order failed");
+    let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
 // Regression test for https://github.com/wboayue/rust-ibapi/issues/426
@@ -208,7 +208,7 @@ async fn cancel_bracket_order() {
     let ids = place_bracket_order(&client, &contract).await;
 
     rate_limit();
-    let mut cancel_sub = client.cancel_order(ids.parent.0, "").await.expect("cancel_order failed");
+    let mut cancel_sub = client.cancel_order(ids.parent, "").await.expect("cancel_order failed");
 
     // TWS may push the parent's current working status (Submitted / PendingCancel)
     // before the terminal Cancelled confirmation, so drain status updates until
@@ -249,7 +249,7 @@ async fn cancel_bracket_order_then_place_new_order() {
     let ids = place_bracket_order(&client, &contract).await;
 
     rate_limit();
-    let _cancel_sub = client.cancel_order(ids.parent.0, "").await.expect("cancel_order failed");
+    let _cancel_sub = client.cancel_order(ids.parent, "").await.expect("cancel_order failed");
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     place_and_cleanup(&client, &contract).await;
@@ -480,5 +480,5 @@ async fn preset_attached_orders_accepted() {
     println!("preset attached orders: {outcome}");
 
     rate_limit();
-    let _ = client.cancel_order(ids.parent.0, "").await;
+    let _ = client.cancel_order(ids.parent, "").await;
 }

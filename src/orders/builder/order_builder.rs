@@ -1,11 +1,11 @@
 use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
-use crate::client::ids::OrderId;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
 use crate::orders::conditions::TriggerMethod;
+use crate::orders::OrderId;
 use crate::orders::{
     Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce,
     VolatilityType,
