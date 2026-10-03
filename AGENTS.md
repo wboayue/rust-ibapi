@@ -240,4 +240,5 @@ IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 
 - DO NOT include "Generated with Claude Code" or similar attribution in commit messages
 - Keep commit messages focused on the technical changes and their purpose
+- Merge PRs with a merge commit (`gh pr merge N --merge`); squash only for a specific reason, such as a branch holding fixup or abandoned commits
 
