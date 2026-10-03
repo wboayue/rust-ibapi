@@ -44,6 +44,15 @@ const MID_FRAME_STALL: Duration = Duration::from_secs(30);
 const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
 const _: () = assert!(MID_FRAME_TIMEOUT_LIMIT > 0, "MID_FRAME_STALL must exceed TWS_READ_TIMEOUT");
 
+/// How long connect waits for each startup frame (handshake ack, account
+/// info) before giving up. A loaded gateway can take longer than one read
+/// timeout to answer.
+const STARTUP_STALL: Duration = Duration::from_secs(30);
+
+/// [`STARTUP_STALL`] in read timeouts, counted like [`MID_FRAME_TIMEOUT_LIMIT`].
+pub(crate) const STARTUP_TIMEOUT_LIMIT: u32 = (STARTUP_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
+const _: () = assert!(STARTUP_TIMEOUT_LIMIT > 0, "STARTUP_STALL must exceed TWS_READ_TIMEOUT");
+
 /// Queue depth at which (and at every further multiple of which) a growing
 /// sync channel logs a warning. Sync channels are unbounded — they never drop,
 /// so the failure mode of a stalled consumer is silent memory growth. The

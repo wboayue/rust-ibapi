@@ -13,7 +13,7 @@ use crate::errors::Error;
 use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket};
+use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket, STARTUP_TIMEOUT_LIMIT};
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -207,10 +207,35 @@ impl<S: Stream> Connection<S> {
     /// Read a message from the connection
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
-        let message = parse_raw_message(&data)?;
+        self.decode_frame(&data)
+    }
+
+    fn decode_frame(&self, data: &[u8]) -> Response {
+        let message = parse_raw_message(data)?;
         self.recorder.record_response(&message);
 
         Ok(message)
+    }
+
+    /// Read one startup frame body, waiting out read timeouts: a loaded
+    /// gateway can take longer than one socket timeout to answer. Gives up
+    /// after [`STARTUP_TIMEOUT_LIMIT`] consecutive timeouts.
+    fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
+        let mut timeouts = 0;
+        loop {
+            match self.socket.read_message() {
+                Err(e) if e.is_read_timeout() => {
+                    timeouts += 1;
+                    if timeouts >= STARTUP_TIMEOUT_LIMIT {
+                        return Err(Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            format!("no startup reply from TWS after {timeouts} read timeouts"),
+                        )));
+                    }
+                }
+                result => return result,
+            }
+        }
     }
 
     /// Break any in-flight blocking read on the underlying socket so the
@@ -235,7 +260,7 @@ impl<S: Stream> Connection<S> {
 
         // Read handshake response as raw text, bypassing parse_raw_message
         // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
-        let ack: Result<ResponseMessage, Error> = match self.socket.read_message() {
+        let ack: Result<ResponseMessage, Error> = match self.read_startup_frame() {
             Ok(data) => {
                 let raw_string = String::from_utf8_lossy(&data).into_owned();
                 Ok(ResponseMessage::from(&raw_string))
@@ -283,7 +308,7 @@ impl<S: Stream> Connection<S> {
         let ctx = self.handshake_context();
         let server_version = self.server_version();
         loop {
-            let mut message = self.read_message()?;
+            let mut message = self.decode_frame(&self.read_startup_frame()?)?;
             let info = self.connection_handler.parse_account_info(server_version, &mut message, &ctx)?;
 
             // Merge received info

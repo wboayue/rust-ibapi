@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -11,7 +11,7 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
-use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus};
+use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus, STARTUP_TIMEOUT_LIMIT};
 use crate::transport::MessageBus;
 
 const CLIENT_ID: i32 = 100;
@@ -274,6 +274,89 @@ fn handshake_unexpected_eof_returns_connection_rejected() {
         }
         other => panic!("expected Error::ConnectionRejected, got {other:?}"),
     }
+}
+
+/// Socket whose reads time out `timeouts_per_frame` times before each frame,
+/// like a `TcpSocket` whose 1s read timeout fires while a loaded gateway is
+/// slow to answer. Delegates to a `MemoryStream` once the timeouts are spent.
+#[derive(Debug)]
+struct SlowSocket {
+    stream: MemoryStream,
+    timeouts_per_frame: u32,
+    pending: AtomicU32,
+    reads: AtomicU32,
+}
+
+impl SlowSocket {
+    fn new(stream: MemoryStream, timeouts_per_frame: u32) -> Self {
+        Self {
+            stream,
+            timeouts_per_frame,
+            pending: AtomicU32::new(timeouts_per_frame),
+            reads: AtomicU32::new(0),
+        }
+    }
+}
+
+impl Io for SlowSocket {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        if self.pending.load(Ordering::SeqCst) > 0 {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            return Err(Error::Io(std::io::Error::new(std::io::ErrorKind::WouldBlock, "read timed out")));
+        }
+        self.pending.store(self.timeouts_per_frame, Ordering::SeqCst);
+        self.stream.read_message()
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        self.stream.write_all(buf)
+    }
+}
+
+impl Reconnect for SlowSocket {
+    fn reconnect(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
+
+    fn shutdown_read(&self) -> Result<(), Error> {
+        self.stream.shutdown_read()
+    }
+}
+
+impl Stream for SlowSocket {}
+
+/// A gateway slower than one read timeout must not fail connect: each startup
+/// read waits out the timeouts (macOS reports them as `WouldBlock`).
+#[test]
+fn establish_connection_waits_out_read_timeouts() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(SlowSocket::new(stream.clone(), 3), CLIENT_ID);
+    push_handshake(&stream);
+
+    connection.establish_connection().expect("read timeouts must not fail connect");
+
+    let metadata = connection.connection_metadata();
+    assert_eq!(metadata.server_version, SERVER_VERSION);
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+}
+
+/// A gateway that never answers fails connect with `TimedOut` after
+/// [`STARTUP_TIMEOUT_LIMIT`] read timeouts rather than hanging.
+#[test]
+fn establish_connection_times_out_when_gateway_silent() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(SlowSocket::new(stream, u32::MAX), CLIENT_ID);
+
+    let err = connection.establish_connection().expect_err("silent gateway must fail connect");
+    match err {
+        Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
+        other => panic!("expected Error::Io(TimedOut), got {other:?}"),
+    }
+    assert_eq!(connection.socket.reads.load(Ordering::SeqCst), STARTUP_TIMEOUT_LIMIT);
 }
 
 /// Socket for the shutdown-during-reconnect tests. Reads and writes delegate
