@@ -90,6 +90,9 @@ impl Client {
     /// * `order_id` - ID of the [`crate::orders::Order`] to cancel.
     /// * `manual_order_cancel_time` - Optional timestamp to specify the cancellation time. Use an empty string to use the current time.
     ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -225,6 +228,9 @@ impl Client {
     ///
     /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
     ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if TWS returns an id at or above 1,500,000,000 (reserved for request ids).
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -281,6 +287,9 @@ impl Client {
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///
@@ -339,6 +348,9 @@ impl Client {
     /// # Returns
     /// * `Ok(())` if the order was successfully sent
     /// * `Err(Error)` if validation failed or sending failed
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///
@@ -514,6 +526,9 @@ impl Client {
     /// * `account`           - Destination account.
     /// * `ovrd`              - Specifies whether your setting will override the system's natural action. For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
     /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000 (reserved for request ids).
+    ///
     /// # Examples
     ///
     /// ```no_run

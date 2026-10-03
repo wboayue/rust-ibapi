@@ -60,6 +60,10 @@ fn error_display() {
         (tws_error_notice(200, "No security found"), "[200] No security found"),
         (Error::AlreadySubscribed, "AlreadySubscribed"),
         (
+            Error::OrderIdInRequestRange { order_id: 7 },
+            "order id 7 is at or above 1500000000, which is reserved for request ids",
+        ),
+        (
             Error::AccountUpdatesInUse {
                 active: AccountId("DU1".into()),
                 requested: AccountId("DU2".into()),
@@ -282,6 +286,7 @@ fn clone_preserves_payloaded_variants() {
             requested: AccountId("DU2".into()),
         },
         Error::BufferLimitExceeded { limit: 5 },
+        Error::OrderIdInRequestRange { order_id: 7 },
     ];
 
     for original in originals {

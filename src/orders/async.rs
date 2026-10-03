@@ -126,6 +126,9 @@ impl Client {
 
     /// Submits an Order (fire-and-forget).
     ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -157,6 +160,9 @@ impl Client {
     }
 
     /// Submits an Order with a subscription for updates.
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///
@@ -202,6 +208,9 @@ impl Client {
     /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem);
     /// the subscription stays open until dropped, so break once cancellation
     /// is observed.
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///
@@ -270,6 +279,9 @@ impl Client {
     /// least that value — monotonically, never lowering it below locally
     /// allocated order IDs, including IDs whose order has not yet reached the
     /// server.
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if TWS returns an id at or above 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///
@@ -460,6 +472,9 @@ impl Client {
     }
 
     /// Exercise an option contract.
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///

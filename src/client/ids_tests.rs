@@ -30,7 +30,7 @@ fn order_id_checked_rejects_request_range() {
 
     let err = OrderId::from(REQUEST_ID_FLOOR).checked().unwrap_err();
     assert!(
-        matches!(&err, Error::InvalidArgument(message) if message.contains(&REQUEST_ID_FLOOR.to_string())),
+        matches!(err, Error::OrderIdInRequestRange { order_id } if order_id == REQUEST_ID_FLOOR),
         "{err:?}"
     );
 }

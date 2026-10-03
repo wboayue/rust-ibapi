@@ -169,6 +169,17 @@ pub enum Error {
         requested: AccountId,
     },
 
+    /// An order id at or above 1,500,000,000, the range reserved for request
+    /// ids. The client routes frames by id range, so an order there would be
+    /// taken for a request. Returned for an id you pass, one
+    /// `next_valid_order_id` receives from TWS, or the client's next order id
+    /// after a reconnect moved it there.
+    #[error("order id {order_id} is at or above {floor}, which is reserved for request ids", floor = crate::client::ids::REQUEST_ID_FLOOR)]
+    OrderIdInRequestRange {
+        /// The refused order id.
+        order_id: i32,
+    },
+
     /// Wraps errors parsing historical data parameters.
     #[error("HistoricalParseError: {0}")]
     HistoricalParseError(#[from] HistoricalParseError),
@@ -352,6 +363,7 @@ impl Clone for Error {
                 active: active.clone(),
                 requested: requested.clone(),
             },
+            Error::OrderIdInRequestRange { order_id } => Error::OrderIdInRequestRange { order_id: *order_id },
             Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
         }

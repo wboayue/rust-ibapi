@@ -51,96 +51,97 @@ The full per-asset-type reference (stocks, options, futures, forex, crypto,
 bonds, spreads, etc.) lives in the [Contract Builder Guide](contract-builder.md);
 that's the canonical home for builder usage. This section is just the pointer.
 
-### Request Builder
+### Request-ID Requests
 
-For client methods with request IDs:
+For a streaming request routed by request id, use `request_helpers::request_with_id`:
+it checks the feature's server version, mints the request id, and hands the
+raw id to your encoder:
 
 ```rust
 // Sync mode (in domain/sync.rs as impl Client block)
 impl Client {
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        let builder = self
-            .request()
-            .check_version(server_versions::PNL, "PnL not supported")?;
-
-        let request = encode_request_pnl(builder.request_id(), account, model_code)?;
-        builder.send(request)
+        request_helpers::blocking::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
     }
 }
 
 // Async mode (in domain/async.rs as impl Client block)
 impl Client {
     pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        let builder = self
-            .request()
-            .check_version(server_versions::PNL, "PnL not supported")
-            .await?;
-
-        let request = encode_request_pnl(builder.request_id(), account, model_code)?;
-        builder.send(request).await
+        request_helpers::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code)).await
     }
 }
 ```
 
-### Shared Request Builder
+When the helper doesn't fit, build on `client.request()` directly: the
+`RequestBuilder` holds the minted id (`builder.request_id()` for the encoder)
+and sends with `send`, `send_bounded` or `send_with_context`.
 
-For requests using shared channels (no request ID):
+### Shared-Channel Requests
+
+For requests routed by message type (no request id), use
+`request_helpers::shared_subscription`:
 
 ```rust
 // Sync mode (in domain/sync.rs)
 impl Client {
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        let request = encode_request_positions()?;
-        
-        self.shared_request(OutgoingMessages::RequestPositions)
-            .send(request)
+        request_helpers::blocking::shared_subscription(
+            self,
+            Features::POSITIONS,
+            OutgoingMessages::RequestPositions,
+            encoders::encode_request_positions,
+        )
     }
 }
 
 // Async mode (in domain/async.rs)
 impl Client {
     pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        let request = encode_request_positions()?;
-        
-        self.shared_request(OutgoingMessages::RequestPositions)
-            .send(request)
-            .await
+        request_helpers::shared_subscription(
+            self,
+            Features::POSITIONS,
+            OutgoingMessages::RequestPositions,
+            encoders::encode_request_positions,
+        )
+        .await
     }
 }
 ```
 
-### Order Request Builder
+### Order Requests
 
-For order operations:
+An order id must be checked against the request-id range before it reaches the
+encoder or the bus (see [id partition](rules/wire/id-partition.md)). Check every
+id the order carries, then send through `send_order`, which registers the
+order's routing entry:
 
 ```rust
 impl Client {
-    pub fn place_order(&self, contract: &Contract, order: &Order) -> Result<(), Error> {
-        let builder = self.order_request();
-        let request = encode_order(builder.order_id(), contract, order)?;
-        builder.send(request)?;  // .await for async
-        Ok(())
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+        let checked_id = verify::verify_order_ids(order_id, order)?; // `OrderId`
+        let request = encoders::encode_place_order(checked_id.raw(), contract, order)?;
+        let subscription = self.send_order(checked_id, request)?;  // .await for async
+        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 }
 ```
 
-### Subscription Builder
+A bare id with nothing attached (`cancel_order`) uses `OrderId::from(id).checked()?`.
 
-Create subscriptions with additional context:
+### Subscription Context
+
+A decoder that needs request-time settings (smart depth, the request type) gets
+them through a `DecoderContext` passed with the request:
 
 ```rust
-impl Client {
-    pub fn market_depth(&self, contract: &Contract, num_rows: i32) 
-        -> Result<Subscription<MarketDepth>, Error> 
-    {
-        let request_id = self.mint_request_id(); // `RequestId`, see docs/rules/wire/id-partition.md
-        let request = encode_market_depth(request_id.raw(), contract, num_rows)?;
-        
-        self.subscription::<MarketDepth>()
-            .with_smart_depth(true)
-            .send_with_request_id(request_id, request)
-            // .await for async version
-    }
+pub(crate) fn market_depth(client: &Client, contract: &Contract, number_of_rows: i32, is_smart_depth: bool)
+    -> Result<Subscription<MarketDepths>, Error>
+{
+    let builder = client.request();
+    let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
+    builder.send_with_context(request, client.decoder_context().with_smart_depth(is_smart_depth))
+    // .await for async version
 }
 ```
 

@@ -2,7 +2,7 @@ use super::*;
 use crate::client::ids::REQUEST_ID_FLOOR;
 
 fn assert_rejected(result: Result<OrderId, Error>, what: &str) {
-    assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+    assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "{what}: {result:?}");
 }
 
 #[test]
