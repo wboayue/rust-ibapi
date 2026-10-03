@@ -1105,7 +1105,7 @@ async fn order_entry_points_reject_request_range_ids() {
         parent_id: floor,
         ..order.clone()
     };
-    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "{what}: {result:?}");
 
     rejected(client.place_order(floor, &contract, &order).await.map(|_| ()), "place_order");
     rejected(client.place_order(1, &contract, &with_parent).await.map(|_| ()), "place_order parent_id");
@@ -1136,6 +1136,9 @@ async fn next_valid_order_id_rejects_request_range() {
     )]);
 
     let result = client.next_valid_order_id().await;
-    assert!(matches!(result, Err(Error::InvalidArgument(_))), "{result:?}");
+    assert!(
+        matches!(result, Err(Error::OrderIdInRequestRange { order_id }) if order_id == REQUEST_ID_FLOOR),
+        "{result:?}"
+    );
     assert!(client.next_order_id() < REQUEST_ID_FLOOR, "generator raised into the request range");
 }

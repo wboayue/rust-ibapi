@@ -1,6 +1,6 @@
 //! Synchronous builder implementations
 
-use crate::client::ids::{OrderId, RequestId};
+use crate::client::ids::RequestId;
 use crate::transport::BufferBound;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -122,45 +122,6 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 }
 
-/// Builder for creating order requests
-#[allow(dead_code)]
-pub(crate) struct OrderRequestBuilder<'a> {
-    client: &'a Client,
-    order_id: OrderId,
-}
-
-#[allow(dead_code)]
-impl<'a> OrderRequestBuilder<'a> {
-    /// Create a new order request builder with an auto-generated order ID
-    pub fn new(client: &'a Client) -> Self {
-        Self {
-            client,
-            order_id: OrderId::from(client.next_order_id()),
-        }
-    }
-
-    /// Create a new order request builder with a specific order ID
-    pub fn with_id(client: &'a Client, order_id: OrderId) -> Self {
-        Self { client, order_id }
-    }
-
-    /// Get the order ID
-    pub fn order_id(&self) -> i32 {
-        self.order_id.raw()
-    }
-
-    /// Check server version requirement
-    pub fn check_version(self, required_version: i32, feature: &str) -> Result<Self, Error> {
-        self.client.check_server_version(required_version, feature)?;
-        Ok(self)
-    }
-
-    /// Send the order request
-    pub fn send(self, message: Vec<u8>) -> Result<InternalSubscription, Error> {
-        self.client.send_order(self.order_id, message)
-    }
-}
-
 /// Builder for simple message sends (no response expected)
 #[allow(dead_code)]
 pub(crate) struct MessageBuilder<'a> {
@@ -244,12 +205,6 @@ where
         let subscription = self.client.send_shared_request(message_type, message)?;
         Ok(self.build(subscription))
     }
-
-    /// Sends an order request and builds the subscription
-    pub fn send_order(self, order_id: OrderId, message: Vec<u8>) -> Result<Subscription<T>, Error> {
-        let subscription = self.client.send_order(order_id, message)?;
-        Ok(self.build(subscription))
-    }
 }
 
 /// Extension trait to add builder methods to Client
@@ -263,12 +218,6 @@ pub(crate) trait ClientRequestBuilders {
 
     /// Create a shared request builder
     fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_>;
-
-    /// Create an order request builder
-    fn order_request(&self) -> OrderRequestBuilder<'_>;
-
-    /// Create an order request builder with a specific order ID
-    fn order_request_with_id(&self, order_id: OrderId) -> OrderRequestBuilder<'_>;
 
     /// Create a simple message builder
     fn message(&self) -> MessageBuilder<'_>;
@@ -286,14 +235,6 @@ impl ClientRequestBuilders for Client {
 
     fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_> {
         SharedRequestBuilder::new(self, message_type)
-    }
-
-    fn order_request(&self) -> OrderRequestBuilder<'_> {
-        OrderRequestBuilder::new(self)
-    }
-
-    fn order_request_with_id(&self, order_id: OrderId) -> OrderRequestBuilder<'_> {
-        OrderRequestBuilder::with_id(self, order_id)
     }
 
     fn message(&self) -> MessageBuilder<'_> {

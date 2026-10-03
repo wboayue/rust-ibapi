@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::client::ids::{OrderId, RequestId};
+use crate::client::ids::RequestId;
 use crate::market_data::realtime::Bar;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -55,21 +55,6 @@ async fn test_shared_request_builder_check_version() {
     let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
     let result = builder.check_version(100, "test_feature").await;
     assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_order_request_builder_new() {
-    let client = create_test_client();
-    let builder = OrderRequestBuilder::new(&client);
-    assert!(builder.order_id > OrderId::from(0));
-}
-
-#[tokio::test]
-async fn test_order_request_builder_with_id() {
-    let client = create_test_client();
-    let order_id = OrderId::from(12345);
-    let builder = OrderRequestBuilder::with_id(&client, order_id);
-    assert_eq!(builder.order_id(), order_id.raw());
 }
 
 #[tokio::test]
@@ -136,14 +121,6 @@ async fn test_client_request_builders_trait() {
     let shared_builder = client.shared_request(OutgoingMessages::RequestMarketData);
     assert_eq!(shared_builder.message_type, OutgoingMessages::RequestMarketData);
 
-    // Test order_request()
-    let order_builder = client.order_request();
-    assert!(order_builder.order_id > OrderId::from(0));
-
-    // Test order_request_with_id()
-    let order_builder = client.order_request_with_id(OrderId::from(999));
-    assert_eq!(order_builder.order_id(), 999);
-
     // Test message()
     let _message_builder = client.message();
 }
@@ -161,7 +138,6 @@ async fn test_builder_patterns_table_driven() {
     struct TestCase {
         name: &'static str,
         request_id: Option<i32>,
-        order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
         expected_id_min: i32,
     }
@@ -170,28 +146,18 @@ async fn test_builder_patterns_table_driven() {
         TestCase {
             name: "auto_request_id",
             request_id: None,
-            order_id: None,
             message_type: None,
             expected_id_min: RequestId::nth(0).raw(),
         },
         TestCase {
             name: "specific_request_id",
             request_id: Some(100),
-            order_id: None,
             message_type: None,
             expected_id_min: 100,
         },
         TestCase {
-            name: "specific_order_id",
-            request_id: None,
-            order_id: Some(500),
-            message_type: None,
-            expected_id_min: 500,
-        },
-        TestCase {
             name: "shared_request_type",
             request_id: None,
-            order_id: None,
             message_type: Some(OutgoingMessages::RequestAccountData),
             expected_id_min: 0,
         },
@@ -203,9 +169,6 @@ async fn test_builder_patterns_table_driven() {
         if let Some(request_id) = tc.request_id {
             let builder = client.request_with_id(RequestId::nth(request_id));
             assert_eq!(builder.request_id(), RequestId::nth(request_id).raw(), "test case '{}' failed", tc.name);
-        } else if let Some(order_id) = tc.order_id {
-            let builder = client.order_request_with_id(OrderId::from(order_id));
-            assert_eq!(builder.order_id(), order_id, "test case '{}' failed", tc.name);
         } else if let Some(message_type) = tc.message_type {
             let builder = client.shared_request(message_type);
             assert_eq!(builder.message_type, message_type, "test case '{}' failed", tc.name);
@@ -322,29 +285,5 @@ async fn test_shared_request_builder_send_raw() {
     let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestManagedAccounts as i32, &[]);
 
     let result = builder.send_raw(message).await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_order_request_builder_check_version() {
-    let client = create_test_client();
-
-    let builder = client.order_request_with_id(OrderId::from(456));
-    let result = builder.check_version(90, "test_feature").await;
-    assert!(result.is_ok());
-
-    let builder = client.order_request_with_id(OrderId::from(457));
-    let result = builder.check_version(999999, "future_feature").await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_order_request_builder_send() {
-    let client = create_test_client();
-
-    let builder = client.order_request_with_id(OrderId::from(789));
-    let message = crate::messages::encode_protobuf_message(OutgoingMessages::PlaceOrder as i32, &[]);
-
-    let result = builder.send(message).await;
     assert!(result.is_ok());
 }

@@ -78,6 +78,18 @@ fn error_display() {
 }
 
 #[test]
+fn order_id_in_request_range_display_names_the_floor() {
+    // The `#[error]` string spells the floor out; this keeps it in step with
+    // the constant.
+    let floor = crate::client::ids::REQUEST_ID_FLOOR;
+    let message = Error::OrderIdInRequestRange { order_id: floor }.to_string();
+    assert_eq!(
+        message,
+        format!("order id {floor} is at or above {floor}, which is reserved for request ids")
+    );
+}
+
+#[test]
 fn unsupported_timezone_display_contains_alias_and_helpers() {
     let error = Error::UnsupportedTimeZone("US/Foo".to_string());
     let rendered = error.to_string();
@@ -282,6 +294,7 @@ fn clone_preserves_payloaded_variants() {
             requested: AccountId("DU2".into()),
         },
         Error::BufferLimitExceeded { limit: 5 },
+        Error::OrderIdInRequestRange { order_id: 7 },
     ];
 
     for original in originals {

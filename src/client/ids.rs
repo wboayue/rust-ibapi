@@ -63,14 +63,11 @@ impl OrderId {
         self.0
     }
 
-    /// This id, or `InvalidArgument` if it falls in the request range, where
-    /// its error frames would route as a request's.
+    /// This id, or [`Error::OrderIdInRequestRange`] if it falls in the
+    /// request range, where its error frames would route as a request's.
     pub(crate) fn checked(self) -> Result<Self, Error> {
         if self.0 >= REQUEST_ID_FLOOR {
-            Err(Error::InvalidArgument(format!(
-                "order id {} is at or above {REQUEST_ID_FLOOR}, which is reserved for request ids",
-                self.0
-            )))
+            Err(Error::OrderIdInRequestRange { order_id: self.0 })
         } else {
             Ok(self)
         }

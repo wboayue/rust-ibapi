@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::client::ids::{OrderId, RequestId};
+use crate::client::ids::RequestId;
 use crate::market_data::realtime::Bar;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -9,9 +9,7 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::DecoderContext;
 
 fn create_test_client() -> Client {
-    let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF_SCAN_DATA);
-    client.raise_next_order_id(OrderId::from(9000));
-    client
+    Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF_SCAN_DATA)
 }
 
 #[test]
@@ -58,21 +56,6 @@ fn test_shared_request_builder_check_version() {
     let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
     let result = builder.check_version(100, "test_feature");
     assert!(result.is_ok());
-}
-
-#[test]
-fn test_order_request_builder_new() {
-    let client = create_test_client();
-    let builder = OrderRequestBuilder::new(&client);
-    assert!(builder.order_id > OrderId::from(0));
-}
-
-#[test]
-fn test_order_request_builder_with_id() {
-    let client = create_test_client();
-    let order_id = OrderId::from(12345);
-    let builder = OrderRequestBuilder::with_id(&client, order_id);
-    assert_eq!(builder.order_id(), order_id.raw());
 }
 
 #[test]
@@ -133,14 +116,6 @@ fn test_client_request_builders_trait() {
     let shared_builder = client.shared_request(OutgoingMessages::RequestMarketData);
     assert_eq!(shared_builder.message_type, OutgoingMessages::RequestMarketData);
 
-    // Test order_request()
-    let order_builder = client.order_request();
-    assert!(order_builder.order_id > OrderId::from(0));
-
-    // Test order_request_with_id()
-    let order_builder = client.order_request_with_id(OrderId::from(999));
-    assert_eq!(order_builder.order_id(), 999);
-
     // Test message()
     let _message_builder = client.message();
 }
@@ -158,7 +133,6 @@ fn test_builder_patterns_table_driven() {
     struct TestCase {
         name: &'static str,
         request_id: Option<i32>,
-        order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
         expected_id_min: i32,
     }
@@ -167,28 +141,18 @@ fn test_builder_patterns_table_driven() {
         TestCase {
             name: "auto_request_id",
             request_id: None,
-            order_id: None,
             message_type: None,
             expected_id_min: RequestId::nth(0).raw(),
         },
         TestCase {
             name: "specific_request_id",
             request_id: Some(100),
-            order_id: None,
             message_type: None,
             expected_id_min: 100,
         },
         TestCase {
-            name: "specific_order_id",
-            request_id: None,
-            order_id: Some(500),
-            message_type: None,
-            expected_id_min: 500,
-        },
-        TestCase {
             name: "shared_request_type",
             request_id: None,
-            order_id: None,
             message_type: Some(OutgoingMessages::RequestAccountData),
             expected_id_min: 0,
         },
@@ -200,9 +164,6 @@ fn test_builder_patterns_table_driven() {
         if let Some(request_id) = tc.request_id {
             let builder = client.request_with_id(RequestId::nth(request_id));
             assert_eq!(builder.request_id(), RequestId::nth(request_id).raw(), "test case '{}' failed", tc.name);
-        } else if let Some(order_id) = tc.order_id {
-            let builder = client.order_request_with_id(OrderId::from(order_id));
-            assert_eq!(builder.order_id(), order_id, "test case '{}' failed", tc.name);
         } else if let Some(message_type) = tc.message_type {
             let builder = client.shared_request(message_type);
             assert_eq!(builder.message_type, message_type, "test case '{}' failed", tc.name);
