@@ -6,6 +6,7 @@ default-members = ["."]
 name = "ibapi"
 version = "4.2.0"
 edition = "2021"
+rust-version = "1.88"
 authors = ["Wil Boayue <wil@wsblabs.com>"]
 description = "An unofficial Rust client for the Interactive Brokers TWS API. Async (Tokio) and blocking clients for TWS and IB Gateway."
 readme = "README.md"
