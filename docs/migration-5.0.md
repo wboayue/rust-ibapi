@@ -221,6 +221,20 @@ let cancel: fn(&Client, i32, &str) -> _ = Client::cancel_order;
 
 The same applies to `.into()` from a narrower integer and to `Default::default()`. `OrderId::from(..)` works too.
 
+### 17. `order_builder::auction_limit` and the `OrderType` auction variants are removed
+
+Since 4.2 dropped `auction_limit`'s strategy parameter ([4.x guide §15](migration-4.0.md#15-orderbuilder-covers-the-integer-coded-order-enums-and-auctionstrategy-is-removed)), it has built the same `Order` as `limit_order`. Routing the contract to `BOX` is what makes it an auction order. `orders::builder::OrderType::AuctionLimit` and `OrderType::AuctionRelative` are removed for the same reason. They sent `LMT` and `REL`, the same as `OrderType::Limit` and `OrderType::Relative`, and validated the same way; serialized `OrderType` values naming them no longer deserialize. TWS still applies the account's configured auction strategy.
+
+```rust,ignore
+// 4.2
+let order = auction_limit(Action::Buy, 10.0, 1.25);
+let builder = builder.order_type(OrderType::AuctionLimit);
+
+// 5.0
+let order = limit_order(Action::Buy, 10.0, 1.25);
+let builder = builder.order_type(OrderType::Limit);
+```
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -249,7 +263,8 @@ No code changes required, but observable at runtime:
 14. If you enable the `utoipa` feature, rename it to `utoipa-6` and upgrade to utoipa 6 — see [§14](#14-the-utoipa-feature-is-renamed-utoipa-6-and-requires-utoipa-6).
 15. Replace uses of `prost::DecodeError` from `Error::ProtobufDecode`, and any `From<prost::DecodeError> for ibapi::Error` conversion — see [§15](#15-errorprotobufdecode-carries-errorsprotobufdecodeerror).
 16. Where an order id argument is converted with `.try_into()`, `.into()`, `.parse()` or `Default::default()`, name the target type (`i32::try_from(..)`, `.parse::<i32>()`) — see [§16](#16-order-methods-take-impl-intoorderid).
-17. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+17. Replace `auction_limit(..)` with `limit_order(..)` (same arguments), and `OrderType::AuctionLimit` / `AuctionRelative` with `OrderType::Limit` / `Relative` — see [§17](#17-order_builderauction_limit-and-the-ordertype-auction-variants-are-removed).
+18. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

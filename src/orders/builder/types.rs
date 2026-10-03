@@ -197,10 +197,6 @@ pub enum OrderType {
     Volatility,
     /// Box-top order that converts to market at the best price.
     BoxTop,
-    /// Auction limit order.
-    AuctionLimit,
-    /// Auction relative (pegged) order.
-    AuctionRelative,
 
     // Combo Orders (special handling required)
     /// Limit order for combo legs.
@@ -260,8 +256,6 @@ impl OrderType {
             // Special Orders
             Self::Volatility => "VOL",
             Self::BoxTop => "BOX TOP",
-            Self::AuctionLimit => "LMT",
-            Self::AuctionRelative => "REL",
 
             // Combo Orders
             Self::ComboLimit => "LMT",
@@ -280,7 +274,6 @@ impl OrderType {
                 | Self::LimitOnClose
                 | Self::LimitOnOpen
                 | Self::LimitIfTouched
-                | Self::AuctionLimit
                 | Self::ComboLimit
                 | Self::RelativeLimitCombo
                 | Self::AtAuction // TrailingStopLimit uses limit_price_offset, not limit_price
@@ -300,7 +293,6 @@ impl OrderType {
                 | Self::TrailingStopLimit
                 | Self::Relative
                 | Self::PassiveRelative
-                | Self::AuctionRelative
                 | Self::PeggedToMarket
         )
     }
