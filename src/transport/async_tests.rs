@@ -1819,8 +1819,10 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
 
-    // First read fails as InvalidFrame, which the processing loop classifies
-    // as connection lost; then the frames the reconnect handshake consumes.
+    // First read is a body too short for the message id: InvalidFrame, which
+    // the processing loop classifies as connection lost, so this also guards
+    // the #891 short-body path end to end (it used to panic the dispatcher).
+    // Then the frames the reconnect handshake consumes.
     stream.push_inbound(b"xx".to_vec());
     let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
     stream.push_inbound(handshake.into_bytes());

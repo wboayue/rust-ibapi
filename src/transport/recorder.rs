@@ -104,9 +104,9 @@ impl MessageRecorder {
     /// worth replaying: an operator capturing a desync burst with
     /// `IBAPI_RECORDING_DIR` got `-1` where the offending id should be.
     fn render(message: &ResponseMessage) -> Vec<u8> {
-        match message.raw_bytes() {
-            Some(payload) => crate::messages::encode_protobuf_message(message.message_id(), payload),
-            None => message.encode().replace('\0', "|").into_bytes(),
+        match (message.raw_bytes(), message.message_id()) {
+            (Some(payload), Some(id)) => crate::messages::encode_protobuf_message(id, payload),
+            _ => message.encode().replace('\0', "|").into_bytes(),
         }
     }
 

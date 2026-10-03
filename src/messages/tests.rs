@@ -1061,12 +1061,44 @@ fn test_is_handshake_synthetic() {
         *ORDER_REJECTION_CODE_RANGE.end(),
         -2, // shutdown sentinel — distinct sentinel, must not be confused with handshake-synthetic
         -1,
+        UNKNOWN_MESSAGE_TYPE_CODE, // synthesized, but not handshake-specific
         100,
     ] {
         assert!(
             !notice_with_code(code).is_handshake_synthetic(),
             "code {code} should not be flagged handshake-synthetic"
         );
+    }
+}
+
+#[test]
+fn test_is_client_synthesized() {
+    for code in [
+        HANDSHAKE_UNKNOWN_FRAME_CODE,
+        HANDSHAKE_DECODE_FAILURE_CODE,
+        UNKNOWN_MESSAGE_TYPE_CODE,
+        SUBSCRIPTION_LAG_CODE,
+        NOTICE_STREAM_LAG_CODE,
+        TRANSPORT_RECONNECT_CODE,
+        // Any negative code, named or not.
+        -1,
+        -2,
+        i32::MIN,
+    ] {
+        assert!(notice_with_code(code).is_client_synthesized(), "code {code}");
+    }
+
+    // TWS-emitted codes, including the code-less 0.
+    for code in [
+        0,
+        ORDER_CANCELLED_CODE,
+        *WARNING_CODE_RANGE.start(),
+        *WARNING_CODE_RANGE.end(),
+        SYSTEM_MESSAGE_CODES[0],
+        *ORDER_REJECTION_CODE_RANGE.start(),
+        10000,
+    ] {
+        assert!(!notice_with_code(code).is_client_synthesized(), "code {code}");
     }
 }
 
@@ -1166,10 +1198,15 @@ fn test_message_type_is_resolved_once_at_construction() {
     assert_eq!(proto.message_type(), IncomingMessages::OpenOrder);
     assert!(proto.fields.is_empty(), "a proto frame allocates no text fields");
 
-    // An unparseable or absent discriminant is NotValid, as before.
-    assert_eq!(ResponseMessage::from("nonsense\0").message_type(), IncomingMessages::NotValid);
-    assert_eq!(ResponseMessage::from("").message_type(), IncomingMessages::NotValid);
-    assert_eq!(ResponseMessage::default().message_type(), IncomingMessages::NotValid);
+    // An unparseable or absent discriminant is NotValid with no id. It used to
+    // be -1 here and 0 from Default - two encodings, and -1 is NotValid's own
+    // discriminant.
+    for message in [ResponseMessage::from("nonsense\0"), ResponseMessage::from(""), ResponseMessage::default()] {
+        assert_eq!(message.message_type(), IncomingMessages::NotValid);
+        assert_eq!(message.message_id(), None);
+    }
+    // An unrecognized id that did parse is kept.
+    assert_eq!(ResponseMessage::from("-1\0").message_id(), Some(-1));
 }
 
 #[test]
@@ -1486,4 +1523,17 @@ fn test_log_level_follows_category() {
     ] {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Error, "code {code}");
     }
+}
+
+#[test]
+fn test_unknown_message_type_notice_names_the_id_or_its_absence() {
+    let notice = unknown_message_type_notice(&ResponseMessage::from("9999\0"));
+    assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
+    assert!(notice.message.contains("message id 9999"), "{:?}", notice.message);
+
+    // Unreachable off the wire (parse_raw_message always yields an id), but
+    // the notice must not invent one.
+    let notice = unknown_message_type_notice(&ResponseMessage::default());
+    assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
+    assert!(notice.message.contains("no message id"), "{:?}", notice.message);
 }

@@ -9,8 +9,8 @@ use crate::accounts::AccountUpdate;
 use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
 use crate::messages::{
-    encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE,
-    HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, PROTOBUF_MSG_ID,
+    encode_length, encode_protobuf_message, unknown_message_type_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage,
+    HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, PROTOBUF_MSG_ID,
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
@@ -27,7 +27,9 @@ use crate::transport::common::NoticeSink;
 /// ([`Client::notice_stream`](crate::Client::notice_stream)) instead, using
 /// the synthesized codes
 /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`](crate::HANDSHAKE_UNKNOWN_FRAME_CODE) and
-/// [`HANDSHAKE_DECODE_FAILURE_CODE`](crate::HANDSHAKE_DECODE_FAILURE_CODE).
+/// [`HANDSHAKE_DECODE_FAILURE_CODE`](crate::HANDSHAKE_DECODE_FAILURE_CODE). A
+/// frame whose message id maps to no kind raises
+/// [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::UNKNOWN_MESSAGE_TYPE_CODE).
 #[derive(Debug)]
 #[non_exhaustive]
 #[allow(clippy::large_enum_variant)]
@@ -220,9 +222,10 @@ impl ConnectionProtocol for ConnectionHandler {
 /// typed frames (`OpenOrder` / `OrderStatus` / account-update / execution /
 /// commission / completed-order, plus the corresponding end markers) decode
 /// into typed [`StartupMessage`] values for the optional startup callback.
-/// Decode failures and unknown frame kinds route to the notice sink with
-/// synthesized codes ([`HANDSHAKE_DECODE_FAILURE_CODE`] and
-/// [`HANDSHAKE_UNKNOWN_FRAME_CODE`]) so observers via
+/// Decode failures, recognized kinds with no typed variant, and unrecognized
+/// message ids route to the notice sink with synthesized codes
+/// ([`HANDSHAKE_DECODE_FAILURE_CODE`], [`HANDSHAKE_UNKNOWN_FRAME_CODE`] and
+/// [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::UNKNOWN_MESSAGE_TYPE_CODE)) so observers via
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
 pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
@@ -275,19 +278,18 @@ pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut R
         IncomingMessages::CompletedOrder => dispatch_typed(ctx, kind, || decode_completed_order(message), StartupMessage::CompletedOrder),
         IncomingMessages::ExecutionDataEnd => dispatch_unit(ctx, StartupMessage::ExecutionDataEnd),
         IncomingMessages::CompletedOrdersEnd => dispatch_unit(ctx, StartupMessage::CompletedOrdersEnd),
+        // An id that maps to no kind is the shape a framing slip takes; it
+        // raises the same code here as in steady-state routing, since a
+        // reconnect runs through this window.
+        IncomingMessages::NotValid => ctx.notice_sink.deliver(unknown_message_type_notice(message)),
         _ => {
-            // Unknown frame kind: log + emit synthesized notice. Fires
-            // regardless of callback presence (no typed variant to receive).
-            //
-            // The id accompanies the kind because an *unrecognized* id renders
-            // as the bare `NotValid` — the same loss `report_unroutable_frame`
-            // repairs for steady-state frames. This is that condition during
-            // the handshake, which is the window a reconnect runs through.
-            let id = message.message_id();
-            warn!("unrouted handshake frame: {kind:?} (message id {id})");
+            // Recognized kind with no typed variant: log + emit synthesized
+            // notice. Fires regardless of callback presence (no typed variant
+            // to receive).
+            warn!("unrouted handshake frame: {kind:?}");
             ctx.notice_sink.deliver(Notice::synthesized(
                 HANDSHAKE_UNKNOWN_FRAME_CODE,
-                format!("unsolicited handshake frame with no typed variant: {kind:?} (message id {id})"),
+                format!("unsolicited handshake frame with no typed variant: {kind:?}"),
             ));
         }
     }

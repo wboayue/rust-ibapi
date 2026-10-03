@@ -809,28 +809,31 @@ pub(crate) struct ResponseMessage {
     /// The numeric id `kind` was resolved from, retained because that mapping
     /// is lossy: every unrecognized id collapses to
     /// [`IncomingMessages::NotValid`]. See [`UNKNOWN_MESSAGE_TYPE_CODE`] for
-    /// what the id buys a reader that the kind alone cannot.
-    message_id: i32,
+    /// what the id buys a reader that the kind alone cannot. `None` when the
+    /// message carried no id at all (a text payload with a missing or
+    /// unparsable `fields[0]`, or `Default`); no `i32` can stand in for that,
+    /// since 0 and negative ids both reach the text path off the wire.
+    message_id: Option<i32>,
 }
 
 impl ResponseMessage {
     /// The one construction path, so `kind` and `message_id` cannot disagree:
-    /// `kind` is always `IncomingMessages::from(message_id)`. The derived
-    /// `Default` upholds it too, by coincidence worth naming — `message_id: 0`
-    /// is unrecognized, and `NotValid` is the enum's `#[default]`.
-    fn new(message_id: i32, fields: Vec<String>, raw_bytes: Option<Vec<u8>>) -> Self {
+    /// `kind` is `IncomingMessages::from(id)`, or `NotValid` with no id. The
+    /// derived `Default` upholds it too: `None` and `NotValid`, the enum's
+    /// `#[default]`.
+    fn new(message_id: Option<i32>, fields: Vec<String>, raw_bytes: Option<Vec<u8>>) -> Self {
         Self {
             i: 0,
             fields,
             raw_bytes,
-            kind: IncomingMessages::from(message_id),
+            kind: message_id.map_or(IncomingMessages::NotValid, IncomingMessages::from),
             message_id,
         }
     }
 
     /// Build a protobuf response message from a binary message type and raw payload bytes.
     pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>) -> Self {
-        Self::new(message_type, Vec::new(), Some(raw_bytes))
+        Self::new(Some(message_type), Vec::new(), Some(raw_bytes))
     }
 
     /// The numeric message id this frame arrived with, before it was resolved
@@ -838,11 +841,15 @@ impl ResponseMessage {
     /// the [`PROTOBUF_MSG_ID`] offset already removed — i.e. the value that was
     /// looked up, not the raw 4 bytes off the wire.
     ///
+    /// Always `Some` for protobuf frames; `None` only for a text payload
+    /// whose `fields[0]` is missing or unparsable.
+    ///
     /// Guaranteed for every message, not just unroutable ones:
-    /// `IncomingMessages::from(m.message_id()) == m.message_type()`. Callers
-    /// that need the id back out of a message — the wire recorder, diagnostics
-    /// for an unrecognized frame — depend on that holding for known kinds too.
-    pub(crate) fn message_id(&self) -> i32 {
+    /// `m.message_id().map_or(NotValid, IncomingMessages::from) == m.message_type()`.
+    /// Callers that need the id back out of a message — the wire recorder,
+    /// diagnostics for an unrecognized frame — depend on that holding for known
+    /// kinds too.
+    pub(crate) fn message_id(&self) -> Option<i32> {
         self.message_id
     }
 
@@ -1043,7 +1050,7 @@ impl ResponseMessage {
     /// walks the field cursor from index 0 — so `kind` is derived from it here
     /// rather than replacing it.
     pub(crate) fn from_text_fields(fields: Vec<String>) -> ResponseMessage {
-        let message_id = fields.first().and_then(|id| i32::from_str(id).ok()).unwrap_or(-1);
+        let message_id = fields.first().and_then(|id| i32::from_str(id).ok());
         Self::new(message_id, fields, None)
     }
 
@@ -1270,8 +1277,10 @@ pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
 /// [`NoticeCategory`] for the precedence chain.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
 
-/// Synthesized notice code emitted when a handshake-time frame's
-/// [`IncomingMessages`] kind has no typed `StartupMessage` variant. Negative
+/// Synthesized notice code emitted when a handshake-time frame's recognized
+/// [`IncomingMessages`] kind has no typed `StartupMessage` variant. A frame
+/// whose id maps to no kind at all raises [`UNKNOWN_MESSAGE_TYPE_CODE`]
+/// instead, as it does after the handshake. Negative
 /// (TWS uses 0+); the other client-synthesized codes are
 /// [`HANDSHAKE_DECODE_FAILURE_CODE`], [`UNKNOWN_MESSAGE_TYPE_CODE`],
 /// [`SUBSCRIPTION_LAG_CODE`], [`NOTICE_STREAM_LAG_CODE`], and
@@ -1307,7 +1316,28 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// explanations: a slipped stream yields *scattered* ids, while a message type
 /// IBKR has added repeats one. A burst of distinct ids on a previously healthy
 /// connection means the framing slipped.
+///
+/// Raised the same way during the connection handshake, which is the window a
+/// reconnect runs through; [`HANDSHAKE_UNKNOWN_FRAME_CODE`] is reserved for
+/// recognized kinds with no typed startup variant.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
+
+/// Build the [`UNKNOWN_MESSAGE_TYPE_CODE`] notice for `message`, and emit the
+/// matching `warn!`. The single owner of the wording, shared by steady-state
+/// routing and the handshake.
+pub(crate) fn unknown_message_type_notice(message: &ResponseMessage) -> Notice {
+    // The Debug dump already carries the id; the notice has no such fallback,
+    // so it interpolates.
+    log::warn!("unroutable frame: message id maps to no known type — the stream may be desynchronized: {message:?}");
+    let id = match message.message_id() {
+        Some(id) => format!("message id {id}"),
+        None => "no message id".to_string(),
+    };
+    Notice::synthesized(
+        UNKNOWN_MESSAGE_TYPE_CODE,
+        format!("received a frame with {id}, which maps to no known type; the stream may be desynchronized"),
+    )
+}
 
 /// Synthesized notice code emitted in-band on an async subscription whose
 /// consumer fell behind its broadcast channel: the channel evicted the oldest
@@ -1672,7 +1702,7 @@ impl Notice {
 
     /// Returns `true` if this notice was synthesized client-side during the
     /// connection handshake — i.e. carries either
-    /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] (an `IncomingMessages` kind with no
+    /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] (a recognized `IncomingMessages` kind with no
     /// typed `StartupMessage` variant) or [`HANDSHAKE_DECODE_FAILURE_CODE`]
     /// (a typed decoder failed on a known kind).
     ///
@@ -1691,6 +1721,29 @@ impl Notice {
     /// ```
     pub fn is_handshake_synthetic(&self) -> bool {
         self.code == HANDSHAKE_UNKNOWN_FRAME_CODE || self.code == HANDSHAKE_DECODE_FAILURE_CODE
+    }
+
+    /// Returns `true` if rust-ibapi synthesized this notice rather than
+    /// receiving it from TWS: any negative code. TWS uses codes 0 and up.
+    ///
+    /// Covers [`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`],
+    /// [`UNKNOWN_MESSAGE_TYPE_CODE`], [`SUBSCRIPTION_LAG_CODE`],
+    /// [`NOTICE_STREAM_LAG_CODE`] and [`TRANSPORT_RECONNECT_CODE`], and any
+    /// code added later. These all classify as [`NoticeCategory::Error`], so
+    /// use this predicate or the constants, not [`Notice::category`], to tell
+    /// them apart from TWS errors.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Notice;
+    /// # let notice: Notice = unimplemented!();
+    /// if notice.is_client_synthesized() {
+    ///     eprintln!("client-side condition: code={} {}", notice.code, notice);
+    /// }
+    /// ```
+    pub fn is_client_synthesized(&self) -> bool {
+        self.code < 0
     }
 
     /// Classify this notice into a disjoint [`NoticeCategory`].

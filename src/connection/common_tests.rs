@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{proto_error_response, proto_response};
 use crate::messages::IncomingMessages;
-use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE};
+use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, UNKNOWN_MESSAGE_TYPE_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::TimeZone;
@@ -571,7 +571,7 @@ fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     // message_id() reports the value actually looked up.
     let message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
-    assert_eq!(message.message_id(), helpers::UNKNOWN_MESSAGE_ID);
+    assert_eq!(message.message_id(), Some(helpers::UNKNOWN_MESSAGE_ID));
 
     // Text framing: same accessor, id taken from fields[0]. Must be at or below
     // PROTOBUF_MSG_ID to reach the text branch at all, so it cannot reuse
@@ -580,12 +580,12 @@ fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     text_frame.extend_from_slice(b"1\0");
     let message = parse_raw_message(&text_frame).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
-    assert_eq!(message.message_id(), 150);
+    assert_eq!(message.message_id(), Some(150));
 
     // A recognized id reports itself too — the accessor is not unknown-only.
     let message = parse_raw_message(&9_i32.to_be_bytes()).expect("bare message id is a legal frame");
     assert_eq!(message.message_type(), IncomingMessages::NextValidId);
-    assert_eq!(message.message_id(), 9);
+    assert_eq!(message.message_id(), Some(9));
 }
 
 /// Test handling of non-UTF8 encoded data from IB Gateway (issue #352)
@@ -1000,6 +1000,26 @@ fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
     let sink = CapturingSink::default();
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
+}
+
+/// An id that maps to no kind raises UNKNOWN_MESSAGE_TYPE_CODE during the
+/// handshake too, not HANDSHAKE_UNKNOWN_FRAME_CODE: one condition, one code,
+/// whether or not a reconnect is in flight.
+#[test]
+fn test_dispatch_unsolicited_unrecognized_id_raises_unknown_message_type() {
+    let mut message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
+
+    let sink = CapturingSink::default();
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+
+    let notice = sink.last().expect("an unrecognized id must raise a notice");
+    assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
+    assert!(!notice.is_handshake_synthetic());
+    assert!(
+        notice.message.contains(&helpers::UNKNOWN_MESSAGE_ID.to_string()),
+        "notice must name the offending id, got {:?}",
+        notice.message
+    );
 }
 
 #[test]
