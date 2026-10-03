@@ -87,6 +87,37 @@ jobs:
       - name: Check benches compile
         run: cargo check --benches ${{ matrix.flags }} || true
 
+  # Library must build on the declared rust-version (Cargo.toml). The
+  # repo's rust-toolchain.toml pins the dev toolchain, so call +1.88 explicitly.
+  msrv:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: async
+            flags: ""
+          - name: sync
+            flags: "--no-default-features --features sync"
+          - name: all-features
+            flags: "--all-features"
+    name: MSRV ${{ matrix.name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-${{ matrix.name }}
+
+      - name: Check library
+        run: cargo +1.88 check -p ibapi --lib ${{ matrix.flags }}
+
   # Separate minimal job for basic checks that don't need feature matrix
   basic-checks:
     runs-on: ubuntu-latest
