@@ -431,7 +431,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
-    /// Cancel the historical-ticks request. Safe to call after completion (no-op).
+    /// Cancel the historical-ticks request. After completion nothing is written.
     /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
     ///
     /// # Examples
@@ -450,15 +450,19 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
             return;
         }
 
-        match encoders::encode_cancel_historical_ticks(self.request_id) {
-            Ok(message) => {
-                if let Err(e) = self.message_bus.send_message(&message) {
-                    log_cancel_error("historical ticks subscription", &e);
+        // After the last batch TWS has finished the request: nothing to
+        // write, but the registration still goes.
+        if !self.done.load(Ordering::Relaxed) {
+            match encoders::encode_cancel_historical_ticks(self.request_id) {
+                Ok(message) => {
+                    if let Err(e) = self.message_bus.send_message(&message) {
+                        log_cancel_error("historical ticks subscription", &e);
+                    }
                 }
-                self.messages.cancel();
+                Err(e) => error!("error encoding cancel historical ticks: {e}"),
             }
-            Err(e) => error!("error encoding cancel historical ticks: {e}"),
         }
+        self.messages.cancel();
     }
 
     /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>` — both
@@ -700,9 +704,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
 impl<T: TickDecoder<T>> Drop for TickSubscription<T> {
     fn drop(&mut self) {
-        if !self.done.load(Ordering::Relaxed) {
-            self.cancel();
-        }
+        self.cancel();
     }
 }
 

@@ -986,6 +986,24 @@ fn test_tick_subscription_drop_after_done_does_not_cancel() {
 }
 
 #[test]
+fn test_tick_subscription_cancel_after_done_writes_nothing() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+
+    let internal = message_bus.send_request(RequestId::nth(103), &[]).unwrap();
+    let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(103).raw(), message_bus.clone());
+    subscription.done.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    subscription.cancel();
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
+        0,
+        "completed subscription should not send cancel"
+    );
+}
+
+#[test]
 fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
