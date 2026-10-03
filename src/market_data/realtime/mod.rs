@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::contracts::OptionComputation;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, MARKET_DEPTH_RESET_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -228,12 +228,10 @@ impl std::fmt::Display for WhatToShow {
 
 /// Market depth data types.
 ///
-/// A `SubscriptionItem::Notice` with code 317 ("Market depth data has been
-/// RESET") means TWS discarded the book on its side: drop every row held and
-/// rebuild from the updates that follow. The stream stays open — 317 is a
-/// [`DATA_ADVISORY_CODES`](crate::messages::DATA_ADVISORY_CODES) entry. Its
-/// sibling 316 ("Market depth data has been HALTED") is terminal: the stream
-/// ends with `Err`, and the caller re-subscribes.
+/// Apply `MarketDepth` / `MarketDepthL2` rows to the book you hold; on
+/// [`Reset`](Self::Reset), drop every row first. The stream stays open
+/// through a reset. Code 316 ("Market depth data has been HALTED") is
+/// terminal: the stream ends with `Err`, and the caller re-subscribes.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
@@ -241,6 +239,10 @@ pub enum MarketDepths {
     MarketDepth(MarketDepth),
     /// Level-2 (per exchange/MPID) depth update.
     MarketDepthL2(MarketDepthL2),
+    /// TWS discarded the book on its side (code 317, "Market depth data has
+    /// been RESET"): empty every row held, then rebuild from the updates that
+    /// follow. Delivered as data so it survives `filter_data` / `iter_data`.
+    Reset,
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -288,6 +290,10 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(message)?)),
             _ => Err(Error::unexpected_response(message)),
         }
+    }
+
+    fn data_from_notice(notice: &Notice) -> Option<Self> {
+        (notice.code == MARKET_DEPTH_RESET_CODE).then_some(MarketDepths::Reset)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {

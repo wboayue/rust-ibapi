@@ -121,6 +121,17 @@ pub(crate) fn is_undeclared(ids: &[IncomingMessages], message: &ResponseMessage)
     !ids.contains(&message.message_type())
 }
 
+/// The item a notice bound to this subscription becomes: data when the
+/// decoder models it ([`StreamDecoder::data_from_notice`]), else a `Notice`.
+///
+/// Shared by both drivers for the same reason as [`is_undeclared`].
+pub(crate) fn notice_item<T: StreamDecoder<T>>(notice: Notice) -> SubscriptionItem<T> {
+    match T::data_from_notice(&notice) {
+        Some(data) => SubscriptionItem::Data(data),
+        None => SubscriptionItem::Notice(notice),
+    }
+}
+
 /// Context for decoding responses, providing all necessary state for decoders.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DecoderContext {
@@ -189,6 +200,14 @@ pub(crate) trait StreamDecoder<T> {
     /// classification change.
     fn is_nonterminal_notice(_notice: &Notice) -> bool {
         false
+    }
+
+    /// Deliver a notice bound to this subscription as a data item instead,
+    /// when the stream's type models it (317 → `MarketDepths::Reset`). Unlike
+    /// a `Notice`, the item survives `filter_data` / `iter_data`. Default:
+    /// `None`, the notice is yielded as `SubscriptionItem::Notice`.
+    fn data_from_notice(_notice: &Notice) -> Option<T> {
+        None
     }
 
     /// Generate a cancellation message for this stream
