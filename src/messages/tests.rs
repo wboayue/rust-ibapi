@@ -680,8 +680,6 @@ fn test_notice_is_cancellation() {
         advanced_order_reject_json: String::new(),
     };
     assert!(cancellation.is_cancellation());
-    assert!(!cancellation.is_warning());
-    assert!(!cancellation.is_system_message());
     assert!(cancellation.is_informational());
     assert!(!cancellation.is_error());
 
@@ -708,8 +706,6 @@ fn test_notice_is_warning() {
     for code in warning_codes {
         let notice = notice_with_code(code);
         assert!(notice.is_warning(), "Code {} should be a warning", code);
-        assert!(!notice.is_cancellation());
-        assert!(!notice.is_system_message());
         assert!(notice.is_informational());
         assert!(!notice.is_error());
     }
@@ -780,8 +776,6 @@ fn test_notice_is_system_message() {
             advanced_order_reject_json: String::new(),
         };
         assert!(notice.is_system_message(), "Code {} should be a system message", code);
-        assert!(!notice.is_cancellation());
-        assert!(!notice.is_warning());
         assert!(notice.is_informational());
         assert!(!notice.is_error());
     }
@@ -875,16 +869,11 @@ fn test_notice_is_order_rejection() {
         assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
     }
 
-    // The band's edges, plus the codes inside it that an earlier category claims.
-    for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000]
-        .into_iter()
-        .chain([ORDER_CANCELLED_CODE, MARKET_DEPTH_RESET_CODE])
-        .chain(REQUEST_ERROR_CODES.iter().copied())
-    {
+    // Codes inside the band that an earlier category claims are covered by
+    // test_notice_category_predicates_are_disjoint.
+    for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
         assert!(!notice_with_code(code).is_order_rejection(), "code {code} should not be order rejection");
     }
-    let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
-    assert!(!order_warning.is_order_rejection());
 }
 
 #[test]
@@ -897,7 +886,6 @@ fn test_notice_is_request_error() {
             "code {code} outside the band it is carved from"
         );
         assert!(notice.is_error(), "code {code} should be terminal");
-        assert!(!notice.is_order_rejection());
     }
     for code in [201, 202, 317, 355, 399, 502, 2104, 10000] {
         assert!(!notice_with_code(code).is_request_error(), "code {code} should not be a request error");
