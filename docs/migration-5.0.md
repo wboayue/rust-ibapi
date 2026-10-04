@@ -436,6 +436,22 @@ let spread = Contract::spread().short_calendar(near, far).build()?;
 
 If you sold the `calendar` combo to go long the calendar, build `long_calendar(near, far)` and buy it instead.
 
+### 30. `generic_tick::ETF_NAV_FROZEN_LAST` is replaced by `ETF_NAV_CLOSE` and `ETF_FROZEN_NAV_LAST`
+
+Through 5.0.0, `generic_tick::ETF_NAV_FROZEN_LAST` was `"578"` and was documented as delivering received tick 97, the ETF NAV last price for frozen data. IB's earlier tick table maps generic tick `578` to ticks 92 and 93 (ETF NAV close and prior close), and tick 97 to generic tick `623`; its current page still lists `623` for tick 97 but no longer lists `578`. The constant is removed, and two new constants replace it: `ETF_NAV_CLOSE` is `"578"` and `ETF_FROZEN_NAV_LAST` is `"623"`:
+
+```rust,ignore
+// 5.0
+.generic_ticks(&[generic_tick::ETF_NAV_FROZEN_LAST])
+
+// Unreleased: what the old constant requested, ticks 92 and 93
+.generic_ticks(&[generic_tick::ETF_NAV_CLOSE])
+// Unreleased: what its name promised, tick 97
+.generic_ticks(&[generic_tick::ETF_FROZEN_NAV_LAST])
+```
+
+Choose by the ticks your code reads: `TickType::EtfNavClose` / `EtfNavPriorClose` need `ETF_NAV_CLOSE`, and `TickType::EtfFrozenNavLast` needs `ETF_FROZEN_NAV_LAST`. The compiler flags every use of the old name, but the similarly named constant it suggests, `ETF_FROZEN_NAV_LAST`, is a different generic tick, so a plain rename changes what is requested. Since IB's current page no longer lists `578` or `576`, whether TWS still serves them is unverified; `ETF_NAV_CLOSE` requests exactly what `ETF_NAV_FROZEN_LAST` did.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -481,7 +497,8 @@ No code changes required, but observable at runtime:
 27. Replace `exercise_options(&contract, action, quantity, account, ovrd, time)` with `exercise_options(&contract).exercise(quantity)` (or `.lapse(quantity)`) plus `.account(..)`, `.override_natural_action()` and `.manual_order_time(..)` as needed, then `.submit()` — see [§27](#27-exercise_options-returns-a-builder).
 28. Replace `peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order`, and the builder's `compete_against_best_offset` / `mid_offset_at_*` setters, with `.peg_best(..)` / `.peg_mid(..)` — see [§28](#28-ibkrats-peg-functions-are-removed-use-peg_best--peg_mid).
 29. Replace `SpreadBuilder::calendar(near, far)` with `short_calendar(near, far)` for the same legs, or with `long_calendar(near, far)` bought instead of sold if you sold it to go long — see [§29](#29-spreadbuildercalendar-is-replaced-by-long_calendar-and-short_calendar).
-30. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+30. Replace `generic_tick::ETF_NAV_FROZEN_LAST` with `ETF_NAV_CLOSE` (same `"578"`, ticks 92 and 93) or `ETF_FROZEN_NAV_LAST` (`"623"`, tick 97), depending on which ticks you read — see [§30](#30-generic_ticketf_nav_frozen_last-is-replaced-by-etf_nav_close-and-etf_frozen_nav_last).
+31. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

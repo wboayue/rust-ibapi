@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `generic_tick::ETF_NAV_CLOSE` (`"578"`, ETF NAV close and prior close, ticks 92 and 93) and `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
+
+### Removed
+
+- `generic_tick::ETF_NAV_FROZEN_LAST`. Its value, `"578"`, is the generic tick IB's tick table gives for the ETF NAV close and prior close (ticks 92 and 93), not the frozen NAV last price (tick 97) its name and docs promised. See `docs/migration-5.0.md` §30 (#946).
+
 ## [5.0.0] - 2026-10-04
 
 ### Added

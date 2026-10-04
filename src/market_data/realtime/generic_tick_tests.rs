@@ -1,7 +1,9 @@
 use super::*;
 
 /// Regression guard: every constant must match the numeric ID listed at
-/// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>.
+/// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>,
+/// except `576` and `578`, which that page no longer lists; those are from IB's
+/// earlier table (copied in `realtime/common/tick_types.rs`).
 ///
 /// Table is the source-of-truth column. If TWS adds a new generic tick request
 /// ID, add a row here and a `pub const` above so the constants module stays in
@@ -31,12 +33,13 @@ fn constants_match_documented_numeric_ids() {
         (BOND_FACTOR_MULTIPLIER, "460"),
         (ETF_NAV_BID, "576"),
         (ETF_NAV_LAST, "577"),
-        (ETF_NAV_FROZEN_LAST, "578"),
+        (ETF_NAV_CLOSE, "578"),
         (IPO_PRICES, "586"),
         (FUTURES_OPEN_INTEREST, "588"),
         (SHORT_TERM_VOLUME, "595"),
         (ETF_NAV_HIGH_LOW, "614"),
         (CREDITMAN_SLOW_MARK_PRICE, "619"),
+        (ETF_FROZEN_NAV_LAST, "623"),
         (ODD_LOT, "787"),
     ];
 
