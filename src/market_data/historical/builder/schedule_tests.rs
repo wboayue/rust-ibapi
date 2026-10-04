@@ -47,7 +47,7 @@ mod sync_tests {
                 .end_date(None)
                 .duration(Duration::days(7))
                 .bar_size(BarSize::Day)
-                .what_to_show(Some(WhatToShow::Schedule))
+                .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
     }
@@ -72,7 +72,7 @@ mod sync_tests {
                 .end_date(Some(end))
                 .duration(Duration::days(30))
                 .bar_size(BarSize::Day)
-                .what_to_show(Some(WhatToShow::Schedule))
+                .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
     }
@@ -113,7 +113,7 @@ mod async_tests {
                 .end_date(None)
                 .duration(Duration::days(7))
                 .bar_size(BarSize::Day)
-                .what_to_show(Some(WhatToShow::Schedule))
+                .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
     }
@@ -139,7 +139,7 @@ mod async_tests {
                 .end_date(Some(end))
                 .duration(Duration::days(30))
                 .bar_size(BarSize::Day)
-                .what_to_show(Some(WhatToShow::Schedule))
+                .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
     }

@@ -82,7 +82,7 @@ pub struct HistoricalDataRequestBuilder {
     pub end_date: Option<OffsetDateTime>,
     pub duration: Duration,
     pub bar_size: BarSize,
-    pub what_to_show: Option<HistoricalWhatToShow>,
+    pub what_to_show: HistoricalWhatToShow,
     pub use_rth: bool,
     pub keep_up_to_date: bool,
 }
@@ -95,7 +95,7 @@ impl Default for HistoricalDataRequestBuilder {
             end_date: None,
             duration: Duration::days(1),
             bar_size: BarSize::Day,
-            what_to_show: None,
+            what_to_show: HistoricalWhatToShow::Trades,
             use_rth: false,
             keep_up_to_date: false,
         }
@@ -123,7 +123,7 @@ impl HistoricalDataRequestBuilder {
         self.bar_size = v;
         self
     }
-    pub fn what_to_show(mut self, v: Option<HistoricalWhatToShow>) -> Self {
+    pub fn what_to_show(mut self, v: HistoricalWhatToShow) -> Self {
         self.what_to_show = v;
         self
     }
