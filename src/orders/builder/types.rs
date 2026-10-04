@@ -124,6 +124,19 @@ impl Price {
     }
 }
 
+/// How far a trailing stop trails the market.
+///
+/// Taken by [`OrderBuilder::trailing_stop`](crate::orders::OrderBuilder::trailing_stop) and
+/// [`OrderBuilder::trailing_stop_limit`](crate::orders::OrderBuilder::trailing_stop_limit).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum TrailBy {
+    /// Trail by a fixed price amount. Sent as `Order::aux_price`.
+    Amount(f64),
+    /// Trail by a percentage of the market price. Sent as `Order::trailing_percent`.
+    Percent(f64),
+}
+
 /// Order types supported by Interactive Brokers
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

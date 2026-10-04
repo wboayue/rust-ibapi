@@ -591,12 +591,16 @@ pub fn combo_limit_order(action: Action, quantity: f64, limit_price: f64, non_gu
 }
 
 fn tag_order_non_guaranteed(mut order: Order) -> Order {
-    order.smart_combo_routing_params = vec![];
-    order.smart_combo_routing_params.push(TagValue {
+    order.smart_combo_routing_params = non_guaranteed_params();
+    order
+}
+
+/// `smart_combo_routing_params` that mark a SMART-routed combo order non-guaranteed.
+pub(crate) fn non_guaranteed_params() -> Vec<TagValue> {
+    vec![TagValue {
         tag: "NonGuaranteed".to_owned(),
         value: "1".to_owned(),
-    });
-    order
+    }]
 }
 
 /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed

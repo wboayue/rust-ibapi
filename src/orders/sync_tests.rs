@@ -18,6 +18,7 @@ use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
 use super::*;
 use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
+use crate::orders::builder::TrailBy;
 use crate::orders::common::order_builder;
 
 #[test]
@@ -1033,7 +1034,7 @@ fn build_order_does_not_reach_the_wire() {
     let order = client
         .order(&contract)
         .sell(100)
-        .trailing_stop(5.0, 95.0)
+        .trailing_stop(TrailBy::Percent(5.0), 95.0)
         .build_order()
         .expect("order should build");
 

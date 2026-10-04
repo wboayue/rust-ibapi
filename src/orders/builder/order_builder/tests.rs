@@ -36,7 +36,9 @@ fn test_trailing_stop_limit() {
     let client = MockClient;
     let contract = create_test_contract();
 
-    let builder = OrderBuilder::new(&client, &contract).sell(100).trailing_stop_limit(5.0, 95.0, 0.50);
+    let builder = OrderBuilder::new(&client, &contract)
+        .sell(100)
+        .trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.50);
 
     let order = builder.build().unwrap();
     assert_eq!(order.order_type, "TRAIL LIMIT");
@@ -737,10 +739,10 @@ fn test_custom_order_type() {
     let client = MockClient;
     let contract = create_test_contract();
 
-    let builder = OrderBuilder::new(&client, &contract).buy(100).order_type(OrderType::PeggedToStock);
+    let builder = OrderBuilder::new(&client, &contract).buy(100).order_type(OrderType::PegBest);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "PEG STK");
+    assert_eq!(order.order_type, "PEG BEST");
 }
 
 #[test]
@@ -1786,4 +1788,268 @@ fn preset_legs_consume_no_ids_for_an_invalid_parent() {
 
     assert!(matches!(result, Err(ValidationError::InvalidQuantity(_))), "got {result:?}");
     assert_eq!(calls, 0);
+}
+
+// === Order::builder() (detached) ===
+
+#[test]
+fn detached_builder_matches_bound_builder() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bound = OrderBuilder::new(&client, &contract)
+        .sell(100)
+        .stop_limit(95.0, 94.5)
+        .good_till_canceled()
+        .outside_rth()
+        .account("DU123")
+        .build()
+        .unwrap();
+    let detached = Order::builder()
+        .sell(100)
+        .stop_limit(95.0, 94.5)
+        .good_till_canceled()
+        .outside_rth()
+        .account("DU123")
+        .build()
+        .unwrap();
+
+    assert_eq!(bound, detached);
+}
+
+#[test]
+fn detached_builder_validates() {
+    let err = Order::builder().buy(100).build().unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("order_type"));
+}
+
+#[test]
+fn detached_bracket_builds() {
+    let orders = Order::builder()
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .build()
+        .unwrap();
+    assert_eq!(orders.len(), 3);
+    assert_eq!(orders[0].limit_price, Some(50.0));
+}
+
+// === Trailing stops: TrailBy ===
+
+#[test]
+fn trailing_stop_by_amount_sets_aux_price() {
+    let order = Order::builder().sell(100).trailing_stop(TrailBy::Amount(2.0), 95.0).build().unwrap();
+    assert_eq!(order.order_type, "TRAIL");
+    assert_eq!(order.aux_price, Some(2.0));
+    assert_eq!(order.trailing_percent, None);
+    assert_eq!(order.trail_stop_price, Some(95.0));
+}
+
+#[test]
+fn trailing_stop_by_percent_sets_trailing_percent() {
+    let order = Order::builder().sell(100).trailing_stop(TrailBy::Percent(5.0), 95.0).build().unwrap();
+    assert_eq!(order.trailing_percent, Some(5.0));
+    assert_eq!(order.aux_price, None);
+}
+
+#[test]
+fn trailing_stop_limit_by_amount_matches_free_fn() {
+    let fluent = Order::builder()
+        .buy(100)
+        .trailing_stop_limit(TrailBy::Amount(1.0), 105.0, 0.25)
+        .build()
+        .unwrap();
+    let free = crate::orders::order_builder::trailing_stop_limit(Action::Buy, 100.0, 0.25, 1.0, 105.0);
+
+    assert_eq!(fluent.order_type, free.order_type);
+    assert_eq!(fluent.aux_price, free.aux_price);
+    assert_eq!(fluent.limit_price_offset, free.limit_price_offset);
+    assert_eq!(fluent.trail_stop_price, free.trail_stop_price);
+    assert_eq!(fluent.trailing_percent, free.trailing_percent);
+}
+
+#[test]
+fn last_trail_wins() {
+    let order = Order::builder()
+        .sell(100)
+        .trailing_stop(TrailBy::Percent(5.0), 95.0)
+        .trailing_stop(TrailBy::Amount(2.0), 95.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.aux_price, Some(2.0));
+    assert_eq!(order.trailing_percent, None);
+}
+
+#[test]
+fn trailing_stop_without_trail_fails_validation() {
+    let err = Order::builder().sell(100).order_type(OrderType::TrailingStop).build().unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("trailing amount or percent"));
+}
+
+// === Pegged orders ===
+
+#[test]
+fn pegged_to_market_sets_offset() {
+    let order = Order::builder().buy(100).pegged_to_market(0.05).build().unwrap();
+    assert_eq!(order, crate::orders::order_builder::pegged_to_market(Action::Buy, 100.0, 0.05));
+}
+
+#[test]
+fn pegged_to_midpoint_matches_free_fn_argument_order() {
+    let order = Order::builder().buy(100).pegged_to_midpoint(0.01, 150.0).build().unwrap();
+    assert_eq!(order, crate::orders::order_builder::pegged_to_midpoint(Action::Buy, 100.0, 0.01, 150.0));
+}
+
+#[test]
+fn box_top_sets_order_type() {
+    let order = Order::builder().buy(10).box_top().build().unwrap();
+    assert_eq!(order, crate::orders::order_builder::box_top(Action::Buy, 10.0));
+}
+
+#[test]
+fn pegged_to_stock_matches_free_fn() {
+    let order = Order::builder()
+        .buy(1)
+        .pegged_to_stock(0.5, 2.10)
+        .stock_reference_price(150.0)
+        .build()
+        .unwrap();
+    assert_eq!(order, crate::orders::order_builder::pegged_to_stock(Action::Buy, 1.0, 0.5, 150.0, 2.10));
+}
+
+#[test]
+fn pegged_to_stock_without_reference_price_matches_auction_free_fn() {
+    let order = Order::builder().buy(1).pegged_to_stock(0.5, 2.10).build().unwrap();
+    assert_eq!(order, crate::orders::order_builder::auction_pegged_to_stock(Action::Buy, 1.0, 2.10, 0.5));
+}
+
+#[test]
+fn stock_range_sets_bounds() {
+    let order = Order::builder()
+        .buy(1)
+        .pegged_to_stock(0.5, 2.10)
+        .stock_range(140.0, 160.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.stock_range_lower, Some(140.0));
+    assert_eq!(order.stock_range_upper, Some(160.0));
+}
+
+#[test]
+fn pegged_to_stock_requires_delta_and_starting_price() {
+    let err = Order::builder().buy(1).order_type(OrderType::PeggedToStock).build().unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("delta"));
+}
+
+#[test]
+fn pegged_to_benchmark_matches_struct_builder() {
+    let fluent = Order::builder()
+        .buy(100)
+        .pegged_to_benchmark(50.0)
+        .reference_contract(12345, "ISLAND")
+        .pegged_change_amount(0.02)
+        .pegged_change_amount_decrease()
+        .reference_change_amount(0.01)
+        .stock_reference_price(49.0)
+        .reference_range(48.0, 52.0)
+        .build()
+        .unwrap();
+    let legacy = crate::orders::order_builder::PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
+        .reference_contract(12345, "ISLAND")
+        .pegged_change_amount(0.02)
+        .pegged_change_amount_decrease(true)
+        .reference_change_amount(0.01)
+        .stock_reference_price(49.0)
+        .reference_range(48.0, 52.0)
+        .build()
+        .unwrap();
+
+    assert_eq!(fluent, legacy);
+}
+
+#[test]
+fn reference_contract_accepts_contract_id() {
+    use crate::accounts::types::ContractId;
+    let order = Order::builder()
+        .buy(100)
+        .pegged_to_benchmark(50.0)
+        .reference_contract(ContractId(12345), "ISLAND")
+        .build()
+        .unwrap();
+    assert_eq!(order.reference_contract_id, 12345);
+    assert_eq!(order.reference_exchange, "ISLAND");
+}
+
+#[test]
+fn pegged_to_benchmark_requires_reference_contract() {
+    let err = Order::builder().buy(100).pegged_to_benchmark(50.0).build().unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("reference_contract"));
+}
+
+#[test]
+fn pegged_to_benchmark_requires_starting_price() {
+    let err = Order::builder()
+        .buy(100)
+        .order_type(OrderType::PeggedToBenchmark)
+        .reference_contract(12345, "ISLAND")
+        .build()
+        .unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("starting_price"));
+}
+
+// === Combo, manual time, cash quantity ===
+
+#[test]
+fn non_guaranteed_matches_free_fn() {
+    let order = Order::builder().buy(1).limit(2.5).non_guaranteed().build().unwrap();
+    let free = crate::orders::order_builder::combo_limit_order(Action::Buy, 1.0, 2.5, true);
+    assert_eq!(order.smart_combo_routing_params, free.smart_combo_routing_params);
+}
+
+#[test]
+fn combo_leg_prices_set_one_leg_per_price() {
+    let order = Order::builder().buy(1).limit(2.5).combo_leg_prices([1.1, 2.2]).build().unwrap();
+    let free = crate::orders::order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 1.0, vec![1.1, 2.2], false);
+    assert_eq!(order.order_combo_legs, free.order_combo_legs);
+}
+
+#[test]
+fn manual_order_time_sets_field() {
+    let order = Order::builder()
+        .buy(100)
+        .limit(50.0)
+        .manual_order_time("20260103 10:00:00")
+        .build()
+        .unwrap();
+    assert_eq!(order.manual_order_time, "20260103 10:00:00");
+}
+
+#[test]
+fn cash_qty_allows_zero_quantity() {
+    let order = Order::builder().buy(0).limit(1.10).cash_qty(20_000.0).build().unwrap();
+    assert_eq!(
+        order,
+        crate::orders::order_builder::limit_order_with_cash_qty(Action::Buy, 1.10, 20_000.0)
+    );
+}
+
+#[test]
+fn cash_qty_keeps_a_nonzero_quantity() {
+    let order = Order::builder().buy(100).limit(1.10).cash_qty(20_000.0).build().unwrap();
+    assert_eq!(order.total_quantity, 100.0);
+}
+
+#[test]
+fn cash_qty_must_be_positive() {
+    let err = Order::builder().buy(0).limit(1.10).cash_qty(0.0).build().unwrap_err();
+    assert_eq!(err, ValidationError::InvalidQuantity(0.0));
+}
+
+#[test]
+fn zero_quantity_without_cash_qty_still_fails() {
+    let err = Order::builder().buy(0).limit(1.10).build().unwrap_err();
+    assert_eq!(err, ValidationError::InvalidQuantity(0.0));
 }

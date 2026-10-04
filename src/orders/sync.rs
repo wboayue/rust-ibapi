@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
-use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
+use super::{Bound, CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
@@ -29,7 +29,7 @@ impl Client {
     ///     .limit(50.0)
     ///     .submit().expect("order submission failed");
     /// ```
-    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<Bound<'a, Self>> {
         OrderBuilder::new(self, contract)
     }
 

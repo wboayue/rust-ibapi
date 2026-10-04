@@ -7,6 +7,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
+use crate::orders::builder::TrailBy;
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
@@ -976,7 +977,7 @@ async fn build_order_does_not_reach_the_wire() {
     let order = client
         .order(&contract)
         .sell(100)
-        .trailing_stop(5.0, 95.0)
+        .trailing_stop(TrailBy::Percent(5.0), 95.0)
         .build_order()
         .expect("order should build");
 

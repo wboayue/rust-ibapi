@@ -34,7 +34,7 @@ impl Client {
     ///         .submit().await.expect("order submission failed");
     /// }
     /// ```
-    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<Bound<'a, Self>> {
         OrderBuilder::new(self, contract)
     }
 
