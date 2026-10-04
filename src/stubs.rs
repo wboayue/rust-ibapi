@@ -23,7 +23,7 @@ use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 #[cfg(feature = "async")]
 use {
     crate::transport::{
-        r#async::{AsyncInternalSubscription, CleanupSignal},
+        r#async::{AsyncInternalSubscription, CleanupSignal, RouteKey},
         AsyncMessageBus,
     },
     async_trait::async_trait,
@@ -391,13 +391,7 @@ impl AsyncMessageBus for MessageBusStub {
             }
         });
 
-        // Unleased: nothing here checks liveness, and the signal identifies
-        // no registration.
-        Ok(AsyncInternalSubscription::with_cleanup(
-            receiver,
-            cleanup_sender,
-            CleanupSignal::OrderUpdateStream(Lease::new().downgrade()),
-        ))
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, cleanup_sender).leased(Lease::new(), RouteKey::OrderUpdateStream))
     }
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {

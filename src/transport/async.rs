@@ -160,6 +160,25 @@ pub enum CleanupSignal {
     OrderUpdateStream(LeaseRef),
 }
 
+/// The registration a leased subscription releases: with the lease, it builds
+/// the subscription's [`CleanupSignal`] when the signal is sent.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RouteKey {
+    Request(RequestId),
+    Order(OrderId),
+    OrderUpdateStream,
+}
+
+impl RouteKey {
+    fn signal(self, lease: LeaseRef) -> CleanupSignal {
+        match self {
+            RouteKey::Request(request_id) => CleanupSignal::Request(request_id, lease),
+            RouteKey::Order(order_id) => CleanupSignal::Order(order_id, lease),
+            RouteKey::OrderUpdateStream => CleanupSignal::OrderUpdateStream(lease),
+        }
+    }
+}
+
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
@@ -223,11 +242,12 @@ pub struct AsyncInternalSubscription {
     template_receiver: broadcast::Receiver<RoutedItem>,
     stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
-    cleanup_signal: Option<CleanupSignal>,
-    /// The registration's liveness, shared by clones; released before the
-    /// cleanup signal is sent. `None` for shared-channel subscriptions,
-    /// whose channels persist.
-    lease: Option<Lease>,
+    /// The registration's liveness, shared by clones, and its key; released
+    /// before the cleanup signal is sent. `None` for shared-channel
+    /// subscriptions, whose channels persist.
+    lease: Option<(Lease, RouteKey)>,
+    /// The shared-channel ticket, for a shared-channel subscription.
+    shared: Option<SharedTicket>,
     /// Items this receiver has read, shared with a bounded route
     /// (`registry::RouteBound`) so it can tell how many are unread. `Sender::len()`
     /// can't: it counts values not yet seen by every receiver, and
@@ -252,8 +272,8 @@ impl Clone for AsyncInternalSubscription {
             cleanup_sender: self.cleanup_sender.clone(),
             // Each clone sends its own cleanup signal on drop; stale ones
             // no-op while another clone still holds the lease.
-            cleanup_signal: self.cleanup_signal.clone(),
             lease: self.lease.clone(),
+            shared: self.shared,
             reads: None,
             class: self.class,
         }
@@ -279,33 +299,35 @@ impl AsyncInternalSubscription {
             template_receiver: template,
             stream: BroadcastStream::new(receiver),
             cleanup_sender: None,
-            cleanup_signal: None,
             lease: None,
+            shared: None,
             reads: None,
             class: ChannelClass::default(),
         }
     }
 
-    pub(crate) fn with_cleanup(
-        receiver: broadcast::Receiver<RoutedItem>,
-        cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
-        cleanup_signal: CleanupSignal,
-    ) -> Self {
+    pub(crate) fn with_cleanup(receiver: broadcast::Receiver<RoutedItem>, cleanup_sender: mpsc::UnboundedSender<CleanupSignal>) -> Self {
         let template = receiver.resubscribe();
         Self {
             template_receiver: template,
             stream: BroadcastStream::new(receiver),
             cleanup_sender: Some(cleanup_sender),
-            cleanup_signal: Some(cleanup_signal),
             lease: None,
+            shared: None,
             reads: None,
             class: ChannelClass::default(),
         }
     }
 
-    /// Hold `lease` for the registration this subscription reads from.
-    fn leased(mut self, lease: Lease) -> Self {
-        self.lease = Some(lease);
+    /// Hold `lease` for the registration under `key` this subscription reads from.
+    pub(crate) fn leased(mut self, lease: Lease, key: RouteKey) -> Self {
+        self.lease = Some((lease, key));
+        self
+    }
+
+    /// Mark this a subscription to the shared channel `ticket` names.
+    fn shared(mut self, ticket: SharedTicket) -> Self {
+        self.shared = Some(ticket);
         self
     }
 
@@ -375,14 +397,10 @@ impl AsyncInternalSubscription {
         std::future::poll_fn(|cx| self.poll_next_routed(cx)).now_or_never()?
     }
 
-    /// The shared-channel ticket when this is a shared-channel subscription,
-    /// taken from the cleanup signal `send_shared_request` attached; `None`
-    /// otherwise.
+    /// The shared-channel ticket when this is a shared-channel subscription;
+    /// `None` otherwise.
     pub(crate) fn shared_ticket(&self) -> Option<SharedTicket> {
-        match self.cleanup_signal {
-            Some(CleanupSignal::Shared(ticket)) => Some(ticket),
-            _ => None,
-        }
+        self.shared
     }
 
     /// Send the cleanup signal, releasing this handle's lease first.
@@ -392,8 +410,15 @@ impl AsyncInternalSubscription {
     /// drops that follow `drop(&mut self)`) could still count as live when a
     /// concurrently processed signal checks it — leaking the registration.
     fn send_cleanup_signal(&mut self) {
-        drop(self.lease.take());
-        let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), self.cleanup_signal.take()) else {
+        let signal = match self.lease.take() {
+            Some((lease, key)) => {
+                let lease_ref = lease.downgrade();
+                drop(lease);
+                Some(key.signal(lease_ref))
+            }
+            None => self.shared.take().map(CleanupSignal::Shared),
+        };
+        let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), signal) else {
             return;
         };
         let _ = sender.send(signal);
@@ -932,12 +957,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Register a channel of `class` under `id` in `routes`, optionally with
     /// an unread-item cap (which sets the capacity), then write the request.
-    /// `signal` builds the cleanup signal that releases the registration.
+    /// `key` names the registration for the cleanup signal that releases it.
     async fn open_route<K: Hash + Eq + Copy + Display + Debug + Send + Sync>(
         &self,
         routes: &SenderHash<K>,
         id: K,
-        signal: fn(K, LeaseRef) -> CleanupSignal,
+        key: fn(K) -> RouteKey,
         message: Vec<u8>,
         class: ChannelClass,
         bound: Option<BufferBound>,
@@ -960,9 +985,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // it, and its cleanup signal releases the registration. Code after the
         // `await` never runs in that case. On a failed write below, the drop
         // sends a second, harmless signal: `release` spares a replacement.
-        let signal = signal(id, lease_ref.clone());
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal)
-            .leased(lease)
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
+            .leased(lease, key(id))
             .class(class);
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),
@@ -1036,32 +1060,24 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             .subscribe(message_type, account, || self.write_message(&message))
             .await?;
 
-        Ok(
-            AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Shared(ticket))
-                .class(ChannelClass::of_shared(message_type)),
-        )
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
+            .shared(ticket)
+            .class(ChannelClass::of_shared(message_type)))
     }
 }
 
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(
-            &self.requests,
-            request_id,
-            CleanupSignal::Request,
-            message,
-            ChannelClass::MarketData,
-            None,
-        )
-        .await
+        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::MarketData, None)
+            .await
     }
 
     async fn send_request_bounded(&self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error> {
         self.open_route(
             &self.requests,
             request_id,
-            CleanupSignal::Request,
+            RouteKey::Request,
             message,
             ChannelClass::MarketData,
             Some(bound),
@@ -1070,12 +1086,12 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_executions_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.requests, request_id, CleanupSignal::Request, message, ChannelClass::Order, None)
+        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::Order, None)
             .await
     }
 
     async fn send_order_request(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.orders, order_id, CleanupSignal::Order, message, ChannelClass::Order, None)
+        self.open_route(&self.orders, order_id, RouteKey::Order, message, ChannelClass::Order, None)
             .await
     }
 
@@ -1121,13 +1137,11 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
         let (sender, receiver) = broadcast::channel(ChannelClass::OrderStream.capacity(self.channel_capacity));
         let lease = Lease::new();
-        let lease_ref = lease.downgrade();
 
-        *order_update_stream = Some(Route::unbounded(sender, lease_ref.clone()));
+        *order_update_stream = Some(Route::unbounded(sender, lease.downgrade()));
 
-        let signal = CleanupSignal::OrderUpdateStream(lease_ref);
-        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal)
-            .leased(lease)
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
+            .leased(lease, RouteKey::OrderUpdateStream)
             .class(ChannelClass::OrderStream))
     }
 
