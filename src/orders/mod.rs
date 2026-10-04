@@ -450,8 +450,9 @@ pub struct Order {
     /// Defines the minimum size to compete. For IBKRATS orders.
     pub min_compete_size: Option<i32>,
     /// Specifies the offset off the midpoint that will be applied to the order. For IBKRATS orders.
+    /// `f64::INFINITY` means compete up to the midpoint, using `mid_offset_at_whole` / `mid_offset_at_half`.
     pub compete_against_best_offset: Option<f64>,
-    /// his offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
+    /// This offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
     pub mid_offset_at_whole: Option<f64>,
     /// This offset is applied when the spread is an odd number of cents wide. This offset must be in half-penny increments. For IBKRATS orders.
     pub mid_offset_at_half: Option<f64>,

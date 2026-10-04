@@ -74,9 +74,8 @@ pub struct OrderBuilder<T> {
     // Pegged order fields
     min_trade_qty: Option<i32>,
     min_compete_size: Option<i32>,
-    compete_against_best_offset: Option<f64>,
-    mid_offset_at_whole: Option<f64>,
-    mid_offset_at_half: Option<f64>,
+    compete: Option<CompeteAgainstBest>,
+    mid_offsets: Option<MidOffsets>,
 
     // Reference contract fields
     reference_contract_id: Option<i32>,
@@ -259,9 +258,8 @@ impl<T> OrderBuilder<T> {
             all_or_none: false,
             min_trade_qty: None,
             min_compete_size: None,
-            compete_against_best_offset: None,
-            mid_offset_at_whole: None,
-            mid_offset_at_half: None,
+            compete: None,
+            mid_offsets: None,
             reference_contract_id: None,
             reference_exchange: None,
             stock_ref_price: None,
@@ -1157,8 +1155,8 @@ impl<T> OrderBuilder<T> {
 
     // Pegged order configuration
 
-    /// Set the minimum quantity per fill, for IBKRATS orders. A paper account rejected it with
-    /// error 10302 ("not allowed for this order").
+    /// Set the minimum quantity per fill, for IBKRATS orders. TWS may reject it with error 10302
+    /// ("not allowed for this order"), as it did on a paper account.
     pub fn min_trade_qty(mut self, qty: i32) -> Self {
         self.min_trade_qty = Some(qty);
         self
@@ -1174,12 +1172,14 @@ impl<T> OrderBuilder<T> {
     /// says, never beyond `limit_price`. Route the contract to `IBKRATS`.
     ///
     /// Sets `not_held`, which TWS requires for IBKRATS pegs: without it the order goes
-    /// `Inactive`. Optionally chain [`min_compete_size`](Self::min_compete_size).
+    /// `Inactive`. A later order-type setter doesn't undo it. Optionally chain
+    /// [`min_compete_size`](Self::min_compete_size). `build()` rejects a non-finite
+    /// [`CompeteAgainstBest::Offset`].
     ///
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::builder::CompeteAgainstBest;
+    /// use ibapi::orders::builder::{CompeteAgainstBest, MidOffsets};
     /// use ibapi::orders::Order;
     ///
     /// let order = Order::builder()
@@ -1193,7 +1193,7 @@ impl<T> OrderBuilder<T> {
     ///
     /// let up_to_mid = Order::builder()
     ///     .buy(100)
-    ///     .peg_best(150.0, CompeteAgainstBest::UpToMid { mid_offset_at_whole: 0.02, mid_offset_at_half: 0.025 })
+    ///     .peg_best(150.0, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: 0.02, at_half: 0.025 }))
     ///     .build()?;
     /// assert_eq!(up_to_mid.mid_offset_at_whole, Some(0.02));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -1202,49 +1202,38 @@ impl<T> OrderBuilder<T> {
         self.order_type = Some(OrderType::PegBest);
         self.limit_price = Some(limit_price.into());
         self.not_held = true;
-        match compete {
-            CompeteAgainstBest::Offset(offset) => {
-                self.compete_against_best_offset = Some(offset);
-                self.mid_offset_at_whole = None;
-                self.mid_offset_at_half = None;
-            }
-            CompeteAgainstBest::UpToMid {
-                mid_offset_at_whole,
-                mid_offset_at_half,
-            } => {
-                self.compete_against_best_offset = COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID;
-                self.mid_offset_at_whole = Some(mid_offset_at_whole);
-                self.mid_offset_at_half = Some(mid_offset_at_half);
-            }
-        }
+        self.compete = Some(compete);
         self
     }
 
-    /// Pegged to Midpoint, IBKRATS form - pegs to the midpoint, offset by `mid_offset_at_whole`
-    /// when the midpoint is a whole penny and `mid_offset_at_half` when it is a half penny, never
-    /// beyond `limit_price`. Route the contract to `IBKRATS`. For the offset form on other
+    /// Pegged to Midpoint, IBKRATS form - pegs to the midpoint, offset by `offsets`, never beyond
+    /// `limit_price`. Route the contract to `IBKRATS`. For the offset form on other
     /// venues, see [`pegged_to_midpoint`](Self::pegged_to_midpoint).
     ///
     /// Sets `not_held`, which TWS requires for IBKRATS pegs: without it the order goes `Inactive`.
+    /// A later order-type setter doesn't undo it.
     ///
     /// # Examples
     ///
     /// ```
+    /// use ibapi::orders::builder::MidOffsets;
     /// use ibapi::orders::Order;
     ///
-    /// let order = Order::builder().buy(100).peg_mid(150.0, 0.02, 0.025).build()?;
+    /// let offsets = MidOffsets { at_whole: 0.02, at_half: 0.025 };
+    /// let order = Order::builder().buy(100).peg_mid(150.0, offsets).build()?;
     /// assert_eq!(order.order_type, "PEG MID");
     /// assert_eq!(order.mid_offset_at_half, Some(0.025));
     /// assert_eq!(order.aux_price, None);
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
-    pub fn peg_mid(mut self, limit_price: impl Into<f64>, mid_offset_at_whole: f64, mid_offset_at_half: f64) -> Self {
+    pub fn peg_mid(mut self, limit_price: impl Into<f64>, offsets: MidOffsets) -> Self {
         self.order_type = Some(OrderType::PeggedToMidpoint);
         self.limit_price = Some(limit_price.into());
+        // Both PEG MID forms share one order type, so `build()` can't tell them apart: each
+        // setter clears the other form's field.
         self.aux_price = None;
         self.not_held = true;
-        self.mid_offset_at_whole = Some(mid_offset_at_whole);
-        self.mid_offset_at_half = Some(mid_offset_at_half);
+        self.mid_offsets = Some(offsets);
         self
     }
 
@@ -1287,8 +1276,8 @@ impl<T> OrderBuilder<T> {
         self.order_type = Some(OrderType::PeggedToMidpoint);
         self.aux_price = Some(offset);
         self.limit_price = Some(limit_price.into());
-        self.mid_offset_at_whole = None;
-        self.mid_offset_at_half = None;
+        // Clears `peg_mid`'s offsets; see there.
+        self.mid_offsets = None;
         self
     }
 
@@ -1661,16 +1650,29 @@ impl<T> OrderBuilder<T> {
         }
 
         // Compete fields are PEG BEST's; mid offsets are PEG MID's, or PEG BEST's when it
-        // competes up to the midpoint (the form C# sends them for).
-        if order_type == OrderType::PegBest {
-            order.min_compete_size = self.min_compete_size;
-            order.compete_against_best_offset = self.compete_against_best_offset;
-        }
-
-        let up_to_mid = order.compete_against_best_offset == COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID;
-        if order_type == OrderType::PeggedToMidpoint || up_to_mid {
-            order.mid_offset_at_whole = self.mid_offset_at_whole;
-            order.mid_offset_at_half = self.mid_offset_at_half;
+        // competes up to the midpoint (the forms C# sends them for). Gated inline rather than by
+        // `OrderType::uses_*`: each applies to one type, and up-to-mid depends on the value.
+        let mid_offsets = match order_type {
+            OrderType::PegBest => {
+                order.min_compete_size = self.min_compete_size;
+                match self.compete {
+                    Some(CompeteAgainstBest::Offset(offset)) => {
+                        order.compete_against_best_offset = Some(Price::new(offset)?.value());
+                        None
+                    }
+                    Some(CompeteAgainstBest::UpToMid(offsets)) => {
+                        order.compete_against_best_offset = COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID;
+                        Some(offsets)
+                    }
+                    None => None,
+                }
+            }
+            OrderType::PeggedToMidpoint => self.mid_offsets,
+            _ => None,
+        };
+        if let Some(offsets) = mid_offsets {
+            order.mid_offset_at_whole = Some(offsets.at_whole);
+            order.mid_offset_at_half = Some(offsets.at_half);
         }
 
         // Set conditions

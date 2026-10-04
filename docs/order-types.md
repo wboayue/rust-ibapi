@@ -769,7 +769,7 @@ Add `.pegged_change_amount_decrease()` to move the order price opposite the refe
 Pegged orders for IBKR's ATS. Route the contract to `IBKRATS`; the order is not held, which both methods set (TWS leaves an IBKRATS peg `Inactive` without it).
 
 ```rust
-use ibapi::orders::builder::CompeteAgainstBest;
+use ibapi::orders::builder::{CompeteAgainstBest, MidOffsets};
 
 let contract = Contract::stock("AAPL").on_exchange("IBKRATS").build();
 
@@ -783,13 +783,13 @@ let order_id = client.order(&contract)
 // Compete up to the midpoint instead
 let order_id = client.order(&contract)
     .buy(100)
-    .peg_best(150.00, CompeteAgainstBest::UpToMid { mid_offset_at_whole: 0.02, mid_offset_at_half: 0.025 })
+    .peg_best(150.00, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: 0.02, at_half: 0.025 }))
     .submit()?;
 
 // Peg to the midpoint, offset by $0.02 at a whole-penny midpoint and $0.025 at a half-penny one
 let order_id = client.order(&contract)
     .buy(100)
-    .peg_mid(150.00, 0.02, 0.025)
+    .peg_mid(150.00, MidOffsets { at_whole: 0.02, at_half: 0.025 })
     .submit()?;
 ```
 

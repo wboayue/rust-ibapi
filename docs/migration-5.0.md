@@ -408,16 +408,16 @@ Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed
 
 ### 28. IBKRATS peg functions are removed; use `peg_best` / `peg_mid`
 
-`order_builder::peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order` are removed. They took six or seven arguments, with same-typed pairs (`min_trade_qty` / `min_compete_size`, the two mid offsets) that compiled when swapped. The fluent builder's raw `compete_against_best_offset`, `mid_offset_at_whole` and `mid_offset_at_half` setters are removed too; `peg_best` and `peg_mid` set them, and the "up to mid" mode no longer needs `f64::INFINITY`:
+`order_builder::peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order` are removed. They took six or seven arguments, with same-typed pairs (`min_trade_qty` / `min_compete_size`, the two mid offsets) that compiled when swapped. The fluent builder's raw `compete_against_best_offset`, `mid_offset_at_whole` and `mid_offset_at_half` setters are removed too; `peg_best` and `peg_mid` set them, the mid offsets are a named `MidOffsets { at_whole, at_half }`, and the "up to mid" mode no longer needs `f64::INFINITY`:
 
 | 4.2 | 5.0 |
 | --- | --- |
 | `peg_best_order(Action::Buy, q, lmt, min_qty, min_size, offset)` | `Order::builder().buy(q).peg_best(lmt, CompeteAgainstBest::Offset(offset)).min_trade_qty(min_qty).min_compete_size(min_size).build()?` |
-| `peg_best_up_to_mid_order(Action::Buy, q, lmt, min_qty, min_size, whole, half)` | `Order::builder().buy(q).peg_best(lmt, CompeteAgainstBest::UpToMid { mid_offset_at_whole: whole, mid_offset_at_half: half }).min_trade_qty(min_qty).min_compete_size(min_size).build()?` |
-| `peg_mid_order(Action::Buy, q, lmt, min_qty, whole, half)` | `Order::builder().buy(q).peg_mid(lmt, whole, half).min_trade_qty(min_qty).build()?` |
-| `.compete_against_best_offset(x)` / `.mid_offset_at_whole(w).mid_offset_at_half(h)` | `.peg_best(lmt, CompeteAgainstBest::Offset(x))` / `.peg_best(lmt, CompeteAgainstBest::UpToMid { .. })` or `.peg_mid(lmt, w, h)` |
+| `peg_best_up_to_mid_order(Action::Buy, q, lmt, min_qty, min_size, whole, half)` | `Order::builder().buy(q).peg_best(lmt, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: whole, at_half: half })).min_trade_qty(min_qty).min_compete_size(min_size).build()?` |
+| `peg_mid_order(Action::Buy, q, lmt, min_qty, whole, half)` | `Order::builder().buy(q).peg_mid(lmt, MidOffsets { at_whole: whole, at_half: half }).min_trade_qty(min_qty).build()?` |
+| `.compete_against_best_offset(x)` / `.mid_offset_at_whole(w).mid_offset_at_half(h)` | `.peg_best(lmt, CompeteAgainstBest::Offset(x))` / `.peg_best(lmt, CompeteAgainstBest::UpToMid(MidOffsets { .. }))` or `.peg_mid(lmt, MidOffsets { .. })` |
 
-`CompeteAgainstBest` is `orders::builder::CompeteAgainstBest`. Both methods set `not_held`, as the free functions did. `build()` sends `min_compete_size` and the compete offset only for PEG BEST, and the mid offsets only for PEG MID or PEG BEST up to the midpoint.
+`CompeteAgainstBest` and `MidOffsets` are in `orders::builder`. Both methods set `not_held`, as the free functions did. Keep `.min_trade_qty` only if you relied on it: TWS may reject it with error 10302, as it did on a paper account. `build()` rejects a non-finite `CompeteAgainstBest::Offset`. `build()` sends `min_compete_size` and the compete offset only for PEG BEST, and the mid offsets only for PEG MID or PEG BEST up to the midpoint.
 
 ## Behavioral changes
 

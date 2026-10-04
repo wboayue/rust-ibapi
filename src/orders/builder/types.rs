@@ -141,16 +141,23 @@ pub enum TrailBy {
 /// [`OrderBuilder::peg_best`](crate::orders::OrderBuilder::peg_best).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CompeteAgainstBest {
-    /// Improve on the best bid (buy) or offer (sell) by this offset.
+    /// Improve on the best bid (buy) or offer (sell) by this offset. Must be finite.
     Offset(f64),
-    /// Compete up to the midpoint, offset by `mid_offset_at_whole` when the midpoint is a whole
-    /// penny and `mid_offset_at_half` when it is a half penny.
-    UpToMid {
-        /// Offset from a whole-penny midpoint.
-        mid_offset_at_whole: f64,
-        /// Offset from a half-penny midpoint.
-        mid_offset_at_half: f64,
-    },
+    /// Compete up to the midpoint, offset from it by [`MidOffsets`].
+    UpToMid(MidOffsets),
+}
+
+/// Offsets from the midpoint for IBKRATS pegs, named so they can't be swapped. See
+/// [`OrderBuilder::peg_mid`](crate::orders::OrderBuilder::peg_mid) and
+/// [`CompeteAgainstBest::UpToMid`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MidOffsets {
+    /// Applied when the spread is an even number of cents wide, so the midpoint is a whole
+    /// penny. Whole-penny increments or zero.
+    pub at_whole: f64,
+    /// Applied when the spread is an odd number of cents wide, so the midpoint is a half
+    /// penny. Half-penny increments.
+    pub at_half: f64,
 }
 
 /// Entry, take-profit and stop-loss prices of a bracket order, named so they can't be swapped.
@@ -339,8 +346,8 @@ impl OrderType {
     }
 
     // `build()` sends a price field only for the types below, so one left by an earlier
-    // order-type setter is dropped. Sets follow C# `OrderSamples.cs`; types reachable only
-    // through `.order_type(..)` (PEG BEST, the REL combos) are given the fields they may carry.
+    // order-type setter is dropped. Sets follow C# `OrderSamples.cs`, plus `limit_price` for
+    // PEG BEST and the fields the REL combos (reachable only through `.order_type(..)`) may carry.
 
     /// Types whose stop price the builder sends as `aux_price`.
     pub(crate) fn uses_stop_price(&self) -> bool {

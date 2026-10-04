@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `OrderBuilder::peg_best(limit, CompeteAgainstBest)` and `peg_mid(limit, mid_offset_at_whole, mid_offset_at_half)` for IBKRATS pegs, with `orders::builder::CompeteAgainstBest` (`Offset` or `UpToMid`). Both set `not_held`, which TWS requires for them (#936).
+- `OrderBuilder::peg_best(limit, CompeteAgainstBest)` and `peg_mid(limit, MidOffsets)` for IBKRATS pegs, with `orders::builder::CompeteAgainstBest` (`Offset` or `UpToMid(MidOffsets)`) and `MidOffsets { at_whole, at_half }`. Both set `not_held`, which TWS requires for them (#936).
 - `orders::order_builder::non_guaranteed(order)`, which tags a combo order non-guaranteed, `attach_adjustable_stop` with `AdjustTo` / `Adjustment`, and `orders::builder::BracketPrices` (#901).
 - `Order::builder()` starts the fluent `OrderBuilder` without a client; `build()` returns the `Order` to pass to `place_order` / `submit_order`. Same setters and validation as `client.order(&contract)`, without `submit()` / `analyze()` / `bracket()` / preset legs, which need the client to allocate order ids (#901).
 - `OrderBuilder` setters for order fields it carried but could not set: `pegged_to_stock(delta, starting_price)`, `stock_reference_price`, `stock_range`, `pegged_to_benchmark(starting_price)` with `reference_contract`, `pegged_change_amount`, `pegged_change_amount_decrease`, `reference_change_amount` and `reference_range`, plus `non_guaranteed`, `combo_leg_prices`, `manual_order_time` and `cash_qty`. `build()` requires `delta` and `starting_price` for PEG STK, and `starting_price` and `reference_contract` for PEG BENCH. With `cash_qty`, the order quantity may be `0` (#901).

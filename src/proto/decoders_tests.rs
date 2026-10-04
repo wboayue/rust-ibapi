@@ -286,6 +286,18 @@ fn decode_order_hedge_max_size_absent_is_none() {
     assert!(order.hedge_max_size.is_none());
 }
 
+#[test]
+fn decode_order_keeps_the_up_to_mid_sentinel() {
+    // PEG BEST "compete up to the midpoint" is sent as +inf; decoding must not drop it like the
+    // f64::MAX unset sentinel.
+    let proto_order = proto::Order {
+        compete_against_best_offset: Some(f64::INFINITY),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.compete_against_best_offset, Some(f64::INFINITY));
+}
+
 // === decode_order deactivate ===
 
 #[test]
