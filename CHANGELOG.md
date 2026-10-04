@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-10-04
+
 ### Added
 
 - `OrderBuilder::peg_best(limit, CompeteAgainstBest)` and `peg_mid(limit, MidOffsets)` for IBKRATS pegs, with `orders::builder::CompeteAgainstBest` (`Offset` or `UpToMid(MidOffsets)`) and `MidOffsets { at_whole, at_half }`. Both set `not_held`, which TWS requires for them (#936).
@@ -347,7 +349,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...v5.0.0
 [4.2.0]: https://github.com/wboayue/rust-ibapi/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/wboayue/rust-ibapi/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/wboayue/rust-ibapi/compare/v4.0.0...v4.0.1
