@@ -7,6 +7,7 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::messages::encode_raw_length;
 use std::sync::Mutex;
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default)]
 enum WriteMode {

@@ -843,7 +843,7 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    pub(crate) fn process_messages(self: &Arc<Self>, _server_version: i32) -> Result<(), Error> {
+    pub(crate) fn process_messages(self: &Arc<Self>) -> Result<(), Error> {
         let handle = self.start_dispatcher_thread();
         self.add_join_handle(handle);
 

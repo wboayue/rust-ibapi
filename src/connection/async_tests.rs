@@ -118,9 +118,7 @@ async fn make_client() -> Client {
     let server_version = connection.server_version();
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
-    bus.clone()
-        .process_messages(server_version, Duration::from_secs(0))
-        .expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
 
     Client::stubbed(bus, server_version)
 }
@@ -479,12 +477,9 @@ async fn dispatcher_task_finishes_when_shutdown_requested_during_reconnect() {
 
     push_handshake(&stream);
     connection.establish_connection().await.expect("establish_connection failed");
-    let server_version = connection.server_version();
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
-    bus.clone()
-        .process_messages(server_version, Duration::from_millis(0))
-        .expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
 
     // Break the read: the dispatcher enters reconnect, waits out its backoff
@@ -522,12 +517,9 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
 
     push_handshake(&stream);
     connection.establish_connection().await.expect("establish_connection failed");
-    let server_version = connection.server_version();
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
-    bus.clone()
-        .process_messages(server_version, Duration::from_millis(0))
-        .expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
 
     let mut subscription = message_bus
@@ -581,9 +573,7 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     let server_version = connection.server_version();
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
-    bus.clone()
-        .process_messages(server_version, Duration::from_millis(0))
-        .expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     let client = Arc::new(Client::stubbed(bus.clone(), server_version));
 
     let request = crate::accounts::common::encoders::encode_request_managed_accounts().expect("encode");

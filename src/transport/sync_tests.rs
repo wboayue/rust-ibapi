@@ -284,7 +284,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let order = order_builder::market_order(Action::Buy, 100.0);
     let contract = &Contract::stock("AAPL").build();
     let request = encode_place_order(5, contract, &order)?;
@@ -367,7 +367,7 @@ fn test_connection_establish_connection() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -391,7 +391,7 @@ fn test_reconnect_failed() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -423,7 +423,7 @@ fn test_reconnect_success() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -452,7 +452,7 @@ fn test_client_reconnect() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let managed_req = crate::accounts::common::encoders::encode_request_managed_accounts().unwrap();
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
@@ -470,7 +470,7 @@ fn test_client_reconnect() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version)?;
+    bus.process_messages()?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     client.managed_accounts()?;
@@ -486,7 +486,7 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -524,7 +524,7 @@ fn test_reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -567,7 +567,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let request_id = RequestId::nth(0);
     let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
@@ -614,7 +614,7 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let request_id = RequestId::nth(0);
     let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
@@ -668,7 +668,7 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let request_id = RequestId::nth(0);
     let packet = encode_request_contract_data(sv, request_id.raw(), &Contract::stock("AAPL").build())?;
 
@@ -710,7 +710,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
 
-    let start_api_bytes = handler.format_start_api(28, sv);
+    let start_api_bytes = handler.format_start_api(28);
     let contract = &Contract::stock("AAPL").build();
 
     // The stubbed client allocates the first request id.
@@ -732,7 +732,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version)?;
+    bus.process_messages()?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     match client.contract_details(contract) {
@@ -952,7 +952,7 @@ fn test_cleanup_thread_exits_promptly_on_shutdown() {
 #[test]
 fn test_dispatcher_thread_exits_promptly_on_shutdown() {
     let (_stream, bus) = make_bus();
-    bus.process_messages(0).expect("process_messages");
+    bus.process_messages().expect("process_messages");
 
     let start = Instant::now();
     bus.ensure_shutdown();
@@ -3864,7 +3864,7 @@ fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::net::T
     let connection = Connection::stubbed(socket, 28);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
-    bus.process_messages(crate::server_versions::PROTOBUF_REST_MESSAGES_3).unwrap();
+    bus.process_messages().unwrap();
     let client = Client::stubbed(bus.clone(), crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer)
 }

@@ -27,7 +27,6 @@ use log::{debug, error, info, warn};
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
-use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -596,7 +595,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Start processing messages from TWS
-    pub fn process_messages(self: Arc<Self>, _server_version: i32, _reconnect_delay: Duration) -> Result<(), Error> {
+    pub fn process_messages(self: Arc<Self>) -> Result<(), Error> {
         let message_bus = self.clone();
         let shutdown = self.shutdown.clone();
 

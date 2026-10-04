@@ -117,7 +117,7 @@ pub trait ConnectionProtocol {
     fn parse_handshake_response(&self, response: &mut ResponseMessage) -> Result<HandshakeData, Self::Error>;
 
     /// Format the start API message as raw bytes (without length prefix).
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8>;
+    fn format_start_api(&self, client_id: i32) -> Vec<u8>;
 
     /// Parse account information from incoming messages.
     ///
@@ -125,12 +125,7 @@ pub trait ConnectionProtocol {
     /// [`AccountInfo`]. Anything else is delegated to
     /// [`dispatch_unsolicited_message`] so the callbacks decide how to surface
     /// (or drop) it.
-    fn parse_account_info(
-        &self,
-        server_version: i32,
-        message: &mut ResponseMessage,
-        ctx: &StartupHandshakeContext<'_>,
-    ) -> Result<AccountInfo, Self::Error>;
+    fn parse_account_info(&self, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error>;
 }
 
 /// Account information received during connection establishment
@@ -209,7 +204,7 @@ impl ConnectionProtocol for ConnectionHandler {
         })
     }
 
-    fn format_start_api(&self, client_id: i32, _server_version: i32) -> Vec<u8> {
+    fn format_start_api(&self, client_id: i32) -> Vec<u8> {
         use prost::Message;
 
         let request = crate::proto::StartApiRequest {
@@ -220,12 +215,7 @@ impl ConnectionProtocol for ConnectionHandler {
         encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
     }
 
-    fn parse_account_info(
-        &self,
-        server_version: i32,
-        message: &mut ResponseMessage,
-        ctx: &StartupHandshakeContext<'_>,
-    ) -> Result<AccountInfo, Self::Error> {
+    fn parse_account_info(&self, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error> {
         use crate::proto::decoders::DecodeProto;
 
         let mut info = AccountInfo::default();
@@ -239,7 +229,7 @@ impl ConnectionProtocol for ConnectionHandler {
                 let proto = crate::proto::ManagedAccounts::decode_proto(message.require_proto()?)?;
                 info.managed_accounts = proto.accounts_list;
             }
-            _ => dispatch_unsolicited_message(server_version, message, ctx),
+            _ => dispatch_unsolicited_message(message, ctx),
         }
 
         Ok(info)
@@ -257,7 +247,7 @@ impl ConnectionProtocol for ConnectionHandler {
 /// ([`HANDSHAKE_DECODE_FAILURE_CODE`], [`HANDSHAKE_UNKNOWN_FRAME_CODE`] and
 /// [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::UNKNOWN_MESSAGE_TYPE_CODE)) so observers via
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
-pub(crate) fn dispatch_unsolicited_message(_server_version: i32, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
+pub(crate) fn dispatch_unsolicited_message(message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 

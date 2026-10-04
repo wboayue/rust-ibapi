@@ -1,7 +1,6 @@
 //! Asynchronous client implementation
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use log::debug;
 use time::OffsetDateTime;
@@ -117,7 +116,6 @@ impl Client {
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity)?);
 
-        let server_version = connection_metadata.server_version;
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
         // Share the order-ID generator with the bus so a successful reconnect
@@ -129,7 +127,7 @@ impl Client {
         }
 
         // Start background task to read messages from TWS
-        message_bus.clone().process_messages(server_version, Duration::from_secs(1))?;
+        message_bus.clone().process_messages()?;
 
         Ok(client)
     }

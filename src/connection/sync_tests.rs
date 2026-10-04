@@ -144,7 +144,7 @@ fn make_client() -> (Client, MemoryStream) {
     let server_version = connection.server_version();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version).expect("process_messages");
+    bus.process_messages().expect("process_messages");
 
     let client = Client::stubbed(bus, server_version);
     (client, stream)
@@ -503,10 +503,9 @@ fn dispatcher_exits_when_shutdown_requested_during_reconnect() {
 
     push_handshake(&stream);
     connection.establish_connection().expect("establish_connection failed");
-    let server_version = connection.server_version();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version).expect("process_messages");
+    bus.process_messages().expect("process_messages");
 
     // Break the read: the dispatcher enters reconnect and waits out its
     // backoff between failing connects.
@@ -548,11 +547,10 @@ fn dispatcher_exits_when_shutdown_requested_during_a_successful_reconnect() {
 
     push_handshake(&stream);
     connection.establish_connection().expect("establish_connection failed");
-    let server_version = connection.server_version();
     let shutdown = connection.shutdown_signal();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version).expect("process_messages");
+    bus.process_messages().expect("process_messages");
 
     // Break the read: the dispatcher enters reconnect, waits out its backoff
     // and blocks on the gated connect.
@@ -594,10 +592,9 @@ fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
 
     push_handshake(&stream);
     connection.establish_connection().expect("establish_connection failed");
-    let server_version = connection.server_version();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version).expect("process_messages");
+    bus.process_messages().expect("process_messages");
     let message_bus: &dyn MessageBus = bus.as_ref();
 
     let subscription = message_bus.send_request(RequestId::nth(0), b"req-bytes").expect("send_request");
@@ -646,7 +643,7 @@ fn one_shot_request_is_retried_after_the_reconnect() {
     let server_version = connection.server_version();
 
     let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
-    bus.process_messages(server_version).expect("process_messages");
+    bus.process_messages().expect("process_messages");
     let client = Arc::new(Client::stubbed(bus.clone(), server_version));
 
     let request = crate::accounts::common::encoders::encode_request_managed_accounts().expect("encode");
