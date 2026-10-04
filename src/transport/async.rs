@@ -641,7 +641,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.shared_channels.reset_counts().await;
     }
 
-    /// Notify all waiting subscriptions about shutdown
+    /// End every subscription with `Error::Shutdown`, then close the channels.
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
@@ -650,16 +650,18 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.connection_state.shutdown();
         self.shutdown.request();
 
-        // Clear all channels - dropping the senders will close the channels
-        // and cause all receivers to get RecvError::Closed. This diverges
-        // from sync's shutdown, which sends Error::Shutdown before clearing:
-        // async consumers see end-of-stream, sync consumers see the error.
-        self.requests.clear().await;
-        self.orders.clear().await;
+        // Fail every subscription, then drop its sender so it ends; the
+        // sync bus does the same. Notice streams just end.
+        self.requests.fail_all(|| Error::Shutdown.into()).await;
+        self.orders.fail_all(|| Error::Shutdown.into()).await;
         // Execution aliases hold sender clones; clear them or the channels stay open.
         self.executions.clear().await;
-        self.shared_channels.close().await;
-        *self.order_update_stream.write().await = None;
+        self.shared_channels.close(|| Error::Shutdown.into()).await;
+        // After the flag: `create_order_update_subscription` checks it under
+        // the same lock, so no stream can register once this slot is emptied.
+        if let Some(sender) = self.order_update_stream.write().await.take() {
+            let _ = sender.send(Error::Shutdown.into());
+        }
 
         self.connection.notice_broadcaster.close();
     }

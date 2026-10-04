@@ -143,12 +143,13 @@ async fn subscribe_counts_only_a_written_request() {
 }
 
 #[tokio::test]
-async fn close_ends_every_channel() {
+async fn close_fails_then_ends_every_channel() {
     let channels = SharedChannels::new(8);
     let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
 
-    channels.close().await;
+    channels.close(|| Error::Shutdown.into()).await;
 
+    assert!(matches!(positions.try_recv(), Ok(RoutedItem::Error(Error::Shutdown))));
     assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
     let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, || async { Ok(()) }).await;
     assert!(matches!(refused, Err(Error::InvalidArgument(_))));

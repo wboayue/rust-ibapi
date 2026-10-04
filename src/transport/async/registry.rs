@@ -322,9 +322,14 @@ impl SharedChannels {
         self.send_to(|channel| channel.responses.iter().any(|r| one_shot.contains(r)), item).await;
     }
 
-    /// Drop the senders, ending every subscription. Later sends are no-ops.
-    pub(super) async fn close(&self) {
-        self.channels.write().await.clear();
+    /// Deliver `item()` once to every channel, then drop the senders so every
+    /// subscription ends after it. Later sends are no-ops.
+    pub(super) async fn close(&self, item: impl Fn() -> RoutedItem) {
+        let mut channels = self.channels.write().await;
+        for channel in channels.values() {
+            let _ = channel.sender.send(item());
+        }
+        channels.clear();
     }
 
     #[cfg(test)]

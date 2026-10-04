@@ -295,6 +295,46 @@ async fn test_order_update_stream_ends_on_request_shutdown_sync() {
     assert!(drained.is_ok(), "order-update stream did not end");
 }
 
+/// Like the sync bus, shutdown fails every kind of subscription with
+/// `Error::Shutdown` before ending it, so a reader can tell shutdown from a
+/// stream that simply closed.
+#[tokio::test]
+async fn test_shutdown_fails_every_subscription_then_ends_it() {
+    let (_, bus) = make_bus();
+    let subscriptions = [
+        ("request", bus.send_request(RequestId::nth(1), vec![]).await.unwrap()),
+        ("order", bus.send_order_request(OrderId::from(7), vec![]).await.unwrap()),
+        (
+            "shared",
+            bus.send_shared_request(OutgoingMessages::RequestPositions, vec![]).await.unwrap(),
+        ),
+        ("order update", bus.create_order_update_subscription().await.unwrap()),
+    ];
+
+    bus.request_shutdown().await;
+
+    for (name, mut subscription) in subscriptions {
+        let first = tokio::time::timeout(TICK, subscription.next_routed()).await.expect(name);
+        assert!(matches!(first, Some(RoutedItem::Error(Error::Shutdown))), "{name}: {first:?}");
+        let end = tokio::time::timeout(TICK, subscription.next_routed()).await.expect(name);
+        assert!(end.is_none(), "{name} did not end: {end:?}");
+    }
+}
+
+/// `Client::drop` only sets the flag; the dispatcher's exit finishes the
+/// shutdown, and that path fails subscriptions with `Error::Shutdown` too.
+#[tokio::test]
+async fn test_request_shutdown_sync_fails_subscriptions_with_shutdown() {
+    let (_, bus) = make_bus();
+    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    let mut request = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
+
+    bus.request_shutdown_sync();
+
+    let first = tokio::time::timeout(Duration::from_millis(500), request.next_routed()).await.unwrap();
+    assert!(matches!(first, Some(RoutedItem::Error(Error::Shutdown))), "{first:?}");
+}
+
 /// A `place_order` or `executions` subscription that has received an
 /// execution is also held in the execution-id map, so the commission report
 /// that follows can reach it. Shutdown must drop that alias too: a sender left
@@ -2211,8 +2251,8 @@ async fn test_bounded_request_end_marker_at_limit_still_ends() {
     assert!(try_next_routed(&mut sub).await.is_none(), "frames after the end marker are discarded");
 }
 
-/// Async shutdown closes the request channels without sending an error; the
-/// drain reports it as `Err(Shutdown)`, as the sync drain does.
+/// Shutdown fails the request with `Error::Shutdown`; the drain reports it, as
+/// the sync drain does.
 #[tokio::test]
 async fn test_drain_reports_shutdown() {
     use crate::contracts::ContractDetails;
