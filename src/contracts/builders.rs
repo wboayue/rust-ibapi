@@ -2,6 +2,7 @@
 
 use super::types::*;
 use super::{ComboLeg, Contract, SecurityType};
+use crate::accounts::types::ContractId;
 use crate::Error;
 
 /// Stock contract builder with type-safe API
@@ -524,11 +525,11 @@ impl Default for SpreadBuilder {
 
 impl SpreadBuilder {
     /// Begin configuring a new leg for the spread.
-    pub fn add_leg(self, contract_id: i32, action: LegAction) -> LegBuilder {
+    pub fn add_leg(self, contract_id: impl Into<ContractId>, action: LegAction) -> LegBuilder {
         LegBuilder {
             parent: self,
             leg: Leg {
-                contract_id,
+                contract_id: contract_id.into().value(),
                 action,
                 ratio: 1,
                 exchange: None,
@@ -536,26 +537,30 @@ impl SpreadBuilder {
         }
     }
 
-    /// Calendar spread convenience method
-    pub fn calendar(self, near_id: i32, far_id: i32) -> Self {
+    /// Calendar spread: buy the near-dated leg, sell the far-dated leg.
+    ///
+    /// Buying this combo is short the calendar. For a long calendar, sell the combo.
+    pub fn calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> Self {
         self.add_leg(near_id, LegAction::Buy).done().add_leg(far_id, LegAction::Sell).done()
     }
 
-    /// Vertical spread convenience method
-    pub fn vertical(self, long_id: i32, short_id: i32) -> Self {
+    /// Vertical spread: buy the long leg, sell the short leg.
+    ///
+    /// Chain two verticals for a four-leg strategy. An iron condor is a put vertical plus a
+    /// call vertical, each long the wing and short the body:
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let (long_put, short_put, short_call, long_call) = (100, 105, 110, 115);
+    /// let iron_condor = Contract::spread()
+    ///     .vertical(long_put, short_put)
+    ///     .vertical(long_call, short_call)
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> Self {
         self.add_leg(long_id, LegAction::Buy).done().add_leg(short_id, LegAction::Sell).done()
-    }
-
-    /// Iron condor spread convenience method
-    pub fn iron_condor(self, long_put_id: i32, short_put_id: i32, short_call_id: i32, long_call_id: i32) -> Self {
-        self.add_leg(long_put_id, LegAction::Buy)
-            .done()
-            .add_leg(short_put_id, LegAction::Sell)
-            .done()
-            .add_leg(short_call_id, LegAction::Sell)
-            .done()
-            .add_leg(long_call_id, LegAction::Buy)
-            .done()
     }
 
     /// Override the spread currency, useful for non-USD underlyings.

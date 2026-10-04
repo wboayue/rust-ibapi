@@ -280,14 +280,10 @@ let vertical = Contract::spread()
     .vertical(11111, 22222)  // Long and short contract IDs
     .build()?;
 
-// Iron condor using convenience method
+// Iron condor: a put vertical plus a call vertical
 let iron_condor = Contract::spread()
-    .iron_condor(
-        10001,  // Long put
-        10002,  // Short put
-        10003,  // Short call
-        10004   // Long call
-    )
+    .vertical(10001, 10002)  // Long put, short put
+    .vertical(10004, 10003)  // Long call, short call
     .build()?;
 
 // Custom butterfly spread

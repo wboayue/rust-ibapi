@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `contracts::SpreadBuilder::add_leg`, `calendar` and `vertical` take `impl Into<ContractId>` instead of `i32`. Literals, `i32` and `ContractId` compile; a `.into()` / `.try_into()` / `.parse()` argument that relied on the `i32` parameter to pick its type now needs the type named. See `docs/migration-5.0.md` §21 (#901).
 - Async client: order channels no longer follow `ClientBuilder::channel_capacity` down. `place_order`, `cancel_order`, `exercise_options` and `executions` subscriptions hold at least 1024 frames, and `order_update_stream` and the open/completed-order streams at least 8192, so a small capacity set for market data cannot make them drop order updates; a larger `channel_capacity` still raises them. A lag on an order channel now logs at `error!` and its `SUBSCRIPTION_LAG_CODE` notice says to resync with `open_orders()` / `executions()`. Shared channels are allocated on first use rather than at connect (#896).
 - Sync client: the notice stream logs a backlog warning every 10,000 unread notices, like the subscription queues (#896).
 - Async client: shutdown (`disconnect()` or dropping the `Client`) ends live subscriptions with `Err(Error::Shutdown)` before end-of-stream, as the blocking client does; they used to end with no error. See `docs/migration-5.0.md` (#895).
@@ -47,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `contracts::SpreadBuilder::iron_condor`. Its four same-typed contract ids compiled in any order. Use `.vertical(long_put, short_put).vertical(long_call, short_call)`. See `docs/migration-5.0.md` §21 (#901).
 - `Client::next_request_id()` (blocking and async). It minted a request id no request used, and no API accepts a caller-chosen request id. Use `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` for a live request's id. See `docs/migration-5.0.md` §20.
 - `orders::order_builder::auction_limit`, which built the same `Order` as `limit_order` once 4.2 dropped its strategy parameter. Routing the contract to `BOX` is what makes it an auction order. Also `orders::builder::OrderType::AuctionLimit` and `AuctionRelative`, which sent `LMT` and `REL` just like `Limit` and `Relative`. See `docs/migration-5.0.md` §17 (#903).
 - `orders::builder::OrderAnalysis`. No API produced or accepted it: `OrderBuilder::analyze()` has returned `OrderState` since the builder was added (#311). Use `OrderState`. See `docs/migration-5.0.md` §13 (#883).
