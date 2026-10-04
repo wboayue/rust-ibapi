@@ -137,6 +137,18 @@ pub enum TrailBy {
     Percent(f64),
 }
 
+/// Entry, take-profit and stop-loss prices of a bracket order, named so they can't be swapped.
+/// See [`order_builder::bracket_order`](crate::orders::order_builder::bracket_order).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BracketPrices {
+    /// Limit price of the parent order.
+    pub entry: f64,
+    /// Limit price of the take-profit order.
+    pub take_profit: f64,
+    /// Stop price of the stop-loss order.
+    pub stop_loss: f64,
+}
+
 /// Order types supported by Interactive Brokers
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1842,19 +1842,18 @@ fn trailing_stop_by_percent_sets_trailing_percent() {
 }
 
 #[test]
-fn trailing_stop_limit_by_amount_matches_free_fn() {
-    let fluent = Order::builder()
+fn trailing_stop_limit_by_amount() {
+    let order = Order::builder()
         .buy(100)
         .trailing_stop_limit(TrailBy::Amount(1.0), 105.0, 0.25)
         .build()
         .unwrap();
-    let free = crate::orders::order_builder::trailing_stop_limit(Action::Buy, 100.0, 0.25, 1.0, 105.0);
 
-    assert_eq!(fluent.order_type, free.order_type);
-    assert_eq!(fluent.aux_price, free.aux_price);
-    assert_eq!(fluent.limit_price_offset, free.limit_price_offset);
-    assert_eq!(fluent.trail_stop_price, free.trail_stop_price);
-    assert_eq!(fluent.trailing_percent, free.trailing_percent);
+    assert_eq!(order.order_type, "TRAIL LIMIT");
+    assert_eq!(order.aux_price, Some(1.0));
+    assert_eq!(order.limit_price_offset, Some(0.25));
+    assert_eq!(order.trail_stop_price, Some(105.0));
+    assert_eq!(order.trailing_percent, None);
 }
 
 #[test]
@@ -2110,20 +2109,37 @@ fn box_top_sets_order_type() {
 }
 
 #[test]
-fn pegged_to_stock_matches_free_fn() {
+fn pegged_to_stock_with_reference_price() {
     let order = Order::builder()
         .buy(1)
         .pegged_to_stock(0.5, 2.10)
         .stock_reference_price(150.0)
         .build()
         .unwrap();
-    assert_eq!(order, crate::orders::order_builder::pegged_to_stock(Action::Buy, 1.0, 0.5, 150.0, 2.10));
+    let expected = Order {
+        action: Action::Buy,
+        order_type: "PEG STK".to_owned(),
+        total_quantity: 1.0,
+        delta: Some(0.5),
+        stock_ref_price: Some(150.0),
+        starting_price: Some(2.10),
+        ..Order::default()
+    };
+    assert_eq!(order, expected);
 }
 
 #[test]
-fn pegged_to_stock_without_reference_price_matches_auction_free_fn() {
+fn pegged_to_stock_without_reference_price() {
     let order = Order::builder().buy(1).pegged_to_stock(0.5, 2.10).build().unwrap();
-    assert_eq!(order, crate::orders::order_builder::auction_pegged_to_stock(Action::Buy, 1.0, 2.10, 0.5));
+    let expected = Order {
+        action: Action::Buy,
+        order_type: "PEG STK".to_owned(),
+        total_quantity: 1.0,
+        delta: Some(0.5),
+        starting_price: Some(2.10),
+        ..Order::default()
+    };
+    assert_eq!(order, expected);
 }
 
 #[test]
@@ -2152,8 +2168,8 @@ fn pegged_to_stock_requires_starting_price() {
 }
 
 #[test]
-fn pegged_to_benchmark_matches_struct_builder() {
-    let fluent = Order::builder()
+fn pegged_to_benchmark_sets_every_field() {
+    let order = Order::builder()
         .buy(100)
         .pegged_to_benchmark(50.0)
         .reference_contract(12345, "ISLAND")
@@ -2164,17 +2180,22 @@ fn pegged_to_benchmark_matches_struct_builder() {
         .reference_range(48.0, 52.0)
         .build()
         .unwrap();
-    let legacy = crate::orders::order_builder::PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
-        .reference_contract(12345, "ISLAND")
-        .pegged_change_amount(0.02)
-        .pegged_change_amount_decrease(true)
-        .reference_change_amount(0.01)
-        .stock_reference_price(49.0)
-        .reference_range(48.0, 52.0)
-        .build()
-        .unwrap();
-
-    assert_eq!(fluent, legacy);
+    let expected = Order {
+        action: Action::Buy,
+        order_type: "PEG BENCH".to_owned(),
+        total_quantity: 100.0,
+        starting_price: Some(50.0),
+        is_pegged_change_amount_decrease: true,
+        pegged_change_amount: Some(0.02),
+        reference_change_amount: Some(0.01),
+        reference_contract_id: 12345,
+        reference_exchange: "ISLAND".to_owned(),
+        stock_ref_price: Some(49.0),
+        stock_range_lower: Some(48.0),
+        stock_range_upper: Some(52.0),
+        ..Order::default()
+    };
+    assert_eq!(order, expected);
 }
 
 #[test]
@@ -2212,14 +2233,14 @@ fn pegged_to_benchmark_requires_starting_price() {
 #[test]
 fn non_guaranteed_matches_free_fn() {
     let order = Order::builder().buy(1).limit(2.5).non_guaranteed().build().unwrap();
-    let free = crate::orders::order_builder::combo_limit_order(Action::Buy, 1.0, 2.5, true);
+    let free = crate::orders::order_builder::non_guaranteed(crate::orders::order_builder::combo_limit_order(Action::Buy, 1.0, 2.5));
     assert_eq!(order.smart_combo_routing_params, free.smart_combo_routing_params);
 }
 
 #[test]
 fn combo_leg_prices_set_one_leg_per_price() {
     let order = Order::builder().buy(1).limit(2.5).combo_leg_prices([1.1, 2.2]).build().unwrap();
-    let free = crate::orders::order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 1.0, vec![1.1, 2.2], false);
+    let free = crate::orders::order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 1.0, vec![1.1, 2.2]);
     assert_eq!(order.order_combo_legs, free.order_combo_legs);
 }
 

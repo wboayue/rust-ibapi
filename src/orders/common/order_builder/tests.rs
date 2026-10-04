@@ -1,6 +1,6 @@
-use crate::orders::builder::ValidationError;
+use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::common::order_builder::*;
-use crate::orders::{Action, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{Action, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// Tests for basic order types like market, limit, and stop orders
 #[cfg(test)]
@@ -47,28 +47,6 @@ mod basic_order_tests {
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(45.0)); // Stop price
         assert_eq!(order.limit_price, None);
-    }
-
-    #[test]
-    fn test_stop_limit_order() {
-        let order = stop_limit(Action::Sell, 100.0, 45.0, 44.0);
-
-        assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.order_type, "STP LMT");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(45.0));
-        assert_eq!(order.aux_price, Some(44.0)); // Stop trigger price
-    }
-
-    #[test]
-    fn test_limit_if_touched() {
-        let order = limit_if_touched(Action::Buy, 100.0, 52.0, 50.0);
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LIT");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(52.0));
-        assert_eq!(order.aux_price, Some(50.0)); // Trigger price
     }
 
     #[test]
@@ -133,7 +111,12 @@ mod complex_order_tests {
 
     #[test]
     fn test_bracket_order() {
-        let orders = bracket_order(1000, Action::Buy, 100.0, 50.0, 55.0, 45.0);
+        let prices = BracketPrices {
+            entry: 50.0,
+            take_profit: 55.0,
+            stop_loss: 45.0,
+        };
+        let orders = bracket_order(1000, Action::Buy, 100.0, prices).unwrap();
 
         assert_eq!(orders.len(), 3);
 
@@ -168,6 +151,27 @@ mod complex_order_tests {
     }
 
     #[test]
+    fn test_bracket_order_rejects_prices_on_the_wrong_side() {
+        // (action, take_profit, stop_loss) around an entry of 50.0
+        let cases = [
+            (Action::Buy, 45.0, 40.0),
+            (Action::Buy, 55.0, 52.0),
+            (Action::Sell, 55.0, 60.0),
+            (Action::Sell, 45.0, 48.0),
+        ];
+
+        for (action, take_profit, stop_loss) in cases {
+            let prices = BracketPrices {
+                entry: 50.0,
+                take_profit,
+                stop_loss,
+            };
+            let err = bracket_order(1000, action, 100.0, prices).unwrap_err();
+            assert!(matches!(err, ValidationError::InvalidBracketOrder(_)), "{action:?} {prices:?}");
+        }
+    }
+
+    #[test]
     fn test_one_cancels_all() {
         let order1 = limit_order(Action::Buy, 100.0, 50.0);
         let order2 = limit_order(Action::Sell, 100.0, 52.0);
@@ -195,18 +199,6 @@ mod complex_order_tests {
         assert_eq!(order.trailing_percent, Some(5.0));
         assert_eq!(order.trail_stop_price, Some(45.0));
     }
-
-    #[test]
-    fn test_trailing_stop_limit_order() {
-        let order = trailing_stop_limit(Action::Sell, 100.0, 2.0, 5.0, 45.0);
-
-        assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.order_type, "TRAIL LIMIT");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price_offset, Some(2.0));
-        assert_eq!(order.aux_price, Some(5.0)); // Trailing amount
-        assert_eq!(order.trail_stop_price, Some(45.0));
-    }
 }
 
 #[cfg(test)]
@@ -215,7 +207,7 @@ mod combo_order_tests {
 
     #[test]
     fn test_combo_market_order() {
-        let order = combo_market_order(Action::Buy, 100.0, true);
+        let order = non_guaranteed(combo_market_order(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "MKT");
@@ -229,7 +221,7 @@ mod combo_order_tests {
 
     #[test]
     fn test_combo_limit_order() {
-        let order = combo_limit_order(Action::Buy, 100.0, 50.0, true);
+        let order = non_guaranteed(combo_limit_order(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "LMT");
@@ -244,7 +236,7 @@ mod combo_order_tests {
 
     #[test]
     fn test_relative_limit_combo() {
-        let order = relative_limit_combo(Action::Buy, 100.0, 50.0, true);
+        let order = non_guaranteed(relative_limit_combo(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "REL + LMT");
@@ -260,7 +252,7 @@ mod combo_order_tests {
     #[test]
     fn test_limit_order_for_combo_with_leg_prices() {
         let leg_prices = vec![50.0, 45.0];
-        let order = limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, leg_prices, true);
+        let order = non_guaranteed(limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, leg_prices));
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "LMT");
@@ -382,56 +374,6 @@ mod specialized_order_tests {
         assert_eq!(order.order_type, "MIDPRICE");
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, None);
-    }
-
-    #[test]
-    fn test_pegged_to_benchmark() {
-        let order = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
-            .reference_contract(12345, "ISLAND")
-            .pegged_change_amount(0.02)
-            .reference_change_amount(0.01)
-            .stock_reference_price(49.0)
-            .reference_range(48.0, 52.0)
-            .build()
-            .expect("reference_contract is set");
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG BENCH");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.starting_price, Some(50.0));
-        assert!(!order.is_pegged_change_amount_decrease);
-        assert_eq!(order.pegged_change_amount, Some(0.02));
-        assert_eq!(order.reference_change_amount, Some(0.01));
-        assert_eq!(order.reference_contract_id, 12345);
-        assert_eq!(order.reference_exchange, "ISLAND");
-        assert_eq!(order.stock_ref_price, Some(49.0));
-        assert_eq!(order.stock_range_lower, Some(48.0));
-        assert_eq!(order.stock_range_upper, Some(52.0));
-    }
-
-    #[test]
-    fn test_pegged_to_benchmark_decrease_flag() {
-        let order = PeggedToBenchmark::new(Action::Sell, 50.0, 60.0)
-            .reference_contract(7, "SMART")
-            .pegged_change_amount_decrease(true)
-            .build()
-            .expect("reference_contract is set");
-
-        assert!(order.is_pegged_change_amount_decrease);
-        assert_eq!(order.pegged_change_amount, None);
-        assert_eq!(order.reference_change_amount, None);
-        assert_eq!(order.stock_ref_price, None);
-        assert_eq!(order.stock_range_lower, None);
-        assert_eq!(order.stock_range_upper, None);
-    }
-
-    #[test]
-    fn test_pegged_to_benchmark_missing_reference_contract() {
-        let err = PeggedToBenchmark::new(Action::Buy, 100.0, 50.0)
-            .build()
-            .expect_err("reference_contract is required");
-
-        assert!(matches!(err, ValidationError::MissingRequiredField("reference_contract")));
     }
 }
 
@@ -577,67 +519,58 @@ mod miscellaneous_order_tests {
 mod adjustable_order_tests {
     use super::*;
 
-    #[test]
-    fn test_attach_adjustable_to_stop() {
-        let parent = stop(Action::Buy, 100.0, 50.0);
-        let order = attach_adjustable_to_stop(
-            &parent, 45.0, // attached_order_stop_price
-            48.0, // trigger_price
-            46.0, // adjusted_stop_price
-        );
+    fn attach(to: AdjustTo) -> Order {
+        let mut parent = stop(Action::Buy, 100.0, 50.0);
+        parent.order_id = 7;
+        attach_adjustable_stop(&parent, 45.0, Adjustment { trigger_price: 48.0, to })
+    }
 
+    fn assert_attached_stop(order: &Order) {
         assert_eq!(order.action, Action::Sell); // Opposite of parent
         assert_eq!(order.order_type, "STP");
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(45.0));
-        assert_eq!(order.parent_id, parent.order_id);
+        assert_eq!(order.parent_id, 7);
         assert_eq!(order.trigger_price, Some(48.0));
-        assert_eq!(order.adjusted_order_type, "STP");
-        assert_eq!(order.adjusted_stop_price, Some(46.0));
     }
 
     #[test]
-    fn test_attach_adjustable_to_stop_limit() {
-        let parent = stop(Action::Buy, 100.0, 50.0);
-        let order = attach_adjustable_to_stop_limit(
-            &parent, 45.0, // attached_order_stop_price
-            48.0, // trigger_price
-            46.0, // adjusted_stop_price
-            47.0, // adjusted_stop_limit_price
-        );
+    fn test_adjust_to_stop() {
+        let order = attach(AdjustTo::Stop { stop_price: 46.0 });
 
-        assert_eq!(order.action, Action::Sell); // Opposite of parent
-        assert_eq!(order.order_type, "STP");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.aux_price, Some(45.0));
-        assert_eq!(order.parent_id, parent.order_id);
-        assert_eq!(order.trigger_price, Some(48.0));
+        assert_attached_stop(&order);
+        assert_eq!(order.adjusted_order_type, "STP");
+        assert_eq!(order.adjusted_stop_price, Some(46.0));
+        assert_eq!(order.adjusted_stop_limit_price, None);
+    }
+
+    #[test]
+    fn test_adjust_to_stop_limit() {
+        let order = attach(AdjustTo::StopLimit {
+            stop_price: 46.0,
+            limit_price: 47.0,
+        });
+
+        assert_attached_stop(&order);
         assert_eq!(order.adjusted_order_type, "STP LMT");
         assert_eq!(order.adjusted_stop_price, Some(46.0));
         assert_eq!(order.adjusted_stop_limit_price, Some(47.0));
     }
 
     #[test]
-    fn test_attach_adjustable_to_trail() {
-        let parent = stop(Action::Buy, 100.0, 50.0);
-        let order = attach_adjustable_to_trail(
-            &parent, 45.0, // attached_order_stop_price
-            48.0, // trigger_price
-            46.0, // adjusted_stop_price
-            0.02, // adjusted_trail_amount
-            100,  // trail_unit (percentage)
-        );
+    fn test_adjust_to_trail() {
+        // (trail, expected adjustable_trailing_unit, expected adjusted_trailing_amount)
+        let cases = [(TrailBy::Amount(0.5), 0, 0.5), (TrailBy::Percent(2.0), 100, 2.0)];
 
-        assert_eq!(order.action, Action::Sell); // Opposite of parent
-        assert_eq!(order.order_type, "STP");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.aux_price, Some(45.0));
-        assert_eq!(order.parent_id, parent.order_id);
-        assert_eq!(order.trigger_price, Some(48.0));
-        assert_eq!(order.adjusted_order_type, "TRAIL");
-        assert_eq!(order.adjusted_stop_price, Some(46.0));
-        assert_eq!(order.adjusted_trailing_amount, Some(0.02));
-        assert_eq!(order.adjustable_trailing_unit, 100);
+        for (trail, unit, amount) in cases {
+            let order = attach(AdjustTo::Trail { stop_price: 46.0, trail });
+
+            assert_attached_stop(&order);
+            assert_eq!(order.adjusted_order_type, "TRAIL");
+            assert_eq!(order.adjusted_stop_price, Some(46.0));
+            assert_eq!(order.adjustable_trailing_unit, unit, "{trail:?}");
+            assert_eq!(order.adjusted_trailing_amount, Some(amount), "{trail:?}");
+        }
     }
 }
 
@@ -647,7 +580,7 @@ mod additional_specialized_order_tests {
 
     #[test]
     fn test_relative_market_combo() {
-        let order = relative_market_combo(Action::Buy, 100.0, true);
+        let order = non_guaranteed(relative_market_combo(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "REL + MKT");
@@ -657,56 +590,6 @@ mod additional_specialized_order_tests {
         assert_eq!(order.smart_combo_routing_params.len(), 1);
         assert_eq!(order.smart_combo_routing_params[0].tag, "NonGuaranteed");
         assert_eq!(order.smart_combo_routing_params[0].value, "1");
-    }
-
-    #[test]
-    fn test_auction_pegged_to_stock() {
-        let order = auction_pegged_to_stock(
-            Action::Buy,
-            100.0, // quantity
-            50.0,  // starting_price
-            0.5,   // delta
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG STK");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.starting_price, Some(50.0));
-        assert_eq!(order.delta, Some(0.5));
-    }
-
-    #[test]
-    fn test_pegged_to_stock() {
-        let order = pegged_to_stock(
-            Action::Buy,
-            100.0, // quantity
-            0.5,   // delta
-            50.0,  // stock_ref_price
-            49.0,  // starting_price
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG STK");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.delta, Some(0.5));
-        assert_eq!(order.stock_ref_price, Some(50.0));
-        assert_eq!(order.starting_price, Some(49.0));
-    }
-
-    #[test]
-    fn test_relative_pegged_to_primary() {
-        let order = relative_pegged_to_primary(
-            Action::Buy,
-            100.0, // quantity
-            50.0,  // price_cap
-            0.01,  // offset_amount
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "REL");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(50.0));
-        assert_eq!(order.aux_price, Some(0.01));
     }
 
     #[test]
