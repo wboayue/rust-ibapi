@@ -2508,6 +2508,32 @@ fn drain_cleanup_signals(bus: &Arc<TcpMessageBus<MemoryStream>>) {
     panic!("cleanup thread did not process the marker signal");
 }
 
+/// #893: drop then immediately recreate the order update stream. The dead
+/// registration is replaced without waiting for the cleanup thread (which
+/// used to return `AlreadySubscribed` here), and the old stream's stale signal
+/// must not clear the replacement.
+#[test]
+fn test_drop_then_recreate_order_update_stream() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+
+    // Cleanup thread not running yet: the old stream's signal stays queued.
+    drop(bus.create_order_update_subscription()?);
+    let replacement = bus.create_order_update_subscription().expect("immediate recreation failed");
+
+    let handle = bus.start_cleanup_thread();
+    drain_cleanup_signals(&bus);
+    assert!(
+        bus.send_order_update_item(Error::Cancelled.into()),
+        "stale cleanup cleared the replacement"
+    );
+    let item = replacement.next_timeout_routed(TICK);
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Cancelled))), "{item:?}");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// Regression test for #773: dropping an old order subscription must not
 /// unregister a newer subscription under the same order id (place then cancel
 /// on one id). The stale signal carries the old sender's identity and skips
@@ -2542,30 +2568,30 @@ fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> 
     Ok(())
 }
 
-/// The identity guards directly: a cleanup carrying a foreign sender must not
-/// remove a live registration, and one carrying the registered sender must.
+/// The identity guards directly: a cleanup carrying a foreign lease must not
+/// remove a live registration, and one carrying the registered lease must.
 #[test]
 fn test_cleanup_identity_guards() -> Result<(), Error> {
     let (_, bus) = make_bus();
 
     let order_id = OrderId::from(7);
     let _order_sub = bus.send_order_request(order_id, &[])?;
-    let (foreign, _foreign_rx) = crossbeam::channel::unbounded();
+    let foreign = Lease::new().downgrade();
     bus.clean_order(order_id, &foreign);
-    assert!(bus.orders.contains(&order_id), "foreign sender removed a live order registration");
-    let registered = bus.orders.copy_sender(order_id).unwrap();
+    assert!(bus.orders.contains(&order_id), "foreign lease removed a live order registration");
+    let registered = bus.orders.lease(order_id).unwrap();
     bus.clean_order(order_id, &registered);
-    assert!(!bus.orders.contains(&order_id), "matching sender failed to remove the registration");
+    assert!(!bus.orders.contains(&order_id), "matching lease failed to remove the registration");
 
     let _stream_sub = bus.create_order_update_subscription()?;
     bus.clear_order_update_stream(&foreign);
     assert!(
         bus.order_update_stream.lock().unwrap().is_some(),
-        "foreign sender cleared a live order update stream"
+        "foreign lease cleared a live order update stream"
     );
-    let registered = bus.order_update_stream.lock().unwrap().clone().unwrap();
+    let registered = bus.order_update_stream.lock().unwrap().as_ref().unwrap().lease.clone();
     bus.clear_order_update_stream(&registered);
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "matching sender failed to clear");
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "matching lease failed to clear");
 
     Ok(())
 }

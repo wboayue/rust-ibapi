@@ -3,6 +3,7 @@ use crate::client::ids::{OrderId, RequestId};
 use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{Drained, SubscriptionItem};
+use crate::transport::common::Lease;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -85,6 +86,7 @@ fn test_routed_item_error_terminates_subscription() {
     let internal = SubscriptionBuilder::new()
         .receiver(receiver)
         .signaler(signaler)
+        .lease(Lease::new())
         .request_id(RequestId::nth(1))
         .build();
 
@@ -132,6 +134,7 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
     let internal = SubscriptionBuilder::new()
         .receiver(receiver)
         .signaler(signaler)
+        .lease(Lease::new())
         .request_id(RequestId::nth(1))
         .build();
     let stub = Arc::new(MessageBusStub::default());
@@ -206,6 +209,7 @@ fn collect_subscription(items: Vec<RoutedItem>, keep_open: bool) -> (Subscriptio
     let internal = SubscriptionBuilder::new()
         .receiver(receiver)
         .signaler(signaler)
+        .lease(Lease::new())
         .request_id(RequestId::nth(1))
         .build();
     let stub = Arc::new(MessageBusStub::default());
@@ -348,7 +352,7 @@ fn routed_subscription<T: StreamDecoder<T>>(
     for item in items {
         sender.send(item).unwrap();
     }
-    let internal = builder.receiver(receiver).sender(sender).signaler(signaler).build();
+    let internal = builder.receiver(receiver).sender(sender).signaler(signaler).lease(Lease::new()).build();
     let stub = Arc::new(MessageBusStub::default());
     (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub, signals)
 }
@@ -454,6 +458,30 @@ fn test_order_update_stream_cancel_unregisters() {
     assert!(bus.request_messages().is_empty());
     assert!(matches!(signals.try_recv(), Ok(Signal::OrderUpdateStream(_))), "route kept after cancel");
     assert!(matches!(sub.next(), Some(Err(Error::Cancelled))));
+}
+
+/// The drop signal needs only the lease, so a subscription built without a
+/// sender still sends it, with its lease already released.
+#[test]
+fn test_drop_signals_without_a_sender() {
+    let (_sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, signals) = channel::unbounded();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .lease(Lease::new())
+        .request_id(RequestId::nth(1))
+        .build();
+
+    drop(internal);
+
+    match signals.try_recv() {
+        Ok(Signal::Request(id, lease)) => {
+            assert_eq!(id, RequestId::nth(1));
+            assert!(!lease.is_live(), "signal sent before the lease was released");
+        }
+        other => panic!("expected a request drop signal, got {}", other.is_ok()),
+    }
 }
 
 // --- collect_to_end ------------------------------------------------------
@@ -607,7 +635,11 @@ fn test_drain_after_snapshot_end_writes_nothing() {
 fn test_drain_without_request_id_cancels_and_returns_unconfirmed() {
     let (sender, receiver) = channel::unbounded::<RoutedItem>();
     let (signaler, _signaler_rx) = channel::unbounded();
-    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .lease(Lease::new())
+        .build();
     let bus = Arc::new(MessageBusStub::default());
     let sub: Subscription<DrainItem> = Subscription::new(bus.clone(), internal, DecoderContext::default());
 

@@ -2,7 +2,7 @@
 //! It provides functionality for routing requests from the Client to TWS,
 //! and responses from TWS back to the Client.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
@@ -17,7 +17,7 @@ use crate::client::id_generator::ClientIdManager;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
-use super::common::{log_orphan, report_unroutable_frame, validate_frame_length};
+use super::common::{log_orphan, report_unroutable_frame, validate_frame_length, Lease, LeaseRef};
 use super::raw_capture::RawFrameTap;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
@@ -82,6 +82,7 @@ struct SharedSubscriber {
     request: OutgoingMessages,
     responses: &'static [IncomingMessages],
     sender: Sender<RoutedItem>,
+    lease: LeaseRef,
 }
 
 impl SharedSubscriber {
@@ -127,17 +128,22 @@ impl SharedChannels {
 
     // Registers `sender` for every response type of `request`. Panics if
     // `request` has no mapping.
-    fn add(&self, request: OutgoingMessages, sender: Sender<RoutedItem>) {
+    fn add(&self, request: OutgoingMessages, sender: Sender<RoutedItem>, lease: LeaseRef) {
         let responses = shared_channel_configuration::response_types(request)
             .unwrap_or_else(|| panic!("unsupported request message {request:?}. check mapping in messages::shared_channel_configuration"));
-        self.subscribers().push(SharedSubscriber { request, responses, sender });
+        self.subscribers().push(SharedSubscriber {
+            request,
+            responses,
+            sender,
+            lease,
+        });
     }
 
-    // Removes the subscription whose queue `sender` feeds, if still registered.
-    fn remove(&self, sender: &Sender<RoutedItem>) {
+    // Removes the subscription holding `lease`, if still registered.
+    fn remove(&self, lease: &LeaseRef) {
         let mut subscribers = self.subscribers();
         let before = subscribers.len();
-        subscribers.retain(|subscriber| !subscriber.sender.same_channel(sender));
+        subscribers.retain(|subscriber| !subscriber.lease.is(lease));
         debug!("cleanup shared subscription: removed={}", before != subscribers.len());
     }
 
@@ -307,7 +313,7 @@ pub struct TcpMessageBus<S: Stream> {
     /// [`Self::set_order_ids`] before the dispatcher thread starts; absent in
     /// bus-only test fixtures, which never reconnect a client.
     order_ids: OnceLock<Arc<ClientIdManager>>,
-    order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
+    order_update_stream: Mutex<Option<Entry<RoutedItem>>>,
     /// Session state, and what `wait_connected` blocks on.
     connection_state: ConnectionSignal,
 }
@@ -366,8 +372,8 @@ impl<S: Stream> TcpMessageBus<S> {
         // After the flag: `create_order_update_subscription` checks it under
         // the same lock, so no stream can register once this slot is emptied.
         // The subscription holds a sender clone, so only a sent item ends it.
-        if let Some(sender) = self.order_update_stream.lock().unwrap().take() {
-            let _ = sender.send(Error::Shutdown.into());
+        if let Some(entry) = self.order_update_stream.lock().unwrap().take() {
+            let _ = entry.sender.send(Error::Shutdown.into());
         }
 
         // bounded(1) + try_send: if a shutdown is already pending,
@@ -423,37 +429,38 @@ impl<S: Stream> TcpMessageBus<S> {
         self.executions.clear();
     }
 
-    // The three cleanup handlers below remove a registration only when it is
-    // `same_channel` with the cancelled or dropped subscription's sender: a
-    // signal can be processed arbitrarily late, and unconditional removal
-    // would take out a newer registration under the same key (place then
-    // cancel on one order id, or an order update stream recreated after a
-    // reconnect reset).
+    // The three cleanup handlers below remove a registration only when it
+    // holds the cancelled or dropped subscription's lease: a signal can be
+    // processed arbitrarily late, and unconditional removal would take out a
+    // newer registration under the same key (place then cancel on one order
+    // id, or an order update stream recreated after a reconnect reset).
+    // Identity alone, not liveness: a sync subscription has one holder, and a
+    // cancel must unregister it while the handle is still held.
     //
     // `clean_request` and `clean_order` also drop the subscription's
-    // execution-id aliases, matched by channel rather than key, so a stale
+    // execution-id aliases, matched by lease rather than key, so a stale
     // signal still releases its own aliases and never a newer registration's.
     // Not gated on `removed`: a stale signal still owns aliases to release.
 
-    fn clean_request(&self, request_id: RequestId, sender: &Sender<RoutedItem>) {
-        let removed = self.requests.remove_if_same(&request_id, sender);
-        let aliases = self.executions.remove_all_same(sender);
+    fn clean_request(&self, request_id: RequestId, lease: &LeaseRef) {
+        let removed = self.requests.remove_if_same(&request_id, lease);
+        let aliases = self.executions.remove_all_same(lease);
         debug!(
             "cleanup request_id {request_id}: removed={removed}, aliases={aliases}, requests.len()={}",
             self.requests.len()
         );
     }
 
-    fn clean_order(&self, order_id: OrderId, sender: &Sender<RoutedItem>) {
-        let removed = self.orders.remove_if_same(&order_id, sender);
-        let aliases = self.executions.remove_all_same(sender);
+    fn clean_order(&self, order_id: OrderId, lease: &LeaseRef) {
+        let removed = self.orders.remove_if_same(&order_id, lease);
+        let aliases = self.executions.remove_all_same(lease);
         debug!(
             "cleanup order_id {order_id}: removed={removed}, aliases={aliases}, orders.len()={}",
             self.orders.len()
         );
     }
 
-    fn clear_order_update_stream(&self, sender: &Sender<RoutedItem>) {
+    fn clear_order_update_stream(&self, lease: &LeaseRef) {
         let mut stream = if let Ok(stream) = self.order_update_stream.lock() {
             stream
         } else {
@@ -461,7 +468,7 @@ impl<S: Stream> TcpMessageBus<S> {
             return;
         };
 
-        let removed = stream.as_ref().is_some_and(|registered| registered.same_channel(sender));
+        let removed = stream.as_ref().is_some_and(|registered| registered.lease.is(lease));
         if removed {
             *stream = None;
         }
@@ -750,11 +757,12 @@ impl<S: Stream> TcpMessageBus<S> {
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
-        let sender_copy = sender.clone();
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
 
         match bound {
-            Some(bound) => self.requests.insert_bounded(request_id, sender, bound),
-            None => self.requests.insert(request_id, sender),
+            Some(bound) => self.requests.insert_bounded(request_id, sender.clone(), lease_ref.clone(), bound),
+            None => self.requests.insert(request_id, sender.clone(), lease_ref.clone()),
         };
 
         // The gate can close between `ensure_connected` and the write, so take
@@ -762,14 +770,15 @@ impl<S: Stream> TcpMessageBus<S> {
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
         if let Err(e) = self.write_message(message) {
-            self.requests.remove_if_same(&request_id, &sender_copy);
+            self.requests.remove_if_same(&request_id, &lease_ref);
             return Err(e);
         }
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
-            .sender(sender_copy)
+            .sender(sender)
             .signaler(self.signals_send.clone())
+            .lease(lease)
             .request_id(request_id)
             .build();
 
@@ -779,14 +788,16 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Alias the execution id to `id`'s channel in `channels`. The insert runs
     /// under `channels`' read lock, so a concurrent cleanup either removes the
     /// registration first (no alias is stored) or prunes the alias after it.
-    fn store_execution_mapping<K: std::hash::Hash + Eq + std::fmt::Debug>(
+    fn store_execution_mapping<K: std::hash::Hash + Eq + Clone + std::fmt::Debug>(
         &self,
         message: &ResponseMessage,
         channels: &SenderHash<K, RoutedItem>,
         id: K,
     ) {
         if let Some(execution_id) = message.execution_id() {
-            channels.with_sender(&id, |sender| self.executions.insert(execution_id, sender.clone()));
+            channels.with_entry(&id, |entry| {
+                self.executions.insert(execution_id, entry.sender.clone(), entry.lease.clone())
+            });
         }
     }
 
@@ -798,12 +809,12 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn send_order_update_item(&self, item: RoutedItem) -> bool {
         if let Ok(order_update_stream) = self.order_update_stream.lock() {
-            if let Some(sender) = order_update_stream.as_ref() {
-                if let Err(e) = sender.send(item) {
+            if let Some(entry) = order_update_stream.as_ref() {
+                if let Err(e) = entry.sender.send(item) {
                     warn!("error sending to order update stream: {e}");
                     return false;
                 }
-                warn_if_backlogged(format_args!("order update stream"), sender.len());
+                warn_if_backlogged(format_args!("order update stream"), entry.sender.len());
                 return true;
             }
         }
@@ -824,10 +835,10 @@ impl<S: Stream> TcpMessageBus<S> {
             loop {
                 crossbeam::select! {
                     recv(signal_recv) -> signal => match signal {
-                        Ok(Signal::Request(request_id, sender)) => message_bus.clean_request(request_id, &sender),
-                        Ok(Signal::Order(order_id, sender)) => message_bus.clean_order(order_id, &sender),
-                        Ok(Signal::OrderUpdateStream(sender)) => message_bus.clear_order_update_stream(&sender),
-                        Ok(Signal::Shared(sender)) => message_bus.shared_channels.remove(&sender),
+                        Ok(Signal::Request(request_id, lease)) => message_bus.clean_request(request_id, &lease),
+                        Ok(Signal::Order(order_id, lease)) => message_bus.clean_order(order_id, &lease),
+                        Ok(Signal::OrderUpdateStream(lease)) => message_bus.clear_order_update_stream(&lease),
+                        Ok(Signal::Shared(lease)) => message_bus.shared_channels.remove(&lease),
                         Err(_) => {
                             debug!("cleanup signal channel closed");
                             return;
@@ -876,21 +887,23 @@ impl<S: Stream> TcpMessageBus<S> {
         // arrive ahead of it. A failed write or a refused account takes the
         // registration with it.
         let (sender, receiver) = channel::unbounded();
-        self.shared_channels.add(message_type, sender.clone());
+        let lease = Lease::new();
+        self.shared_channels.add(message_type, sender.clone(), lease.downgrade());
         let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_message(message)) {
             Ok(ticket) => ticket,
             Err(e) => {
-                self.shared_channels.remove(&sender);
+                self.shared_channels.remove(&lease.downgrade());
                 return Err(e);
             }
         };
 
-        // The sender is the drop signal's identity: `Signal::Shared` removes
+        // The lease is the drop signal's identity: `Signal::Shared` removes
         // exactly this registration.
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
             .signaler(self.signals_send.clone())
+            .lease(lease)
             .shared(ticket)
             .build();
 
@@ -911,21 +924,23 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
-        let sender_copy = sender.clone();
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
 
-        self.orders.insert(order_id, sender);
+        self.orders.insert(order_id, sender.clone(), lease_ref.clone());
         debug!("Registered order subscription for order_id={}", order_id);
 
         // See `send_request`: a failed write takes its registration with it.
         if let Err(e) = self.write_message(message) {
-            self.orders.remove_if_same(&order_id, &sender_copy);
+            self.orders.remove_if_same(&order_id, &lease_ref);
             return Err(e);
         }
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
-            .sender(sender_copy)
+            .sender(sender)
             .signaler(self.signals_send.clone())
+            .lease(lease)
             .order_id(order_id)
             .build();
 
@@ -946,20 +961,26 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             return Err(Error::Shutdown);
         }
 
-        if order_update_stream.is_some() {
+        // A registration with a dead lease is a dropped stream whose cleanup
+        // signal has not been processed yet; replace it rather than refusing,
+        // so drop-then-recreate never races the cleanup thread. Its stale
+        // signal then finds another lease and leaves the replacement alone.
+        if order_update_stream.as_ref().is_some_and(|registered| registered.lease.is_live()) {
             return Err(Error::AlreadySubscribed);
         }
 
         let (sender, receiver) = channel::unbounded();
+        let lease = Lease::new();
 
-        *order_update_stream = Some(sender.clone());
+        *order_update_stream = Some(Entry::new(sender.clone(), lease.downgrade()));
 
-        // The sender gives the subscription's drop signal its identity — see
+        // The lease gives the subscription's drop signal its identity — see
         // `clear_order_update_stream`.
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
             .signaler(self.signals_send.clone())
+            .lease(lease)
             .build();
 
         Ok(subscription)
@@ -999,11 +1020,17 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 #[derive(Debug)]
 struct Entry<V> {
     sender: Sender<V>,
+    /// The subscription's lease: which subscription this is, and whether it lives.
+    lease: LeaseRef,
     /// The unread-item cap of a route opened with `send_request_bounded`.
     bound: Option<BoundState>,
 }
 
 impl<V> Entry<V> {
+    fn new(sender: Sender<V>, lease: LeaseRef) -> Self {
+        Self { sender, lease, bound: None }
+    }
+
     fn closed(&self) -> bool {
         self.bound.as_ref().is_some_and(BoundState::closed)
     }
@@ -1014,7 +1041,7 @@ struct SenderHash<K, V> {
     senders: RwLock<HashMap<K, Entry<V>>>,
 }
 
-impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
+impl<K: std::hash::Hash + Eq + Clone + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
             senders: RwLock::new(HashMap::new()),
@@ -1027,47 +1054,49 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         senders.get(&id).map(|entry| entry.sender.clone())
     }
 
-    /// Run `f` on `id`'s sender while holding the read lock, so no removal can
-    /// land between the lookup and `f`.
-    pub fn with_sender<R>(&self, id: &K, f: impl FnOnce(&Sender<V>) -> R) -> Option<R> {
-        let senders = self.senders.read().unwrap();
-        senders.get(id).map(|entry| f(&entry.sender))
+    #[cfg(test)]
+    pub fn lease(&self, id: K) -> Option<LeaseRef> {
+        self.with_entry(&id, |entry| entry.lease.clone())
     }
 
-    pub fn insert(&self, id: K, sender: Sender<V>) -> Option<Sender<V>> {
-        let mut senders = self.senders.write().unwrap();
-        senders.insert(id, Entry { sender, bound: None }).map(|entry| entry.sender)
+    /// Run `f` on `id`'s entry while holding the read lock, so no removal can
+    /// land between the lookup and `f`.
+    fn with_entry<R>(&self, id: &K, f: impl FnOnce(&Entry<V>) -> R) -> Option<R> {
+        let senders = self.senders.read().unwrap();
+        senders.get(id).map(f)
+    }
+
+    pub fn insert(&self, id: K, sender: Sender<V>, lease: LeaseRef) {
+        self.senders.write().unwrap().insert(id, Entry::new(sender, lease));
     }
 
     /// Like [`insert`](Self::insert), with an unread-item cap: see [`BoundState::admit`].
-    pub fn insert_bounded(&self, id: K, sender: Sender<V>, bound: BufferBound) -> Option<Sender<V>> {
+    pub fn insert_bounded(&self, id: K, sender: Sender<V>, lease: LeaseRef, bound: BufferBound) {
         let entry = Entry {
-            sender,
             bound: Some(BoundState::new(bound)),
+            ..Entry::new(sender, lease)
         };
-        let mut senders = self.senders.write().unwrap();
-        senders.insert(id, entry).map(|entry| entry.sender)
+        self.senders.write().unwrap().insert(id, entry);
     }
 
-    /// Remove the entry for `id` only if it is the same channel as `sender`.
-    /// Returns whether an entry was removed. Used by drop-signal cleanup so a
-    /// stale signal cannot remove a newer registration under the same key.
-    pub fn remove_if_same(&self, id: &K, sender: &Sender<V>) -> bool {
-        let mut senders = self.senders.write().unwrap();
-        if senders.get(id).is_some_and(|registered| registered.sender.same_channel(sender)) {
-            senders.remove(id);
-            true
-        } else {
-            false
+    /// Remove the entry for `id` only if it holds `lease`. Returns whether an
+    /// entry was removed. Used by signal cleanup so a stale signal cannot
+    /// remove a newer registration under the same key.
+    pub fn remove_if_same(&self, id: &K, lease: &LeaseRef) -> bool {
+        match self.senders.write().unwrap().entry(id.clone()) {
+            hash_map::Entry::Occupied(registered) if registered.get().lease.is(lease) => {
+                registered.remove();
+                true
+            }
+            _ => false,
         }
     }
 
-    /// Remove every entry on the same channel as `sender`. Returns how many
-    /// were removed.
-    pub fn remove_all_same(&self, sender: &Sender<V>) -> usize {
+    /// Remove every entry holding `lease`. Returns how many were removed.
+    pub fn remove_all_same(&self, lease: &LeaseRef) -> usize {
         let mut senders = self.senders.write().unwrap();
         let before = senders.len();
-        senders.retain(|_, registered| !registered.sender.same_channel(sender));
+        senders.retain(|_, registered| !registered.lease.is(lease));
         before - senders.len()
     }
 
