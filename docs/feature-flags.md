@@ -39,13 +39,13 @@ The crate enforces that at least one of the two features is enabled; both may be
 ```toml
 [dependencies]
 # Default async client
-ibapi = "4.0"
+ibapi = "5.0"
 
 # Sync-only (disable defaults)
-ibapi = { version = "4.0", default-features = false, features = ["sync"] }
+ibapi = { version = "5.0", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "4.0", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "5.0", default-features = false, features = ["sync", "async"] }
 ```
 
 ## Testing with Features

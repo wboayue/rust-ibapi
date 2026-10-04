@@ -14,9 +14,9 @@ error: You must enable at least one of the 'sync' or 'async' features to use thi
 **Solution:**
 Default features are off and neither client is enabled. In a dependency, add one back in `Cargo.toml`:
 ```toml
-ibapi = { version = "4.0", default-features = false, features = ["async"] }
+ibapi = { version = "5.0", default-features = false, features = ["async"] }
 # OR
-ibapi = { version = "4.0", default-features = false, features = ["sync"] }
+ibapi = { version = "5.0", default-features = false, features = ["sync"] }
 ```
 When building this repository with `--no-default-features`, add `--features sync` or `--features async` to the command.
 

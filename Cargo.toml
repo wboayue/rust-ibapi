@@ -4,7 +4,7 @@ default-members = ["."]
 
 [package]
 name = "ibapi"
-version = "4.2.0"
+version = "5.0.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Wil Boayue <wil@wsblabs.com>"]

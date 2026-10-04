@@ -539,7 +539,7 @@ impl Default for Order {
             preset_profit_taker_order_id: None,
             block_order: false,
             sweep_to_fill: false,
-            display_size: Some(0), // TODO - default to None?
+            display_size: Some(0),
             trigger_method: conditions::TriggerMethod::Default,
             outside_rth: false,
             hidden: false,
