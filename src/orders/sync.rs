@@ -7,7 +7,7 @@ use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
-use crate::{client::sync::Client, server_versions, Error};
+use crate::{client::sync::Client, Error};
 
 impl Client {
     /// Start building an order for the given contract
@@ -115,13 +115,6 @@ impl Client {
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-        if !manual_order_cancel_time.is_empty() {
-            self.check_server_version(
-                server_versions::MANUAL_ORDER_TIME,
-                "It does not support manual order cancel time attribute",
-            )?
-        }
-
         let order_id = order_id.into().checked()?;
         let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
         let subscription = self.send_order(order_id, request)?;
@@ -147,8 +140,6 @@ impl Client {
     /// }
     /// ```
     pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
-        self.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
-
         let request = encoders::encode_completed_orders(api_only)?;
         let subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request)?;
 
@@ -207,8 +198,6 @@ impl Client {
     /// client.global_cancel().expect("request failed");
     /// ```
     pub fn global_cancel(&self) -> Result<(), Error> {
-        self.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
-
         let message = encoders::encode_global_cancel()?;
         self.send_message(message)?;
 
@@ -323,8 +312,7 @@ impl Client {
     /// ```
     pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;
@@ -389,8 +377,7 @@ impl Client {
     /// ```
     pub fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request)?;
