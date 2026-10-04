@@ -423,7 +423,23 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Set a custom order type
+    /// Set the order type without setting any price.
+    ///
+    /// `build()` sends only the price fields `order_type` uses, so a price set earlier for a type
+    /// that doesn't take it is dropped: `.limit(100.0).order_type(OrderType::PeggedToStock)` sends
+    /// no limit price. Prefer the named setter (`.relative(..)`, `.pegged_to_midpoint(..)`, ...).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::builder::OrderType;
+    /// use ibapi::orders::Order;
+    ///
+    /// let order = Order::builder().buy(100).limit(150.0).order_type(OrderType::PegBest).build()?;
+    /// assert_eq!(order.order_type, "PEG BEST");
+    /// assert_eq!(order.limit_price, Some(150.0));
+    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
         self.order_type = Some(order_type);
         self
@@ -1434,37 +1450,44 @@ impl<T> OrderBuilder<T> {
             None => Quantity::new(quantity_raw)?.value(),
         };
 
-        // Validate prices based on order type
+        // Each price field is sent only for the order types that use it (`OrderType::uses_*`),
+        // so one left by an earlier order-type setter is dropped instead of riding along.
         let limit_price = if order_type.requires_limit_price() {
             let price_raw = self.limit_price.ok_or(ValidationError::MissingRequiredField("limit_price"))?;
-            Some(Price::new(price_raw)?)
-        } else if let Some(price_raw) = self.limit_price {
-            Some(Price::new(price_raw)?)
+            Some(Price::new(price_raw)?.value())
+        } else if order_type.uses_limit_price() {
+            self.limit_price.map(Price::new).transpose()?.map(|price| price.value())
         } else {
             None
         };
 
-        // Only stop types read `stop_price`; one left by an earlier setter is ignored, so it
-        // can't take `aux_price` from the trail amount, offset or trigger price.
-        let stop_price = match order_type {
-            OrderType::Stop | OrderType::StopLimit | OrderType::StopWithProtection => {
-                let price_raw = self.stop_price.ok_or(ValidationError::MissingRequiredField("stop_price"))?;
-                Some(Price::new(price_raw)?)
-            }
-            _ => None,
+        // Stop types send the stop price as `aux_price`; the others send the trigger, offset or
+        // trail amount their setter wrote.
+        let aux_price = if order_type.uses_stop_price() {
+            let price_raw = self.stop_price.ok_or(ValidationError::MissingRequiredField("stop_price"))?;
+            Some(Price::new(price_raw)?.value())
+        } else if order_type.uses_aux_price() {
+            self.aux_price
+        } else {
+            None
         };
 
-        let trail_stop_price = match order_type {
-            OrderType::TrailingStop | OrderType::TrailingStopLimit => {
-                if self.trailing_percent.is_none() && self.aux_price.is_none() {
-                    return Err(ValidationError::MissingRequiredField("trailing amount or percent"));
-                }
-                if let Some(price_raw) = self.trail_stop_price {
-                    Some(Price::new(price_raw)?)
-                } else {
-                    None
-                }
+        let (trailing_percent, trail_stop_price) = if order_type.uses_trail() {
+            if self.trailing_percent.is_none() && aux_price.is_none() {
+                return Err(ValidationError::MissingRequiredField("trailing amount or percent"));
             }
+            let trail_stop_price = self.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
+            (self.trailing_percent, trail_stop_price)
+        } else {
+            (None, None)
+        };
+
+        if order_type.requires_aux_price() && !order_type.uses_trail() && aux_price.is_none() {
+            return Err(ValidationError::MissingRequiredField("aux_price"));
+        }
+
+        let limit_price_offset = match order_type {
+            OrderType::TrailingStopLimit => self.limit_price_offset,
             _ => None,
         };
 
@@ -1495,29 +1518,13 @@ impl<T> OrderBuilder<T> {
             action,
             total_quantity,
             order_type: order_type.as_str().to_string(),
+            limit_price,
+            aux_price,
+            trailing_percent,
+            trail_stop_price,
+            limit_price_offset,
             ..Default::default()
         };
-
-        // Set prices
-        if let Some(price) = limit_price {
-            order.limit_price = Some(price.value());
-        }
-
-        if let Some(price) = stop_price {
-            order.aux_price = Some(price.value());
-        }
-
-        if let Some(price) = trail_stop_price {
-            order.trail_stop_price = Some(price.value());
-        }
-
-        if let Some(percent) = self.trailing_percent {
-            order.trailing_percent = Some(percent);
-        }
-
-        if let Some(offset) = self.limit_price_offset {
-            order.limit_price_offset = Some(offset);
-        }
 
         // Set time in force
         order.tif = self.time_in_force;
@@ -1580,13 +1587,6 @@ impl<T> OrderBuilder<T> {
 
         if let Some(delta) = self.delta {
             order.delta = Some(delta);
-        }
-
-        if let Some(aux) = self.aux_price {
-            // Only set if not already set by stop price
-            if order.aux_price.is_none() {
-                order.aux_price = Some(aux);
-            }
         }
 
         // Set special flags

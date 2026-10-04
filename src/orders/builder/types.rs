@@ -309,6 +309,30 @@ impl OrderType {
                 | Self::PeggedToMarket
         )
     }
+
+    // `build()` sends a price field only for the types below, so one left by an earlier
+    // order-type setter is dropped. Sets follow C# `OrderSamples.cs`; types reachable only
+    // through `.order_type(..)` (PEG BEST, the REL combos) are given the fields they may carry.
+
+    /// Types whose stop price the builder sends as `aux_price`.
+    pub(crate) fn uses_stop_price(&self) -> bool {
+        matches!(self, Self::Stop | Self::StopLimit | Self::StopWithProtection)
+    }
+
+    /// Types that send `limit_price`, required or as an optional cap.
+    pub(crate) fn uses_limit_price(&self) -> bool {
+        self.requires_limit_price() || matches!(self, Self::Midprice | Self::Relative | Self::PeggedToMidpoint | Self::PegBest)
+    }
+
+    /// Types that send `aux_price` as a trigger, offset or trail amount.
+    pub(crate) fn uses_aux_price(&self) -> bool {
+        self.requires_aux_price() || matches!(self, Self::PeggedToMidpoint | Self::RelativeLimitCombo | Self::RelativeMarketCombo)
+    }
+
+    /// Types that send `trailing_percent` and `trail_stop_price`.
+    pub(crate) fn uses_trail(&self) -> bool {
+        matches!(self, Self::TrailingStop | Self::TrailingStopLimit)
+    }
 }
 
 /// Validation errors
