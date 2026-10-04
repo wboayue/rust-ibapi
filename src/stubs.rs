@@ -18,7 +18,7 @@ use crate::transport::{RoutedItem, SharedTicket};
 use crate::Error;
 
 #[cfg(feature = "sync")]
-use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
+use crate::transport::{InternalSubscription, MessageBus, Signal, SubscriptionBuilder};
 
 #[cfg(feature = "async")]
 use {
@@ -52,6 +52,11 @@ pub(crate) struct MessageBusStub {
     /// with none. See [`AsyncMessageBus::runtime_handle`].
     #[cfg(feature = "async")]
     runtime: Option<tokio::runtime::Handle>,
+    /// The cleanup channel stubbed subscriptions signal on drop or cancel.
+    /// Nothing reads it; the receiver is kept so sends succeed rather than
+    /// logging a warning per subscription.
+    #[cfg(feature = "sync")]
+    signals: (channel::Sender<Signal>, channel::Receiver<Signal>),
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -72,6 +77,8 @@ impl Default for MessageBusStub {
             connection_resets: AtomicUsize::new(0),
             #[cfg(feature = "async")]
             runtime: tokio::runtime::Handle::try_current().ok(),
+            #[cfg(feature = "sync")]
+            signals: channel::unbounded(),
         }
     }
 }
@@ -240,7 +247,6 @@ impl MessageBus for MessageBusStub {
         drop(tracker); // Release lock early
 
         let (sender, receiver) = channel::unbounded();
-        let (signaler, _) = channel::unbounded();
 
         // Send any pre-configured response messages
         for item in self.routed_items() {
@@ -249,7 +255,7 @@ impl MessageBus for MessageBusStub {
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
-            .signaler(signaler)
+            .signaler(self.signals.0.clone())
             .lease(Lease::new())
             .build();
 
@@ -305,13 +311,15 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
     stub.request_messages.write().unwrap().push(message.to_vec());
 
     let (sender, receiver) = channel::unbounded();
-    let (s1, _r1) = channel::unbounded();
 
     for item in stub.routed_items_for_request() {
         sender.send(item).unwrap();
     }
 
-    let subscription = SubscriptionBuilder::new().signaler(s1).lease(Lease::new()).receiver(receiver);
+    let subscription = SubscriptionBuilder::new()
+        .signaler(stub.signals.0.clone())
+        .lease(Lease::new())
+        .receiver(receiver);
     match route {
         MockRoute::Request(request_id) => subscription.request_id(request_id),
         MockRoute::Order(order_id) => subscription.order_id(order_id),
