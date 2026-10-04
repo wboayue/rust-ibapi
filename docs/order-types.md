@@ -165,6 +165,8 @@ let order_id = client.order(&contract)
 A trailing stop that becomes a limit order when triggered.
 
 ```rust
+use ibapi::orders::builder::TrailBy;
+
 // Trailing stop limit with 5% trail and $0.50 limit offset
 let order_id = client.order(&contract)
     .sell(100)
@@ -697,7 +699,7 @@ let order_id = client.order(&contract)
 
 ### Pegged to Market
 
-Pegs to the best quote on your side: ask minus the offset for a buy, bid plus the offset for a sell.
+Pegs to the national best offer minus the offset for a buy, or the national best bid plus the offset for a sell.
 
 ```rust
 let order_id = client.order(&contract)
@@ -724,7 +726,7 @@ let order_id = client.order(&contract)
 
 ### Pegged to Stock
 
-An option order whose price moves by delta times the change in the underlying stock price, starting from a starting price. Enter delta positive for calls, negative for puts.
+An option order whose price moves by delta times the change in the underlying stock price, starting from a starting price. Enter delta as an absolute value: TWS treats it as positive for calls and negative for puts.
 
 ```rust
 // Start at $2.10, move 0.5 per $1 in the stock, measured from $150.00;
