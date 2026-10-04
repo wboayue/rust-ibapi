@@ -2817,7 +2817,7 @@ fn test_response_with_no_recipient_dropped() -> Result<(), Error> {
 
 /// `reset` notifies every channel category — requests, orders, shared — and
 /// clears the channel maps. All three categories must be live before the call
-/// to exercise each `notify_all` branch. A shared subscription receives the
+/// to exercise each `fail_all` branch. A shared subscription receives the
 /// reset once, however many response types its request maps to
 /// (`RequestAccountData` maps to four).
 #[test]

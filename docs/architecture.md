@@ -197,6 +197,7 @@ The `Client` can be shared between threads for concurrent operations:
 - On a socket drop, every live subscription and in-flight one-shot request fails with `Error::ConnectionReset` immediately, before the reconnect starts: the session that held them cannot answer, whether or not the reconnect succeeds
 - While the session is down, sends are refused with `Error::ConnectionReset`, and `is_connected()` reports false until the replayed handshake completes (it is a snapshot: a call made right after the check can still be refused). One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) wait out the reconnect and retry, giving up with `Error::Shutdown` if it fails
 - Once the reconnected session is live, a `TRANSPORT_RECONNECT_CODE` notice is published to the notice stream: TWS never frames the reconnect itself and does not replay 1101/1102 on the new connection, so the notice stream is otherwise blind to the socket generation change. Resubscribing from its handler lands on the new session
+- On shutdown (`disconnect()` or dropping the client), every live subscription yields `Err(Error::Shutdown)`, then ends; the notice stream just ends
 
 ### Connection Monitoring
 Use `client.is_connected()` to check connection status:
