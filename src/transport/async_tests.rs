@@ -70,6 +70,86 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     assert_eq!(sender.len(), 2, "capacity-2 channel retains only the newest 2 frames");
 }
 
+/// Send `capacity + 1` items and return how many the channel retained: its
+/// capacity, since a broadcast channel evicts the oldest past it.
+fn retained(sender: &broadcast::Sender<RoutedItem>, capacity: usize) -> usize {
+    for _ in 0..=capacity {
+        sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
+    }
+    sender.len()
+}
+
+/// A small `channel_capacity` sizes market-data channels but never shrinks
+/// the order-class floors (#896).
+#[tokio::test]
+async fn test_order_class_channels_keep_their_floor_under_small_channel_capacity() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 1).unwrap());
+
+    let _market = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
+    let _executions = bus.send_order_stream_request(RequestId::nth(2), vec![]).await.unwrap();
+    let _order = bus.send_order_request(OrderId::new(3), vec![]).await.unwrap();
+    let _updates = bus.create_order_update_subscription().await.unwrap();
+
+    assert_eq!(retained(&bus.requests.sender(&RequestId::nth(1)).unwrap(), 1), 1);
+    assert_eq!(
+        retained(&bus.requests.sender(&RequestId::nth(2)).unwrap(), ORDER_STREAM_CAPACITY),
+        ORDER_STREAM_CAPACITY
+    );
+    assert_eq!(
+        retained(&bus.orders.sender(&OrderId::new(3)).unwrap(), BROADCAST_CHANNEL_CAPACITY),
+        BROADCAST_CHANNEL_CAPACITY
+    );
+    let updates = bus.order_update_stream.lock().unwrap().as_ref().unwrap().sender.clone();
+    assert_eq!(retained(&updates, ORDER_STREAM_CAPACITY), ORDER_STREAM_CAPACITY);
+}
+
+/// A `channel_capacity` above a floor raises the order-class channels too.
+#[test]
+fn test_channel_class_capacity() {
+    assert_eq!(ChannelClass::MarketData.capacity(4), 4);
+    assert_eq!(ChannelClass::Order.capacity(4), BROADCAST_CHANNEL_CAPACITY);
+    assert_eq!(ChannelClass::OrderStream.capacity(4), ORDER_STREAM_CAPACITY);
+    let large = ORDER_STREAM_CAPACITY * 2;
+    assert_eq!(ChannelClass::Order.capacity(large), large);
+    assert_eq!(ChannelClass::OrderStream.capacity(large), large);
+}
+
+#[test]
+fn test_shared_order_channels_are_order_class() {
+    for request in [
+        OutgoingMessages::RequestOpenOrders,
+        OutgoingMessages::RequestAllOpenOrders,
+        OutgoingMessages::RequestAutoOpenOrders,
+        OutgoingMessages::RequestCompletedOrders,
+    ] {
+        assert_eq!(ChannelClass::of_shared(request), ChannelClass::OrderStream, "{request:?}");
+    }
+    assert_eq!(ChannelClass::of_shared(OutgoingMessages::RequestPositions), ChannelClass::MarketData);
+}
+
+/// A lag on an order-class subscription surfaces the order lag notice, and
+/// clones keep the class.
+#[tokio::test]
+async fn test_order_class_lag_surfaces_order_lag_notice() {
+    let (sender, receiver) = broadcast::channel(1);
+    let mut subscription = AsyncInternalSubscription::new(receiver).order_class(true);
+    let mut clone = subscription.clone();
+    for _ in 0..2 {
+        sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
+        sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
+    }
+
+    for sub in [&mut subscription, &mut clone] {
+        match sub.next_routed().await {
+            Some(RoutedItem::Notice(notice)) => assert_eq!(notice, crate::messages::order_lag_notice(3)),
+            other => panic!("expected order lag notice, got {other:?}"),
+        }
+    }
+}
+
 /// Receive next message with a deadline; panics with context if the channel
 /// times out, closes, or surfaces an error.
 async fn next_message(sub: &mut AsyncInternalSubscription) -> ResponseMessage {

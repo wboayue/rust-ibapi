@@ -360,6 +360,11 @@ async fn test_executions() {
 
     let filter = ExecutionFilter::default();
     let mut subscription = client.executions(filter).await.expect("failed to get executions");
+    assert_eq!(
+        message_bus.order_stream_requests.read().unwrap().len(),
+        1,
+        "executions opens an order-class channel"
+    );
 
     let exec_data = subscription.next().await;
     assert!(

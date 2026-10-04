@@ -463,7 +463,7 @@ impl Client {
     pub async fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         let request_id = self.mint_request_id();
         let request = encoders::encode_executions(request_id.raw(), &filter)?;
-        let internal_subscription = self.send_request(request_id, request).await?;
+        let internal_subscription = self.message_bus.send_order_stream_request(request_id, request).await?;
         Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),

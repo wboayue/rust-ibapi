@@ -1348,10 +1348,21 @@ pub(crate) fn unknown_message_type_notice(message: &ResponseMessage) -> Notice {
 /// uses codes 0 and up.
 ///
 /// On receiving this notice the stream is still live, but frames are gone:
-/// reconcile the same way as after a reconnect gap (for order streams,
-/// `open_orders()`; for market data, the feed self-corrects with the next
-/// tick). A consumer that lags persistently should raise
-/// `ClientBuilder::channel_capacity` or consume faster.
+/// reconcile the same way as after a reconnect gap.
+///
+/// - **Market data** (ticks, bars, depth): bounded and lossy by design —
+///   freshness beats completeness, and the feed self-corrects with the next
+///   tick. Channels hold `ClientBuilder::channel_capacity` frames; a
+///   consumer that lags persistently should raise it or consume faster.
+/// - **Orders** (`place_order`, `order_update_stream`, `executions`, the
+///   open/completed-order streams): sized well above any normal burst
+///   regardless of `channel_capacity`, so this notice there means order
+///   state was lost and the client logs it as an error. Resynchronize with
+///   `open_orders()` / `executions()` before acting on recorded state.
+///
+/// The sync client never drops: its queues are unbounded and log a warning
+/// at every 10,000 unread messages instead. Both transports surface falling
+/// behind; only async trades completeness for bounded memory.
 pub const SUBSCRIPTION_LAG_CODE: i32 = -6;
 
 /// Build the in-band notice for a subscription that fell behind its broadcast
@@ -1361,6 +1372,15 @@ pub const SUBSCRIPTION_LAG_CODE: i32 = -6;
 pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
     let message = format!("subscription fell behind; {skipped} frames dropped (consumer lagged broadcast channel)");
     log::warn!("{message}");
+    Notice::synthesized(SUBSCRIPTION_LAG_CODE, message)
+}
+
+/// [`subscription_lag_notice`] for an order-class channel, where a gap means
+/// lost order state: logged as an error, and the message says to resync.
+#[cfg(feature = "async")]
+pub(crate) fn order_lag_notice(skipped: u64) -> Notice {
+    let message = format!("order stream fell behind; {skipped} frames dropped — order state unknown, resync with open_orders()");
+    log::error!("{message}");
     Notice::synthesized(SUBSCRIPTION_LAG_CODE, message)
 }
 
@@ -1385,7 +1405,8 @@ pub(crate) fn subscription_lag_notice(skipped: u64) -> Notice {
 /// re-baselines its link state and re-establishes subscriptions). This is
 /// the notice-stream instance of [`SUBSCRIPTION_LAG_CODE`], closing the
 /// step-1 leftover of #779. The sync
-/// notice fan-out is unbounded and cannot lag.
+/// notice fan-out is unbounded and cannot lag; it logs a warning at every
+/// 10,000 unread notices instead.
 pub const NOTICE_STREAM_LAG_CODE: i32 = -7;
 
 /// Build the in-band notice delivered when the notice stream's consumer fell

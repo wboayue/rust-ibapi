@@ -249,9 +249,10 @@ impl SharedChannels {
     }
 }
 
-/// Fan-out for unrouted notices. Each subscriber gets its own crossbeam
-/// channel; `broadcast` lazily prunes subscribers whose receivers have
-/// been dropped (`Sender::send` returns `Err` once the receiver is gone).
+/// Fan-out for unrouted notices. Each subscriber gets its own unbounded
+/// crossbeam channel, watermarked like the subscription queues; `broadcast`
+/// lazily prunes subscribers whose receivers have been dropped
+/// (`Sender::send` returns `Err` once the receiver is gone).
 #[derive(Debug)]
 pub(crate) struct NoticeBroadcaster {
     /// `None` once closed.
@@ -283,7 +284,13 @@ impl NoticeBroadcaster {
 
     pub(crate) fn broadcast(&self, notice: Notice) {
         if let Some(senders) = self.senders.lock().unwrap().as_mut() {
-            senders.retain(|s| s.send(notice.clone()).is_ok());
+            senders.retain(|s| {
+                let sent = s.send(notice.clone()).is_ok();
+                if sent {
+                    warn_if_backlogged(format_args!("notice stream"), s.len());
+                }
+                sent
+            });
         }
     }
 

@@ -43,12 +43,61 @@ use super::routing::{
 };
 use super::{BufferBound, RoutedItem, SharedTicket};
 
-/// Default capacity for broadcast channels. Subscription-data channels take
-/// the per-client override from `ClientBuilder::channel_capacity`; the notice
+/// Default capacity for broadcast channels. Market-data channels take the
+/// per-client override from `ClientBuilder::channel_capacity`; the notice
 /// fan-out channels always use this default. When a consumer falls behind by
 /// more than the capacity, the channel evicts the oldest frames and a data
 /// subscription receives a `SUBSCRIPTION_LAG_CODE` notice naming the count.
 pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
+
+/// Capacity floor for the aggregate order-class channels: the order update
+/// stream, `executions`, and the shared open/completed-order channels.
+/// Completeness is their contract, so a lag there should mean a stalled
+/// consumer, never a busy day. Tokio preallocates every slot (~120 bytes
+/// each), which is why per-order routes get the smaller
+/// [`BROADCAST_CHANNEL_CAPACITY`] floor instead; see #896.
+pub(crate) const ORDER_STREAM_CAPACITY: usize = 8192;
+
+/// What a channel carries, which decides its capacity and how loudly a lag
+/// on it is reported (#896). Market data is bounded and lossy by design;
+/// order channels are sized so a lag means a stalled consumer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChannelClass {
+    /// Ticks, bars, depth, and everything else not order-related; sized by
+    /// `ClientBuilder::channel_capacity`.
+    MarketData,
+    /// One order's route; low volume.
+    Order,
+    /// An aggregate of many orders' traffic.
+    OrderStream,
+}
+
+impl ChannelClass {
+    /// The class of a shared channel's request type.
+    fn of_shared(request: OutgoingMessages) -> Self {
+        match request {
+            OutgoingMessages::RequestOpenOrders
+            | OutgoingMessages::RequestAllOpenOrders
+            | OutgoingMessages::RequestAutoOpenOrders
+            | OutgoingMessages::RequestCompletedOrders => Self::OrderStream,
+            _ => Self::MarketData,
+        }
+    }
+
+    /// Capacity given the client's `channel_capacity`, which can raise an
+    /// order-class floor but never lower it.
+    fn capacity(self, channel_capacity: usize) -> usize {
+        match self {
+            Self::MarketData => channel_capacity,
+            Self::Order => channel_capacity.max(BROADCAST_CHANNEL_CAPACITY),
+            Self::OrderStream => channel_capacity.max(ORDER_STREAM_CAPACITY),
+        }
+    }
+
+    fn is_order(self) -> bool {
+        self != Self::MarketData
+    }
+}
 
 /// Fan-out for unrouted notices, the async counterpart of the sync
 /// `NoticeBroadcaster`. It holds the only `broadcast::Sender`, so `close`
@@ -116,6 +165,11 @@ pub trait AsyncMessageBus: Send + Sync {
     /// queues `Error::BufferLimitExceeded` and discards later frames.
     async fn send_request_bounded(&self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error>;
 
+    /// [`send_request`](Self::send_request) for an aggregate order-class
+    /// stream (`executions`): sized for completeness rather than by
+    /// `ClientBuilder::channel_capacity`.
+    async fn send_order_stream_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
+
     async fn send_order_request(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
@@ -176,6 +230,9 @@ pub struct AsyncInternalSubscription {
     /// `template_receiver` never reads. Only the original handle counts;
     /// clones start at the tail with `None`.
     reads: Option<Arc<AtomicUsize>>,
+    /// Reads an order-class channel, where a lag means lost order state and
+    /// is reported as an error rather than a warning.
+    order_class: bool,
 }
 
 impl Clone for AsyncInternalSubscription {
@@ -194,6 +251,7 @@ impl Clone for AsyncInternalSubscription {
             cleanup_signal: self.cleanup_signal.clone(),
             lease: self.lease.clone(),
             reads: None,
+            order_class: self.order_class,
         }
     }
 }
@@ -220,6 +278,7 @@ impl AsyncInternalSubscription {
             cleanup_signal: None,
             lease: None,
             reads: None,
+            order_class: false,
         }
     }
 
@@ -236,12 +295,19 @@ impl AsyncInternalSubscription {
             cleanup_signal: Some(cleanup_signal),
             lease: None,
             reads: None,
+            order_class: false,
         }
     }
 
     /// Hold `lease` for the registration this subscription reads from.
     fn leased(mut self, lease: Lease) -> Self {
         self.lease = Some(lease);
+        self
+    }
+
+    /// Mark this subscription as reading an order-class channel when `order`.
+    fn order_class(mut self, order: bool) -> Self {
+        self.order_class = order;
         self
     }
 
@@ -253,7 +319,7 @@ impl AsyncInternalSubscription {
 
     /// Poll the underlying broadcast stream, converting a `Lagged` error into
     /// an in-band [`SUBSCRIPTION_LAG_CODE`](crate::messages::SUBSCRIPTION_LAG_CODE)
-    /// notice (which also `warn!`s). The single place lag is handled — every
+    /// notice (which also logs: `error!` on an order-class channel, else `warn!`). The single place lag is handled — every
     /// consumer polls through here, so none can reintroduce a silent swallow.
     pub(crate) fn poll_next_routed(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<RoutedItem>> {
         use std::task::Poll;
@@ -265,7 +331,12 @@ impl AsyncInternalSubscription {
                 Poll::Ready(Some(item))
             }
             Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
-                Poll::Ready(Some(RoutedItem::Notice(crate::messages::subscription_lag_notice(skipped))))
+                let notice = if self.order_class {
+                    crate::messages::order_lag_notice(skipped)
+                } else {
+                    crate::messages::subscription_lag_notice(skipped)
+                };
+                Poll::Ready(Some(RoutedItem::Notice(notice)))
             }
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
@@ -351,8 +422,9 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// Optional channel for order update stream. A std lock, like the
     /// registries', so shutdown can empty it from `Drop`.
     order_update_stream: Arc<std::sync::Mutex<Option<Route>>>,
-    /// Capacity of every broadcast channel this bus creates. Default
-    /// `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
+    /// Capacity of the market-data channels this bus creates, and the
+    /// order-class floors' override when larger (see [`ChannelClass`]).
+    /// Default `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
     channel_capacity: usize,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
@@ -395,8 +467,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         Self::with_channel_capacity(connection, BROADCAST_CHANNEL_CAPACITY)
     }
 
-    /// Create a new async TCP message bus whose broadcast channels hold up to
-    /// `channel_capacity` frames per subscription before evicting the oldest.
+    /// Create a new async TCP message bus whose market-data channels hold up
+    /// to `channel_capacity` frames per subscription before evicting the
+    /// oldest. Order-class channels hold at least their [`ChannelClass`] floor.
     pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
@@ -407,7 +480,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             requests: Arc::new(SenderHash::new()),
             orders: Arc::new(SenderHash::new()),
             executions: Arc::new(SenderHash::new()),
-            shared_channels: SharedChannels::new(channel_capacity),
+            shared_channels: SharedChannels::new(|request| ChannelClass::of_shared(request).capacity(channel_capacity)),
             order_update_stream: Arc::new(std::sync::Mutex::new(None)),
             channel_capacity,
             cleanup_sender,
@@ -853,12 +926,18 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
     }
 
-    /// Register `request_id`'s channel, optionally with an unread-item cap,
-    /// then write the request.
-    async fn open_request(&self, request_id: RequestId, message: Vec<u8>, bound: Option<BufferBound>) -> Result<AsyncInternalSubscription, Error> {
+    /// Register `request_id`'s channel of `class`, optionally with an
+    /// unread-item cap (which sets the capacity), then write the request.
+    async fn open_request(
+        &self,
+        request_id: RequestId,
+        message: Vec<u8>,
+        class: ChannelClass,
+        bound: Option<BufferBound>,
+    ) -> Result<AsyncInternalSubscription, Error> {
         self.ensure_connected()?;
 
-        let capacity = bound.map_or(self.channel_capacity, |bound| bound.limit + 1);
+        let capacity = bound.map_or(class.capacity(self.channel_capacity), |bound| bound.limit + 1);
         let (sender, receiver) = broadcast::channel(capacity);
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
@@ -875,7 +954,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // `await` never runs in that case. On a failed write below, the drop
         // sends a second, harmless signal: `release` spares a replacement.
         let signal = CleanupSignal::Request(request_id, lease_ref.clone());
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease);
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal)
+            .leased(lease)
+            .order_class(class.is_order());
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),
             None => subscription,
@@ -948,28 +1029,31 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             .subscribe(message_type, account, || self.write_message(&message))
             .await?;
 
-        Ok(AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Shared(ticket),
-        ))
+        Ok(
+            AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Shared(ticket))
+                .order_class(ChannelClass::of_shared(message_type).is_order()),
+        )
     }
 }
 
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_request(request_id, message, None).await
+        self.open_request(request_id, message, ChannelClass::MarketData, None).await
     }
 
     async fn send_request_bounded(&self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error> {
-        self.open_request(request_id, message, Some(bound)).await
+        self.open_request(request_id, message, ChannelClass::MarketData, Some(bound)).await
+    }
+
+    async fn send_order_stream_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.open_request(request_id, message, ChannelClass::OrderStream, None).await
     }
 
     async fn send_order_request(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.ensure_connected()?;
 
-        let (sender, receiver) = broadcast::channel(self.channel_capacity);
+        let (sender, receiver) = broadcast::channel(ChannelClass::Order.capacity(self.channel_capacity));
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
 
@@ -978,7 +1062,9 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         // See `send_request`: owned before the write, so an abandoned write
         // releases its registration too; a failed write takes it with it.
         let signal = CleanupSignal::Order(order_id, lease_ref.clone());
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease);
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal)
+            .leased(lease)
+            .order_class(true);
         if let Err(e) = self.write_message(&message).await {
             self.orders.remove_if_same(order_id, &lease_ref);
             return Err(e);
@@ -1027,14 +1113,16 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             return Err(Error::AlreadySubscribed);
         }
 
-        let (sender, receiver) = broadcast::channel(self.channel_capacity);
+        let (sender, receiver) = broadcast::channel(ChannelClass::OrderStream.capacity(self.channel_capacity));
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
 
         *order_update_stream = Some(Route::unbounded(sender, lease_ref.clone()));
 
         let signal = CleanupSignal::OrderUpdateStream(lease_ref);
-        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease))
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal)
+            .leased(lease)
+            .order_class(true))
     }
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {

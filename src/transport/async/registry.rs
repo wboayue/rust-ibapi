@@ -11,7 +11,7 @@ use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use log::{debug, trace};
 use tokio::sync::{broadcast, Mutex};
@@ -228,9 +228,10 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     }
 }
 
-/// One persistent broadcast channel per shared request type, created up front
-/// from `CHANNEL_MAPPINGS`. Every live subscription of a type reads the same
-/// channel from its own receiver.
+/// One persistent broadcast channel per shared request type, from
+/// `CHANNEL_MAPPINGS`. Each is allocated on its first subscription (tokio
+/// preallocates every slot) and kept from then on; every live subscription
+/// of a type reads the same channel from its own receiver.
 #[derive(Debug)]
 pub(super) struct SharedChannels {
     /// One entry per request type; emptied at shutdown, which closes them.
@@ -245,17 +246,28 @@ pub(super) struct SharedChannels {
 #[derive(Debug)]
 struct SharedChannel {
     responses: &'static [IncomingMessages],
-    sender: BroadcastSender,
+    capacity: usize,
+    /// Unset until the first subscription; a frame for a channel nobody has
+    /// subscribed to has no receiver anyway.
+    sender: OnceLock<BroadcastSender>,
+}
+
+impl SharedChannel {
+    fn subscribe(&self) -> broadcast::Receiver<RoutedItem> {
+        self.sender.get_or_init(|| broadcast::channel(self.capacity).0).subscribe()
+    }
 }
 
 impl SharedChannels {
-    pub(super) fn new(capacity: usize) -> Self {
+    /// `capacity` maps each request type to its channel's capacity.
+    pub(super) fn new(capacity: impl Fn(OutgoingMessages) -> usize) -> Self {
         let channels = shared_channel_configuration::CHANNEL_MAPPINGS
             .iter()
             .map(|mapping| {
                 let channel = SharedChannel {
                     responses: mapping.responses,
-                    sender: broadcast::channel(capacity).0,
+                    capacity: capacity(mapping.request),
+                    sender: OnceLock::new(),
                 };
                 (mapping.request, channel)
             })
@@ -279,7 +291,7 @@ impl SharedChannels {
         let receiver = self
             .channels()
             .get(&message_type)
-            .map(|channel| channel.sender.subscribe())
+            .map(SharedChannel::subscribe)
             .ok_or_else(|| Error::InvalidArgument(format!("No shared channel configured for message type: {message_type:?}")))?;
 
         let mut counts = self.counts.lock().await;
@@ -321,7 +333,7 @@ impl SharedChannels {
         for (request, channel) in channels.iter().filter(|(_, channel)| filter(channel)) {
             selected += 1;
             // Fails only with no receivers: nobody is subscribed.
-            if channel.sender.send(item()).is_err() {
+            if channel.sender.get().is_none_or(|sender| sender.send(item()).is_err()) {
                 trace!("no shared subscription for {request:?}");
             }
         }
@@ -352,8 +364,8 @@ impl SharedChannels {
     /// subscription ends after it. Later sends are no-ops.
     pub(super) fn close(&self, item: impl Fn() -> RoutedItem) {
         let mut channels = self.channels.write().unwrap_or_else(PoisonError::into_inner);
-        for channel in channels.values() {
-            let _ = channel.sender.send(item());
+        for sender in channels.values().filter_map(|channel| channel.sender.get()) {
+            let _ = sender.send(item());
         }
         channels.clear();
     }

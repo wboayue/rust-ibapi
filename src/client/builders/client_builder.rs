@@ -404,7 +404,8 @@ pub mod async_impl {
             self
         }
 
-        /// Set the per-subscription broadcast channel capacity (default 1024).
+        /// Set the per-subscription broadcast channel capacity for market data
+        /// (default 1024).
         ///
         /// Every async subscription reads from a bounded broadcast channel; a
         /// consumer that falls more than `capacity` frames behind has the
@@ -413,6 +414,11 @@ pub mod async_impl {
         /// notice naming the dropped count. Raise the capacity if your
         /// consumers legitimately fall behind during bursts; the cost is
         /// memory per in-flight subscription.
+        ///
+        /// Order channels have their own floors, which this setting can raise
+        /// but not lower: 1024 per `place_order` subscription, 8192 for
+        /// `order_update_stream`, `executions` and the open/completed-order
+        /// streams.
         ///
         /// # Examples
         ///
