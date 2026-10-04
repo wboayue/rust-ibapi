@@ -280,6 +280,11 @@ let vertical = Contract::spread()
     .vertical(11111, 22222)  // Long and short contract IDs
     .build()?;
 
+// Long calendar: sell the near expiry, buy the far one (same strike and right)
+let calendar = Contract::spread()
+    .long_calendar(20001, 20002)  // Near and far contract IDs
+    .build()?;
+
 // Iron condor: a put vertical plus a call vertical
 let iron_condor = Contract::spread()
     .vertical(10001, 10002)  // Long put, short put
