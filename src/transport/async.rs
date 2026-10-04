@@ -1029,18 +1029,6 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Route message to shared channel
     async fn route_to_shared_channel(&self, message_type: IncomingMessages, message: ResponseMessage) -> Result<(), Error> {
-        // Send order-related messages to order update stream
-        match message_type {
-            IncomingMessages::OpenOrder
-            | IncomingMessages::OrderStatus
-            | IncomingMessages::ExecutionData
-            | IncomingMessages::CommissionsReport
-            | IncomingMessages::CompletedOrder => {
-                self.send_order_update(&message);
-            }
-            _ => {}
-        }
-
         if !self.shared_channels.send_message(message_type, &message) {
             // Nothing claimed the frame. Silent until now, which is why a
             // desynchronized stream looked identical to an idle one.
