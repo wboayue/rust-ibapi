@@ -380,8 +380,10 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
-        // Released before the signal is sent, so the registration is dead by
-        // the time cleanup sees it (see `Signal`).
+        // Released before the signal is sent, so the registration reads as
+        // dead from here on: `create_order_update_subscription` can replace
+        // it before the cleanup thread runs. Cleanup itself matches identity
+        // only (see `Signal`).
         let Some(lease) = self.lease.take() else {
             return;
         };

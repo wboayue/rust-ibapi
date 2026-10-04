@@ -76,6 +76,11 @@ impl Route {
         self.bound.as_ref().is_some_and(|bound| bound.state.closed())
     }
 
+    /// Whether this route holds `lease` and every holder of it is gone.
+    pub(super) fn released(&self, lease: &LeaseRef) -> bool {
+        self.lease.is(lease) && !self.lease.is_live()
+    }
+
     /// Send `item`, subject to a bounded route's cap ([`BoundState::admit`]).
     /// The dispatcher is the only producer, so the unread check cannot race
     /// another send. Never blocks.
@@ -142,11 +147,11 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         }
     }
 
-    /// Remove `id`'s registration if `keep` rejects it; returns whether it
+    /// Remove `id`'s registration if it matches `pred`; returns whether it
     /// was removed.
-    fn remove_unless(&self, id: K, keep: impl FnOnce(&Route) -> bool) -> bool {
+    fn remove_if(&self, id: K, pred: impl FnOnce(&Route) -> bool) -> bool {
         match self.write().entry(id) {
-            Entry::Occupied(route) if !keep(route.get()) => {
+            Entry::Occupied(route) if pred(route.get()) => {
                 route.remove();
                 true
             }
@@ -157,7 +162,7 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// Remove `id`'s registration only if it holds `lease`, so a newer
     /// registration under the same id survives.
     pub(super) fn remove_if_same(&self, id: K, lease: &LeaseRef) {
-        self.remove_unless(id, |route| !route.lease.is(lease));
+        self.remove_if(id, |route| route.lease.is(lease));
     }
 
     /// Remove `id`'s registration only if it holds `lease` and that lease is
@@ -168,7 +173,7 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// so its own signal always sees it dead.
     pub(super) fn release(&self, id: K, lease: &LeaseRef, kind: &str) {
         let label = id.to_string();
-        let removed = self.remove_unless(id, |route| !route.lease.is(lease) || route.lease.is_live());
+        let removed = self.remove_if(id, |route| route.released(lease));
         debug!("cleanup {kind} channel {label}: removed={removed}");
     }
 

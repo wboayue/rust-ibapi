@@ -94,9 +94,10 @@ impl NoticeBroadcaster {
     }
 }
 
-/// Cleanup signal for removing channels when subscriptions are dropped. Each
-/// id-keyed variant carries the subscription's lease, so cleanup removes only
-/// its own registration, and only once no clone holds the lease.
+/// Cleanup signal for removing channels when subscriptions are dropped. Every
+/// variant but `Shared` (whose channels persist) carries the subscription's
+/// lease, so cleanup removes only its own registration, and only once no
+/// clone holds the lease.
 #[derive(Debug, Clone)]
 pub enum CleanupSignal {
     Request(RequestId, LeaseRef),
@@ -189,7 +190,7 @@ impl Clone for AsyncInternalSubscription {
             stream: BroadcastStream::new(new_polling),
             cleanup_sender: self.cleanup_sender.clone(),
             // Each clone sends its own cleanup signal on drop; stale ones
-            // no-op against a registration that still has live receivers.
+            // no-op while another clone still holds the lease.
             cleanup_signal: self.cleanup_signal.clone(),
             lease: self.lease.clone(),
             reads: None,
@@ -453,7 +454,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     }
                     CleanupSignal::OrderUpdateStream(lease) => {
                         let mut stream = lock_slot(&order_update_stream);
-                        let removed = stream.as_ref().is_some_and(|route| route.lease.is(&lease) && !route.lease.is_live());
+                        let removed = stream.as_ref().is_some_and(|route| route.released(&lease));
                         if removed {
                             *stream = None;
                         }

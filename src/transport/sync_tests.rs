@@ -1308,8 +1308,8 @@ fn test_send_message_writes_through() -> Result<(), Error> {
 }
 
 /// `MessageBus::create_order_update_subscription` returns `AlreadySubscribed`
-/// on duplicate calls; explicit drop of the first subscription releases the
-/// slot via the cleanup thread, but here we just assert duplicate-rejection.
+/// on duplicate calls while the first is held; dropping it frees the slot at
+/// once (see `test_drop_then_recreate_order_update_stream`).
 #[test]
 fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
     let (_, bus) = make_bus();
@@ -2536,7 +2536,7 @@ fn test_drop_then_recreate_order_update_stream() -> Result<(), Error> {
 
 /// Regression test for #773: dropping an old order subscription must not
 /// unregister a newer subscription under the same order id (place then cancel
-/// on one id). The stale signal carries the old sender's identity and skips
+/// on one id). The stale signal carries the old subscription's lease and skips
 /// the replacement.
 #[test]
 fn test_stale_order_cleanup_preserves_newer_subscription() -> Result<(), Error> {

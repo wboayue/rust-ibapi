@@ -443,7 +443,7 @@ impl<S: Stream> TcpMessageBus<S> {
     // Not gated on `removed`: a stale signal still owns aliases to release.
 
     fn clean_request(&self, request_id: RequestId, lease: &LeaseRef) {
-        let removed = self.requests.remove_if_same(&request_id, lease);
+        let removed = self.requests.remove_if_same(request_id, lease);
         let aliases = self.executions.remove_all_same(lease);
         debug!(
             "cleanup request_id {request_id}: removed={removed}, aliases={aliases}, requests.len()={}",
@@ -452,7 +452,7 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn clean_order(&self, order_id: OrderId, lease: &LeaseRef) {
-        let removed = self.orders.remove_if_same(&order_id, lease);
+        let removed = self.orders.remove_if_same(order_id, lease);
         let aliases = self.executions.remove_all_same(lease);
         debug!(
             "cleanup order_id {order_id}: removed={removed}, aliases={aliases}, orders.len()={}",
@@ -770,7 +770,7 @@ impl<S: Stream> TcpMessageBus<S> {
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
         if let Err(e) = self.write_message(message) {
-            self.requests.remove_if_same(&request_id, &lease_ref);
+            self.requests.remove_if_same(request_id, &lease_ref);
             return Err(e);
         }
 
@@ -788,7 +788,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Alias the execution id to `id`'s channel in `channels`. The insert runs
     /// under `channels`' read lock, so a concurrent cleanup either removes the
     /// registration first (no alias is stored) or prunes the alias after it.
-    fn store_execution_mapping<K: std::hash::Hash + Eq + Clone + std::fmt::Debug>(
+    fn store_execution_mapping<K: std::hash::Hash + Eq + std::fmt::Debug>(
         &self,
         message: &ResponseMessage,
         channels: &SenderHash<K, RoutedItem>,
@@ -888,11 +888,12 @@ impl<S: Stream> TcpMessageBus<S> {
         // registration with it.
         let (sender, receiver) = channel::unbounded();
         let lease = Lease::new();
-        self.shared_channels.add(message_type, sender.clone(), lease.downgrade());
+        let lease_ref = lease.downgrade();
+        self.shared_channels.add(message_type, sender.clone(), lease_ref.clone());
         let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_message(message)) {
             Ok(ticket) => ticket,
             Err(e) => {
-                self.shared_channels.remove(&lease.downgrade());
+                self.shared_channels.remove(&lease_ref);
                 return Err(e);
             }
         };
@@ -932,7 +933,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
         // See `send_request`: a failed write takes its registration with it.
         if let Err(e) = self.write_message(message) {
-            self.orders.remove_if_same(&order_id, &lease_ref);
+            self.orders.remove_if_same(order_id, &lease_ref);
             return Err(e);
         }
 
@@ -1041,7 +1042,7 @@ struct SenderHash<K, V> {
     senders: RwLock<HashMap<K, Entry<V>>>,
 }
 
-impl<K: std::hash::Hash + Eq + Clone + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
             senders: RwLock::new(HashMap::new()),
@@ -1050,8 +1051,7 @@ impl<K: std::hash::Hash + Eq + Clone + std::fmt::Debug, V: std::fmt::Debug> Send
 
     #[cfg(test)]
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
-        let senders = self.senders.read().unwrap();
-        senders.get(&id).map(|entry| entry.sender.clone())
+        self.with_entry(&id, |entry| entry.sender.clone())
     }
 
     #[cfg(test)]
@@ -1082,8 +1082,8 @@ impl<K: std::hash::Hash + Eq + Clone + std::fmt::Debug, V: std::fmt::Debug> Send
     /// Remove the entry for `id` only if it holds `lease`. Returns whether an
     /// entry was removed. Used by signal cleanup so a stale signal cannot
     /// remove a newer registration under the same key.
-    pub fn remove_if_same(&self, id: &K, lease: &LeaseRef) -> bool {
-        match self.senders.write().unwrap().entry(id.clone()) {
+    pub fn remove_if_same(&self, id: K, lease: &LeaseRef) -> bool {
+        match self.senders.write().unwrap().entry(id) {
             hash_map::Entry::Occupied(registered) if registered.get().lease.is(lease) => {
                 registered.remove();
                 true
