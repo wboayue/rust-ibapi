@@ -10,6 +10,9 @@ use std::time::Duration;
 use crossbeam::channel::{Receiver, Sender};
 
 #[cfg(feature = "sync")]
+use common::{Lease, LeaseRef};
+
+#[cfg(feature = "sync")]
 use crate::client::ids::{OrderId, RequestId};
 use crate::errors::Error;
 use crate::messages::ResponseMessage;
@@ -254,11 +257,12 @@ pub(crate) trait MessageBus: Send + Sync {
 
 // InternalSubscription - handles receiving messages for sync subscriptions
 #[cfg(feature = "sync")]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<RoutedItem>>,   // this subscription's own queue
-    sender: Option<Sender<RoutedItem>>,       // feeds `receiver`; the drop signal's identity
-    signaler: Option<Sender<Signal>>,         // for client to signal termination
+    sender: Option<Sender<RoutedItem>>,       // feeds `receiver`, for the cancel notification
+    signaler: Sender<Signal>,                 // for client to signal termination
+    lease: Option<Lease>,                     // the registration's liveness; released at drop
     pub(crate) request_id: Option<RequestId>, // initiating request id
     pub(crate) order_id: Option<OrderId>,     // initiating order id
     pub(crate) shared: Option<SharedTicket>,  // shared-channel identity, when routed by message type
@@ -313,34 +317,34 @@ impl InternalSubscription {
     }
 
     pub(crate) fn cancel(&self) {
-        let Some(sender) = &self.sender else {
-            return;
-        };
-        if let Err(e) = sender.send(Error::Cancelled.into()) {
-            log::warn!("error sending cancel notification: {e}")
+        if let Some(sender) = &self.sender {
+            if let Err(e) = sender.send(Error::Cancelled.into()) {
+                log::warn!("error sending cancel notification: {e}")
+            }
         }
         // A cancelled subscription is unregistered by the cleanup thread once
         // it processes this signal, rather than at the handle's drop: a handle
         // kept after `cancel()` must not go on collecting frames. Frames
         // dispatched before the signal is processed still land on the queue,
-        // behind `Cancelled`. The signal carries this sender, so cleanup
+        // behind `Cancelled`. The signal carries this lease, so cleanup
         // removes only this subscription's registration, never a newer one
         // under the same id, and the later drop signal is a no-op.
-        if let Some(signaler) = &self.signaler {
-            if let Err(e) = signaler.send(self.signal(sender.clone())) {
-                log::warn!("error sending cancel signal: {e}");
-            }
+        let Some(lease) = &self.lease else {
+            return;
+        };
+        if let Err(e) = self.signaler.send(self.signal(lease.downgrade())) {
+            log::warn!("error sending cancel signal: {e}");
         }
     }
 
-    /// The cleanup signal for this subscription, identified by `sender`.
-    fn signal(&self, sender: Sender<RoutedItem>) -> Signal {
+    /// The cleanup signal for this subscription, identified by `lease`.
+    fn signal(&self, lease: LeaseRef) -> Signal {
         match (self.request_id, self.order_id, self.shared) {
-            (Some(request_id), _, _) => Signal::Request(request_id, sender),
-            (_, Some(order_id), _) => Signal::Order(order_id, sender),
-            (_, _, Some(_)) => Signal::Shared(sender),
+            (Some(request_id), _, _) => Signal::Request(request_id, lease),
+            (_, Some(order_id), _) => Signal::Order(order_id, lease),
+            (_, _, Some(_)) => Signal::Shared(lease),
             // No request, order id or shared ticket: the order update stream.
-            _ => Signal::OrderUpdateStream(sender),
+            _ => Signal::OrderUpdateStream(lease),
         }
     }
 
@@ -376,13 +380,16 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
-        // The sender is the drop signal's identity (see `Signal`); without
-        // one there is nothing safe to send — better a leaked registration
-        // than removing a live successor.
-        let (Some(signaler), Some(sender)) = (&self.signaler, self.sender.clone()) else {
+        // Released before the signal is sent, so the registration reads as
+        // dead from here on: `create_order_update_subscription` can replace
+        // it before the cleanup thread runs. Cleanup itself matches identity
+        // only (see `Signal`).
+        let Some(lease) = self.lease.take() else {
             return;
         };
-        if let Err(e) = signaler.send(self.signal(sender)) {
+        let lease_ref = lease.downgrade();
+        drop(lease);
+        if let Err(e) = self.signaler.send(self.signal(lease_ref)) {
             log::warn!("error sending drop signal: {e}");
         }
     }
@@ -390,15 +397,15 @@ impl Drop for InternalSubscription {
 
 // Signals are used to notify the backend when a subscriber is cancelled or
 // dropped. This facilitates the cleanup of the SenderHashes. Each signal
-// carries the subscription's data sender; cleanup removes a registration only
-// when it is `same_channel` with it, so a stale signal cannot remove a newer
-// registration under the same key.
+// carries the subscription's lease; cleanup removes a registration only when
+// it holds that lease, so a stale signal cannot remove a newer registration
+// under the same key.
 #[cfg(feature = "sync")]
 pub(crate) enum Signal {
-    Request(RequestId, Sender<RoutedItem>),
-    Order(OrderId, Sender<RoutedItem>),
-    OrderUpdateStream(Sender<RoutedItem>),
-    Shared(Sender<RoutedItem>),
+    Request(RequestId, LeaseRef),
+    Order(OrderId, LeaseRef),
+    OrderUpdateStream(LeaseRef),
+    Shared(LeaseRef),
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances
@@ -407,6 +414,7 @@ pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<RoutedItem>>,
     sender: Option<Sender<RoutedItem>>,
     signaler: Option<Sender<Signal>>,
+    lease: Option<Lease>,
     order_id: Option<OrderId>,
     request_id: Option<RequestId>,
     shared: Option<SharedTicket>,
@@ -419,6 +427,7 @@ impl SubscriptionBuilder {
             receiver: None,
             sender: None,
             signaler: None,
+            lease: None,
             order_id: None,
             request_id: None,
             shared: None,
@@ -440,6 +449,11 @@ impl SubscriptionBuilder {
         self
     }
 
+    pub(crate) fn lease(mut self, lease: Lease) -> Self {
+        self.lease = Some(lease);
+        self
+    }
+
     pub(crate) fn order_id(mut self, order_id: OrderId) -> Self {
         self.order_id = Some(order_id);
         self
@@ -456,13 +470,14 @@ impl SubscriptionBuilder {
     }
 
     pub(crate) fn build(self) -> InternalSubscription {
-        let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) else {
+        let (Some(receiver), Some(signaler), Some(lease)) = (self.receiver, self.signaler, self.lease) else {
             panic!("bad configuration");
         };
         InternalSubscription {
             receiver: Some(receiver),
             sender: self.sender,
-            signaler: Some(signaler),
+            signaler,
+            lease: Some(lease),
             request_id: self.request_id,
             order_id: self.order_id,
             shared: self.shared,

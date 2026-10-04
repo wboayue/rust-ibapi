@@ -125,3 +125,33 @@ fn test_fibonacci_backoff_zero_max() {
     assert_eq!(backoff.next_delay(), Duration::ZERO);
     assert_eq!(backoff.next_delay(), Duration::ZERO);
 }
+
+#[test]
+fn lease_is_live_while_any_holder_is() {
+    let lease = Lease::new();
+    let lease_ref = lease.downgrade();
+    let clone = lease.clone();
+
+    drop(lease);
+    assert!(lease_ref.is_live(), "a clone still holds the lease");
+
+    drop(clone);
+    assert!(!lease_ref.is_live(), "no holder left");
+}
+
+#[test]
+fn lease_ref_identifies_its_lease() {
+    let lease = Lease::new();
+    let other = Lease::new();
+
+    assert!(lease.downgrade().is(&lease.downgrade()));
+    assert!(lease.downgrade().is(&lease.clone().downgrade()), "clones share identity");
+    assert!(!lease.downgrade().is(&other.downgrade()));
+
+    // Identity outlives the lease: a stale signal still matches its own
+    // dead registration, and only that one.
+    let lease_ref = lease.downgrade();
+    drop(lease);
+    assert!(lease_ref.is(&lease_ref.clone()));
+    assert!(!lease_ref.is(&other.downgrade()));
+}

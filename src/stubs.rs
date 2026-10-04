@@ -12,6 +12,7 @@ use crossbeam::channel;
 use crate::accounts::types::AccountId;
 use crate::client::ids::{OrderId, RequestId};
 use crate::messages::{OutgoingMessages, ResponseMessage};
+use crate::transport::common::Lease;
 use crate::transport::routing::{classify_error, determine_routing, ErrorDisposition, RoutingDecision};
 use crate::transport::{RoutedItem, SharedTicket};
 use crate::Error;
@@ -241,7 +242,11 @@ impl MessageBus for MessageBusStub {
             sender.send(item).unwrap();
         }
 
-        let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .signaler(signaler)
+            .lease(Lease::new())
+            .build();
 
         Ok(subscription)
     }
@@ -301,7 +306,7 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
         sender.send(item).unwrap();
     }
 
-    let subscription = SubscriptionBuilder::new().signaler(s1).receiver(receiver);
+    let subscription = SubscriptionBuilder::new().signaler(s1).lease(Lease::new()).receiver(receiver);
     match route {
         MockRoute::Request(request_id) => subscription.request_id(request_id),
         MockRoute::Order(order_id) => subscription.order_id(order_id),
@@ -369,17 +374,19 @@ impl AsyncMessageBus for MessageBusStub {
         let (cleanup_sender, mut cleanup_receiver) = tokio::sync::mpsc::unbounded_channel();
         tokio::spawn(async move {
             while let Some(signal) = cleanup_receiver.recv().await {
-                if matches!(signal, CleanupSignal::OrderUpdateStream) {
+                if matches!(signal, CleanupSignal::OrderUpdateStream(_)) {
                     ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
                     break;
                 }
             }
         });
 
+        // Unleased: nothing here checks liveness, and the signal identifies
+        // no registration.
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
             cleanup_sender,
-            CleanupSignal::OrderUpdateStream,
+            CleanupSignal::OrderUpdateStream(Lease::new().downgrade()),
         ))
     }
 

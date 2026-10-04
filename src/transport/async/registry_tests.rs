@@ -1,10 +1,13 @@
 use super::*;
 use crate::client::ids::RequestId;
+use crate::transport::common::Lease;
 use crate::transport::BufferBound;
 
-fn route() -> (Route, broadcast::Receiver<RoutedItem>) {
+/// A route, its receiver, and the lease that keeps it live.
+fn route() -> (Route, broadcast::Receiver<RoutedItem>, Lease) {
     let (sender, receiver) = broadcast::channel(8);
-    (Route::unbounded(sender), receiver)
+    let lease = Lease::new();
+    (Route::unbounded(sender, lease.downgrade()), receiver, lease)
 }
 
 fn items(receiver: &mut broadcast::Receiver<RoutedItem>) -> Vec<RoutedItem> {
@@ -18,7 +21,7 @@ fn is_reset(item: &RoutedItem) -> bool {
 #[test]
 fn fail_all_delivers_then_clears() {
     let routes = SenderHash::new();
-    let (route, mut receiver) = route();
+    let (route, mut receiver, _lease) = route();
     routes.insert(RequestId::nth(1), route);
 
     routes.fail_all(|| Error::ConnectionReset.into());
@@ -39,7 +42,9 @@ fn fail_all_skips_a_closed_bounded_route() {
         limit: 1,
         end: IncomingMessages::ContractDataEnd,
     };
-    routes.insert(RequestId::nth(1), Route::bounded(sender, bound, Arc::new(AtomicUsize::new(0))));
+    let lease = Lease::new();
+    let route = Route::bounded(sender, lease.downgrade(), bound, Arc::new(AtomicUsize::new(0)));
+    routes.insert(RequestId::nth(1), route);
     // An error is terminal: it closes the route.
     routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
 
@@ -58,36 +63,53 @@ fn deliver_hands_the_item_back_when_unrouted() {
 #[test]
 fn remove_if_same_spares_a_replacement() {
     let routes = SenderHash::new();
-    let (stale, _stale_receiver) = route();
-    let stale_sender = stale.sender.clone();
+    let (stale, _stale_receiver, stale_lease) = route();
     routes.insert(RequestId::nth(1), stale);
-    let (replacement, _receiver) = route();
+    let (replacement, _receiver, _lease) = route();
     routes.insert(RequestId::nth(1), replacement);
 
-    routes.remove_if_same(&RequestId::nth(1), &stale_sender);
+    routes.remove_if_same(RequestId::nth(1), &stale_lease.downgrade());
 
     assert!(routes.contains(&RequestId::nth(1)));
 }
 
 #[test]
-fn remove_if_dead_spares_a_live_route() {
+fn release_spares_a_live_route() {
     let routes = SenderHash::new();
-    let (route, receiver) = route();
+    let (route, _receiver, lease) = route();
+    let lease_ref = lease.downgrade();
+    let clone = lease.clone();
     routes.insert(RequestId::nth(1), route);
 
-    routes.remove_if_dead(RequestId::nth(1), "request");
-    assert!(routes.contains(&RequestId::nth(1)), "live route removed");
+    drop(lease);
+    routes.release(RequestId::nth(1), &lease_ref, "request");
+    assert!(routes.contains(&RequestId::nth(1)), "route removed while a clone holds the lease");
 
-    drop(receiver);
-    routes.remove_if_dead(RequestId::nth(1), "request");
+    drop(clone);
+    routes.release(RequestId::nth(1), &lease_ref, "request");
     assert!(!routes.contains(&RequestId::nth(1)), "dead route kept");
+}
+
+/// A stale signal finds a dead replacement under its key: not its own, so the
+/// replacement's signal is left to remove it.
+#[test]
+fn release_spares_another_leases_route() {
+    let routes = SenderHash::new();
+    let (_, _, stale) = route();
+    let (replacement, _receiver, lease) = route();
+    routes.insert(RequestId::nth(1), replacement);
+    drop(lease);
+
+    routes.release(RequestId::nth(1), &stale.downgrade(), "request");
+
+    assert!(routes.contains(&RequestId::nth(1)));
 }
 
 #[test]
 fn prune_dead_drops_only_dead_routes() {
     let routes = SenderHash::new();
-    let (live, _receiver) = route();
-    let (dead, _) = route();
+    let (live, _receiver, _lease) = route();
+    let (dead, _receiver, _) = route();
     routes.insert("live".to_string(), live);
     routes.insert("dead".to_string(), dead);
 

@@ -1766,6 +1766,25 @@ async fn test_dropping_clone_keeps_order_channel_registered() {
     assert!(!bus.orders.contains(&order_id), "order channel leaked");
 }
 
+/// The lease is released before the cleanup signal is sent, not by the field
+/// drops after it: otherwise a concurrently processed signal could find the
+/// registration still live and skip the removal, leaking it.
+#[tokio::test]
+async fn test_cleanup_signal_follows_lease_release() {
+    let (_, bus) = make_bus();
+    let request_id = RequestId::nth(5);
+    let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
+    let is_live = || bus.requests.with_route(&request_id, |route| route.lease.is_live());
+    assert_eq!(is_live(), Some(true));
+
+    sub.send_cleanup_signal();
+    assert_eq!(is_live(), Some(false), "signal sent while the handle still held the lease");
+
+    drain_cleanup_signals(&bus).await;
+    assert!(!bus.requests.contains(&request_id), "request channel leaked");
+    drop(sub);
+}
+
 /// Regression test for #778: drop then immediately recreate the order update
 /// stream. The dead registration is replaced without waiting for the cleanup
 /// task, and the old stream's stale signal must not clear the replacement.
@@ -1784,7 +1803,7 @@ async fn test_drop_then_recreate_order_update_stream() {
     drain_cleanup_signals(&bus).await;
     let sender = {
         let stream = bus.order_update_stream.lock().unwrap();
-        stream.as_ref().expect("stale cleanup cleared the replacement stream").clone()
+        stream.as_ref().expect("stale cleanup cleared the replacement stream").sender.clone()
     };
     sender
         .send(RoutedItem::Error(Error::Cancelled))

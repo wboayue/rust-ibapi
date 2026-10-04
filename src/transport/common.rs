@@ -1,5 +1,6 @@
 //! Common utilities shared between sync and async transport implementations
 
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use log::info;
@@ -87,6 +88,43 @@ pub(crate) fn validate_frame_length(length: usize) -> Result<usize, Error> {
         )));
     }
     Ok(length)
+}
+
+/// A subscription's claim on its registration: the registration is live while
+/// any holder is. Async clones share one lease, so it covers them all.
+///
+/// A dropping subscription releases its lease *before* sending its cleanup
+/// signal, so the cleanup that signal triggers sees the registration dead.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Lease(Arc<()>);
+
+impl Lease {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// The registration's side of this lease.
+    pub(crate) fn downgrade(&self) -> LeaseRef {
+        LeaseRef(Arc::downgrade(&self.0))
+    }
+}
+
+/// Held beside a registration: tells whether its subscription is still live,
+/// and identifies which subscription it belongs to, so a late cleanup signal
+/// never removes a newer registration under the same key.
+#[derive(Clone, Debug)]
+pub(crate) struct LeaseRef(Weak<()>);
+
+impl LeaseRef {
+    /// Whether any holder of the lease remains.
+    pub(crate) fn is_live(&self) -> bool {
+        self.0.strong_count() > 0
+    }
+
+    /// Whether `other` refers to the same lease.
+    pub(crate) fn is(&self, other: &LeaseRef) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// Fibonacci backoff for reconnection attempts

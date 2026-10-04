@@ -20,6 +20,7 @@ use crate::testdata::builders::market_data::{
     historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::common::Lease;
 use crate::transport::{Signal, SubscriptionBuilder};
 use crossbeam::channel;
 use std::sync::Arc;
@@ -51,6 +52,7 @@ fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubsc
     let internal = SubscriptionBuilder::new()
         .receiver(receiver)
         .signaler(signaler)
+        .lease(Lease::new())
         .request_id(RequestId::nth(300))
         .build();
     let subscription = TickSubscription::new(internal, RequestId::nth(300).raw(), Arc::new(MessageBusStub::default()));
