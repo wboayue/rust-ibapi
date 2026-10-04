@@ -312,7 +312,7 @@ client.order(&contract).sell(100).trailing_stop(TrailBy::Percent(5.0), 95.0).sub
 client.order(&contract).sell(100).trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.5).submit()?;
 ```
 
-`OrderBuilder<'a, C>` is now `OrderBuilder<T>`, where `T` is `orders::ClientBound<'a, C>` for the builder `Client::order` returns and `orders::Detached` for the new `Order::builder()`, which builds an `Order` without a client. `BracketOrderBuilder<'a, C>` and `AttachedOrdersBuilder<'a, C>` are unchanged. This only affects code that names the type, for example a function returning `OrderBuilder<'a, Client>`: write `OrderBuilder<ClientBound<'a, Client>>`. Chains starting from `client.order(..)` are unchanged.
+`OrderBuilder<'a, C>` is now `OrderBuilder<T>`, where `T` is `orders::ClientBound<'a, C>` for the builder `Client::order` returns and `orders::Detached` for the new `Order::builder()`, which builds an `Order` without a client. `BracketOrderBuilder<'a, C>` is unchanged. This only affects code that names the type, for example a function returning `OrderBuilder<'a, Client>`: write `OrderBuilder<ClientBound<'a, Client>>`. Chains starting from `client.order(..)` are unchanged.
 
 ## Behavioral changes
 
