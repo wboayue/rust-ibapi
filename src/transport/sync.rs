@@ -141,12 +141,6 @@ impl SharedChannels {
         debug!("cleanup shared subscription: removed={}", before != subscribers.len());
     }
 
-    // Removes every registration. Every subscription has just been failed,
-    // and a failed handle's queue must not keep filling until it is dropped.
-    fn clear(&self) {
-        self.subscribers().clear();
-    }
-
     fn is_shared_response(&self, message_type: IncomingMessages) -> bool {
         self.response_types.contains(&message_type)
     }
@@ -221,12 +215,19 @@ impl SharedChannels {
         }
     }
 
-    // Deliver `message_fn()` once to every live subscription.
-    fn notify_all<F>(&self, message_fn: F)
+    // Deliver `message_fn()` once to every live subscription, then remove
+    // every registration under the same lock, so one made meanwhile can't be
+    // dropped unnotified. A failed handle's queue must not keep filling until
+    // it is dropped.
+    fn fail_all<F>(&self, message_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
-        self.send_to(|_| true, message_fn);
+        let mut subscribers = self.subscribers();
+        for subscriber in subscribers.iter() {
+            let _ = subscriber.sender.send(message_fn());
+        }
+        subscribers.clear();
     }
 
     // Fail in-flight one-shot requests fast by delivering an error to the
@@ -349,14 +350,11 @@ impl<S: Stream> TcpMessageBus<S> {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        self.requests.notify_all(|| Error::Shutdown.into());
-        self.orders.notify_all(|| Error::Shutdown.into());
-        self.shared_channels.notify_all(|| Error::Shutdown.into());
-
-        self.requests.clear();
-        self.orders.clear();
+        self.requests.fail_all(|| Error::Shutdown.into());
+        self.orders.fail_all(|| Error::Shutdown.into());
+        self.shared_channels.fail_all(|| Error::Shutdown.into());
+        // Aliases of the routes just failed.
         self.executions.clear();
-        self.shared_channels.clear();
         self.connection.notice_broadcaster.close();
 
         // Both latch: the connection signal releases every `wait_connected`
@@ -417,14 +415,12 @@ impl<S: Stream> TcpMessageBus<S> {
     fn reset(&self) {
         debug!("reset message bus");
 
-        self.requests.notify_all(|| Error::ConnectionReset.into());
-        self.orders.notify_all(|| Error::ConnectionReset.into());
-        self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        self.requests.fail_all(|| Error::ConnectionReset.into());
+        self.orders.fail_all(|| Error::ConnectionReset.into());
+        self.shared_channels.fail_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts();
-        self.requests.clear();
-        self.orders.clear();
+        // Aliases of the routes just failed.
         self.executions.clear();
-        self.shared_channels.clear();
     }
 
     // The three cleanup handlers below remove a registration only when it is
@@ -1120,18 +1116,20 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
         Ok(())
     }
 
-    /// Send `message_fn()` to every route, skipping closed bounded ones: their
-    /// stream already ended.
-    pub fn notify_all<F>(&self, message_fn: F)
+    /// Send `message_fn()` to every route, skipping closed bounded ones (their
+    /// stream already ended), then clear them all under the same write lock,
+    /// so a route registered meanwhile can't be cleared unnotified.
+    pub fn fail_all<F>(&self, message_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
-        let senders = self.senders.read().unwrap();
+        let mut senders = self.senders.write().unwrap();
         for entry in senders.values().filter(|entry| !entry.closed()) {
             if let Err(e) = entry.sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }
         }
+        senders.clear();
     }
 }
 

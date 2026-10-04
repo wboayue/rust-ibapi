@@ -389,8 +389,6 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
                     }
                 }
                 Ok(None) if self.ended_natively() => return Ok(Drained::Ended),
-                // Async shutdown closes the channels without an error.
-                Ok(None) if !self.message_bus.is_connected() => return Err(Error::Shutdown),
                 // The channel closed without an end marker.
                 Ok(None) => return Ok(Drained::Unconfirmed),
             }
