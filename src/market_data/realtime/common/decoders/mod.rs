@@ -242,15 +242,27 @@ pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<Optio
     Ok(OptionComputation {
         field: TickType::from(msg.tick_type.unwrap_or_default()),
         tick_attribute: msg.tick_attrib,
-        implied_volatility: optional_f64(msg.implied_vol),
-        delta: optional_f64(msg.delta),
-        option_price: optional_f64(msg.opt_price),
-        present_value_dividend: optional_f64(msg.pv_dividend),
-        gamma: optional_f64(msg.gamma),
-        vega: optional_f64(msg.vega),
-        theta: optional_f64(msg.theta),
-        underlying_price: optional_f64(msg.und_price),
+        implied_volatility: computed(msg.implied_vol, NOT_COMPUTED),
+        delta: computed(msg.delta, NOT_COMPUTED_GREEK),
+        option_price: computed(msg.opt_price, NOT_COMPUTED),
+        present_value_dividend: computed(msg.pv_dividend, NOT_COMPUTED),
+        gamma: computed(msg.gamma, NOT_COMPUTED_GREEK),
+        vega: computed(msg.vega, NOT_COMPUTED_GREEK),
+        theta: computed(msg.theta, NOT_COMPUTED_GREEK),
+        underlying_price: computed(msg.und_price, NOT_COMPUTED),
     })
+}
+
+/// TWS's "not yet computed" sentinel for implied volatility and the prices.
+const NOT_COMPUTED: f64 = -1.0;
+/// TWS's "not yet computed" sentinel for delta, gamma, vega and theta.
+const NOT_COMPUTED_GREEK: f64 = -2.0;
+
+/// An option-computation value, or `None` if TWS has not computed it yet. TWS
+/// says so with a sentinel ([`NOT_COMPUTED`], [`NOT_COMPUTED_GREEK`]) rather
+/// than by leaving the field out.
+fn computed(val: Option<f64>, not_computed: f64) -> Option<f64> {
+    optional_f64(val).filter(|&v| v != not_computed)
 }
 
 pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
