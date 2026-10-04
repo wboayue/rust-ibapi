@@ -27,21 +27,6 @@ pub fn require_request_id_for(id: Option<i32>, operation: &str) -> Result<i32, E
     require_with(id, || format!("Request ID required to {}", operation))
 }
 
-/// Ensures a value is within a valid range
-pub fn require_range<T>(value: T, min: T, max: T, name: &str) -> Result<T, Error>
-where
-    T: PartialOrd + std::fmt::Display,
-{
-    if value < min || value > max {
-        Err(Error::InvalidArgument(format!(
-            "{} must be between {} and {}, got {}",
-            name, min, max, value
-        )))
-    } else {
-        Ok(value)
-    }
-}
-
 /// Ensures a string is not empty
 pub fn require_not_empty<'a>(value: &'a str, name: &str) -> Result<&'a str, Error> {
     if value.is_empty() {

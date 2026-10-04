@@ -1,7 +1,5 @@
 //! Asynchronous implementation of order management functionality
 
-use time::OffsetDateTime;
-
 use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
@@ -471,60 +469,33 @@ impl Client {
         ))
     }
 
-    /// Exercise an option contract.
+    /// Exercise or lapse an option position.
     ///
-    /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000 (reserved for request ids).
+    /// Terminal: [`ExerciseOptionsBuilder::submit`]. Pick [`exercise`](ExerciseOptionsBuilder::exercise)
+    /// or [`lapse`](ExerciseOptionsBuilder::lapse); [`account`](ExerciseOptionsBuilder::account),
+    /// [`override_natural_action`](ExerciseOptionsBuilder::override_natural_action) and
+    /// [`manual_order_time`](ExerciseOptionsBuilder::manual_order_time) are optional.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
-    /// use ibapi::orders::ExerciseAction;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
     ///     let subscription = client
-    ///         .exercise_options(&contract, ExerciseAction::Exercise, 1, "DU000001", false, None)
+    ///         .exercise_options(&contract)
+    ///         .exercise(1)
+    ///         .override_natural_action()
+    ///         .submit()
     ///         .await
     ///         .expect("exercise_options failed");
-    ///     // Consume the subscription so execution updates and commission reports surface.
-    ///     let mut events = subscription.filter_data();
-    ///     while let Some(event) = events.next().await {
-    ///         match event {
-    ///             Ok(item) => println!("exercise event: {item:?}"),
-    ///             Err(e)   => { eprintln!("exercise err: {e:?}"); break; }
-    ///         }
-    ///     }
     /// }
     /// ```
-    pub async fn exercise_options(
-        &self,
-        contract: &Contract,
-        exercise_action: ExerciseAction,
-        exercise_quantity: i32,
-        account: &str,
-        ovrd: bool,
-        manual_order_time: Option<OffsetDateTime>,
-    ) -> Result<Subscription<ExerciseOptions>, Error> {
-        let order_id = OrderId::from(self.next_order_id()).checked()?;
-        let request = encoders::encode_exercise_options(
-            order_id.value(),
-            contract,
-            exercise_action,
-            exercise_quantity,
-            account,
-            ovrd,
-            manual_order_time,
-        )?;
-        let internal_subscription = self.send_order(order_id, request).await?;
-        Ok(Subscription::new_from_internal_simple(
-            internal_subscription,
-            self.message_bus.clone(),
-            self.decoder_context(),
-        ))
+    pub fn exercise_options<'a>(&'a self, contract: &'a Contract) -> ExerciseOptionsBuilder<'a, Self> {
+        ExerciseOptionsBuilder::new(self, contract)
     }
 }
 

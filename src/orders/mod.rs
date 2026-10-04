@@ -39,6 +39,7 @@ pub mod builder;
 
 /// Order condition types for conditional orders.
 pub mod conditions;
+mod exercise_options_builder;
 
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
@@ -48,6 +49,7 @@ pub use common::order_builder;
 pub use crate::client::ids::OrderId;
 pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, Detached, OrderBuilder};
 pub use builder::types::{AttachedOrderIds, BracketOrderIds};
+pub use exercise_options_builder::ExerciseOptionsBuilder;
 
 // Re-export condition types and builders
 pub use conditions::{

@@ -7,10 +7,7 @@
 //! ```
 
 use ibapi::client::blocking::Client;
-use ibapi::{
-    contracts::{Contract, SecurityType},
-    orders::ExerciseAction,
-};
+use ibapi::contracts::{Contract, SecurityType};
 
 fn main() {
     env_logger::init();
@@ -91,7 +88,6 @@ fn main() {
 
     let accounts = client.managed_accounts().expect("could not get managed accounts");
     let account = &accounts[0];
-    let manual_order_time = None;
 
     println!("\n=== Exercising Option Contract ===");
     println!("Account: {}", account);
@@ -101,7 +97,11 @@ fn main() {
     println!();
 
     let subscription = client
-        .exercise_options(&option_contract, ExerciseAction::Exercise, 1, account, true, manual_order_time)
+        .exercise_options(&option_contract)
+        .exercise(1)
+        .account(account)
+        .override_natural_action()
+        .submit()
         .expect("exercise options request failed!");
 
     println!("Exercise request sent. Waiting for responses...\n");
