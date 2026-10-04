@@ -18,7 +18,7 @@ use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
 
 use super::*;
 use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
-use crate::orders::builder::TrailBy;
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::common::order_builder;
 
 #[test]
@@ -1220,7 +1220,7 @@ fn order_methods_accept_typed_order_ids() {
         ids.parent,
         Action::Buy,
         100.0,
-        crate::orders::builder::BracketPrices {
+        BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
             stop_loss: 45.0,

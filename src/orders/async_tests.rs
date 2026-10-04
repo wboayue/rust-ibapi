@@ -7,7 +7,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::builder::TrailBy;
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
@@ -1172,7 +1172,7 @@ async fn order_methods_accept_typed_order_ids() {
         ids.parent,
         Action::Buy,
         100.0,
-        crate::orders::builder::BracketPrices {
+        BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
             stop_loss: 45.0,

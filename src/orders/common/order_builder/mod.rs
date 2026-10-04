@@ -48,7 +48,7 @@
 //! `limit_order_with_manual_order_time`).
 
 use crate::orders::builder::validation::validate_bracket_prices;
-use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
+use crate::orders::builder::{BracketPrices, Price, TrailBy, ValidationError};
 use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
@@ -342,9 +342,9 @@ pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_pric
 /// Products: CFD, BAG, FOP, CASH, FUT, OPT, STK, WAR
 ///
 /// Returns the parent (LMT at `prices.entry`), take-profit (LMT) and stop-loss (STP) orders, with
-/// ids `parent_order_id`, `+1` and `+2`. Fails with
-/// [`ValidationError::InvalidBracketOrder`] when the take profit and stop loss are on the wrong
-/// side of the entry.
+/// ids `parent_order_id`, `+1` and `+2`. Fails with [`ValidationError::InvalidPrice`] for a
+/// non-finite price, and [`ValidationError::InvalidBracketOrder`] when the take profit and stop
+/// loss are on the wrong side of the entry.
 ///
 /// # Examples
 ///
@@ -365,6 +365,9 @@ pub fn bracket_order(
     quantity: f64,
     prices: BracketPrices,
 ) -> Result<Vec<Order>, ValidationError> {
+    for price in [prices.entry, prices.take_profit, prices.stop_loss] {
+        Price::new(price)?;
+    }
     validate_bracket_prices(Some(&action), &prices)?;
     let parent_order_id = parent_order_id.into().value();
 
@@ -636,7 +639,7 @@ pub fn market_f_hedge(parent_order_id: impl Into<OrderId>, action: Action) -> Or
 
 /// What an attached adjustable stop turns into once the market reaches
 /// [`Adjustment::trigger_price`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AdjustTo {
     /// A STP order at `stop_price`.
     Stop {
@@ -660,7 +663,7 @@ pub enum AdjustTo {
 }
 
 /// When and how an attached stop adjusts. See [`attach_adjustable_stop`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Adjustment {
     /// Price that, once penetrated, triggers the adjustment.
     pub trigger_price: f64,

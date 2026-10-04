@@ -151,6 +151,31 @@ mod complex_order_tests {
     }
 
     #[test]
+    fn test_bracket_order_rejects_non_finite_prices() {
+        let valid = BracketPrices {
+            entry: 50.0,
+            take_profit: 55.0,
+            stop_loss: 45.0,
+        };
+        let cases = [
+            BracketPrices { entry: f64::NAN, ..valid },
+            BracketPrices {
+                take_profit: f64::INFINITY,
+                ..valid
+            },
+            BracketPrices {
+                stop_loss: f64::NAN,
+                ..valid
+            },
+        ];
+
+        for prices in cases {
+            let err = bracket_order(1000, Action::Buy, 100.0, prices).unwrap_err();
+            assert!(matches!(err, ValidationError::InvalidPrice(_)), "{prices:?}");
+        }
+    }
+
+    #[test]
     fn test_bracket_order_rejects_prices_on_the_wrong_side() {
         // (action, take_profit, stop_loss) around an entry of 50.0
         let cases = [

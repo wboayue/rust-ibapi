@@ -375,7 +375,7 @@ The old `trail_unit: i32` was `0` for an amount and `100` for a percent; write `
 
 ### 26. `bracket_order` takes `BracketPrices` and returns a `Result`; `BracketOrderBuilder::build` is crate-private
 
-`order_builder::bracket_order` takes its three prices as an `orders::builder::BracketPrices` instead of three `f64`s, and returns `Result<Vec<Order>, ValidationError>`. It now checks the prices as the fluent bracket does: a buy needs the take profit above the entry and the stop loss below, a sell the reverse, otherwise `ValidationError::InvalidBracketOrder`.
+`order_builder::bracket_order` takes its three prices as an `orders::builder::BracketPrices` instead of three `f64`s, and returns `Result<Vec<Order>, ValidationError>`. It now checks the prices as the fluent bracket does: each must be finite, and a buy needs the take profit above the entry and the stop loss below, a sell the reverse, otherwise `ValidationError::InvalidBracketOrder`.
 
 ```rust,ignore
 // 4.2

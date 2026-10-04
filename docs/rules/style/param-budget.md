@@ -52,7 +52,8 @@ the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
 The open violation inventory is tracked in #901: the three IBKRATS peg free functions in
-`order_builder` (waiting on #936's PEG BEST decision) and `exercise_options`. Take one when
+`order_builder` (waiting on #936's PEG BEST decision), `exercise_options`, and the internal
+`require_range`. Take one when
 you are already in the file.
 
 ## Precedents
