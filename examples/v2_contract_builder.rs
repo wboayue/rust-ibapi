@@ -62,10 +62,10 @@ fn main() {
 
     // Spread contract
     let spread = Contract::spread()
-        .calendar(12345, 67890) // Near and far contract IDs
+        .long_calendar(12345, 67890) // Near and far contract IDs
         .build()
         .expect("Valid spread");
-    println!("Calendar spread with {} legs", spread.combo_legs.len());
+    println!("Long calendar spread with {} legs", spread.combo_legs.len());
 
     // Custom spread with individual legs
     let custom_spread = Contract::spread()

@@ -215,9 +215,9 @@ fn test_index_contract() {
 }
 
 #[test]
-fn test_spread_builder_calendar() {
+fn test_spread_builder_long_calendar() {
     let spread = Contract::spread()
-        .calendar(12345, 67890)
+        .long_calendar(12345, 67890)
         .in_currency("USD")
         .on_exchange("SMART")
         .build()
@@ -226,13 +226,26 @@ fn test_spread_builder_calendar() {
     assert_eq!(spread.security_type, SecurityType::Spread);
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 12345);
+    assert_eq!(spread.combo_legs[0].action, LegAction::Sell);
+    assert_eq!(spread.combo_legs[0].ratio, 1);
+    assert_eq!(spread.combo_legs[1].contract_id, 67890);
+    assert_eq!(spread.combo_legs[1].action, LegAction::Buy);
+    assert_eq!(spread.combo_legs[1].ratio, 1);
+    assert_eq!(spread.currency, Currency::from("USD"));
+    assert_eq!(spread.exchange, Exchange::from("SMART"));
+}
+
+#[test]
+fn test_spread_builder_short_calendar() {
+    let spread = Contract::spread().short_calendar(12345, 67890).build().unwrap();
+
+    assert_eq!(spread.combo_legs.len(), 2);
+    assert_eq!(spread.combo_legs[0].contract_id, 12345);
     assert_eq!(spread.combo_legs[0].action, LegAction::Buy);
     assert_eq!(spread.combo_legs[0].ratio, 1);
     assert_eq!(spread.combo_legs[1].contract_id, 67890);
     assert_eq!(spread.combo_legs[1].action, LegAction::Sell);
     assert_eq!(spread.combo_legs[1].ratio, 1);
-    assert_eq!(spread.currency, Currency::from("USD"));
-    assert_eq!(spread.exchange, Exchange::from("SMART"));
 }
 
 #[test]
@@ -381,7 +394,7 @@ fn test_spread_builder_accepts_contract_id() {
 
     let spread = Contract::spread()
         .vertical(ContractId(11111), ContractId(22222))
-        .calendar(ContractId(33333), 44444)
+        .long_calendar(ContractId(33333), 44444)
         .add_leg(ContractId(55555), LegAction::Buy)
         .done()
         .build()

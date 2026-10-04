@@ -445,7 +445,7 @@ impl Contract {
     /// use ibapi::contracts::{Contract, LegAction};
     ///
     /// let spread = Contract::spread()
-    ///     .calendar(12345, 67890)
+    ///     .long_calendar(12345, 67890)
     ///     .build();
     /// ```
     pub fn spread() -> SpreadBuilder {

@@ -279,7 +279,7 @@ if notice.is_order_rejection() || notice.is_request_error() { /* failed */ }
 
 ### 21. `SpreadBuilder` takes `impl Into<ContractId>`, and `iron_condor` is removed
 
-`SpreadBuilder::add_leg`, `calendar` and `vertical` take `impl Into<ContractId>` instead of `i32`, as the condition constructors do ([§5](#5-price-volume-and-percent-change-conditions-take-impl-intocontractid)). Integer literals, `i32` values (for example `contract.contract_id`) and `ContractId` all compile. An argument converted with `.into()`, `.try_into()` or `.parse()` that relied on the old `i32` parameter to pick its type now needs the type named.
+`SpreadBuilder::add_leg` and `vertical` (and `calendar`'s replacements, [§29](#29-spreadbuildercalendar-is-replaced-by-long_calendar-and-short_calendar)) take `impl Into<ContractId>` instead of `i32`, as the condition constructors do ([§5](#5-price-volume-and-percent-change-conditions-take-impl-intocontractid)). Integer literals, `i32` values (for example `contract.contract_id`) and `ContractId` all compile. An argument converted with `.into()`, `.try_into()` or `.parse()` that relied on the old `i32` parameter to pick its type now needs the type named.
 
 `SpreadBuilder::iron_condor(long_put, short_put, short_call, long_call)` is removed. It took four contract ids of one type in a fixed order, so swapping two compiled and built a different strategy. Chain two verticals instead, each long the wing and short the body:
 
@@ -419,6 +419,23 @@ Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed
 
 `CompeteAgainstBest` and `MidOffsets` are in `orders::builder`. Both methods set `not_held`, as the free functions did. Keep `.min_trade_qty` only if you relied on it: TWS may reject it with error 10302, as it did on a paper account. `build()` rejects a non-finite `CompeteAgainstBest::Offset`. `build()` sends `min_compete_size` and the compete offset only for PEG BEST, and the mid offsets only for PEG MID or PEG BEST up to the midpoint.
 
+### 29. `SpreadBuilder::calendar` is replaced by `long_calendar` and `short_calendar`
+
+`SpreadBuilder::calendar(near, far)` bought the near-dated leg and sold the far-dated one, so buying the combo was short the calendar. It is removed rather than flipped, so code relying on it fails to compile instead of trading the other direction. Both replacements take `(near, far)`:
+
+- `long_calendar(near, far)`: sell near, buy far.
+- `short_calendar(near, far)`: buy near, sell far, the legs `calendar` built.
+
+```rust,ignore
+// 4.2
+let spread = Contract::spread().calendar(near, far).build()?;
+
+// 5.0: same legs
+let spread = Contract::spread().short_calendar(near, far).build()?;
+```
+
+If you sold the `calendar` combo to go long the calendar, build `long_calendar(near, far)` and buy it instead.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -463,7 +480,8 @@ No code changes required, but observable at runtime:
 26. Pass `BracketPrices { entry, take_profit, stop_loss }` to `bracket_order` and handle its `Result`; replace `bracket().build()` with `submit_all()` — see [§26](#26-bracket_order-takes-bracketprices-and-returns-a-result-bracketorderbuilderbuild-is-crate-private).
 27. Replace `exercise_options(&contract, action, quantity, account, ovrd, time)` with `exercise_options(&contract).exercise(quantity)` (or `.lapse(quantity)`) plus `.account(..)`, `.override_natural_action()` and `.manual_order_time(..)` as needed, then `.submit()` — see [§27](#27-exercise_options-returns-a-builder).
 28. Replace `peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order`, and the builder's `compete_against_best_offset` / `mid_offset_at_*` setters, with `.peg_best(..)` / `.peg_mid(..)` — see [§28](#28-ibkrats-peg-functions-are-removed-use-peg_best--peg_mid).
-29. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+29. Replace `SpreadBuilder::calendar(near, far)` with `short_calendar(near, far)` for the same legs, or with `long_calendar(near, far)` bought instead of sold if you sold it to go long — see [§29](#29-spreadbuildercalendar-is-replaced-by-long_calendar-and-short_calendar).
+30. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
