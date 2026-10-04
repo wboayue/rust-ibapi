@@ -1,7 +1,9 @@
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_request, proto_response, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_request_msg_id, proto_response, request_message_count, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::news::ArticleType;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -211,4 +213,33 @@ fn test_broad_tape_news() {
     assert_eq!(article.headline, "Breaking news headline");
     assert_eq!(article.extra_data, "TSLA:123");
     assert_eq!(article.time.unix_timestamp(), 1_672_531_200);
+}
+
+#[test]
+fn test_contract_news_cancellation() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let contract = Contract::stock("TSLA").build();
+    let subscription = client.contract_news(&contract, &["BZ"]).unwrap();
+    assert_eq!(request_message_count(&message_bus), 1);
+
+    subscription.cancel();
+
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelMarketData);
+}
+
+#[test]
+fn test_broad_tape_news_cancellation() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let subscription = client.broad_tape_news("BZ").unwrap();
+    assert_eq!(request_message_count(&message_bus), 1);
+
+    subscription.cancel();
+
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelMarketData);
 }

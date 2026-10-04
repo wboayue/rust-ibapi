@@ -280,3 +280,17 @@ async fn test_contract_news_cancellation() {
     assert_eq!(request_message_count(&message_bus), 2);
     assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelMarketData);
 }
+
+#[tokio::test]
+async fn test_broad_tape_news_cancellation() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let subscription = client.broad_tape_news("BZ").await.unwrap();
+    assert_eq!(request_message_count(&message_bus), 1);
+
+    subscription.cancel().await;
+
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelMarketData);
+}

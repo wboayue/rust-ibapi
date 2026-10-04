@@ -1,12 +1,10 @@
 //! Synchronous implementation of news functionality
 
-use std::sync::Arc;
-
 use time::OffsetDateTime;
 
 use super::common::{self, decoders, encoders};
 use super::*;
-use crate::client::blocking::Subscription;
+use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
@@ -59,9 +57,8 @@ impl Client {
     /// ```
     pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
         let request = encoders::encode_request_news_bulletins(all_messages)?;
-        let subscription = self.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+        self.subscription::<NewsBulletin>()
+            .send_shared(OutgoingMessages::RequestNewsBulletins, request)
     }
 
     /// Requests historical news headlines.
@@ -117,11 +114,10 @@ impl Client {
     ) -> Result<Subscription<NewsArticle>, Error> {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
-        let request_id = self.mint_request_id();
-        let request = encoders::encode_request_historical_news(request_id.raw(), contract_id, provider_codes, start_time, end_time, total_results)?;
-        let subscription = self.send_request(request_id, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+        let builder = self.request();
+        let request =
+            encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
+        builder.send(request)
     }
 
     /// Requests news article body given articleId.
@@ -179,11 +175,9 @@ impl Client {
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.mint_request_id();
-        let request = common::encode_contract_news_request(request_id.raw(), contract, provider_codes)?;
-        let subscription = self.send_request(request_id, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+        let builder = self.request();
+        let request = common::encode_contract_news_request(builder.request_id(), contract, provider_codes)?;
+        builder.send_with_context(request, self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData))
     }
 
     /// Requests realtime BroadTape News
@@ -207,11 +201,9 @@ impl Client {
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.mint_request_id();
-        let request = common::encode_broad_tape_news_request(request_id.raw(), provider_code)?;
-        let subscription = self.send_request(request_id, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+        let builder = self.request();
+        let request = common::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
+        builder.send_with_context(request, self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData))
     }
 }
 
