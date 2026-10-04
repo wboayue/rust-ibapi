@@ -1830,7 +1830,7 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
     }
 
     /// Build bracket orders with full validation
-    pub fn build(mut self) -> Result<Vec<Order>, ValidationError> {
+    pub(crate) fn build(mut self) -> Result<Vec<Order>, ValidationError> {
         // Validate and convert take profit and stop loss prices
         let take_profit_raw = self.take_profit_price.ok_or(ValidationError::MissingRequiredField("take_profit"))?;
         let stop_loss_raw = self.stop_loss_price.ok_or(ValidationError::MissingRequiredField("stop_loss"))?;
@@ -1846,12 +1846,12 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
             BracketEntryType::Limit(price) => {
                 let entry_price = Price::new(price)?;
                 // Validate bracket order prices
-                validation::validate_bracket_prices(
-                    self.parent_builder.action.as_ref(),
-                    entry_price.value(),
-                    take_profit.value(),
-                    stop_loss.value(),
-                )?;
+                let prices = BracketPrices {
+                    entry: entry_price.value(),
+                    take_profit: take_profit.value(),
+                    stop_loss: stop_loss.value(),
+                };
+                validation::validate_bracket_prices(self.parent_builder.action.as_ref(), &prices)?;
                 self.parent_builder.order_type = Some(OrderType::Limit);
                 self.parent_builder.limit_price = Some(entry_price.value());
             }

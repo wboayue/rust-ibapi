@@ -298,7 +298,7 @@ The legs come out as buy long put, sell short put, buy long call, sell short cal
 
 ### 22. Fluent trailing stops take `TrailBy`, and `OrderBuilder` is generic over its target
 
-`OrderBuilder::trailing_stop` and `trailing_stop_limit` take a `orders::builder::TrailBy` instead of an `f64` percent, so a trailing stop can trail by a fixed amount as well as a percentage. `TrailBy::Percent` is the old behavior and sets `trailing_percent`; `TrailBy::Amount` sets `aux_price`, the form `order_builder::trailing_stop_limit` builds. A bare `f64` no longer compiles:
+`OrderBuilder::trailing_stop` and `trailing_stop_limit` take a `orders::builder::TrailBy` instead of an `f64` percent, so a trailing stop can trail by a fixed amount as well as a percentage. `TrailBy::Percent` is the old behavior and sets `trailing_percent`; `TrailBy::Amount` sets `aux_price`. A bare `f64` no longer compiles:
 
 ```rust,ignore
 // 4.2
@@ -313,6 +313,82 @@ client.order(&contract).sell(100).trailing_stop_limit(TrailBy::Percent(5.0), 95.
 ```
 
 `OrderBuilder<'a, C>` is now `OrderBuilder<T>`, where `T` is `orders::ClientBound<'a, C>` for the builder `Client::order` returns and `orders::Detached` for the new `Order::builder()`, which builds an `Order` without a client. `BracketOrderBuilder<'a, C>` is unchanged. This only affects code that names the type, for example a function returning `OrderBuilder<'a, Client>`: write `OrderBuilder<ClientBound<'a, Client>>`. Chains starting from `client.order(..)` are unchanged.
+
+### 23. `order_builder` free functions with swappable prices are removed; use `Order::builder()`
+
+`order_builder::stop_limit`, `limit_if_touched`, `relative_pegged_to_primary`, `trailing_stop_limit`, `pegged_to_stock`, `auction_pegged_to_stock` and the `PeggedToBenchmark` builder are removed. Each took two or more prices of the same type, in a different order from the fluent builder's method of the same name (`stop_limit(.., limit, stop)` vs `.stop_limit(stop, limit)`), so a swap compiled and placed a different order. Build the order with `Order::builder()` and pass it to `place_order` / `submit_order` as before:
+
+| 4.2 | 5.0 |
+| --- | --- |
+| `stop_limit(Action::Buy, q, limit, stop)` | `Order::builder().buy(q).stop_limit(stop, limit).build()?` |
+| `limit_if_touched(Action::Buy, q, limit, trigger)` | `Order::builder().buy(q).limit_if_touched(trigger, limit).build()?` |
+| `relative_pegged_to_primary(Action::Buy, q, cap, offset)` | `Order::builder().buy(q).relative(offset, Some(cap)).build()?` |
+| `trailing_stop_limit(Action::Buy, q, offset, amount, stop)` | `Order::builder().buy(q).trailing_stop_limit(TrailBy::Amount(amount), stop, offset).build()?` |
+| `pegged_to_stock(Action::Buy, q, delta, ref_price, start)` | `Order::builder().buy(q).pegged_to_stock(delta, start).stock_reference_price(ref_price).build()?` |
+| `auction_pegged_to_stock(Action::Buy, q, start, delta)` | `Order::builder().buy(q).pegged_to_stock(delta, start).build()?`, contract routed to `BOX` |
+| `PeggedToBenchmark::new(Action::Buy, q, start).reference_contract(id, exch)…build()?` | `Order::builder().buy(q).pegged_to_benchmark(start).reference_contract(id, exch)…build()?` |
+
+`PeggedToBenchmark`'s other setters keep their names on the builder, except `pegged_change_amount_decrease(true)`, which is now `pegged_change_amount_decrease()` with no argument. `build()` checks prices are finite and returns `Result<Order, ValidationError>`; the free functions checked nothing. `q` is any `impl Into<f64>`, so `100` and `100.0` both work. `TrailBy` is `orders::builder::TrailBy`.
+
+### 24. Combo order functions drop `non_guaranteed: bool`; wrap them in `non_guaranteed`
+
+`order_builder::combo_limit_order`, `combo_market_order`, `limit_order_for_combo_with_leg_prices`, `relative_limit_combo` and `relative_market_combo` no longer take a trailing `non_guaranteed: bool`. Pass the order through the new `order_builder::non_guaranteed` instead:
+
+```rust,ignore
+// 4.2
+let order = combo_limit_order(Action::Buy, 1.0, 2.5, true);
+let order = combo_market_order(Action::Buy, 1.0, false);
+
+// 5.0
+let order = non_guaranteed(combo_limit_order(Action::Buy, 1.0, 2.5));
+let order = combo_market_order(Action::Buy, 1.0);
+```
+
+On the fluent builder, the same tag is `.non_guaranteed()`.
+
+### 25. `attach_adjustable_to_*` become `attach_adjustable_stop`
+
+`order_builder::attach_adjustable_to_stop`, `attach_adjustable_to_stop_limit` and `attach_adjustable_to_trail` are replaced by one function that takes what the stop becomes as an `AdjustTo`:
+
+```rust,ignore
+// 4.2
+attach_adjustable_to_stop(&parent, stop, trigger, adjusted_stop);
+attach_adjustable_to_stop_limit(&parent, stop, trigger, adjusted_stop, adjusted_limit);
+attach_adjustable_to_trail(&parent, stop, trigger, adjusted_stop, trail_amount, 100);
+
+// 5.0
+use ibapi::orders::builder::TrailBy;
+use ibapi::orders::order_builder::{attach_adjustable_stop, AdjustTo, Adjustment};
+
+attach_adjustable_stop(&parent, stop, Adjustment { trigger_price: trigger, to: AdjustTo::Stop { stop_price: adjusted_stop } });
+attach_adjustable_stop(&parent, stop, Adjustment {
+    trigger_price: trigger,
+    to: AdjustTo::StopLimit { stop_price: adjusted_stop, limit_price: adjusted_limit },
+});
+attach_adjustable_stop(&parent, stop, Adjustment {
+    trigger_price: trigger,
+    to: AdjustTo::Trail { stop_price: adjusted_stop, trail: TrailBy::Percent(trail_amount) },
+});
+```
+
+The old `trail_unit: i32` was `0` for an amount and `100` for a percent; write `TrailBy::Amount` or `TrailBy::Percent`. In a live check TWS rejected `1`, the value IB's `Order` reference gives for percent.
+
+### 26. `bracket_order` takes `BracketPrices` and returns a `Result`; `BracketOrderBuilder::build` is crate-private
+
+`order_builder::bracket_order` takes its three prices as an `orders::builder::BracketPrices` instead of three `f64`s, and returns `Result<Vec<Order>, ValidationError>`. It now checks the prices as the fluent bracket does: each must be finite, and a buy needs the take profit above the entry and the stop loss below, a sell the reverse, otherwise `ValidationError::InvalidBracketOrder`.
+
+```rust,ignore
+// 4.2
+let orders = bracket_order(parent_id, Action::Buy, 100.0, 50.0, 55.0, 45.0);
+
+// 5.0
+use ibapi::orders::builder::BracketPrices;
+
+let prices = BracketPrices { entry: 50.0, take_profit: 55.0, stop_loss: 45.0 };
+let orders = bracket_order(parent_id, Action::Buy, 100.0, prices)?;
+```
+
+`BracketOrderBuilder::build()` (from `client.order(..).bracket()`) is no longer public. It returned the three orders with placeholder ids that `submit_all()` fills in, so they could not be placed as they were. Use `submit_all()`, or `bracket_order` with your own parent id.
 
 ## Behavioral changes
 
@@ -351,7 +427,11 @@ No code changes required, but observable at runtime:
 20. Delete calls to `Client::next_request_id()`; take a live request's id from `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` — see [§20](#20-clientnext_request_id-is-removed).
 21. Replace `SpreadBuilder::iron_condor(lp, sp, sc, lc)` with `.vertical(lp, sp).vertical(lc, sc)`, and name the target type where a spread leg's contract id is converted with `.into()`, `.try_into()` or `.parse()` — see [§21](#21-spreadbuilder-takes-impl-intocontractid-and-iron_condor-is-removed).
 22. Wrap the trail in `TrailBy::Percent(..)` in `OrderBuilder::trailing_stop` / `trailing_stop_limit` calls, and write `OrderBuilder<ClientBound<'a, C>>` where you named `OrderBuilder<'a, C>` — see [§22](#22-fluent-trailing-stops-take-trailby-and-orderbuilder-is-generic-over-its-target).
-23. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+23. Replace the removed `order_builder` stop-limit, limit-if-touched, relative, trailing-stop-limit, pegged-to-stock and `PeggedToBenchmark` constructors with `Order::builder()` chains — see [§23](#23-order_builder-free-functions-with-swappable-prices-are-removed-use-orderbuilder).
+24. Drop the `non_guaranteed` argument from the combo order functions, wrapping the order in `non_guaranteed(..)` where it was `true` — see [§24](#24-combo-order-functions-drop-non_guaranteed-bool-wrap-them-in-non_guaranteed).
+25. Replace `attach_adjustable_to_stop` / `_to_stop_limit` / `_to_trail` with `attach_adjustable_stop(&parent, stop, Adjustment { .. })` — see [§25](#25-attach_adjustable_to_-become-attach_adjustable_stop).
+26. Pass `BracketPrices { entry, take_profit, stop_loss }` to `bracket_order` and handle its `Result`; replace `bracket().build()` with `submit_all()` — see [§26](#26-bracket_order-takes-bracketprices-and-returns-a-result-bracketorderbuilderbuild-is-crate-private).
+27. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

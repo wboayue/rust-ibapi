@@ -1,9 +1,14 @@
-use super::types::ValidationError;
+use super::types::{BracketPrices, ValidationError};
 use crate::orders::Action;
 
 /// Validates bracket order prices
-pub fn validate_bracket_prices(action: Option<&Action>, entry: f64, take_profit: f64, stop_loss: f64) -> Result<(), ValidationError> {
+pub(crate) fn validate_bracket_prices(action: Option<&Action>, prices: &BracketPrices) -> Result<(), ValidationError> {
     let action = action.ok_or(ValidationError::MissingRequiredField("action"))?;
+    let BracketPrices {
+        entry,
+        take_profit,
+        stop_loss,
+    } = *prices;
 
     match action {
         Action::Buy => {

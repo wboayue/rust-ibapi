@@ -3,7 +3,7 @@ pub mod algo_helpers;
 pub mod condition_helpers;
 pub(crate) mod order_builder;
 pub(crate) mod types;
-mod validation;
+pub(crate) mod validation;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
@@ -25,4 +25,4 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-pub use types::{OrderType, Price, Quantity, TrailBy, ValidationError};
+pub use types::{BracketPrices, OrderType, Price, Quantity, TrailBy, ValidationError};

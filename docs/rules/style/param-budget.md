@@ -51,15 +51,19 @@ split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planne
 the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
-The open violation inventory — four internal helpers and one client method, with a
-per-signature verdict on each — is tracked in #901. Take one when you are already in the
-file.
+The open violation inventory is tracked in #901: the three IBKRATS peg free functions in
+`order_builder` (waiting on #936's PEG BEST decision), `exercise_options`, and the internal
+`require_range`. Take one when
+you are already in the file.
 
 ## Precedents
 
-- #660 — the `pegged_to_benchmark` free function became `PeggedToBenchmark::new(action,
-  quantity, starting_price)` plus six setters for the optional fields. The clear-win shape:
-  three required args at the entry point, everything optional named.
+- #901 — free functions whose same-typed prices came in a different order from the fluent
+  method of the same name (`stop_limit(.., limit, stop)` vs `.stop_limit(stop, limit)`) were
+  removed in favor of `Order::builder()`, and #660's `PeggedToBenchmark` folded into it. Fix
+  an API split by finishing the one builder, not by adding a builder or struct per function.
+  Where named fields are the whole point and no builder fits, a plain struct argument
+  (`BracketPrices`, `Adjustment`) does it.
 - #549 — the order-construction sweep, which is what a fluent builder buys at the call site
   (`.buy(100).limit(150.0).submit()`), and where builder enum coverage has to be audited
   against the underlying enum.

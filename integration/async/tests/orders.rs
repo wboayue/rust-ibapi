@@ -2,7 +2,6 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::orders::order_builder::PeggedToBenchmark;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, OrderUpdate, PlaceOrder};
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
@@ -291,14 +290,16 @@ async fn place_pegged_to_benchmark() {
     let details = client.contract_details(&contract).await.expect("contract_details failed");
     let reference_id = details[0].contract.contract_id;
 
-    let order = PeggedToBenchmark::new(Action::Buy, 1.0, 1.0)
+    let order = Order::builder()
+        .buy(1)
+        .pegged_to_benchmark(1.0)
         .reference_contract(reference_id, "ISLAND")
         .pegged_change_amount(0.01)
         .reference_change_amount(0.01)
         .stock_reference_price(1.0)
         .reference_range(0.5, 9999.0)
         .build()
-        .expect("PeggedToBenchmark build failed");
+        .expect("pegged-to-benchmark build failed");
 
     rate_limit();
     let order_id = client.next_order_id();

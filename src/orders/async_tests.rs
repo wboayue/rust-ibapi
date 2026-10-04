@@ -7,7 +7,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::builder::TrailBy;
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
@@ -1168,6 +1168,16 @@ async fn order_methods_accept_typed_order_ids() {
     assert_eq!(placed_id(2), Some(43), "place_order");
 
     assert_eq!(order_builder::market_f_hedge(ids.parent, Action::Sell).parent_id, 41);
-    let bracket = order_builder::bracket_order(ids.parent, Action::Buy, 100.0, 50.0, 55.0, 45.0);
+    let bracket = order_builder::bracket_order(
+        ids.parent,
+        Action::Buy,
+        100.0,
+        BracketPrices {
+            entry: 50.0,
+            take_profit: 55.0,
+            stop_loss: 45.0,
+        },
+    )
+    .unwrap();
     assert_eq!(bracket[1].parent_id, 41, "bracket_order");
 }
