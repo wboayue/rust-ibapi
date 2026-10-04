@@ -2,6 +2,14 @@
 
 This guide describes all order types supported by rust-ibapi and demonstrates how to create each type using the fluent API.
 
+The examples start from `client.order(&contract)`. To build an `Order` without a client, start from `Order::builder()` instead: the setters are the same, and `build()` returns the `Order` for `place_order` / `submit_order`.
+
+```rust
+use ibapi::orders::Order;
+
+let order = Order::builder().buy(100).limit(150.0).build()?;
+```
+
 ## Table of Contents
 
 - [Basic Order Types](#basic-order-types)
@@ -30,10 +38,15 @@ This guide describes all order types supported by rust-ibapi and demonstrates ho
 - [Pegged Orders](#pegged-orders)
   - [Relative/Pegged-to-Primary](#relativepegged-to-primary)
   - [Passive Relative](#passive-relative)
+  - [Pegged to Market](#pegged-to-market)
+  - [Pegged to Midpoint](#pegged-to-midpoint)
+  - [Pegged to Stock](#pegged-to-stock)
+  - [Pegged to Benchmark](#pegged-to-benchmark)
 - [Special Order Types](#special-order-types)
   - [Discretionary Order](#discretionary-order)
   - [Sweep to Fill](#sweep-to-fill)
   - [Block Order](#block-order)
+  - [Box Top](#box-top)
 - [Complex Orders](#complex-orders)
   - [Bracket Orders](#bracket-orders)
   - [Preset Attached Orders](#preset-attached-orders)
@@ -130,10 +143,18 @@ let order_id = client.order(&contract)
 A trailing stop adjusts the stop price as the market moves in your favor.
 
 ```rust
-// Trailing stop with 5% trailing amount
+use ibapi::orders::builder::TrailBy;
+
+// Trail 5% behind the market, initial stop at $95
 let order_id = client.order(&contract)
     .sell(100)
-    .trailing_stop(5.0, 95.00)  // 5% trailing, initial stop at $95
+    .trailing_stop(TrailBy::Percent(5.0), 95.00)
+    .submit()?;
+
+// Or trail by a fixed $2.00
+let order_id = client.order(&contract)
+    .sell(100)
+    .trailing_stop(TrailBy::Amount(2.00), 95.00)
     .submit()?;
 ```
 
@@ -147,7 +168,7 @@ A trailing stop that becomes a limit order when triggered.
 // Trailing stop limit with 5% trail and $0.50 limit offset
 let order_id = client.order(&contract)
     .sell(100)
-    .trailing_stop_limit(5.0, 95.00, 0.50)
+    .trailing_stop_limit(TrailBy::Percent(5.0), 95.00, 0.50)
     .submit()?;
 ```
 
@@ -674,6 +695,72 @@ let order_id = client.order(&contract)
 **Products:** STK, WAR
 **When to use:** To join the queue with passive pricing.
 
+### Pegged to Market
+
+Pegs to the best quote on your side: ask minus the offset for a buy, bid plus the offset for a sell.
+
+```rust
+let order_id = client.order(&contract)
+    .buy(100)
+    .pegged_to_market(0.05)
+    .submit()?;
+```
+
+**Products:** STK
+
+### Pegged to Midpoint
+
+Pegs to the NBBO midpoint, adjusted by the offset, and never beyond the limit price.
+
+```rust
+// Offset $0.01, limit $150.00
+let order_id = client.order(&contract)
+    .buy(100)
+    .pegged_to_midpoint(0.01, 150.00)
+    .submit()?;
+```
+
+**Products:** STK
+
+### Pegged to Stock
+
+An option order whose price moves by delta times the change in the underlying stock price, starting from a starting price. Enter delta positive for calls, negative for puts.
+
+```rust
+// Start at $2.10, move 0.5 per $1 in the stock, measured from $150.00;
+// cancel if the stock leaves $140-$160
+let order_id = client.order(&option_contract)
+    .buy(1)
+    .pegged_to_stock(0.5, 2.10)
+    .stock_reference_price(150.00)
+    .stock_range(140.00, 160.00)
+    .submit()?;
+```
+
+Without `stock_reference_price`, the NBBO midpoint when the order is placed is used. Routed to BOX, the order is an Auction Pegged to Stock order and may enter BOX's price improvement auction.
+
+**Products:** OPT
+
+### Pegged to Benchmark
+
+An order whose price tracks a different contract. The reference contract is required.
+
+```rust
+// Start at $50.00; move $0.02 for every $0.01 the reference contract moves,
+// while it trades between $48 and $52
+let order_id = client.order(&contract)
+    .buy(100)
+    .pegged_to_benchmark(50.00)
+    .reference_contract(12345, "ISLAND")
+    .pegged_change_amount(0.02)
+    .reference_change_amount(0.01)
+    .stock_reference_price(49.00)
+    .reference_range(48.00, 52.00)
+    .submit()?;
+```
+
+Add `.pegged_change_amount_decrease()` to move the order price opposite the reference contract. `reference_range` and `stock_range` write the same `Order` fields.
+
 ## Special Order Types
 
 ### Discretionary Order
@@ -719,6 +806,19 @@ let order_id = client.order(&option_contract)
 **Products:** OPT (ISE exchange only)
 **Requirements:** Minimum 50 contracts
 **When to use:** For large option trades seeking better execution.
+
+### Box Top
+
+Executes as a market order at the best price; any unfilled remainder becomes a limit order at the fill price.
+
+```rust
+let order_id = client.order(&option_contract)
+    .buy(10)
+    .box_top()
+    .submit()?;
+```
+
+**Products:** OPT (BOX exchange only)
 
 ## Complex Orders
 

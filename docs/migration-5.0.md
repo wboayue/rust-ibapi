@@ -296,6 +296,24 @@ let spread = Contract::spread()
 
 The legs come out as buy long put, sell short put, buy long call, sell short call; `iron_condor` put the call legs the other way round. In a paper what-if, TWS accepted both orders with the same order state. To keep the old order, add the legs with `add_leg`.
 
+### 22. Fluent trailing stops take `TrailBy`, and `OrderBuilder` is generic over its target
+
+`OrderBuilder::trailing_stop` and `trailing_stop_limit` take a `orders::builder::TrailBy` instead of an `f64` percent, so a trailing stop can trail by a fixed amount as well as a percentage. `TrailBy::Percent` is the old behavior and sets `trailing_percent`; `TrailBy::Amount` sets `aux_price`, the form `order_builder::trailing_stop_limit` builds. A bare `f64` no longer compiles:
+
+```rust,ignore
+// 4.2
+client.order(&contract).sell(100).trailing_stop(5.0, 95.0).submit()?;
+client.order(&contract).sell(100).trailing_stop_limit(5.0, 95.0, 0.5).submit()?;
+
+// 5.0
+use ibapi::orders::builder::TrailBy;
+
+client.order(&contract).sell(100).trailing_stop(TrailBy::Percent(5.0), 95.0).submit()?;
+client.order(&contract).sell(100).trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.5).submit()?;
+```
+
+`OrderBuilder<'a, C>` is now `OrderBuilder<T>`, where `T` is `orders::Bound<'a, C>` for the builder `Client::order` returns and `orders::Detached` for the new `Order::builder()`, which builds an `Order` without a client. `BracketOrderBuilder` and `AttachedOrdersBuilder` follow. This only affects code that names the type, for example a function returning `OrderBuilder<'a, Client>`: write `OrderBuilder<Bound<'a, Client>>`. Chains starting from `client.order(..)` are unchanged.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -331,7 +349,8 @@ No code changes required, but observable at runtime:
 19. Check code that treats `NoticeCategory::OrderRejection` or `is_order_rejection()` as "any 200..=399 failure": request errors now come as `RequestError` / `is_request_error()`, and `is_warning()` is false for 2188 — see [§19](#19-noticecategoryrequesterror-notice-predicates-follow-category).
 20. Delete calls to `Client::next_request_id()`; take a live request's id from `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` — see [§20](#20-clientnext_request_id-is-removed).
 21. Replace `SpreadBuilder::iron_condor(lp, sp, sc, lc)` with `.vertical(lp, sp).vertical(lc, sc)`, and name the target type where a spread leg's contract id is converted with `.into()`, `.try_into()` or `.parse()` — see [§21](#21-spreadbuilder-takes-impl-intocontractid-and-iron_condor-is-removed).
-22. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+22. Wrap the trail in `TrailBy::Percent(..)` in `OrderBuilder::trailing_stop` / `trailing_stop_limit` calls, and write `OrderBuilder<Bound<'a, C>>` where you named `OrderBuilder<'a, C>` — see [§22](#22-fluent-trailing-stops-take-trailby-and-orderbuilder-is-generic-over-its-target).
+23. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
