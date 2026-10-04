@@ -489,6 +489,50 @@ mod tick_option_computation_tests {
         let result = decode_tick_option_computation_proto(&proto_msg.encode_to_vec()).expect("decode failed");
         assert_eq!(result.implied_volatility, None);
     }
+
+    #[test]
+    fn test_decode_tick_option_computation_proto_not_computed_to_none() {
+        // TWS sends -1 (volatility, prices) or -2 (Greeks) for a value it has not computed yet.
+        let proto_msg = crate::proto::TickOptionComputation {
+            req_id: Some(1),
+            tick_type: Some(13),
+            tick_attrib: Some(1),
+            implied_vol: Some(-1.0),
+            delta: Some(-2.0),
+            opt_price: Some(-1.0),
+            pv_dividend: Some(-1.0),
+            gamma: Some(-2.0),
+            vega: Some(-2.0),
+            theta: Some(-2.0),
+            und_price: Some(-1.0),
+        };
+
+        let result = decode_tick_option_computation_proto(&proto_msg.encode_to_vec()).expect("decode failed");
+        assert_eq!(result.implied_volatility, None);
+        assert_eq!(result.delta, None);
+        assert_eq!(result.option_price, None);
+        assert_eq!(result.present_value_dividend, None);
+        assert_eq!(result.gamma, None);
+        assert_eq!(result.vega, None);
+        assert_eq!(result.theta, None);
+        assert_eq!(result.underlying_price, None);
+    }
+
+    #[test]
+    fn test_decode_tick_option_computation_proto_keeps_real_negative_greeks() {
+        // The Greeks' sentinel is -2: -1 is a real delta (a deep in-the-money put) and a real theta.
+        let proto_msg = crate::proto::TickOptionComputation {
+            req_id: Some(1),
+            tick_type: Some(13),
+            delta: Some(-1.0),
+            theta: Some(-1.0),
+            ..Default::default()
+        };
+
+        let result = decode_tick_option_computation_proto(&proto_msg.encode_to_vec()).expect("decode failed");
+        assert_eq!(result.delta, Some(-1.0));
+        assert_eq!(result.theta, Some(-1.0));
+    }
 }
 
 mod tick_request_parameters_tests {
