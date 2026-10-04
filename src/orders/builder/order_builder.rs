@@ -21,7 +21,7 @@ mod tests;
 /// All validation is deferred to the build() method to ensure
 /// no silent failures occur during order construction.
 ///
-/// `T` is the builder's target: [`Bound`] for a builder from `Client::order`, which can
+/// `T` is the builder's target: [`ClientBound`] for a builder from `Client::order`, which can
 /// submit, or [`Detached`] for one from [`Order::builder`], which only builds.
 #[must_use = "OrderBuilder does nothing until you call .submit() (place it) or .build() (offline construction)"]
 pub struct OrderBuilder<T> {
@@ -107,7 +107,7 @@ pub struct OrderBuilder<T> {
 
 /// Target of an [`OrderBuilder`] from `Client::order`: the client and contract the order is
 /// submitted with.
-pub struct Bound<'a, C> {
+pub struct ClientBound<'a, C> {
     pub(crate) client: &'a C,
     pub(crate) contract: &'a Contract,
 }
@@ -116,10 +116,19 @@ pub struct Bound<'a, C> {
 /// builder only builds an [`Order`].
 pub struct Detached;
 
-impl<'a, C> OrderBuilder<Bound<'a, C>> {
+impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
     /// Creates a builder that submits to `client` for `contract`.
     pub fn new(client: &'a C, contract: &'a Contract) -> Self {
-        Self::with_target(Bound { client, contract })
+        Self::with_target(ClientBound { client, contract })
+    }
+
+    /// Create bracket orders with take profit and stop loss
+    ///
+    /// The prices are the caller's and the three orders are placed by the client. To have TWS
+    /// attach children priced from its order presets instead, see
+    /// [`preset_stop_loss`](Self::preset_stop_loss) / [`preset_profit_taker`](Self::preset_profit_taker).
+    pub fn bracket(self) -> BracketOrderBuilder<ClientBound<'a, C>> {
+        BracketOrderBuilder::new(self)
     }
 
     /// Ask TWS to attach a stop-loss to this order, priced from its order presets.
@@ -153,7 +162,7 @@ impl<'a, C> OrderBuilder<Bound<'a, C>> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<Bound<'a, C>> {
+    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<ClientBound<'a, C>> {
         AttachedOrdersBuilder::new(self).preset_stop_loss()
     }
 
@@ -175,7 +184,7 @@ impl<'a, C> OrderBuilder<Bound<'a, C>> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<Bound<'a, C>> {
+    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<ClientBound<'a, C>> {
         AttachedOrdersBuilder::new(self).preset_profit_taker()
     }
 }
@@ -184,7 +193,8 @@ impl Order {
     /// Start a fluent [`OrderBuilder`] with no client attached.
     ///
     /// `build()` returns the [`Order`], which you place with `place_order` or `submit_order`.
-    /// It's the same builder `Client::order` returns, without `submit()`, `analyze()` or preset legs.
+    /// It's the same builder `Client::order` returns, without `submit()`, `analyze()`, `bracket()` or preset legs: those
+    /// allocate order ids, which only a client can do.
     ///
     /// # Examples
     ///
@@ -446,6 +456,8 @@ impl<T> OrderBuilder<T> {
     fn set_trail(&mut self, trail: TrailBy) {
         match trail {
             TrailBy::Amount(amount) => {
+                // `build` sends a stop price as `aux_price` ahead of the trail amount.
+                self.stop_price = None;
                 self.aux_price = Some(amount);
                 self.trailing_percent = None;
             }
@@ -876,15 +888,6 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Create bracket orders with take profit and stop loss
-    ///
-    /// The prices are the caller's and the three orders are placed by the client. To have TWS
-    /// attach children priced from its order presets instead, see
-    /// [`preset_stop_loss`](Self::preset_stop_loss) / [`preset_profit_taker`](Self::preset_profit_taker).
-    pub fn bracket(self) -> BracketOrderBuilder<T> {
-        BracketOrderBuilder::new(self)
-    }
-
     // Conditional orders
 
     /// Add a condition to the order.
@@ -1174,8 +1177,8 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Pegged to Market - pegs to the best quote on the order's side, offset by `offset`
-    /// (bid + offset for a sell, ask - offset for a buy). Stocks only.
+    /// Pegged to Market - pegs to the national best offer minus `offset` for a buy, or the
+    /// national best bid plus `offset` for a sell. Stocks only.
     ///
     /// # Examples
     ///
@@ -1238,8 +1241,8 @@ impl<T> OrderBuilder<T> {
     /// The change is measured from the stock reference price, which defaults to the NBBO
     /// midpoint when the order is placed; set it with
     /// [`stock_reference_price`](Self::stock_reference_price). [`stock_range`](Self::stock_range)
-    /// cancels the order when the stock leaves the range. Enter `delta` as a positive number
-    /// for calls and negative for puts.
+    /// cancels the order when the stock leaves the range. Enter `delta` as an absolute
+    /// value: TWS treats it as positive for calls and negative for puts.
     ///
     /// Routed to BOX, this is an Auction Pegged to Stock order:
     /// IB may enter it in BOX's price improvement auction, using the delta times the stock
@@ -1790,7 +1793,7 @@ enum BracketEntryType {
 }
 
 /// Builder for bracket orders
-#[must_use = "BracketOrderBuilder does nothing until you call .submit()"]
+#[must_use = "BracketOrderBuilder does nothing until you call .submit_all()"]
 pub struct BracketOrderBuilder<T> {
     pub(crate) parent_builder: OrderBuilder<T>,
     entry_type: BracketEntryType,

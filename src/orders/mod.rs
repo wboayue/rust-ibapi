@@ -46,7 +46,7 @@ pub use common::order_builder;
 // Builder types: `order_builder` and `types` are `pub(crate)` so `orders::*`
 // is the only public spelling.
 pub use crate::client::ids::OrderId;
-pub use builder::order_builder::{AttachedOrdersBuilder, Bound, BracketOrderBuilder, Detached, OrderBuilder};
+pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, Detached, OrderBuilder};
 pub use builder::types::{AttachedOrderIds, BracketOrderIds};
 
 // Re-export condition types and builders

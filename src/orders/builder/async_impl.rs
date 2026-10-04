@@ -1,6 +1,6 @@
 use futures::StreamExt;
 
-use super::order_builder::{AttachedOrdersBuilder, Bound, BracketOrderBuilder, OrderBuilder};
+use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, OrderBuilder};
 use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
@@ -8,11 +8,11 @@ use crate::orders::OrderId;
 use crate::orders::PlaceOrder;
 use crate::subscriptions::SubscriptionItemStreamExt;
 
-impl OrderBuilder<Bound<'_, Client>> {
+impl OrderBuilder<ClientBound<'_, Client>> {
     /// Submit the order asynchronously
     /// Returns the order ID assigned to the submitted order
     pub async fn submit(self) -> Result<OrderId, Error> {
-        let Bound { client, contract } = self.target;
+        let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
         client.submit_order(order_id, contract, &order).await?;
@@ -28,7 +28,7 @@ impl OrderBuilder<Bound<'_, Client>> {
     /// Analyze order for margin/commission (what-if)
     pub async fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
         self.what_if = true;
-        let Bound { client, contract } = self.target;
+        let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
 
@@ -51,11 +51,11 @@ impl OrderBuilder<Bound<'_, Client>> {
     }
 }
 
-impl BracketOrderBuilder<Bound<'_, Client>> {
+impl BracketOrderBuilder<ClientBound<'_, Client>> {
     /// Submit bracket orders asynchronously
     /// Returns BracketOrderIds containing all three order IDs
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
-        let Bound { client, contract } = self.parent_builder.target;
+        let ClientBound { client, contract } = self.parent_builder.target;
         let orders = self.build()?;
 
         // Reserve all order IDs upfront to prevent collisions
@@ -85,7 +85,7 @@ impl BracketOrderBuilder<Bound<'_, Client>> {
     }
 }
 
-impl AttachedOrdersBuilder<Bound<'_, Client>> {
+impl AttachedOrdersBuilder<ClientBound<'_, Client>> {
     /// Submit the order with its preset children asynchronously.
     ///
     /// Allocates the parent id, then one id per requested child, and sends a single
@@ -115,7 +115,7 @@ impl AttachedOrdersBuilder<Bound<'_, Client>> {
     /// }
     /// ```
     pub async fn submit(self) -> Result<AttachedOrderIds, Error> {
-        let Bound { client, contract } = self.parent_builder.target;
+        let ClientBound { client, contract } = self.parent_builder.target;
         let (order, ids) = self.build_with_ids(|| client.next_order_id())?;
         client.submit_order(order.order_id, contract, &order).await?;
         Ok(ids)

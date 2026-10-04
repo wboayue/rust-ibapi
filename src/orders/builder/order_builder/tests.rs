@@ -1823,20 +1823,6 @@ fn detached_builder_validates() {
     assert_eq!(err, ValidationError::MissingRequiredField("order_type"));
 }
 
-#[test]
-fn detached_bracket_builds() {
-    let orders = Order::builder()
-        .buy(100)
-        .bracket()
-        .entry_limit(50.0)
-        .take_profit(55.0)
-        .stop_loss(45.0)
-        .build()
-        .unwrap();
-    assert_eq!(orders.len(), 3);
-    assert_eq!(orders[0].limit_price, Some(50.0));
-}
-
 // === Trailing stops: TrailBy ===
 
 #[test]
@@ -1881,6 +1867,18 @@ fn last_trail_wins() {
         .unwrap();
     assert_eq!(order.aux_price, Some(2.0));
     assert_eq!(order.trailing_percent, None);
+}
+
+#[test]
+fn trail_amount_replaces_an_earlier_stop_price() {
+    let order = Order::builder()
+        .sell(100)
+        .stop(100.0)
+        .trailing_stop(TrailBy::Amount(2.0), 98.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.aux_price, Some(2.0));
+    assert_eq!(order.trail_stop_price, Some(98.0));
 }
 
 #[test]
@@ -1939,9 +1937,16 @@ fn stock_range_sets_bounds() {
 }
 
 #[test]
-fn pegged_to_stock_requires_delta_and_starting_price() {
+fn pegged_to_stock_requires_delta() {
     let err = Order::builder().buy(1).order_type(OrderType::PeggedToStock).build().unwrap_err();
     assert_eq!(err, ValidationError::MissingRequiredField("delta"));
+}
+
+#[test]
+fn pegged_to_stock_requires_starting_price() {
+    let mut builder = Order::builder().buy(1).order_type(OrderType::PeggedToStock);
+    builder.delta = Some(0.5);
+    assert_eq!(builder.build().unwrap_err(), ValidationError::MissingRequiredField("starting_price"));
 }
 
 #[test]
