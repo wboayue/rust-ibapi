@@ -52,8 +52,8 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
         self
     }
 
-    /// Account holding the options. Defaults to the logged-in account; on a single-account login
-    /// TWS uses that account when none is given.
+    /// Account holding the options. If unset, no account is sent; on a single-account login TWS
+    /// then uses the logged-in account.
     pub fn account(mut self, account: impl Into<String>) -> Self {
         self.account = Some(account.into());
         self

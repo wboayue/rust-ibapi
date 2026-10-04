@@ -1,5 +1,8 @@
 //! Options Exercise example
 //!
+//! Finds a SPY call through the option chain and asks TWS to exercise one contract. Without a
+//! position in that option, TWS answers with error 322.
+//!
 //! # Usage
 //!
 //! ```bash
@@ -7,108 +10,47 @@
 //! ```
 
 use ibapi::client::blocking::Client;
-use ibapi::contracts::{Contract, SecurityType};
+use ibapi::contracts::{Contract, OptionRight, SecurityType};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    let client = Client::connect("127.0.0.1:4002", 100)?;
 
-    // Try to get option chain first
-    println!("Attempting to get SPY option chain...");
-    let option_chain_result = client.option_chain("SPY", SecurityType::Stock, 756733).subscribe();
-
-    let mut option_contract = if let Ok(subscription) = option_chain_result {
-        let mut chains = Vec::new();
-        for chain in subscription.iter_data() {
-            let chain = match chain {
-                Ok(chain) => chain,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    break;
-                }
-            };
-            println!(
-                "Found option chain for exchange: {}, trading class: {}",
-                chain.exchange, chain.trading_class
-            );
-            chains.push(chain);
-        }
-
-        if !chains.is_empty() && !chains[0].expirations.is_empty() && !chains[0].strikes.is_empty() {
-            let chain = &chains[0];
-            let expiration = &chain.expirations[0];
-            let strike = chain.strikes[chain.strikes.len() / 2];
-            let (year, month, day) = parse_yyyymmdd(expiration).expect("expiration in YYYYMMDD");
-
-            println!("Using option from chain: SPY {} Call, Strike: {}", expiration, strike);
-
-            Contract::call("SPY")
-                .strike(strike)
-                .expires_on(year, month, day)
-                .on_exchange(chain.exchange.clone())
-                .multiplier(chain.multiplier.parse().unwrap_or(100))
-                .trading_class(chain.trading_class.clone())
-                .build()
-        } else {
-            println!("No option chain data available, using hardcoded contract");
-            Contract::call("SPY").strike(500.0).expires_on(2025, 1, 17).build()
-        }
-    } else {
-        println!("Could not get option chain, using hardcoded contract");
-        Contract::call("SPY").strike(550.0).expires_on(2025, 1, 17).build()
-    };
-
-    println!("\nGetting contract details for option:");
-    println!(
-        "Symbol: {}, Strike: {}, Right: {}, Expiry: {}",
-        option_contract.symbol,
-        option_contract.strike,
-        option_contract.right.map_or("", |r| r.as_str()),
-        option_contract.last_trade_date_or_contract_month
-    );
-
-    // Try to get contract details to validate and get the full contract info
-    match client.contract_details(&option_contract) {
-        Ok(details) if !details.is_empty() => {
-            // Use the first valid contract with full details
-            option_contract = details[0].contract.clone();
-            println!("\nFound valid contract!");
-            println!("Local Symbol: {}", option_contract.local_symbol);
-            println!("Contract ID: {}", option_contract.contract_id);
-            println!("Exchange: {}", option_contract.exchange);
-            println!("Trading Class: {}", option_contract.trading_class);
-        }
-        _ => {
-            println!("\nWarning: Could not validate contract details.");
-            println!("Will attempt to exercise with the provided contract specification.");
-            println!("Note: This may fail if the contract doesn't exist.");
+    // SPY's contract id is 756733; the SMART chain lists every expiration and strike.
+    let mut smart_chain = None;
+    for chain in client.option_chain("SPY", SecurityType::Stock, 756733).subscribe()?.iter_data() {
+        let chain = chain?;
+        if chain.exchange == "SMART" {
+            smart_chain = Some(chain);
+            break;
         }
     }
+    let chain = smart_chain.ok_or("no SMART option chain for SPY")?;
 
-    let accounts = client.managed_accounts().expect("could not get managed accounts");
-    let account = &accounts[0];
+    let mut expirations = chain.expirations.clone();
+    expirations.sort();
+    let expiration = expirations.first().ok_or("no expirations")?;
 
-    println!("\n=== Exercising Option Contract ===");
-    println!("Account: {}", account);
-    println!("Action: Exercise");
-    println!("Quantity: 1 contract");
-    println!("Override: true (exercise even if out-of-the-money)");
-    println!();
+    // The chain's strikes span every expiration. A strike of 0 asks TWS for each strike this
+    // expiration lists; take the middle one.
+    let mut calls = client.contract_details(&Contract::option("SPY", expiration, 0.0, OptionRight::Call))?;
+    calls.sort_by(|a, b| a.contract.strike.total_cmp(&b.contract.strike));
+    let contract = calls.get(calls.len() / 2).ok_or("no listed strikes")?.contract.clone();
+    println!("Exercising 1 {} (contract id {})", contract.local_symbol, contract.contract_id);
+
+    let accounts = client.managed_accounts()?;
 
     let subscription = client
-        .exercise_options(&option_contract)
+        .exercise_options(&contract)
         .exercise(1)
-        .account(account)
-        .override_natural_action()
-        .submit()
-        .expect("exercise options request failed!");
+        .account(&accounts[0])
+        .override_natural_action() // exercise even if out of the money
+        .submit()?;
 
-    println!("Exercise request sent. Waiting for responses...\n");
-
-    for status in subscription.iter_data() {
-        match status {
-            Ok(status) => println!("Response: {:?}", status),
+    for event in subscription.iter_data() {
+        match event {
+            Ok(event) => println!("Response: {event:?}"),
             Err(e) => {
                 eprintln!("error: {e}");
                 break;
@@ -116,15 +58,5 @@ fn main() {
         }
     }
 
-    println!("\nExercise options example completed.");
-}
-
-fn parse_yyyymmdd(s: &str) -> Option<(u16, u8, u8)> {
-    if s.len() != 8 {
-        return None;
-    }
-    let year = s.get(..4)?.parse().ok()?;
-    let month = s.get(4..6)?.parse().ok()?;
-    let day = s.get(6..8)?.parse().ok()?;
-    Some((year, month, day))
+    Ok(())
 }

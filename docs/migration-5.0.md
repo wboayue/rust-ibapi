@@ -404,7 +404,7 @@ client.exercise_options(&contract).exercise(1).account("DU123").override_natural
 client.exercise_options(&contract).lapse(2).manual_order_time(time).submit()?;
 ```
 
-Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed here. `account` is optional: on a single-account login TWS uses the logged-in account when none is given. `submit()` returns `Error::InvalidArgument` without sending anything if neither `exercise` nor `lapse` was called or the quantity is not positive.
+Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed here. `account` is optional: if unset, no account is sent, and on a single-account login TWS then uses the logged-in account. `submit()` returns `Error::InvalidArgument` without sending anything if neither `exercise` nor `lapse` was called or the quantity is not positive.
 
 ## Behavioral changes
 
