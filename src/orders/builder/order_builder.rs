@@ -423,7 +423,23 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Set a custom order type
+    /// Set the order type without setting any price.
+    ///
+    /// `build()` sends only the price fields `order_type` uses, so a price set earlier for a type
+    /// that doesn't take it is dropped: `.limit(100.0).order_type(OrderType::PeggedToStock)` sends
+    /// no limit price. Prefer the named setter (`.relative(..)`, `.pegged_to_midpoint(..)`, ...).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::builder::OrderType;
+    /// use ibapi::orders::Order;
+    ///
+    /// let order = Order::builder().buy(100).limit(150.0).order_type(OrderType::PegBest).build()?;
+    /// assert_eq!(order.order_type, "PEG BEST");
+    /// assert_eq!(order.limit_price, Some(150.0));
+    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
         self.order_type = Some(order_type);
         self

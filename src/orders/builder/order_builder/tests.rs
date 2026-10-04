@@ -2005,6 +2005,7 @@ fn peg_mid_builds_without_aux_price() {
     assert_eq!(order.limit_price, Some(150.0));
 }
 
+// Every variant; add a new one here and in `sent_price_fields`.
 const ALL_ORDER_TYPES: [OrderType; 30] = [
     OrderType::Market,
     OrderType::Limit,
