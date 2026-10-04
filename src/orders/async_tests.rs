@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
+use crate::client::ids::{OrderId, RequestId, REQUEST_ID_FLOOR};
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
     proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
@@ -361,8 +361,8 @@ async fn test_executions() {
     let filter = ExecutionFilter::default();
     let mut subscription = client.executions(filter).await.expect("failed to get executions");
     assert_eq!(
-        message_bus.order_stream_requests.read().unwrap().len(),
-        1,
+        *message_bus.executions_requests.read().unwrap(),
+        vec![RequestId::nth(0)],
         "executions opens an order-class channel"
     );
 

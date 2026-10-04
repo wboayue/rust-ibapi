@@ -405,10 +405,10 @@ pub mod async_impl {
         }
 
         /// Set the per-subscription broadcast channel capacity for market data
-        /// (default 1024).
+        /// and other non-order streams (default 1024).
         ///
-        /// Every async subscription reads from a bounded broadcast channel; a
-        /// consumer that falls more than `capacity` frames behind has the
+        /// Each of these subscriptions reads from a bounded broadcast channel;
+        /// a consumer that falls more than `capacity` frames behind has the
         /// oldest frames evicted and receives a
         /// [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE)
         /// notice naming the dropped count. Raise the capacity if your
@@ -416,9 +416,9 @@ pub mod async_impl {
         /// memory per in-flight subscription.
         ///
         /// Order channels have their own floors, which this setting can raise
-        /// but not lower: 1024 per `place_order` subscription, 8192 for
-        /// `order_update_stream`, `executions` and the open/completed-order
-        /// streams.
+        /// but not lower: 1024 per order (`place_order`, `cancel_order`,
+        /// `exercise_options`) and per `executions` request, 8192 for
+        /// `order_update_stream` and the open/completed-order streams.
         ///
         /// # Examples
         ///
