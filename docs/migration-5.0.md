@@ -277,6 +277,25 @@ if notice.is_order_rejection() || notice.is_request_error() { /* failed */ }
 
 `next_request_id()` (blocking and async) handed out a fresh request id that no request used. Nothing in the API accepts a caller-chosen request id, so the value had no use: passing it to `cancel_contract_details` or `cancel_historical_ticks` cancelled nothing. The ids of requests in flight come from `Subscription::request_id()` and `ContractDetailsBuilder::request_id()`, both unchanged, and the new `TickSubscription::request_id()`. Delete any call; to cancel a request, drop its subscription or call `cancel()` on it.
 
+### 21. `SpreadBuilder` takes `impl Into<ContractId>`, and `iron_condor` is removed
+
+`SpreadBuilder::add_leg`, `calendar` and `vertical` take `impl Into<ContractId>` instead of `i32`, as the condition constructors do ([§5](#5-price-volume-and-percent-change-conditions-take-impl-intocontractid)). Integer literals, `i32` values (for example `contract.contract_id`) and `ContractId` all compile. An argument converted with `.into()`, `.try_into()` or `.parse()` that relied on the old `i32` parameter to pick its type now needs the type named, and a narrower integer type needs `i32::from(..)`.
+
+`SpreadBuilder::iron_condor(long_put, short_put, short_call, long_call)` is removed. It took four contract ids of one type in a fixed order, so swapping two compiled and built a different strategy. Chain two verticals instead, each long the wing and short the body:
+
+```rust,ignore
+// 4.2
+let spread = Contract::spread().iron_condor(long_put, short_put, short_call, long_call).build()?;
+
+// 5.0
+let spread = Contract::spread()
+    .vertical(long_put, short_put)
+    .vertical(long_call, short_call)
+    .build()?;
+```
+
+The legs come out as buy long put, sell short put, buy long call, sell short call; `iron_condor` put the call legs the other way round. TWS accepts both orders for the same combo. To keep the old order, add the legs with `add_leg`.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -311,7 +330,8 @@ No code changes required, but observable at runtime:
 18. Add a `MarketDepths::Reset` arm that empties your book to exhaustive matches on `MarketDepths`, and drop any code-317 notice handling on depth subscriptions — see [§18](#18-marketdepths-gains-reset).
 19. Check code that treats `NoticeCategory::OrderRejection` or `is_order_rejection()` as "any 200..=399 failure": request errors now come as `RequestError` / `is_request_error()`, and `is_warning()` is false for 2188 — see [§19](#19-noticecategoryrequesterror-notice-predicates-follow-category).
 20. Delete calls to `Client::next_request_id()`; take a live request's id from `Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or `TickSubscription::request_id()` — see [§20](#20-clientnext_request_id-is-removed).
-21. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+21. Replace `SpreadBuilder::iron_condor(lp, sp, sc, lc)` with `.vertical(lp, sp).vertical(lc, sc)`, and name the target type where a spread leg's contract id is converted with `.into()`, `.try_into()` or `.parse()` — see [§21](#21-spreadbuilder-takes-impl-intocontractid-and-iron_condor-is-removed).
+22. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 
