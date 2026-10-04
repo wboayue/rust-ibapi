@@ -30,6 +30,7 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - [**Testing Patterns**](docs/testing-patterns.md) - Test fixture stratification: `MessageBusStub` / `MemoryStream` / handshake-replay listener
 - [**Integration Tests**](docs/integration-tests.md) - Writing tests against a live gateway
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
+- [**Blocked Issues**](docs/block-issues.md) - Work waiting on a gateway capture or paper-account setup
 
 ## Version 3.0 Philosophy
 

@@ -8,7 +8,8 @@ triggers:
   - deferring a review finding, follow-up, or open question past the current PR
   - recording wire observations or investigation findings that outlive a PR
   - citing a plan file from code, docs, or a rule node
-symbols: [plans/, .gitignore]
+  - an issue is waiting on a gateway capture or account setup (`blocked`)
+symbols: [plans/, .gitignore, docs/block-issues.md]
 related: [pre-pr-checks]
 precedents: ["#889", "#890"]
 memory: [feedback_plans_in_todos]
@@ -21,8 +22,13 @@ decided.
 Anything that outlives the PR goes in a **GitHub issue**, not a plan file:
 
 - deferred review or `/simplify` findings, rule-of-three deferrals, and follow-ups;
-- open questions blocked on a decision or a live capture;
+- open questions blocked on a decision;
 - investigation findings and wire observations still needed by future work.
+
+The exception is work blocked on something outside the code: a capture from a gateway in a
+particular configuration, or account setup. It goes in [`docs/block-issues.md`](../../block-issues.md),
+one section per item, each saying what unblocks it. When it unblocks, open an issue from the
+section (or do the work) and delete the section.
 
 Group related small items into one issue; give a bug or a decision its own. Cross-link issues
 that must be sequenced. When a PR resolves one, close it from the PR (`Closes #N`).
@@ -38,4 +44,4 @@ Source comments and rule nodes linked to them, so pruning a plan broke those lin
 close with the PR that fixes them, are searchable, and stay addressable after they close.
 
 On 2026-10-02 the remaining open items moved to #891–#907, and the #789 design is linked from
-that issue.
+that issue. On 2026-10-04 the two `blocked` issues (#904, #905) moved to `docs/block-issues.md`.
