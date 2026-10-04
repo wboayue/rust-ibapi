@@ -4,7 +4,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 
 #[test]
 fn test_decode_config_proto_populated() {
-    let bytes = config_response()
+    let p = config_response()
         .read_only_api(true)
         .socket_port(4002)
         .trusted_ip("127.0.0.1")
@@ -12,9 +12,9 @@ fn test_decode_config_proto_populated() {
         .seek_price_improvement(true)
         .auto_logoff_time("23:59")
         .message(1, "Order Warning", false)
-        .encode_proto();
+        .to_proto();
 
-    let config = decode_config_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
+    let config = decode_config_proto(p).unwrap();
 
     let api = config.api.expect("api present");
     let settings = api.settings.expect("settings present");
@@ -50,14 +50,14 @@ fn test_decode_config_proto_empty() {
 
 #[test]
 fn test_decode_update_config_proto_populated() {
-    let bytes = crate::testdata::builders::config::update_config_response()
+    let p = crate::testdata::builders::config::update_config_response()
         .status("warning")
         .message("please confirm")
         .changed_field("socketPort")
         .error("bad value")
         .warning(131, "Confirm Mandatory Cap Price")
-        .encode_proto();
-    let response = decode_update_config_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
+        .to_proto();
+    let response = decode_update_config_proto(p).unwrap();
     assert_eq!(response.status.as_deref(), Some("warning"));
     assert_eq!(response.message.as_deref(), Some("please confirm"));
     assert_eq!(response.changed_fields, vec!["socketPort".to_string()]);

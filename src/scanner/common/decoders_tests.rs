@@ -4,8 +4,6 @@ use crate::messages::IncomingMessages;
 
 #[test]
 fn test_decode_scanner_data_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::ScannerData {
         req_id: Some(1),
         scanner_data_element: vec![
@@ -40,10 +38,7 @@ fn test_decode_scanner_data_proto() {
         ],
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let results = decode_scanner_data_proto(&bytes).unwrap();
+    let results = decode_scanner_data_proto(proto_msg).unwrap();
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].rank, 0);
     assert_eq!(results[0].contract_details.contract.contract_id, 265598);

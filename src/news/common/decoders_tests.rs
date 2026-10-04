@@ -1,7 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
-use prost::Message;
 
 #[test]
 fn test_decode_news_bulletin_proto() {
@@ -12,10 +11,7 @@ fn test_decode_news_bulletin_proto() {
         originating_exch: Some("NYSE".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_news_bulletin_proto(&bytes).unwrap();
+    let result = decode_news_bulletin_proto(proto_msg).unwrap();
     assert_eq!(result.message_id, 42);
     assert_eq!(result.message_type, 1);
     assert_eq!(result.message, "Market closed early");
@@ -45,10 +41,7 @@ fn test_decode_historical_news_proto() {
         headline: Some("Market Update".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_historical_news_proto(&bytes).unwrap();
+    let result = decode_historical_news_proto(proto_msg).unwrap();
     assert_eq!(result.provider_code, "BRFG");
     assert_eq!(result.article_id, "BRFG$12345");
     assert_eq!(result.headline, "Market Update");
@@ -109,10 +102,7 @@ fn test_decode_tick_news_proto() {
         extra_data: Some("TSLA:123".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_tick_news_proto(&bytes).unwrap();
+    let result = decode_tick_news_proto(proto_msg).unwrap();
     assert_eq!(result.provider_code, "BZ");
     assert_eq!(result.article_id, "BZ$123");
     assert_eq!(result.headline, "Breaking news headline");
@@ -126,10 +116,8 @@ fn test_decode_tick_news_proto_invalid_timestamp() {
         timestamp: Some(i64::MAX),
         ..Default::default()
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let err = decode_tick_news_proto(&bytes).unwrap_err();
+    let err = decode_tick_news_proto(proto_msg).unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains(&i64::MAX.to_string()), "error should include the bad value: {msg}");
 }

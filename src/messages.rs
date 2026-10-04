@@ -997,6 +997,12 @@ impl ResponseMessage {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_wire_format(self))
     }
 
+    /// The protobuf payload decoded as `M`, inferred from the decoder it is
+    /// handed to. Text-framed arrival fails as in [`Self::require_proto`].
+    pub(crate) fn proto<M: crate::proto::decoders::DecodeProto>(&self) -> Result<M, crate::Error> {
+        M::decode_proto(self.require_proto()?)
+    }
+
     /// Narrow a frame to one expected message type, or fail with
     /// `Error::UnexpectedResponse`.
     ///
