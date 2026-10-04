@@ -1,0 +1,155 @@
+use super::*;
+use crate::client::ids::RequestId;
+use crate::transport::BufferBound;
+
+fn route() -> (Route, broadcast::Receiver<RoutedItem>) {
+    let (sender, receiver) = broadcast::channel(8);
+    (Route::unbounded(sender), receiver)
+}
+
+fn items(receiver: &mut broadcast::Receiver<RoutedItem>) -> Vec<RoutedItem> {
+    std::iter::from_fn(|| receiver.try_recv().ok()).collect()
+}
+
+fn is_reset(item: &RoutedItem) -> bool {
+    matches!(item, RoutedItem::Error(Error::ConnectionReset))
+}
+
+#[tokio::test]
+async fn fail_all_delivers_then_clears() {
+    let routes = SenderHash::new();
+    let (route, mut receiver) = route();
+    routes.insert(RequestId::nth(1), route).await;
+
+    routes.fail_all(|| Error::ConnectionReset.into()).await;
+
+    assert!(routes.is_empty().await);
+    let items = items(&mut receiver);
+    assert!(items.len() == 1 && is_reset(&items[0]), "{items:?}");
+    assert!(matches!(receiver.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
+}
+
+/// A closed bounded route's stream already ended; failing it again would put
+/// a second terminal item behind the first.
+#[tokio::test]
+async fn fail_all_skips_a_closed_bounded_route() {
+    let routes = SenderHash::new();
+    let (sender, mut receiver) = broadcast::channel(4);
+    let bound = BufferBound {
+        limit: 1,
+        end: IncomingMessages::ContractDataEnd,
+    };
+    routes
+        .insert(RequestId::nth(1), Route::bounded(sender, bound, Arc::new(AtomicUsize::new(0))))
+        .await;
+    // An error is terminal: it closes the route.
+    routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).await.unwrap();
+
+    routes.fail_all(|| Error::ConnectionReset.into()).await;
+
+    assert!(!items(&mut receiver).iter().any(is_reset), "closed route was failed again");
+}
+
+#[tokio::test]
+async fn deliver_hands_the_item_back_when_unrouted() {
+    let routes = SenderHash::<RequestId>::new();
+    let item = routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).await;
+    assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
+}
+
+#[tokio::test]
+async fn remove_if_same_spares_a_replacement() {
+    let routes = SenderHash::new();
+    let (stale, _stale_receiver) = route();
+    let stale_sender = stale.sender.clone();
+    routes.insert(RequestId::nth(1), stale).await;
+    let (replacement, _receiver) = route();
+    routes.insert(RequestId::nth(1), replacement).await;
+
+    routes.remove_if_same(&RequestId::nth(1), &stale_sender).await;
+
+    assert!(routes.contains(&RequestId::nth(1)).await);
+}
+
+#[tokio::test]
+async fn remove_if_dead_spares_a_live_route() {
+    let routes = SenderHash::new();
+    let (route, receiver) = route();
+    routes.insert(RequestId::nth(1), route).await;
+
+    routes.remove_if_dead(RequestId::nth(1), "request").await;
+    assert!(routes.contains(&RequestId::nth(1)).await, "live route removed");
+
+    drop(receiver);
+    routes.remove_if_dead(RequestId::nth(1), "request").await;
+    assert!(!routes.contains(&RequestId::nth(1)).await, "dead route kept");
+}
+
+#[tokio::test]
+async fn prune_dead_drops_only_dead_routes() {
+    let routes = SenderHash::new();
+    let (live, _receiver) = route();
+    let (dead, _) = route();
+    routes.insert("live".to_string(), live).await;
+    routes.insert("dead".to_string(), dead).await;
+
+    routes.prune_dead().await;
+
+    assert!(routes.contains(&"live".to_string()).await);
+    assert!(!routes.contains(&"dead".to_string()).await);
+}
+
+async fn subscribe(channels: &SharedChannels, request: OutgoingMessages) -> broadcast::Receiver<RoutedItem> {
+    channels.subscribe(request, None, || async { Ok(()) }).await.unwrap().0
+}
+
+/// One channel maps several response types (open orders: OpenOrder,
+/// OrderStatus, OpenOrderEnd). Indexed by response type, a reset reached it
+/// once per type; it must reach it once.
+#[tokio::test]
+async fn notify_all_reaches_each_channel_once() {
+    let channels = SharedChannels::new(8);
+    let mut open_orders = subscribe(&channels, OutgoingMessages::RequestOpenOrders).await;
+
+    channels.notify_all(|| Error::ConnectionReset.into()).await;
+
+    let items = items(&mut open_orders);
+    assert!(items.len() == 1 && is_reset(&items[0]), "{items:?}");
+}
+
+#[tokio::test]
+async fn fail_one_shot_channels_spares_streaming_channels() {
+    let channels = SharedChannels::new(8);
+    let mut current_time = subscribe(&channels, OutgoingMessages::RequestCurrentTime).await;
+    let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
+
+    channels.fail_one_shot_channels(|| Error::ConnectionReset.into()).await;
+
+    assert_eq!(items(&mut current_time).len(), 1);
+    assert!(items(&mut positions).is_empty(), "streaming channel failed");
+}
+
+#[tokio::test]
+async fn subscribe_counts_only_a_written_request() {
+    let channels = SharedChannels::new(8);
+    let failed = channels
+        .subscribe(OutgoingMessages::RequestPositions, None, || async { Err(Error::ConnectionReset) })
+        .await;
+    assert!(matches!(failed, Err(Error::ConnectionReset)));
+    assert_eq!(channels.live(OutgoingMessages::RequestPositions).await, 0);
+
+    subscribe(&channels, OutgoingMessages::RequestPositions).await;
+    assert_eq!(channels.live(OutgoingMessages::RequestPositions).await, 1);
+}
+
+#[tokio::test]
+async fn close_ends_every_channel() {
+    let channels = SharedChannels::new(8);
+    let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
+
+    channels.close().await;
+
+    assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
+    let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, || async { Ok(()) }).await;
+    assert!(matches!(refused, Err(Error::InvalidArgument(_))));
+}

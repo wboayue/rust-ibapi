@@ -2,6 +2,7 @@
 
 mod connection_signal;
 mod io;
+mod registry;
 mod shutdown;
 pub(crate) use connection_signal::ConnectionSignal;
 /// The frame reader itself, for tests that drive it over an in-memory cursor
@@ -12,17 +13,17 @@ pub(crate) use io::read_framed_message;
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+use registry::{BroadcastSender, Route, SenderHash, SharedChannels};
 pub(crate) use shutdown::ShutdownSignal;
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use futures::Stream;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, warn};
 use tokio::runtime::Handle;
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
 use tokio::time::Duration;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -32,7 +33,7 @@ use crate::accounts::types::AccountId;
 use crate::client::id_generator::ClientIdManager;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::{transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame};
@@ -40,7 +41,7 @@ use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
-use super::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
+use super::{BufferBound, RoutedItem, SharedTicket};
 
 /// Default capacity for broadcast channels. Subscription-data channels take
 /// the per-client override from `ClientBuilder::channel_capacity`; the notice
@@ -321,131 +322,16 @@ impl Drop for AsyncInternalSubscription {
     }
 }
 
-type BroadcastSender = broadcast::Sender<RoutedItem>;
-
-/// A request-id registration: the channel, plus an unread-item cap when the
-/// request was opened with `send_request_bounded`.
-#[derive(Debug)]
-struct RequestRoute {
-    sender: BroadcastSender,
-    bound: Option<RouteBound>,
-}
-
-#[derive(Debug)]
-struct RouteBound {
-    state: BoundState,
-    /// Items sent to the channel, and items the subscription has read (its
-    /// `AsyncInternalSubscription::reads`): the difference is unread.
-    /// `Sender::len()` can't stand in, since it counts values the
-    /// never-reading `template_receiver` hasn't seen.
-    sent: AtomicUsize,
-    reads: Arc<AtomicUsize>,
-}
-
-impl RouteBound {
-    fn unread(&self) -> usize {
-        self.sent.load(Ordering::Relaxed).saturating_sub(self.reads.load(Ordering::Relaxed))
-    }
-}
-
-impl RequestRoute {
-    fn unbounded(sender: BroadcastSender) -> Self {
-        Self { sender, bound: None }
-    }
-
-    /// A bounded route's channel has one slot more than `bound.limit`, for the
-    /// one terminal item (end marker, error, or overflow error) that may
-    /// arrive with the cap full, so sending it never evicts a queued item.
-    /// `reads` is the subscription's read counter.
-    fn bounded(sender: BroadcastSender, bound: BufferBound, reads: Arc<AtomicUsize>) -> Self {
-        let bound = RouteBound {
-            state: BoundState::new(bound),
-            sent: AtomicUsize::new(0),
-            reads,
-        };
-        Self { sender, bound: Some(bound) }
-    }
-
-    fn closed(&self) -> bool {
-        self.bound.as_ref().is_some_and(|bound| bound.state.closed())
-    }
-
-    /// Send `item`, subject to a bounded route's cap ([`BoundState::admit`]).
-    /// The dispatcher is the only producer, so the unread check cannot race
-    /// another send. Never blocks.
-    fn deliver(&self, request_id: RequestId, item: RoutedItem) {
-        let item = match &self.bound {
-            Some(bound) => match bound.state.admit(&item, bound.unread()) {
-                Admit::Deliver => {
-                    bound.sent.fetch_add(1, Ordering::Relaxed);
-                    item
-                }
-                Admit::Overflow => bound.state.overflow_error(),
-                Admit::Discard => {
-                    trace!("discarding item for closed request {request_id}");
-                    return;
-                }
-            },
-            None => item,
-        };
-        let _ = self.sender.send(item);
-    }
-}
-
-/// Remove `id`'s registration only if its channel has no receivers left —
-/// i.e. every subscription and clone feeding off it is gone. A stale drop
-/// signal that finds a live replacement under the same key is a no-op; the
-/// replacement's own drop signal performs the eventual removal. The count is
-/// authoritative because a dropping subscription detaches its receivers
-/// before signalling (`AsyncInternalSubscription::detach_receivers`).
-async fn remove_if_dead<K: std::hash::Hash + Eq + Copy + std::fmt::Display, V>(
-    channels: &RwLock<HashMap<K, V>>,
-    id: K,
-    kind: &str,
-    sender: fn(&V) -> &BroadcastSender,
-) {
-    let mut channels = channels.write().await;
-    let removed = match channels.entry(id) {
-        std::collections::hash_map::Entry::Occupied(entry) if sender(entry.get()).receiver_count() == 0 => {
-            entry.remove();
-            true
-        }
-        _ => false,
-    };
-    debug!("cleanup {kind} channel {id}: removed={removed}");
-}
-
-/// Drop every execution-id alias whose channel has no receivers left, so a
-/// dropped subscription's sender (and anything buffered in it) is released.
-/// Same liveness rule as [`remove_if_dead`]. Not gated on that removal: a
-/// stale or clone signal still owns aliases to sweep. It also catches other
-/// dead subscriptions whose signals are still queued.
-async fn prune_dead_aliases(aliases: &RwLock<HashMap<String, BroadcastSender>>) {
-    if aliases.read().await.is_empty() {
-        return;
-    }
-    let mut aliases = aliases.write().await;
-    let before = aliases.len();
-    aliases.retain(|_, sender| sender.receiver_count() > 0);
-    debug!("pruned {} execution aliases", before - aliases.len());
-}
-
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     connection: Arc<AsyncConnection<S>>,
-    /// Maps request IDs to their response channels
-    request_channels: Arc<RwLock<HashMap<RequestId, RequestRoute>>>,
-    /// Maps IncomingMessages to broadcast senders (like sync does)
-    shared_channel_senders: Arc<RwLock<HashMap<IncomingMessages, Vec<BroadcastSender>>>>,
-    /// Maps OutgoingMessages to receivers for client subscription
-    shared_channel_receivers: Arc<RwLock<HashMap<OutgoingMessages, broadcast::Receiver<RoutedItem>>>>,
-    /// Live subscriptions per shared request type; see [`SharedCounts`].
-    shared_counts: Mutex<SharedCounts>,
-    /// Maps order IDs to their response channels
-    order_channels: Arc<RwLock<HashMap<OrderId, BroadcastSender>>>,
-    /// Maps execution IDs to their response channels (for commission reports).
-    /// Pruned when the owning request or order subscription is cleaned up.
-    execution_channels: Arc<RwLock<HashMap<String, BroadcastSender>>>,
+    requests: Arc<SenderHash<RequestId>>,
+    orders: Arc<SenderHash<OrderId>>,
+    /// Execution-id aliases of request and order routes, for the commission
+    /// reports that follow an execution. Pruned when the owning request or
+    /// order subscription is cleaned up.
+    executions: Arc<SenderHash<String>>,
+    shared_channels: SharedChannels,
     /// Optional channel for order update stream
     order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
     /// Capacity of every broadcast channel this bus creates. Default
@@ -494,30 +380,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
-        // Pre-create broadcast channels for all shared channels (like sync does)
-        let mut shared_channel_senders = HashMap::new();
-        let mut shared_channel_receivers = HashMap::new();
-
-        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            let (sender, receiver) = broadcast::channel(channel_capacity);
-            shared_channel_receivers.insert(mapping.request, receiver);
-
-            // Map each response type to the sender (multiple response types can share same sender)
-            for response_type in mapping.responses {
-                shared_channel_senders.entry(*response_type).or_insert_with(Vec::new).push(sender.clone());
-            }
-        }
-
         let shutdown = connection.shutdown_signal();
 
         let message_bus = Self {
             connection: Arc::new(connection),
-            request_channels: Arc::new(RwLock::new(HashMap::new())),
-            shared_channel_senders: Arc::new(RwLock::new(shared_channel_senders)),
-            shared_channel_receivers: Arc::new(RwLock::new(shared_channel_receivers)),
-            shared_counts: Mutex::new(SharedCounts::default()),
-            order_channels: Arc::new(RwLock::new(HashMap::new())),
-            execution_channels: Arc::new(RwLock::new(HashMap::new())),
+            requests: Arc::new(SenderHash::new()),
+            orders: Arc::new(SenderHash::new()),
+            executions: Arc::new(SenderHash::new()),
+            shared_channels: SharedChannels::new(channel_capacity),
             order_update_stream: Arc::new(RwLock::new(None)),
             channel_capacity,
             cleanup_sender,
@@ -529,26 +399,26 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         };
 
         // Start cleanup task
-        let request_channels = message_bus.request_channels.clone();
-        let order_channels = message_bus.order_channels.clone();
-        let execution_channels = message_bus.execution_channels.clone();
+        let requests = message_bus.requests.clone();
+        let orders = message_bus.orders.clone();
+        let executions = message_bus.executions.clone();
         let order_update_stream = message_bus.order_update_stream.clone();
 
         // A signal can be processed arbitrarily long after the drop that sent
         // it — including after a newer subscription registered under the same
         // key — so removal is gated on the registration being dead. See
-        // `remove_if_dead` and `AsyncInternalSubscription::detach_receivers`.
+        // `SenderHash::remove_if_dead` and `AsyncInternalSubscription::detach_receivers`.
         task::spawn(async move {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
                 match signal {
                     CleanupSignal::Request(request_id) => {
-                        remove_if_dead(&request_channels, request_id, "request", |route| &route.sender).await;
-                        prune_dead_aliases(&execution_channels).await;
+                        requests.remove_if_dead(request_id, "request").await;
+                        executions.prune_dead().await;
                     }
                     CleanupSignal::Order(order_id) => {
-                        remove_if_dead(&order_channels, order_id, "order", |sender| sender).await;
-                        prune_dead_aliases(&execution_channels).await;
+                        orders.remove_if_dead(order_id, "order").await;
+                        executions.prune_dead().await;
                     }
                     CleanupSignal::Shared(ticket) => {
                         // Shared channels are persistent and should not be removed
@@ -756,31 +626,19 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
 
-        // A closed bounded route's stream already ended. An open one at its
-        // cap still has the spare slot for this.
-        for route in self.request_channels.read().await.values().filter(|route| !route.closed()) {
-            let _ = route.sender.send(Error::ConnectionReset.into());
-        }
-        for sender in self.order_channels.read().await.values() {
-            let _ = sender.send(Error::ConnectionReset.into());
-        }
+        self.requests.fail_all(|| Error::ConnectionReset.into()).await;
+        self.orders.fail_all(|| Error::ConnectionReset.into()).await;
+        // Aliases of the routes just failed.
+        self.executions.clear().await;
         // Shared channels too, mirroring sync's `notify_all`: an in-flight
         // open_orders/positions subscription awaits an end marker only the
         // pre-reconnect request could produce, so it would hang forever.
         // Unfiltered on purpose — `fail_one_shot_channels`' one-shot filter
         // protects live streams from *unrelated* errors, but a reset
-        // terminates every stream by definition. The senders are not cleared
-        // here, unlike the maps below.
-        for sender in self.shared_channel_senders.read().await.values().flatten() {
-            let _ = sender.send(Error::ConnectionReset.into());
-        }
-        // Every live shared subscription has just been failed: start a new
-        // generation so their later drops cannot touch the next session's counts.
-        self.shared_counts.lock().await.reset();
-
-        self.request_channels.write().await.clear();
-        self.order_channels.write().await.clear();
-        self.execution_channels.write().await.clear();
+        // terminates every stream by definition. The channels persist across
+        // sessions, so they are not closed.
+        self.shared_channels.notify_all(|| Error::ConnectionReset.into()).await;
+        self.shared_channels.reset_counts().await;
     }
 
     /// Notify all waiting subscriptions about shutdown
@@ -796,36 +654,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // and cause all receivers to get RecvError::Closed. This diverges
         // from sync's shutdown, which sends Error::Shutdown before clearing:
         // async consumers see end-of-stream, sync consumers see the error.
-        {
-            let mut channels = self.request_channels.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut channels = self.order_channels.write().await;
-            channels.clear();
-        }
-
+        self.requests.clear().await;
+        self.orders.clear().await;
         // Execution aliases hold sender clones; clear them or the channels stay open.
-        {
-            let mut channels = self.execution_channels.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut channels = self.shared_channel_senders.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut channels = self.shared_channel_receivers.write().await;
-            channels.clear();
-        }
-
-        {
-            let mut order_update_stream = self.order_update_stream.write().await;
-            *order_update_stream = None;
-        }
+        self.executions.clear().await;
+        self.shared_channels.close().await;
+        *self.order_update_stream.write().await = None;
 
         self.connection.notice_broadcaster.close();
     }
@@ -844,7 +678,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             ErrorDisposition::NoticeAndFailOneShots(notice, error) => {
                 notice.log();
                 self.connection.notice_broadcaster.broadcast(notice);
-                self.fail_one_shot_channels(error).await;
+                self.shared_channels.fail_one_shot_channels(|| RoutedItem::Error(error.clone())).await;
             }
             ErrorDisposition::Route(id, item) => {
                 self.deliver(id, item, sent_to_update_stream).await;
@@ -853,38 +687,17 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         Ok(())
     }
 
-    /// Deliver a request-less hard error to every in-flight one-shot shared
-    /// request so it fails fast rather than hanging. Streaming shared channels
-    /// are excluded (see [`shared_channel_configuration::exclusive_one_shot_response_types`]).
-    async fn fail_one_shot_channels(&self, error: Error) {
-        let channels = self.shared_channel_senders.read().await;
-        for message_type in shared_channel_configuration::exclusive_one_shot_response_types() {
-            if let Some(senders) = channels.get(message_type) {
-                for sender in senders {
-                    let _ = sender.send(RoutedItem::Error(error.clone()));
-                }
-            }
-        }
-    }
-
     /// Deliver a pre-classified Notice or Error to the request or order
     /// subscription its id names.
     async fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
-        match id {
-            WireId::Request(request_id) => {
-                if let Some(route) = self.request_channels.read().await.get(&request_id) {
-                    return route.deliver(request_id, item);
-                }
+        let unrouted = match id {
+            WireId::Request(request_id) => self.requests.deliver(&request_id, item).await,
+            WireId::Order(order_id) => self.orders.deliver(&order_id, item).await,
+        };
+        if let Err(item) = unrouted {
+            if !sent_to_update_stream {
+                log_orphan(id, &item);
             }
-            WireId::Order(order_id) => {
-                if let Some(sender) = self.order_channels.read().await.get(&order_id) {
-                    let _ = sender.send(item);
-                    return;
-                }
-            }
-        }
-        if !sent_to_update_stream {
-            log_orphan(id, &item);
         }
     }
 
@@ -892,11 +705,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// can name one ([`RequestId::from_raw`]); the types routed here are data
     /// messages, which no order subscription reads.
     async fn route_to_request_channel(&self, id: i32, message: ResponseMessage) -> Result<(), Error> {
-        let Some(request_id) = RequestId::from_raw(id) else {
-            return Ok(());
-        };
-        if let Some(route) = self.request_channels.read().await.get(&request_id) {
-            route.deliver(request_id, message.into());
+        if let Some(request_id) = RequestId::from_raw(id) {
+            let _ = self.requests.deliver(&request_id, message.into()).await;
         }
         Ok(())
     }
@@ -905,62 +715,52 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
         let routed = self.send_order_update(&message).await;
         let strategy = order_routing_strategy(message.message_type());
+        let message_order_id = message.order_id().map(OrderId::from);
+        let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {}
             OrderRoutingStrategy::ExecutionData => {
                 // Try order_id channel first, then request_id, storing execution_id mapping
-                if let Some(actual_order_id) = message.order_id().map(OrderId::from) {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&actual_order_id) {
-                        self.store_execution_mapping(&message, sender).await;
-                        let _ = sender.send(message.into());
-                        return Ok(());
-                    }
+                let execution_id = message.execution_id();
+                let mut item = RoutedItem::from(message);
+                if let Some(order_id) = message_order_id {
+                    item = match self.deliver_execution(&self.orders, &order_id, execution_id.clone(), item).await {
+                        Ok(()) => return Ok(()),
+                        Err(item) => item,
+                    };
                 }
-                if let Some(req_id) = message.request_id().and_then(RequestId::from_raw) {
-                    let channels = self.request_channels.read().await;
-                    if let Some(route) = channels.get(&req_id) {
-                        self.store_execution_mapping(&message, &route.sender).await;
-                        route.deliver(req_id, message.into());
-                        return Ok(());
-                    }
+                if let Some(request_id) = message_request_id {
+                    item = match self.deliver_execution(&self.requests, &request_id, execution_id, item).await {
+                        Ok(()) => return Ok(()),
+                        Err(item) => item,
+                    };
                 }
                 if !routed {
-                    warn!("could not route ExecutionData message {:?}", message);
+                    warn!("could not route ExecutionData message {item:?}");
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                if let Some(actual_order_id) = message.order_id().map(OrderId::from) {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(message.into());
-                        return Ok(());
-                    }
+                let mut item = RoutedItem::from(message);
+                if let Some(order_id) = message_order_id {
+                    item = match self.orders.deliver(&order_id, item).await {
+                        Ok(()) => return Ok(()),
+                        Err(item) => item,
+                    };
                 }
-                if let Some(req_id) = message.request_id().and_then(RequestId::from_raw) {
-                    let channels = self.request_channels.read().await;
-                    if let Some(route) = channels.get(&req_id) {
-                        route.deliver(req_id, message.into());
-                        return Ok(());
-                    }
+                if let Some(request_id) = message_request_id {
+                    item = match self.requests.deliver(&request_id, item).await {
+                        Ok(()) => return Ok(()),
+                        Err(item) => item,
+                    };
                 }
-                warn!("could not route ExecutionDataEnd message {:?}", message);
+                warn!("could not route ExecutionDataEnd message {item:?}");
             }
             OrderRoutingStrategy::OrderOrShared => {
-                if let Some(actual_order_id) = message.order_id().map(OrderId::from) {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(message.into());
-                        return Ok(());
-                    }
-                    drop(channels);
-
-                    let shared_channels = self.shared_channel_senders.read().await;
-                    if let Some(senders) = shared_channels.get(&message.message_type()) {
-                        for sender in senders {
-                            let _ = sender.send(message.clone().into());
-                        }
+                if let Some(order_id) = message_order_id {
+                    if self.orders.deliver(&order_id, message.clone().into()).await.is_ok()
+                        || self.shared_channels.send_message(message.message_type(), &message).await
+                    {
                         return Ok(());
                     }
                 }
@@ -970,40 +770,59 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
             OrderRoutingStrategy::ByExecutionId => {
                 if let Some(execution_id) = message.execution_id() {
-                    let exec_channels = self.execution_channels.read().await;
-                    if let Some(sender) = exec_channels.get(&execution_id) {
-                        let _ = sender.send(message.into());
-                        return Ok(());
-                    }
+                    let _ = self.executions.deliver(&execution_id, message.into()).await;
                 }
             }
             OrderRoutingStrategy::SharedOnly => {
-                let shared_channels = self.shared_channel_senders.read().await;
-                if let Some(senders) = shared_channels.get(&message.message_type()) {
-                    for sender in senders {
-                        let _ = sender.send(message.clone().into());
-                    }
-                    return Ok(());
-                }
-                if !routed {
+                if !self.shared_channels.send_message(message.message_type(), &message).await && !routed {
                     warn!("could not route message {:?}", message);
                 }
             }
             OrderRoutingStrategy::ByOrderId => {
-                if order_id >= 0 {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&OrderId::from(order_id)) {
-                        let _ = sender.send(message.into());
-                        return Ok(());
+                let unrouted = if order_id >= 0 {
+                    self.orders.deliver(&OrderId::from(order_id), message.into()).await
+                } else {
+                    Err(message.into())
+                };
+                if let Err(item) = unrouted {
+                    if !routed {
+                        warn!("could not route message {item:?}");
                     }
-                }
-                if !routed {
-                    warn!("could not route message {:?}", message);
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Deliver an execution to `id`'s route in `routes` and alias the route
+    /// under `execution_id`, for the commission report that follows. Hands
+    /// the item back when nothing is registered under `id`.
+    async fn deliver_execution<K: std::hash::Hash + Eq + std::fmt::Display + std::fmt::Debug>(
+        &self,
+        routes: &SenderHash<K>,
+        id: &K,
+        execution_id: Option<String>,
+        item: RoutedItem,
+    ) -> Result<(), RoutedItem> {
+        let mut item = Some(item);
+        let delivered = routes
+            .with_route(id, |route| {
+                if let Some(item) = item.take() {
+                    route.deliver(id, item);
+                }
+                route.sender.clone()
+            })
+            .await;
+        match (delivered, item) {
+            (Some(sender), _) => {
+                if let Some(execution_id) = execution_id {
+                    self.executions.insert(execution_id, Route::unbounded(sender)).await;
+                }
+                Ok(())
+            }
+            (None, item) => Err(item.expect("undelivered item")),
+        }
     }
 
     /// Register `request_id`'s channel, optionally with an unread-item cap,
@@ -1015,14 +834,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let (sender, receiver) = broadcast::channel(capacity);
         let reads = bound.map(|_| Arc::new(AtomicUsize::new(0)));
         let route = match (bound, &reads) {
-            (Some(bound), Some(reads)) => RequestRoute::bounded(sender.clone(), bound, reads.clone()),
-            _ => RequestRoute::unbounded(sender.clone()),
+            (Some(bound), Some(reads)) => Route::bounded(sender.clone(), bound, reads.clone()),
+            _ => Route::unbounded(sender.clone()),
         };
-
-        {
-            let mut channels = self.request_channels.write().await;
-            channels.insert(request_id, route);
-        }
+        self.requests.insert(request_id, route).await;
 
         // Owned before the write: a caller that drops this future while the
         // write is pending (a timeout, a `select!`) drops the subscription with
@@ -1041,25 +856,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // reset will clear. `same_channel` so a newer registration under the
         // same id survives.
         if let Err(e) = self.write_message(&message).await {
-            let mut channels = self.request_channels.write().await;
-            if channels
-                .get(&request_id)
-                .is_some_and(|registered| registered.sender.same_channel(&sender))
-            {
-                channels.remove(&request_id);
-            }
+            self.requests.remove_if_same(&request_id, &sender).await;
             return Err(e);
         }
 
         Ok(subscription)
-    }
-
-    /// Store execution_id -> sender mapping for commission report routing
-    async fn store_execution_mapping(&self, message: &ResponseMessage, sender: &BroadcastSender) {
-        if let Some(execution_id) = message.execution_id() {
-            let mut exec_channels = self.execution_channels.write().await;
-            exec_channels.insert(execution_id, sender.clone());
-        }
     }
 
     /// Route message to shared channel
@@ -1076,16 +877,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             _ => {}
         }
 
-        // Route to all senders for this message type (like sync does)
-        let channels = self.shared_channel_senders.read().await;
-        if let Some(senders) = channels.get(&message_type) {
-            // Broadcast to all subscribers
-            for sender in senders {
-                if let Err(e) = sender.send(message.clone().into()) {
-                    warn!("error sending to shared channel for {message_type:?}: {e}");
-                }
-            }
-        } else {
+        if !self.shared_channels.send_message(message_type, &message).await {
             // Nothing claimed the frame. Silent until now, which is why a
             // desynchronized stream looked identical to an idle one.
             report_unroutable_frame(&message, &self.connection.notice_broadcaster);
@@ -1121,25 +913,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     ) -> Result<AsyncInternalSubscription, Error> {
         self.ensure_connected()?;
 
-        let receiver = {
-            let channels = self.shared_channel_receivers.read().await;
-            if let Some(receiver) = channels.get(&message_type) {
-                receiver.resubscribe()
-            } else {
-                return Err(Error::InvalidArgument(format!(
-                    "No shared channel configured for message type: {:?}",
-                    message_type
-                )));
-            }
-        };
-
-        // The lock spans the write so the count and the wire agree.
-        let ticket = {
-            let mut counts = self.shared_counts.lock().await;
-            counts.check_account_updates(account)?;
-            self.write_message(&message).await?;
-            counts.subscribe(message_type, account)
-        };
+        let (receiver, ticket) = self
+            .shared_channels
+            .subscribe(message_type, account, || self.write_message(&message))
+            .await?;
 
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
@@ -1164,19 +941,13 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
         let (sender, receiver) = broadcast::channel(self.channel_capacity);
 
-        {
-            let mut channels = self.order_channels.write().await;
-            channels.insert(order_id, sender.clone());
-        }
+        self.orders.insert(order_id, Route::unbounded(sender.clone())).await;
 
         // See `send_request`: owned before the write, so an abandoned write
         // releases its registration too; a failed write takes it with it.
         let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Order(order_id));
         if let Err(e) = self.write_message(&message).await {
-            let mut channels = self.order_channels.write().await;
-            if channels.get(&order_id).is_some_and(|registered| registered.same_channel(&sender)) {
-                channels.remove(&order_id);
-            }
+            self.orders.remove_if_same(&order_id, &sender).await;
             return Err(e);
         }
 
@@ -1192,14 +963,14 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {
-        let mut counts = self.shared_counts.lock().await;
-        if !counts.unsubscribe(ticket) {
-            return Ok(());
-        }
-        match message {
-            Some(message) => self.write_message(&message).await,
-            None => Ok(()),
-        }
+        self.shared_channels
+            .unsubscribe(ticket, || async move {
+                match message {
+                    Some(message) => self.write_message(&message).await,
+                    None => Ok(()),
+                }
+            })
+            .await
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {

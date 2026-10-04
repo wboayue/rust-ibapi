@@ -77,13 +77,8 @@ impl Registration {
     /// The sender registered under `ID`, if any.
     async fn registered(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Option<BroadcastSender> {
         match self {
-            Self::Request | Self::BoundedRequest => bus
-                .request_channels
-                .read()
-                .await
-                .get(&RequestId::nth(ID))
-                .map(|route| route.sender.clone()),
-            Self::Order => bus.order_channels.read().await.get(&OrderId::from(ID)).cloned(),
+            Self::Request | Self::BoundedRequest => bus.requests.sender(&RequestId::nth(ID)).await,
+            Self::Order => bus.orders.sender(&OrderId::from(ID)).await,
         }
     }
 
