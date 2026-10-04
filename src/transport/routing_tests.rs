@@ -638,3 +638,33 @@ fn test_unknown_message_type_routes_by_message_type() {
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(determine_routing(&message), RoutingDecision::ByMessageType(IncomingMessages::NotValid));
 }
+
+/// Every order-scoped type must route by order id, ahead of the request-id
+/// arm. The async bus has no fallback that would forward one of these to the
+/// order-update stream from shared routing. Each frame carries an int32 at
+/// proto tag 1, which `request_id()` reads for `OpenOrder`, `ExecutionData`
+/// and `ExecutionDataEnd`, so the request-id arm would claim them if it ran
+/// first.
+#[test]
+fn test_order_message_types_route_by_order_id() {
+    let id_at_tag_1 = crate::proto::ExecutionDetailsEnd { req_id: Some(7) }.encode_to_vec();
+    let order_types = [
+        IncomingMessages::OrderStatus,
+        IncomingMessages::OrderBound,
+        IncomingMessages::OpenOrder,
+        IncomingMessages::OpenOrderEnd,
+        IncomingMessages::CompletedOrder,
+        IncomingMessages::CompletedOrdersEnd,
+        IncomingMessages::ExecutionData,
+        IncomingMessages::ExecutionDataEnd,
+        IncomingMessages::CommissionsReport,
+    ];
+    for message_type in order_types {
+        let message = proto_response(message_type, id_at_tag_1.clone());
+        let routing = determine_routing(&message);
+        assert!(
+            matches!(routing, RoutingDecision::ByOrderId(_)),
+            "{message_type:?}: expected ByOrderId, got {routing:?}"
+        );
+    }
+}
