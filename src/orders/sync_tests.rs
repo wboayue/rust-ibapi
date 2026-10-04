@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, ExerciseOptions, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
@@ -546,7 +546,9 @@ fn exercise_options() {
     };
 
     let subscription = client
-        .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
+        .exercise_options(&contract)
+        .exercise(1)
+        .submit()
         .expect("failed to exercise options");
 
     let exercise_response = subscription.next_data();
@@ -1168,12 +1170,7 @@ fn order_entry_points_reject_request_range_ids() {
     rejected(client.cancel_order(floor, "").map(|_| ()), "cancel_order");
 
     client.raise_next_order_id(OrderId::from(floor));
-    rejected(
-        client
-            .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
-            .map(|_| ()),
-        "exercise_options",
-    );
+    rejected(client.exercise_options(&contract).exercise(1).submit().map(|_| ()), "exercise_options");
 
     assert_eq!(request_message_count(&message_bus), 0, "nothing reaches the wire");
 }

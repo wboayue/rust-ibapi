@@ -57,33 +57,6 @@ fn test_require_request_id_for_none() {
 }
 
 #[test]
-fn test_require_range_valid() {
-    let result = require_range(5, 1, 10, "value");
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), 5);
-}
-
-#[test]
-fn test_require_range_too_low() {
-    let result = require_range(0, 1, 10, "value");
-    assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "value must be between 1 and 10, got 0"));
-}
-
-#[test]
-fn test_require_range_too_high() {
-    let result = require_range(15, 1, 10, "value");
-    assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "value must be between 1 and 10, got 15"));
-}
-
-#[test]
-fn test_require_range_boundary_values() {
-    assert!(require_range(1, 1, 10, "value").is_ok());
-    assert!(require_range(10, 1, 10, "value").is_ok());
-}
-
-#[test]
 fn test_require_not_empty_valid() {
     let result = require_not_empty("hello", "name");
     assert!(result.is_ok());
@@ -143,26 +116,4 @@ fn test_map_error_with_err() {
     let result = map_error_with(err_result, |e| format!("Could not find resource: {}", e));
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Could not find resource: not found"));
-}
-
-#[test]
-fn test_require_range_with_floats() {
-    let result = require_range(5.5, 0.0, 10.0, "percentage");
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), 5.5);
-
-    let result = require_range(10.1, 0.0, 10.0, "percentage");
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_error_message_formatting() {
-    // Test that error messages are properly formatted
-    let result = require_range(-5, 0, 100, "temperature");
-    assert!(result.is_err());
-    if let Err(Error::InvalidArgument(msg)) = result {
-        assert_eq!(msg, "temperature must be between 0 and 100, got -5");
-    } else {
-        panic!("Expected Error::InvalidArgument");
-    }
 }

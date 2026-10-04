@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
-use super::{CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
+use super::{CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
 use crate::{client::sync::Client, server_versions, Error};
-use time::OffsetDateTime;
 
 impl Client {
     /// Start building an order for the given contract
@@ -515,64 +514,30 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
-    /// Exercises an options contract.
+    /// Exercise or lapse an option position.
     ///
-    /// Note: this function is affected by a TWS setting which specifies if an exercise request must be finalized.
-    ///
-    /// # Arguments
-    /// * `contract`          - The option [Contract] to be exercised.
-    /// * `exercise_action`   - Exercise option. ExerciseAction::Exercise or ExerciseAction::Lapse.
-    /// * `exercise_quantity` - Number of contracts to be exercised.
-    /// * `account`           - Destination account.
-    /// * `ovrd`              - Specifies whether your setting will override the system's natural action. For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
-    /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
-    /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000 (reserved for request ids).
+    /// Terminal: [`ExerciseOptionsBuilder::submit`]. Pick [`exercise`](ExerciseOptionsBuilder::exercise)
+    /// or [`lapse`](ExerciseOptionsBuilder::lapse); [`account`](ExerciseOptionsBuilder::account),
+    /// [`override_natural_action`](ExerciseOptionsBuilder::override_natural_action) and
+    /// [`manual_order_time`](ExerciseOptionsBuilder::manual_order_time) are optional.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::{Contract, OptionRight};
-    /// use ibapi::orders::ExerciseAction;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
     /// let subscription = client
-    ///     .exercise_options(&contract, ExerciseAction::Exercise, 1, "DU000001", false, None)
+    ///     .exercise_options(&contract)
+    ///     .exercise(1)
+    ///     .override_natural_action()
+    ///     .submit()
     ///     .expect("exercise_options failed");
-    ///
-    /// // Consume the subscription so execution updates and commission reports surface.
-    /// for event in subscription.iter_data() {
-    ///     match event {
-    ///         Ok(item) => println!("exercise event: {item:?}"),
-    ///         Err(e) => { eprintln!("exercise err: {e:?}"); break; }
-    ///     }
-    /// }
     /// ```
-    pub fn exercise_options(
-        &self,
-        contract: &Contract,
-        exercise_action: ExerciseAction,
-        exercise_quantity: i32,
-        account: &str,
-        ovrd: bool,
-        manual_order_time: Option<OffsetDateTime>,
-    ) -> Result<Subscription<ExerciseOptions>, Error> {
-        let order_id = OrderId::from(self.next_order_id()).checked()?;
-
-        let request = encoders::encode_exercise_options(
-            order_id.value(),
-            contract,
-            exercise_action,
-            exercise_quantity,
-            account,
-            ovrd,
-            manual_order_time,
-        )?;
-        let subscription = self.send_order(order_id, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+    pub fn exercise_options<'a>(&'a self, contract: &'a Contract) -> ExerciseOptionsBuilder<'a, Self> {
+        ExerciseOptionsBuilder::new(self, contract)
     }
 }
 

@@ -340,6 +340,11 @@ path = "examples/async/option_chain.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_options_exercise"
+path = "examples/async/options_exercise.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_scanner_parameters"
 path = "examples/async/scanner_parameters.rs"
 required-features = ["async"]

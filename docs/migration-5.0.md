@@ -390,6 +390,22 @@ let orders = bracket_order(parent_id, Action::Buy, 100.0, prices)?;
 
 `BracketOrderBuilder::build()` (from `client.order(..).bracket()`) is no longer public. It returned the three orders with placeholder ids that `submit_all()` fills in, so they could not be placed as they were. Use `submit_all()`, or `bracket_order` with your own parent id.
 
+### 27. `exercise_options` returns a builder
+
+`Client::exercise_options` (blocking and async) takes only the contract and returns an `orders::ExerciseOptionsBuilder`. Its six positional arguments, two with defaults and one a bare `bool`, become named setters:
+
+```rust,ignore
+// 4.2
+client.exercise_options(&contract, ExerciseAction::Exercise, 1, "DU123", true, None)?;
+client.exercise_options(&contract, ExerciseAction::Lapse, 2, "", false, Some(time))?;
+
+// 5.0
+client.exercise_options(&contract).exercise(1).account("DU123").override_natural_action().submit()?;
+client.exercise_options(&contract).lapse(2).manual_order_time(time).submit()?;
+```
+
+Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed here. `account` is optional: if unset, no account is sent, and on a single-account login TWS then uses the logged-in account. `submit()` returns `Error::InvalidArgument` without sending anything if neither `exercise` nor `lapse` was called or the quantity is not positive.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -431,7 +447,8 @@ No code changes required, but observable at runtime:
 24. Drop the `non_guaranteed` argument from the combo order functions, wrapping the order in `non_guaranteed(..)` where it was `true` — see [§24](#24-combo-order-functions-drop-non_guaranteed-bool-wrap-them-in-non_guaranteed).
 25. Replace `attach_adjustable_to_stop` / `_to_stop_limit` / `_to_trail` with `attach_adjustable_stop(&parent, stop, Adjustment { .. })` — see [§25](#25-attach_adjustable_to_-become-attach_adjustable_stop).
 26. Pass `BracketPrices { entry, take_profit, stop_loss }` to `bracket_order` and handle its `Result`; replace `bracket().build()` with `submit_all()` — see [§26](#26-bracket_order-takes-bracketprices-and-returns-a-result-bracketorderbuilderbuild-is-crate-private).
-27. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+27. Replace `exercise_options(&contract, action, quantity, account, ovrd, time)` with `exercise_options(&contract).exercise(quantity)` (or `.lapse(quantity)`) plus `.account(..)`, `.override_natural_action()` and `.manual_order_time(..)` as needed, then `.submit()` — see [§27](#27-exercise_options-returns-a-builder).
+28. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

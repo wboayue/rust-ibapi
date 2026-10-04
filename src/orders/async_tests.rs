@@ -446,7 +446,9 @@ async fn test_exercise_options() {
     };
 
     let mut subscription = client
-        .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
+        .exercise_options(&contract)
+        .exercise(1)
+        .submit()
         .await
         .expect("failed to exercise options");
 
@@ -1120,10 +1122,7 @@ async fn order_entry_points_reject_request_range_ids() {
 
     client.raise_next_order_id(OrderId::from(floor));
     rejected(
-        client
-            .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
-            .await
-            .map(|_| ()),
+        client.exercise_options(&contract).exercise(1).submit().await.map(|_| ()),
         "exercise_options",
     );
 
