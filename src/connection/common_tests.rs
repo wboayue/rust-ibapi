@@ -1012,3 +1012,69 @@ fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
     assert_eq!(notice.code, HANDSHAKE_UNKNOWN_FRAME_CODE);
     assert!(notice.is_handshake_synthetic());
 }
+
+#[test]
+fn test_account_info_merge() {
+    let mut info = AccountInfo::default();
+
+    let complete = info.merge(AccountInfo {
+        next_order_id: Some(90),
+        managed_accounts: None,
+    });
+    assert!(!complete, "only next_order_id is set");
+
+    let complete = info.merge(AccountInfo::default());
+    assert!(!complete);
+    assert_eq!(info.next_order_id, Some(90), "absent field must not clear a set one");
+
+    let complete = info.merge(AccountInfo {
+        next_order_id: None,
+        managed_accounts: Some("DU1234567".to_owned()),
+    });
+    assert!(complete, "both fields set");
+    assert_eq!(info.next_order_id, Some(90));
+    assert_eq!(info.managed_accounts.as_deref(), Some("DU1234567"));
+}
+
+#[test]
+fn test_connection_metadata_apply_account_info() {
+    let mut metadata = ConnectionMetadata {
+        next_order_id: 1,
+        managed_accounts: "OLD".to_owned(),
+        ..Default::default()
+    };
+
+    metadata.apply_account_info(AccountInfo::default());
+    assert_eq!(metadata.next_order_id, 1);
+    assert_eq!(metadata.managed_accounts, "OLD");
+
+    metadata.apply_account_info(AccountInfo {
+        next_order_id: Some(90),
+        managed_accounts: Some("DU1234567".to_owned()),
+    });
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+}
+
+#[test]
+fn test_parse_handshake_ack() {
+    let handler = ConnectionHandler::default();
+
+    let ack = format!("{}\020230405 22:20:39 PST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
+    let (server_version, time, tz) = parse_handshake_ack(&handler, Ok(ack.into_bytes())).unwrap();
+    assert_eq!(server_version, server_versions::PROTOBUF_REST_MESSAGES_3);
+    assert!(time.is_some());
+    assert!(tz.is_some());
+
+    let eof = std::io::Error::from(std::io::ErrorKind::UnexpectedEof);
+    match parse_handshake_ack(&handler, Err(Error::Io(eof))) {
+        Err(Error::ConnectionRejected(msg)) => assert!(msg.contains("server may be rejecting"), "unexpected message: {msg}"),
+        other => panic!("expected Error::ConnectionRejected, got {other:?}"),
+    }
+
+    let reset = std::io::Error::from(std::io::ErrorKind::ConnectionReset);
+    match parse_handshake_ack(&handler, Err(Error::Io(reset))) {
+        Err(Error::Io(err)) => assert_eq!(err.kind(), std::io::ErrorKind::ConnectionReset),
+        other => panic!("expected Error::Io passthrough, got {other:?}"),
+    }
+}

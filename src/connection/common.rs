@@ -5,6 +5,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
+use super::ConnectionMetadata;
 use crate::accounts::AccountUpdate;
 use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
@@ -137,6 +138,35 @@ pub trait ConnectionProtocol {
 pub struct AccountInfo {
     pub next_order_id: Option<i32>,
     pub managed_accounts: Option<String>,
+}
+
+/// `receive_account_info` gives up once more than this many frames have
+/// arrived without a complete [`AccountInfo`].
+pub(crate) const MAX_ACCOUNT_INFO_ATTEMPTS: i32 = 100;
+
+impl AccountInfo {
+    /// Takes each field `other` carries. Returns true once both fields are set.
+    pub(crate) fn merge(&mut self, other: AccountInfo) -> bool {
+        if other.next_order_id.is_some() {
+            self.next_order_id = other.next_order_id;
+        }
+        if other.managed_accounts.is_some() {
+            self.managed_accounts = other.managed_accounts;
+        }
+        self.next_order_id.is_some() && self.managed_accounts.is_some()
+    }
+}
+
+impl ConnectionMetadata {
+    /// Copies the fields `info` carries; absent fields leave the current value.
+    pub(crate) fn apply_account_info(&mut self, info: AccountInfo) {
+        if let Some(next_order_id) = info.next_order_id {
+            self.next_order_id = next_order_id;
+        }
+        if let Some(managed_accounts) = info.managed_accounts {
+            self.managed_accounts = managed_accounts;
+        }
+    }
 }
 
 /// Standard connection handler implementation
@@ -315,6 +345,31 @@ pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error>
         ));
     }
     Ok(())
+}
+
+/// Parses the handshake reply into the server version, connection time and
+/// time zone. A reply that ends in `UnexpectedEof` becomes
+/// [`Error::ConnectionRejected`].
+///
+/// The reply is read as raw text, bypassing `parse_raw_message`, which would
+/// misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
+pub(crate) fn parse_handshake_ack(
+    handler: &ConnectionHandler,
+    ack: Result<Vec<u8>, Error>,
+) -> Result<(i32, Option<OffsetDateTime>, Option<&'static Tz>), Error> {
+    match ack {
+        Ok(data) => {
+            let raw_string = String::from_utf8_lossy(&data).into_owned();
+            let mut response = ResponseMessage::from(&raw_string);
+            let handshake_data = handler.parse_handshake_response(&mut response)?;
+            let (time, tz) = parse_connection_time(&handshake_data.server_time);
+            Ok((handshake_data.server_version, time, tz))
+        }
+        Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => Err(Error::ConnectionRejected(format!(
+            "server may be rejecting connections from this host: {err}"
+        ))),
+        Err(err) => Err(err),
+    }
 }
 
 /// Parse connection time from TWS format
