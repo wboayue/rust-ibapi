@@ -241,6 +241,7 @@ IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 - DO NOT include "Generated with Claude Code" or similar attribution in commit messages
 - Keep commit messages focused on the technical changes and their purpose
 - Choose the merge strategy by what the branch holds:
-  - **Merge commit** (`gh pr merge N --merge`) for stacked PRs (a squashed parent leaves the child with duplicate commits) and for multi-commit branches where every commit stands alone and builds
+  - **Merge commit** (`gh pr merge N --merge`) for stacked PRs (a squashed parent leaves the child with duplicate commits) and for multi-commit branches whose commits form one change (revert with `-m 1`, bisect with `--first-parent` as a unit); every commit must build
+  - **Rebase** (`gh pr merge N --rebase`) for multi-commit branches of independent small changes (no commit depends on another), with no PR stacked on top (rebase rewrites SHAs, so a child would carry duplicates); linear history, no merge bubble
   - **Squash** (`gh pr merge N --squash`) for single-commit PRs (no merge bubble), fork PRs, and branches carrying fixup, review-response or merge-from-main commits; pass `--body-file` summarizing the final design when the branch holds an abandoned approach
 
