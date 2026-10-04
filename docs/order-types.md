@@ -42,6 +42,7 @@ let order = Order::builder().buy(100).limit(150.0).build()?;
   - [Pegged to Midpoint](#pegged-to-midpoint)
   - [Pegged to Stock](#pegged-to-stock)
   - [Pegged to Benchmark](#pegged-to-benchmark)
+  - [IBKRATS Pegs (PEG BEST, PEG MID)](#ibkrats-pegs-peg-best-peg-mid)
 - [Special Order Types](#special-order-types)
   - [Discretionary Order](#discretionary-order)
   - [Sweep to Fill](#sweep-to-fill)
@@ -762,6 +763,39 @@ let order_id = client.order(&contract)
 ```
 
 Add `.pegged_change_amount_decrease()` to move the order price opposite the reference contract. `reference_range` and `stock_range` write the same `Order` fields.
+
+### IBKRATS Pegs (PEG BEST, PEG MID)
+
+Pegged orders for IBKR's ATS. Route the contract to `IBKRATS`; the order is not held, which both methods set (TWS leaves an IBKRATS peg `Inactive` without it).
+
+```rust
+use ibapi::orders::builder::{CompeteAgainstBest, MidOffsets};
+
+let contract = Contract::stock("AAPL").on_exchange("IBKRATS").build();
+
+// Improve on the best bid by $0.01, up to $150, against quotes of 200+ shares
+let order_id = client.order(&contract)
+    .buy(100)
+    .peg_best(150.00, CompeteAgainstBest::Offset(0.01))
+    .min_compete_size(200)
+    .submit()?;
+
+// Compete up to the midpoint instead
+let order_id = client.order(&contract)
+    .buy(100)
+    .peg_best(150.00, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: 0.02, at_half: 0.025 }))
+    .submit()?;
+
+// Peg to the midpoint, offset by $0.02 at a whole-penny midpoint and $0.025 at a half-penny one
+let order_id = client.order(&contract)
+    .buy(100)
+    .peg_mid(150.00, MidOffsets { at_whole: 0.02, at_half: 0.025 })
+    .submit()?;
+```
+
+`peg_mid` is the IBKRATS form of PEG MID; [Pegged to Midpoint](#pegged-to-midpoint) is the offset form for other venues. For a plain not-held limit order on IBKRATS, `order_builder::limit_ibkrats`.
+
+**Products:** STK
 
 ## Special Order Types
 

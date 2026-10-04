@@ -1,6 +1,6 @@
 use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::common::order_builder::*;
-use crate::orders::{Action, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{Action, Order};
 
 /// Tests for basic order types like market, limit, and stop orders
 #[cfg(test)]
@@ -399,77 +399,6 @@ mod specialized_order_tests {
         assert_eq!(order.order_type, "MIDPRICE");
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, None);
-    }
-}
-
-#[cfg(test)]
-mod pegged_order_tests {
-    use super::*;
-
-    #[test]
-    fn test_peg_best_order() {
-        let order = peg_best_order(
-            Action::Buy,
-            100.0, // quantity
-            50.0,  // limit_price
-            10,    // min_trade_qty
-            20,    // min_compete_size
-            0.01,  // compete_against_best_offset
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG BEST");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(50.0));
-        assert!(order.not_held);
-        assert_eq!(order.min_trade_qty, Some(10));
-        assert_eq!(order.min_compete_size, Some(20));
-        assert_eq!(order.compete_against_best_offset, Some(0.01));
-    }
-
-    #[test]
-    fn test_peg_best_up_to_mid() {
-        let order = peg_best_up_to_mid_order(
-            Action::Buy,
-            100.0, // quantity
-            50.0,  // limit_price
-            10,    // min_trade_qty
-            20,    // min_compete_size
-            0.01,  // mid_offset_at_whole
-            0.005, // mid_offset_at_half
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG BEST");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(50.0));
-        assert!(order.not_held);
-        assert_eq!(order.min_trade_qty, Some(10));
-        assert_eq!(order.min_compete_size, Some(20));
-        assert_eq!(order.compete_against_best_offset, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID);
-        assert_eq!(order.mid_offset_at_whole, Some(0.01));
-        assert_eq!(order.mid_offset_at_half, Some(0.005));
-    }
-
-    #[test]
-    fn test_peg_mid_order() {
-        let order = peg_mid_order(
-            Action::Buy,
-            100.0, // quantity
-            50.0,  // limit_price
-            10,    // min_trade_qty
-            0.01,  // mid_offset_at_whole
-            0.005, // mid_offset_at_half
-        );
-
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG MID");
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.limit_price, Some(50.0));
-        assert!(order.not_held);
-        assert_eq!(order.min_trade_qty, Some(10));
-        assert_eq!(order.mid_offset_at_whole, Some(0.01));
-        assert_eq!(order.mid_offset_at_half, Some(0.005));
     }
 }
 

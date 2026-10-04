@@ -51,9 +51,8 @@ split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planne
 the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
-The open violation inventory is tracked in #901: the three IBKRATS peg free functions in
-`order_builder`, waiting on #936's PEG BEST decision. Take one when you are already in the
-file.
+No violations are open; #901 tracked the last ones. `historical_news` (five required
+arguments) was reviewed and kept flat.
 
 ## Precedents
 

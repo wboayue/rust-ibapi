@@ -1991,17 +1991,138 @@ fn stop_price_does_not_stand_in_for_a_trigger() {
 }
 
 #[test]
-fn peg_mid_builds_without_aux_price() {
+fn pegged_to_midpoint_type_does_not_require_aux() {
     let order = Order::builder()
         .buy(100)
         .limit(150.0)
         .order_type(OrderType::PeggedToMidpoint)
-        .mid_offset_at_whole(0.01)
-        .mid_offset_at_half(0.005)
         .build()
         .unwrap();
     assert_eq!(order.aux_price, None);
     assert_eq!(order.limit_price, Some(150.0));
+}
+
+// === IBKRATS pegs ===
+
+#[test]
+fn peg_best_sends_the_c_sharp_shape() {
+    let base = Order {
+        action: Action::Buy,
+        order_type: "PEG BEST".to_owned(),
+        total_quantity: 100.0,
+        limit_price: Some(111.11),
+        not_held: true,
+        min_trade_qty: Some(100),
+        min_compete_size: Some(200),
+        ..Order::default()
+    };
+    let cases = [
+        (
+            CompeteAgainstBest::Offset(0.03),
+            Order {
+                compete_against_best_offset: Some(0.03),
+                ..base.clone()
+            },
+        ),
+        (
+            CompeteAgainstBest::UpToMid(UP_TO_MID),
+            Order {
+                compete_against_best_offset: Some(f64::INFINITY),
+                mid_offset_at_whole: Some(0.02),
+                mid_offset_at_half: Some(0.025),
+                ..base.clone()
+            },
+        ),
+    ];
+
+    for (compete, expected) in cases {
+        let order = Order::builder()
+            .buy(100)
+            .peg_best(111.11, compete)
+            .min_trade_qty(100)
+            .min_compete_size(200)
+            .build()
+            .unwrap();
+        assert_eq!(order, expected, "{compete:?}");
+    }
+}
+
+#[test]
+fn peg_best_rejects_a_non_finite_offset() {
+    for offset in [f64::INFINITY, f64::NAN] {
+        let err = Order::builder()
+            .buy(100)
+            .peg_best(111.11, CompeteAgainstBest::Offset(offset))
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, ValidationError::InvalidPrice(_)), "{offset}");
+    }
+}
+
+#[test]
+fn peg_mid_sends_the_c_sharp_shape() {
+    let order = Order::builder().buy(100).peg_mid(111.11, UP_TO_MID).build().unwrap();
+    let expected = Order {
+        action: Action::Buy,
+        order_type: "PEG MID".to_owned(),
+        total_quantity: 100.0,
+        limit_price: Some(111.11),
+        not_held: true,
+        mid_offset_at_whole: Some(0.02),
+        mid_offset_at_half: Some(0.025),
+        ..Order::default()
+    };
+    assert_eq!(order, expected);
+}
+
+#[test]
+fn peg_best_offset_drops_earlier_mid_offsets() {
+    let up_to_mid = CompeteAgainstBest::UpToMid(UP_TO_MID);
+    let order = Order::builder()
+        .buy(100)
+        .peg_best(111.11, up_to_mid)
+        .peg_best(111.11, CompeteAgainstBest::Offset(0.03))
+        .build()
+        .unwrap();
+    assert_eq!(order.mid_offset_at_whole, None);
+    assert_eq!(order.mid_offset_at_half, None);
+}
+
+#[test]
+fn other_types_drop_peg_best_fields() {
+    let up_to_mid = CompeteAgainstBest::UpToMid(UP_TO_MID);
+    let order = Order::builder()
+        .buy(100)
+        .peg_best(111.11, up_to_mid)
+        .min_compete_size(200)
+        .limit(100.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.compete_against_best_offset, None);
+    assert_eq!(order.min_compete_size, None);
+    assert_eq!(order.mid_offset_at_whole, None);
+    assert_eq!(order.mid_offset_at_half, None);
+}
+
+#[test]
+fn peg_mid_forms_replace_each_other() {
+    let offset_form = Order::builder()
+        .buy(100)
+        .peg_mid(111.11, UP_TO_MID)
+        .pegged_to_midpoint(0.01, 111.11)
+        .build()
+        .unwrap();
+    assert_eq!(offset_form.aux_price, Some(0.01));
+    assert_eq!(offset_form.mid_offset_at_whole, None);
+
+    let ibkrats_form = Order::builder()
+        .buy(100)
+        .pegged_to_midpoint(0.01, 111.11)
+        .peg_mid(111.11, UP_TO_MID)
+        .build()
+        .unwrap();
+    assert_eq!(ibkrats_form.aux_price, None);
+    assert_eq!(ibkrats_form.mid_offset_at_whole, Some(0.02));
 }
 
 // Every variant; add a new one here and in `sent_price_fields`.
@@ -2043,6 +2164,9 @@ const ALL_ORDER_TYPES: [OrderType; 30] = [
 fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached> {
     Order::builder()
         .buy(1)
+        .peg_best(1.0, CompeteAgainstBest::UpToMid(UP_TO_MID))
+        .min_compete_size(200)
+        .peg_mid(1.0, PEG_MID)
         .trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.5)
         .limit(100.0)
         .stop(99.0)
@@ -2052,6 +2176,15 @@ fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached> {
         .reference_contract(1, "ISLAND")
         .order_type(order_type)
 }
+
+const UP_TO_MID: MidOffsets = MidOffsets {
+    at_whole: 0.02,
+    at_half: 0.025,
+};
+const PEG_MID: MidOffsets = MidOffsets {
+    at_whole: 0.03,
+    at_half: 0.035,
+};
 
 /// Which price fields each type sends: (limit_price, aux_price, trail fields), per C#
 /// `OrderSamples.cs` plus `OrderType::uses_*` for PEG BEST and the REL combos. Exhaustive, so a
@@ -2085,6 +2218,19 @@ fn each_type_sends_exactly_the_price_fields_it_uses() {
             (order_type == OrderType::TrailingStopLimit).then_some(0.5),
             "{order_type:?}"
         );
+
+        // IBKRATS fields: compete fields on PEG BEST only; mid offsets on PEG MID (from
+        // `peg_mid`) and on PEG BEST up to the midpoint.
+        let peg_best = order_type == OrderType::PegBest;
+        let mid_offsets = match order_type {
+            OrderType::PegBest => Some(UP_TO_MID),
+            OrderType::PeggedToMidpoint => Some(PEG_MID),
+            _ => None,
+        };
+        assert_eq!(order.min_compete_size, peg_best.then_some(200), "{order_type:?}");
+        assert_eq!(order.compete_against_best_offset, peg_best.then_some(f64::INFINITY), "{order_type:?}");
+        assert_eq!(order.mid_offset_at_whole, mid_offsets.map(|m| m.at_whole), "{order_type:?}");
+        assert_eq!(order.mid_offset_at_half, mid_offsets.map(|m| m.at_half), "{order_type:?}");
     }
 }
 
