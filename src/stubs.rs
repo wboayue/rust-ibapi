@@ -42,6 +42,9 @@ pub(crate) struct MessageBusStub {
     /// The `limit` of each `send_request_bounded` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
     pub buffer_limits: RwLock<Vec<usize>>,
+    /// The request id of each `send_executions_request` call, in order.
+    #[cfg(feature = "async")]
+    pub executions_requests: RwLock<Vec<RequestId>>,
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
     connection_resets: AtomicUsize,
@@ -64,6 +67,8 @@ impl Default for MessageBusStub {
             response_messages: vec![],
             ordered_responses: vec![],
             buffer_limits: RwLock::new(vec![]),
+            #[cfg(feature = "async")]
+            executions_requests: RwLock::new(vec![]),
             connection_resets: AtomicUsize::new(0),
             #[cfg(feature = "async")]
             runtime: tokio::runtime::Handle::try_current().ok(),
@@ -329,6 +334,11 @@ impl AsyncMessageBus for MessageBusStub {
         bound: crate::transport::BufferBound,
     ) -> Result<AsyncInternalSubscription, Error> {
         self.buffer_limits.write().unwrap().push(bound.limit);
+        Ok(self.seeded_subscription(message))
+    }
+
+    async fn send_executions_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.executions_requests.write().unwrap().push(request_id);
         Ok(self.seeded_subscription(message))
     }
 

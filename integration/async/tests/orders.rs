@@ -481,3 +481,57 @@ async fn preset_attached_orders_accepted() {
     rate_limit();
     let _ = client.cancel_order(ids.parent, "").await;
 }
+
+/// A `channel_capacity` of 1 sizes market data only: an unread order update
+/// stream still keeps every frame of several placed-then-cancelled orders,
+/// with no lag notice (#896). Before the order-class floor, the burst evicted
+/// all but the newest frame.
+#[tokio::test]
+#[serial(orders)]
+async fn order_update_stream_keeps_frames_under_small_channel_capacity() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::builder()
+        .address(GATEWAY)
+        .client_id(client_id.id())
+        .channel_capacity(1)
+        .connect()
+        .await
+        .expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+    let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
+
+    // Place and cancel without reading, so every frame queues.
+    let mut order_ids = Vec::new();
+    for _ in 0..3 {
+        rate_limit();
+        let order_id = client.order(&contract).buy(1).limit(1.0).submit().await.expect("submit failed");
+        order_ids.push(order_id.0);
+    }
+    for &order_id in &order_ids {
+        rate_limit();
+        let _ = client.cancel_order(order_id, "").await.expect("cancel failed");
+    }
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    let mut cancelled = Vec::new();
+    let outcome = timeout(Duration::from_secs(15), async {
+        while let Some(item) = updates.next().await {
+            match item.expect("order update stream error") {
+                SubscriptionItem::Notice(n) if n.code == ibapi::SUBSCRIPTION_LAG_CODE => panic!("order update stream lagged: {n:?}"),
+                SubscriptionItem::Data(OrderUpdate::OrderStatus(s)) if order_ids.contains(&s.order_id) && s.status.is_terminal() => {
+                    if !cancelled.contains(&s.order_id) {
+                        cancelled.push(s.order_id);
+                    }
+                    if cancelled.len() == order_ids.len() {
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+        panic!("order update stream ended");
+    })
+    .await;
+    assert!(outcome.is_ok(), "terminal status seen for {cancelled:?} of {order_ids:?}");
+}

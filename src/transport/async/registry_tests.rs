@@ -125,7 +125,7 @@ async fn subscribe(channels: &SharedChannels, request: OutgoingMessages) -> broa
 
 #[tokio::test]
 async fn fail_one_shot_channels_spares_streaming_channels() {
-    let channels = SharedChannels::new(8);
+    let channels = SharedChannels::new(|_| 8);
     let mut current_time = subscribe(&channels, OutgoingMessages::RequestCurrentTime).await;
     let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
 
@@ -137,7 +137,7 @@ async fn fail_one_shot_channels_spares_streaming_channels() {
 
 #[tokio::test]
 async fn subscribe_counts_only_a_written_request() {
-    let channels = SharedChannels::new(8);
+    let channels = SharedChannels::new(|_| 8);
     let failed = channels
         .subscribe(OutgoingMessages::RequestPositions, None, || async { Err(Error::ConnectionReset) })
         .await;
@@ -150,7 +150,7 @@ async fn subscribe_counts_only_a_written_request() {
 
 #[tokio::test]
 async fn close_fails_then_ends_every_channel() {
-    let channels = SharedChannels::new(8);
+    let channels = SharedChannels::new(|_| 8);
     let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
 
     channels.close(|| Error::Shutdown.into());
@@ -159,4 +159,21 @@ async fn close_fails_then_ends_every_channel() {
     assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
     let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, || async { Ok(()) }).await;
     assert!(matches!(refused, Err(Error::InvalidArgument(_))));
+}
+
+/// Each shared channel takes its request type's capacity, allocated on the
+/// first subscription; sends before then are no-ops.
+#[tokio::test]
+async fn shared_channels_take_per_type_capacity_lazily() {
+    let channels = SharedChannels::new(|request| if request == OutgoingMessages::RequestCompletedOrders { 4 } else { 1 });
+    channels.notify_all(|| Error::Cancelled.into());
+
+    let mut completed = subscribe(&channels, OutgoingMessages::RequestCompletedOrders).await;
+    let mut positions = subscribe(&channels, OutgoingMessages::RequestPositions).await;
+    for _ in 0..2 {
+        channels.notify_all(|| Error::Cancelled.into());
+    }
+
+    assert_eq!(items(&mut completed).len(), 2, "capacity-4 channel lost an item");
+    assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Lagged(1))));
 }

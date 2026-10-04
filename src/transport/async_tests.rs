@@ -70,6 +70,113 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     assert_eq!(sender.len(), 2, "capacity-2 channel retains only the newest 2 frames");
 }
 
+/// Send `capacity + 1` items through `send`, then expect `subscription` to
+/// report exactly one dropped frame with `class`'s lag notice: proof that its
+/// channel holds `capacity` and that the subscription carries `class`.
+async fn assert_capacity_and_class(name: &str, subscription: &mut AsyncInternalSubscription, send: impl Fn(), capacity: usize, class: ChannelClass) {
+    for _ in 0..=capacity {
+        send();
+    }
+    let expected = match class {
+        ChannelClass::MarketData => crate::messages::subscription_lag_notice(1),
+        ChannelClass::Order | ChannelClass::OrderStream => crate::messages::order_lag_notice(1),
+    };
+    match subscription.next_routed().await {
+        Some(RoutedItem::Notice(notice)) => assert_eq!(notice, expected, "{name}"),
+        other => panic!("{name}: expected a one-frame lag notice, got {other:?}"),
+    }
+}
+
+/// A small `channel_capacity` sizes market-data channels but never shrinks
+/// the order-class floors, and each subscription carries its channel's class
+/// (#896).
+#[tokio::test]
+async fn test_channel_classes_under_small_channel_capacity() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 1).unwrap());
+    let cancelled = || RoutedItem::Error(Error::Cancelled);
+
+    let mut market = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
+    let sender = bus.requests.sender(&RequestId::nth(1)).unwrap();
+    let send = || drop(sender.send(cancelled()));
+    assert_capacity_and_class("request", &mut market, send, 1, ChannelClass::MarketData).await;
+
+    let mut executions = bus.send_executions_request(RequestId::nth(2), vec![]).await.unwrap();
+    let sender = bus.requests.sender(&RequestId::nth(2)).unwrap();
+    let send = || drop(sender.send(cancelled()));
+    assert_capacity_and_class("executions", &mut executions, send, ORDER_CAPACITY, ChannelClass::Order).await;
+
+    let mut order = bus.send_order_request(OrderId::new(3), vec![]).await.unwrap();
+    let sender = bus.orders.sender(&OrderId::new(3)).unwrap();
+    let send = || drop(sender.send(cancelled()));
+    assert_capacity_and_class("order", &mut order, send, ORDER_CAPACITY, ChannelClass::Order).await;
+
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let sender = bus.order_update_stream.lock().unwrap().as_ref().unwrap().sender.clone();
+    let send = || drop(sender.send(cancelled()));
+    assert_capacity_and_class(
+        "order update stream",
+        &mut updates,
+        send,
+        ORDER_STREAM_CAPACITY,
+        ChannelClass::OrderStream,
+    )
+    .await;
+
+    // Shared channels: `notify_all` reaches every allocated one, so each is
+    // subscribed only when its turn comes.
+    let notify = || bus.shared_channels.notify_all(cancelled);
+    let mut positions = bus.send_shared_request(OutgoingMessages::RequestPositions, vec![]).await.unwrap();
+    assert_capacity_and_class("positions", &mut positions, notify, 1, ChannelClass::MarketData).await;
+    let mut open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    assert_capacity_and_class("open orders", &mut open_orders, notify, ORDER_STREAM_CAPACITY, ChannelClass::OrderStream).await;
+}
+
+/// A `channel_capacity` above a floor raises the order-class channels too.
+#[test]
+fn test_channel_class_capacity() {
+    assert_eq!(ChannelClass::MarketData.capacity(4), 4);
+    assert_eq!(ChannelClass::Order.capacity(4), ORDER_CAPACITY);
+    assert_eq!(ChannelClass::OrderStream.capacity(4), ORDER_STREAM_CAPACITY);
+    let large = ORDER_STREAM_CAPACITY * 2;
+    assert_eq!(ChannelClass::Order.capacity(large), large);
+    assert_eq!(ChannelClass::OrderStream.capacity(large), large);
+}
+
+#[test]
+fn test_shared_order_channels_are_order_class() {
+    for request in [
+        OutgoingMessages::RequestOpenOrders,
+        OutgoingMessages::RequestAllOpenOrders,
+        OutgoingMessages::RequestAutoOpenOrders,
+        OutgoingMessages::RequestCompletedOrders,
+    ] {
+        assert_eq!(ChannelClass::of_shared(request), ChannelClass::OrderStream, "{request:?}");
+    }
+    assert_eq!(ChannelClass::of_shared(OutgoingMessages::RequestPositions), ChannelClass::MarketData);
+}
+
+/// A lag on an order-class subscription surfaces the order lag notice, and
+/// clones keep the class.
+#[tokio::test]
+async fn test_order_class_lag_surfaces_order_lag_notice() {
+    let (sender, receiver) = broadcast::channel(1);
+    let mut subscription = AsyncInternalSubscription::new(receiver).class(ChannelClass::Order);
+    let mut clone = subscription.clone();
+    for _ in 0..4 {
+        sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
+    }
+
+    for sub in [&mut subscription, &mut clone] {
+        match sub.next_routed().await {
+            Some(RoutedItem::Notice(notice)) => assert_eq!(notice, crate::messages::order_lag_notice(3)),
+            other => panic!("expected order lag notice, got {other:?}"),
+        }
+    }
+}
+
 /// Receive next message with a deadline; panics with context if the channel
 /// times out, closes, or surfaces an error.
 async fn next_message(sub: &mut AsyncInternalSubscription) -> ResponseMessage {
