@@ -16,12 +16,6 @@ impl OrderBuilder<ClientBound<'_, Client>> {
         Ok(OrderId::new(order_id))
     }
 
-    /// Build the order and return it without submitting
-    /// Useful for batch operations or custom submission logic
-    pub fn build_order(self) -> Result<crate::orders::Order, Error> {
-        self.build().map_err(Into::into)
-    }
-
     /// Analyze order for margin/commission (what-if)
     pub fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
         self.what_if = true;

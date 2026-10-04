@@ -183,6 +183,12 @@ impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
     pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<'a, C> {
         AttachedOrdersBuilder::new(self).preset_profit_taker()
     }
+
+    /// Build the order and return it without submitting
+    /// Useful for batch operations or custom submission logic
+    pub fn build_order(self) -> Result<Order, crate::Error> {
+        self.build().map_err(Into::into)
+    }
 }
 
 impl Order {
