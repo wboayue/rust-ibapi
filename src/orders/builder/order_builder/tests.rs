@@ -1911,6 +1911,183 @@ fn trailing_stop_without_trail_fails_validation() {
     assert_eq!(err, ValidationError::MissingRequiredField("trailing amount or percent"));
 }
 
+// === Price fields from an earlier order-type setter ===
+
+#[test]
+fn limit_drops_an_earlier_trail_percent() {
+    let order = Order::builder()
+        .sell(100)
+        .trailing_stop(TrailBy::Percent(5.0), 95.0)
+        .limit(100.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.trailing_percent, None);
+    assert_eq!(order.trail_stop_price, None);
+}
+
+#[test]
+fn limit_drops_an_earlier_trail_amount() {
+    let order = Order::builder()
+        .sell(100)
+        .trailing_stop(TrailBy::Amount(2.0), 95.0)
+        .limit(100.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.aux_price, None);
+}
+
+#[test]
+fn trailing_stop_limit_drops_an_earlier_limit_price() {
+    let order = Order::builder()
+        .sell(100)
+        .stop_limit(95.0, 94.5)
+        .trailing_stop_limit(TrailBy::Amount(2.0), 95.0, 0.5)
+        .build()
+        .unwrap();
+    assert_eq!(order.limit_price, None);
+    assert_eq!(order.limit_price_offset, Some(0.5));
+}
+
+#[test]
+fn trailing_stop_drops_an_earlier_limit_offset() {
+    let order = Order::builder()
+        .sell(100)
+        .trailing_stop_limit(TrailBy::Amount(2.0), 95.0, 0.5)
+        .trailing_stop(TrailBy::Amount(2.0), 95.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.limit_price_offset, None);
+}
+
+#[test]
+fn aux_types_require_aux_price() {
+    for order_type in [
+        OrderType::MarketIfTouched,
+        OrderType::Relative,
+        OrderType::PassiveRelative,
+        OrderType::PeggedToMarket,
+    ] {
+        let err = Order::builder().buy(100).order_type(order_type.clone()).build().unwrap_err();
+        assert_eq!(err, ValidationError::MissingRequiredField("aux_price"), "{order_type:?}");
+    }
+
+    let err = Order::builder()
+        .buy(100)
+        .limit(100.0)
+        .order_type(OrderType::LimitIfTouched)
+        .build()
+        .unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("aux_price"));
+}
+
+#[test]
+fn stop_price_does_not_stand_in_for_a_trigger() {
+    let err = Order::builder()
+        .buy(100)
+        .stop(100.0)
+        .order_type(OrderType::MarketIfTouched)
+        .build()
+        .unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("aux_price"));
+}
+
+#[test]
+fn peg_mid_builds_without_aux_price() {
+    let order = Order::builder()
+        .buy(100)
+        .limit(150.0)
+        .order_type(OrderType::PeggedToMidpoint)
+        .mid_offset_at_whole(0.01)
+        .mid_offset_at_half(0.005)
+        .build()
+        .unwrap();
+    assert_eq!(order.aux_price, None);
+    assert_eq!(order.limit_price, Some(150.0));
+}
+
+const ALL_ORDER_TYPES: [OrderType; 30] = [
+    OrderType::Market,
+    OrderType::Limit,
+    OrderType::Stop,
+    OrderType::StopLimit,
+    OrderType::TrailingStop,
+    OrderType::TrailingStopLimit,
+    OrderType::MarketOnClose,
+    OrderType::LimitOnClose,
+    OrderType::MarketOnOpen,
+    OrderType::LimitOnOpen,
+    OrderType::AtAuction,
+    OrderType::MarketIfTouched,
+    OrderType::LimitIfTouched,
+    OrderType::MarketWithProtection,
+    OrderType::StopWithProtection,
+    OrderType::MarketToLimit,
+    OrderType::Midprice,
+    OrderType::PeggedToMarket,
+    OrderType::PeggedToStock,
+    OrderType::PeggedToMidpoint,
+    OrderType::PeggedToBenchmark,
+    OrderType::PegBest,
+    OrderType::Relative,
+    OrderType::PassiveRelative,
+    OrderType::Volatility,
+    OrderType::BoxTop,
+    OrderType::ComboLimit,
+    OrderType::ComboMarket,
+    OrderType::RelativeLimitCombo,
+    OrderType::RelativeMarketCombo,
+];
+
+/// A builder that sets every price field and every field a type requires, then switches to
+/// `order_type`.
+fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached> {
+    Order::builder()
+        .buy(1)
+        .trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.5)
+        .limit(100.0)
+        .stop(99.0)
+        .market_if_touched(98.0)
+        .volatility(0.3)
+        .pegged_to_stock(0.5, 2.0)
+        .reference_contract(1, "ISLAND")
+        .order_type(order_type)
+}
+
+/// Which price fields each type sends: (limit_price, aux_price, trail fields), per C#
+/// `OrderSamples.cs` plus `OrderType::uses_*` for PEG BEST and the REL combos. Exhaustive, so a
+/// new `OrderType` variant needs a row.
+fn sent_price_fields(order_type: &OrderType) -> (bool, bool, bool) {
+    use OrderType::*;
+    match order_type {
+        Limit | LimitOnClose | LimitOnOpen | AtAuction | Midprice | PegBest | ComboLimit => (true, false, false),
+        StopLimit | LimitIfTouched | Relative | PeggedToMidpoint | RelativeLimitCombo => (true, true, false),
+        Stop | StopWithProtection | MarketIfTouched | PassiveRelative | PeggedToMarket | RelativeMarketCombo => (false, true, false),
+        TrailingStop | TrailingStopLimit => (false, true, true),
+        Market | MarketOnClose | MarketOnOpen | MarketWithProtection | MarketToLimit | PeggedToStock | PeggedToBenchmark | Volatility | BoxTop
+        | ComboMarket => (false, false, false),
+    }
+}
+
+#[test]
+fn each_type_sends_exactly_the_price_fields_it_uses() {
+    for order_type in ALL_ORDER_TYPES {
+        let order = every_price_field(order_type.clone()).build().unwrap();
+        let (limit, aux, trail) = sent_price_fields(&order_type);
+        // Stop types send `.stop(99.0)` as aux; the rest send `.market_if_touched(98.0)`'s trigger.
+        let expected_aux = if order_type.uses_stop_price() { 99.0 } else { 98.0 };
+
+        assert_eq!(order.limit_price, limit.then_some(100.0), "{order_type:?}");
+        assert_eq!(order.aux_price, aux.then_some(expected_aux), "{order_type:?}");
+        assert_eq!(order.trailing_percent, trail.then_some(5.0), "{order_type:?}");
+        assert_eq!(order.trail_stop_price, trail.then_some(95.0), "{order_type:?}");
+        assert_eq!(
+            order.limit_price_offset,
+            (order_type == OrderType::TrailingStopLimit).then_some(0.5),
+            "{order_type:?}"
+        );
+    }
+}
+
 // === Pegged orders ===
 
 #[test]
