@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
+- `client::blocking` exports the blocking `TickSubscription`, its four iterator types and `DisplayGroupSubscription`. With both `sync` and `async` enabled the top-level names are the async types, and the blocking `DisplayGroupSubscription` had no public path (#958).
 
 ### Deprecated
 

@@ -10,7 +10,7 @@ triggers:
   - a path containing the async keyword fails to parse
 symbols: [NoticeStream, sync_impl, async_impl, Subscription, r#async]
 related: [feature-matrix, no-parity-wrappers, subscription-consumer-idiom]
-precedents: ["#512", "#526", "#823"]
+precedents: ["#512", "#526", "#823", "#958"]
 memory: [feedback_raw_identifier_async_path, feedback_plan_cfg_receiver_types]
 ---
 
@@ -67,3 +67,5 @@ it stopped being so, so bring the halves together rather than documenting the ga
   `panic!`. Binding the struct on `T: StreamDecoder<T>` like the sync one deleted both:
   `git diff --shortstat 29013b4c f2f2fa51` reads 11 files, +422 −689. The dead constructor was
   public, so it still cost a migration-guide section to remove.
+- #958 — extended the `client::blocking` mirror to `TickSubscription` (+ its four iterators) and
+  `DisplayGroupSubscription`; the latter had no public blocking path in a both-features build.
