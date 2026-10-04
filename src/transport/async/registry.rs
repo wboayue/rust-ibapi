@@ -1,16 +1,19 @@
 //! The async bus's channel registries, the counterparts of the sync
 //! `SenderHash` and `SharedChannels`. Each owns its map and lock, so routing
 //! and teardown are one call per registry instead of open-coded per map.
+//!
+//! The maps sit behind std locks, which no caller holds across an `.await`,
+//! so teardown needs no runtime: `Client::drop` runs the whole shutdown.
 
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use log::{debug, trace};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, Mutex};
 
 use crate::accounts::types::AccountId;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
@@ -101,21 +104,29 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         }
     }
 
+    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Route>> {
+        self.routes.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Route>> {
+        self.routes.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Registers `route` under `id`, replacing any earlier registration.
-    pub(super) async fn insert(&self, id: K, route: Route) {
-        self.routes.write().await.insert(id, route);
+    pub(super) fn insert(&self, id: K, route: Route) {
+        self.write().insert(id, route);
     }
 
     /// Run `f` on `id`'s route while holding the read lock, so no removal can
     /// land between the lookup and `f`.
-    pub(super) async fn with_route<R>(&self, id: &K, f: impl FnOnce(&Route) -> R) -> Option<R> {
-        self.routes.read().await.get(id).map(f)
+    pub(super) fn with_route<R>(&self, id: &K, f: impl FnOnce(&Route) -> R) -> Option<R> {
+        self.read().get(id).map(f)
     }
 
     /// Deliver `item` to `id`'s route; hands it back when nothing is
     /// registered under `id`.
-    pub(super) async fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
-        match self.routes.read().await.get(id) {
+    pub(super) fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
+        match self.read().get(id) {
             Some(route) => {
                 route.deliver(id, item);
                 Ok(())
@@ -126,8 +137,8 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
 
     /// Remove `id`'s registration only if it is on `sender`'s channel, so a
     /// newer registration under the same id survives.
-    pub(super) async fn remove_if_same(&self, id: &K, sender: &BroadcastSender) {
-        let mut routes = self.routes.write().await;
+    pub(super) fn remove_if_same(&self, id: &K, sender: &BroadcastSender) {
+        let mut routes = self.write();
         if routes.get(id).is_some_and(|route| route.sender.same_channel(sender)) {
             routes.remove(id);
         }
@@ -139,8 +150,8 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// replacement's own drop signal performs the eventual removal. The count
     /// is authoritative because a dropping subscription detaches its receivers
     /// before signalling (`AsyncInternalSubscription::detach_receivers`).
-    pub(super) async fn remove_if_dead(&self, id: K, kind: &str) {
-        let mut routes = self.routes.write().await;
+    pub(super) fn remove_if_dead(&self, id: K, kind: &str) {
+        let mut routes = self.write();
         let removed = routes.get(&id).is_some_and(|route| route.sender.receiver_count() == 0);
         if removed {
             routes.remove(&id);
@@ -151,11 +162,11 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// Drop every route whose channel has no receivers left, so a dropped
     /// subscription's sender (and anything buffered in it) is released. Same
     /// liveness rule as [`remove_if_dead`](Self::remove_if_dead).
-    pub(super) async fn prune_dead(&self) {
-        if self.routes.read().await.is_empty() {
+    pub(super) fn prune_dead(&self) {
+        if self.read().is_empty() {
             return;
         }
-        let mut routes = self.routes.write().await;
+        let mut routes = self.write();
         let before = routes.len();
         routes.retain(|_, route| route.sender.receiver_count() > 0);
         debug!("pruned {} dead routes", before - routes.len());
@@ -164,8 +175,8 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// Send `item()` to every route, then clear them all, under one write lock
     /// so a route registered meanwhile can't be cleared unnotified. A closed
     /// bounded route is skipped: its stream already ended.
-    pub(super) async fn fail_all(&self, item: impl Fn() -> RoutedItem) {
-        let mut routes = self.routes.write().await;
+    pub(super) fn fail_all(&self, item: impl Fn() -> RoutedItem) {
+        let mut routes = self.write();
         for route in routes.values().filter(|route| !route.closed()) {
             let _ = route.sender.send(item());
         }
@@ -174,34 +185,28 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
 
     /// Clear every route without notifying. For aliases, whose owners are
     /// failed through their own registry.
-    pub(super) async fn clear(&self) {
-        self.routes.write().await.clear();
+    pub(super) fn clear(&self) {
+        self.write().clear();
     }
 
     #[cfg(test)]
-    pub(super) async fn sender(&self, id: &K) -> Option<BroadcastSender> {
-        self.with_route(id, |route| route.sender.clone()).await
+    pub(super) fn sender(&self, id: &K) -> Option<BroadcastSender> {
+        self.with_route(id, |route| route.sender.clone())
     }
 
     #[cfg(test)]
-    pub(super) async fn contains(&self, id: &K) -> bool {
-        self.routes.read().await.contains_key(id)
+    pub(super) fn contains(&self, id: &K) -> bool {
+        self.read().contains_key(id)
     }
 
     #[cfg(test)]
-    pub(super) async fn len(&self) -> usize {
-        self.routes.read().await.len()
+    pub(super) fn len(&self) -> usize {
+        self.read().len()
     }
 
     #[cfg(test)]
-    pub(super) async fn is_empty(&self) -> bool {
-        self.routes.read().await.is_empty()
-    }
-
-    /// Hold the write lock, to stall the cleanup task in tests.
-    #[cfg(test)]
-    pub(super) async fn lock(&self) -> tokio::sync::RwLockWriteGuard<'_, HashMap<K, Route>> {
-        self.routes.write().await
+    pub(super) fn is_empty(&self) -> bool {
+        self.read().is_empty()
     }
 }
 
@@ -211,8 +216,11 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
 #[derive(Debug)]
 pub(super) struct SharedChannels {
     /// One entry per request type; emptied at shutdown, which closes them.
+    /// A std lock, never held across an `.await`, so shutdown can run from
+    /// `Drop`.
     channels: RwLock<HashMap<OutgoingMessages, SharedChannel>>,
     /// Live subscriptions per request type; see [`SharedCounts`].
+    /// A tokio lock: it spans the request write.
     counts: Mutex<SharedCounts>,
 }
 
@@ -251,9 +259,7 @@ impl SharedChannels {
         write: impl FnOnce() -> F,
     ) -> Result<(broadcast::Receiver<RoutedItem>, SharedTicket), Error> {
         let receiver = self
-            .channels
-            .read()
-            .await
+            .channels()
             .get(&message_type)
             .map(|channel| channel.sender.subscribe())
             .ok_or_else(|| Error::InvalidArgument(format!("No shared channel configured for message type: {message_type:?}")))?;
@@ -279,6 +285,10 @@ impl SharedChannels {
         }
     }
 
+    fn channels(&self) -> RwLockReadGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
+        self.channels.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Every live shared subscription has just been failed: start a new
     /// generation so their later drops cannot touch the next session's counts.
     pub(super) async fn reset_counts(&self) {
@@ -287,8 +297,8 @@ impl SharedChannels {
 
     /// Sends `item()` once to every channel selected by `filter`; returns how
     /// many were selected.
-    async fn send_to(&self, filter: impl Fn(&SharedChannel) -> bool, item: impl Fn() -> RoutedItem) -> usize {
-        let channels = self.channels.read().await;
+    fn send_to(&self, filter: impl Fn(&SharedChannel) -> bool, item: impl Fn() -> RoutedItem) -> usize {
+        let channels = self.channels();
         let mut selected = 0;
         for (request, channel) in channels.iter().filter(|(_, channel)| filter(channel)) {
             selected += 1;
@@ -302,30 +312,28 @@ impl SharedChannels {
 
     /// Deliver `message` to every channel whose request maps `message_type`.
     /// Returns `false` when no channel maps it (or after shutdown).
-    pub(super) async fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) -> bool {
-        self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into())
-            .await
-            > 0
+    pub(super) fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) -> bool {
+        self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into()) > 0
     }
 
     /// Deliver `item()` once to every channel.
-    pub(super) async fn notify_all(&self, item: impl Fn() -> RoutedItem) {
-        self.send_to(|_| true, item).await;
+    pub(super) fn notify_all(&self, item: impl Fn() -> RoutedItem) {
+        self.send_to(|_| true, item);
     }
 
     /// Fail in-flight one-shot requests fast by delivering an error to the
     /// one-shot channels only. Used for request-less errors, which carry no
     /// id to correlate. Streaming channels are excluded so an unrelated error
     /// can't terminate a live stream.
-    pub(super) async fn fail_one_shot_channels(&self, item: impl Fn() -> RoutedItem) {
+    pub(super) fn fail_one_shot_channels(&self, item: impl Fn() -> RoutedItem) {
         let one_shot = shared_channel_configuration::exclusive_one_shot_response_types();
-        self.send_to(|channel| channel.responses.iter().any(|r| one_shot.contains(r)), item).await;
+        self.send_to(|channel| channel.responses.iter().any(|r| one_shot.contains(r)), item);
     }
 
     /// Deliver `item()` once to every channel, then drop the senders so every
     /// subscription ends after it. Later sends are no-ops.
-    pub(super) async fn close(&self, item: impl Fn() -> RoutedItem) {
-        let mut channels = self.channels.write().await;
+    pub(super) fn close(&self, item: impl Fn() -> RoutedItem) {
+        let mut channels = self.channels.write().unwrap_or_else(PoisonError::into_inner);
         for channel in channels.values() {
             let _ = channel.sender.send(item());
         }

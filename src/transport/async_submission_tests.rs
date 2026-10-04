@@ -77,8 +77,8 @@ impl Registration {
     /// The sender registered under `ID`, if any.
     async fn registered(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Option<BroadcastSender> {
         match self {
-            Self::Request | Self::BoundedRequest => bus.requests.sender(&RequestId::nth(ID)).await,
-            Self::Order => bus.orders.sender(&OrderId::from(ID)).await,
+            Self::Request | Self::BoundedRequest => bus.requests.sender(&RequestId::nth(ID)),
+            Self::Order => bus.orders.sender(&OrderId::from(ID)),
         }
     }
 
@@ -130,10 +130,9 @@ async fn test_dropping_a_pending_write_releases_its_registration() {
 async fn test_abandoned_write_cleanup_preserves_a_newer_registration() {
     for kind in KINDS {
         let (stream, bus) = make_bus(WriteMode::Pending);
-        // Hold the FIFO cleanup task on an unrelated map, so the abandoned
-        // submission's signal cannot run until the replacement is live.
-        let cleanup_gate = bus.order_update_stream.write().await;
-        bus.cleanup_sender.send(CleanupSignal::OrderUpdateStream).unwrap();
+        // Stall the cleanup task, so the abandoned submission's signal cannot
+        // run until the replacement is live.
+        let cleanup_gate = bus.cleanup_gate.lock().await;
 
         let mut submitting = Box::pin(kind.submit(&bus));
         assert!(futures::poll!(submitting.as_mut()).is_pending());

@@ -63,7 +63,7 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2).unwrap());
 
     let _sub = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
-    let sender = bus.requests.sender(&RequestId::nth(1)).await.unwrap();
+    let sender = bus.requests.sender(&RequestId::nth(1)).unwrap();
     for _ in 0..3 {
         sender.send(RoutedItem::Error(Error::Cancelled)).unwrap();
     }
@@ -244,7 +244,7 @@ async fn test_create_order_update_subscription_after_shutdown_fails() {
 
     let err = mb.create_order_update_subscription().await.err().expect("subscribe after shutdown");
     assert!(matches!(err, Error::Shutdown), "got: {err:?}");
-    assert!(bus.order_update_stream.read().await.is_none());
+    assert!(bus.order_update_stream.lock().unwrap().is_none());
 }
 
 /// Shutdown ends a live notice stream, and one opened afterwards is already
@@ -280,9 +280,8 @@ async fn test_notice_stream_ends_on_request_shutdown_sync() {
     assert!(matches!(ended, Ok(None)), "live stream: {ended:?}");
 }
 
-/// `Client::drop` only calls `request_shutdown_sync`; the dispatcher must
-/// finish the shutdown on exit, or a live order-update stream (whose
-/// subscription holds the bus) never ends.
+/// `Client::drop` calls `request_shutdown_sync`, which must end a live
+/// order-update stream (whose subscription holds the bus).
 #[tokio::test]
 async fn test_order_update_stream_ends_on_request_shutdown_sync() {
     let (_, bus) = make_bus();
@@ -311,7 +310,7 @@ async fn test_shutdown_fails_every_subscription_then_ends_it() {
         ("order update", bus.create_order_update_subscription().await.unwrap()),
     ];
 
-    bus.request_shutdown().await;
+    bus.request_shutdown();
 
     for (name, mut subscription) in subscriptions {
         let first = tokio::time::timeout(TICK, subscription.next_routed()).await.expect(name);
@@ -321,18 +320,19 @@ async fn test_shutdown_fails_every_subscription_then_ends_it() {
     }
 }
 
-/// `Client::drop` only sets the flag; the dispatcher's exit finishes the
-/// shutdown, and that path fails subscriptions with `Error::Shutdown` too.
+/// `Client::drop` runs the whole shutdown itself (`request_shutdown_sync`),
+/// with no dispatcher to finish it.
 #[tokio::test]
 async fn test_request_shutdown_sync_fails_subscriptions_with_shutdown() {
     let (_, bus) = make_bus();
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
     let mut request = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
 
     bus.request_shutdown_sync();
 
-    let first = tokio::time::timeout(Duration::from_millis(500), request.next_routed()).await.unwrap();
+    let first = tokio::time::timeout(TICK, request.next_routed()).await.unwrap();
     assert!(matches!(first, Some(RoutedItem::Error(Error::Shutdown))), "{first:?}");
+    let end = tokio::time::timeout(TICK, request.next_routed()).await.unwrap();
+    assert!(end.is_none(), "request did not end: {end:?}");
 }
 
 /// A `place_order` or `executions` subscription that has received an
@@ -355,7 +355,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
         let message = next_message(sub).await;
         assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData, "{name}");
     }
-    assert_eq!(bus.executions.len().await, 2, "both executions mapped");
+    assert_eq!(bus.executions.len(), 2, "both executions mapped");
 
     bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
     bus.request_shutdown_sync();
@@ -364,7 +364,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
         let drained = tokio::time::timeout(Duration::from_millis(500), async { while sub.next().await.is_some() {} }).await;
         assert!(drained.is_ok(), "{name} subscription with an execution did not end");
     }
-    assert!(bus.executions.is_empty().await);
+    assert!(bus.executions.is_empty());
 }
 
 /// A frame with message id `-2` is `IncomingMessages::Shutdown`: the router
@@ -386,7 +386,7 @@ async fn test_shutdown_frame_ends_subscriptions_with_executions() {
     let drained = tokio::time::timeout(Duration::from_millis(500), async { while order.next().await.is_some() {} }).await;
     assert!(drained.is_ok(), "order subscription with an execution did not end");
     assert!(!bus.is_connected());
-    assert!(bus.executions.is_empty().await);
+    assert!(bus.executions.is_empty());
 }
 
 /// An order-update stream dropped while its cleanup signal is still queued
@@ -399,12 +399,14 @@ async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_clea
     let mut order = bus.send_order_request(OrderId::from(22), vec![]).await.unwrap();
     let updates = bus.create_order_update_subscription().await.unwrap();
 
-    // Hold the FIFO cleanup task on a map this routing path does not touch,
-    // so the stream's cleanup signal cannot run before the frame is routed.
-    let cleanup_gate = bus.requests.lock().await;
-    bus.cleanup_sender.send(CleanupSignal::Request(RequestId::nth(987_654))).unwrap();
+    // Stall the cleanup task, so the stream's cleanup signal cannot run
+    // before the frame is routed.
+    let cleanup_gate = bus.cleanup_gate.lock().await;
     drop(updates);
-    assert!(bus.order_update_stream.read().await.is_some(), "the dropped stream is still registered");
+    assert!(
+        bus.order_update_stream.lock().unwrap().is_some(),
+        "the dropped stream is still registered"
+    );
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::OrderStatus as i32,
@@ -1490,16 +1492,16 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
     stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
-    assert_eq!(bus.executions.len().await, 2, "both executions mapped");
+    assert_eq!(bus.executions.len(), 2, "both executions mapped");
 
     drop(order);
     drain_cleanup_signals(&bus).await;
-    assert!(!bus.executions.contains(&"exec-order".to_string()).await, "order alias leaked");
-    assert!(bus.executions.contains(&"exec-request".to_string()).await, "live request alias pruned");
+    assert!(!bus.executions.contains(&"exec-order".to_string()), "order alias leaked");
+    assert!(bus.executions.contains(&"exec-request".to_string()), "live request alias pruned");
 
     drop(executions);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.executions.is_empty().await, "request alias leaked");
+    assert!(bus.executions.is_empty(), "request alias leaked");
 }
 
 /// Each clone sends its own cleanup signal; the alias stays while any clone
@@ -1514,14 +1516,11 @@ async fn test_execution_alias_kept_while_a_clone_is_alive() {
     let clone = order.clone();
     drop(order);
     drain_cleanup_signals(&bus).await;
-    assert!(
-        bus.executions.contains(&"exec-order".to_string()).await,
-        "alias pruned while a clone is alive"
-    );
+    assert!(bus.executions.contains(&"exec-order".to_string()), "alias pruned while a clone is alive");
 
     drop(clone);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.executions.is_empty().await, "alias leaked");
+    assert!(bus.executions.is_empty(), "alias leaked");
 }
 
 /// A stale drop signal releases the old subscription's aliases and keeps those
@@ -1538,12 +1537,12 @@ async fn test_stale_cleanup_keeps_newer_execution_aliases() {
 
     drop(sub_a);
     drain_cleanup_signals(&bus).await;
-    assert!(!bus.executions.contains(&"exec-a".to_string()).await, "stale subscription's alias leaked");
-    assert!(bus.executions.contains(&"exec-b".to_string()).await, "newer subscription's alias pruned");
+    assert!(!bus.executions.contains(&"exec-a".to_string()), "stale subscription's alias leaked");
+    assert!(bus.executions.contains(&"exec-b".to_string()), "newer subscription's alias pruned");
 
     drop(sub_b);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.executions.is_empty().await);
+    assert!(bus.executions.is_empty());
 }
 
 #[tokio::test]
@@ -1726,7 +1725,7 @@ pub(super) async fn drain_cleanup_signals<S: AsyncStream>(bus: &Arc<AsyncTcpMess
 
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     while std::time::Instant::now() < deadline {
-        if !bus.requests.contains(&MARKER_REQUEST_ID).await {
+        if !bus.requests.contains(&MARKER_REQUEST_ID) {
             return;
         }
         tokio::time::sleep(Duration::from_millis(1)).await;
@@ -1748,7 +1747,7 @@ async fn test_stale_order_cleanup_preserves_newer_subscription() {
 
     drain_cleanup_signals(&bus).await;
 
-    let sender = bus.orders.sender(&order_id).await.expect("stale cleanup removed the newer subscription");
+    let sender = bus.orders.sender(&order_id).expect("stale cleanup removed the newer subscription");
     sender
         .send(RoutedItem::Error(Error::Cancelled))
         .expect("registered channel has no receivers");
@@ -1759,7 +1758,7 @@ async fn test_stale_order_cleanup_preserves_newer_subscription() {
     // The replacement's own drop still cleans up.
     drop(sub_b);
     drain_cleanup_signals(&bus).await;
-    assert!(!bus.orders.contains(&order_id).await, "order channel leaked");
+    assert!(!bus.orders.contains(&order_id), "order channel leaked");
 }
 
 /// Dropping a clone must not unregister the channel while a sibling is still
@@ -1774,11 +1773,11 @@ async fn test_dropping_clone_keeps_order_channel_registered() {
     drop(clone);
 
     drain_cleanup_signals(&bus).await;
-    assert!(bus.orders.contains(&order_id).await, "clone drop unregistered a live subscription");
+    assert!(bus.orders.contains(&order_id), "clone drop unregistered a live subscription");
 
     drop(sub);
     drain_cleanup_signals(&bus).await;
-    assert!(!bus.orders.contains(&order_id).await, "order channel leaked");
+    assert!(!bus.orders.contains(&order_id), "order channel leaked");
 }
 
 /// Regression test for #778: drop then immediately recreate the order update
@@ -1798,7 +1797,7 @@ async fn test_drop_then_recreate_order_update_stream() {
     // Process s1's stale OrderUpdateStream signal; s2's registration survives.
     drain_cleanup_signals(&bus).await;
     let sender = {
-        let stream = bus.order_update_stream.read().await;
+        let stream = bus.order_update_stream.lock().unwrap();
         stream.as_ref().expect("stale cleanup cleared the replacement stream").clone()
     };
     sender
@@ -1810,7 +1809,7 @@ async fn test_drop_then_recreate_order_update_stream() {
 
     drop(s2);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.order_update_stream.read().await.is_none(), "order update stream leaked");
+    assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream leaked");
 }
 
 /// `reset_channels` after reconnect: every in-flight request and order
@@ -1836,9 +1835,9 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
         assert!(matches!(item, RoutedItem::Error(Error::ConnectionReset)), "{name}: {item:?}");
     }
 
-    assert!(bus.requests.is_empty().await);
-    assert!(bus.orders.is_empty().await);
-    assert!(bus.executions.is_empty().await);
+    assert!(bus.requests.is_empty());
+    assert!(bus.orders.is_empty());
+    assert!(bus.executions.is_empty());
 
     // A shared subscription created after the reset resubscribes at the
     // channel's current tail: it must not read the stale ConnectionReset.
@@ -2000,8 +1999,8 @@ async fn test_sends_are_refused_while_disconnected() {
     ));
     assert!(matches!(mb.send_message(b"message-bytes".to_vec()).await, Err(Error::ConnectionReset)));
 
-    assert!(bus.requests.is_empty().await, "a refused request must register nothing");
-    assert!(bus.orders.is_empty().await, "a refused order request must register nothing");
+    assert!(bus.requests.is_empty(), "a refused request must register nothing");
+    assert!(bus.orders.is_empty(), "a refused order request must register nothing");
     assert!(stream.captured().is_empty(), "a refused send must not reach the socket");
 
     // The same send goes through once the handshake has put the session back.
@@ -2071,10 +2070,10 @@ async fn test_failed_write_leaves_no_registration() {
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
     assert!(mb.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await.is_err());
-    assert!(bus.requests.is_empty().await, "a failed write must leave no request registered");
+    assert!(bus.requests.is_empty(), "a failed write must leave no request registered");
 
     assert!(mb.send_order_request(OrderId::from(42), b"order-bytes".to_vec()).await.is_err());
-    assert!(bus.orders.is_empty().await, "a failed write must leave no order registered");
+    assert!(bus.orders.is_empty(), "a failed write must leave no order registered");
 }
 
 #[tokio::test]
@@ -2270,7 +2269,7 @@ async fn test_drain_reports_shutdown() {
 
     let drain = tokio::spawn(subscription.cancel_and_drain(tokio::time::Instant::now() + Duration::from_secs(5)));
     tokio::time::sleep(Duration::from_millis(20)).await;
-    bus.request_shutdown().await;
+    bus.request_shutdown();
 
     let outcome: Result<Drained, Error> = drain.await.unwrap();
     assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
