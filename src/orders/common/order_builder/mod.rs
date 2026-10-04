@@ -49,7 +49,7 @@
 
 use crate::orders::builder::validation::validate_bracket_prices;
 use crate::orders::builder::{BracketPrices, Price, TrailBy, ValidationError};
-use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, TimeInForce, VolatilityType};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -852,75 +852,6 @@ pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_p
     manual_order_time.clone_into(&mut order.manual_order_time);
 
     order
-}
-
-/// Create a `PEG BEST` order that competes up to the midpoint.
-pub fn peg_best_up_to_mid_order(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    min_trade_qty: i32,
-    min_compete_size: i32,
-    mid_offset_at_whole: f64,
-    mid_offset_at_half: f64,
-) -> Order {
-    Order {
-        action,
-        order_type: "PEG BEST".to_owned(),
-        total_quantity: quantity,
-        limit_price: Some(limit_price),
-        not_held: true,
-        min_trade_qty: Some(min_trade_qty),
-        min_compete_size: Some(min_compete_size),
-        compete_against_best_offset: COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
-        mid_offset_at_whole: Some(mid_offset_at_whole),
-        mid_offset_at_half: Some(mid_offset_at_half),
-        ..Order::default()
-    }
-}
-
-/// Create a `PEG BEST` order with a caller-specified competition offset.
-pub fn peg_best_order(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    min_trade_qty: i32,
-    min_compete_size: i32,
-    compete_against_best_offset: f64,
-) -> Order {
-    Order {
-        action,
-        order_type: "PEG BEST".to_owned(),
-        total_quantity: quantity,
-        limit_price: Some(limit_price),
-        not_held: true,
-        min_trade_qty: Some(min_trade_qty),
-        min_compete_size: Some(min_compete_size),
-        compete_against_best_offset: Some(compete_against_best_offset),
-        ..Order::default()
-    }
-}
-
-/// Create a `PEG MID` order pegged to the NBBO midpoint.
-pub fn peg_mid_order(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    min_trade_qty: i32,
-    mid_offset_at_whole: f64,
-    mid_offset_at_half: f64,
-) -> Order {
-    Order {
-        action,
-        order_type: "PEG MID".to_owned(),
-        total_quantity: quantity,
-        limit_price: Some(limit_price),
-        not_held: true,
-        min_trade_qty: Some(min_trade_qty),
-        mid_offset_at_whole: Some(mid_offset_at_whole),
-        mid_offset_at_half: Some(mid_offset_at_half),
-        ..Order::default()
-    }
 }
 
 #[cfg(test)]

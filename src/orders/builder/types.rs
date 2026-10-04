@@ -137,6 +137,22 @@ pub enum TrailBy {
     Percent(f64),
 }
 
+/// How a PEG BEST order competes. See
+/// [`OrderBuilder::peg_best`](crate::orders::OrderBuilder::peg_best).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CompeteAgainstBest {
+    /// Improve on the best bid (buy) or offer (sell) by this offset.
+    Offset(f64),
+    /// Compete up to the midpoint, offset by `mid_offset_at_whole` when the midpoint is a whole
+    /// penny and `mid_offset_at_half` when it is a half penny.
+    UpToMid {
+        /// Offset from a whole-penny midpoint.
+        mid_offset_at_whole: f64,
+        /// Offset from a half-penny midpoint.
+        mid_offset_at_half: f64,
+    },
+}
+
 /// Entry, take-profit and stop-loss prices of a bracket order, named so they can't be swapped.
 /// See [`order_builder::bracket_order`](crate::orders::order_builder::bracket_order).
 #[derive(Clone, Copy, Debug, PartialEq)]

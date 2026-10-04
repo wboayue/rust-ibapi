@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `OrderBuilder::peg_best(limit, CompeteAgainstBest)` and `peg_mid(limit, mid_offset_at_whole, mid_offset_at_half)` for IBKRATS pegs, with `orders::builder::CompeteAgainstBest` (`Offset` or `UpToMid`). Both set `not_held`, which TWS requires for them (#936).
 - `orders::order_builder::non_guaranteed(order)`, which tags a combo order non-guaranteed, `attach_adjustable_stop` with `AdjustTo` / `Adjustment`, and `orders::builder::BracketPrices` (#901).
 - `Order::builder()` starts the fluent `OrderBuilder` without a client; `build()` returns the `Order` to pass to `place_order` / `submit_order`. Same setters and validation as `client.order(&contract)`, without `submit()` / `analyze()` / `bracket()` / preset legs, which need the client to allocate order ids (#901).
 - `OrderBuilder` setters for order fields it carried but could not set: `pegged_to_stock(delta, starting_price)`, `stock_reference_price`, `stock_range`, `pegged_to_benchmark(starting_price)` with `reference_contract`, `pegged_change_amount`, `pegged_change_amount_decrease`, `reference_change_amount` and `reference_range`, plus `non_guaranteed`, `combo_leg_prices`, `manual_order_time` and `cash_qty`. `build()` requires `delta` and `starting_price` for PEG STK, and `starting_price` and `reference_contract` for PEG BENCH. With `cash_qty`, the order quantity may be `0` (#901).
@@ -57,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `order_builder::peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order`, and the `OrderBuilder` setters `compete_against_best_offset`, `mid_offset_at_whole` and `mid_offset_at_half`. Use `peg_best` / `peg_mid`. See `docs/migration-5.0.md` §28 (#936).
 - `order_builder::stop_limit`, `limit_if_touched`, `relative_pegged_to_primary`, `trailing_stop_limit`, `pegged_to_stock`, `auction_pegged_to_stock` and `PeggedToBenchmark`. Each took same-typed prices in a different order from the fluent method of the same name, so a swap compiled. Use `Order::builder()`. See `docs/migration-5.0.md` §23 (#901).
 - `order_builder::attach_adjustable_to_stop`, `attach_adjustable_to_stop_limit` and `attach_adjustable_to_trail`, replaced by `attach_adjustable_stop`; the trail unit is a `TrailBy` instead of a magic `0` / `100`. See `docs/migration-5.0.md` §25 (#901).
 - `contracts::SpreadBuilder::iron_condor`. Its four same-typed contract ids compiled in any order. Use `.vertical(long_put, short_put).vertical(long_call, short_call)`. See `docs/migration-5.0.md` §21 (#901).

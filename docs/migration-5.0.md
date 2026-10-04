@@ -406,6 +406,19 @@ client.exercise_options(&contract).lapse(2).manual_order_time(time).submit()?;
 
 Async: `.submit().await?`. `ExerciseAction` is still public but no longer needed here. `account` is optional: if unset, no account is sent, and on a single-account login TWS then uses the logged-in account. `submit()` returns `Error::InvalidArgument` without sending anything if neither `exercise` nor `lapse` was called or the quantity is not positive.
 
+### 28. IBKRATS peg functions are removed; use `peg_best` / `peg_mid`
+
+`order_builder::peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order` are removed. They took six or seven arguments, with same-typed pairs (`min_trade_qty` / `min_compete_size`, the two mid offsets) that compiled when swapped. The fluent builder's raw `compete_against_best_offset`, `mid_offset_at_whole` and `mid_offset_at_half` setters are removed too; `peg_best` and `peg_mid` set them, and the "up to mid" mode no longer needs `f64::INFINITY`:
+
+| 4.2 | 5.0 |
+| --- | --- |
+| `peg_best_order(Action::Buy, q, lmt, min_qty, min_size, offset)` | `Order::builder().buy(q).peg_best(lmt, CompeteAgainstBest::Offset(offset)).min_trade_qty(min_qty).min_compete_size(min_size).build()?` |
+| `peg_best_up_to_mid_order(Action::Buy, q, lmt, min_qty, min_size, whole, half)` | `Order::builder().buy(q).peg_best(lmt, CompeteAgainstBest::UpToMid { mid_offset_at_whole: whole, mid_offset_at_half: half }).min_trade_qty(min_qty).min_compete_size(min_size).build()?` |
+| `peg_mid_order(Action::Buy, q, lmt, min_qty, whole, half)` | `Order::builder().buy(q).peg_mid(lmt, whole, half).min_trade_qty(min_qty).build()?` |
+| `.compete_against_best_offset(x)` / `.mid_offset_at_whole(w).mid_offset_at_half(h)` | `.peg_best(lmt, CompeteAgainstBest::Offset(x))` / `.peg_best(lmt, CompeteAgainstBest::UpToMid { .. })` or `.peg_mid(lmt, w, h)` |
+
+`CompeteAgainstBest` is `orders::builder::CompeteAgainstBest`. Both methods set `not_held`, as the free functions did. `build()` sends `min_compete_size` and the compete offset only for PEG BEST, and the mid offsets only for PEG MID or PEG BEST up to the midpoint.
+
 ## Behavioral changes
 
 No code changes required, but observable at runtime:
@@ -448,7 +461,8 @@ No code changes required, but observable at runtime:
 25. Replace `attach_adjustable_to_stop` / `_to_stop_limit` / `_to_trail` with `attach_adjustable_stop(&parent, stop, Adjustment { .. })` — see [§25](#25-attach_adjustable_to_-become-attach_adjustable_stop).
 26. Pass `BracketPrices { entry, take_profit, stop_loss }` to `bracket_order` and handle its `Result`; replace `bracket().build()` with `submit_all()` — see [§26](#26-bracket_order-takes-bracketprices-and-returns-a-result-bracketorderbuilderbuild-is-crate-private).
 27. Replace `exercise_options(&contract, action, quantity, account, ovrd, time)` with `exercise_options(&contract).exercise(quantity)` (or `.lapse(quantity)`) plus `.account(..)`, `.override_natural_action()` and `.manual_order_time(..)` as needed, then `.submit()` — see [§27](#27-exercise_options-returns-a-builder).
-28. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
+28. Replace `peg_best_order`, `peg_best_up_to_mid_order` and `peg_mid_order`, and the builder's `compete_against_best_offset` / `mid_offset_at_*` setters, with `.peg_best(..)` / `.peg_mid(..)` — see [§28](#28-ibkrats-peg-functions-are-removed-use-peg_best--peg_mid).
+29. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features -- -D warnings`, and your test suite for each feature flag you support.
 
 ## Need help?
 

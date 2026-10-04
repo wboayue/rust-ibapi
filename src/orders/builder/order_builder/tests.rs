@@ -1996,12 +1996,123 @@ fn peg_mid_builds_without_aux_price() {
         .buy(100)
         .limit(150.0)
         .order_type(OrderType::PeggedToMidpoint)
-        .mid_offset_at_whole(0.01)
-        .mid_offset_at_half(0.005)
         .build()
         .unwrap();
     assert_eq!(order.aux_price, None);
     assert_eq!(order.limit_price, Some(150.0));
+}
+
+// === IBKRATS pegs ===
+
+#[test]
+fn peg_best_sends_the_c_sharp_shape() {
+    let base = Order {
+        action: Action::Buy,
+        order_type: "PEG BEST".to_owned(),
+        total_quantity: 100.0,
+        limit_price: Some(111.11),
+        not_held: true,
+        min_compete_size: Some(200),
+        ..Order::default()
+    };
+    let cases = [
+        (
+            CompeteAgainstBest::Offset(0.03),
+            Order {
+                compete_against_best_offset: Some(0.03),
+                ..base.clone()
+            },
+        ),
+        (
+            CompeteAgainstBest::UpToMid {
+                mid_offset_at_whole: 0.02,
+                mid_offset_at_half: 0.025,
+            },
+            Order {
+                compete_against_best_offset: Some(f64::INFINITY),
+                mid_offset_at_whole: Some(0.02),
+                mid_offset_at_half: Some(0.025),
+                ..base.clone()
+            },
+        ),
+    ];
+
+    for (compete, expected) in cases {
+        let order = Order::builder().buy(100).peg_best(111.11, compete).min_compete_size(200).build().unwrap();
+        assert_eq!(order, expected, "{compete:?}");
+    }
+}
+
+#[test]
+fn peg_mid_sends_the_c_sharp_shape() {
+    let order = Order::builder().buy(100).peg_mid(111.11, 0.02, 0.025).build().unwrap();
+    let expected = Order {
+        action: Action::Buy,
+        order_type: "PEG MID".to_owned(),
+        total_quantity: 100.0,
+        limit_price: Some(111.11),
+        not_held: true,
+        mid_offset_at_whole: Some(0.02),
+        mid_offset_at_half: Some(0.025),
+        ..Order::default()
+    };
+    assert_eq!(order, expected);
+}
+
+#[test]
+fn peg_best_offset_drops_earlier_mid_offsets() {
+    let up_to_mid = CompeteAgainstBest::UpToMid {
+        mid_offset_at_whole: 0.02,
+        mid_offset_at_half: 0.025,
+    };
+    let order = Order::builder()
+        .buy(100)
+        .peg_best(111.11, up_to_mid)
+        .peg_best(111.11, CompeteAgainstBest::Offset(0.03))
+        .build()
+        .unwrap();
+    assert_eq!(order.mid_offset_at_whole, None);
+    assert_eq!(order.mid_offset_at_half, None);
+}
+
+#[test]
+fn other_types_drop_peg_best_fields() {
+    let up_to_mid = CompeteAgainstBest::UpToMid {
+        mid_offset_at_whole: 0.02,
+        mid_offset_at_half: 0.025,
+    };
+    let order = Order::builder()
+        .buy(100)
+        .peg_best(111.11, up_to_mid)
+        .min_compete_size(200)
+        .limit(100.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.compete_against_best_offset, None);
+    assert_eq!(order.min_compete_size, None);
+    assert_eq!(order.mid_offset_at_whole, None);
+    assert_eq!(order.mid_offset_at_half, None);
+}
+
+#[test]
+fn peg_mid_forms_replace_each_other() {
+    let offset_form = Order::builder()
+        .buy(100)
+        .peg_mid(111.11, 0.02, 0.025)
+        .pegged_to_midpoint(0.01, 111.11)
+        .build()
+        .unwrap();
+    assert_eq!(offset_form.aux_price, Some(0.01));
+    assert_eq!(offset_form.mid_offset_at_whole, None);
+
+    let ibkrats_form = Order::builder()
+        .buy(100)
+        .pegged_to_midpoint(0.01, 111.11)
+        .peg_mid(111.11, 0.02, 0.025)
+        .build()
+        .unwrap();
+    assert_eq!(ibkrats_form.aux_price, None);
+    assert_eq!(ibkrats_form.mid_offset_at_whole, Some(0.02));
 }
 
 // Every variant; add a new one here and in `sent_price_fields`.
