@@ -538,6 +538,8 @@ impl SpreadBuilder {
     }
 
     /// Calendar spread: buy the near-dated leg, sell the far-dated leg.
+    ///
+    /// Buying this combo is short the calendar. For a long calendar, sell the combo.
     pub fn calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> Self {
         self.add_leg(near_id, LegAction::Buy).done().add_leg(far_id, LegAction::Sell).done()
     }

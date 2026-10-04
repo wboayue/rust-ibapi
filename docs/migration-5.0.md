@@ -279,7 +279,7 @@ if notice.is_order_rejection() || notice.is_request_error() { /* failed */ }
 
 ### 21. `SpreadBuilder` takes `impl Into<ContractId>`, and `iron_condor` is removed
 
-`SpreadBuilder::add_leg`, `calendar` and `vertical` take `impl Into<ContractId>` instead of `i32`, as the condition constructors do ([§5](#5-price-volume-and-percent-change-conditions-take-impl-intocontractid)). Integer literals, `i32` values (for example `contract.contract_id`) and `ContractId` all compile. An argument converted with `.into()`, `.try_into()` or `.parse()` that relied on the old `i32` parameter to pick its type now needs the type named, and a narrower integer type needs `i32::from(..)`.
+`SpreadBuilder::add_leg`, `calendar` and `vertical` take `impl Into<ContractId>` instead of `i32`, as the condition constructors do ([§5](#5-price-volume-and-percent-change-conditions-take-impl-intocontractid)). Integer literals, `i32` values (for example `contract.contract_id`) and `ContractId` all compile. An argument converted with `.into()`, `.try_into()` or `.parse()` that relied on the old `i32` parameter to pick its type now needs the type named.
 
 `SpreadBuilder::iron_condor(long_put, short_put, short_call, long_call)` is removed. It took four contract ids of one type in a fixed order, so swapping two compiled and built a different strategy. Chain two verticals instead, each long the wing and short the body:
 
@@ -294,7 +294,7 @@ let spread = Contract::spread()
     .build()?;
 ```
 
-The legs come out as buy long put, sell short put, buy long call, sell short call; `iron_condor` put the call legs the other way round. TWS accepts both orders for the same combo. To keep the old order, add the legs with `add_leg`.
+The legs come out as buy long put, sell short put, buy long call, sell short call; `iron_condor` put the call legs the other way round. In a paper what-if, TWS accepted both orders with the same order state. To keep the old order, add the legs with `add_leg`.
 
 ## Behavioral changes
 
