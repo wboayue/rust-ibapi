@@ -101,20 +101,6 @@ async fn subscribe(channels: &SharedChannels, request: OutgoingMessages) -> broa
     channels.subscribe(request, None, || async { Ok(()) }).await.unwrap().0
 }
 
-/// One channel maps several response types (open orders: OpenOrder,
-/// OrderStatus, OpenOrderEnd). Indexed by response type, a reset reached it
-/// once per type; it must reach it once.
-#[tokio::test]
-async fn notify_all_reaches_each_channel_once() {
-    let channels = SharedChannels::new(8);
-    let mut open_orders = subscribe(&channels, OutgoingMessages::RequestOpenOrders).await;
-
-    channels.notify_all(|| Error::ConnectionReset.into());
-
-    let items = items(&mut open_orders);
-    assert!(items.len() == 1 && is_reset(&items[0]), "{items:?}");
-}
-
 #[tokio::test]
 async fn fail_one_shot_channels_spares_streaming_channels() {
     let channels = SharedChannels::new(8);

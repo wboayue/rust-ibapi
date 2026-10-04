@@ -164,7 +164,7 @@ pub struct AsyncInternalSubscription {
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
     /// Items this receiver has read, shared with a bounded route
-    /// ([`RouteBound`]) so it can tell how many are unread. `Sender::len()`
+    /// (`registry::RouteBound`) so it can tell how many are unread. `Sender::len()`
     /// can't: it counts values not yet seen by every receiver, and
     /// `template_receiver` never reads. Only the original handle counts;
     /// clones start at the tail with `None`.
@@ -648,7 +648,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.orders.fail_all(|| Error::ConnectionReset.into());
         // Aliases of the routes just failed.
         self.executions.clear();
-        // Shared channels too, mirroring sync's `notify_all`: an in-flight
+        // Shared channels too, mirroring sync's `fail_all`: an in-flight
         // open_orders/positions subscription awaits an end marker only the
         // pre-reconnect request could produce, so it would hang forever.
         // Unfiltered on purpose — `fail_one_shot_channels`' one-shot filter
@@ -746,13 +746,13 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 let execution_id = message.execution_id();
                 let mut item = RoutedItem::from(message);
                 if let Some(order_id) = message_order_id {
-                    item = match self.deliver_execution(&self.orders, &order_id, execution_id.clone(), item).await {
+                    item = match self.deliver_execution(&self.orders, &order_id, execution_id.clone(), item) {
                         Ok(()) => return Ok(()),
                         Err(item) => item,
                     };
                 }
                 if let Some(request_id) = message_request_id {
-                    item = match self.deliver_execution(&self.requests, &request_id, execution_id, item).await {
+                    item = match self.deliver_execution(&self.requests, &request_id, execution_id, item) {
                         Ok(()) => return Ok(()),
                         Err(item) => item,
                     };
@@ -819,7 +819,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Deliver an execution to `id`'s route in `routes` and alias the route
     /// under `execution_id`, for the commission report that follows. Hands
     /// the item back when nothing is registered under `id`.
-    async fn deliver_execution<K: std::hash::Hash + Eq + std::fmt::Display + std::fmt::Debug>(
+    fn deliver_execution<K: std::hash::Hash + Eq + std::fmt::Display + std::fmt::Debug>(
         &self,
         routes: &SenderHash<K>,
         id: &K,

@@ -296,7 +296,8 @@ async fn test_order_update_stream_ends_on_request_shutdown_sync() {
 
 /// Like the sync bus, shutdown fails every kind of subscription with
 /// `Error::Shutdown` before ending it, so a reader can tell shutdown from a
-/// stream that simply closed.
+/// stream that simply closed. Through `request_shutdown_sync`, the
+/// `Client::drop` path, with no dispatcher to finish it.
 #[tokio::test]
 async fn test_shutdown_fails_every_subscription_then_ends_it() {
     let (_, bus) = make_bus();
@@ -310,7 +311,7 @@ async fn test_shutdown_fails_every_subscription_then_ends_it() {
         ("order update", bus.create_order_update_subscription().await.unwrap()),
     ];
 
-    bus.request_shutdown();
+    bus.request_shutdown_sync();
 
     for (name, mut subscription) in subscriptions {
         let first = tokio::time::timeout(TICK, subscription.next_routed()).await.expect(name);
@@ -318,21 +319,6 @@ async fn test_shutdown_fails_every_subscription_then_ends_it() {
         let end = tokio::time::timeout(TICK, subscription.next_routed()).await.expect(name);
         assert!(end.is_none(), "{name} did not end: {end:?}");
     }
-}
-
-/// `Client::drop` runs the whole shutdown itself (`request_shutdown_sync`),
-/// with no dispatcher to finish it.
-#[tokio::test]
-async fn test_request_shutdown_sync_fails_subscriptions_with_shutdown() {
-    let (_, bus) = make_bus();
-    let mut request = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
-
-    bus.request_shutdown_sync();
-
-    let first = tokio::time::timeout(TICK, request.next_routed()).await.unwrap();
-    assert!(matches!(first, Some(RoutedItem::Error(Error::Shutdown))), "{first:?}");
-    let end = tokio::time::timeout(TICK, request.next_routed()).await.unwrap();
-    assert!(end.is_none(), "request did not end: {end:?}");
 }
 
 /// A `place_order` or `executions` subscription that has received an

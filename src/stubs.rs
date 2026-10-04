@@ -98,7 +98,7 @@ impl MessageBusStub {
     /// serving the configured responses.
     ///
     /// The real transport synthesizes `ConnectionReset` in its reconnect path
-    /// (`notify_all`), which the stub bypasses — so before this existed, no test
+    /// (`fail_all`), which the stub bypasses — so before this existed, no test
     /// could reach the retry wiring every one-shot request goes through (#741),
     /// only the combinator in `src/common/retry.rs`. The assertion is a resend
     /// count: `request_messages().len()` is the number of attempts, because each
