@@ -22,6 +22,7 @@ use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 #[cfg(feature = "async")]
 use {
     crate::transport::{
+        common::Lease,
         r#async::{AsyncInternalSubscription, CleanupSignal},
         AsyncMessageBus,
     },
@@ -369,17 +370,19 @@ impl AsyncMessageBus for MessageBusStub {
         let (cleanup_sender, mut cleanup_receiver) = tokio::sync::mpsc::unbounded_channel();
         tokio::spawn(async move {
             while let Some(signal) = cleanup_receiver.recv().await {
-                if matches!(signal, CleanupSignal::OrderUpdateStream) {
+                if matches!(signal, CleanupSignal::OrderUpdateStream(_)) {
                     ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
                     break;
                 }
             }
         });
 
+        // Unleased: nothing here checks liveness, and the signal identifies
+        // no registration.
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
             cleanup_sender,
-            CleanupSignal::OrderUpdateStream,
+            CleanupSignal::OrderUpdateStream(Lease::new().downgrade()),
         ))
     }
 

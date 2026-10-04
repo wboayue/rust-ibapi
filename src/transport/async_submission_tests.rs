@@ -75,7 +75,7 @@ const KINDS: [Registration; 3] = [Registration::Request, Registration::BoundedRe
 
 impl Registration {
     /// The sender registered under `ID`, if any.
-    async fn registered(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Option<BroadcastSender> {
+    async fn registered(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Option<broadcast::Sender<RoutedItem>> {
         match self {
             Self::Request | Self::BoundedRequest => bus.requests.sender(&RequestId::nth(ID)),
             Self::Order => bus.orders.sender(&OrderId::from(ID)),

@@ -13,7 +13,7 @@ pub(crate) use io::read_framed_message;
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
-use registry::{BroadcastSender, Route, SenderHash, SharedChannels};
+use registry::{Route, SenderHash, SharedChannels};
 pub(crate) use shutdown::ShutdownSignal;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -36,7 +36,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::{log_orphan, report_unroutable_frame};
+use super::common::{log_orphan, report_unroutable_frame, Lease, LeaseRef};
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
@@ -94,13 +94,15 @@ impl NoticeBroadcaster {
     }
 }
 
-/// Cleanup signal for removing channels when subscriptions are dropped
+/// Cleanup signal for removing channels when subscriptions are dropped. Each
+/// id-keyed variant carries the subscription's lease, so cleanup removes only
+/// its own registration, and only once no clone holds the lease.
 #[derive(Debug, Clone)]
 pub enum CleanupSignal {
-    Request(RequestId),
-    Order(OrderId),
+    Request(RequestId, LeaseRef),
+    Order(OrderId, LeaseRef),
     Shared(SharedTicket),
-    OrderUpdateStream,
+    OrderUpdateStream(LeaseRef),
 }
 
 /// Asynchronous message bus trait
@@ -163,6 +165,10 @@ pub struct AsyncInternalSubscription {
     stream: BroadcastStream<RoutedItem>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
+    /// The registration's liveness, shared by clones; released before the
+    /// cleanup signal is sent. `None` for shared-channel subscriptions,
+    /// whose channels persist.
+    lease: Option<Lease>,
     /// Items this receiver has read, shared with a bounded route
     /// (`registry::RouteBound`) so it can tell how many are unread. `Sender::len()`
     /// can't: it counts values not yet seen by every receiver, and
@@ -185,6 +191,7 @@ impl Clone for AsyncInternalSubscription {
             // Each clone sends its own cleanup signal on drop; stale ones
             // no-op against a registration that still has live receivers.
             cleanup_signal: self.cleanup_signal.clone(),
+            lease: self.lease.clone(),
             reads: None,
         }
     }
@@ -210,6 +217,7 @@ impl AsyncInternalSubscription {
             stream: BroadcastStream::new(receiver),
             cleanup_sender: None,
             cleanup_signal: None,
+            lease: None,
             reads: None,
         }
     }
@@ -225,8 +233,15 @@ impl AsyncInternalSubscription {
             stream: BroadcastStream::new(receiver),
             cleanup_sender: Some(cleanup_sender),
             cleanup_signal: Some(cleanup_signal),
+            lease: None,
             reads: None,
         }
+    }
+
+    /// Hold `lease` for the registration this subscription reads from.
+    fn leased(mut self, lease: Lease) -> Self {
+        self.lease = Some(lease);
+        self
     }
 
     /// Count this handle's reads into `reads`, for a bounded route.
@@ -294,26 +309,18 @@ impl AsyncInternalSubscription {
         }
     }
 
-    /// Send the cleanup signal, detaching this subscription's receivers first.
+    /// Send the cleanup signal, releasing this handle's lease first.
+    ///
+    /// The order matters: the cleanup task removes a registration only once
+    /// its lease is dead, and a lease released after the send (by the field
+    /// drops that follow `drop(&mut self)`) could still count as live when a
+    /// concurrently processed signal checks it — leaking the registration.
     fn send_cleanup_signal(&mut self) {
+        drop(self.lease.take());
         let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), self.cleanup_signal.take()) else {
             return;
         };
-        self.detach_receivers();
         let _ = sender.send(signal);
-    }
-
-    /// Drop this subscription's receivers by swapping in detached ones.
-    ///
-    /// Must run before the cleanup signal is sent: the cleanup task decides
-    /// whether a registration is dead via `Sender::receiver_count()`, and the
-    /// struct's own receivers would otherwise outlive `drop(&mut self)` just
-    /// long enough for a concurrently processed signal to count them as live
-    /// and skip the removal — leaking the registration.
-    fn detach_receivers(&mut self) {
-        let (detached_sender, detached) = broadcast::channel(1);
-        self.template_receiver = detached;
-        self.stream = BroadcastStream::new(detached_sender.subscribe());
     }
 }
 
@@ -326,7 +333,7 @@ impl Drop for AsyncInternalSubscription {
 
 /// Lock the order-update slot, recovering from poisoning: the slot holds no
 /// invariant a panic could break.
-fn lock_slot(slot: &std::sync::Mutex<Option<BroadcastSender>>) -> std::sync::MutexGuard<'_, Option<BroadcastSender>> {
+fn lock_slot(slot: &std::sync::Mutex<Option<Route>>) -> std::sync::MutexGuard<'_, Option<Route>> {
     slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
@@ -342,7 +349,7 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     shared_channels: SharedChannels,
     /// Optional channel for order update stream. A std lock, like the
     /// registries', so shutdown can empty it from `Drop`.
-    order_update_stream: Arc<std::sync::Mutex<Option<BroadcastSender>>>,
+    order_update_stream: Arc<std::sync::Mutex<Option<Route>>>,
     /// Capacity of every broadcast channel this bus creates. Default
     /// `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
     channel_capacity: usize,
@@ -422,20 +429,21 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         // A signal can be processed arbitrarily long after the drop that sent
         // it — including after a newer subscription registered under the same
-        // key — so removal is gated on the registration being dead. See
-        // `SenderHash::remove_if_dead` and `AsyncInternalSubscription::detach_receivers`.
+        // key — so removal is gated on the registration holding the signal's
+        // lease, and that lease being dead. See `SenderHash::release` and
+        // `AsyncInternalSubscription::send_cleanup_signal`.
         task::spawn(async move {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
                 #[cfg(test)]
                 drop(cleanup_gate.lock().await);
                 match signal {
-                    CleanupSignal::Request(request_id) => {
-                        requests.remove_if_dead(request_id, "request");
+                    CleanupSignal::Request(request_id, lease) => {
+                        requests.release(request_id, &lease, "request");
                         executions.prune_dead();
                     }
-                    CleanupSignal::Order(order_id) => {
-                        orders.remove_if_dead(order_id, "order");
+                    CleanupSignal::Order(order_id, lease) => {
+                        orders.release(order_id, &lease, "order");
                         executions.prune_dead();
                     }
                     CleanupSignal::Shared(ticket) => {
@@ -443,9 +451,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                         // They are created at initialization and reused across multiple requests
                         debug!("Subscription for shared channel {:?} ended (channel remains active)", ticket.message_type);
                     }
-                    CleanupSignal::OrderUpdateStream => {
+                    CleanupSignal::OrderUpdateStream(lease) => {
                         let mut stream = lock_slot(&order_update_stream);
-                        let removed = stream.as_ref().is_some_and(|sender| sender.receiver_count() == 0);
+                        let removed = stream.as_ref().is_some_and(|route| route.lease.is(&lease) && !route.lease.is_live());
                         if removed {
                             *stream = None;
                         }
@@ -678,8 +686,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.shared_channels.close(|| Error::Shutdown.into());
         // After the flag: `create_order_update_subscription` checks it under
         // the same lock, so no stream can register once this slot is emptied.
-        if let Some(sender) = lock_slot(&self.order_update_stream).take() {
-            let _ = sender.send(Error::Shutdown.into());
+        if let Some(route) = lock_slot(&self.order_update_stream).take() {
+            let _ = route.sender.send(Error::Shutdown.into());
         }
 
         self.connection.notice_broadcaster.close();
@@ -831,12 +839,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             if let Some(item) = item.take() {
                 route.deliver(id, item);
             }
-            route.sender.clone()
+            (route.sender.clone(), route.lease.clone())
         });
         match (delivered, item) {
-            (Some(sender), _) => {
+            (Some((sender, lease)), _) => {
                 if let Some(execution_id) = execution_id {
-                    self.executions.insert(execution_id, Route::unbounded(sender));
+                    self.executions.insert(execution_id, Route::unbounded(sender, lease));
                 }
                 Ok(())
             }
@@ -851,10 +859,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         let capacity = bound.map_or(self.channel_capacity, |bound| bound.limit + 1);
         let (sender, receiver) = broadcast::channel(capacity);
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
         let reads = bound.map(|_| Arc::new(AtomicUsize::new(0)));
         let route = match (bound, &reads) {
-            (Some(bound), Some(reads)) => Route::bounded(sender.clone(), bound, reads.clone()),
-            _ => Route::unbounded(sender.clone()),
+            (Some(bound), Some(reads)) => Route::bounded(sender, lease_ref.clone(), bound, reads.clone()),
+            _ => Route::unbounded(sender, lease_ref.clone()),
         };
         self.requests.insert(request_id, route);
 
@@ -862,9 +872,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // write is pending (a timeout, a `select!`) drops the subscription with
         // it, and its cleanup signal releases the registration. Code after the
         // `await` never runs in that case. On a failed write below, the drop
-        // sends a second, harmless signal: `remove_if_dead` spares a live
-        // replacement.
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id));
+        // sends a second, harmless signal: `release` spares a replacement.
+        let signal = CleanupSignal::Request(request_id, lease_ref.clone());
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease);
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),
             None => subscription,
@@ -872,10 +882,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         // The gate can close between `ensure_connected` and the write, so take
         // the registration back out on failure rather than leave a channel no
-        // reset will clear. `same_channel` so a newer registration under the
+        // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
         if let Err(e) = self.write_message(&message).await {
-            self.requests.remove_if_same(&request_id, &sender);
+            self.requests.remove_if_same(request_id, &lease_ref);
             return Err(e);
         }
 
@@ -912,8 +922,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     fn send_order_update_item(&self, item: RoutedItem) -> bool {
         let order_update_stream = lock_slot(&self.order_update_stream);
-        if let Some(sender) = order_update_stream.as_ref() {
-            if let Err(e) = sender.send(item) {
+        if let Some(route) = order_update_stream.as_ref() {
+            if let Err(e) = route.sender.send(item) {
                 warn!("error sending to order update stream: {e}");
                 return false;
             }
@@ -959,14 +969,17 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         self.ensure_connected()?;
 
         let (sender, receiver) = broadcast::channel(self.channel_capacity);
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
 
-        self.orders.insert(order_id, Route::unbounded(sender.clone()));
+        self.orders.insert(order_id, Route::unbounded(sender, lease_ref.clone()));
 
         // See `send_request`: owned before the write, so an abandoned write
         // releases its registration too; a failed write takes it with it.
-        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Order(order_id));
+        let signal = CleanupSignal::Order(order_id, lease_ref.clone());
+        let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease);
         if let Err(e) = self.write_message(&message).await {
-            self.orders.remove_if_same(&order_id, &sender);
+            self.orders.remove_if_same(order_id, &lease_ref);
             return Err(e);
         }
 
@@ -1005,22 +1018,22 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             return Err(Error::Shutdown);
         }
 
-        // A registration with no receivers is a dropped stream whose cleanup
-        // signal has not been processed yet (see `remove_if_dead`); replace it
-        // rather than refusing, so drop-then-recreate never races the cleanup task.
-        if order_update_stream.as_ref().is_some_and(|sender| sender.receiver_count() > 0) {
+        // A registration with a dead lease is a dropped stream whose cleanup
+        // signal has not been processed yet (see `SenderHash::release`);
+        // replace it rather than refusing, so drop-then-recreate never races
+        // the cleanup task.
+        if order_update_stream.as_ref().is_some_and(|route| route.lease.is_live()) {
             return Err(Error::AlreadySubscribed);
         }
 
         let (sender, receiver) = broadcast::channel(self.channel_capacity);
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
 
-        *order_update_stream = Some(sender);
+        *order_update_stream = Some(Route::unbounded(sender, lease_ref.clone()));
 
-        Ok(AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::OrderUpdateStream,
-        ))
+        let signal = CleanupSignal::OrderUpdateStream(lease_ref);
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), signal).leased(lease))
     }
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {

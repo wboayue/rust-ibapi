@@ -5,6 +5,7 @@
 //! The maps sit behind std locks, which no caller holds across an `.await`,
 //! so teardown needs no runtime: `Client::drop` runs the whole shutdown.
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::future::Future;
@@ -17,16 +18,18 @@ use tokio::sync::{broadcast, Mutex};
 
 use crate::accounts::types::AccountId;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::transport::common::LeaseRef;
 use crate::transport::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
 use crate::Error;
 
 pub(super) type BroadcastSender = broadcast::Sender<RoutedItem>;
 
-/// A registration: the channel, plus an unread-item cap when the request was
-/// opened with `send_request_bounded`.
+/// A registration: the channel, its subscription's lease, plus an unread-item
+/// cap when the request was opened with `send_request_bounded`.
 #[derive(Debug)]
 pub(super) struct Route {
     pub(super) sender: BroadcastSender,
+    pub(super) lease: LeaseRef,
     bound: Option<RouteBound>,
 }
 
@@ -48,21 +51,25 @@ impl RouteBound {
 }
 
 impl Route {
-    pub(super) fn unbounded(sender: BroadcastSender) -> Self {
-        Self { sender, bound: None }
+    pub(super) fn unbounded(sender: BroadcastSender, lease: LeaseRef) -> Self {
+        Self { sender, lease, bound: None }
     }
 
     /// A bounded route's channel has one slot more than `bound.limit`, for the
     /// one terminal item (end marker, error, or overflow error) that may
     /// arrive with the cap full, so sending it never evicts a queued item.
     /// `reads` is the subscription's read counter.
-    pub(super) fn bounded(sender: BroadcastSender, bound: BufferBound, reads: Arc<AtomicUsize>) -> Self {
+    pub(super) fn bounded(sender: BroadcastSender, lease: LeaseRef, bound: BufferBound, reads: Arc<AtomicUsize>) -> Self {
         let bound = RouteBound {
             state: BoundState::new(bound),
             sent: AtomicUsize::new(0),
             reads,
         };
-        Self { sender, bound: Some(bound) }
+        Self {
+            sender,
+            lease,
+            bound: Some(bound),
+        }
     }
 
     fn closed(&self) -> bool {
@@ -135,40 +142,46 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         }
     }
 
-    /// Remove `id`'s registration only if it is on `sender`'s channel, so a
-    /// newer registration under the same id survives.
-    pub(super) fn remove_if_same(&self, id: &K, sender: &BroadcastSender) {
-        let mut routes = self.write();
-        if routes.get(id).is_some_and(|route| route.sender.same_channel(sender)) {
-            routes.remove(id);
+    /// Remove `id`'s registration if `keep` rejects it; returns whether it
+    /// was removed.
+    fn remove_unless(&self, id: K, keep: impl FnOnce(&Route) -> bool) -> bool {
+        match self.write().entry(id) {
+            Entry::Occupied(route) if !keep(route.get()) => {
+                route.remove();
+                true
+            }
+            _ => false,
         }
     }
 
-    /// Remove `id`'s registration only if its channel has no receivers left —
-    /// i.e. every subscription and clone feeding off it is gone. A stale drop
-    /// signal that finds a live replacement under the same key is a no-op; the
-    /// replacement's own drop signal performs the eventual removal. The count
-    /// is authoritative because a dropping subscription detaches its receivers
-    /// before signalling (`AsyncInternalSubscription::detach_receivers`).
-    pub(super) fn remove_if_dead(&self, id: K, kind: &str) {
-        let mut routes = self.write();
-        let removed = routes.get(&id).is_some_and(|route| route.sender.receiver_count() == 0);
-        if removed {
-            routes.remove(&id);
-        }
-        debug!("cleanup {kind} channel {id}: removed={removed}");
+    /// Remove `id`'s registration only if it holds `lease`, so a newer
+    /// registration under the same id survives.
+    pub(super) fn remove_if_same(&self, id: K, lease: &LeaseRef) {
+        self.remove_unless(id, |route| !route.lease.is(lease));
     }
 
-    /// Drop every route whose channel has no receivers left, so a dropped
-    /// subscription's sender (and anything buffered in it) is released. Same
-    /// liveness rule as [`remove_if_dead`](Self::remove_if_dead).
+    /// Remove `id`'s registration only if it holds `lease` and that lease is
+    /// dead — every subscription and clone holding it is gone. A stale drop
+    /// signal that finds a replacement under the same key, or a clone's drop
+    /// while others live, is a no-op; the last holder's signal performs the
+    /// removal. A dropping subscription releases its lease before signalling,
+    /// so its own signal always sees it dead.
+    pub(super) fn release(&self, id: K, lease: &LeaseRef, kind: &str) {
+        let label = id.to_string();
+        let removed = self.remove_unless(id, |route| !route.lease.is(lease) || route.lease.is_live());
+        debug!("cleanup {kind} channel {label}: removed={removed}");
+    }
+
+    /// Drop every route whose lease is dead, so a dropped subscription's
+    /// sender (and anything buffered in it) is released. Same liveness rule
+    /// as [`release`](Self::release).
     pub(super) fn prune_dead(&self) {
         if self.read().is_empty() {
             return;
         }
         let mut routes = self.write();
         let before = routes.len();
-        routes.retain(|_, route| route.sender.receiver_count() > 0);
+        routes.retain(|_, route| route.lease.is_live());
         debug!("pruned {} dead routes", before - routes.len());
     }
 
