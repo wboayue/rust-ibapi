@@ -1882,6 +1882,30 @@ fn trail_amount_replaces_an_earlier_stop_price() {
 }
 
 #[test]
+fn trail_percent_ignores_an_earlier_stop_price() {
+    let order = Order::builder()
+        .sell(100)
+        .stop(100.0)
+        .trailing_stop(TrailBy::Percent(5.0), 95.0)
+        .build()
+        .unwrap();
+    assert_eq!(order.aux_price, None);
+    assert_eq!(order.trailing_percent, Some(5.0));
+}
+
+#[test]
+fn market_if_touched_ignores_an_earlier_stop_price() {
+    let order = Order::builder().buy(100).stop(100.0).market_if_touched(105.0).build().unwrap();
+    assert_eq!(order.aux_price, Some(105.0));
+}
+
+#[test]
+fn stop_with_protection_requires_stop_price() {
+    let err = Order::builder().buy(1).order_type(OrderType::StopWithProtection).build().unwrap_err();
+    assert_eq!(err, ValidationError::MissingRequiredField("stop_price"));
+}
+
+#[test]
 fn trailing_stop_without_trail_fails_validation() {
     let err = Order::builder().sell(100).order_type(OrderType::TrailingStop).build().unwrap_err();
     assert_eq!(err, ValidationError::MissingRequiredField("trailing amount or percent"));

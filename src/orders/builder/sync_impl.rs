@@ -47,7 +47,7 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     }
 }
 
-impl BracketOrderBuilder<ClientBound<'_, Client>> {
+impl BracketOrderBuilder<'_, Client> {
     /// Submit bracket orders synchronously
     /// Returns BracketOrderIds containing all three order IDs
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
@@ -81,7 +81,7 @@ impl BracketOrderBuilder<ClientBound<'_, Client>> {
     }
 }
 
-impl AttachedOrdersBuilder<ClientBound<'_, Client>> {
+impl AttachedOrdersBuilder<'_, Client> {
     /// Submit the order with its preset children synchronously.
     ///
     /// Allocates the parent id, then one id per requested child, and sends a single

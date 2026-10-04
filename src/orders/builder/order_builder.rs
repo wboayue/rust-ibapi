@@ -127,7 +127,7 @@ impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
     /// The prices are the caller's and the three orders are placed by the client. To have TWS
     /// attach children priced from its order presets instead, see
     /// [`preset_stop_loss`](Self::preset_stop_loss) / [`preset_profit_taker`](Self::preset_profit_taker).
-    pub fn bracket(self) -> BracketOrderBuilder<ClientBound<'a, C>> {
+    pub fn bracket(self) -> BracketOrderBuilder<'a, C> {
         BracketOrderBuilder::new(self)
     }
 
@@ -162,7 +162,7 @@ impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<ClientBound<'a, C>> {
+    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<'a, C> {
         AttachedOrdersBuilder::new(self).preset_stop_loss()
     }
 
@@ -184,7 +184,7 @@ impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<ClientBound<'a, C>> {
+    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<'a, C> {
         AttachedOrdersBuilder::new(self).preset_profit_taker()
     }
 }
@@ -456,8 +456,6 @@ impl<T> OrderBuilder<T> {
     fn set_trail(&mut self, trail: TrailBy) {
         match trail {
             TrailBy::Amount(amount) => {
-                // `build` sends a stop price as `aux_price` ahead of the trail amount.
-                self.stop_price = None;
                 self.aux_price = Some(amount);
                 self.trailing_percent = None;
             }
@@ -1446,18 +1444,14 @@ impl<T> OrderBuilder<T> {
             None
         };
 
+        // Only stop types read `stop_price`; one left by an earlier setter is ignored, so it
+        // can't take `aux_price` from the trail amount, offset or trigger price.
         let stop_price = match order_type {
-            OrderType::Stop | OrderType::StopLimit => {
+            OrderType::Stop | OrderType::StopLimit | OrderType::StopWithProtection => {
                 let price_raw = self.stop_price.ok_or(ValidationError::MissingRequiredField("stop_price"))?;
                 Some(Price::new(price_raw)?)
             }
-            _ => {
-                if let Some(price_raw) = self.stop_price {
-                    Some(Price::new(price_raw)?)
-                } else {
-                    None
-                }
-            }
+            _ => None,
         };
 
         let trail_stop_price = match order_type {
@@ -1712,14 +1706,14 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
 /// `submit()` allocates the parent and child order ids and sends one place-order request.
 /// Set everything else on the [`OrderBuilder`] first; this builder only adds legs.
 #[must_use = "AttachedOrdersBuilder does nothing until you call .submit()"]
-pub struct AttachedOrdersBuilder<T> {
-    pub(crate) parent_builder: OrderBuilder<T>,
+pub struct AttachedOrdersBuilder<'a, C> {
+    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>>,
     stop_loss: bool,
     profit_taker: bool,
 }
 
-impl<T> AttachedOrdersBuilder<T> {
-    fn new(parent_builder: OrderBuilder<T>) -> Self {
+impl<'a, C> AttachedOrdersBuilder<'a, C> {
+    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>>) -> Self {
         Self {
             parent_builder,
             stop_loss: false,
@@ -1794,15 +1788,15 @@ enum BracketEntryType {
 
 /// Builder for bracket orders
 #[must_use = "BracketOrderBuilder does nothing until you call .submit_all()"]
-pub struct BracketOrderBuilder<T> {
-    pub(crate) parent_builder: OrderBuilder<T>,
+pub struct BracketOrderBuilder<'a, C> {
+    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>>,
     entry_type: BracketEntryType,
     take_profit_price: Option<f64>,
     stop_loss_price: Option<f64>,
 }
 
-impl<T> BracketOrderBuilder<T> {
-    fn new(parent_builder: OrderBuilder<T>) -> Self {
+impl<'a, C> BracketOrderBuilder<'a, C> {
+    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>>) -> Self {
         Self {
             parent_builder,
             entry_type: BracketEntryType::None,
