@@ -853,40 +853,17 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {}
             OrderRoutingStrategy::ExecutionData => {
-                // Try order_id channel first, then request_id, storing execution_id mapping
                 let execution_id = message.execution_id();
-                let mut item = RoutedItem::from(message);
-                if let Some(order_id) = message_order_id {
-                    item = match self.deliver_execution(&self.orders, &order_id, execution_id.clone(), item) {
-                        Ok(()) => return Ok(()),
-                        Err(item) => item,
-                    };
-                }
-                if let Some(request_id) = message_request_id {
-                    item = match self.deliver_execution(&self.requests, &request_id, execution_id, item) {
-                        Ok(()) => return Ok(()),
-                        Err(item) => item,
-                    };
-                }
-                if !routed {
-                    warn!("could not route ExecutionData message {item:?}");
+                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), execution_id.as_ref()) {
+                    if !routed {
+                        warn!("could not route ExecutionData message {item:?}");
+                    }
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                let mut item = RoutedItem::from(message);
-                if let Some(order_id) = message_order_id {
-                    item = match self.orders.deliver(&order_id, item) {
-                        Ok(()) => return Ok(()),
-                        Err(item) => item,
-                    };
+                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), None) {
+                    warn!("could not route ExecutionDataEnd message {item:?}");
                 }
-                if let Some(request_id) = message_request_id {
-                    item = match self.requests.deliver(&request_id, item) {
-                        Ok(()) => return Ok(()),
-                        Err(item) => item,
-                    };
-                }
-                warn!("could not route ExecutionDataEnd message {item:?}");
             }
             OrderRoutingStrategy::OrderOrShared => {
                 if let Some(order_id) = message_order_id {
@@ -927,32 +904,24 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         Ok(())
     }
 
-    /// Deliver an execution to `id`'s route in `routes` and alias the route
-    /// under `execution_id`, for the commission report that follows. Hands
-    /// the item back when nothing is registered under `id`.
-    fn deliver_execution<K: std::hash::Hash + Eq + std::fmt::Display + std::fmt::Debug>(
+    /// Deliver to `order_id`'s route, else `request_id`'s, aliasing the route
+    /// under `execution_id` for the commission report that follows. Hands
+    /// the item back when neither is registered.
+    fn deliver_to_order_or_request(
         &self,
-        routes: &SenderHash<K>,
-        id: &K,
-        execution_id: Option<String>,
+        order_id: Option<OrderId>,
+        request_id: Option<RequestId>,
         item: RoutedItem,
+        execution_id: Option<&String>,
     ) -> Result<(), RoutedItem> {
-        let mut item = Some(item);
-        let delivered = routes.with_route(id, |route| {
-            if let Some(item) = item.take() {
-                route.deliver(id, item);
-            }
-            (route.sender.clone(), route.lease.clone())
-        });
-        match (delivered, item) {
-            (Some((sender, lease)), _) => {
-                if let Some(execution_id) = execution_id {
-                    self.executions.insert(execution_id, Route::unbounded(sender, lease));
-                }
-                Ok(())
-            }
-            (None, item) => Err(item.expect("undelivered item")),
+        match order_id {
+            Some(id) => self.orders.deliver_aliased(&id, item, execution_id, &self.executions),
+            None => Err(item),
         }
+        .or_else(|item| match request_id {
+            Some(id) => self.requests.deliver_aliased(&id, item, execution_id, &self.executions),
+            None => Err(item),
+        })
     }
 
     /// Register a channel of `class` under `id` in `routes`, optionally with

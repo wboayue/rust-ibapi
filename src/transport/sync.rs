@@ -636,11 +636,11 @@ impl<S: Stream> TcpMessageBus<S> {
     fn process_response_with_id(&self, id: Option<WireId>, message: ResponseMessage, routed: bool) {
         match id {
             Some(WireId::Request(request_id)) if self.requests.contains(&request_id) => {
-                self.requests.send(&request_id, message.into()).unwrap();
+                let _ = self.requests.deliver(&request_id, message.into());
                 return;
             }
             Some(WireId::Order(order_id)) if self.orders.contains(&order_id) => {
-                self.orders.send(&order_id, message.into()).unwrap();
+                let _ = self.orders.deliver(&order_id, message.into());
                 return;
             }
             _ => {}
@@ -655,15 +655,14 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Deliver a pre-classified Notice or Error to the request or order
     /// subscription its id names.
     fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
-        match id {
-            WireId::Request(request_id) if self.requests.contains(&request_id) => {
-                let _ = self.requests.send(&request_id, item);
+        let unrouted = match id {
+            WireId::Request(request_id) => self.requests.deliver(&request_id, item),
+            WireId::Order(order_id) => self.orders.deliver(&order_id, item),
+        };
+        if let Err(item) = unrouted {
+            if !sent_to_update_stream {
+                log_orphan(id, &item);
             }
-            WireId::Order(order_id) if self.orders.contains(&order_id) => {
-                let _ = self.orders.send(&order_id, item);
-            }
-            _ if sent_to_update_stream => {}
-            _ => log_orphan(id, &item),
         }
     }
 
@@ -676,63 +675,30 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             OrderRoutingStrategy::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
-
-                // Try order_id channel first, then request_id, storing execution_id mapping
-                if let Some(order_id) = message.order_id().map(OrderId::from) {
-                    if self.orders.contains(&order_id) {
-                        self.store_execution_mapping(&message, &self.orders, order_id);
-                        if let Err(e) = self.orders.send(&order_id, message.into()) {
-                            warn!("error routing message for order_id({order_id}): {e}");
-                        }
-                        return;
+                let (order_id, request_id) = (message.order_id().map(OrderId::from), message.request_id().and_then(RequestId::from_raw));
+                let execution_id = message.execution_id();
+                if let Err(item) = self.deliver_to_order_or_request(order_id, request_id, message.into(), execution_id.as_ref()) {
+                    if !sent_to_update_stream {
+                        warn!("could not route message {item:?}");
                     }
-                }
-                if let Some(request_id) = message.request_id().and_then(RequestId::from_raw) {
-                    if self.requests.contains(&request_id) {
-                        self.store_execution_mapping(&message, &self.requests, request_id);
-                        if let Err(e) = self.requests.send(&request_id, message.into()) {
-                            warn!("error routing message for request_id({request_id}): {e}");
-                        }
-                        return;
-                    }
-                }
-                if !sent_to_update_stream {
-                    warn!("could not route message {message:?}");
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                if let Some(order_id) = message.order_id().map(OrderId::from) {
-                    if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, message.into()) {
-                            warn!("error routing message for order_id({order_id}): {e}");
-                        }
-                        return;
-                    }
+                let (order_id, request_id) = (message.order_id().map(OrderId::from), message.request_id().and_then(RequestId::from_raw));
+                if let Err(item) = self.deliver_to_order_or_request(order_id, request_id, message.into(), None) {
+                    warn!("could not route message {item:?}");
                 }
-                if let Some(request_id) = message.request_id().and_then(RequestId::from_raw) {
-                    if self.requests.contains(&request_id) {
-                        if let Err(e) = self.requests.send(&request_id, message.into()) {
-                            warn!("error routing message for request_id({request_id}): {e}");
-                        }
-                        return;
-                    }
-                }
-                warn!("could not route message {message:?}");
             }
             OrderRoutingStrategy::OrderOrShared => {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(order_id) = message.order_id().map(OrderId::from) {
                     if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, message.into()) {
-                            warn!("error routing message for order_id({order_id}): {e}");
-                        }
-                        return;
-                    }
-                    if self.shared_channels.is_shared_response(IncomingMessages::OpenOrder) {
+                        let _ = self.orders.deliver(&order_id, message.into());
+                    } else {
                         self.shared_channels.send_message(message.message_type(), &message);
-                        return;
                     }
+                    return;
                 }
                 if !sent_to_update_stream {
                     warn!("could not route message {message:?}");
@@ -742,8 +708,8 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(execution_id) = message.execution_id() {
-                    if let Err(e) = self.executions.send(&execution_id, message.into()) {
-                        warn!("error sending commission report for execution {execution_id}: {e}");
+                    if self.executions.deliver(&execution_id, message.into()).is_err() {
+                        warn!("no recipient for commission report of execution {execution_id}");
                     }
                 } else if !sent_to_update_stream {
                     warn!("could not route commission report {message:?}");
@@ -792,20 +758,24 @@ impl<S: Stream> TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    /// Alias the execution id to `id`'s channel in `channels`. The insert runs
-    /// under `channels`' read lock, so a concurrent cleanup either removes the
-    /// registration first (no alias is stored) or prunes the alias after it.
-    fn store_execution_mapping<K: std::hash::Hash + Eq + std::fmt::Debug>(
+    /// Deliver to `order_id`'s route, else `request_id`'s, aliasing the route
+    /// under `execution_id` for the commission report that follows. Hands
+    /// the item back when neither is registered.
+    fn deliver_to_order_or_request(
         &self,
-        message: &ResponseMessage,
-        channels: &SenderHash<K, RoutedItem>,
-        id: K,
-    ) {
-        if let Some(execution_id) = message.execution_id() {
-            channels.with_entry(&id, |entry| {
-                self.executions.insert(execution_id, entry.sender.clone(), entry.lease.clone())
-            });
+        order_id: Option<OrderId>,
+        request_id: Option<RequestId>,
+        item: RoutedItem,
+        execution_id: Option<&String>,
+    ) -> Result<(), RoutedItem> {
+        match order_id {
+            Some(id) => self.orders.deliver_aliased(&id, item, execution_id, &self.executions),
+            None => Err(item),
         }
+        .or_else(|item| match request_id {
+            Some(id) => self.requests.deliver_aliased(&id, item, execution_id, &self.executions),
+            None => Err(item),
+        })
     }
 
     // Sends an order update message to the order update stream if it exists.
@@ -1043,6 +1013,34 @@ impl<V> Entry<V> {
     fn closed(&self) -> bool {
         self.bound.as_ref().is_some_and(BoundState::closed)
     }
+
+    /// An unbounded registration sharing this one's channel and lease.
+    fn alias(&self) -> Self {
+        Self::new(self.sender.clone(), self.lease.clone())
+    }
+}
+
+impl Entry<RoutedItem> {
+    /// Send `item`, subject to a bounded route's cap ([`BoundState::admit`]).
+    /// Never blocks.
+    fn deliver(&self, id: &impl std::fmt::Debug, item: RoutedItem) {
+        let item = match &self.bound {
+            Some(bound) => match bound.admit(&item, self.sender.len()) {
+                Admit::Deliver => item,
+                Admit::Overflow => bound.overflow_error(),
+                Admit::Discard => {
+                    trace!("discarding item for closed route {id:?}");
+                    return;
+                }
+            },
+            None => item,
+        };
+        if let Err(err) = self.sender.send(item) {
+            warn!("error sending: {id:?}, {err}")
+        } else {
+            warn_if_backlogged(format_args!("subscription queue for {id:?}"), self.sender.len());
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1069,6 +1067,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 
     /// Run `f` on `id`'s entry while holding the read lock, so no removal can
     /// land between the lookup and `f`.
+    #[cfg(test)]
     fn with_entry<R>(&self, id: &K, f: impl FnOnce(&Entry<V>) -> R) -> Option<R> {
         let senders = self.senders.read().unwrap();
         senders.get(id).map(f)
@@ -1125,31 +1124,41 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 }
 
 impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
-    /// Deliver `message` to `id`'s channel, subject to a bounded route's cap
-    /// ([`BoundState::admit`]). Never blocks.
-    pub fn send(&self, id: &K, message: RoutedItem) -> Result<(), Error> {
+    /// Deliver `item` to `id`'s route; hands it back when nothing is
+    /// registered under `id`.
+    pub fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
+        self.deliver_then(id, item, |_| {})
+    }
+
+    /// Deliver `item` to `id`'s route, then alias that route under `alias`
+    /// in `aliases` while still holding `id`'s read lock, so a concurrent
+    /// cleanup either removes the registration first (no alias is stored) or
+    /// prunes the alias after it. Lock order: `self` (read), then `aliases`
+    /// (write); nothing takes them the other way round. Hands the item back
+    /// when nothing is registered under `id`.
+    pub fn deliver_aliased<A: std::hash::Hash + Eq + Clone + std::fmt::Debug>(
+        &self,
+        id: &K,
+        item: RoutedItem,
+        alias: Option<&A>,
+        aliases: &SenderHash<A, RoutedItem>,
+    ) -> Result<(), RoutedItem> {
+        self.deliver_then(id, item, |entry| {
+            if let Some(alias) = alias {
+                aliases.senders.write().unwrap().insert(alias.clone(), entry.alias());
+            }
+        })
+    }
+
+    /// Deliver `item` to `id`'s route and run `then` on it, both under the
+    /// read lock.
+    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl FnOnce(&Entry<RoutedItem>)) -> Result<(), RoutedItem> {
         let senders = self.senders.read().unwrap();
-        debug!("senders: {senders:?}");
         let Some(entry) = senders.get(id) else {
-            warn!("no recipient found for: {id:?}, {message:?}");
-            return Ok(());
+            return Err(item);
         };
-        let message = match &entry.bound {
-            Some(bound) => match bound.admit(&message, entry.sender.len()) {
-                Admit::Deliver => message,
-                Admit::Overflow => bound.overflow_error(),
-                Admit::Discard => {
-                    trace!("discarding item for closed route {id:?}");
-                    return Ok(());
-                }
-            },
-            None => message,
-        };
-        if let Err(err) = entry.sender.send(message) {
-            warn!("error sending: {id:?}, {err}")
-        } else {
-            warn_if_backlogged(format_args!("subscription queue for {id:?}"), entry.sender.len());
-        }
+        entry.deliver(id, item);
+        then(entry);
         Ok(())
     }
 
