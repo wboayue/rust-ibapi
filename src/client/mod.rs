@@ -34,11 +34,41 @@ pub mod sync;
 pub mod r#async;
 
 /// Blocking client bindings for synchronous workflows.
+///
+/// Also the path for the blocking versions of types whose top-level name
+/// (`ibapi::market_data::historical::TickSubscription`,
+/// `ibapi::display_groups::DisplayGroupSubscription`) is the async type when
+/// both the `sync` and `async` features are enabled.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::blocking::{Client, DisplayGroupSubscription, TickSubscription};
+/// use ibapi::contracts::Contract;
+/// use ibapi::market_data::historical::TickLast;
+///
+/// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+/// let contract = Contract::stock("TSLA").build();
+///
+/// let ticks: TickSubscription<TickLast> = client.historical_ticks(&contract, 100).trade().expect("historical ticks request failed");
+/// for tick in ticks.iter_data() {
+///     println!("{:?}", tick.expect("decode error"));
+/// }
+///
+/// let group: DisplayGroupSubscription = client.subscribe_to_group_events(1).expect("subscription failed");
+/// for update in group.iter_data() {
+///     println!("{:?}", update.expect("decode error"));
+/// }
+/// ```
 #[cfg(feature = "sync")]
 pub mod blocking {
     pub use super::sync::Client;
     pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
     pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
+    pub use crate::display_groups::sync::DisplayGroupSubscription;
+    pub use crate::market_data::historical::sync::{
+        TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter,
+    };
     pub use crate::subscriptions::notice_stream::sync_impl::{NoticeStream, NoticeStreamIter};
     pub use crate::subscriptions::sync::{Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 }
