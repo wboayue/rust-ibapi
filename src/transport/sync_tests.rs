@@ -3558,3 +3558,35 @@ fn sender_hash_recovers_from_a_poisoned_lock() {
     assert_eq!(receiver.try_iter().count(), 1);
     assert_eq!(routes.len(), 0);
 }
+
+/// A panic under the order-update slot's lock must not silently drop later
+/// order updates or leave the slot uncleanable.
+#[test]
+fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let stream_sub = bus.create_order_update_subscription()?;
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = bus.order_update_stream.lock().unwrap();
+                panic!("poison the order-update slot");
+            })
+            .join();
+    });
+    assert!(bus.order_update_stream.is_poisoned());
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
+    bus.dispatch()?;
+    assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+
+    let registered = lock_slot(&bus.order_update_stream).as_ref().unwrap().lease.clone();
+    bus.clear_order_update_stream(&registered);
+    assert!(lock_slot(&bus.order_update_stream).is_none(), "poisoned slot not cleared");
+    Ok(())
+}

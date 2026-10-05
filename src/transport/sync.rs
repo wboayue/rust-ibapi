@@ -5,7 +5,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -122,7 +122,7 @@ impl SharedChannels {
         }
     }
 
-    fn subscribers(&self) -> std::sync::MutexGuard<'_, Vec<SharedSubscriber>> {
+    fn subscribers(&self) -> MutexGuard<'_, Vec<SharedSubscriber>> {
         self.subscribers.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -301,6 +301,12 @@ impl NoticeBroadcaster {
     }
 }
 
+/// Lock the order-update slot, recovering from poisoning: the slot holds no
+/// invariant a panic could break.
+fn lock_slot(slot: &Mutex<Option<Entry<RoutedItem>>>) -> MutexGuard<'_, Option<Entry<RoutedItem>>> {
+    slot.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 #[derive(Debug)]
 pub struct TcpMessageBus<S: Stream> {
     connection: Connection<S>,
@@ -379,7 +385,7 @@ impl<S: Stream> TcpMessageBus<S> {
         // After the flag: `create_order_update_subscription` checks it under
         // the same lock, so no stream can register once this slot is emptied.
         // The subscription holds a sender clone, so only a sent item ends it.
-        if let Some(entry) = self.order_update_stream.lock().unwrap().take() {
+        if let Some(entry) = lock_slot(&self.order_update_stream).take() {
             let _ = entry.sender.send(Error::Shutdown.into());
         }
 
@@ -468,13 +474,7 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn clear_order_update_stream(&self, lease: &LeaseRef) {
-        let mut stream = if let Ok(stream) = self.order_update_stream.lock() {
-            stream
-        } else {
-            warn!("failed to lock order_update_stream");
-            return;
-        };
-
+        let mut stream = lock_slot(&self.order_update_stream);
         let removed = stream.as_ref().is_some_and(|registered| registered.lease.is(lease));
         if removed {
             *stream = None;
@@ -787,17 +787,16 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn send_order_update_item(&self, item: RoutedItem) -> bool {
-        if let Ok(order_update_stream) = self.order_update_stream.lock() {
-            if let Some(entry) = order_update_stream.as_ref() {
-                if let Err(e) = entry.sender.send(item) {
-                    warn!("error sending to order update stream: {e}");
-                    return false;
-                }
-                warn_if_backlogged(format_args!("order update stream"), entry.sender.len());
-                return true;
-            }
+        let order_update_stream = lock_slot(&self.order_update_stream);
+        let Some(entry) = order_update_stream.as_ref() else {
+            return false;
+        };
+        if let Err(e) = entry.sender.send(item) {
+            warn!("error sending to order update stream: {e}");
+            return false;
         }
-        false
+        warn_if_backlogged(format_args!("order update stream"), entry.sender.len());
+        true
     }
 
     // The cleanup thread receives signals as subscribers are cancelled or
@@ -933,7 +932,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
-        let mut order_update_stream = self.order_update_stream.lock().unwrap();
+        let mut order_update_stream = lock_slot(&self.order_update_stream);
 
         // Not `ensure_connected`: nothing is written, and the stream may be
         // created while a reconnect is in progress.
