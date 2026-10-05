@@ -57,9 +57,7 @@ impl Client {
     /// ```
     pub async fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
         let request = encoders::encode_request_news_bulletins(all_messages)?;
-        self.subscription::<NewsBulletin>()
-            .send_shared(OutgoingMessages::RequestNewsBulletins, request)
-            .await
+        self.subscription().send_shared(OutgoingMessages::RequestNewsBulletins, request).await
     }
 
     /// Historical News Headlines
@@ -157,7 +155,7 @@ impl Client {
         let builder = self.request();
         let request = common::encode_contract_news_request(builder.request_id(), contract, provider_codes)?;
         builder
-            .send_with_context(request, self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData))
+            .send_with_context(request, common::tick_news_context(self.decoder_context()))
             .await
     }
 
@@ -182,7 +180,7 @@ impl Client {
         let builder = self.request();
         let request = common::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
         builder
-            .send_with_context(request, self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData))
+            .send_with_context(request, common::tick_news_context(self.decoder_context()))
             .await
     }
 }

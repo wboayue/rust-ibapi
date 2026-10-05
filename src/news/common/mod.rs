@@ -3,7 +3,15 @@ pub(crate) mod encoders;
 pub(crate) mod stream_decoders;
 
 use crate::contracts::Contract;
+use crate::messages::OutgoingMessages;
+use crate::subscriptions::DecoderContext;
 use crate::Error;
+
+/// Decoder context for news subscribed through `reqMktData` (generic tick 292),
+/// so `NewsArticle`'s cancel sends `cancelMktData`.
+pub(crate) fn tick_news_context(context: DecoderContext) -> DecoderContext {
+    context.with_request_type(OutgoingMessages::RequestMarketData)
+}
 
 /// Build the generic tick list for contract-specific news subscriptions.
 pub(crate) fn contract_news_generic_ticks(provider_codes: &[&str]) -> Vec<String> {
