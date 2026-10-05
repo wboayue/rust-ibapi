@@ -488,8 +488,8 @@ impl Client {
     /// [`Error::Shutdown`].
     ///
     /// After an error, drop the ended subscription and call
-    /// `order_update_stream` again; while the old one is held, a second call
-    /// returns [`Error::AlreadySubscribed`].
+    /// `order_update_stream` again; while the old one is held and not
+    /// cancelled, a second call returns [`Error::AlreadySubscribed`].
     /// After a reconnect, the existing subscription is still live. In both
     /// cases, rebuild state from snapshots:
     ///

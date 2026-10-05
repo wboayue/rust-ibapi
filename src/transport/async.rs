@@ -416,7 +416,7 @@ impl AsyncInternalSubscription {
                 drop(lease);
                 Some(key.signal(lease_ref))
             }
-            None => self.shared.take().map(CleanupSignal::Shared),
+            None => self.shared.map(CleanupSignal::Shared),
         };
         let (Some(sender), Some(signal)) = (self.cleanup_sender.take(), signal) else {
             return;
