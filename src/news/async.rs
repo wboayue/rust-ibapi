@@ -2,6 +2,7 @@
 
 use super::common::{self, decoders, encoders};
 use super::*;
+use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
@@ -56,15 +57,7 @@ impl Client {
     /// ```
     pub async fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
         let request = encoders::encode_request_news_bulletins(all_messages)?;
-        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestNewsBulletins, request).await?;
-
-        Ok(Subscription::new_from_internal(
-            internal_subscription,
-            self.message_bus.clone(),
-            None,
-            None,
-            self.decoder_context(),
-        ))
+        self.subscription().send_shared(OutgoingMessages::RequestNewsBulletins, request).await
     }
 
     /// Historical News Headlines
@@ -106,17 +99,10 @@ impl Client {
     ) -> Result<Subscription<NewsArticle>, Error> {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
-        let request_id = self.mint_request_id();
-        let request = encoders::encode_request_historical_news(request_id.raw(), contract_id, provider_codes, start_time, end_time, total_results)?;
-        let internal_subscription = self.send_request(request_id, request).await?;
-
-        Ok(Subscription::new_from_internal(
-            internal_subscription,
-            self.message_bus.clone(),
-            Some(request_id.raw()),
-            None,
-            self.decoder_context(),
-        ))
+        let builder = self.request();
+        let request =
+            encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
+        builder.send(request).await
     }
 
     /// Requests news article body
@@ -166,17 +152,11 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.mint_request_id();
-        let request = common::encode_contract_news_request(request_id.raw(), contract, provider_codes)?;
-        let internal_subscription = self.send_request(request_id, request).await?;
-
-        Ok(Subscription::new_from_internal(
-            internal_subscription,
-            self.message_bus.clone(),
-            Some(request_id.raw()),
-            None,
-            self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
-        ))
+        let builder = self.request();
+        let request = common::encode_contract_news_request(builder.request_id(), contract, provider_codes)?;
+        builder
+            .send_with_context(request, common::tick_news_context(self.decoder_context()))
+            .await
     }
 
     /// Subscribe to broad tape news
@@ -197,17 +177,11 @@ impl Client {
     /// }
     /// ```
     pub async fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let request_id = self.mint_request_id();
-        let request = common::encode_broad_tape_news_request(request_id.raw(), provider_code)?;
-        let internal_subscription = self.send_request(request_id, request).await?;
-
-        Ok(Subscription::new_from_internal(
-            internal_subscription,
-            self.message_bus.clone(),
-            Some(request_id.raw()),
-            None,
-            self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
-        ))
+        let builder = self.request();
+        let request = common::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
+        builder
+            .send_with_context(request, common::tick_news_context(self.decoder_context()))
+            .await
     }
 }
 
