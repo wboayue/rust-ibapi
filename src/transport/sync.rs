@@ -441,8 +441,8 @@ impl<S: Stream> TcpMessageBus<S> {
     // processed arbitrarily late, and unconditional removal would take out a
     // newer registration under the same key (place then cancel on one order
     // id, or an order update stream recreated after a reconnect reset).
-    // Identity alone, not liveness: a sync subscription has one holder, and a
-    // cancel must unregister it while the handle is still held.
+    // Identity alone, not liveness: a sync subscription has one holder, and
+    // its lease is released before its signal is sent, at cancel or drop.
     //
     // `clean_request` and `clean_order` also drop the subscription's
     // execution-id aliases, matched by lease rather than key, so a stale
@@ -969,10 +969,11 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             return Err(Error::Shutdown);
         }
 
-        // A registration with a dead lease is a dropped stream whose cleanup
-        // signal has not been processed yet; replace it rather than refusing,
-        // so drop-then-recreate never races the cleanup thread. Its stale
-        // signal then finds another lease and leaves the replacement alone.
+        // A registration with a dead lease is a cancelled or dropped stream
+        // whose cleanup signal has not been processed yet; replace it rather
+        // than refusing, so cancel- or drop-then-recreate never races the
+        // cleanup thread. Its stale signal then finds another lease and leaves
+        // the replacement alone.
         if order_update_stream.as_ref().is_some_and(|registered| registered.lease.is_live()) {
             return Err(Error::AlreadySubscribed);
         }

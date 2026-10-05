@@ -2534,6 +2534,35 @@ fn test_drop_then_recreate_order_update_stream() -> Result<(), Error> {
     Ok(())
 }
 
+/// #932: cancel then recreate the order update stream, the old handle still
+/// held. `cancel()` releases the lease, so the registration is replaced
+/// without waiting for the cleanup thread; the old stream sends one signal,
+/// none at drop, and that stale signal must not clear the replacement.
+#[test]
+fn test_cancel_then_recreate_order_update_stream() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+
+    // Cleanup thread not running yet: the old stream's signal stays queued.
+    let cancelled = bus.create_order_update_subscription()?;
+    cancelled.cancel();
+    let replacement = bus.create_order_update_subscription().expect("recreation after cancel failed");
+    drop(cancelled);
+    assert_eq!(bus.signals_recv.len(), 1, "cancel then drop should send one signal");
+
+    let handle = bus.start_cleanup_thread();
+    drain_cleanup_signals(&bus);
+    assert!(
+        bus.send_order_update_item(Error::Cancelled.into()),
+        "stale cleanup cleared the replacement"
+    );
+    let item = replacement.next_timeout_routed(TICK);
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Cancelled))), "{item:?}");
+
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
 /// Regression test for #773: dropping an old order subscription must not
 /// unregister a newer subscription under the same order id (place then cancel
 /// on one id). The stale signal carries the old subscription's lease and skips
