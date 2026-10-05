@@ -8,7 +8,7 @@ use time_tz::timezones;
 use super::*;
 use crate::client::ids::RequestId;
 use crate::client::sync::Client;
-use crate::common::test_utils::helpers::{error_frame, managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{binary_text, error_frame, handshake_frames, managed_accounts_frame, next_valid_id_frame};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus, STARTUP_TIMEOUT_LIMIT};
@@ -22,17 +22,9 @@ fn push_handshake(stream: &MemoryStream) {
 }
 
 fn push_handshake_in_zone(stream: &MemoryStream, zone: &str) {
-    let handshake = format!("{SERVER_VERSION}\020240120 12:00:00 {zone}\0");
-    stream.push_inbound(handshake.into_bytes());
-    stream.push_inbound(next_valid_id_frame(90));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
-}
-
-fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
-    let mut data = Vec::with_capacity(4 + payload.len());
-    data.extend_from_slice(&msg_id.to_be_bytes());
-    data.extend_from_slice(payload.as_bytes());
-    data
+    for frame in handshake_frames(SERVER_VERSION, zone, 90) {
+        stream.push_inbound(frame);
+    }
 }
 
 /// `-2` is the clean-shutdown sentinel TWS sends when it wants the client

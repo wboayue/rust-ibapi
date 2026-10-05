@@ -1,16 +1,7 @@
 //! Unit tests for the sync and async `NoticeStream` impls.
 
+use crate::common::test_utils::helpers::test_notice;
 use crate::messages::Notice;
-
-fn make_notice(code: i32, message: &str) -> Notice {
-    Notice {
-        request_id: None,
-        code,
-        message: message.into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
-}
 
 #[cfg(feature = "sync")]
 mod sync_tests {
@@ -24,7 +15,7 @@ mod sync_tests {
         let (sender, receiver) = channel::unbounded();
         let stream = NoticeStream::new(receiver);
 
-        sender.send(make_notice(2104, "farm OK")).unwrap();
+        sender.send(test_notice(2104, "farm OK")).unwrap();
         let notice = stream.next().expect("pending notice not received");
         assert_eq!(notice.code, 2104);
         assert_eq!(notice.message, "farm OK");
@@ -37,7 +28,7 @@ mod sync_tests {
 
         assert!(stream.try_next().is_none(), "empty channel should yield None");
 
-        sender.send(make_notice(1100, "lost")).unwrap();
+        sender.send(test_notice(1100, "lost")).unwrap();
         assert_eq!(stream.try_next().expect("notice").code, 1100);
     }
 
@@ -64,8 +55,8 @@ mod sync_tests {
         let (sender, receiver) = channel::unbounded();
         let stream = NoticeStream::new(receiver);
 
-        sender.send(make_notice(2104, "a")).unwrap();
-        sender.send(make_notice(2107, "b")).unwrap();
+        sender.send(test_notice(2104, "a")).unwrap();
+        sender.send(test_notice(2107, "b")).unwrap();
         drop(sender);
 
         let codes: Vec<i32> = stream.iter().map(|n| n.code).collect();
@@ -85,7 +76,7 @@ mod async_tests {
         let (sender, receiver) = broadcast::channel(8);
         let mut stream = NoticeStream::new(receiver);
 
-        sender.send(make_notice(2104, "farm OK")).unwrap();
+        sender.send(test_notice(2104, "farm OK")).unwrap();
         let notice = stream.next().await.expect("pending notice not received");
         assert_eq!(notice.code, 2104);
     }
@@ -104,7 +95,7 @@ mod async_tests {
         let mut a = NoticeStream::new(sender.subscribe());
         let mut b = NoticeStream::new(sender.subscribe());
 
-        sender.send(make_notice(1100, "lost")).unwrap();
+        sender.send(test_notice(1100, "lost")).unwrap();
 
         assert_eq!(a.next().await.unwrap().code, 1100);
         assert_eq!(b.next().await.unwrap().code, 1100);
@@ -117,7 +108,7 @@ mod async_tests {
 
         // Overflow the channel; the two oldest notices are evicted.
         for code in 1..=4 {
-            sender.send(make_notice(code, "")).unwrap();
+            sender.send(test_notice(code, "")).unwrap();
         }
 
         // The lag surfaces in-band: a gap notice naming the dropped count...
@@ -139,7 +130,7 @@ mod async_tests {
         let mut s = NoticeStream::new(receiver);
 
         for code in [2104, 2107, 1102] {
-            sender.send(make_notice(code, "")).unwrap();
+            sender.send(test_notice(code, "")).unwrap();
         }
         drop(sender);
 

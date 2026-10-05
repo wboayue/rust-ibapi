@@ -1,6 +1,7 @@
 use prost::Message;
 
 use super::*;
+use crate::common::test_utils::helpers;
 
 // Table-driven test data structures
 struct EncodeLengthTestCase {
@@ -694,17 +695,13 @@ fn test_notice_is_cancellation() {
     assert!(!error.is_cancellation());
 }
 
-fn notice_with_code(code: i32) -> Notice {
-    Notice::synthesized(code, String::new())
-}
-
 #[test]
 fn test_notice_is_warning() {
     // Boundaries from the constant; 2176 and 2187 are the post-2169 codes IB
     // shipped that motivated widening the band (#805).
     let warning_codes = [*WARNING_CODE_RANGE.start(), 2107, 2119, 2150, 2176, 2187, *WARNING_CODE_RANGE.end()];
     for code in warning_codes {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(notice.is_warning(), "Code {} should be a warning", code);
         assert!(notice.is_informational());
         assert!(!notice.is_error());
@@ -730,7 +727,7 @@ fn test_notice_is_warning() {
     // 2188 inside it.
     let non_warning_codes = [*WARNING_CODE_RANGE.start() - 1, *WARNING_CODE_RANGE.end() + 1, 200, 202, 1000, 2188];
     for code in non_warning_codes {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(!notice.is_warning(), "Code {} should not be a warning", code);
     }
 }
@@ -799,7 +796,7 @@ fn test_notice_is_informational() {
     // Informational includes cancellations, warnings, and system messages
     let informational_codes = [202, 1100, 1101, 1102, 1300, *WARNING_CODE_RANGE.start(), 2107, *WARNING_CODE_RANGE.end()];
     for code in informational_codes {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(notice.is_informational(), "Code {} should be informational", code);
         assert!(!notice.is_error(), "Code {} should not be an error", code);
     }
@@ -807,7 +804,7 @@ fn test_notice_is_informational() {
     // Non-informational (actual errors)
     let error_codes = [100, 200, 201, 316, 321, 354, 502, 10000];
     for code in error_codes {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(!notice.is_informational(), "Code {} should not be informational", code);
         assert!(notice.is_error(), "Code {} should be an error", code);
     }
@@ -866,20 +863,26 @@ fn test_notice_is_order_rejection() {
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
     for code in [201, 203, 355, end - 1, end] {
-        assert!(notice_with_code(code).is_order_rejection(), "code {code} should be order rejection");
+        assert!(
+            helpers::test_notice(code, "").is_order_rejection(),
+            "code {code} should be order rejection"
+        );
     }
 
     // Codes inside the band that an earlier category claims are covered by
     // test_notice_category_predicates_are_disjoint.
     for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
-        assert!(!notice_with_code(code).is_order_rejection(), "code {code} should not be order rejection");
+        assert!(
+            !helpers::test_notice(code, "").is_order_rejection(),
+            "code {code} should not be order rejection"
+        );
     }
 }
 
 #[test]
 fn test_notice_is_request_error() {
     for &code in REQUEST_ERROR_CODES {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(notice.is_request_error(), "code {code} should be a request error");
         assert!(
             ORDER_REJECTION_CODE_RANGE.contains(&code),
@@ -888,7 +891,10 @@ fn test_notice_is_request_error() {
         assert!(notice.is_error(), "code {code} should be terminal");
     }
     for code in [201, 202, 317, 355, 399, 502, 2104, 10000] {
-        assert!(!notice_with_code(code).is_request_error(), "code {code} should not be a request error");
+        assert!(
+            !helpers::test_notice(code, "").is_request_error(),
+            "code {code} should not be a request error"
+        );
     }
 }
 
@@ -951,7 +957,7 @@ fn test_notice_category_partition() {
     ];
 
     for &(code, expected) in cases {
-        assert_eq!(notice_with_code(code).category(), expected, "code {code} miscategorised");
+        assert_eq!(helpers::test_notice(code, "").category(), expected, "code {code} miscategorised");
     }
 }
 
@@ -984,8 +990,8 @@ fn test_connectivity_status_delegates() {
     // The accessor is a thin wrapper over from_code; assert delegation without
     // re-asserting the whole table.
     let code = FARM_BROKEN_CODES[0];
-    assert_eq!(notice_with_code(code).connectivity_status(), ConnectivityStatus::from_code(code));
-    assert_eq!(notice_with_code(500).connectivity_status(), None);
+    assert_eq!(helpers::test_notice(code, "").connectivity_status(), ConnectivityStatus::from_code(code));
+    assert_eq!(helpers::test_notice(500, "").connectivity_status(), None);
 }
 
 #[test]
@@ -998,7 +1004,7 @@ fn test_connectivity_status_subset_of_warning() {
         .chain(&FARM_INACTIVE_CODES)
         .chain(&FARM_CONNECTING_CODES);
     for &code in all_farm {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(notice.is_warning(), "farm code {code} should be a warning");
         assert_eq!(
             notice.category(),
@@ -1016,7 +1022,7 @@ fn test_notice_data_advisory() {
     // over ranges: every advisory categorises as DataAdvisory whatever band it
     // is numerically inside (317 in 200..=399, 2188 in the 21xx band).
     for &code in DATA_ADVISORY_CODES {
-        let notice = notice_with_code(code);
+        let notice = helpers::test_notice(code, "");
         assert!(notice.is_data_advisory(), "code {code} should be a data advisory");
         assert!(notice.is_informational(), "code {code} should be informational");
         assert!(!notice.is_error(), "code {code} should not be an error");
@@ -1028,7 +1034,7 @@ fn test_notice_data_advisory() {
                 continue;
             }
             assert!(
-                !notice_with_code(neighbor).is_data_advisory(),
+                !helpers::test_notice(neighbor, "").is_data_advisory(),
                 "code {neighbor} should not be a data advisory"
             );
         }
@@ -1047,8 +1053,8 @@ fn test_handshake_synthetic_constants_pinned() {
 
 #[test]
 fn test_is_handshake_synthetic() {
-    assert!(notice_with_code(HANDSHAKE_UNKNOWN_FRAME_CODE).is_handshake_synthetic());
-    assert!(notice_with_code(HANDSHAKE_DECODE_FAILURE_CODE).is_handshake_synthetic());
+    assert!(helpers::test_notice(HANDSHAKE_UNKNOWN_FRAME_CODE, "").is_handshake_synthetic());
+    assert!(helpers::test_notice(HANDSHAKE_DECODE_FAILURE_CODE, "").is_handshake_synthetic());
 
     // TWS-emitted codes must not pass the predicate.
     for code in [
@@ -1065,7 +1071,7 @@ fn test_is_handshake_synthetic() {
         100,
     ] {
         assert!(
-            !notice_with_code(code).is_handshake_synthetic(),
+            !helpers::test_notice(code, "").is_handshake_synthetic(),
             "code {code} should not be flagged handshake-synthetic"
         );
     }
@@ -1085,7 +1091,7 @@ fn test_is_client_synthesized() {
         -2,
         i32::MIN,
     ] {
-        assert!(notice_with_code(code).is_client_synthesized(), "code {code}");
+        assert!(helpers::test_notice(code, "").is_client_synthesized(), "code {code}");
     }
 
     // TWS-emitted codes, including the code-less 0.
@@ -1098,7 +1104,7 @@ fn test_is_client_synthesized() {
         *ORDER_REJECTION_CODE_RANGE.start(),
         10000,
     ] {
-        assert!(!notice_with_code(code).is_client_synthesized(), "code {code}");
+        assert!(!helpers::test_notice(code, "").is_client_synthesized(), "code {code}");
     }
 }
 

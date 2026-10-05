@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::test_utils::helpers::CapturingSink;
 use crate::messages::UNKNOWN_MESSAGE_TYPE_CODE;
 
 #[test]
@@ -27,18 +28,6 @@ fn test_validate_frame_length_rejects_out_of_range_lengths() {
     }
 }
 
-/// Collects everything delivered to the notice sink.
-#[derive(Default)]
-struct CapturingSink {
-    notices: std::sync::Mutex<Vec<Notice>>,
-}
-
-impl NoticeSink for CapturingSink {
-    fn deliver(&self, notice: Notice) {
-        self.notices.lock().unwrap().push(notice);
-    }
-}
-
 #[test]
 fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
     // Message id 9999 maps to no IncomingMessages variant, which is what a
@@ -49,7 +38,7 @@ fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
     let sink = CapturingSink::default();
     report_unroutable_frame(&message, &sink);
 
-    let notices = sink.notices.lock().unwrap();
+    let notices = sink.notices();
     assert_eq!(notices.len(), 1, "an unknown kind must be observable, not just logged");
     assert_eq!(notices[0].code, UNKNOWN_MESSAGE_TYPE_CODE);
     // Naming the id is the whole point: scattered ids mean the framing slipped,
@@ -73,7 +62,7 @@ fn test_report_unroutable_frame_stays_quiet_for_a_known_kind() {
     report_unroutable_frame(&message, &sink);
 
     assert!(
-        sink.notices.lock().unwrap().is_empty(),
+        sink.notices().is_empty(),
         "a known kind with no listener is routine and must raise no notice"
     );
 }
