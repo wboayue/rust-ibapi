@@ -13,8 +13,7 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{
-    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, managed_accounts_frame, next_valid_id_frame,
-    NoticeTestData, FARM_OK_MSG,
+    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, NoticeTestData, FARM_OK_MSG,
 };
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
@@ -1921,10 +1920,9 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
     // the #891 short-body path end to end (it used to panic the dispatcher).
     // Then the frames the reconnect handshake consumes.
     stream.push_inbound(b"xx".to_vec());
-    let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
-    stream.push_inbound(handshake.into_bytes());
-    stream.push_inbound(next_valid_id_frame(5000));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     let mut notices = bus.connection.notice_broadcaster.subscribe();
@@ -1973,10 +1971,9 @@ async fn test_reconnect_raises_order_ids_from_handshake() {
     // id), which the processing loop classifies as connection lost.
     stream.push_inbound(b"xx".to_vec());
     // Frames the reconnect handshake consumes, in order.
-    let handshake = format!("{}\020240120 12:00:00 EST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
-    stream.push_inbound(handshake.into_bytes());
-    stream.push_inbound(next_valid_id_frame(5000));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100).unwrap());

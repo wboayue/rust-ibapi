@@ -231,7 +231,7 @@ fn test_text_request_id_field() {
 
 #[test]
 fn test_notice() {
-    let message = crate::common::test_utils::helpers::proto_error_response(-1, 2107, "HMDS data farm connection is inactive.");
+    let message = helpers::proto_error_response(-1, 2107, "HMDS data farm connection is inactive.");
 
     let notice = Notice::from(&message);
 
@@ -662,7 +662,7 @@ fn test_notice_edge_cases() {
     ];
 
     for test_case in test_cases {
-        let message = crate::common::test_utils::helpers::proto_error_response(-1, test_case.code, test_case.msg);
+        let message = helpers::proto_error_response(-1, test_case.code, test_case.msg);
         let notice = Notice::from(&message);
 
         assert_eq!(notice.code, test_case.code, "Test '{}' failed: wrong error code", test_case.name);

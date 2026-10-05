@@ -229,11 +229,18 @@ pub mod helpers {
         binary_text(msg_id, &payload)
     }
 
-    /// Connect-time frames a server sends: raw-text handshake response
-    /// (`"<sv>\0<connection-time>\0"`), then `NextValidId` and `ManagedAccounts`.
+    /// Raw-text handshake response frame: `"<sv>\0<connection-time>\0"`.
+    /// For tests that interleave extra frames into the handshake; otherwise
+    /// use [`handshake_frames`].
+    pub fn handshake_response_frame(server_version: i32, zone: &str) -> Vec<u8> {
+        format!("{server_version}\020240120 12:00:00 {zone}\0").into_bytes()
+    }
+
+    /// Connect-time frames a server sends: [`handshake_response_frame`], then
+    /// `NextValidId` and `ManagedAccounts` (for [`TEST_ACCOUNT`]).
     pub fn handshake_frames(server_version: i32, zone: &str, next_order_id: i32) -> Vec<Vec<u8>> {
         vec![
-            format!("{server_version}\020240120 12:00:00 {zone}\0").into_bytes(),
+            handshake_response_frame(server_version, zone),
             next_valid_id_frame(next_order_id),
             managed_accounts_frame(TEST_ACCOUNT),
         ]
@@ -290,9 +297,11 @@ pub mod helpers {
         pub fn notices(&self) -> Vec<crate::messages::Notice> {
             self.notices.lock().unwrap().clone()
         }
+        /// Most recently delivered notice, if any.
         pub fn last(&self) -> Option<crate::messages::Notice> {
             self.notices.lock().unwrap().last().cloned()
         }
+        /// Number of notices delivered so far.
         pub fn count(&self) -> usize {
             self.notices.lock().unwrap().len()
         }

@@ -9,7 +9,9 @@ use time_tz::timezones;
 use super::*;
 use crate::client::ids::RequestId;
 use crate::client::r#async::Client;
-use crate::common::test_utils::helpers::{binary_text, error_frame, handshake_frames, managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{
+    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
+};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
@@ -34,8 +36,7 @@ async fn establish_connection_rejects_pre_protobuf_server() {
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
 
     let too_old = server_versions::PROTOBUF_REST_MESSAGES_3 - 1;
-    let handshake = format!("{}\020240120 12:00:00 EST\0", too_old);
-    stream.push_inbound(handshake.into_bytes());
+    stream.push_inbound(handshake_response_frame(too_old, "EST"));
 
     let err = connection.establish_connection().await.expect_err("must reject old server");
     match err {
@@ -66,7 +67,7 @@ async fn establish_connection_populates_metadata() {
 
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.next_order_id, 90);
-    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
     assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
 }
 
@@ -81,7 +82,7 @@ async fn establish_connection_tolerates_unknown_time_zone() {
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.time_zone, None);
     assert_eq!(metadata.connection_time, None);
-    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
 }
 
 #[tokio::test]
@@ -147,12 +148,12 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
 
     // OpenOrderEnd is a unit marker (no payload to decode), so the typed
     // callback fires regardless of wire framing.
-    let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
+    let handshake_bytes = handshake_response_frame(SERVER_VERSION, "EST");
     stream.push_inbound(handshake_bytes.clone());
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(error_frame(-1, 2104, "farm OK"));
     stream.push_inbound(next_valid_id_frame(90));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    stream.push_inbound(managed_accounts_frame(TEST_ACCOUNT));
 
     connection.establish_connection().await.expect("first establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 1, "startup callback should fire on first handshake");
@@ -163,7 +164,7 @@ async fn handshake_callbacks_and_notice_stream_survive_reconnect() {
     stream.push_inbound(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
     stream.push_inbound(error_frame(-1, 2106, "HMDS farm OK"));
     stream.push_inbound(next_valid_id_frame(91));
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    stream.push_inbound(managed_accounts_frame(TEST_ACCOUNT));
 
     connection.establish_connection().await.expect("second establish_connection failed");
     assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");
@@ -233,7 +234,7 @@ async fn reconnect_retries_after_transient_handshake_failure() {
     connection.establish_connection().await.expect("initial establish_connection failed");
 
     let too_old = server_versions::PROTOBUF_REST_MESSAGES_3 - 1;
-    stream.push_inbound(format!("{}\020240120 12:00:00 EST\0", too_old).into_bytes());
+    stream.push_inbound(handshake_response_frame(too_old, "EST"));
     push_handshake(&stream);
 
     connection.reconnect().await.expect("reconnect must retry a failed handshake");
@@ -241,7 +242,7 @@ async fn reconnect_retries_after_transient_handshake_failure() {
     assert_eq!(connection.server_version(), SERVER_VERSION);
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.next_order_id, 90);
-    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
 }
 
 /// When the socket refuses reconnects through every Fibonacci attempt, the
@@ -281,7 +282,7 @@ async fn reconnect_clears_metadata_while_waiting_for_handshake() {
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.server_version, SERVER_VERSION);
     assert_eq!(metadata.next_order_id, 90);
-    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
 
     let initial_capture_len = stream.captured().len();
 
@@ -320,7 +321,7 @@ async fn reconnect_clears_metadata_while_waiting_for_handshake() {
     let metadata = connection.connection_metadata().await;
     assert_eq!(metadata.server_version, SERVER_VERSION);
     assert_eq!(metadata.next_order_id, 90);
-    assert_eq!(metadata.managed_accounts, "DU1234567");
+    assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
     assert_eq!(metadata.time_zone, Some(timezones::db::america::NEW_YORK));
 }
 
@@ -600,14 +601,14 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     socket.release();
 
     wait_for("the retried request", || count_writes(&stream, &request) == 2).await;
-    stream.push_inbound(managed_accounts_frame("DU1234567"));
+    stream.push_inbound(managed_accounts_frame(TEST_ACCOUNT));
 
     let accounts = tokio::time::timeout(Duration::from_secs(10), call)
         .await
         .expect("managed_accounts did not return")
         .expect("caller task panicked")
         .expect("managed_accounts failed");
-    assert_eq!(accounts, vec!["DU1234567".to_string()]);
+    assert_eq!(accounts, vec![TEST_ACCOUNT.to_string()]);
 
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
     message_bus.request_shutdown_sync();
