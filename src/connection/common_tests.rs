@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
-use crate::common::test_utils::helpers::{proto_error_response, proto_response};
+use crate::common::test_utils::helpers::{binary_text, proto_error_response, proto_response, CapturingSink};
 use crate::messages::IncomingMessages;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, UNKNOWN_MESSAGE_TYPE_CODE};
 use std::sync::{Arc, Mutex};
@@ -16,25 +16,6 @@ const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
 struct DiscardingSink;
 impl NoticeSink for DiscardingSink {
     fn deliver(&self, _: Notice) {}
-}
-
-/// Test sink that captures every notice into a shared `Vec`.
-#[derive(Default)]
-struct CapturingSink {
-    notices: Mutex<Vec<Notice>>,
-}
-impl CapturingSink {
-    fn last(&self) -> Option<Notice> {
-        self.notices.lock().unwrap().last().cloned()
-    }
-    fn count(&self) -> usize {
-        self.notices.lock().unwrap().len()
-    }
-}
-impl NoticeSink for CapturingSink {
-    fn deliver(&self, n: Notice) {
-        self.notices.lock().unwrap().push(n);
-    }
 }
 
 fn empty_ctx<'a>() -> StartupHandshakeContext<'a> {
@@ -532,10 +513,7 @@ fn test_parse_raw_message_protobuf() {
 #[test]
 fn test_parse_raw_message_binary_id_text_payload() {
     // Simulate a text message at server >= 201: binary msg_id=9, then NUL-delimited text
-    let msg_id: i32 = 9; // NextValidId
-    let text_payload = b"1\01000\0";
-    let mut data = msg_id.to_be_bytes().to_vec();
-    data.extend_from_slice(text_payload);
+    let data = binary_text(IncomingMessages::NextValidId as i32, "1\01000\0");
 
     let message = parse_raw_message(&data).expect("well-formed text frame");
     assert!(message.raw_bytes().is_none(), "text framing must leave raw_bytes empty");
@@ -576,8 +554,7 @@ fn test_parse_raw_message_retains_an_unrecognized_message_id() {
     // Text framing: same accessor, id taken from fields[0]. Must be at or below
     // PROTOBUF_MSG_ID to reach the text branch at all, so it cannot reuse
     // UNKNOWN_MESSAGE_ID.
-    let mut text_frame = 150_i32.to_be_bytes().to_vec();
-    text_frame.extend_from_slice(b"1\0");
+    let text_frame = binary_text(150, "1\0");
     let message = parse_raw_message(&text_frame).expect("well-formed frame");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(message.message_id(), Some(150));

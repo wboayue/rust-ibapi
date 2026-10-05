@@ -12,33 +12,16 @@ use std::time::Duration;
 use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers;
-use crate::common::test_utils::helpers::{binary_proto, error_frame, managed_accounts_frame, next_valid_id_frame};
+use crate::common::test_utils::helpers::{
+    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, managed_accounts_frame, next_valid_id_frame,
+    NoticeTestData, FARM_OK_MSG,
+};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
 use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
-
-/// Build a binary-text-payload response body from a pipe-delimited test input.
-/// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
-/// stand-ins for NULs so test inputs stay readable. For `Error` frames,
-/// use [`crate::common::test_utils::helpers::error_frame`] — they ship as
-/// protobuf post-floor-213 and the binary-text-payload path defaults to an
-/// empty Notice.
-fn body(text: &str) -> Vec<u8> {
-    let fields: Vec<&str> = text.split_terminator('|').collect();
-    let msg_id: i32 = fields[0].parse().expect("body() fixture must start with a numeric msg_id");
-    debug_assert_ne!(
-        msg_id,
-        crate::messages::IncomingMessages::Error as i32,
-        "Error frames must use error_frame() — protobuf-framed since PR-D1"
-    );
-    let payload: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
-    let mut data = msg_id.to_be_bytes().to_vec();
-    data.extend_from_slice(payload.as_bytes());
-    data
-}
 
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
@@ -440,8 +423,8 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
     let mut executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
 
     // Mapped by order id, and by request id where no order channel matches.
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
     for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
@@ -468,7 +451,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
 async fn test_shutdown_frame_ends_subscriptions_with_executions() {
     let (stream, bus) = make_bus();
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
     bus.read_and_route_message().await.unwrap();
     let message = next_message(&mut order).await;
     assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData);
@@ -739,28 +722,8 @@ use crate::subscriptions::r#async::Subscription;
 use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem, SubscriptionItemStreamExt};
 use futures::StreamExt;
 
-const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
 const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
-
-fn farm_ok_frame_42() -> Vec<u8> {
-    error_frame(RequestId::nth(42).raw(), 2104, FARM_OK_MSG)
-}
-
-fn farm_ok_frame_unrouted() -> Vec<u8> {
-    error_frame(-1, 2104, FARM_OK_MSG)
-}
-
-#[derive(Debug)]
-struct NoticeTestData;
-
-impl StreamDecoder<NoticeTestData> for NoticeTestData {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistogramData];
-
-    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<NoticeTestData, Error> {
-        Ok(NoticeTestData)
-    }
-}
 
 async fn make_request_subscription(request_id: RequestId) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
     let (stream, bus) = make_bus();
@@ -1428,30 +1391,12 @@ async fn test_notice_stream_late_subscriber_misses_prior() {
 // dispatches by `order_routing_strategy(message_type)`; each strategy has a
 // different fallback order (order_id → request_id, by execution_id, shared-only).
 
-/// Proto-framed ExecutionData fixture. `request_id` is at proto tag 1; the
-/// dispatcher's `order_id` / `execution_id` accessors read the nested
-/// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
-fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
-    binary_proto(
-        crate::messages::IncomingMessages::ExecutionData as i32,
-        &crate::proto::ExecutionDetails {
-            req_id: Some(request_id),
-            contract: None,
-            execution: Some(crate::proto::Execution {
-                order_id: Some(order_id),
-                exec_id: Some(execution_id.to_string()),
-                ..Default::default()
-            }),
-        },
-    )
-}
-
 #[tokio::test]
 async fn test_execution_data_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
@@ -1464,7 +1409,7 @@ async fn test_execution_data_falls_back_to_request_channel() {
     let request_id = RequestId::nth(99);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_body(request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(request_id.raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
@@ -1476,7 +1421,7 @@ async fn test_execution_data_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an orphan message");
@@ -1539,7 +1484,7 @@ async fn test_commission_report_routes_via_execution_id_mapping() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -1581,8 +1526,8 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
@@ -1603,7 +1548,7 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
 async fn test_execution_alias_kept_while_a_clone_is_alive() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
     bus.read_and_route_message().await.unwrap();
 
     let clone = order.clone();
@@ -1622,10 +1567,10 @@ async fn test_execution_alias_kept_while_a_clone_is_alive() {
 async fn test_stale_cleanup_keeps_newer_execution_aliases() {
     let (stream, bus) = make_bus();
     let sub_a = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 42, "exec-a"));
+    stream.push_inbound(execution_data_frame(0, 42, "exec-a"));
     bus.read_and_route_message().await.unwrap();
     let sub_b = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_body(0, 42, "exec-b"));
+    stream.push_inbound(execution_data_frame(0, 42, "exec-b"));
     bus.read_and_route_message().await.unwrap();
 
     drop(sub_a);

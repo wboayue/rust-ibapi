@@ -1,5 +1,6 @@
 use super::*;
-use crate::messages::{encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::common::test_utils::helpers::test_notice;
+use crate::messages::{encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
 use crate::subscriptions::SubscriptionItemStreamExt;
@@ -133,17 +134,6 @@ fn cancel_frame() -> Vec<u8> {
 /// the payload `IntItem` reads sits at field 1.
 fn int_frame(value: i32) -> RoutedItem {
     RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
-}
-
-/// A request-less notice for tests (no error_time / advanced-reject payload).
-fn test_notice(code: i32, message: &str) -> Notice {
-    Notice {
-        request_id: None,
-        code,
-        message: message.into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
-    }
 }
 
 /// What a test built by [`subscription_with`] gets back: the subscription, the

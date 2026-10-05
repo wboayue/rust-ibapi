@@ -1,13 +1,13 @@
 use super::*;
 use crate::common::test_utils::helpers::{
     assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, assert_tws_error_message, count_proto_msgs,
-    create_test_client_with_ordered_proto_responses, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    create_test_client_with_ordered_proto_responses, proto_error_response, proto_response, request_message_count, test_notice, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::TickLast;
 use crate::market_data::IgnoreSize;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -42,17 +42,6 @@ fn expect_data<T: std::fmt::Debug>(item: Option<Result<SubscriptionItem<T>, Erro
     match item {
         Some(Ok(SubscriptionItem::Data(t))) => t,
         other => panic!("expected tick data, got {other:?}"),
-    }
-}
-
-/// A request-scoped IB notice for tests (no error_time / advanced-reject payload).
-fn test_notice(code: i32, message: &str) -> Notice {
-    Notice {
-        request_id: None,
-        code,
-        message: message.into(),
-        error_time: None,
-        advanced_order_reject_json: String::new(),
     }
 }
 

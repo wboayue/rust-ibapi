@@ -8,7 +8,9 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 // Additional imports for connection tests
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers;
-use crate::common::test_utils::helpers::{binary_proto, error_frame, proto_response};
+use crate::common::test_utils::helpers::{
+    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, proto_response, NoticeTestData, FARM_OK_MSG,
+};
 use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
 use crate::orders::common::encoders::encode_place_order;
@@ -762,26 +764,6 @@ fn test_request_encoding_roundtrip() {
 // express scenarios like interleaved responses or shared-channel fan-out.
 // `MemoryStream` lets tests push response frames freely and drive
 // `bus.dispatch()` directly.
-
-/// Build a binary-text-payload response body from a pipe-delimited test input.
-/// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
-/// stand-ins for NULs so test inputs stay readable. For `Error` frames,
-/// use [`crate::common::test_utils::helpers::error_frame`] — they ship as
-/// protobuf post-floor-213 and the binary-text-payload path defaults to an
-/// empty Notice.
-fn body(text: &str) -> Vec<u8> {
-    let fields: Vec<&str> = text.split_terminator('|').collect();
-    let msg_id: i32 = fields[0].parse().expect("body() fixture must start with a numeric msg_id");
-    debug_assert_ne!(
-        msg_id,
-        crate::messages::IncomingMessages::Error as i32,
-        "Error frames must use error_frame() — protobuf-framed since PR-D1"
-    );
-    let payload: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
-    let mut data = msg_id.to_be_bytes().to_vec();
-    data.extend_from_slice(payload.as_bytes());
-    data
-}
 
 /// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
@@ -1876,28 +1858,8 @@ fn test_warning_with_order_id_routes_to_order_channel() -> Result<(), Error> {
 // / `iter_data()` API that the consumer sees `SubscriptionItem::Notice` /
 // `Err(_)` / `None` as expected.
 
-const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
 const CONNECTIVITY_RESTORED_MSG: &str = "Connectivity between IB and TWS has been restored - data maintained.";
 const READ_ONLY_MSG: &str = "The API interface is currently in Read-Only mode.";
-
-fn farm_ok_frame_42() -> Vec<u8> {
-    error_frame(RequestId::nth(42).raw(), 2104, FARM_OK_MSG)
-}
-
-fn farm_ok_frame_unrouted() -> Vec<u8> {
-    error_frame(-1, 2104, FARM_OK_MSG)
-}
-
-#[derive(Debug)]
-struct NoticeTestData;
-
-impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
-    const RESPONSE_MESSAGE_IDS: &'static [crate::messages::IncomingMessages] = &[crate::messages::IncomingMessages::HistogramData];
-
-    fn decode(_context: &crate::subscriptions::DecoderContext, _msg: &ResponseMessage) -> Result<NoticeTestData, Error> {
-        Ok(NoticeTestData)
-    }
-}
 
 fn wrap_subscription<T: crate::subscriptions::StreamDecoder<T>>(
     bus: Arc<TcpMessageBus<MemoryStream>>,
@@ -2235,30 +2197,12 @@ fn test_notice_stream_closes_on_shutdown() -> Result<(), Error> {
 // shared-only). For each strategy we cover the positive route, every fallback,
 // and the orphan-fallthrough.
 
-/// Proto-framed ExecutionData fixture. `request_id` is at proto tag 1; the
-/// dispatcher's `order_id` / `execution_id` accessors read the nested
-/// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
-fn execution_data_body(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
-    binary_proto(
-        crate::messages::IncomingMessages::ExecutionData as i32,
-        &crate::proto::ExecutionDetails {
-            req_id: Some(request_id),
-            contract: None,
-            execution: Some(crate::proto::Execution {
-                order_id: Some(order_id),
-                exec_id: Some(execution_id.to_string()),
-                ..Default::default()
-            }),
-        },
-    )
-}
-
 #[test]
 fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
@@ -2273,7 +2217,7 @@ fn test_execution_data_falls_back_to_request_channel() -> Result<(), Error> {
     let request_id = RequestId::nth(99);
     let sub = bus.send_request(request_id, &[])?;
 
-    stream.push_inbound(execution_data_body(request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(request_id.raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
@@ -2326,7 +2270,7 @@ fn test_commission_report_routes_via_execution_id_mapping() -> Result<(), Error>
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -2719,7 +2663,7 @@ fn test_execution_data_orphan_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let unrelated = bus.send_request(RequestId::nth(42), &[])?;
 
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan message");
@@ -2770,8 +2714,8 @@ fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> 
 
     let order = bus.send_order_request(OrderId::from(7), &[])?;
     let executions = bus.send_request(RequestId::nth(99), &[])?;
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_body(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
     bus.dispatch()?;
     bus.dispatch()?;
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
@@ -2799,7 +2743,7 @@ fn test_execution_aliases_pruned_on_cancel() -> Result<(), Error> {
 
     let order_id = OrderId::from(7);
     let order = bus.send_order_request(order_id, &[])?;
-    stream.push_inbound(execution_data_body(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
     bus.dispatch()?;
     order.cancel();
     drain_cleanup_signals(&bus);
@@ -2823,10 +2767,10 @@ fn test_stale_cleanup_keeps_newer_execution_aliases() -> Result<(), Error> {
     let handle = bus.start_cleanup_thread();
 
     let sub_a = bus.send_order_request(OrderId::from(42), &[])?;
-    stream.push_inbound(execution_data_body(0, 42, "exec-a"));
+    stream.push_inbound(execution_data_frame(0, 42, "exec-a"));
     bus.dispatch()?;
     let sub_b = bus.send_order_request(OrderId::from(42), &[])?;
-    stream.push_inbound(execution_data_body(0, 42, "exec-b"));
+    stream.push_inbound(execution_data_frame(0, 42, "exec-b"));
     bus.dispatch()?;
 
     drop(sub_a);

@@ -202,6 +202,115 @@ pub mod helpers {
         )
     }
 
+    /// Binary-text wire payload: `[4-byte BE msg_id][payload]`. `payload` is
+    /// passed through verbatim — NUL-delimit the fields yourself, or use
+    /// [`body`] for the pipe-delimited shorthand.
+    pub fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
+        let mut data = Vec::with_capacity(4 + payload.len());
+        data.extend_from_slice(&msg_id.to_be_bytes());
+        data.extend_from_slice(payload.as_bytes());
+        data
+    }
+
+    /// Build a binary-text-payload response body from a pipe-delimited test input.
+    /// `"msg_id|f1|f2|..."` → `[4-byte BE msg_id][f1\0f2\0...]`. Pipes are
+    /// stand-ins for NULs so test inputs stay readable. For `Error` frames,
+    /// use [`error_frame`] — they ship as protobuf post-floor-213 and the
+    /// binary-text-payload path defaults to an empty Notice.
+    pub fn body(text: &str) -> Vec<u8> {
+        let fields: Vec<&str> = text.split_terminator('|').collect();
+        let msg_id: i32 = fields[0].parse().expect("body() fixture must start with a numeric msg_id");
+        debug_assert_ne!(
+            msg_id,
+            crate::messages::IncomingMessages::Error as i32,
+            "Error frames must use error_frame() — protobuf-framed since PR-D1"
+        );
+        let payload: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
+        binary_text(msg_id, &payload)
+    }
+
+    /// Connect-time frames a server sends: raw-text handshake response
+    /// (`"<sv>\0<connection-time>\0"`), then `NextValidId` and `ManagedAccounts`.
+    pub fn handshake_frames(server_version: i32, zone: &str, next_order_id: i32) -> Vec<Vec<u8>> {
+        vec![
+            format!("{server_version}\020240120 12:00:00 {zone}\0").into_bytes(),
+            next_valid_id_frame(next_order_id),
+            managed_accounts_frame(TEST_ACCOUNT),
+        ]
+    }
+
+    /// Message text of the farm-OK informational notice (code 2104).
+    pub const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+
+    /// Farm-OK notice frame scoped to `RequestId::nth(42)`.
+    pub fn farm_ok_frame_42() -> Vec<u8> {
+        error_frame(crate::client::ids::RequestId::nth(42).raw(), 2104, FARM_OK_MSG)
+    }
+
+    /// Farm-OK notice frame with no request id (`-1`), i.e. unrouted.
+    pub fn farm_ok_frame_unrouted() -> Vec<u8> {
+        error_frame(-1, 2104, FARM_OK_MSG)
+    }
+
+    /// Proto-framed ExecutionData frame. `request_id` is at proto tag 1; the
+    /// dispatcher's `order_id` / `execution_id` accessors read the nested
+    /// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
+    pub fn execution_data_frame(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
+        use crate::testdata::builders::ResponseProtoEncoder;
+        let response = crate::testdata::builders::orders::execution_data()
+            .request_id(request_id)
+            .order_id(order_id)
+            .execution_id(execution_id);
+        binary_proto(crate::messages::IncomingMessages::ExecutionData as i32, &response.to_proto())
+    }
+
+    /// Stub [`StreamDecoder`](crate::subscriptions::StreamDecoder) that
+    /// accepts `HistogramData` and decodes every frame to a unit value. For
+    /// tests that care about routing/notices, not payloads.
+    #[derive(Debug)]
+    pub struct NoticeTestData;
+
+    impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
+        const RESPONSE_MESSAGE_IDS: &'static [crate::messages::IncomingMessages] = &[crate::messages::IncomingMessages::HistogramData];
+
+        fn decode(_context: &crate::subscriptions::DecoderContext, _msg: &crate::messages::ResponseMessage) -> Result<NoticeTestData, crate::Error> {
+            Ok(NoticeTestData)
+        }
+    }
+
+    /// [`NoticeSink`](crate::transport::common::NoticeSink) that captures
+    /// every delivered notice.
+    #[derive(Default)]
+    pub struct CapturingSink {
+        notices: std::sync::Mutex<Vec<crate::messages::Notice>>,
+    }
+
+    impl CapturingSink {
+        /// Snapshot of every notice delivered so far.
+        pub fn notices(&self) -> Vec<crate::messages::Notice> {
+            self.notices.lock().unwrap().clone()
+        }
+        pub fn last(&self) -> Option<crate::messages::Notice> {
+            self.notices.lock().unwrap().last().cloned()
+        }
+        pub fn count(&self) -> usize {
+            self.notices.lock().unwrap().len()
+        }
+    }
+
+    impl crate::transport::common::NoticeSink for CapturingSink {
+        fn deliver(&self, notice: crate::messages::Notice) {
+            self.notices.lock().unwrap().push(notice);
+        }
+    }
+
+    /// A request-less IB notice for tests (no error_time / advanced-reject
+    /// payload). Field-for-field [`Notice::synthesized`](crate::messages::Notice::synthesized);
+    /// named separately so TWS-code tests don't read as client-sentinel tests.
+    pub fn test_notice(code: i32, message: impl Into<String>) -> crate::messages::Notice {
+        crate::messages::Notice::synthesized(code, message.into())
+    }
+
     /// Common test constants that can be used across modules
     pub mod constants {
         /// Test account identifiers
