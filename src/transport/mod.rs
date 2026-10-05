@@ -4,7 +4,7 @@
 pub(crate) mod common;
 
 #[cfg(feature = "sync")]
-use std::time::Duration;
+use std::{sync::Mutex, time::Duration};
 
 #[cfg(feature = "sync")]
 use crossbeam::channel::{Receiver, Sender};
@@ -262,7 +262,7 @@ pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<RoutedItem>>,   // this subscription's own queue
     sender: Option<Sender<RoutedItem>>,       // feeds `receiver`, for the cancel notification
     signaler: Sender<Signal>,                 // for client to signal termination
-    lease: Option<Lease>,                     // the registration's liveness; released at drop
+    lease: Mutex<Option<Lease>>,              // the registration's liveness; released at cancel or drop
     pub(crate) request_id: Option<RequestId>, // initiating request id
     pub(crate) order_id: Option<OrderId>,     // initiating order id
     pub(crate) shared: Option<SharedTicket>,  // shared-channel identity, when routed by message type
@@ -328,12 +328,25 @@ impl InternalSubscription {
         // dispatched before the signal is processed still land on the queue,
         // behind `Cancelled`. The signal carries this lease, so cleanup
         // removes only this subscription's registration, never a newer one
-        // under the same id, and the later drop signal is a no-op.
-        let Some(lease) = &self.lease else {
+        // under the same id. The lease is released here, so the later drop
+        // sends nothing.
+        self.release("cancel");
+    }
+
+    /// Release the lease and send the cleanup signal, once per subscription:
+    /// whichever of cancel and drop comes first. Released before the signal is
+    /// sent, so the registration reads as dead from here on:
+    /// `create_order_update_subscription` can replace it before the cleanup
+    /// thread runs. Cleanup itself matches identity only (see `Signal`).
+    fn release(&self, cause: &str) {
+        let lease = self.lease.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        let Some(lease) = lease else {
             return;
         };
-        if let Err(e) = self.signaler.send(self.signal(lease.downgrade())) {
-            log::warn!("error sending cancel signal: {e}");
+        let lease_ref = lease.downgrade();
+        drop(lease);
+        if let Err(e) = self.signaler.send(self.signal(lease_ref)) {
+            log::warn!("error sending {cause} signal: {e}");
         }
     }
 
@@ -380,18 +393,7 @@ impl InternalSubscription {
 #[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
-        // Released before the signal is sent, so the registration reads as
-        // dead from here on: `create_order_update_subscription` can replace
-        // it before the cleanup thread runs. Cleanup itself matches identity
-        // only (see `Signal`).
-        let Some(lease) = self.lease.take() else {
-            return;
-        };
-        let lease_ref = lease.downgrade();
-        drop(lease);
-        if let Err(e) = self.signaler.send(self.signal(lease_ref)) {
-            log::warn!("error sending drop signal: {e}");
-        }
+        self.release("drop");
     }
 }
 
@@ -477,7 +479,7 @@ impl SubscriptionBuilder {
             receiver: Some(receiver),
             sender: self.sender,
             signaler,
-            lease: Some(lease),
+            lease: Mutex::new(Some(lease)),
             request_id: self.request_id,
             order_id: self.order_id,
             shared: self.shared,

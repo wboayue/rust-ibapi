@@ -29,18 +29,25 @@ fn constants_match_documented_numeric_ids() {
         (RT_HISTORICAL_VOLATILITY, "411"),
         (IB_DIVIDENDS, "456"),
         (BOND_FACTOR_MULTIPLIER, "460"),
-        (ETF_NAV_BID, "576"),
         (ETF_NAV_LAST, "577"),
-        (ETF_NAV_FROZEN_LAST, "578"),
         (IPO_PRICES, "586"),
         (FUTURES_OPEN_INTEREST, "588"),
         (SHORT_TERM_VOLUME, "595"),
         (ETF_NAV_HIGH_LOW, "614"),
         (CREDITMAN_SLOW_MARK_PRICE, "619"),
+        (ETF_FROZEN_NAV_LAST, "623"),
         (ODD_LOT, "787"),
     ];
 
     for (constant, expected) in cases {
         assert_eq!(constant, expected, "constant {constant} should equal {expected}");
     }
+}
+
+/// Deprecated constants keep their 5.0 values; TWS rejects both IDs.
+#[test]
+#[allow(deprecated)]
+fn deprecated_constants_keep_their_values() {
+    assert_eq!(ETF_NAV_BID, "576");
+    assert_eq!(ETF_NAV_FROZEN_LAST, "578");
 }

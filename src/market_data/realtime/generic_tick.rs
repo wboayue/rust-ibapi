@@ -152,9 +152,12 @@ pub const IB_DIVIDENDS: &str = "456";
 /// Delivers received tick `BOND_FACTOR_MULTIPLIER` (60).
 pub const BOND_FACTOR_MULTIPLIER: &str = "460";
 
-/// `576` — Bid price of ETF's Net Asset Value.
+/// `576` — Bid and ask prices of ETF's Net Asset Value.
 ///
-/// Delivers received tick `ETF_NAV_BID` (94).
+/// IB's earlier tick table maps it to received ticks `ETF_NAV_BID` (94) and
+/// `ETF_NAV_ASK` (95). TWS now rejects it for stocks and ETFs with error 321
+/// ("Incorrect generic tick list"), and IB's current page no longer lists it.
+#[deprecated(since = "5.1.0", note = "TWS rejects generic tick 576 (error 321); no replacement")]
 pub const ETF_NAV_BID: &str = "576";
 
 /// `577` — Last price of ETF's Net Asset Value.
@@ -162,9 +165,17 @@ pub const ETF_NAV_BID: &str = "576";
 /// Delivers received tick `ETF_NAV_LAST` (96).
 pub const ETF_NAV_LAST: &str = "577";
 
-/// `578` — Frozen last price of ETF's NAV.
+/// `578` — Today's and yesterday's closing prices of ETF's Net Asset Value.
 ///
-/// Delivers received tick `ETF_FROZEN_NAV_LAST` (97).
+/// Despite its name, this is not the frozen NAV last price (tick 97); that is
+/// [`ETF_FROZEN_NAV_LAST`] (`623`). IB's earlier tick table maps `578` to
+/// received ticks `ETF_NAV_CLOSE` (92) and `ETF_NAV_PRIOR_CLOSE` (93); TWS now
+/// rejects it for stocks and ETFs with error 321 ("Incorrect generic tick
+/// list"), and IB's current page no longer lists it.
+#[deprecated(
+    since = "5.1.0",
+    note = "TWS rejects generic tick 578 (error 321); for the frozen NAV last price (tick 97) use ETF_FROZEN_NAV_LAST (\"623\")"
+)]
 pub const ETF_NAV_FROZEN_LAST: &str = "578";
 
 /// `586` — IPO pricing data.
@@ -193,6 +204,11 @@ pub const ETF_NAV_HIGH_LOW: &str = "614";
 ///
 /// Delivers received tick `CREDITMAN_SLOW_MARK_PRICE` (79).
 pub const CREDITMAN_SLOW_MARK_PRICE: &str = "619";
+
+/// `623` — Last price of ETF's NAV for frozen data.
+///
+/// Delivers received tick `ETF_FROZEN_NAV_LAST` (97).
+pub const ETF_FROZEN_NAV_LAST: &str = "623";
 
 /// `787` — Odd-lot bid/ask quotes.
 ///

@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
+
+### Deprecated
+
+- `generic_tick::ETF_NAV_FROZEN_LAST`. Its value, `"578"`, is the generic tick IB's earlier tick table gives for the ETF NAV close and prior close (ticks 92 and 93), not the frozen NAV last price (tick 97) its name and docs promised, and TWS rejects it (error 321). Use `ETF_FROZEN_NAV_LAST` for tick 97 (#946).
+- `generic_tick::ETF_NAV_BID` (`"576"`). TWS rejects it (error 321), and IB's current tick-type page no longer lists it; there is no replacement.
+
 ### Fixed
 
+- Blocking `order_update_stream()` can be reopened right after `cancel()`, while the old handle is still held; it used to return `AlreadySubscribed` until the cleanup thread caught up (#932).
 - Blocking client: cancelling or dropping a `contract_news` or `broad_tape_news` subscription now sends `cancelMktData`, as the async client already did. Previously no cancel was sent, and TWS kept the news subscription open until disconnect (#947).
 
 ## [5.0.0] - 2026-10-04
