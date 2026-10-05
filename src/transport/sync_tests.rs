@@ -3537,3 +3537,24 @@ fn sender_hash_deliver_aliased_hands_the_item_back_when_unrouted() {
     assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
     assert_eq!(aliases.len(), 0, "unrouted item was aliased");
 }
+
+/// A panic under the route lock must not take every later route and
+/// teardown down with it.
+#[test]
+fn sender_hash_recovers_from_a_poisoned_lock() {
+    let (routes, receiver, _lease) = sender_hash_route();
+    let routes = Arc::new(routes);
+    let poisoner = routes.clone();
+    let _ = std::thread::spawn(move || {
+        let _guard = poisoner.senders.write().unwrap();
+        panic!("poison the route lock");
+    })
+    .join();
+    assert!(routes.senders.is_poisoned());
+
+    routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
+    routes.clear();
+
+    assert_eq!(receiver.try_iter().count(), 1);
+    assert_eq!(routes.len(), 0);
+}

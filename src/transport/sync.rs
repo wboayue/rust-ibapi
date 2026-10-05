@@ -5,7 +5,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -1057,6 +1057,17 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
+    // A panic while holding the lock leaves the map consistent (every
+    // operation is a single map call), so recover rather than cascade the
+    // panic into every later route and teardown.
+    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Entry<V>>> {
+        self.senders.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Entry<V>>> {
+        self.senders.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
     #[cfg(test)]
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         self.with_entry(&id, |entry| entry.sender.clone())
@@ -1071,7 +1082,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     /// land between the lookup and `f`.
     #[cfg(test)]
     fn with_entry<R>(&self, id: &K, f: impl FnOnce(&Entry<V>) -> R) -> Option<R> {
-        let senders = self.senders.read().unwrap();
+        let senders = self.read();
         senders.get(id).map(f)
     }
 
@@ -1089,14 +1100,14 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     }
 
     fn insert_entry(&self, id: K, entry: Entry<V>) {
-        self.senders.write().unwrap().insert(id, entry);
+        self.write().insert(id, entry);
     }
 
     /// Remove the entry for `id` only if it holds `lease`. Returns whether an
     /// entry was removed. Used by signal cleanup so a stale signal cannot
     /// remove a newer registration under the same key.
     pub fn remove_if_same(&self, id: K, lease: &LeaseRef) -> bool {
-        match self.senders.write().unwrap().entry(id) {
+        match self.write().entry(id) {
             hash_map::Entry::Occupied(registered) if registered.get().lease.is(lease) => {
                 registered.remove();
                 true
@@ -1107,24 +1118,24 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 
     /// Remove every entry holding `lease`. Returns how many were removed.
     pub fn remove_all_same(&self, lease: &LeaseRef) -> usize {
-        let mut senders = self.senders.write().unwrap();
+        let mut senders = self.write();
         let before = senders.len();
         senders.retain(|_, registered| !registered.lease.is(lease));
         before - senders.len()
     }
 
     pub fn contains(&self, id: &K) -> bool {
-        let senders = self.senders.read().unwrap();
+        let senders = self.read();
         senders.contains_key(id)
     }
 
     pub fn len(&self) -> usize {
-        let senders = self.senders.read().unwrap();
+        let senders = self.read();
         senders.len()
     }
 
     pub fn clear(&self) {
-        let mut senders = self.senders.write().unwrap();
+        let mut senders = self.write();
         senders.clear();
     }
 }
@@ -1159,7 +1170,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
     /// Deliver `item` to `id`'s route and run `then` on it, both under the
     /// read lock.
     fn deliver_then(&self, id: &K, item: RoutedItem, then: impl FnOnce(&Entry<RoutedItem>)) -> Result<(), RoutedItem> {
-        let senders = self.senders.read().unwrap();
+        let senders = self.read();
         let Some(entry) = senders.get(id) else {
             return Err(item);
         };
@@ -1175,7 +1186,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
     where
         F: Fn() -> RoutedItem,
     {
-        let mut senders = self.senders.write().unwrap();
+        let mut senders = self.write();
         for entry in senders.values().filter(|entry| !entry.closed()) {
             if let Err(e) = entry.sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
