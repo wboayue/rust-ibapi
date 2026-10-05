@@ -878,8 +878,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 }
             }
             OrderRoutingStrategy::ByExecutionId => {
-                if let Some(execution_id) = message.execution_id() {
-                    let _ = self.executions.deliver(&execution_id, message.into());
+                let unrouted = match message.execution_id() {
+                    Some(execution_id) => self.executions.deliver(&execution_id, message.into()),
+                    None => Err(message.into()),
+                };
+                if let Err(item) = unrouted {
+                    if !routed {
+                        warn!("could not route commission report {item:?}");
+                    }
                 }
             }
             OrderRoutingStrategy::SharedOnly => {

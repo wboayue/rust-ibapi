@@ -707,12 +707,14 @@ impl<S: Stream> TcpMessageBus<S> {
             OrderRoutingStrategy::ByExecutionId => {
                 let sent_to_update_stream = self.send_order_update(&message);
 
-                if let Some(execution_id) = message.execution_id() {
-                    if self.executions.deliver(&execution_id, message.into()).is_err() {
-                        warn!("no recipient for commission report of execution {execution_id}");
+                let unrouted = match message.execution_id() {
+                    Some(execution_id) => self.executions.deliver(&execution_id, message.into()),
+                    None => Err(message.into()),
+                };
+                if let Err(item) = unrouted {
+                    if !sent_to_update_stream {
+                        warn!("could not route commission report {item:?}");
                     }
-                } else if !sent_to_update_stream {
-                    warn!("could not route commission report {message:?}");
                 }
             }
             OrderRoutingStrategy::SharedOnly => {
