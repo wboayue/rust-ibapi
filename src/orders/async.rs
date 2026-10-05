@@ -3,7 +3,6 @@
 use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
-use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
@@ -148,8 +147,7 @@ impl Client {
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -187,8 +185,7 @@ impl Client {
     /// ```
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
@@ -234,10 +231,6 @@ impl Client {
     /// }
     /// ```
     pub async fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-        if !manual_order_cancel_time.is_empty() {
-            check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
-        }
-
         let order_id = order_id.into().checked()?;
         let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
@@ -263,8 +256,6 @@ impl Client {
     /// }
     /// ```
     pub async fn global_cancel(&self) -> Result<(), Error> {
-        check_version(self.server_version(), Features::REQ_GLOBAL_CANCEL)?;
-
         let message = encoders::encode_global_cancel()?;
         self.send_message(message).await?;
 
@@ -325,8 +316,6 @@ impl Client {
     /// }
     /// ```
     pub async fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
-        check_version(self.server_version(), Features::COMPLETED_ORDERS)?;
-
         let request = encoders::encode_completed_orders(api_only)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
