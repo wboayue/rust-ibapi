@@ -178,6 +178,12 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         Ok(())
     }
 
+    /// Whether a route is registered under `id`. For a caller whose miss
+    /// path still needs the message `deliver` would consume.
+    pub(super) fn contains(&self, id: &K) -> bool {
+        self.read().contains_key(id)
+    }
+
     /// Remove `id`'s registration if it matches `pred`; returns whether it
     /// was removed.
     fn remove_if(&self, id: K, pred: impl FnOnce(&Route) -> bool) -> bool {
@@ -241,10 +247,6 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     #[cfg(test)]
     pub(super) fn sender(&self, id: &K) -> Option<BroadcastSender> {
         self.with_route(id, |route| route.sender.clone())
-    }
-
-    pub(super) fn contains(&self, id: &K) -> bool {
-        self.read().contains_key(id)
     }
 
     #[cfg(test)]
