@@ -41,9 +41,7 @@
 //! # References
 //!
 //! - IB docs: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>
-//!   (see the *Generic tick required* column). That page no longer lists
-//!   `576`, `578` or received ticks 92-95; those mappings come from IB's earlier
-//!   table, copied in `realtime/common/tick_types.rs`.
+//!   (see the *Generic tick required* column).
 //!
 //! [`MarketDataBuilder::generic_ticks`]: crate::market_data::realtime::MarketDataBuilder::generic_ticks
 //! [`MarketDataBuilder::add_generic_tick`]: crate::market_data::realtime::MarketDataBuilder::add_generic_tick
@@ -156,7 +154,10 @@ pub const BOND_FACTOR_MULTIPLIER: &str = "460";
 
 /// `576` — Bid and ask prices of ETF's Net Asset Value.
 ///
-/// Delivers received ticks `ETF_NAV_BID` (94) and `ETF_NAV_ASK` (95).
+/// IB's earlier tick table maps it to received ticks `ETF_NAV_BID` (94) and
+/// `ETF_NAV_ASK` (95). TWS now rejects it for stocks and ETFs with error 321
+/// ("Incorrect generic tick list"), and IB's current page no longer lists it.
+#[deprecated(since = "5.1.0", note = "TWS rejects generic tick 576 (error 321); no replacement")]
 pub const ETF_NAV_BID: &str = "576";
 
 /// `577` — Last price of ETF's Net Asset Value.
@@ -166,18 +167,16 @@ pub const ETF_NAV_LAST: &str = "577";
 
 /// `578` — Today's and yesterday's closing prices of ETF's Net Asset Value.
 ///
-/// Delivers received ticks `ETF_NAV_CLOSE` (92) and `ETF_NAV_PRIOR_CLOSE` (93).
-pub const ETF_NAV_CLOSE: &str = "578";
-
-/// `578` — Today's and yesterday's closing prices of ETF's Net Asset Value.
-///
 /// Despite its name, this is not the frozen NAV last price (tick 97); that is
-/// [`ETF_FROZEN_NAV_LAST`] (`623`).
+/// [`ETF_FROZEN_NAV_LAST`] (`623`). IB's earlier tick table maps `578` to
+/// received ticks `ETF_NAV_CLOSE` (92) and `ETF_NAV_PRIOR_CLOSE` (93); TWS now
+/// rejects it for stocks and ETFs with error 321 ("Incorrect generic tick
+/// list"), and IB's current page no longer lists it.
 #[deprecated(
     since = "5.1.0",
-    note = "is \"578\" (ticks 92/93), not tick 97: use ETF_NAV_CLOSE for the same request, or ETF_FROZEN_NAV_LAST (\"623\") for tick 97"
+    note = "TWS rejects generic tick 578 (error 321); for the frozen NAV last price (tick 97) use ETF_FROZEN_NAV_LAST (\"623\")"
 )]
-pub const ETF_NAV_FROZEN_LAST: &str = ETF_NAV_CLOSE;
+pub const ETF_NAV_FROZEN_LAST: &str = "578";
 
 /// `586` — IPO pricing data.
 ///

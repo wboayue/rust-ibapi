@@ -1,8 +1,7 @@
 use super::*;
 
 /// Regression guard: every constant must match the numeric ID listed at
-/// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>,
-/// except `576` and `578` (see the module docs).
+/// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>.
 ///
 /// Table is the source-of-truth column. If TWS adds a new generic tick request
 /// ID, add a row here and a `pub const` above so the constants module stays in
@@ -30,9 +29,7 @@ fn constants_match_documented_numeric_ids() {
         (RT_HISTORICAL_VOLATILITY, "411"),
         (IB_DIVIDENDS, "456"),
         (BOND_FACTOR_MULTIPLIER, "460"),
-        (ETF_NAV_BID, "576"),
         (ETF_NAV_LAST, "577"),
-        (ETF_NAV_CLOSE, "578"),
         (IPO_PRICES, "586"),
         (FUTURES_OPEN_INTEREST, "588"),
         (SHORT_TERM_VOLUME, "595"),
@@ -47,8 +44,10 @@ fn constants_match_documented_numeric_ids() {
     }
 }
 
+/// Deprecated constants keep their 5.0 values; TWS rejects both IDs.
 #[test]
 #[allow(deprecated)]
-fn deprecated_etf_nav_frozen_last_keeps_its_value() {
-    assert_eq!(ETF_NAV_FROZEN_LAST, ETF_NAV_CLOSE);
+fn deprecated_constants_keep_their_values() {
+    assert_eq!(ETF_NAV_BID, "576");
+    assert_eq!(ETF_NAV_FROZEN_LAST, "578");
 }
