@@ -1,7 +1,10 @@
+use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
+use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::*;
 use crate::messages::IncomingMessages;
+use crate::subscriptions::common::{DecoderContext, RoutedItem};
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
     cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time,
@@ -14,8 +17,11 @@ use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::common::Lease;
+use crate::transport::SubscriptionBuilder;
 use crate::{client::blocking::Client, server_versions, stubs::MessageBusStub, Error};
 use std::sync::Arc;
+use std::time::Duration;
 
 #[test]
 fn test_pnl() {
@@ -890,4 +896,77 @@ fn test_verify_message_version_error() {
     let result = client.verify_message("data");
     assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
     assert_eq!(request_message_count(&message_bus), 0);
+}
+
+fn summary_frame(tag: &str, value: &str, currency: &str) -> RoutedItem {
+    RoutedItem::Response(proto_response(
+        IncomingMessages::AccountSummary,
+        account_summary().tag(tag).value(value).currency(currency).encode_proto(),
+    ))
+}
+
+fn end_frame() -> RoutedItem {
+    RoutedItem::Response(proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()))
+}
+
+fn snapshots_over_channel(quiet: Duration) -> (AccountSummarySnapshots, crossbeam::channel::Sender<RoutedItem>) {
+    let (sender, receiver) = crossbeam::channel::unbounded::<RoutedItem>();
+    let (signaler, _signaler_rx) = crossbeam::channel::unbounded();
+    let internal = SubscriptionBuilder::new()
+        .receiver(receiver)
+        .signaler(signaler)
+        .lease(Lease::new())
+        .request_id(RequestId::nth(1))
+        .build();
+    let subscription = Subscription::new(Arc::new(MessageBusStub::default()), internal, DecoderContext::default());
+
+    let snapshots = AccountSummarySnapshots {
+        subscription,
+        builder: SnapshotBuilder::default(),
+        quiet,
+    };
+
+    (snapshots, sender)
+}
+
+fn values(snapshot: &AccountSummarySnapshot) -> Vec<(&str, &str, &str)> {
+    snapshot
+        .iter()
+        .map(|row| (row.tag.as_str(), row.currency.as_str(), row.value.as_str()))
+        .collect()
+}
+
+#[test]
+fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
+    let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    tx.send(summary_frame("BuyingPower", "400.0", "USD")).unwrap();
+    tx.send(end_frame()).unwrap();
+    let initial = snapshots.next().unwrap().unwrap();
+
+    tx.send(summary_frame("NetLiquidation", "101.5", "USD")).unwrap();
+    let refreshed = snapshots.next().unwrap().unwrap();
+
+    assert_eq!(
+        values(&initial),
+        vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]
+    );
+    assert_eq!(
+        values(&refreshed),
+        vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "101.5")]
+    );
+}
+
+#[test]
+fn test_account_summary_snapshots_end_when_subscription_closes() {
+    let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    drop(tx);
+    let last = snapshots.next().unwrap().unwrap();
+    let after = snapshots.next();
+
+    assert_eq!(values(&last), vec![("NetLiquidation", "USD", "100.0")]);
+    assert!(after.is_none());
 }

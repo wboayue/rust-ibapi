@@ -13,11 +13,12 @@ pub mod types;
 use crate::contracts::Contract;
 use crate::Error;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 // Public types - always available regardless of feature flags
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 /// Account information as it appears in the TWS' Account Summary Window
 pub struct AccountSummary {
     /// The account identifier.
@@ -152,6 +153,38 @@ pub enum AccountSummaryResult {
     /// An `End` does not follow the rows TWS pushes later, so a consumer that wants complete
     /// updates must decide for itself when a pushed batch is finished.
     End,
+}
+
+/// The latest account summary values, keyed by account, tag and currency.
+///
+/// Built from the rows of an account summary subscription. After the initial snapshot TWS pushes
+/// only the values that changed, so each snapshot holds the most recent value of every row seen
+/// so far, not just the latest batch.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct AccountSummarySnapshot {
+    rows: BTreeMap<(String, String, String), AccountSummary>,
+}
+
+impl AccountSummarySnapshot {
+    /// Returns the latest row for an account, tag and currency.
+    pub fn get(&self, account: &str, tag: &str, currency: &str) -> Option<&AccountSummary> {
+        self.rows.get(&(account.to_string(), tag.to_string(), currency.to_string()))
+    }
+
+    /// Iterates over the latest rows, ordered by account, tag and currency.
+    pub fn iter(&self) -> impl Iterator<Item = &AccountSummary> {
+        self.rows.values()
+    }
+
+    /// Returns the number of rows.
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Returns `true` when no row has been received.
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
 }
 
 /// Aggregated profit and loss metrics for the entire account.
@@ -454,6 +487,18 @@ pub struct VerificationResult {
 // Feature-specific implementations
 #[cfg(feature = "sync")]
 mod sync;
+
+#[cfg(feature = "sync")]
+pub mod blocking {
+    //! Blocking account types, for builds that enable both `sync` and `async`.
+    pub use super::sync::AccountSummarySnapshots;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::AccountSummarySnapshots;
+
+#[cfg(feature = "async")]
+pub use r#async::AccountSummarySnapshots;
 
 #[cfg(feature = "async")]
 mod r#async;

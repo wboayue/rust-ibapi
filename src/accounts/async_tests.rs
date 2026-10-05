@@ -2,6 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers::*;
 use crate::messages::IncomingMessages;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::common::{DecoderContext, RoutedItem};
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::accounts::{
     account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
@@ -15,9 +16,11 @@ use crate::testdata::builders::positions::{
     cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::r#async::AsyncInternalSubscription;
 use crate::{server_versions, Client};
 use futures::StreamExt;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::test]
 async fn test_positions() {
@@ -670,4 +673,94 @@ async fn test_verify_message_version_error() {
     let result = client.verify_message("data").await;
     assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
     assert_eq!(request_message_count(&message_bus), 0);
+}
+
+fn summary_frame(tag: &str, value: &str, currency: &str) -> RoutedItem {
+    RoutedItem::Response(proto_response(
+        IncomingMessages::AccountSummary,
+        account_summary().tag(tag).value(value).currency(currency).encode_proto(),
+    ))
+}
+
+fn end_frame() -> RoutedItem {
+    RoutedItem::Response(proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()))
+}
+
+fn snapshots_over_open_channel(quiet: Duration) -> (AccountSummarySnapshots, tokio::sync::broadcast::Sender<RoutedItem>) {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let (tx, rx) = tokio::sync::broadcast::channel::<RoutedItem>(16);
+    let subscription = Subscription::new_from_internal(
+        AsyncInternalSubscription::new(rx),
+        message_bus,
+        Some(TEST_REQ_ID_FIRST),
+        None,
+        DecoderContext::default(),
+    );
+
+    let snapshots = AccountSummarySnapshots {
+        subscription,
+        builder: SnapshotBuilder::default(),
+        quiet,
+    };
+
+    (snapshots, tx)
+}
+
+fn values(snapshot: &AccountSummarySnapshot) -> Vec<(&str, &str, &str)> {
+    snapshot
+        .iter()
+        .map(|row| (row.tag.as_str(), row.currency.as_str(), row.value.as_str()))
+        .collect()
+}
+
+#[tokio::test]
+async fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
+    let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_millis(50));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    tx.send(summary_frame("BuyingPower", "400.0", "USD")).unwrap();
+    tx.send(end_frame()).unwrap();
+    let initial = snapshots.next().await.unwrap().unwrap();
+
+    tx.send(summary_frame("NetLiquidation", "101.5", "USD")).unwrap();
+    let refreshed = snapshots.next().await.unwrap().unwrap();
+    let still_open = tokio::time::timeout(Duration::from_millis(300), snapshots.next()).await;
+
+    assert_eq!(
+        values(&initial),
+        vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]
+    );
+    assert_eq!(
+        values(&refreshed),
+        vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "101.5")]
+    );
+    assert!(still_open.is_err());
+}
+
+#[tokio::test]
+async fn test_account_summary_snapshots_group_one_push_and_emit_on_end_without_new_rows() {
+    let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_millis(50));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    tx.send(summary_frame("BuyingPower", "400.0", "USD")).unwrap();
+    let first = snapshots.next().await.unwrap().unwrap();
+
+    tx.send(end_frame()).unwrap();
+    let on_end = snapshots.next().await.unwrap().unwrap();
+
+    assert_eq!(first.len(), 2);
+    assert_eq!(on_end, first);
+}
+
+#[tokio::test]
+async fn test_account_summary_snapshots_return_pending_rows_when_subscription_ends() {
+    let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_secs(60));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    drop(tx);
+    let last = snapshots.next().await.unwrap().unwrap();
+    let after = snapshots.next().await;
+
+    assert_eq!(values(&last), vec![("NetLiquidation", "USD", "100.0")]);
+    assert!(after.is_none());
 }
