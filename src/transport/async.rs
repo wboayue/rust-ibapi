@@ -867,9 +867,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
             OrderRoutingStrategy::OrderOrShared => {
                 if let Some(order_id) = message_order_id {
-                    if self.orders.deliver(&order_id, message.clone().into()).is_ok()
-                        || self.shared_channels.send_message(message.message_type(), &message)
-                    {
+                    // `contains` first, not `deliver`'s hand-back: the shared
+                    // fallback needs the message, and a second lookup is
+                    // cheaper than cloning every frame.
+                    if self.orders.contains(&order_id) {
+                        let _ = self.orders.deliver(&order_id, message.into());
+                        return Ok(());
+                    }
+                    if self.shared_channels.send_message(message.message_type(), &message) {
                         return Ok(());
                     }
                 }

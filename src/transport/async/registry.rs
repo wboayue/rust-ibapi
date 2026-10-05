@@ -243,7 +243,6 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         self.with_route(id, |route| route.sender.clone())
     }
 
-    #[cfg(test)]
     pub(super) fn contains(&self, id: &K) -> bool {
         self.read().contains_key(id)
     }
