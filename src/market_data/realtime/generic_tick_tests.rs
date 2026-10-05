@@ -2,8 +2,7 @@ use super::*;
 
 /// Regression guard: every constant must match the numeric ID listed at
 /// <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>,
-/// except `576` and `578`, which that page no longer lists; those are from IB's
-/// earlier table (copied in `realtime/common/tick_types.rs`).
+/// except `576` and `578` (see the module docs).
 ///
 /// Table is the source-of-truth column. If TWS adds a new generic tick request
 /// ID, add a row here and a `pub const` above so the constants module stays in
@@ -46,4 +45,10 @@ fn constants_match_documented_numeric_ids() {
     for (constant, expected) in cases {
         assert_eq!(constant, expected, "constant {constant} should equal {expected}");
     }
+}
+
+#[test]
+#[allow(deprecated)]
+fn deprecated_etf_nav_frozen_last_keeps_its_value() {
+    assert_eq!(ETF_NAV_FROZEN_LAST, ETF_NAV_CLOSE);
 }

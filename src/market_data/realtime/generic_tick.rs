@@ -41,7 +41,9 @@
 //! # References
 //!
 //! - IB docs: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction>
-//!   (see the *Generic tick required* column).
+//!   (see the *Generic tick required* column). That page no longer lists
+//!   `576`, `578` or received ticks 92-95; those mappings come from IB's earlier
+//!   table, copied in `realtime/common/tick_types.rs`.
 //!
 //! [`MarketDataBuilder::generic_ticks`]: crate::market_data::realtime::MarketDataBuilder::generic_ticks
 //! [`MarketDataBuilder::add_generic_tick`]: crate::market_data::realtime::MarketDataBuilder::add_generic_tick
@@ -155,9 +157,6 @@ pub const BOND_FACTOR_MULTIPLIER: &str = "460";
 /// `576` — Bid and ask prices of ETF's Net Asset Value.
 ///
 /// Delivers received ticks `ETF_NAV_BID` (94) and `ETF_NAV_ASK` (95).
-///
-/// IB's current tick-type page no longer lists `576` or ticks 92-95; this
-/// mapping is from IB's earlier table.
 pub const ETF_NAV_BID: &str = "576";
 
 /// `577` — Last price of ETF's Net Asset Value.
@@ -168,10 +167,17 @@ pub const ETF_NAV_LAST: &str = "577";
 /// `578` — Today's and yesterday's closing prices of ETF's Net Asset Value.
 ///
 /// Delivers received ticks `ETF_NAV_CLOSE` (92) and `ETF_NAV_PRIOR_CLOSE` (93).
-///
-/// IB's current tick-type page no longer lists `578` or ticks 92-95; this
-/// mapping is from IB's earlier table.
 pub const ETF_NAV_CLOSE: &str = "578";
+
+/// `578` — Today's and yesterday's closing prices of ETF's Net Asset Value.
+///
+/// Despite its name, this is not the frozen NAV last price (tick 97); that is
+/// [`ETF_FROZEN_NAV_LAST`] (`623`).
+#[deprecated(
+    since = "5.1.0",
+    note = "is \"578\" (ticks 92/93), not tick 97: use ETF_NAV_CLOSE for the same request, or ETF_FROZEN_NAV_LAST (\"623\") for tick 97"
+)]
+pub const ETF_NAV_FROZEN_LAST: &str = ETF_NAV_CLOSE;
 
 /// `586` — IPO pricing data.
 ///
