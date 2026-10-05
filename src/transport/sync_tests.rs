@@ -3135,10 +3135,9 @@ fn test_short_frame_body_reconnects() -> Result<(), Error> {
     let notices = bus.connection.notice_broadcaster.subscribe();
 
     stream.push_inbound(b"xx".to_vec());
-    let sv = crate::server_versions::PROTOBUF_REST_MESSAGES_3;
-    stream.push_inbound(format!("{sv}\020240120 12:00:00 EST\0").into_bytes());
-    stream.push_inbound(helpers::next_valid_id_frame(5000));
-    stream.push_inbound(helpers::managed_accounts_frame("DU1234567"));
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
 
     bus.dispatch()?;
 

@@ -6,7 +6,8 @@ use serial_test::serial;
 use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers::{
-    binary_text, error_frame, handshake_frames, managed_accounts_frame, next_valid_id_frame, TEST_ORDER_ID_SEED,
+    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
+    TEST_ORDER_ID_SEED,
 };
 use crate::messages::{encode_raw_length, IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -91,12 +92,16 @@ fn create_order_update_subscription_is_unique() {
     assert!(matches!(err, Error::AlreadySubscribed), "got {err:?}");
 }
 
+fn default_handshake_frames() -> Vec<Vec<u8>> {
+    handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED)
+}
+
 /// A server whose next valid order id is already in the request range is
 /// refused at connect: every order the session placed would collide with
 /// request ids (#789).
 #[test]
 fn connect_rejects_next_valid_id_in_request_range() {
-    let mut frames = handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED);
+    let mut frames = default_handshake_frames();
     frames[1] = next_valid_id_frame(crate::client::ids::REQUEST_ID_FLOOR);
     let (addr, _h) = spawn_handshake_listener(frames);
 
@@ -109,7 +114,7 @@ fn connect_rejects_next_valid_id_in_request_range() {
 
 #[test]
 fn connect_handshakes_against_real_socket() {
-    let (addr, _h) = spawn_handshake_listener(handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED));
+    let (addr, _h) = spawn_handshake_listener(default_handshake_frames());
 
     let client = Client::connect(&addr.to_string(), 100).expect("Client::connect");
 
@@ -130,7 +135,7 @@ fn connect_handshakes_against_real_socket() {
 #[test]
 #[serial]
 fn raw_capture_env_var_records_framed_wire_bytes() {
-    let frames = handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED);
+    let frames = default_handshake_frames();
     let (addr, _h) = spawn_handshake_listener(frames.clone());
     let dir = tempfile::TempDir::new().unwrap();
 
@@ -158,11 +163,12 @@ fn raw_capture_env_var_records_framed_wire_bytes() {
 fn builder_startup_callback_receives_unsolicited_messages() {
     // OpenOrderEnd (msg=53) is a unit marker (no payload to decode), so the
     // typed callback fires regardless of wire framing.
-    let mut frames = Vec::new();
-    frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
-    frames.push(next_valid_id_frame(9000));
-    frames.push(binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"));
-    frames.push(managed_accounts_frame("DU1234567"));
+    let frames = vec![
+        handshake_response_frame(SERVER_VERSION, "EST"),
+        next_valid_id_frame(TEST_ORDER_ID_SEED),
+        binary_text(IncomingMessages::OpenOrderEnd as i32, "1\0"),
+        managed_accounts_frame(TEST_ACCOUNT),
+    ];
 
     let (addr, _h) = spawn_handshake_listener(frames);
     let captured = Arc::new(Mutex::new(Vec::<i32>::new()));
@@ -186,7 +192,7 @@ fn builder_startup_callback_receives_unsolicited_messages() {
 
 #[test]
 fn builder_tcp_no_delay_round_trips() {
-    let (addr, _h) = spawn_handshake_listener(handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED));
+    let (addr, _h) = spawn_handshake_listener(default_handshake_frames());
 
     let client = Client::builder()
         .address(addr.to_string())
@@ -201,11 +207,12 @@ fn builder_tcp_no_delay_round_trips() {
 
 #[test]
 fn builder_connect_with_notice_stream_captures_handshake_notice() {
-    let mut frames = Vec::new();
-    frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
-    frames.push(next_valid_id_frame(9000));
-    frames.push(error_frame(-1, 2104, "farm OK"));
-    frames.push(managed_accounts_frame("DU1234567"));
+    let frames = vec![
+        handshake_response_frame(SERVER_VERSION, "EST"),
+        next_valid_id_frame(TEST_ORDER_ID_SEED),
+        error_frame(-1, 2104, "farm OK"),
+        managed_accounts_frame(TEST_ACCOUNT),
+    ];
 
     let (addr, _h) = spawn_handshake_listener(frames);
 
