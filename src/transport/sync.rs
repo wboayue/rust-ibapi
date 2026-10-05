@@ -668,6 +668,8 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn process_orders(&self, message: ResponseMessage) {
         let strategy = order_routing_strategy(message.message_type());
+        let message_order_id = message.order_id().map(OrderId::from);
+        let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {
@@ -675,24 +677,22 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             OrderRoutingStrategy::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
-                let (order_id, request_id) = (message.order_id().map(OrderId::from), message.request_id().and_then(RequestId::from_raw));
                 let execution_id = message.execution_id();
-                if let Err(item) = self.deliver_to_order_or_request(order_id, request_id, message.into(), execution_id.as_ref()) {
+                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), execution_id.as_ref()) {
                     if !sent_to_update_stream {
                         warn!("could not route message {item:?}");
                     }
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                let (order_id, request_id) = (message.order_id().map(OrderId::from), message.request_id().and_then(RequestId::from_raw));
-                if let Err(item) = self.deliver_to_order_or_request(order_id, request_id, message.into(), None) {
+                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), None) {
                     warn!("could not route message {item:?}");
                 }
             }
             OrderRoutingStrategy::OrderOrShared => {
                 let sent_to_update_stream = self.send_order_update(&message);
 
-                if let Some(order_id) = message.order_id().map(OrderId::from) {
+                if let Some(order_id) = message_order_id {
                     if self.orders.contains(&order_id) {
                         let _ = self.orders.deliver(&order_id, message.into());
                     } else {
@@ -1074,7 +1074,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     }
 
     pub fn insert(&self, id: K, sender: Sender<V>, lease: LeaseRef) {
-        self.senders.write().unwrap().insert(id, Entry::new(sender, lease));
+        self.insert_entry(id, Entry::new(sender, lease));
     }
 
     /// Like [`insert`](Self::insert), with an unread-item cap: see [`BoundState::admit`].
@@ -1083,6 +1083,10 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
             bound: Some(BoundState::new(bound)),
             ..Entry::new(sender, lease)
         };
+        self.insert_entry(id, entry);
+    }
+
+    fn insert_entry(&self, id: K, entry: Entry<V>) {
         self.senders.write().unwrap().insert(id, entry);
     }
 
@@ -1145,7 +1149,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
     ) -> Result<(), RoutedItem> {
         self.deliver_then(id, item, |entry| {
             if let Some(alias) = alias {
-                aliases.senders.write().unwrap().insert(alias.clone(), entry.alias());
+                aliases.insert_entry(alias.clone(), entry.alias());
             }
         })
     }
