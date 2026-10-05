@@ -192,6 +192,13 @@ impl Client {
 
     /// Subscribe to account summary updates for a group of accounts.
     ///
+    /// # Subscription lifetime
+    ///
+    /// The subscription stays open until it is dropped or cancelled. TWS first sends the requested
+    /// tags followed by [`AccountSummaryResult::End`], then pushes changed values as further
+    /// [`AccountSummaryResult::Summary`] rows without another `End`. Dropping the subscription cancels
+    /// the request.
+    ///
     /// # Arguments
     /// * `group` - Set to "All" to return account summary data for all accounts, or set to a specific Advisor Account Group name.
     /// * `tags`  - List of the desired tags.

@@ -144,8 +144,13 @@ impl AccountSummaryTags {
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
+    ///
+    /// After [`End`](Self::End), TWS keeps sending rows on the same subscription when values change.
     Summary(AccountSummary),
-    /// End marker for a batch of account summaries
+    /// End marker for the initial snapshot of account summaries.
+    ///
+    /// An `End` does not follow the rows TWS pushes later, so a consumer that wants complete
+    /// updates must decide for itself when a pushed batch is finished.
     End,
 }
 
