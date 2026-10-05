@@ -3543,13 +3543,14 @@ fn sender_hash_deliver_aliased_hands_the_item_back_when_unrouted() {
 #[test]
 fn sender_hash_recovers_from_a_poisoned_lock() {
     let (routes, receiver, _lease) = sender_hash_route();
-    let routes = Arc::new(routes);
-    let poisoner = routes.clone();
-    let _ = std::thread::spawn(move || {
-        let _guard = poisoner.senders.write().unwrap();
-        panic!("poison the route lock");
-    })
-    .join();
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = routes.senders.write().unwrap();
+                panic!("poison the route lock");
+            })
+            .join();
+    });
     assert!(routes.senders.is_poisoned());
 
     routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
