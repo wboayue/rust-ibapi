@@ -211,9 +211,14 @@ impl Client {
     ///
     /// Wraps [`account_summary`](Self::account_summary) and keeps the latest value of every row, so
     /// each [`AccountSummarySnapshot`] holds the whole account rather than only the rows TWS pushed
-    /// last. TWS sends no `End` marker after the initial snapshot, so a snapshot is emitted at an
-    /// `End` and once no row has arrived for `quiet`. Choose `quiet` longer than the gap between the
+    /// last. TWS sends one `End` marker after the initial snapshot and none after the rows it pushes
+    /// later, so a snapshot is emitted at an `End` and once no row has arrived for `quiet`. IB
+    /// documents the pushes as every three minutes for the values that changed. A snapshot is
+    /// emitted only when a row changed a value since the previous one, except the first, which is
+    /// emitted at the first `End` even when empty. Choose `quiet` longer than the gap between the
     /// rows of one push, which arrive within milliseconds of each other.
+    ///
+    /// Notices that arrive on the subscription are dropped.
     ///
     /// Dropping the returned iterator cancels the subscription.
     ///

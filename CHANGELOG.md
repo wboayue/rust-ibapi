@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Client::account_summary_snapshots(&group, tags, quiet)` (async and blocking) wraps `account_summary` and yields `AccountSummarySnapshot`, the latest value of every row by account, tag and currency. TWS sends no `End` after the first snapshot and then pushes only changed rows, so a snapshot completes at an `End` or once no row has arrived for `quiet`. Blocking types are at `accounts::blocking` when both features are enabled.
-- `AccountSummary` implements `Clone` and `PartialEq`.
+- `Client::account_summary_snapshots(&group, tags, quiet)` (async and blocking) wraps `account_summary` and yields `AccountSummarySnapshot`, the latest value of every row by account, tag and currency. TWS sends one `End` after the first snapshot and none after the rows it pushes later, so a snapshot completes at an `End` or once no row has arrived for `quiet`, and only when a row changed a value. The blocking type is at `client::blocking::AccountSummarySnapshots` when both features are enabled (#957).
+- `AccountSummary` implements `Clone` and `PartialEq` (#957).
 - `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
 
 ### Deprecated

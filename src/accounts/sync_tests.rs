@@ -970,3 +970,51 @@ fn test_account_summary_snapshots_end_when_subscription_closes() {
     assert_eq!(values(&last), vec![("NetLiquidation", "USD", "100.0")]);
     assert!(after.is_none());
 }
+
+#[test]
+fn test_account_summary_snapshots_group_one_push_and_skip_end_without_changes() {
+    let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
+
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    tx.send(summary_frame("BuyingPower", "400.0", "USD")).unwrap();
+    let first = snapshots.next().unwrap().unwrap();
+
+    tx.send(end_frame()).unwrap();
+    tx.send(summary_frame("NetLiquidation", "101.0", "USD")).unwrap();
+    let second = snapshots.next().unwrap().unwrap();
+
+    assert_eq!(values(&first), vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(values(&second), vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "101.0")]);
+}
+
+#[test]
+fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::AccountSummary,
+            account_summary().tag("NetLiquidation").value("100.0").currency("USD").encode_proto(),
+        ),
+        proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+
+    let mut snapshots = client
+        .account_summary_snapshots(&group, tags, Duration::from_secs(1))
+        .expect("request account_summary_snapshots failed");
+    let snapshot = snapshots.next().unwrap().unwrap();
+    drop(snapshots);
+
+    assert_eq!(values(&snapshot), vec![("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST)
+            .group("All")
+            .tags([AccountSummaryTags::NET_LIQUIDATION]),
+    );
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
+}

@@ -738,7 +738,7 @@ async fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
 }
 
 #[tokio::test]
-async fn test_account_summary_snapshots_group_one_push_and_emit_on_end_without_new_rows() {
+async fn test_account_summary_snapshots_group_one_push_and_skip_end_without_changes() {
     let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -746,10 +746,11 @@ async fn test_account_summary_snapshots_group_one_push_and_emit_on_end_without_n
     let first = snapshots.next().await.unwrap().unwrap();
 
     tx.send(end_frame()).unwrap();
-    let on_end = snapshots.next().await.unwrap().unwrap();
+    tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
+    let repeated = tokio::time::timeout(Duration::from_millis(300), snapshots.next()).await;
 
-    assert_eq!(first.len(), 2);
-    assert_eq!(on_end, first);
+    assert_eq!(values(&first), vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]);
+    assert!(repeated.is_err());
 }
 
 #[tokio::test]
@@ -763,4 +764,38 @@ async fn test_account_summary_snapshots_return_pending_rows_when_subscription_en
 
     assert_eq!(values(&last), vec![("NetLiquidation", "USD", "100.0")]);
     assert!(after.is_none());
+}
+
+#[tokio::test]
+async fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::AccountSummary,
+            account_summary().tag("NetLiquidation").value("100.0").currency("USD").encode_proto(),
+        ),
+        proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+
+    let mut snapshots = client
+        .account_summary_snapshots(&group, tags, Duration::from_secs(1))
+        .await
+        .expect("request account_summary_snapshots failed");
+    let snapshot = snapshots.next().await.unwrap().unwrap();
+    drop(snapshots);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    assert_eq!(values(&snapshot), vec![("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST)
+            .group("All")
+            .tags([AccountSummaryTags::NET_LIQUIDATION]),
+    );
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }

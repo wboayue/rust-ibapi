@@ -151,7 +151,8 @@ pub enum AccountSummaryResult {
     /// End marker for the initial snapshot of account summaries.
     ///
     /// An `End` does not follow the rows TWS pushes later, so a consumer that wants complete
-    /// updates must decide for itself when a pushed batch is finished.
+    /// updates must decide for itself when a pushed batch is finished. See
+    /// [`Client::account_summary_snapshots`](crate::Client::account_summary_snapshots).
     End,
 }
 
@@ -167,11 +168,29 @@ pub struct AccountSummarySnapshot {
 
 impl AccountSummarySnapshot {
     /// Returns the latest row for an account, tag and currency.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountSummarySnapshot;
+    ///
+    /// let snapshot = AccountSummarySnapshot::default();
+    /// assert!(snapshot.get("DU1234567", "NetLiquidation", "USD").is_none());
+    /// ```
     pub fn get(&self, account: &str, tag: &str, currency: &str) -> Option<&AccountSummary> {
         self.rows.get(&(account.to_string(), tag.to_string(), currency.to_string()))
     }
 
     /// Iterates over the latest rows, ordered by account, tag and currency.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountSummarySnapshot;
+    ///
+    /// let snapshot = AccountSummarySnapshot::default();
+    /// assert_eq!(snapshot.iter().count(), 0);
+    /// ```
     pub fn iter(&self) -> impl Iterator<Item = &AccountSummary> {
         self.rows.values()
     }
@@ -486,13 +505,7 @@ pub struct VerificationResult {
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
-mod sync;
-
-#[cfg(feature = "sync")]
-pub mod blocking {
-    //! Blocking account types, for builds that enable both `sync` and `async`.
-    pub use super::sync::AccountSummarySnapshots;
-}
+pub(crate) mod sync;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::AccountSummarySnapshots;
