@@ -61,6 +61,58 @@ fn deliver_hands_the_item_back_when_unrouted() {
 }
 
 #[test]
+fn deliver_aliased_aliases_the_route() {
+    let routes = SenderHash::new();
+    let aliases = SenderHash::<String>::new();
+    let (route, mut receiver, lease) = route();
+    routes.insert(RequestId::nth(1), route);
+    let alias = "exec-1".to_string();
+
+    routes
+        .deliver_aliased(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled), Some(&alias), &aliases)
+        .unwrap();
+    aliases.deliver(&alias, Error::ConnectionReset.into()).unwrap();
+
+    let items = items(&mut receiver);
+    assert!(items.len() == 2 && is_reset(&items[1]), "{items:?}");
+    assert!(
+        aliases.with_route(&alias, |route| route.lease.is(&lease.downgrade())).unwrap(),
+        "alias holds another lease"
+    );
+}
+
+#[test]
+fn deliver_aliased_without_alias_registers_none() {
+    let routes = SenderHash::new();
+    let aliases = SenderHash::<String>::new();
+    let (route, mut receiver, _lease) = route();
+    routes.insert(RequestId::nth(1), route);
+
+    routes
+        .deliver_aliased(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled), None, &aliases)
+        .unwrap();
+
+    assert_eq!(items(&mut receiver).len(), 1);
+    assert!(aliases.is_empty());
+}
+
+#[test]
+fn deliver_aliased_hands_the_item_back_when_unrouted() {
+    let routes = SenderHash::<RequestId>::new();
+    let aliases = SenderHash::<String>::new();
+
+    let item = routes.deliver_aliased(
+        &RequestId::nth(1),
+        RoutedItem::Error(Error::Cancelled),
+        Some(&"exec-1".to_string()),
+        &aliases,
+    );
+
+    assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
+    assert!(aliases.is_empty(), "unrouted item was aliased");
+}
+
+#[test]
 fn remove_if_same_spares_a_replacement() {
     let routes = SenderHash::new();
     let (stale, _stale_receiver, stale_lease) = route();

@@ -76,6 +76,11 @@ impl Route {
         self.bound.as_ref().is_some_and(|bound| bound.state.closed())
     }
 
+    /// An unbounded route sharing this one's channel and lease.
+    fn alias(&self) -> Self {
+        Self::unbounded(self.sender.clone(), self.lease.clone())
+    }
+
     /// Whether this route holds `lease` and every holder of it is gone.
     pub(super) fn released(&self, lease: &LeaseRef) -> bool {
         self.lease.is(lease) && !self.lease.is_live()
@@ -131,6 +136,7 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
 
     /// Run `f` on `id`'s route while holding the read lock, so no removal can
     /// land between the lookup and `f`.
+    #[cfg(test)]
     pub(super) fn with_route<R>(&self, id: &K, f: impl FnOnce(&Route) -> R) -> Option<R> {
         self.read().get(id).map(f)
     }
@@ -138,13 +144,44 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// Deliver `item` to `id`'s route; hands it back when nothing is
     /// registered under `id`.
     pub(super) fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
-        match self.read().get(id) {
-            Some(route) => {
-                route.deliver(id, item);
-                Ok(())
+        self.deliver_then(id, item, |_| {})
+    }
+
+    /// Deliver `item` to `id`'s route, then alias that route under `alias`
+    /// in `aliases` while still holding `id`'s read lock, so a concurrent
+    /// clear can't land between the delivery and the alias. Lock order:
+    /// `self` (read), then `aliases` (write); nothing takes them the other
+    /// way round. Hands the item back when nothing is registered under `id`.
+    pub(super) fn deliver_aliased<A: Hash + Eq + Clone + Display + Debug>(
+        &self,
+        id: &K,
+        item: RoutedItem,
+        alias: Option<&A>,
+        aliases: &SenderHash<A>,
+    ) -> Result<(), RoutedItem> {
+        self.deliver_then(id, item, |route| {
+            if let Some(alias) = alias {
+                aliases.insert(alias.clone(), route.alias());
             }
-            None => Err(item),
-        }
+        })
+    }
+
+    /// Deliver `item` to `id`'s route and run `then` on it, both under the
+    /// read lock.
+    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl FnOnce(&Route)) -> Result<(), RoutedItem> {
+        let routes = self.read();
+        let Some(route) = routes.get(id) else {
+            return Err(item);
+        };
+        route.deliver(id, item);
+        then(route);
+        Ok(())
+    }
+
+    /// Whether a route is registered under `id`. For a caller whose miss
+    /// path still needs the message `deliver` would consume.
+    pub(super) fn contains(&self, id: &K) -> bool {
+        self.read().contains_key(id)
     }
 
     /// Remove `id`'s registration if it matches `pred`; returns whether it
@@ -210,11 +247,6 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     #[cfg(test)]
     pub(super) fn sender(&self, id: &K) -> Option<BroadcastSender> {
         self.with_route(id, |route| route.sender.clone())
-    }
-
-    #[cfg(test)]
-    pub(super) fn contains(&self, id: &K) -> bool {
-        self.read().contains_key(id)
     }
 
     #[cfg(test)]
@@ -319,6 +351,10 @@ impl SharedChannels {
         self.channels.read().unwrap_or_else(PoisonError::into_inner)
     }
 
+    fn channels_mut(&self) -> RwLockWriteGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
+        self.channels.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Every live shared subscription has just been failed: start a new
     /// generation so their later drops cannot touch the next session's counts.
     pub(super) async fn reset_counts(&self) {
@@ -362,8 +398,12 @@ impl SharedChannels {
 
     /// Deliver `item()` once to every channel, then drop the senders so every
     /// subscription ends after it. Later sends are no-ops.
+    ///
+    /// The counterpart of sync `SharedChannels::fail_all` (notify and clear
+    /// under one lock); named `close` because async channels persist across
+    /// subscriptions, and a closed registry refuses later subscribes.
     pub(super) fn close(&self, item: impl Fn() -> RoutedItem) {
-        let mut channels = self.channels.write().unwrap_or_else(PoisonError::into_inner);
+        let mut channels = self.channels_mut();
         for sender in channels.values().filter_map(|channel| channel.sender.get()) {
             let _ = sender.send(item());
         }

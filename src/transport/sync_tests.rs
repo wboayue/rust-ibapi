@@ -3473,3 +3473,121 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     assert!(sub.try_next().is_none(), "frames after the end marker are discarded");
     Ok(())
 }
+
+/// A request route, its receiver, and the lease that keeps it live.
+fn sender_hash_route() -> (SenderHash<RequestId, RoutedItem>, Receiver<RoutedItem>, Lease) {
+    let routes = SenderHash::new();
+    let (sender, receiver) = channel::unbounded();
+    let lease = Lease::new();
+    routes.insert(RequestId::nth(1), sender, lease.downgrade());
+    (routes, receiver, lease)
+}
+
+#[test]
+fn sender_hash_deliver_hands_the_item_back_when_unrouted() {
+    let routes = SenderHash::<RequestId, RoutedItem>::new();
+    let item = routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled));
+    assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
+}
+
+#[test]
+fn sender_hash_deliver_aliased_aliases_the_route() {
+    let (routes, receiver, lease) = sender_hash_route();
+    let aliases = SenderHash::<String, RoutedItem>::new();
+    let alias = "exec-1".to_string();
+
+    routes
+        .deliver_aliased(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled), Some(&alias), &aliases)
+        .unwrap();
+    aliases.deliver(&alias, Error::ConnectionReset.into()).unwrap();
+
+    let items: Vec<_> = receiver.try_iter().collect();
+    assert!(
+        items.len() == 2 && matches!(items[1], RoutedItem::Error(Error::ConnectionReset)),
+        "{items:?}"
+    );
+    assert!(aliases.lease(alias).unwrap().is(&lease.downgrade()), "alias holds another lease");
+}
+
+#[test]
+fn sender_hash_deliver_aliased_without_alias_registers_none() {
+    let (routes, receiver, _lease) = sender_hash_route();
+    let aliases = SenderHash::<String, RoutedItem>::new();
+
+    routes
+        .deliver_aliased(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled), None, &aliases)
+        .unwrap();
+
+    assert_eq!(receiver.try_iter().count(), 1);
+    assert_eq!(aliases.len(), 0);
+}
+
+#[test]
+fn sender_hash_deliver_aliased_hands_the_item_back_when_unrouted() {
+    let routes = SenderHash::<RequestId, RoutedItem>::new();
+    let aliases = SenderHash::<String, RoutedItem>::new();
+
+    let item = routes.deliver_aliased(
+        &RequestId::nth(1),
+        RoutedItem::Error(Error::Cancelled),
+        Some(&"exec-1".to_string()),
+        &aliases,
+    );
+
+    assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
+    assert_eq!(aliases.len(), 0, "unrouted item was aliased");
+}
+
+/// A panic under the route lock must not take every later route and
+/// teardown down with it.
+#[test]
+fn sender_hash_recovers_from_a_poisoned_lock() {
+    let (routes, receiver, _lease) = sender_hash_route();
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = routes.senders.write().unwrap();
+                panic!("poison the route lock");
+            })
+            .join();
+    });
+    assert!(routes.senders.is_poisoned());
+
+    routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
+    routes.clear();
+
+    assert_eq!(receiver.try_iter().count(), 1);
+    assert_eq!(routes.len(), 0);
+}
+
+/// A panic under the order-update slot's lock must not silently drop later
+/// order updates or leave the slot uncleanable.
+#[test]
+fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let stream_sub = bus.create_order_update_subscription()?;
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = bus.order_update_stream.lock().unwrap();
+                panic!("poison the order-update slot");
+            })
+            .join();
+    });
+    assert!(bus.order_update_stream.is_poisoned());
+
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
+    bus.dispatch()?;
+    assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+
+    let registered = lock_slot(&bus.order_update_stream).as_ref().unwrap().lease.clone();
+    bus.clear_order_update_stream(&registered);
+    assert!(lock_slot(&bus.order_update_stream).is_none(), "poisoned slot not cleared");
+    Ok(())
+}
