@@ -7,8 +7,8 @@ use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
-    StartupMessage,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
+    StartupMessage, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -249,36 +249,12 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         self.socket.write_all(&handshake).await?;
 
-        // Read handshake response as raw text, bypassing parse_raw_message
-        // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
-        let ack: Result<ResponseMessage, Error> = match self.socket.read_message().await {
-            Ok(data) => {
-                let raw_string = String::from_utf8_lossy(&data).into_owned();
-                Ok(ResponseMessage::from(&raw_string))
-            }
-            Err(err) => Err(err),
-        };
+        let (server_version, time, tz) = parse_handshake_ack(&self.connection_handler, self.socket.read_message().await)?;
 
         let mut connection_metadata = self.connection_metadata.lock().await;
-
-        match ack {
-            Ok(mut response) => {
-                let handshake_data = self.connection_handler.parse_handshake_response(&mut response)?;
-                self.server_version_cache.store(handshake_data.server_version, Ordering::Release);
-
-                let (time, tz) = parse_connection_time(&handshake_data.server_time);
-                connection_metadata.connection_time = time;
-                connection_metadata.time_zone = tz;
-            }
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(Error::ConnectionRejected(format!(
-                    "server may be rejecting connections from this host: {err}"
-                )));
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
+        self.server_version_cache.store(server_version, Ordering::Release);
+        connection_metadata.connection_time = time;
+        connection_metadata.time_zone = tz;
         Ok(())
     }
 
@@ -295,35 +271,19 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
-        const MAX_ATTEMPTS: i32 = 100;
         let ctx = self.handshake_context();
         let server_version = self.server_version();
         loop {
             let mut message = self.read_message().await?;
             let info = self.connection_handler.parse_account_info(server_version, &mut message, &ctx)?;
 
-            // Merge received info
-            if info.next_order_id.is_some() {
-                account_info.next_order_id = info.next_order_id;
-            }
-            if info.managed_accounts.is_some() {
-                account_info.managed_accounts = info.managed_accounts;
-            }
-
             attempts += 1;
-            if (account_info.next_order_id.is_some() && account_info.managed_accounts.is_some()) || attempts > MAX_ATTEMPTS {
+            if account_info.merge(info) || attempts > MAX_ACCOUNT_INFO_ATTEMPTS {
                 break;
             }
         }
 
-        // Update connection metadata
-        let mut connection_metadata = self.connection_metadata.lock().await;
-        if let Some(next_order_id) = account_info.next_order_id {
-            connection_metadata.next_order_id = next_order_id;
-        }
-        if let Some(managed_accounts) = account_info.managed_accounts {
-            connection_metadata.managed_accounts = managed_accounts;
-        }
+        self.connection_metadata.lock().await.apply_account_info(account_info);
 
         Ok(())
     }
