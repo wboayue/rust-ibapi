@@ -37,6 +37,7 @@ pub mod r#async;
 #[cfg(feature = "sync")]
 pub mod blocking {
     pub use super::sync::Client;
+    pub use crate::accounts::sync::AccountSummarySnapshots;
     pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
     pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
     pub use crate::subscriptions::notice_stream::sync_impl::{NoticeStream, NoticeStreamIter};
