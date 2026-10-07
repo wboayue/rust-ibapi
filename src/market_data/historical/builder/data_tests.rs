@@ -115,7 +115,7 @@ mod sync_tests {
                 .end_date(None)
                 .duration(Duration::days(7))
                 .bar_size(BarSize::Hour)
-                .what_to_show(Some(WhatToShow::Trades))
+                .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
         );
     }
@@ -144,7 +144,7 @@ mod sync_tests {
                 .end_date(Some(end))
                 .duration(Duration::days(2))
                 .bar_size(BarSize::Hour)
-                .what_to_show(Some(WhatToShow::MidPoint))
+                .what_to_show(WhatToShow::MidPoint)
                 .use_rth(false),
         );
     }
@@ -172,7 +172,7 @@ mod sync_tests {
                 .end_date(Some(end))
                 .duration(Duration::days(8))
                 .bar_size(BarSize::Hour)
-                .what_to_show(Some(WhatToShow::Trades))
+                .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
         );
     }
@@ -309,7 +309,7 @@ mod async_tests {
                 .end_date(None)
                 .duration(Duration::days(7))
                 .bar_size(BarSize::Hour)
-                .what_to_show(Some(WhatToShow::Trades))
+                .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
         );
     }
@@ -338,7 +338,7 @@ mod async_tests {
                 .end_date(Some(end))
                 .duration(Duration::days(8))
                 .bar_size(BarSize::Hour)
-                .what_to_show(Some(WhatToShow::Trades))
+                .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
         );
     }

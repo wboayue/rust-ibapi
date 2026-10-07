@@ -55,7 +55,7 @@ pub(crate) fn encode_request_historical_data(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
     bar_size: BarSize,
-    what_to_show: Option<WhatToShow>,
+    what_to_show: WhatToShow,
     use_rth: bool,
     keep_up_to_date: bool,
     chart_options: &[crate::contracts::TagValue],

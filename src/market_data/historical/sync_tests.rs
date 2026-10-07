@@ -253,7 +253,7 @@ fn test_historical_data() {
             .end_date(Some(end_date))
             .duration(duration)
             .bar_size(bar_size)
-            .what_to_show(Some(what_to_show))
+            .what_to_show(what_to_show)
             .use_rth(trading_hours.use_rth()),
     );
 }
@@ -316,7 +316,7 @@ fn test_historical_schedules() {
             .end_date(Some(end_date))
             .duration(duration)
             .bar_size(BarSize::Day)
-            .what_to_show(Some(WhatToShow::Schedule))
+            .what_to_show(WhatToShow::Schedule)
             .use_rth(true),
     );
 }
@@ -893,7 +893,7 @@ fn test_historical_data_streaming_with_updates() {
             .contract(&contract)
             .duration(Duration::days(1))
             .bar_size(BarSize::Hour)
-            .what_to_show(Some(WhatToShow::Trades))
+            .what_to_show(WhatToShow::Trades)
             .use_rth(true)
             .keep_up_to_date(true),
     );
@@ -1199,7 +1199,7 @@ fn test_historical_schedules_ending_now() {
             .contract(&contract)
             .duration(duration)
             .bar_size(BarSize::Day)
-            .what_to_show(Some(WhatToShow::Schedule))
+            .what_to_show(WhatToShow::Schedule)
             .use_rth(true),
     );
 }
