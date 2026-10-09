@@ -316,12 +316,13 @@ pub(crate) async fn historical_data(
         // and cannot use the helpers in `common::request_helpers`.
         match subscription.next().await {
             Some(Ok(end_message)) => {
-                let (start, end) = decoders::decode_historical_data_end(&end_message)?;
+                let end_message = end_message.expect_type(IncomingMessages::HistoricalDataEnd)?;
+                let (start, end) = decoders::decode_historical_data_end(end_message)?;
                 data.start = start;
                 data.end = end;
             }
             Some(Err(e)) => return Err(e),
-            None => {}
+            None => return Err(Error::UnexpectedEndOfStream),
         }
 
         Ok(data)

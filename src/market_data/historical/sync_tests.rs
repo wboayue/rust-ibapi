@@ -1133,12 +1133,15 @@ fn test_historical_data_end_of_stream_is_not_retried() {
 #[test]
 fn test_historical_data_retries_a_connection_reset() {
     let message_bus = Arc::new(
-        MessageBusStub::with_ordered_responses(vec![proto_response(
-            IncomingMessages::HistoricalData,
-            historical_data_response()
-                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
-                .encode_proto(),
-        )])
+        MessageBusStub::with_ordered_responses(vec![
+            proto_response(
+                IncomingMessages::HistoricalData,
+                historical_data_response()
+                    .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                    .encode_proto(),
+            ),
+            proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
+        ])
         .with_connection_resets(1),
     );
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -1508,4 +1511,61 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
         .expect("decode error");
     assert_eq!(tick.price, 14.00, "wrong price");
     assert!(subscription.next().is_none(), "should be done");
+}
+
+/// A decoded batch alone cannot prove a finite request completed.
+#[test]
+fn test_historical_data_requires_end_after_a_batch() {
+    for populated in [false, true] {
+        let response = historical_data_response();
+        let response = if populated {
+            response.bar(historical_data_daily_bar("20230315").ohlc(1.0, 2.0, 0.5, 1.5))
+        } else {
+            response
+        };
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+            IncomingMessages::HistoricalData,
+            response.encode_proto(),
+        )]));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+        let result = client
+            .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
+            .duration(Duration::seconds(86_400))
+            .fetch();
+        assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "populated={populated}: {result:?}");
+        assert_eq!(request_message_count(&bus), 1, "bare closure must not replay the request");
+    }
+}
+
+/// A second data frame is not the completion marker.
+#[test]
+fn test_historical_data_requires_end_message_type() {
+    let response = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![response.clone(), response]));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch();
+    assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
+    assert_eq!(request_message_count(&bus), 1);
+}
+
+/// An empty result is valid when the broker explicitly completes the request.
+#[test]
+fn test_historical_data_requires_end_accepts_completed_empty_batch() {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
+        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
+    ]));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch()
+        .unwrap();
+    assert!(result.bars.is_empty());
+    assert_eq!(result.start, datetime!(2023-03-15 09:30:00 UTC));
+    assert_eq!(result.end, datetime!(2023-03-15 10:30:00 UTC));
+    assert_eq!(request_message_count(&bus), 1);
 }
