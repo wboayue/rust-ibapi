@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Finite historical fetches require HistoricalDataEnd before returning success in both clients. Closure after a batch returns UnexpectedEndOfStream; another message type returns UnexpectedResponse. Connection-reset retries retain their existing behavior.
 - Blocking `order_update_stream()` can be reopened right after `cancel()`, while the old handle is still held; it used to return `AlreadySubscribed` until the cleanup thread caught up (#932).
 - Blocking client: cancelling or dropping a `contract_news` or `broad_tape_news` subscription now sends `cancelMktData`, as the async client already did. Previously no cancel was sent, and TWS kept the news subscription open until disconnect (#947).
 

@@ -358,3 +358,12 @@ If you're still stuck:
 - [ ] Debug logging enabled?
 - [ ] Checked examples for similar use case?
 - [ ] Tested both sync and async modes?
+
+## Incomplete historical downloads
+
+Both finite historical fetch APIs require the broker's HistoricalDataEnd marker.
+A bar batch followed by channel closure returns Error::UnexpectedEndOfStream;
+an unexpected second message type returns Error::UnexpectedResponse.
+Treat either result as a failed request rather than a completed empty or partial
+download. An empty batch followed by HistoricalDataEnd remains a valid result,
+and connection resets still use the existing retry policy.

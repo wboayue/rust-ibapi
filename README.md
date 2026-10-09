@@ -135,6 +135,11 @@ For a complete list of contract attributes, explore the [Contract documentation]
 
 ### Requesting Historical Market Data
 
+A finite historical fetch succeeds only after receiving HistoricalDataEnd.
+If its response channel closes after the bar batch, fetch returns
+Error::UnexpectedEndOfStream, including for an empty batch. An explicitly completed
+empty result remains valid. Connection-reset retries retain their existing policy.
+
 #### Sync Example
 
 ```rust
