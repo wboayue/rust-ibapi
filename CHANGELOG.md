@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Async disconnect and dispatcher shutdown release both TCP halves even when clients or subscriptions remain retained. Pending I/O is awakened before close; repeated close is safe and retired sockets cannot reconnect.
-
 ### Added
 
 - `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
@@ -22,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Async disconnect and dispatcher shutdown release both TCP halves even when clients or subscriptions remain retained. Pending I/O is awakened before close; repeated close is safe and retired sockets cannot reconnect.
 - Blocking `order_update_stream()` can be reopened right after `cancel()`, while the old handle is still held; it used to return `AlreadySubscribed` until the cleanup thread caught up (#932).
 - Blocking client: cancelling or dropping a `contract_news` or `broad_tape_news` subscription now sends `cancelMktData`, as the async client already did. Previously no cancel was sent, and TWS kept the news subscription open until disconnect (#947).
 
