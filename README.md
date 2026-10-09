@@ -55,6 +55,13 @@ use ibapi::client::blocking::Client;  // blocking client
 
 The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
 
+## Async physical disconnect
+
+Calling async Client::disconnect().await releases the physical TCP connection even
+while the client or subscriptions are retained. Pending I/O is awakened before
+shutdown joins the dispatcher. Dropping the client requests shutdown synchronously;
+the dispatcher performs the physical close when it exits.
+
 ## Examples
 
 These examples demonstrate key features of the `ibapi` API.

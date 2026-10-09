@@ -28,6 +28,10 @@ struct SubmissionStream {
 
 #[async_trait]
 impl AsyncIo for SubmissionStream {
+    async fn close(&self) {
+        AsyncIo::close(&self.inner).await;
+    }
+
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.inner.read_message().await
     }

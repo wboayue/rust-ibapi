@@ -96,6 +96,10 @@ impl AsyncIo for MemoryStream {
         self.inner.lock().unwrap().outbound.extend_from_slice(buf);
         Ok(())
     }
+
+    async fn close(&self) {
+        MemoryStream::close(self);
+    }
 }
 
 #[async_trait]

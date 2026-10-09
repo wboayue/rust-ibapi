@@ -131,3 +131,48 @@ async fn test_reconnect_clears_a_broken_connection() {
     peer.write_all(&encode_raw_length(&[0, 0, 0, 9, 42])).await.unwrap();
     assert_eq!(socket.read_message().await.unwrap(), [0, 0, 0, 9, 42]);
 }
+
+/// Terminal close interrupts a blocked read, releases TCP, and cannot reconnect.
+#[tokio::test]
+async fn test_physical_close_wakes_read_and_is_terminal() {
+    let (socket, mut peer, _listener) = socket_pair().await;
+    let reading = socket.clone();
+    let read = tokio::spawn(async move { reading.read_message().await });
+    tokio::task::yield_now().await;
+    tokio::time::timeout(Duration::from_secs(1), socket.close())
+        .await
+        .expect("close blocked on read");
+    assert!(matches!(read.await.unwrap(), Err(Error::ConnectionReset | Error::Shutdown)));
+    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
+        .await
+        .expect("close retained TCP");
+    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+    socket.close().await;
+    assert!(matches!(socket.write_all(&[1]).await, Err(Error::Shutdown)));
+    assert!(matches!(socket.read_message().await, Err(Error::Shutdown)));
+    assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
+}
+
+/// A sender queued before close cannot write when its lock becomes available.
+#[tokio::test]
+async fn test_physical_close_prevents_a_queued_write() {
+    let (socket, mut peer, _listener) = socket_pair().await;
+    let writer = socket.writer.lock().await;
+    let sending = socket.clone();
+    let write = tokio::spawn(async move { sending.write_all(&[0xAA; 4]).await });
+    tokio::task::yield_now().await;
+    let closing = socket.clone();
+    let close = tokio::spawn(async move { closing.close().await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !socket.closed.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("close never latched");
+    drop(writer);
+    tokio::time::timeout(Duration::from_secs(1), close).await.unwrap().unwrap();
+    assert!(matches!(write.await.unwrap(), Err(Error::Shutdown)));
+    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8()).await.unwrap();
+    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+}

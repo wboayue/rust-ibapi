@@ -4,6 +4,7 @@
 //! method-async via `#[async_trait]`. Frame-level: `read_message` returns the
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -28,6 +29,8 @@ pub(crate) trait AsyncIo {
     /// must fail with a connection-lost error (pending ones included), because
     /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    /// Permanently close the physical stream, even while owners retain it.
+    async fn close(&self);
 }
 
 #[async_trait]
@@ -47,8 +50,9 @@ pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static +
 /// task and the request senders.
 #[derive(Debug)]
 pub(crate) struct AsyncTcpSocket {
-    reader: Mutex<OwnedReadHalf>,
-    writer: Mutex<OwnedWriteHalf>,
+    reader: Mutex<Option<OwnedReadHalf>>,
+    writer: Mutex<Option<OwnedWriteHalf>>,
+    closed: AtomicBool,
     /// True once a write stops mid-frame (see [`FrameProgress`]); cleared by
     /// `reconnect`. Writes refuse and reads fail while it is set, so the
     /// dispatcher reconnects.
@@ -66,8 +70,9 @@ impl AsyncTcpSocket {
         stream.set_nodelay(tcp_no_delay)?;
         let (read_half, write_half) = stream.into_split();
         Ok(Self {
-            reader: Mutex::new(read_half),
-            writer: Mutex::new(write_half),
+            reader: Mutex::new(Some(read_half)),
+            writer: Mutex::new(Some(write_half)),
+            closed: AtomicBool::new(false),
             broken: watch::Sender::new(false),
             connection_url: address.to_string(),
             tcp_no_delay,
@@ -125,6 +130,10 @@ where
 impl AsyncIo for AsyncTcpSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock().await;
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::Shutdown);
+        }
+        let reader = reader.as_mut().ok_or(Error::Shutdown)?;
         let mut broken = self.broken.subscribe();
         tokio::select! {
             biased;
@@ -135,6 +144,10 @@ impl AsyncIo for AsyncTcpSocket {
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let mut writer = self.writer.lock().await;
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::Shutdown);
+        }
+        let writer = writer.as_mut().ok_or(Error::Shutdown)?;
         if self.is_broken() {
             return Err(Error::ConnectionReset);
         }
@@ -145,24 +158,48 @@ impl AsyncIo for AsyncTcpSocket {
             len: buf.len(),
             remaining: buf,
         };
-        writer.write_all_buf(&mut progress.remaining).await?;
-        writer.flush().await?;
-        Ok(())
+        // Physical close must wake a backpressured sender before taking its lock.
+        let mut broken = self.broken.subscribe();
+        tokio::select! {
+            biased;
+            _ = broken.wait_for(|broken| *broken) => Err(Error::ConnectionReset),
+            result = async {
+                writer.write_all_buf(&mut progress.remaining).await?;
+                writer.flush().await?;
+                Ok(())
+            } => result,
+        }
+    }
+
+    async fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+        // Wake both in-flight I/O operations before acquiring either half.
+        self.broken.send_replace(true);
+        let mut reader = self.reader.lock().await;
+        let mut writer = self.writer.lock().await;
+        drop(reader.take());
+        drop(writer.take());
+        self.broken.send_replace(true);
     }
 }
 
 #[async_trait]
 impl AsyncReconnect for AsyncTcpSocket {
     async fn reconnect(&self) -> Result<(), Error> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::Shutdown);
+        }
         let stream = TcpStream::connect(&self.connection_url).await?;
         stream.set_nodelay(self.tcp_no_delay)?;
         let (new_reader, new_writer) = stream.into_split();
-        *self.reader.lock().await = new_reader;
-        {
-            let mut writer = self.writer.lock().await;
-            *writer = new_writer;
-            self.broken.send_replace(false);
+        let mut reader = self.reader.lock().await;
+        let mut writer = self.writer.lock().await;
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::Shutdown);
         }
+        *reader = Some(new_reader);
+        *writer = Some(new_writer);
+        self.broken.send_replace(false);
         // One capture file per TCP stream: splicing two of them would read back
         // as a desync at the seam that never happened.
         self.tap.start_new_segment();

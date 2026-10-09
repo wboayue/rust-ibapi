@@ -2090,6 +2090,10 @@ struct FailingWriteStream(MemoryStream);
 
 #[async_trait::async_trait]
 impl AsyncIo for FailingWriteStream {
+    async fn close(&self) {
+        AsyncIo::close(&self.0).await;
+    }
+
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.0.read_message().await
     }
@@ -2327,4 +2331,54 @@ async fn test_drain_reports_shutdown() {
 
     let outcome: Result<Drained, Error> = drain.await.unwrap();
     assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
+}
+
+/// Retained clients and subscriptions cannot retain a disconnected physical socket.
+#[tokio::test]
+async fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
+    use tokio::io::AsyncReadExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
+    let mut peer = peer.unwrap().0;
+    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
+    bus.clone()
+        .process_messages(server_versions::PROTOBUF_REST_MESSAGES_3, Duration::ZERO)
+        .unwrap();
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let subscription = client.order_update_stream().await.unwrap();
+    client.disconnect().await;
+    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
+        .await
+        .expect("disconnect retained the TCP socket");
+    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+    assert!(!client.is_connected());
+    client.disconnect().await;
+    drop(subscription);
+    drop(client);
+    drop(bus);
+}
+
+/// Runtime-free Client::drop requests close; the dispatcher releases both halves.
+#[tokio::test]
+async fn test_client_drop_closes_tcp_with_retained_subscription() {
+    use tokio::io::AsyncReadExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
+    let mut peer = peer.unwrap().0;
+    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
+    bus.clone()
+        .process_messages(server_versions::PROTOBUF_REST_MESSAGES_3, Duration::ZERO)
+        .unwrap();
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let subscription = client.order_update_stream().await.unwrap();
+    drop(client);
+    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
+        .await
+        .expect("drop retained the TCP socket");
+    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+    assert!(!bus.is_connected());
+    drop(subscription);
+    drop(bus);
 }
