@@ -216,3 +216,12 @@ if client.is_connected() {
 3. **Rate Limiting**: TWS has rate limits. The library doesn't enforce these - applications must manage their request rates.
 
 4. **Error Recovery**: Connection errors trigger automatic reconnection. Application errors must be handled by the caller.
+
+### Async physical socket teardown
+
+Stopping dispatch does not release a socket whose bus still has owners. Explicit
+async disconnect closes both owned TCP halves before joining dispatch; dispatcher
+exit performs the same idempotent close for best-effort client drop. A terminal
+close flag prevents queued I/O or reconnect from reviving the retired socket.
+Close signals blocked reads/writes before acquiring their locks, so teardown can
+release the halves without waiting indefinitely for network activity.

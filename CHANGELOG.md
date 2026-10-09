@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Async disconnect and dispatcher shutdown release both TCP halves even when clients or subscriptions remain retained. Pending I/O is awakened before close; repeated close is safe and retired sockets cannot reconnect.
+
 ### Added
 
 - `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).

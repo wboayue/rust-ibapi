@@ -689,6 +689,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             // bus, so without this its sender would never drop. Idempotent
             // when a shutdown already ran it.
             message_bus.request_shutdown();
+            // Retained subscriptions must not keep the retired physical socket alive.
+            message_bus.connection.socket.close().await;
         });
 
         // Store the task handle
@@ -1133,6 +1135,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         debug!("ensure_shutdown called");
 
         self.request_shutdown();
+        // Wake in-flight I/O and release both halves before joining the dispatcher.
+        self.connection.socket.close().await;
 
         // Wait for the processing task to finish
         let task_handle = {
