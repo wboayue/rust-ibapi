@@ -52,11 +52,8 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
-        let builder = SubscriptionBuilder::new(self.client);
-        match BufferBound::for_stream::<T>(buffer_limit)? {
-            Some(bound) => builder.send_with_request_id_bounded(self.request_id, message, bound),
-            None => builder.send_with_request_id(self.request_id, message),
-        }
+        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
+        SubscriptionBuilder::new(self.client).send_with_request_id_capped(self.request_id, message, bound)
     }
 
     /// Send the request and create a subscription with context
@@ -126,15 +123,19 @@ where
 
     /// Sends a request with a specific request ID and builds the subscription
     pub fn send_with_request_id(self, request_id: RequestId, message: Vec<u8>) -> Result<Subscription<T>, Error> {
-        let subscription = self.client.send_request(request_id, message)?;
-        Ok(self.build(subscription))
+        self.send_with_request_id_capped(request_id, message, None)
     }
 
-    /// [`send_with_request_id`](Self::send_with_request_id) with a cap on
-    /// unread items (`MessageBus::send_request_bounded`).
-    pub fn send_with_request_id_bounded(self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error> {
-        log::debug!("send_message({request_id:?}), buffer limit {}", bound.limit);
-        let subscription = self.client.message_bus.send_request_bounded(request_id, &message, bound)?;
+    /// [`send_with_request_id`](Self::send_with_request_id), capping unread
+    /// items when `bound` is set (`MessageBus::send_request_bounded`).
+    pub fn send_with_request_id_capped(self, request_id: RequestId, message: Vec<u8>, bound: Option<BufferBound>) -> Result<Subscription<T>, Error> {
+        let subscription = match bound {
+            Some(bound) => {
+                log::debug!("send_message({request_id:?}), buffer limit {}", bound.limit);
+                self.client.message_bus.send_request_bounded(request_id, &message, bound)?
+            }
+            None => self.client.send_request(request_id, message)?,
+        };
         Ok(self.build(subscription))
     }
 

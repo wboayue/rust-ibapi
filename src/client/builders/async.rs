@@ -59,11 +59,9 @@ impl<'a> RequestBuilder<'a> {
         let bound = BufferBound::for_stream::<T>(buffer_limit)?;
         let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
-        let builder = SubscriptionBuilder::<T>::new_with_components(context, message_bus);
-        match bound {
-            Some(bound) => builder.send_with_request_id_bounded(self.request_id, message, bound).await,
-            None => builder.send_with_request_id(self.request_id, message).await,
-        }
+        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
+            .send_with_request_id_capped(self.request_id, message, bound)
+            .await
     }
 
     /// Send the request and create a subscription with context
@@ -126,24 +124,24 @@ where
     where
         T: StreamDecoder<T>,
     {
-        let subscription = self.message_bus.send_request(request_id, message).await?;
-
-        Ok(Subscription::new_from_internal(
-            subscription,
-            self.message_bus.clone(),
-            Some(request_id.raw()),
-            None,
-            self.context,
-        ))
+        self.send_with_request_id_capped(request_id, message, None).await
     }
 
-    /// [`send_with_request_id`](Self::send_with_request_id) with a cap on
-    /// unread items (`AsyncMessageBus::send_request_bounded`).
-    pub async fn send_with_request_id_bounded(self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error>
+    /// [`send_with_request_id`](Self::send_with_request_id), capping unread
+    /// items when `bound` is set (`AsyncMessageBus::send_request_bounded`).
+    pub async fn send_with_request_id_capped(
+        self,
+        request_id: RequestId,
+        message: Vec<u8>,
+        bound: Option<BufferBound>,
+    ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
-        let subscription = self.message_bus.send_request_bounded(request_id, message, bound).await?;
+        let subscription = match bound {
+            Some(bound) => self.message_bus.send_request_bounded(request_id, message, bound).await?,
+            None => self.message_bus.send_request(request_id, message).await?,
+        };
 
         Ok(Subscription::new_from_internal(
             subscription,
