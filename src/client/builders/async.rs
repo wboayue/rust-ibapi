@@ -43,11 +43,7 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let context = self.client.decoder_context();
-        let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id(self.request_id, message)
-            .await
+        self.send_capped(message, None).await
     }
 
     /// [`send`](Self::send), capping unread items at `buffer_limit` when set.
