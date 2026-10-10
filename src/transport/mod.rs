@@ -33,7 +33,7 @@ pub mod r#async;
 pub(crate) use crate::subscriptions::common::RoutedItem;
 
 /// A request route's unread-item cap (`buffer_limit`), opened with
-/// `send_request_bounded`.
+/// `send_request_capped`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferBound {
     /// The most unread items the route queues.
@@ -41,6 +41,29 @@ pub(crate) struct BufferBound {
     /// The request's end marker. It always gets through, like an error, so a
     /// result that fills the cap exactly still ends normally.
     pub end: crate::messages::IncomingMessages,
+}
+
+/// The largest `buffer_limit`. The async client allocates its channel's slots
+/// up front: `limit + 1`, rounded up to a power of two. At this maximum that
+/// is 65,536 slots, a few MiB.
+pub const MAX_BUFFER_LIMIT: usize = 65_535;
+
+impl BufferBound {
+    /// The bound for a `buffer_limit` on a `T` stream, or `None` when unset.
+    /// Errors if `limit` is outside `1..=MAX_BUFFER_LIMIT`.
+    #[cfg(any(feature = "sync", feature = "async"))]
+    pub(crate) fn for_stream<T: crate::subscriptions::StreamDecoder<T>>(limit: Option<usize>) -> Result<Option<Self>, Error> {
+        let Some(limit) = limit else {
+            return Ok(None);
+        };
+        if !(1..=MAX_BUFFER_LIMIT).contains(&limit) {
+            return Err(Error::InvalidArgument(format!(
+                "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
+            )));
+        }
+        let end = T::END_MESSAGE.expect("buffer_limit needs a stream with an end marker");
+        Ok(Some(Self { limit, end }))
+    }
 }
 
 /// What a bounded route does with the next item.
@@ -220,12 +243,15 @@ impl SharedCounts {
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
-    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error>;
-
-    /// [`send_request`](Self::send_request) with a cap on unread items: see
-    /// [`BoundState::admit`]. Past the cap the route queues
+    /// Open a request-id route and write `packet`. With `bound`, unread items
+    /// are capped: see [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_bounded(&self, request_id: RequestId, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
+    fn send_request_capped(&self, request_id: RequestId, packet: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error>;
+
+    /// [`send_request_capped`](Self::send_request_capped) without a cap.
+    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error> {
+        self.send_request_capped(request_id, packet, None)
+    }
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 

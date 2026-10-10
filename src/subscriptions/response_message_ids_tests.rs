@@ -124,6 +124,18 @@ fn check_stream<D: StreamDecoder<D>>(roster: &mut Roster) {
         .extend(check_decoder(std::any::type_name::<D>(), D::RESPONSE_MESSAGE_IDS, |message| {
             <D as StreamDecoder<D>>::decode(&context, message).map(|_| ())
         }));
+    if let Some(end) = D::END_MESSAGE {
+        let decoder = std::any::type_name::<D>();
+        if !D::RESPONSE_MESSAGE_IDS.contains(&end) {
+            roster.failures.push(format!(
+                "{decoder} names {end:?} as END_MESSAGE but does not declare it in RESPONSE_MESSAGE_IDS"
+            ));
+        } else if !matches!(<D as StreamDecoder<D>>::decode(&context, &probe(end)), Err(Error::EndOfStream)) {
+            roster.failures.push(format!(
+                "{decoder} names {end:?} as END_MESSAGE but `decode` does not end the stream on it"
+            ));
+        }
+    }
 }
 
 /// The tick driver (`market_data/historical/common/tick.rs::classify`) filters on

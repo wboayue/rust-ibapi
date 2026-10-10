@@ -3345,7 +3345,7 @@ fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize
 #[test]
 fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
 
     route(&stream, &bus, 4, RequestId::nth(100))?;
 
@@ -3359,7 +3359,7 @@ fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
 #[test]
 fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
 
     for _ in 0..6 {
         route(&stream, &bus, 1, RequestId::nth(100))?;
@@ -3371,8 +3371,8 @@ fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
 #[test]
 fn test_reset_skips_overflowed_route() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let overflowed = bus.send_request_bounded(RequestId::nth(100), &[], bound(1))?;
-    let at_limit = bus.send_request_bounded(RequestId::nth(200), &[], bound(1))?;
+    let overflowed = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(1)))?;
+    let at_limit = bus.send_request_capped(RequestId::nth(200), &[], Some(bound(1)))?;
 
     route(&stream, &bus, 2, RequestId::nth(100))?;
     route(&stream, &bus, 1, RequestId::nth(200))?;
@@ -3394,7 +3394,7 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     use crate::subscriptions::DecoderContext;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
@@ -3461,7 +3461,7 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     // A result exactly `limit` rows long, read late: the end marker gets
     // through past the cap, so the stream ends normally.
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
+    let sub = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);

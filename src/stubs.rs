@@ -39,7 +39,7 @@ pub(crate) struct MessageBusStub {
     /// Pre-built responses, served in order. When non-empty, supersedes
     /// `response_messages`.
     pub ordered_responses: Vec<ResponseMessage>,
-    /// The `limit` of each `send_request_bounded` call, in order. The stub
+    /// The `limit` of each bounded `send_request_capped` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
     pub buffer_limits: RwLock<Vec<usize>>,
     /// The request id of each `send_executions_request` call, in order.
@@ -92,6 +92,12 @@ impl Drop for MessageBusStub {
 }
 
 impl MessageBusStub {
+    fn record_buffer_limit(&self, bound: Option<crate::transport::BufferBound>) {
+        if let Some(bound) = bound {
+            self.buffer_limits.write().unwrap().push(bound.limit);
+        }
+    }
+
     pub fn with_responses(response_messages: Vec<String>) -> Self {
         let mut stub = Self::default();
         stub.response_messages = response_messages;
@@ -213,17 +219,13 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
-    fn send_request(&self, request_id: RequestId, message: &[u8]) -> Result<InternalSubscription, Error> {
-        Ok(mock_request(self, MockRoute::Request(request_id), message))
-    }
-
-    fn send_request_bounded(
+    fn send_request_capped(
         &self,
         request_id: RequestId,
         message: &[u8],
-        bound: crate::transport::BufferBound,
+        bound: Option<crate::transport::BufferBound>,
     ) -> Result<InternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(bound.limit);
+        self.record_buffer_limit(bound);
         Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
 
@@ -331,17 +333,13 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
 #[cfg(feature = "async")]
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
-    async fn send_request(&self, _request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        Ok(self.seeded_subscription(message))
-    }
-
-    async fn send_request_bounded(
+    async fn send_request_capped(
         &self,
         _request_id: RequestId,
         message: Vec<u8>,
-        bound: crate::transport::BufferBound,
+        bound: Option<crate::transport::BufferBound>,
     ) -> Result<AsyncInternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(bound.limit);
+        self.record_buffer_limit(bound);
         Ok(self.seeded_subscription(message))
     }
 

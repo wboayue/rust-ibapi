@@ -75,7 +75,11 @@ impl Client {
 
 When the helper doesn't fit, build on `client.request()` directly: the
 `RequestBuilder` holds the minted id (`builder.request_id()` for the encoder)
-and sends with `send`, `send_bounded` or `send_with_context`.
+and sends with `send`, `send_capped` or `send_with_context`. `send_capped`
+takes a builder's `buffer_limit` and reads the cap's end marker from the
+decoder's `StreamDecoder::END_MESSAGE`, so a stream can only be capped when it
+declares one. A builder that exposes `request_id()` before sending mints the id
+in its constructor and sends with `client.request_with_id(id)` instead.
 
 ### Shared-Channel Requests
 
