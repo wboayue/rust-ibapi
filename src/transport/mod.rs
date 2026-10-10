@@ -43,6 +43,29 @@ pub(crate) struct BufferBound {
     pub end: crate::messages::IncomingMessages,
 }
 
+/// The largest `buffer_limit`. The async client allocates its channel's slots
+/// up front: `limit + 1`, rounded up to a power of two. At this maximum that
+/// is 65,536 slots, a few MiB.
+pub const MAX_BUFFER_LIMIT: usize = 65_535;
+
+impl BufferBound {
+    /// The bound for a `buffer_limit` on a `T` stream, or `None` when unset.
+    /// Errors if `limit` is outside `1..=MAX_BUFFER_LIMIT`.
+    #[cfg(any(feature = "sync", feature = "async"))]
+    pub(crate) fn for_stream<T: crate::subscriptions::StreamDecoder<T>>(limit: Option<usize>) -> Result<Option<Self>, Error> {
+        let Some(limit) = limit else {
+            return Ok(None);
+        };
+        if !(1..=MAX_BUFFER_LIMIT).contains(&limit) {
+            return Err(Error::InvalidArgument(format!(
+                "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
+            )));
+        }
+        let end = T::END_MESSAGE.expect("buffer_limit needs a stream with an end marker");
+        Ok(Some(Self { limit, end }))
+    }
+}
+
 /// What a bounded route does with the next item.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Admit {

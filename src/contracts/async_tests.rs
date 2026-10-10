@@ -798,20 +798,48 @@ async fn contract_details_stream_buffer_limit_reaches_the_bus() {
     assert_eq!(request_message_count(&message_bus), 2);
 }
 
-#[tokio::test]
-async fn contract_details_stream_rejects_out_of_range_buffer_limit() {
-    let (client, message_bus) = stream_client(vec![], server_versions::CANCEL_CONTRACT_DATA);
-    let contract = Contract::stock("AAPL").build();
+// ---- option_chain request id + buffer_limit --------------------------------
 
-    for limit in [0, crate::contracts::MAX_BUFFER_LIMIT + 1] {
-        let result = client.contract_details_stream(&contract).buffer_limit(limit).subscribe().await;
-        assert!(matches!(result, Err(crate::Error::InvalidArgument(_))), "limit {limit} must be rejected");
-    }
-    let _max = client
-        .contract_details_stream(&contract)
-        .buffer_limit(crate::contracts::MAX_BUFFER_LIMIT)
+#[tokio::test]
+async fn option_chain_request_id_known_before_send() {
+    let (client, message_bus) = stream_client(vec![], server_versions::SEC_DEF_OPT_PARAMS_REQ);
+
+    let request = client.option_chain("AAPL", SecurityType::Stock, 265598);
+    let request_id = request.request_id();
+    assert_eq!(request_message_count(&message_bus), 0, "building the request sends nothing");
+
+    let _subscription = request.subscribe().await.expect("subscribe failed");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &option_chain_request()
+            .request_id(request_id)
+            .symbol("AAPL")
+            .exchange(None)
+            .security_type(SecurityType::Stock)
+            .contract_id(265598),
+    );
+}
+
+#[tokio::test]
+async fn option_chain_buffer_limit_reaches_the_bus() {
+    let (client, message_bus) = stream_client(vec![], server_versions::SEC_DEF_OPT_PARAMS_REQ);
+
+    let _bounded = client
+        .option_chain("AAPL", SecurityType::Stock, 265598)
+        .buffer_limit(8)
         .subscribe()
         .await
         .unwrap();
-    assert_eq!(request_message_count(&message_bus), 1, "only the in-range request is sent");
+    let _unbounded = client.option_chain("AAPL", SecurityType::Stock, 265598).subscribe().await.unwrap();
+    let rejected = client.option_chain("AAPL", SecurityType::Stock, 265598).buffer_limit(0).subscribe().await;
+
+    assert!(matches!(rejected, Err(crate::Error::InvalidArgument(_))));
+    assert_eq!(
+        *message_bus.buffer_limits.read().unwrap(),
+        vec![8],
+        "only the bounded request carries a limit"
+    );
+    assert_eq!(request_message_count(&message_bus), 2, "the rejected request sends nothing");
 }

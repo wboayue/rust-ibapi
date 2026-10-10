@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `generic_tick::ETF_FROZEN_NAV_LAST` (`"623"`, frozen-data ETF NAV last price, tick 97) (#946).
+- `OptionChainBuilder::request_id()` and `OptionChainBuilder::buffer_limit(n)`, as on `ContractDetailsBuilder`. The id is allocated when the builder is made, so it is known before anything is sent; `subscribe()` sends once (no retry). TWS has no cancel for this request (#902).
 
 ### Deprecated
 

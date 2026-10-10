@@ -46,12 +46,17 @@ impl<'a> RequestBuilder<'a> {
         SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
 
-    /// [`send`](Self::send) with a cap on unread items.
-    pub fn send_bounded<T>(self, message: Vec<u8>, bound: BufferBound) -> Result<Subscription<T>, Error>
+    /// [`send`](Self::send), capping unread items at `buffer_limit` when set.
+    /// An invalid limit errors before anything is written.
+    pub fn send_capped<T>(self, message: Vec<u8>, buffer_limit: Option<usize>) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
-        SubscriptionBuilder::new(self.client).send_with_request_id_bounded(self.request_id, message, bound)
+        let builder = SubscriptionBuilder::new(self.client);
+        match BufferBound::for_stream::<T>(buffer_limit)? {
+            Some(bound) => builder.send_with_request_id_bounded(self.request_id, message, bound),
+            None => builder.send_with_request_id(self.request_id, message),
+        }
     }
 
     /// Send the request and create a subscription with context

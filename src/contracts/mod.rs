@@ -16,9 +16,10 @@ use crate::encode_option_field;
 use crate::ToField;
 
 // Re-export builder and contract types
+pub use crate::transport::MAX_BUFFER_LIMIT;
 pub use builders::*;
 pub use common::contract_builder::ContractBuilder;
-pub use contract_details_builder::{ContractDetailsBuilder, MAX_BUFFER_LIMIT};
+pub use contract_details_builder::ContractDetailsBuilder;
 pub use option_chain_builder::OptionChainBuilder;
 pub use types::*;
 
