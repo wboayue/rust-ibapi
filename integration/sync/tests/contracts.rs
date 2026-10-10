@@ -275,3 +275,56 @@ fn option_chain_returns_data() {
     assert!(!chain.expirations.is_empty());
     assert!(!chain.strikes.is_empty());
 }
+
+/// AAPL's contract id (wire-verified, PR #792).
+const AAPL_CONTRACT_ID: i32 = 265598;
+
+#[test]
+fn option_chain_request_id_and_buffer_limit_read_to_end() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let request = client.option_chain("AAPL", SecurityType::Stock, AAPL_CONTRACT_ID).buffer_limit(256);
+    assert!(request.request_id() > 0, "request id is known before sending");
+
+    let subscription = request.subscribe().expect("option_chain failed");
+    let mut chains = 0;
+    let outcome = loop {
+        match subscription.next() {
+            Some(Ok(SubscriptionItem::Data(_))) => chains += 1,
+            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
+            other => break other,
+        }
+    };
+    // A reader that keeps up never hits the cap; the stream ends on TWS's end marker.
+    assert!(outcome.is_none(), "got {outcome:?}");
+    assert!(chains > 0, "expected at least one chain");
+}
+
+#[test]
+fn option_chain_buffer_limit_fails_a_stalled_reader() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let subscription = client
+        .option_chain("AAPL", SecurityType::Stock, AAPL_CONTRACT_ID)
+        .buffer_limit(3)
+        .subscribe()
+        .expect("option_chain failed");
+    std::thread::sleep(std::time::Duration::from_secs(2)); // stall: AAPL lists far more than 3 exchanges
+
+    let mut chains = 0;
+    let outcome = loop {
+        match subscription.next() {
+            Some(Ok(SubscriptionItem::Data(_))) => chains += 1,
+            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
+            other => break other,
+        }
+    };
+    assert!(chains >= 3, "every queued chain is delivered before the error, got {chains}");
+    assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 3 }))), "got {outcome:?}");
+}
