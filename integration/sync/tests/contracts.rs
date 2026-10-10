@@ -2,7 +2,7 @@ use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use ibapi::subscriptions::{Drained, SubscriptionItem};
 use ibapi::Error;
-use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
+use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, AAPL_CON_ID, GATEWAY};
 use serial_test::serial;
 
 #[test]
@@ -97,14 +97,7 @@ fn contract_details_stream_buffer_limit_fails_a_stalled_reader() {
         .expect("subscribe failed");
     std::thread::sleep(std::time::Duration::from_secs(2)); // stall: let TWS send far more than 5 rows
 
-    let mut rows = 0;
-    let outcome = loop {
-        match subscription.next() {
-            Some(Ok(SubscriptionItem::Data(_))) => rows += 1,
-            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
-            other => break other,
-        }
-    };
+    let (rows, outcome) = read_to_terminal(|| subscription.next());
     // At least the 5 queued rows; more if TWS was still sending when the
     // reader woke and freed slots before the overflow.
     assert!(rows >= 5, "every queued row is delivered before the error, got {rows}");
@@ -276,9 +269,6 @@ fn option_chain_returns_data() {
     assert!(!chain.strikes.is_empty());
 }
 
-/// AAPL's contract id (wire-verified, PR #792).
-const AAPL_CONTRACT_ID: i32 = 265598;
-
 #[test]
 fn option_chain_request_id_and_buffer_limit_read_to_end() {
     let client_id = ClientId::get();
@@ -286,18 +276,11 @@ fn option_chain_request_id_and_buffer_limit_read_to_end() {
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
     rate_limit();
-    let request = client.option_chain("AAPL", SecurityType::Stock, AAPL_CONTRACT_ID).buffer_limit(256);
+    let request = client.option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID).buffer_limit(256);
     assert!(request.request_id() > 0, "request id is known before sending");
 
     let subscription = request.subscribe().expect("option_chain failed");
-    let mut chains = 0;
-    let outcome = loop {
-        match subscription.next() {
-            Some(Ok(SubscriptionItem::Data(_))) => chains += 1,
-            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
-            other => break other,
-        }
-    };
+    let (chains, outcome) = read_to_terminal(|| subscription.next());
     // A reader that keeps up never hits the cap; the stream ends on TWS's end marker.
     assert!(outcome.is_none(), "got {outcome:?}");
     assert!(chains > 0, "expected at least one chain");
@@ -311,20 +294,26 @@ fn option_chain_buffer_limit_fails_a_stalled_reader() {
 
     rate_limit();
     let subscription = client
-        .option_chain("AAPL", SecurityType::Stock, AAPL_CONTRACT_ID)
+        .option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID)
         .buffer_limit(3)
         .subscribe()
         .expect("option_chain failed");
     std::thread::sleep(std::time::Duration::from_secs(2)); // stall: AAPL lists far more than 3 exchanges
 
-    let mut chains = 0;
-    let outcome = loop {
-        match subscription.next() {
-            Some(Ok(SubscriptionItem::Data(_))) => chains += 1,
-            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
-            other => break other,
-        }
-    };
+    let (chains, outcome) = read_to_terminal(|| subscription.next());
     assert!(chains >= 3, "every queued chain is delivered before the error, got {chains}");
     assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 3 }))), "got {outcome:?}");
+}
+
+/// Count data items until the first terminal item (end of stream or error),
+/// logging notices; returns the count and that terminal item.
+fn read_to_terminal<T>(mut next: impl FnMut() -> Option<Result<SubscriptionItem<T>, Error>>) -> (usize, Option<Result<SubscriptionItem<T>, Error>>) {
+    let mut count = 0;
+    loop {
+        match next() {
+            Some(Ok(SubscriptionItem::Data(_))) => count += 1,
+            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
+            other => return (count, other),
+        }
+    }
 }
