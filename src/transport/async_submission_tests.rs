@@ -1,5 +1,5 @@
 //! Registration ownership across an async submission's write: what a caller
-//! that abandons `send_request` / `send_request_bounded` /
+//! that abandons `send_request` / `send_request_capped` /
 //! `send_order_request` mid-write leaves behind.
 
 use super::tests::{bound, drain_cleanup_signals};
@@ -85,7 +85,7 @@ impl Registration {
     async fn submit(self, bus: &AsyncTcpMessageBus<SubmissionStream>) -> Result<AsyncInternalSubscription, Error> {
         match self {
             Self::Request => bus.send_request(RequestId::nth(ID), packet()).await,
-            Self::BoundedRequest => bus.send_request_bounded(RequestId::nth(ID), packet(), bound(8)).await,
+            Self::BoundedRequest => bus.send_request_capped(RequestId::nth(ID), packet(), Some(bound(8))).await,
             Self::Order => bus.send_order_request(OrderId::from(ID), packet()).await,
         }
     }

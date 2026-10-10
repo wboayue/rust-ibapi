@@ -128,7 +128,7 @@ where
     }
 
     /// [`send_with_request_id`](Self::send_with_request_id), capping unread
-    /// items when `bound` is set (`AsyncMessageBus::send_request_bounded`).
+    /// items when `bound` is set.
     pub async fn send_with_request_id_capped(
         self,
         request_id: RequestId,
@@ -138,10 +138,7 @@ where
     where
         T: StreamDecoder<T>,
     {
-        let subscription = match bound {
-            Some(bound) => self.message_bus.send_request_bounded(request_id, message, bound).await?,
-            None => self.message_bus.send_request(request_id, message).await?,
-        };
+        let subscription = self.message_bus.send_request_capped(request_id, message, bound).await?;
 
         Ok(Subscription::new_from_internal(
             subscription,

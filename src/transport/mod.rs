@@ -33,7 +33,7 @@ pub mod r#async;
 pub(crate) use crate::subscriptions::common::RoutedItem;
 
 /// A request route's unread-item cap (`buffer_limit`), opened with
-/// `send_request_bounded`.
+/// `send_request_capped`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferBound {
     /// The most unread items the route queues.
@@ -243,12 +243,15 @@ impl SharedCounts {
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
-    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error>;
-
-    /// [`send_request`](Self::send_request) with a cap on unread items: see
-    /// [`BoundState::admit`]. Past the cap the route queues
+    /// Open a request-id route and write `packet`. With `bound`, unread items
+    /// are capped: see [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_bounded(&self, request_id: RequestId, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
+    fn send_request_capped(&self, request_id: RequestId, packet: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error>;
+
+    /// [`send_request_capped`](Self::send_request_capped) without a cap.
+    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error> {
+        self.send_request_capped(request_id, packet, None)
+    }
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 

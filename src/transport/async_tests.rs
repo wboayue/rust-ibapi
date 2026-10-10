@@ -2187,7 +2187,7 @@ async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedIt
 #[tokio::test]
 async fn test_bounded_request_fails_after_limit_unread() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(RequestId::nth(100), vec![], bound(2)).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
     route_histograms(&stream, &bus, 4, RequestId::nth(100)).await;
 
@@ -2210,7 +2210,7 @@ async fn test_bounded_request_fails_after_limit_unread() {
 #[tokio::test]
 async fn test_bounded_request_counts_unread_not_total() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(RequestId::nth(100), vec![], bound(2)).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
     for _ in 0..6 {
         route_histograms(&stream, &bus, 1, RequestId::nth(100)).await;
@@ -2224,8 +2224,8 @@ async fn test_bounded_request_counts_unread_not_total() {
 #[tokio::test]
 async fn test_reset_skips_overflowed_route() {
     let (stream, bus) = make_bus();
-    let mut overflowed = bus.send_request_bounded(RequestId::nth(100), vec![], bound(1)).await.unwrap();
-    let mut at_limit = bus.send_request_bounded(RequestId::nth(200), vec![], bound(1)).await.unwrap();
+    let mut overflowed = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(1))).await.unwrap();
+    let mut at_limit = bus.send_request_capped(RequestId::nth(200), vec![], Some(bound(1))).await.unwrap();
 
     route_histograms(&stream, &bus, 2, RequestId::nth(100)).await;
     route_histograms(&stream, &bus, 1, RequestId::nth(200)).await;
@@ -2251,7 +2251,7 @@ async fn test_overflowed_subscription_cancels_on_drop() {
     use crate::contracts::ContractDetails;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(CONTRACT_REQUEST_ID, vec![], bound(1)).await.unwrap();
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
     let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -2286,7 +2286,7 @@ async fn test_bounded_request_end_marker_at_limit_still_ends() {
     // A result exactly `limit` rows long, read late: the end marker takes the
     // spare slot, so the stream ends normally and nothing is evicted.
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(CONTRACT_REQUEST_ID, vec![], bound(1)).await.unwrap();
+    let mut sub = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);

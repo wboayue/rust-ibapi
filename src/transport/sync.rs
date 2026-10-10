@@ -891,12 +891,8 @@ impl<S: Stream> TcpMessageBus<S> {
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
-    fn send_request(&self, request_id: RequestId, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.open_request(request_id, message, None)
-    }
-
-    fn send_request_bounded(&self, request_id: RequestId, message: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error> {
-        self.open_request(request_id, message, Some(bound))
+    fn send_request_capped(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, bound)
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -1002,7 +998,7 @@ struct Entry<V> {
     sender: Sender<V>,
     /// The subscription's lease: which subscription this is, and whether it lives.
     lease: LeaseRef,
-    /// The unread-item cap of a route opened with `send_request_bounded`.
+    /// The unread-item cap of a route opened with a `send_request_capped` bound.
     bound: Option<BoundState>,
 }
 

@@ -182,12 +182,21 @@ impl RouteKey {
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
-    async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
+    /// Open a request-id route and write `message`. With `bound`, unread
+    /// items are capped: see [`BoundState::admit`](super::BoundState::admit).
+    /// Past the cap the route queues `Error::BufferLimitExceeded` and discards
+    /// later frames.
+    async fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        message: Vec<u8>,
+        bound: Option<BufferBound>,
+    ) -> Result<AsyncInternalSubscription, Error>;
 
-    /// [`send_request`](Self::send_request) with a cap on unread items: see
-    /// [`BoundState::admit`](super::BoundState::admit). Past the cap the route
-    /// queues `Error::BufferLimitExceeded` and discards later frames.
-    async fn send_request_bounded(&self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error>;
+    /// [`send_request_capped`](Self::send_request_capped) without a cap.
+    async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+        self.send_request_capped(request_id, message, None).await
+    }
 
     /// [`send_request`](Self::send_request) for `executions`: an order-class
     /// route, which `ClientBuilder::channel_capacity` can raise but not shrink.
@@ -1048,21 +1057,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
 #[async_trait]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
-    async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::MarketData, None)
+    async fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        message: Vec<u8>,
+        bound: Option<BufferBound>,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::MarketData, bound)
             .await
-    }
-
-    async fn send_request_bounded(&self, request_id: RequestId, message: Vec<u8>, bound: BufferBound) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(
-            &self.requests,
-            request_id,
-            RouteKey::Request,
-            message,
-            ChannelClass::MarketData,
-            Some(bound),
-        )
-        .await
     }
 
     async fn send_executions_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {

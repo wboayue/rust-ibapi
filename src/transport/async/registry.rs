@@ -25,7 +25,7 @@ use crate::Error;
 pub(super) type BroadcastSender = broadcast::Sender<RoutedItem>;
 
 /// A registration: the channel, its subscription's lease, plus an unread-item
-/// cap when the request was opened with `send_request_bounded`.
+/// cap when the request was opened with a `send_request_capped` bound.
 #[derive(Debug)]
 pub(super) struct Route {
     pub(super) sender: BroadcastSender,
