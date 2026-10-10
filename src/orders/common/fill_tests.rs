@@ -1,15 +1,10 @@
 use super::*;
-use crate::common::test_utils::helpers::proto_response;
-use crate::messages::{IncomingMessages, Notice};
+use crate::common::test_utils::helpers::order_status_response;
+use crate::messages::Notice;
 use crate::testdata::builders::orders::{order_status, OrderStatusResponse};
-use crate::testdata::builders::ResponseProtoEncoder;
-
-fn frame(status: OrderStatusResponse) -> ResponseMessage {
-    proto_response(IncomingMessages::OrderStatus, status.encode_proto())
-}
 
 fn observe(status: OrderStatusResponse) -> Option<OrderOutcome> {
-    FillTracker::default().observe(&frame(status)).unwrap()
+    FillTracker::default().observe(&order_status_response(status)).unwrap()
 }
 
 #[test]
@@ -61,8 +56,12 @@ fn unknown_and_api_pending_keep_waiting() {
 #[test]
 fn timed_out_carries_last_working_status() {
     let mut tracker = FillTracker::default();
-    tracker.observe(&frame(order_status().filled(10.0).remaining(90.0))).unwrap();
-    tracker.observe(&frame(order_status().filled(40.0).remaining(60.0))).unwrap();
+    tracker
+        .observe(&order_status_response(order_status().filled(10.0).remaining(90.0)))
+        .unwrap();
+    tracker
+        .observe(&order_status_response(order_status().filled(40.0).remaining(60.0)))
+        .unwrap();
 
     assert!(matches!(tracker.timed_out(), OrderOutcome::TimedOut(Some(s)) if s.filled == 40.0));
 }

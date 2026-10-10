@@ -1,7 +1,9 @@
 use super::*;
 use crate::client::ids::{OrderId, RequestId};
+use crate::common::test_utils::helpers::order_status_frame;
 use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
 use crate::connection::sync::Connection;
+use crate::orders::OrderStatusKind;
 use crate::tests::assert_send_and_sync;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
@@ -3654,28 +3656,17 @@ fn test_throttled_shared_subscribe_does_not_hold_up_shared_cancel() -> Result<()
     Ok(())
 }
 
-fn push_order_status(stream: &MemoryStream, order_id: i32, status: &str) {
-    stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::OrderStatus as i32,
-        &crate::proto::OrderStatus {
-            order_id: Some(order_id),
-            status: Some(status.into()),
-            ..Default::default()
-        },
-    ));
-}
-
 /// A status that arrived before the wait began — an order filled between
-/// `submit()` and `wait_for_fill` — is handed to the waiter as `latest`.
+/// `submit()` and `wait_for_fill` — is the first item the waiter receives.
 #[test]
 fn test_order_status_watch_sees_status_from_before_it() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    push_order_status(&stream, 7, "Filled");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
     bus.dispatch()?;
 
     let watch = bus.watch_order_status(OrderId::from(7))?;
-    assert_eq!(watch.latest.as_ref().and_then(|m| m.order_id()), Some(7));
+    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
     Ok(())
 }
 
@@ -3689,7 +3680,7 @@ fn test_order_status_watch_takes_nothing_from_other_routes() -> Result<(), Error
     let updates = bus.create_order_update_subscription()?;
     let watch = bus.watch_order_status(OrderId::from(7))?;
 
-    push_order_status(&stream, 7, "Submitted");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
     assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
@@ -3704,7 +3695,7 @@ fn test_order_status_watch_sees_unrouted_status() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
     let watch = bus.watch_order_status(OrderId::from(7))?;
-    push_order_status(&stream, 7, "Submitted");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
     assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));

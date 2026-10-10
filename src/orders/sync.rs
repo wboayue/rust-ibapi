@@ -566,20 +566,13 @@ impl Client {
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
         let watch = self.message_bus.watch_order_status(order_id.into())?;
         let mut tracker = FillTracker::default();
-        if let Some(latest) = &watch.latest {
-            if let Some(outcome) = tracker.observe(latest)? {
-                return Ok(outcome);
-            }
-        }
 
-        // No deadline for a timeout too large to represent: wait without one.
+        // No deadline for a timeout too large to represent; `recv_timeout`
+        // then waits without one.
         let deadline = Instant::now().checked_add(timeout);
         loop {
-            let item = match deadline {
-                Some(deadline) => watch.receiver.recv_deadline(deadline),
-                None => watch.receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
-            };
-            match item {
+            let remaining = deadline.map_or(timeout, |deadline| deadline.saturating_duration_since(Instant::now()));
+            match watch.receiver.recv_timeout(remaining) {
                 Ok(item) => {
                     if let Some(outcome) = tracker.on_item(item)? {
                         return Ok(outcome);

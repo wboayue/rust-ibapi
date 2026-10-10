@@ -24,7 +24,7 @@ impl FillTracker {
     }
 
     /// Take one `OrderStatus` frame. Partial fills keep the wait going.
-    pub(crate) fn observe(&mut self, message: &ResponseMessage) -> Result<Option<OrderOutcome>, Error> {
+    fn observe(&mut self, message: &ResponseMessage) -> Result<Option<OrderOutcome>, Error> {
         let status = decode_order_status(message)?;
         if is_filled(&status) {
             return Ok(Some(OrderOutcome::Filled(status)));

@@ -1,19 +1,16 @@
 use super::*;
-use crate::common::test_utils::helpers::proto_response;
-use crate::messages::IncomingMessages;
+use crate::common::test_utils::helpers::{order_status_response, proto_response};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::OrderStatusKind;
-use crate::testdata::builders::orders::order_status;
+use crate::testdata::builders::orders::{execution_data, order_status};
 use crate::testdata::builders::ResponseProtoEncoder;
 use crossbeam::channel::Sender;
 
 type Board = OrderStatusBoard<Sender<RoutedItem>>;
 type Watch = OrderStatusWatch<Sender<RoutedItem>>;
 
-fn status_frame(order_id: i32, status: OrderStatusKind) -> ResponseMessage {
-    proto_response(
-        IncomingMessages::OrderStatus,
-        order_status().order_id(order_id).status(status).encode_proto(),
-    )
+fn publish(board: &Board, order_id: i32, status: OrderStatusKind) {
+    board.publish(&order_status_response(order_status().order_id(order_id).status(status)));
 }
 
 fn watch(board: &Arc<Board>, order_id: i32) -> Watch {
@@ -21,32 +18,35 @@ fn watch(board: &Arc<Board>, order_id: i32) -> Watch {
 }
 
 fn waiters(board: &Board, order_id: i32) -> usize {
-    board.lock().slots[&OrderId::from(order_id)].watchers.len()
+    board.lock().slots.get(&OrderId::from(order_id)).map_or(0, |slot| slot.watchers.len())
 }
 
-fn order_id_of(item: RoutedItem) -> Option<i32> {
-    match item {
-        RoutedItem::Response(message) => message.order_id(),
+fn next_response(watch: &Watch) -> ResponseMessage {
+    match watch.receiver.try_recv() {
+        Ok(RoutedItem::Response(message)) => message,
         other => panic!("expected a response, got {other:?}"),
     }
 }
 
 #[test]
-fn watch_returns_status_published_before_it() {
+fn watch_starts_with_status_published_before_it() {
     let board = Arc::new(Board::default());
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Filled));
+    publish(&board, 7, OrderStatusKind::Submitted);
+    publish(&board, 7, OrderStatusKind::Cancelled);
 
     let watch = watch(&board, 7);
 
-    assert_eq!(watch.latest.and_then(|m| m.order_id()), Some(7));
+    let cancelled = order_status().order_id(7).status(OrderStatusKind::Cancelled).encode_proto();
+    assert_eq!(next_response(&watch).raw_bytes(), Some(cancelled.as_slice()), "latest only");
+    assert!(watch.receiver.try_recv().is_err());
 }
 
 #[test]
-fn watch_of_unseen_order_has_no_latest() {
+fn watch_of_unseen_order_starts_empty() {
     let board = Arc::new(Board::default());
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Filled));
+    publish(&board, 7, OrderStatusKind::Filled);
 
-    assert!(watch(&board, 8).latest.is_none());
+    assert!(watch(&board, 8).receiver.try_recv().is_err());
 }
 
 #[test]
@@ -56,23 +56,24 @@ fn publish_reaches_every_waiter_on_the_order_only() {
     let second = watch(&board, 7);
     let other = watch(&board, 8);
 
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Submitted));
+    publish(&board, 7, OrderStatusKind::Submitted);
 
-    assert_eq!(order_id_of(first.receiver.try_recv().unwrap()), Some(7));
-    assert_eq!(order_id_of(second.receiver.try_recv().unwrap()), Some(7));
+    assert_eq!(next_response(&first).order_id(), Some(7));
+    assert_eq!(next_response(&second).order_id(), Some(7));
     assert!(other.receiver.try_recv().is_err());
 }
 
 #[test]
-fn publish_replaces_latest() {
+fn publish_ignores_other_frames() {
     let board = Arc::new(Board::default());
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Submitted));
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Cancelled));
+    let watch = watch(&board, 7);
 
-    let latest = watch(&board, 7).latest.unwrap();
+    board.publish(&proto_response(
+        IncomingMessages::ExecutionData,
+        execution_data().order_id(7).encode_proto(),
+    ));
 
-    let cancelled = order_status().order_id(7).status(OrderStatusKind::Cancelled).encode_proto();
-    assert_eq!(latest.raw_bytes(), Some(cancelled.as_slice()));
+    assert!(watch.receiver.try_recv().is_err());
 }
 
 #[test]
@@ -92,23 +93,24 @@ fn waiter_whose_receiver_dropped_is_pruned_on_publish() {
     let Watch { receiver, _registration, .. } = watch(&board, 7);
     drop(receiver);
 
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Submitted));
+    publish(&board, 7, OrderStatusKind::Submitted);
 
     assert_eq!(waiters(&board, 7), 0);
     drop(_registration);
 }
 
 #[test]
-fn fail_all_ends_waiters_and_keeps_latest() {
+fn reset_ends_waiters_and_keeps_latest() {
     let board = Arc::new(Board::default());
-    board.publish(OrderId::from(7), &status_frame(7, OrderStatusKind::Submitted));
     let failed = watch(&board, 7);
+    publish(&board, 7, OrderStatusKind::Submitted);
+    next_response(&failed);
 
-    board.fail_all(|| Error::ConnectionReset);
+    board.reset();
 
     assert!(matches!(failed.receiver.try_recv(), Ok(RoutedItem::Error(Error::ConnectionReset))));
     assert!(failed.receiver.recv().is_err(), "sender dropped after the error");
-    assert!(watch(&board, 7).latest.is_some(), "a reset keeps the latest status");
+    assert_eq!(next_response(&watch(&board, 7)).order_id(), Some(7), "a reset keeps the latest status");
 }
 
 #[test]

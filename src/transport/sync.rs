@@ -473,7 +473,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.shared_channels.reset_counts();
         // Aliases of the routes just failed.
         self.executions.clear();
-        self.order_statuses.fail_all(|| Error::ConnectionReset);
+        self.order_statuses.reset();
     }
 
     // The three cleanup handlers below remove a registration only when it
@@ -705,11 +705,7 @@ impl<S: Stream> TcpMessageBus<S> {
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
-        if message.message_type() == IncomingMessages::OrderStatus {
-            if let Some(order_id) = message_order_id {
-                self.order_statuses.publish(order_id, &message);
-            }
-        }
+        self.order_statuses.publish(&message);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {

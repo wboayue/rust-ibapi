@@ -521,11 +521,6 @@ impl Client {
     pub async fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
         let mut watch = self.message_bus.watch_order_status(order_id.into())?;
         let mut tracker = FillTracker::default();
-        if let Some(latest) = &watch.latest {
-            if let Some(outcome) = tracker.observe(latest)? {
-                return Ok(outcome);
-            }
-        }
 
         let wait = async {
             while let Some(item) = watch.receiver.recv().await {

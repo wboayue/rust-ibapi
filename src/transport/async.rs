@@ -811,7 +811,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // sessions, so they are not closed.
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts().await;
-        self.order_statuses.fail_all(|| Error::ConnectionReset);
+        self.order_statuses.reset();
     }
 
     /// End every subscription with `Error::Shutdown`, then close the channels.
@@ -895,11 +895,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
-        if message.message_type() == IncomingMessages::OrderStatus {
-            if let Some(order_id) = message_order_id {
-                self.order_statuses.publish(order_id, &message);
-            }
-        }
+        self.order_statuses.publish(&message);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {}

@@ -6,6 +6,8 @@
 //! binary-text-payload framing that `parse_raw_message` expects post-floor-213:
 //! `[4-byte BE msg_id][NUL-delimited remaining fields]`, produced by `body()`.
 
+use crate::common::test_utils::helpers::order_status_frame;
+use crate::orders::OrderStatusKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -2366,17 +2368,6 @@ async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error
     Ok(())
 }
 
-fn push_order_status(stream: &MemoryStream, order_id: i32, status: &str) {
-    stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::OrderStatus as i32,
-        &crate::proto::OrderStatus {
-            order_id: Some(order_id),
-            status: Some(status.into()),
-            ..Default::default()
-        },
-    ));
-}
-
 async fn next_watched(watch: &mut crate::transport::order_status_board::AsyncOrderStatusWatch) -> RoutedItem {
     tokio::time::timeout(TICK, watch.receiver.recv())
         .await
@@ -2385,16 +2376,16 @@ async fn next_watched(watch: &mut crate::transport::order_status_board::AsyncOrd
 }
 
 /// A status that arrived before the wait began — an order filled between
-/// `submit()` and `wait_for_fill` — is handed to the waiter as `latest`.
+/// `submit()` and `wait_for_fill` — is the first item the waiter receives.
 #[tokio::test]
 async fn test_order_status_watch_sees_status_from_before_it() {
     let (stream, bus) = make_bus();
 
-    push_order_status(&stream, 7, "Filled");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
     bus.read_and_route_message().await.unwrap();
 
-    let watch = bus.watch_order_status(OrderId::from(7)).unwrap();
-    assert_eq!(watch.latest.as_ref().and_then(|m| m.order_id()), Some(7));
+    let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+    assert!(matches!(next_watched(&mut watch).await, RoutedItem::Response(m) if m.order_id() == Some(7)));
 }
 
 /// The waiter gets a copy: the `place_order` subscription for the same order
@@ -2407,7 +2398,7 @@ async fn test_order_status_watch_takes_nothing_from_other_routes() {
     let mut updates = bus.create_order_update_subscription().await.unwrap();
     let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
 
-    push_order_status(&stream, 7, "Submitted");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.read_and_route_message().await.unwrap();
 
     assert!(matches!(next_watched(&mut watch).await, RoutedItem::Response(m) if m.order_id() == Some(7)));
@@ -2421,7 +2412,7 @@ async fn test_order_status_watch_sees_unrouted_status() {
     let (stream, bus) = make_bus();
 
     let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
-    push_order_status(&stream, 7, "Submitted");
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.read_and_route_message().await.unwrap();
 
     assert!(matches!(next_watched(&mut watch).await, RoutedItem::Response(m) if m.order_id() == Some(7)));

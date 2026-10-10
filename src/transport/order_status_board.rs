@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::client::ids::OrderId;
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::RoutedItem;
 use crate::Error;
 
@@ -112,18 +112,25 @@ impl<S: WatchSender> OrderStatusBoard<S> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Record `message` as `order_id`'s latest status and copy it to each
-    /// waiter. Waiters that have gone are dropped.
-    pub(crate) fn publish(&self, order_id: OrderId, message: &ResponseMessage) {
+    /// Record an `OrderStatus` frame as its order's latest status and copy it
+    /// to each waiter; any other frame is ignored. Waiters that have gone are
+    /// dropped.
+    pub(crate) fn publish(&self, message: &ResponseMessage) {
+        if message.message_type() != IncomingMessages::OrderStatus {
+            return;
+        }
+        let Some(order_id) = message.order_id().map(OrderId::from) else {
+            return;
+        };
         let mut state = self.lock();
         let slot = state.slots.entry(order_id).or_default();
         slot.watchers.retain(|(_, sender)| sender.send_item(message.clone().into()));
         slot.latest = Some(message.clone());
     }
 
-    /// Register a waiter on `order_id`. The order's latest status is read
-    /// under the same lock as the registration, so no frame falls between the
-    /// two. Refused with [`Error::Shutdown`] once the board is closed.
+    /// Register a waiter on `order_id`. The order's latest status, if any, is
+    /// queued first, under the same lock as the registration, so no frame
+    /// falls between the two. Refused with [`Error::Shutdown`] once the board is closed.
     pub(crate) fn watch(self: &Arc<Self>, order_id: OrderId) -> Result<OrderStatusWatch<S>, Error> {
         let mut state = self.lock();
         if state.closed {
@@ -133,10 +140,12 @@ impl<S: WatchSender> OrderStatusBoard<S> {
         state.next_watch += 1;
         let (sender, receiver) = S::channel();
         let slot = state.slots.entry(order_id).or_default();
+        if let Some(latest) = &slot.latest {
+            sender.send_item(latest.clone().into());
+        }
         slot.watchers.push((id, sender));
         Ok(OrderStatusWatch {
             receiver,
-            latest: slot.latest.clone(),
             _registration: Some(WatchRegistration {
                 board: Arc::clone(self),
                 order_id,
@@ -153,13 +162,13 @@ impl<S: WatchSender> OrderStatusBoard<S> {
         }
     }
 
-    /// End every waiter with `error()` (connection reset). Latest statuses are
+    /// End every waiter with [`Error::ConnectionReset`]. Latest statuses are
     /// kept, and new waiters may register.
-    pub(crate) fn fail_all(&self, error: impl Fn() -> Error) {
-        Self::fail_watchers(&mut self.lock(), error);
+    pub(crate) fn reset(&self) {
+        Self::fail_watchers(&mut self.lock(), || Error::ConnectionReset);
     }
 
-    /// [`fail_all`](Self::fail_all) with [`Error::Shutdown`], and refuse
+    /// [`reset`](Self::reset) with [`Error::Shutdown`], and refuse
     /// every later [`watch`](Self::watch). One lock, so no waiter registers
     /// between the two.
     pub(crate) fn close(&self) {
@@ -177,11 +186,10 @@ impl<S: WatchSender> OrderStatusBoard<S> {
     }
 }
 
-/// One waiter: the order's latest status when the wait began, and the
-/// channel later statuses arrive on. Dropping it deregisters the waiter.
+/// One waiter: the channel its order's statuses arrive on, starting with the
+/// latest one from before the wait. Dropping it deregisters the waiter.
 pub(crate) struct OrderStatusWatch<S: WatchSender> {
     pub(crate) receiver: S::Receiver,
-    pub(crate) latest: Option<ResponseMessage>,
     _registration: Option<WatchRegistration<S>>,
     /// Keeps a detached watch's channel open.
     _sender: Option<S>,
@@ -193,7 +201,6 @@ impl<S: WatchSender> OrderStatusWatch<S> {
     pub(crate) fn detached(sender: S, receiver: S::Receiver) -> Self {
         Self {
             receiver,
-            latest: None,
             _registration: None,
             _sender: Some(sender),
         }

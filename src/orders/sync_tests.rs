@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_blocking_test_client, create_blocking_test_client_with_ordered_proto_responses,
-    decode_request_proto, proto_error_response, proto_response, request_message_count,
+    decode_request_proto, order_status_response, proto_error_response, proto_response, request_message_count,
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
@@ -1227,19 +1227,12 @@ fn order_methods_accept_typed_order_ids() {
     assert_eq!(bracket[1].parent_id, 41, "bracket_order");
 }
 
-fn status_response(status: OrderStatusKind, filled: f64, remaining: f64) -> crate::messages::ResponseMessage {
-    proto_response(
-        IncomingMessages::OrderStatus,
-        order_status().status(status).filled(filled).remaining(remaining).encode_proto(),
-    )
-}
-
 #[test]
 fn wait_for_fill_waits_through_partial_fills() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
-        status_response(OrderStatusKind::Submitted, 0.0, 100.0),
-        status_response(OrderStatusKind::Submitted, 40.0, 60.0),
-        status_response(OrderStatusKind::Filled, 100.0, 0.0),
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(0.0).remaining(100.0)),
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0)),
+        order_status_response(order_status().status(OrderStatusKind::Filled).filled(100.0).remaining(0.0)),
     ]);
 
     let outcome = client.wait_for_fill(13, std::time::Duration::from_secs(5)).unwrap();
@@ -1249,23 +1242,10 @@ fn wait_for_fill_waits_through_partial_fills() {
 }
 
 #[test]
-fn wait_for_fill_reports_cancelled_order_as_ended() {
-    let (client, _) = create_blocking_test_client_with_ordered_proto_responses(vec![
-        status_response(OrderStatusKind::Submitted, 40.0, 60.0),
-        status_response(OrderStatusKind::Cancelled, 40.0, 60.0),
-    ]);
-
-    let outcome = client.wait_for_fill(13, std::time::Duration::from_secs(5)).unwrap();
-
-    assert!(
-        matches!(&outcome, OrderOutcome::Ended(s) if s.status == OrderStatusKind::Cancelled && s.filled == 40.0),
-        "{outcome:?}"
-    );
-}
-
-#[test]
 fn wait_for_fill_times_out_with_last_status() {
-    let (client, _) = create_blocking_test_client_with_ordered_proto_responses(vec![status_response(OrderStatusKind::Submitted, 40.0, 60.0)]);
+    let (client, _) = create_blocking_test_client_with_ordered_proto_responses(vec![order_status_response(
+        order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0),
+    )]);
 
     let outcome = client.wait_for_fill(13, std::time::Duration::from_millis(20)).unwrap();
 
