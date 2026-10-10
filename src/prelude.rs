@@ -60,7 +60,7 @@ pub use crate::market_data::realtime::{
 pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 
 // Order types
-pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderUpdate, Orders, PlaceOrder};
+pub use crate::orders::{order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderOutcome, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
 pub use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};

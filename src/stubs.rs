@@ -238,6 +238,14 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
+    fn watch_order_status(&self, _order_id: OrderId) -> Result<crate::transport::order_status_board::SyncOrderStatusWatch, Error> {
+        let (sender, receiver) = channel::unbounded();
+        for item in self.routed_items_for_request() {
+            sender.send(item).unwrap();
+        }
+        Ok(crate::transport::order_status_board::OrderStatusWatch::detached(sender, receiver))
+    }
+
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
         // Use pointer address as unique identifier for this stub instance
         let stub_id = self as *const _ as usize;
@@ -370,6 +378,14 @@ impl AsyncMessageBus for MessageBusStub {
             self.request_messages.write().unwrap().push(message);
         }
         Ok(())
+    }
+
+    fn watch_order_status(&self, _order_id: OrderId) -> Result<crate::transport::order_status_board::AsyncOrderStatusWatch, Error> {
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        for item in self.routed_items_for_request() {
+            sender.send(item).unwrap();
+        }
+        Ok(crate::transport::order_status_board::OrderStatusWatch::detached(sender, receiver))
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {

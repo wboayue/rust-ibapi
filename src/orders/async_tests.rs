@@ -1180,3 +1180,67 @@ async fn order_methods_accept_typed_order_ids() {
     .unwrap();
     assert_eq!(bracket[1].parent_id, 41, "bracket_order");
 }
+
+fn status_response(status: OrderStatusKind, filled: f64, remaining: f64) -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::OrderStatus,
+        order_status().status(status).filled(filled).remaining(remaining).encode_proto(),
+    )
+}
+
+#[tokio::test]
+async fn wait_for_fill_waits_through_partial_fills() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![
+        status_response(OrderStatusKind::Submitted, 0.0, 100.0),
+        status_response(OrderStatusKind::Submitted, 40.0, 60.0),
+        status_response(OrderStatusKind::Filled, 100.0, 0.0),
+    ]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_secs(5)).await.unwrap();
+
+    assert!(matches!(&outcome, OrderOutcome::Filled(s) if s.filled == 100.0), "{outcome:?}");
+    assert_eq!(request_message_count(&message_bus), 0, "waiting writes nothing");
+}
+
+#[tokio::test]
+async fn wait_for_fill_reports_cancelled_order_as_ended() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![
+        status_response(OrderStatusKind::Submitted, 40.0, 60.0),
+        status_response(OrderStatusKind::Cancelled, 40.0, 60.0),
+    ]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_secs(5)).await.unwrap();
+
+    assert!(
+        matches!(&outcome, OrderOutcome::Ended(s) if s.status == OrderStatusKind::Cancelled && s.filled == 40.0),
+        "{outcome:?}"
+    );
+}
+
+#[tokio::test]
+async fn wait_for_fill_times_out_with_last_status() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![status_response(OrderStatusKind::Submitted, 40.0, 60.0)]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_millis(20)).await.unwrap();
+
+    assert!(matches!(&outcome, OrderOutcome::TimedOut(Some(s)) if s.filled == 40.0), "{outcome:?}");
+}
+
+#[tokio::test]
+async fn wait_for_fill_times_out_without_status() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_millis(20)).await.unwrap();
+
+    assert_eq!(outcome, OrderOutcome::TimedOut(None));
+}
+
+#[tokio::test]
+async fn wait_for_fill_fails_on_connection_reset() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]).with_connection_resets(1));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let result = client.wait_for_fill(13, Duration::from_secs(5)).await;
+
+    assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
+}

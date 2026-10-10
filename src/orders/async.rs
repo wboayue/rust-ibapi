@@ -7,6 +7,9 @@ use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
+use std::time::Duration;
+
+use super::common::fill::FillTracker;
 use super::common::{decoders, encoders, verify};
 use super::*;
 
@@ -467,6 +470,75 @@ impl Client {
             self.message_bus.clone(),
             self.decoder_context(),
         ))
+    }
+
+    /// Waits until an order fills or ends, or `timeout` elapses.
+    ///
+    /// Returns [`OrderOutcome::Filled`] when the order filled completely,
+    /// [`OrderOutcome::Ended`] when it was cancelled or became inactive first,
+    /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
+    /// out. A timeout leaves the order working; cancel it yourself if needed.
+    ///
+    /// An order that already finished before the call is reported at once, as
+    /// long as its status reached this client since it connected. Statuses
+    /// only reach the client that placed the order (or client 0 with auto
+    /// bind), so an order placed elsewhere, or finished before this
+    /// connection, waits out the timeout.
+    ///
+    /// Uses neither [`order_update_stream`](Self::order_update_stream) nor the
+    /// [`place_order`](Self::place_order) subscription, and takes nothing from
+    /// them: both may be open at the same time, as may several waits on one
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ConnectionReset`] if the connection drops during the wait,
+    /// [`Error::Shutdown`] if the client shuts down.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OrderOutcome;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     let order_id = client.order(&contract).buy(100).market().submit().await.expect("order submission failed");
+    ///
+    ///     match client.wait_for_fill(order_id, Duration::from_secs(30)).await.expect("wait failed") {
+    ///         OrderOutcome::Filled(status) => println!("filled {} @ {:?}", status.filled, status.average_fill_price),
+    ///         OrderOutcome::Ended(status) => println!("ended {:?} after {} filled", status.status, status.filled),
+    ///         OrderOutcome::TimedOut(status) => println!("still working: {status:?}"),
+    ///     }
+    /// }
+    /// ```
+    pub async fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
+        let mut watch = self.message_bus.watch_order_status(order_id.into())?;
+        let mut tracker = FillTracker::default();
+        if let Some(latest) = &watch.latest {
+            if let Some(outcome) = tracker.observe(latest)? {
+                return Ok(outcome);
+            }
+        }
+
+        let wait = async {
+            while let Some(item) = watch.receiver.recv().await {
+                if let Some(outcome) = tracker.on_item(item)? {
+                    return Ok(outcome);
+                }
+            }
+            Err(Error::UnexpectedEndOfStream)
+        };
+        match tokio::time::timeout(timeout, wait).await {
+            Ok(result) => result,
+            Err(_) => Ok(tracker.timed_out()),
+        }
     }
 
     /// Exercise or lapse an option position.

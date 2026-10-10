@@ -1727,6 +1727,29 @@ pub struct OrderStatus {
     pub market_cap_price: Option<f64>,
 }
 
+/// How an order ended, as reported by `Client::wait_for_fill`.
+///
+/// Each variant carries the order's last [`OrderStatus`]: `filled`,
+/// `remaining` and `average_fill_price` give the fill, which may be partial
+/// for [`Ended`](Self::Ended) and [`TimedOut`](Self::TimedOut).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum OrderOutcome {
+    /// The order filled completely: status [`Filled`](OrderStatusKind::Filled),
+    /// or nothing remaining after a fill (market orders do not always report
+    /// `Filled`).
+    Filled(OrderStatus),
+    /// The order ended without filling completely:
+    /// [`Cancelled`](OrderStatusKind::Cancelled),
+    /// [`ApiCancelled`](OrderStatusKind::ApiCancelled) or
+    /// [`Inactive`](OrderStatusKind::Inactive).
+    Ended(OrderStatus),
+    /// The wait timed out with the order still working. Carries the last
+    /// status seen, if any. The order is left alone; cancel it yourself if
+    /// you no longer want it.
+    TimedOut(Option<OrderStatus>),
+}
+
 /// Enumerates possible results from cancelling an order.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]

@@ -39,6 +39,7 @@ use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessa
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame, Lease, LeaseRef};
+use super::order_status_board::{AsyncOrderStatusWatch, OrderStatusBoard};
 use super::rate_limiter::RateLimiter;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
@@ -219,6 +220,10 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error>;
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
+
+    /// Wait on `order_id`'s `OrderStatus` frames, alongside their normal
+    /// routing. Nothing is written.
+    fn watch_order_status(&self, order_id: OrderId) -> Result<AsyncOrderStatusWatch, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream;
 
@@ -461,6 +466,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// Optional channel for order update stream. A std lock, like the
     /// registries', so shutdown can empty it from `Drop`.
     order_update_stream: Arc<std::sync::Mutex<Option<Route>>>,
+    /// Every `OrderStatus` frame, fanned out to `wait_for_fill` waiters.
+    order_statuses: Arc<OrderStatusBoard<mpsc::UnboundedSender<RoutedItem>>>,
     /// Capacity of the market-data channels this bus creates, and the
     /// order-class floors' override when larger (see [`ChannelClass`]).
     /// Default `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
@@ -524,6 +531,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             executions: Arc::new(SenderHash::new()),
             shared_channels: SharedChannels::new(|request| ChannelClass::of_shared(request).capacity(channel_capacity)),
             order_update_stream: Arc::new(std::sync::Mutex::new(None)),
+            order_statuses: Arc::default(),
             channel_capacity,
             cleanup_sender,
             #[cfg(test)]
@@ -803,6 +811,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // sessions, so they are not closed.
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts().await;
+        self.order_statuses.fail_all(|| Error::ConnectionReset);
     }
 
     /// End every subscription with `Error::Shutdown`, then close the channels.
@@ -827,6 +836,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         if let Some(route) = lock_slot(&self.order_update_stream).take() {
             let _ = route.sender.send(Error::Shutdown.into());
         }
+        self.order_statuses.close();
 
         self.connection.notice_broadcaster.close();
     }
@@ -884,6 +894,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let strategy = order_routing_strategy(message.message_type());
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
+
+        if message.message_type() == IncomingMessages::OrderStatus {
+            if let Some(order_id) = message_order_id {
+                self.order_statuses.publish(order_id, &message);
+            }
+        }
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {}
@@ -1127,6 +1143,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.write_message(&message).await
+    }
+
+    fn watch_order_status(&self, order_id: OrderId) -> Result<AsyncOrderStatusWatch, Error> {
+        self.order_statuses.watch(order_id)
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {

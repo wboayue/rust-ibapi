@@ -18,6 +18,7 @@ use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length, Lease, LeaseRef};
+use super::order_status_board::{OrderStatusBoard, SyncOrderStatusWatch};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
 use super::routing::{
@@ -333,6 +334,8 @@ pub struct TcpMessageBus<S: Stream> {
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
     order_update_stream: Mutex<Option<Entry<RoutedItem>>>,
+    /// Every `OrderStatus` frame, fanned out to `wait_for_fill` waiters.
+    order_statuses: Arc<OrderStatusBoard<Sender<RoutedItem>>>,
     /// Session state, and what `wait_connected` blocks on.
     connection_state: ConnectionSignal,
 }
@@ -358,6 +361,7 @@ impl<S: Stream> TcpMessageBus<S> {
             order_ids: OnceLock::new(),
             rate_limiter: OnceLock::new(),
             order_update_stream: Mutex::new(None),
+            order_statuses: Arc::default(),
             connection_state: ConnectionSignal::default(),
         })
     }
@@ -401,6 +405,7 @@ impl<S: Stream> TcpMessageBus<S> {
         if let Some(entry) = lock_slot(&self.order_update_stream).take() {
             let _ = entry.sender.send(Error::Shutdown.into());
         }
+        self.order_statuses.close();
 
         // bounded(1) + try_send: if a shutdown is already pending,
         // Err(Full) is the desired no-op (idempotent across duplicate calls).
@@ -468,6 +473,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.shared_channels.reset_counts();
         // Aliases of the routes just failed.
         self.executions.clear();
+        self.order_statuses.fail_all(|| Error::ConnectionReset);
     }
 
     // The three cleanup handlers below remove a registration only when it
@@ -698,6 +704,12 @@ impl<S: Stream> TcpMessageBus<S> {
         let strategy = order_routing_strategy(message.message_type());
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
+
+        if message.message_type() == IncomingMessages::OrderStatus {
+            if let Some(order_id) = message_order_id {
+                self.order_statuses.publish(order_id, &message);
+            }
+        }
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {
@@ -954,6 +966,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         self.write_message(message)?;
         Ok(())
+    }
+
+    fn watch_order_status(&self, order_id: OrderId) -> Result<SyncOrderStatusWatch, Error> {
+        self.order_statuses.watch(order_id)
     }
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {

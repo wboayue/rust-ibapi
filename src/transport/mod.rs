@@ -28,6 +28,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+pub(crate) mod order_status_board;
 pub(crate) mod rate_limiter;
 
 // Internal channel envelope shared across sync/async transports.
@@ -271,6 +272,10 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_message(&self, packet: &[u8]) -> Result<(), Error>;
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
+
+    /// Wait on `order_id`'s `OrderStatus` frames, alongside their normal
+    /// routing. Nothing is written.
+    fn watch_order_status(&self, order_id: OrderId) -> Result<order_status_board::SyncOrderStatusWatch, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 

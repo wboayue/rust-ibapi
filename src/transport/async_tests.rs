@@ -2365,3 +2365,78 @@ async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error
     );
     Ok(())
 }
+
+fn push_order_status(stream: &MemoryStream, order_id: i32, status: &str) {
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(order_id),
+            status: Some(status.into()),
+            ..Default::default()
+        },
+    ));
+}
+
+async fn next_watched(watch: &mut crate::transport::order_status_board::AsyncOrderStatusWatch) -> RoutedItem {
+    tokio::time::timeout(TICK, watch.receiver.recv())
+        .await
+        .expect("waiter got no item")
+        .expect("waiter channel closed")
+}
+
+/// A status that arrived before the wait began — an order filled between
+/// `submit()` and `wait_for_fill` — is handed to the waiter as `latest`.
+#[tokio::test]
+async fn test_order_status_watch_sees_status_from_before_it() {
+    let (stream, bus) = make_bus();
+
+    push_order_status(&stream, 7, "Filled");
+    bus.read_and_route_message().await.unwrap();
+
+    let watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+    assert_eq!(watch.latest.as_ref().and_then(|m| m.order_id()), Some(7));
+}
+
+/// The waiter gets a copy: the `place_order` subscription for the same order
+/// and the order-update stream still receive the frame.
+#[tokio::test]
+async fn test_order_status_watch_takes_nothing_from_other_routes() {
+    let (stream, bus) = make_bus();
+
+    let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+
+    push_order_status(&stream, 7, "Submitted");
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(matches!(next_watched(&mut watch).await, RoutedItem::Response(m) if m.order_id() == Some(7)));
+    assert_eq!(next_message(&mut order).await.order_id(), Some(7));
+    assert_eq!(next_message(&mut updates).await.order_id(), Some(7));
+}
+
+/// A status for an order no route claims still reaches the waiter.
+#[tokio::test]
+async fn test_order_status_watch_sees_unrouted_status() {
+    let (stream, bus) = make_bus();
+
+    let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+    push_order_status(&stream, 7, "Submitted");
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(matches!(next_watched(&mut watch).await, RoutedItem::Response(m) if m.order_id() == Some(7)));
+}
+
+#[tokio::test]
+async fn test_order_status_watch_ends_on_reset_and_shutdown() {
+    let (_stream, bus) = make_bus();
+
+    let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+    bus.reset_channels().await;
+    assert!(matches!(next_watched(&mut watch).await, RoutedItem::Error(Error::ConnectionReset)));
+
+    let mut watch = bus.watch_order_status(OrderId::from(7)).unwrap();
+    bus.request_shutdown();
+    assert!(matches!(next_watched(&mut watch).await, RoutedItem::Error(Error::Shutdown)));
+    assert!(matches!(bus.watch_order_status(OrderId::from(7)), Err(Error::Shutdown)));
+}

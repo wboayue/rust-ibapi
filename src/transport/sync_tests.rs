@@ -3653,3 +3653,75 @@ fn test_throttled_shared_subscribe_does_not_hold_up_shared_cancel() -> Result<()
     assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1);
     Ok(())
 }
+
+fn push_order_status(stream: &MemoryStream, order_id: i32, status: &str) {
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(order_id),
+            status: Some(status.into()),
+            ..Default::default()
+        },
+    ));
+}
+
+/// A status that arrived before the wait began — an order filled between
+/// `submit()` and `wait_for_fill` — is handed to the waiter as `latest`.
+#[test]
+fn test_order_status_watch_sees_status_from_before_it() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    push_order_status(&stream, 7, "Filled");
+    bus.dispatch()?;
+
+    let watch = bus.watch_order_status(OrderId::from(7))?;
+    assert_eq!(watch.latest.as_ref().and_then(|m| m.order_id()), Some(7));
+    Ok(())
+}
+
+/// The waiter gets a copy: the `place_order` subscription for the same order
+/// and the order-update stream still receive the frame.
+#[test]
+fn test_order_status_watch_takes_nothing_from_other_routes() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let order = bus.send_order_request(OrderId::from(7), &[])?;
+    let updates = bus.create_order_update_subscription()?;
+    let watch = bus.watch_order_status(OrderId::from(7))?;
+
+    push_order_status(&stream, 7, "Submitted");
+    bus.dispatch()?;
+
+    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
+    assert_eq!(order.next_timeout(TICK).expect("order route got no message")?.order_id(), Some(7));
+    assert_eq!(updates.next_timeout(TICK).expect("update stream got no message")?.order_id(), Some(7));
+    Ok(())
+}
+
+/// A status for an order no route claims still reaches the waiter.
+#[test]
+fn test_order_status_watch_sees_unrouted_status() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let watch = bus.watch_order_status(OrderId::from(7))?;
+    push_order_status(&stream, 7, "Submitted");
+    bus.dispatch()?;
+
+    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
+    Ok(())
+}
+
+#[test]
+fn test_order_status_watch_ends_on_reset_and_shutdown() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+
+    let watch = bus.watch_order_status(OrderId::from(7))?;
+    bus.reset();
+    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Error(Error::ConnectionReset))));
+
+    let watch = bus.watch_order_status(OrderId::from(7))?;
+    bus.request_shutdown();
+    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Error(Error::Shutdown))));
+    assert!(matches!(bus.watch_order_status(OrderId::from(7)), Err(Error::Shutdown)));
+    Ok(())
+}

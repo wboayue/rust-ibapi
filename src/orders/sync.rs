@@ -1,7 +1,13 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use crossbeam::channel::RecvTimeoutError;
+
+use super::common::fill::FillTracker;
 use super::common::{decoders, encoders, verify};
-use super::{CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
+use super::{
+    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderUpdate, Orders, PlaceOrder,
+};
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
@@ -512,6 +518,77 @@ impl Client {
     pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         let subscription = self.create_order_update_subscription()?;
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+    }
+
+    /// Waits until an order fills or ends, or `timeout` elapses.
+    ///
+    /// Returns [`OrderOutcome::Filled`] when the order filled completely,
+    /// [`OrderOutcome::Ended`] when it was cancelled or became inactive first,
+    /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
+    /// out. A timeout leaves the order working; cancel it yourself if needed.
+    ///
+    /// An order that already finished before the call is reported at once, as
+    /// long as its status reached this client since it connected. Statuses
+    /// only reach the client that placed the order (or client 0 with auto
+    /// bind), so an order placed elsewhere, or finished before this
+    /// connection, waits out the timeout.
+    ///
+    /// Uses neither [`order_update_stream`](Self::order_update_stream) nor the
+    /// [`place_order`](Self::place_order) subscription, and takes nothing from
+    /// them: both may be open at the same time, as may several waits on one
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ConnectionReset`] if the connection drops during the wait,
+    /// [`Error::Shutdown`] if the client shuts down.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OrderOutcome;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let order_id = client.order(&contract).buy(100).market().submit().expect("order submission failed");
+    ///
+    /// match client.wait_for_fill(order_id, Duration::from_secs(30)).expect("wait failed") {
+    ///     OrderOutcome::Filled(status) => println!("filled {} @ {:?}", status.filled, status.average_fill_price),
+    ///     OrderOutcome::Ended(status) => println!("ended {:?} after {} filled", status.status, status.filled),
+    ///     OrderOutcome::TimedOut(status) => println!("still working: {status:?}"),
+    /// }
+    /// ```
+    pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
+        let watch = self.message_bus.watch_order_status(order_id.into())?;
+        let mut tracker = FillTracker::default();
+        if let Some(latest) = &watch.latest {
+            if let Some(outcome) = tracker.observe(latest)? {
+                return Ok(outcome);
+            }
+        }
+
+        // No deadline for a timeout too large to represent: wait without one.
+        let deadline = Instant::now().checked_add(timeout);
+        loop {
+            let item = match deadline {
+                Some(deadline) => watch.receiver.recv_deadline(deadline),
+                None => watch.receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
+            };
+            match item {
+                Ok(item) => {
+                    if let Some(outcome) = tracker.on_item(item)? {
+                        return Ok(outcome);
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => return Ok(tracker.timed_out()),
+                Err(RecvTimeoutError::Disconnected) => return Err(Error::UnexpectedEndOfStream),
+            }
+        }
     }
 
     /// Exercise or lapse an option position.
