@@ -540,6 +540,14 @@ fn test_collect_to_end_within_times_out_without_end_marker() {
 }
 
 #[test]
+fn test_collect_to_end_within_deadline_holds_while_items_are_ready() {
+    // The whole result is already queued, but the deadline has passed.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::ZERO), Err(Error::Timeout)));
+}
+
+#[test]
 fn test_collect_to_end_within_returns_terminal_error() {
     let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
 

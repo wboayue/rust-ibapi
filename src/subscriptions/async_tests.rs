@@ -883,6 +883,14 @@ async fn test_collect_to_end_within_times_out_without_end_marker() {
 }
 
 #[tokio::test]
+async fn test_collect_to_end_within_deadline_holds_while_items_are_ready() {
+    // The whole result is already queued, but the deadline has passed.
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::ZERO).await, Err(Error::Timeout)));
+}
+
+#[tokio::test]
 async fn test_collect_to_end_within_returns_terminal_error() {
     let (mut sub, _keep) = collect_subscription(vec![int_frame(10), RoutedItem::Error(Error::ConnectionReset)], true);
 

@@ -322,6 +322,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         loop {
             let item = match deadline {
                 None => self.next().await,
+                // `timeout_at` polls `next()` first, so while items are ready it
+                // never looks at the clock; check it here, as sync does.
+                Some(deadline) if tokio::time::Instant::now() >= deadline => return (rows, CollectStop::Deadline),
                 Some(deadline) => match tokio::time::timeout_at(deadline, self.next()).await {
                     Ok(item) => item,
                     Err(_elapsed) => return (rows, CollectStop::Deadline),
