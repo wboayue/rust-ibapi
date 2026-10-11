@@ -1,14 +1,13 @@
 use std::time::Duration as StdDuration;
 
-use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalBarUpdate, WhatToShow};
 use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Error;
-use ibapi_integration_sync::read_to_terminal;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::{connect, read_to_terminal};
+use ibapi_test::ClientId;
 use serial_test::serial;
 use time::macros::datetime;
 use time::OffsetDateTime;
@@ -17,10 +16,8 @@ use time::OffsetDateTime;
 #[serial(historical)]
 fn head_timestamp_stock() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let ts = client
         .head_timestamp(&contract, WhatToShow::Trades, TradingHours::Regular)
@@ -34,10 +31,8 @@ fn head_timestamp_stock() {
 #[serial(historical)]
 fn head_timestamp_forex() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::forex("EUR", "USD").build();
     let ts = client
         .head_timestamp(&contract, WhatToShow::MidPoint, TradingHours::Extended)
@@ -50,10 +45,8 @@ fn head_timestamp_forex() {
 #[serial(historical)]
 fn historical_data_daily() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Day)
@@ -69,10 +62,8 @@ fn historical_data_daily() {
 #[serial(historical)]
 fn historical_data_hourly() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("MSFT").build();
     let data = client
         .historical_data(&contract, BarSize::Hour)
@@ -87,10 +78,8 @@ fn historical_data_hourly() {
 #[serial(historical)]
 fn historical_data_minute() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Min)
@@ -105,10 +94,8 @@ fn historical_data_minute() {
 #[serial(historical)]
 fn historical_data_bid_ask() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Hour)
@@ -124,10 +111,8 @@ fn historical_data_bid_ask() {
 #[serial(historical)]
 fn historical_data_midpoint() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Hour)
@@ -143,10 +128,8 @@ fn historical_data_midpoint() {
 #[serial(historical)]
 fn historical_schedule() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let schedule = client
         .historical_schedules(&contract, Duration::months(1))
@@ -160,10 +143,8 @@ fn historical_schedule() {
 #[serial(historical)]
 fn historical_ticks_trade() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
@@ -179,10 +160,8 @@ fn historical_ticks_trade() {
 #[serial(historical)]
 fn historical_ticks_bid_ask() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
@@ -198,10 +177,8 @@ fn historical_ticks_bid_ask() {
 #[serial(historical)]
 fn historical_ticks_mid_point() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
     let subscription = client
@@ -217,11 +194,9 @@ fn historical_ticks_mid_point() {
 #[serial(historical)]
 fn cancel_historical_ticks_succeeds() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     // Cancel with an arbitrary request_id - should not error even if no request is pending
-    rate_limit();
     let result = client.cancel_historical_ticks(99999);
     assert!(result.is_ok(), "cancel_historical_ticks failed: {:?}", result.err());
 }
@@ -230,10 +205,8 @@ fn cancel_historical_ticks_succeeds() {
 #[serial(historical)]
 fn histogram_data_weekly() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
@@ -249,13 +222,11 @@ fn histogram_data_weekly() {
 #[serial(historical)]
 fn historical_data_between_one_day_stays_in_range() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let start = datetime!(2026-09-17 00:00 UTC);
     let end = datetime!(2026-09-18 00:00 UTC);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Hour)
@@ -271,13 +242,11 @@ fn historical_data_between_one_day_stays_in_range() {
 #[serial(historical)]
 fn historical_data_between_multi_day_stays_in_range() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let start = datetime!(2026-09-15 00:00 UTC);
     let end = datetime!(2026-09-18 00:00 UTC);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let data = client
         .historical_data(&contract, BarSize::Hour)
@@ -306,10 +275,8 @@ fn assert_bars_within(bars: &[Bar], start: OffsetDateTime, end: OffsetDateTime) 
 #[serial(historical)]
 fn historical_data_stream_buffer_limit_fails_a_stalled_reader() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("SPY").build();
     let subscription = client
         .historical_data(&contract, BarSize::Min15)
@@ -328,10 +295,8 @@ fn historical_data_stream_buffer_limit_fails_a_stalled_reader() {
 #[serial(historical)]
 fn historical_data_stream_buffer_limit_reader_keeps_up() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("SPY").build();
     let subscription = client
         .historical_data(&contract, BarSize::Min15)

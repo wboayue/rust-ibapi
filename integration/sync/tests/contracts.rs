@@ -1,18 +1,15 @@
-use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use ibapi::subscriptions::{Drained, SubscriptionItem};
 use ibapi::Error;
-use ibapi_integration_sync::read_to_terminal;
-use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, AAPL_CON_ID, GATEWAY};
+use ibapi_integration_sync::{connect, read_to_terminal};
+use ibapi_test::{yyyymm_months_from_now, ClientId, AAPL_CON_ID};
 use serial_test::serial;
 
 #[test]
 fn contract_details_stock() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
@@ -23,14 +20,11 @@ fn contract_details_stock() {
 #[test]
 fn contract_details_stream_matches_collect() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     let contract = Contract::stock("AAPL").build();
 
-    rate_limit();
     let collected = client.contract_details(&contract).expect("contract_details failed");
 
-    rate_limit();
     let request = client.contract_details_stream(&contract);
     let request_id = request.request_id();
     let subscription = request.subscribe().expect("subscribe failed");
@@ -52,18 +46,15 @@ fn contract_details_stream_matches_collect() {
 #[test]
 fn contract_details_stream_early_drop_leaves_client_usable() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let broad = spy_calls_one_month();
 
-    rate_limit();
     let subscription = client.contract_details_stream(&broad).subscribe().expect("subscribe failed");
     let rows = subscription.iter_data().take(5).collect::<Result<Vec<_>, _>>().expect("rows");
     assert_eq!(rows.len(), 5);
     drop(subscription); // writes cancelContractData
 
-    rate_limit();
     let details = client
         .contract_details(&Contract::stock("AAPL").build())
         .expect("client unusable after early drop");
@@ -87,10 +78,8 @@ fn spy_calls_one_month() -> Contract {
 #[test]
 fn contract_details_stream_buffer_limit_fails_a_stalled_reader() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let subscription = client
         .contract_details_stream(&spy_calls_one_month())
         .buffer_limit(5)
@@ -110,10 +99,8 @@ fn contract_details_stream_cancel_and_drain_ends() {
     // Observed live: TWS sends the rest of the result after the cancel, then
     // the end marker, so the drain ends with `Ended`.
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let subscription = client
         .contract_details_stream(&spy_calls_one_month())
         .subscribe()
@@ -132,8 +119,7 @@ fn contract_details_bond() {
     // TWS answers bond queries with BondContractData (msg 18); until #876's fix
     // every row was dropped and this returned an empty Vec.
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let bonds = Contract {
         symbol: Symbol::from("AAPL"),
@@ -143,7 +129,6 @@ fn contract_details_bond() {
         ..Default::default()
     };
 
-    rate_limit();
     let details = client.contract_details(&bonds).expect("contract_details failed");
 
     assert!(!details.is_empty(), "bond query returned no rows");
@@ -153,10 +138,8 @@ fn contract_details_bond() {
 #[test]
 fn contract_details_futures() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::futures("ES").next_quarter().on_exchange("CME").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
@@ -167,10 +150,8 @@ fn contract_details_futures() {
 #[test]
 fn contract_details_continuous_futures() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::continuous_futures("ES").on_exchange("CME").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
@@ -181,10 +162,8 @@ fn contract_details_continuous_futures() {
 #[test]
 fn contract_details_forex() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::forex("EUR", "USD").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
@@ -196,10 +175,8 @@ fn contract_details_forex() {
 #[serial(matching_symbols)]
 fn matching_symbols_exact() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let symbols = client.matching_symbols("AAPL").expect("matching_symbols failed");
 
     assert!(!symbols.is_empty());
@@ -210,10 +187,8 @@ fn matching_symbols_exact() {
 #[serial(matching_symbols)]
 fn matching_symbols_partial() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let symbols = client.matching_symbols("Micro").expect("matching_symbols failed");
 
     assert!(!symbols.is_empty());
@@ -222,10 +197,8 @@ fn matching_symbols_partial() {
 #[test]
 fn market_rule_returns_increments() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let rule = client.market_rule(26).expect("market_rule failed");
 
     assert!(!rule.price_increments.is_empty());
@@ -234,11 +207,9 @@ fn market_rule_returns_increments() {
 #[test]
 fn cancel_contract_details_succeeds() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     // Cancel with an arbitrary request_id - should not error even if no request is pending
-    rate_limit();
     let result = client.cancel_contract_details(99999);
     assert!(result.is_ok(), "cancel_contract_details failed: {:?}", result.err());
 }
@@ -246,16 +217,13 @@ fn cancel_contract_details_succeeds() {
 #[test]
 fn option_chain_returns_data() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     // Get AAPL contract_id first
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
     let con_id = details[0].contract.contract_id;
 
-    rate_limit();
     let subscription = client
         .option_chain("AAPL", SecurityType::Stock, con_id)
         .subscribe()
@@ -273,10 +241,8 @@ fn option_chain_returns_data() {
 #[test]
 fn option_chain_request_id_and_buffer_limit_read_to_end() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let request = client.option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID).buffer_limit(256);
     assert!(request.request_id() > 0, "request id is known before sending");
 
@@ -290,10 +256,8 @@ fn option_chain_request_id_and_buffer_limit_read_to_end() {
 #[test]
 fn option_chain_buffer_limit_fails_a_stalled_reader() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let subscription = client
         .option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID)
         .buffer_limit(3)

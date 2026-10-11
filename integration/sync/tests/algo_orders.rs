@@ -9,13 +9,12 @@ use ibapi::orders::builder::{
 use ibapi::orders::{Order, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Error;
-use ibapi_test::{rate_limit, yyyymmdd_today, ClientId, GATEWAY};
+use ibapi_test::{yyyymmdd_today, ClientId};
 use serial_test::serial;
 
 fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = ibapi_integration_sync::connect(&client_id);
     (client, client_id)
 }
 
@@ -35,7 +34,6 @@ fn algo_order(client: &Client, contract: &Contract, algo: AlgoParams) -> Order {
 /// non-rejection Notice), then cancels. Code 201 (hard rejection) fails the
 /// test — that's what would catch a malformed algo encoding.
 fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order) {
-    rate_limit();
     let order_id = client.next_order_id();
     let subscription = client.place_order(order_id, contract, order).expect("place_order failed");
 
@@ -64,7 +62,6 @@ fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order) {
     }
     assert!(acknowledged, "no acknowledgement from TWS within timeout");
 
-    rate_limit();
     let _ = client.cancel_order(order_id, "");
 }
 

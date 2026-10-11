@@ -1,14 +1,12 @@
-use ibapi::client::blocking::Client;
 use ibapi::scanner::ScannerSubscription;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 
 #[test]
 fn scanner_parameters_returns_xml() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let xml = client.scanner_parameters().expect("scanner_parameters failed");
 
     assert!(!xml.is_empty());
@@ -18,8 +16,7 @@ fn scanner_parameters_returns_xml() {
 #[test]
 fn scanner_subscription_top_gainers() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let sub = ScannerSubscription {
         scan_code: Some("TOP_PERC_GAIN".to_string()),
@@ -29,7 +26,6 @@ fn scanner_subscription_top_gainers() {
         ..Default::default()
     };
 
-    rate_limit();
     let subscription = client.scanner_subscription(&sub, &[]).expect("scanner_subscription failed");
 
     let results = subscription

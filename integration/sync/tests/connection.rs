@@ -1,20 +1,18 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ibapi::client::blocking::Client;
 use ibapi::{Error, StartupMessage};
-use ibapi_test::{rate_limit, ClientId};
+use ibapi_integration_sync::{client_builder, connect};
+use ibapi_test::ClientId;
 
 #[test]
 fn connect_to_gateway() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     assert!(client.server_version() > 0);
     assert!(client.connection_time().is_some());
 
-    rate_limit();
     let time = client.server_time().expect("failed to get server time");
     assert!(time.year() >= 2025);
 }
@@ -25,10 +23,7 @@ fn builder_startup_callback_fires_during_handshake() {
     let count = Arc::new(Mutex::new(0_usize));
     let count_clone = count.clone();
 
-    rate_limit();
-    let client = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
+    let client = client_builder(&client_id)
         .startup_callback(move |msg| {
             // Sanity-check the typed payload — should match one of the known variants.
             if let StartupMessage::OpenOrder(ref o) = msg {
@@ -47,13 +42,7 @@ fn builder_startup_callback_fires_during_handshake() {
 fn builder_tcp_no_delay_round_trips() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .tcp_no_delay(true)
-        .connect()
-        .expect("connection failed");
+    let client = client_builder(&client_id).tcp_no_delay(true).connect().expect("connection failed");
 
     assert!(client.server_version() > 0);
 }
@@ -65,12 +54,7 @@ fn builder_tcp_no_delay_round_trips() {
 fn builder_notice_stream_receives_handshake_notices() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let (_client, notices) = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .connect_with_notice_stream()
-        .expect("connection failed");
+    let (_client, notices) = client_builder(&client_id).connect_with_notice_stream().expect("connection failed");
 
     // Collect every notice that arrives within a short window — handshake
     // notices land within milliseconds, so 250ms is generous.
@@ -104,12 +88,7 @@ fn builder_notice_stream_survives_reconnect() {
     let captured: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
     let captured_clone = captured.clone();
 
-    rate_limit();
-    let (_client, notices) = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .connect_with_notice_stream()
-        .expect("connection failed");
+    let (_client, notices) = client_builder(&client_id).connect_with_notice_stream().expect("connection failed");
 
     // Drain on a worker thread — broadcaster lives on Connection, so the
     // stream survives gateway flaps.
@@ -137,8 +116,7 @@ fn builder_notice_stream_survives_reconnect() {
 fn order_update_stream_ends_on_disconnect() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     let updates = client.order_update_stream().expect("order_update_stream failed");
 
     let (tx, rx) = std::sync::mpsc::channel();
@@ -174,8 +152,7 @@ fn order_update_stream_ends_on_disconnect() {
 fn order_update_stream_after_disconnect_fails() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     client.disconnect();
 
     match client.order_update_stream() {
@@ -190,8 +167,7 @@ fn order_update_stream_after_disconnect_fails() {
 fn notice_stream_after_disconnect_is_ended() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     client.disconnect();
 
     let notices = client.notice_stream().expect("notice_stream failed");
