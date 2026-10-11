@@ -38,7 +38,7 @@ impl VersionedClient for crate::client::r#async::Client {
 }
 
 // Gates whose server version is at or below the connection floor
-// (`PROTOBUF_REST_MESSAGES_3`) are omitted: they always pass, since the
+// (`PROTOBUF_REST_MESSAGES_3`, 213) are omitted: they always pass, since the
 // handshake rejects older servers.
 pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order) -> Result<(), Error> {
     if order.hedge_max_size.is_some() {
