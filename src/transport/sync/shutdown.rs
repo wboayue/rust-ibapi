@@ -1,6 +1,8 @@
 //! Latching shutdown signal shared by the blocking bus and its connection.
 
 use std::sync::{Condvar, Mutex, PoisonError};
+
+use crate::transport::common::lock;
 use std::time::Duration;
 
 /// Records that shutdown was requested and wakes anyone waiting on it.
@@ -17,17 +19,17 @@ pub(crate) struct ShutdownSignal {
 
 impl ShutdownSignal {
     pub(crate) fn is_requested(&self) -> bool {
-        *self.requested.lock().unwrap_or_else(PoisonError::into_inner)
+        *lock(&self.requested)
     }
 
     pub(crate) fn request(&self) {
-        *self.requested.lock().unwrap_or_else(PoisonError::into_inner) = true;
+        *lock(&self.requested) = true;
         self.changed.notify_all();
     }
 
     /// Block for up to `duration`, returning early once shutdown is requested.
     pub(crate) fn wait_timeout(&self, duration: Duration) {
-        let requested = self.requested.lock().unwrap_or_else(PoisonError::into_inner);
+        let requested = lock(&self.requested);
         let _ = self
             .changed
             .wait_timeout_while(requested, duration, |requested| !*requested)

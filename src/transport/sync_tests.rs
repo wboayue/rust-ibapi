@@ -3563,6 +3563,30 @@ fn sender_hash_recovers_from_a_poisoned_lock() {
     assert_eq!(routes.len(), 0);
 }
 
+/// A panic under the broadcaster lock must not end notice delivery or panic
+/// every later broadcast on the dispatcher thread.
+#[test]
+fn notice_broadcaster_recovers_from_a_poisoned_lock() {
+    let broadcaster = NoticeBroadcaster::new();
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = broadcaster.senders.lock().unwrap();
+                panic!("poison the broadcaster lock");
+            })
+            .join();
+    });
+    assert!(broadcaster.senders.is_poisoned());
+
+    let receiver = broadcaster.subscribe();
+    broadcaster.broadcast(Notice::synthesized(1, "after poison".into()));
+    broadcaster.close();
+
+    let received: Vec<Notice> = receiver.iter().collect();
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].message, "after poison");
+}
+
 /// A panic under the order-update slot's lock must not silently drop later
 /// order updates or leave the slot uncleanable.
 #[test]

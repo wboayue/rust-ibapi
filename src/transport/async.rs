@@ -38,7 +38,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::{log_orphan, report_unroutable_frame, Lease, LeaseRef};
+use super::common::{lock, log_orphan, report_unroutable_frame, Lease, LeaseRef};
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::routing::{
@@ -131,14 +131,14 @@ impl NoticeBroadcaster {
     /// After `close`, the returned receiver is already at end-of-stream,
     /// like the ones `close` ended.
     pub(crate) fn subscribe(&self) -> broadcast::Receiver<Notice> {
-        match self.sender.lock().unwrap().as_ref() {
+        match lock(&self.sender).as_ref() {
             Some(sender) => sender.subscribe(),
             None => broadcast::channel(1).1,
         }
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
-        if let Some(sender) = self.sender.lock().unwrap().as_ref() {
+        if let Some(sender) = lock(&self.sender).as_ref() {
             let _ = sender.send(notice);
         }
     }
@@ -146,7 +146,7 @@ impl NoticeBroadcaster {
     /// Drop the sender so existing receivers see channel-closed, and end
     /// every later subscription on arrival.
     pub(crate) fn close(&self) {
-        *self.sender.lock().unwrap() = None;
+        *lock(&self.sender) = None;
     }
 }
 

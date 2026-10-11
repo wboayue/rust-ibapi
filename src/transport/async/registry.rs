@@ -11,14 +11,14 @@ use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use log::{debug, trace};
 use tokio::sync::{broadcast, Mutex};
 
 use crate::accounts::types::AccountId;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::transport::common::LeaseRef;
+use crate::transport::common::{read_lock, write_lock, LeaseRef};
 use crate::transport::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
 use crate::Error;
 
@@ -122,11 +122,11 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     }
 
     fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Route>> {
-        self.routes.read().unwrap_or_else(PoisonError::into_inner)
+        read_lock(&self.routes)
     }
 
     fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Route>> {
-        self.routes.write().unwrap_or_else(PoisonError::into_inner)
+        write_lock(&self.routes)
     }
 
     /// Registers `route` under `id`, replacing any earlier registration.
@@ -348,11 +348,11 @@ impl SharedChannels {
     }
 
     fn channels(&self) -> RwLockReadGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
-        self.channels.read().unwrap_or_else(PoisonError::into_inner)
+        read_lock(&self.channels)
     }
 
     fn channels_mut(&self) -> RwLockWriteGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
-        self.channels.write().unwrap_or_else(PoisonError::into_inner)
+        write_lock(&self.channels)
     }
 
     /// Every live shared subscription has just been failed: start a new

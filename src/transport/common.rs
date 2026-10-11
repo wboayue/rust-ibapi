@@ -1,6 +1,6 @@
 //! Common utilities shared between sync and async transport implementations
 
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::time::Duration;
 
 use log::info;
@@ -9,6 +9,26 @@ use crate::client::ids::WireId;
 use crate::errors::Error;
 use crate::messages::{unknown_message_type_notice, IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN};
 use crate::subscriptions::common::RoutedItem;
+
+// Poison recovery. Every std lock in the transport guards state that each
+// critical section leaves whole (single map/vec operations, flag stores), so a
+// panic elsewhere cannot break an invariant. Recover the guard rather than
+// cascade that panic into every later route, broadcast and teardown.
+
+/// Lock `mutex`, recovering the guard if a panicking holder poisoned it.
+pub(crate) fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Read-lock `lock`, recovering the guard if a panicking holder poisoned it.
+pub(crate) fn read_lock<T: ?Sized>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Write-lock `lock`, recovering the guard if a panicking holder poisoned it.
+pub(crate) fn write_lock<T: ?Sized>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Sink for unrouted notices observed during the handshake. Production impls
 /// forward to the per-feature notice broadcaster owned by `Connection`, so

@@ -6,11 +6,11 @@
 //! both, so each bus has one field to publish to, reset, and close.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use log::warn;
 
-use super::common::{Lease, LeaseRef};
+use super::common::{lock, Lease, LeaseRef};
 use crate::client::ids::OrderId;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::transport::RoutedItem;
@@ -149,7 +149,7 @@ impl<S> Default for OrderTaps<S> {
 impl<S: TapSender> OrderTaps<S> {
     /// Lock the state, recovering from poisoning: every update leaves it whole.
     fn lock(&self) -> MutexGuard<'_, State<S>> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.state)
     }
 
     /// Open the order-update stream. Refused with [`Error::AlreadySubscribed`]

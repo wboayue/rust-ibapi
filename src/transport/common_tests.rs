@@ -144,3 +144,35 @@ fn lease_ref_identifies_its_lease() {
     assert!(lease_ref.is(&lease_ref.clone()));
     assert!(!lease_ref.is(&other.downgrade()));
 }
+
+/// Panic while holding a guard from `acquire`, poisoning the lock.
+fn poison_with<G>(acquire: impl FnOnce() -> G + Send) {
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = acquire();
+                panic!("poison the lock");
+            })
+            .join();
+    });
+}
+
+#[test]
+fn lock_recovers_from_a_poisoned_mutex() {
+    let mutex = Mutex::new(1);
+    poison_with(|| mutex.lock().unwrap());
+    assert!(mutex.is_poisoned());
+
+    *lock(&mutex) += 1;
+    assert_eq!(*lock(&mutex), 2);
+}
+
+#[test]
+fn read_and_write_lock_recover_from_a_poisoned_rwlock() {
+    let rwlock = RwLock::new(1);
+    poison_with(|| rwlock.write().unwrap());
+    assert!(rwlock.is_poisoned());
+
+    *write_lock(&rwlock) += 1;
+    assert_eq!(*read_lock(&rwlock), 2);
+}

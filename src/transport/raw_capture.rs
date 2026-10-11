@@ -214,7 +214,7 @@ impl Sink {
     /// capture may have a torn frame in it, but refusing to record from here on
     /// is strictly worse than continuing, so recover the guard.
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        super::common::lock(&self.state)
     }
 
     /// Open the file pair for `number`, or `None` with a warning if either file

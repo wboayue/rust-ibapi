@@ -1,7 +1,9 @@
 //! Outbound message rate limiter (#950).
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use super::common::lock;
 
 /// Caps how fast a client sends messages to TWS / IB Gateway.
 ///
@@ -128,7 +130,7 @@ impl RateLimiter {
     }
 
     fn state(&self) -> std::sync::MutexGuard<'_, Gcra> {
-        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.inner)
     }
 }
 

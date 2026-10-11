@@ -5,7 +5,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -17,7 +17,7 @@ use crate::client::id_generator::ClientIdManager;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
-use super::common::{log_orphan, report_unroutable_frame, validate_frame_length, Lease, LeaseRef};
+use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
@@ -127,7 +127,7 @@ impl SharedChannels {
     }
 
     fn subscribers(&self) -> MutexGuard<'_, Vec<SharedSubscriber>> {
-        self.subscribers.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.subscribers)
     }
 
     // Registers `sender` for every response type of `request`. Panics if
@@ -164,7 +164,7 @@ impl SharedChannels {
         account: Option<&AccountId>,
         write: impl FnOnce() -> Result<(), Error>,
     ) -> Result<SharedTicket, Error> {
-        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut counts = lock(&self.counts);
         counts.check_account_updates(account)?;
         write()?;
         Ok(counts.subscribe(message_type, account))
@@ -173,7 +173,7 @@ impl SharedChannels {
     // Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
     // `SharedCounts::unsubscribe` says so.
     fn unsubscribe(&self, ticket: SharedTicket, write: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
-        let mut counts = self.counts.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut counts = lock(&self.counts);
         if counts.unsubscribe(ticket) {
             write()
         } else {
@@ -184,7 +184,7 @@ impl SharedChannels {
     // Every live shared subscription has just been failed: start a new
     // generation so their later drops cannot touch the next session's counts.
     fn reset_counts(&self) {
-        self.counts.lock().unwrap_or_else(PoisonError::into_inner).reset();
+        lock(&self.counts).reset();
     }
 
     // Sends `item()` to every subscriber selected by `filter`; returns how
@@ -280,14 +280,14 @@ impl NoticeBroadcaster {
     /// like the ones `close` ended.
     pub(crate) fn subscribe(&self) -> Receiver<Notice> {
         let (sender, receiver) = channel::unbounded();
-        if let Some(senders) = self.senders.lock().unwrap().as_mut() {
+        if let Some(senders) = lock(&self.senders).as_mut() {
             senders.push(sender);
         }
         receiver
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
-        if let Some(senders) = self.senders.lock().unwrap().as_mut() {
+        if let Some(senders) = lock(&self.senders).as_mut() {
             senders.retain(|s| {
                 let sent = s.send(notice.clone()).is_ok();
                 if sent {
@@ -301,7 +301,7 @@ impl NoticeBroadcaster {
     /// Drop all senders so existing receivers see channel-closed, and end
     /// every later subscription on arrival.
     pub(crate) fn close(&self) {
-        *self.senders.lock().unwrap() = None;
+        *lock(&self.senders) = None;
     }
 }
 
@@ -852,12 +852,12 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn add_join_handle(&self, handle: JoinHandle<()>) {
-        let mut handles = self.handles.lock().unwrap();
+        let mut handles = lock(&self.handles);
         handles.push(handle);
     }
 
     pub fn join(&self) {
-        let mut handles = self.handles.lock().unwrap();
+        let mut handles = lock(&self.handles);
 
         for handle in handles.drain(..) {
             if let Err(e) = handle.join() {
@@ -1058,15 +1058,12 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
-    // A panic while holding the lock leaves the map consistent (every
-    // operation is a single map call), so recover rather than cascade the
-    // panic into every later route and teardown.
     fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Entry<V>>> {
-        self.senders.read().unwrap_or_else(PoisonError::into_inner)
+        read_lock(&self.senders)
     }
 
     fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Entry<V>>> {
-        self.senders.write().unwrap_or_else(PoisonError::into_inner)
+        write_lock(&self.senders)
     }
 
     #[cfg(test)]

@@ -2439,3 +2439,26 @@ async fn test_abandoned_order_status_wait_is_released() {
 
     assert!(!bus.order_taps.has_status_entry(OrderId::from(7)), "status stream outlived its wait");
 }
+
+/// A panic under the broadcaster lock must not end notice delivery or panic
+/// every later broadcast on the dispatcher task.
+#[tokio::test]
+async fn notice_broadcaster_recovers_from_a_poisoned_lock() {
+    let broadcaster = NoticeBroadcaster::new(broadcast::channel(4).0);
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = broadcaster.sender.lock().unwrap();
+                panic!("poison the broadcaster lock");
+            })
+            .join();
+    });
+    assert!(broadcaster.sender.is_poisoned());
+
+    let mut receiver = broadcaster.subscribe();
+    broadcaster.broadcast(Notice::synthesized(1, "after poison".into()));
+    broadcaster.close();
+
+    assert_eq!(receiver.recv().await.unwrap().message, "after poison");
+    assert!(matches!(receiver.recv().await, Err(broadcast::error::RecvError::Closed)));
+}

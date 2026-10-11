@@ -373,7 +373,7 @@ impl InternalSubscription {
     /// `create_order_update_subscription` can replace it before the cleanup
     /// thread runs. Cleanup itself matches identity only (see `Signal`).
     fn release(&self, cause: &str) {
-        let lease = self.lease.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        let lease = common::lock(&self.lease).take();
         let Some(lease) = lease else {
             return;
         };
