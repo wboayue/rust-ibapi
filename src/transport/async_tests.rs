@@ -2087,16 +2087,16 @@ struct FailingWriteStream(MemoryStream);
 
 #[async_trait::async_trait]
 impl AsyncIo for FailingWriteStream {
-    async fn close(&self) {
-        AsyncIo::close(&self.0).await;
-    }
-
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.0.read_message().await
     }
 
     async fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
         Err(Error::ConnectionReset)
+    }
+
+    async fn close(&self) {
+        AsyncIo::close(&self.0).await;
     }
 }
 
@@ -2330,54 +2330,50 @@ async fn test_drain_reports_shutdown() {
     assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
 }
 
-/// Retained clients and subscriptions cannot retain a disconnected physical socket.
-#[tokio::test]
-async fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
-    use tokio::io::AsyncReadExt;
+/// A client on a dispatching bus over loopback TCP, and the peer end.
+async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncTcpSocket>>, tokio::net::TcpStream) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
-    let mut peer = peer.unwrap().0;
     let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
     bus.clone()
         .process_messages(server_versions::PROTOBUF_REST_MESSAGES_3, Duration::ZERO)
         .unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-    let subscription = client.order_update_stream().await.unwrap();
-    client.disconnect().await;
+    (client, bus, peer.unwrap().0)
+}
+
+/// The peer sees EOF: the client side released its socket.
+async fn assert_peer_sees_eof(mut peer: tokio::net::TcpStream) {
+    use tokio::io::AsyncReadExt;
     let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
         .await
-        .expect("disconnect retained the TCP socket");
+        .expect("TCP socket retained");
     assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
-    assert!(!client.is_connected());
+}
+
+/// Retained clients and subscriptions cannot retain a disconnected physical socket.
+#[tokio::test]
+async fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
+    let (client, _bus, peer) = tcp_client_with_peer().await;
+    let _subscription = client.order_update_stream().await.unwrap();
+
     client.disconnect().await;
-    drop(subscription);
-    drop(client);
-    drop(bus);
+    assert_peer_sees_eof(peer).await;
+    assert!(!client.is_connected());
+    // A second disconnect on the closed socket is a no-op.
+    client.disconnect().await;
 }
 
 /// Runtime-free Client::drop requests close; the dispatcher releases both halves.
 #[tokio::test]
 async fn test_client_drop_closes_tcp_with_retained_subscription() {
-    use tokio::io::AsyncReadExt;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap().to_string();
-    let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
-    let mut peer = peer.unwrap().0;
-    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
-    bus.clone()
-        .process_messages(server_versions::PROTOBUF_REST_MESSAGES_3, Duration::ZERO)
-        .unwrap();
-    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-    let subscription = client.order_update_stream().await.unwrap();
+    let (client, bus, peer) = tcp_client_with_peer().await;
+    let _subscription = client.order_update_stream().await.unwrap();
+
     drop(client);
-    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
-        .await
-        .expect("drop retained the TCP socket");
-    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_peer_sees_eof(peer).await;
     assert!(!bus.is_connected());
-    drop(subscription);
-    drop(bus);
 }
 
 // ---- outbound rate limiter (#950) ----

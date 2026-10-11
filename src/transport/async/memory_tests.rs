@@ -41,7 +41,9 @@ async fn trait_close_wakes_a_pending_reader() {
     let read = tokio::spawn(async move { reading.read_message().await });
     tokio::task::yield_now().await;
     AsyncIo::close(&stream).await;
-    let timeout_context = format!("transport close did not wake {stream:?}");
-    let result = tokio::time::timeout(Duration::from_secs(1), read).await.expect(&timeout_context).unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(1), read)
+        .await
+        .unwrap_or_else(|_| panic!("transport close did not wake {stream:?}"))
+        .unwrap();
     assert!(matches!(result, Err(Error::Io(ref error)) if error.kind() == io::ErrorKind::UnexpectedEof));
 }

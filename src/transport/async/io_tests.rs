@@ -142,7 +142,8 @@ async fn test_physical_close_wakes_read_and_is_terminal() {
     tokio::time::timeout(Duration::from_secs(1), socket.close())
         .await
         .expect("close blocked on read");
-    assert!(matches!(read.await.unwrap(), Err(Error::ConnectionReset | Error::Shutdown)));
+    let read = read.await.unwrap();
+    assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
     let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
         .await
         .expect("close retained TCP");
@@ -164,7 +165,7 @@ async fn test_physical_close_prevents_a_queued_write() {
     let closing = socket.clone();
     let close = tokio::spawn(async move { closing.close().await });
     tokio::time::timeout(Duration::from_secs(1), async {
-        while !socket.closed.load(Ordering::Acquire) {
+        while !socket.is_closed() {
             tokio::task::yield_now().await;
         }
     })
@@ -175,4 +176,28 @@ async fn test_physical_close_prevents_a_queued_write() {
     assert!(matches!(write.await.unwrap(), Err(Error::Shutdown)));
     let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8()).await.unwrap();
     assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+}
+
+/// Close wakes a write stalled on a full send buffer, rather than waiting for
+/// the peer to drain it.
+#[tokio::test]
+async fn test_physical_close_wakes_a_backpressured_write() {
+    let (socket, _peer, _listener) = socket_pair().await;
+    let write = tokio::spawn({
+        let socket = socket.clone();
+        async move { socket.write_all(&vec![0xAA; LARGE]).await }
+    });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while socket.writer.try_lock().is_ok() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("large write never took the writer");
+
+    tokio::time::timeout(Duration::from_secs(1), socket.close())
+        .await
+        .expect("close blocked on write");
+    let written = write.await.unwrap();
+    assert!(matches!(written, Err(Error::Shutdown)), "write: {written:?}");
 }

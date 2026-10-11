@@ -221,7 +221,7 @@ if client.is_connected() {
 
 Stopping dispatch does not release a socket whose bus still has owners. Explicit
 async disconnect closes both owned TCP halves before joining dispatch; dispatcher
-exit performs the same idempotent close for best-effort client drop. A terminal
-close flag prevents queued I/O or reconnect from reviving the retired socket.
-Close signals blocked reads/writes before acquiring their locks, so teardown can
-release the halves without waiting indefinitely for network activity.
+exit performs the same idempotent close for best-effort client drop. Close
+latches a flag first, which wakes blocked reads and writes so their locks free
+up and fails them with `Error::Shutdown`; queued I/O and reconnect check it, so
+the retired socket can't be revived.
