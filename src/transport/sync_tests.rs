@@ -1,8 +1,11 @@
 use super::*;
 use crate::client::ids::{OrderId, RequestId};
+use crate::common::test_utils::helpers::order_status_frame;
 use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
 use crate::connection::sync::Connection;
+use crate::orders::OrderStatusKind;
 use crate::tests::assert_send_and_sync;
+use crate::transport::common::poison_with;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 // Additional imports for connection tests
@@ -104,10 +107,6 @@ impl Reconnect for MockSocket {
         Err(mock_socket_error(ErrorKind::ConnectionRefused))
     }
     fn sleep(&self, _duration: std::time::Duration, _shutdown: &ShutdownSignal) {}
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.keep_alive.store(true, Ordering::SeqCst);
-        Ok(())
-    }
 }
 
 impl Stream for MockSocket {}
@@ -213,6 +212,10 @@ impl Io for MockSocket {
         self.responses_len.store(exchange.responses.len(), Ordering::SeqCst);
 
         Ok(())
+    }
+
+    fn close(&self) {
+        self.keep_alive.store(true, Ordering::SeqCst);
     }
 }
 
@@ -911,7 +914,7 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_request(RequestId::nth(100), &[])?;
 
-    stream.close();
+    stream.hang_up();
     let err = bus.dispatch().expect_err("dispatch should surface an error");
     assert!(matches!(err, Error::ConnectionFailed), "unexpected error: {err:?}");
 
@@ -943,7 +946,7 @@ fn test_cleanup_thread_exits_promptly_on_shutdown() {
 }
 
 /// Dispatcher thread's blocked socket read is interrupted by
-/// `Reconnect::shutdown_read` from `request_shutdown`, instead of waiting
+/// `Io::close` from `request_shutdown`, instead of waiting
 /// up to the 1s `TWS_READ_TIMEOUT`. Companion to the cleanup-thread test;
 /// together they cover both threads `Client::drop` joins. Issue #523.
 #[test]
@@ -1331,7 +1334,7 @@ fn test_order_update_stream_ends_on_shutdown() -> Result<(), Error> {
 
     let item = updates.next_timeout_routed(TICK);
     assert!(matches!(item, Some(RoutedItem::Error(Error::Shutdown))), "got: {item:?}");
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "slot should be released");
+    assert!(bus.order_taps.updates_lease().is_none(), "slot should be released");
     Ok(())
 }
 
@@ -2415,7 +2418,7 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
 
     assert!(!bus.requests.contains(&request_id), "request not cleaned");
     assert!(!bus.orders.contains(&order_id), "order not cleaned");
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream not cleared");
+    assert!(bus.order_taps.updates_lease().is_none(), "order update stream not cleared");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -2556,15 +2559,16 @@ fn test_cleanup_identity_guards() -> Result<(), Error> {
     bus.clean_order(order_id, &registered);
     assert!(!bus.orders.contains(&order_id), "matching lease failed to remove the registration");
 
-    let _stream_sub = bus.create_order_update_subscription()?;
+    let stream_sub = bus.create_order_update_subscription()?;
     bus.clear_order_update_stream(&foreign);
     assert!(
-        bus.order_update_stream.lock().unwrap().is_some(),
+        bus.order_taps.updates_lease().is_some(),
         "foreign lease cleared a live order update stream"
     );
-    let registered = bus.order_update_stream.lock().unwrap().as_ref().unwrap().lease.clone();
+    let registered = bus.order_taps.updates_lease().unwrap();
+    drop(stream_sub);
     bus.clear_order_update_stream(&registered);
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "matching lease failed to clear");
+    assert!(bus.order_taps.updates_lease().is_none(), "matching lease failed to clear");
 
     Ok(())
 }
@@ -3067,10 +3071,11 @@ fn test_read_message_survives_a_socket_read_timeout_mid_frame() {
     peer.join().unwrap();
 }
 
-/// `shutdown_read` still breaks a read that is waiting out a stalled frame: the
-/// read ends as a lost connection right away, not after the stall limit.
+/// The socket shutdown `Io::close` performs still breaks a read that is waiting
+/// out a stalled frame: the read ends as a lost connection right away, not after
+/// the stall limit.
 #[test]
-fn test_shutdown_read_breaks_a_mid_frame_wait() {
+fn test_close_breaks_a_mid_frame_wait() {
     let read_timeout = Duration::from_millis(50);
     let (release_send, release) = std::sync::mpsc::channel::<()>();
     let (mut client, ready, peer) = socket_pair(read_timeout, move |mut socket, ready| {
@@ -3081,10 +3086,10 @@ fn test_shutdown_read_breaks_a_mid_frame_wait() {
     });
     ready.recv().unwrap();
 
-    let shutdown_handle = client.try_clone().unwrap();
+    let close_handle = client.try_clone().unwrap();
     let shutdown = std::thread::spawn(move || {
         std::thread::sleep(read_timeout * 3);
-        shutdown_handle.shutdown(std::net::Shutdown::Read).unwrap();
+        close_handle.shutdown(std::net::Shutdown::Both).unwrap();
     });
 
     let started = Instant::now();
@@ -3245,6 +3250,10 @@ impl Io for FailingWriteStream {
     fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
         Err(Error::ConnectionReset)
     }
+
+    fn close(&self) {
+        self.0.close()
+    }
 }
 
 impl Reconnect for FailingWriteStream {
@@ -3254,10 +3263,6 @@ impl Reconnect for FailingWriteStream {
 
     fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
         self.0.sleep(duration, shutdown)
-    }
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.0.shutdown_read()
     }
 }
 
@@ -3306,7 +3311,7 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
 fn bound(limit: usize) -> BufferBound {
     BufferBound {
         limit,
-        end: IncomingMessages::ContractDataEnd,
+        end: &[IncomingMessages::ContractDataEnd],
     }
 }
 
@@ -3345,7 +3350,7 @@ fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize
 #[test]
 fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
 
     route(&stream, &bus, 4, RequestId::nth(100))?;
 
@@ -3359,7 +3364,7 @@ fn test_bounded_request_fails_after_limit_unread() -> Result<(), Error> {
 #[test]
 fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(RequestId::nth(100), &[], bound(2))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
 
     for _ in 0..6 {
         route(&stream, &bus, 1, RequestId::nth(100))?;
@@ -3371,8 +3376,8 @@ fn test_bounded_request_counts_unread_not_total() -> Result<(), Error> {
 #[test]
 fn test_reset_skips_overflowed_route() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let overflowed = bus.send_request_bounded(RequestId::nth(100), &[], bound(1))?;
-    let at_limit = bus.send_request_bounded(RequestId::nth(200), &[], bound(1))?;
+    let overflowed = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(1)))?;
+    let at_limit = bus.send_request_capped(RequestId::nth(200), &[], Some(bound(1)))?;
 
     route(&stream, &bus, 2, RequestId::nth(100))?;
     route(&stream, &bus, 1, RequestId::nth(200))?;
@@ -3394,7 +3399,7 @@ fn test_overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     use crate::subscriptions::DecoderContext;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
@@ -3461,7 +3466,7 @@ fn test_bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     // A result exactly `limit` rows long, read late: the end marker gets
     // through past the cap, so the stream ends normally.
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_bounded(CONTRACT_REQUEST_ID, &[], bound(1))?;
+    let sub = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);
@@ -3543,14 +3548,7 @@ fn sender_hash_deliver_aliased_hands_the_item_back_when_unrouted() {
 #[test]
 fn sender_hash_recovers_from_a_poisoned_lock() {
     let (routes, receiver, _lease) = sender_hash_route();
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = routes.senders.write().unwrap();
-                panic!("poison the route lock");
-            })
-            .join();
-    });
+    poison_with(|| routes.senders.write().unwrap());
     assert!(routes.senders.is_poisoned());
 
     routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
@@ -3560,21 +3558,30 @@ fn sender_hash_recovers_from_a_poisoned_lock() {
     assert_eq!(routes.len(), 0);
 }
 
+/// A panic under the broadcaster lock must not end notice delivery or panic
+/// every later broadcast on the dispatcher thread.
+#[test]
+fn notice_broadcaster_recovers_from_a_poisoned_lock() {
+    let broadcaster = NoticeBroadcaster::new();
+    poison_with(|| broadcaster.senders.lock().unwrap());
+    assert!(broadcaster.senders.is_poisoned());
+
+    let receiver = broadcaster.subscribe();
+    broadcaster.broadcast(Notice::synthesized(1, "after poison".into()));
+    broadcaster.close();
+
+    let received: Vec<Notice> = receiver.iter().collect();
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].message, "after poison");
+}
+
 /// A panic under the order-update slot's lock must not silently drop later
 /// order updates or leave the slot uncleanable.
 #[test]
 fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let stream_sub = bus.create_order_update_subscription()?;
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = bus.order_update_stream.lock().unwrap();
-                panic!("poison the order-update slot");
-            })
-            .join();
-    });
-    assert!(bus.order_update_stream.is_poisoned());
+    bus.order_taps.poison();
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::OpenOrder as i32,
@@ -3586,8 +3593,270 @@ fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
     bus.dispatch()?;
     assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
 
-    let registered = lock_slot(&bus.order_update_stream).as_ref().unwrap().lease.clone();
+    let registered = bus.order_taps.updates_lease().unwrap();
+    drop(stream_sub);
     bus.clear_order_update_stream(&registered);
-    assert!(lock_slot(&bus.order_update_stream).is_none(), "poisoned slot not cleared");
+    assert!(bus.order_taps.updates_lease().is_none(), "poisoned slot not cleared");
     Ok(())
+}
+
+// ---- outbound rate limiter (#950) ----
+
+fn rate_limited_bus(limiter: &crate::RateLimiter) -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
+    let (stream, bus) = make_bus();
+    bus.set_rate_limiter(limiter.clone());
+    (stream, bus)
+}
+
+#[test]
+fn test_rate_limiter_reserves_a_slot_per_send() -> Result<(), Error> {
+    let limiter = crate::RateLimiter::per_second(1000);
+    let (_stream, bus) = rate_limited_bus(&limiter);
+
+    let mut reserved = Vec::new();
+    for id in 1..=3 {
+        let _subscription = bus.send_request(RequestId::nth(id), b"request")?;
+        reserved.push(limiter.reserved_until().expect("send did not reserve"));
+    }
+    assert!(reserved[0] < reserved[1] && reserved[1] < reserved[2], "{reserved:?}");
+    Ok(())
+}
+
+#[test]
+fn test_rate_limited_cancel_is_written_without_waiting() -> Result<(), Error> {
+    // per_second(1): the first send spends the budget for a whole second.
+    let limiter = crate::RateLimiter::per_second(1);
+    let (stream, bus) = rate_limited_bus(&limiter);
+    bus.send_message(b"request")?;
+
+    let cancel = crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, b"");
+    let started = Instant::now();
+    bus.send_message(&cancel)?;
+    assert!(started.elapsed() < Duration::from_millis(200), "cancel waited {:?}", started.elapsed());
+    assert_eq!(count_frames(&stream.captured(), &cancel), 1);
+    Ok(())
+}
+
+/// A shared subscribe throttles before taking the `counts` lock, so a shared
+/// cancel on another thread is not held up behind its wait.
+#[test]
+fn test_throttled_shared_subscribe_does_not_hold_up_shared_cancel() -> Result<(), Error> {
+    // Burst of 1, then one every 500 ms.
+    let limiter = crate::RateLimiter::per_second(2);
+    let (stream, bus) = rate_limited_bus(&limiter);
+    let positions = positions_subscription(&bus)?;
+
+    let waiting = {
+        let bus = bus.clone();
+        thread::spawn(move || bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders").map(drop))
+    };
+    thread::sleep(Duration::from_millis(50)); // let it reach the limiter
+
+    let started = Instant::now();
+    drop(positions);
+    assert!(started.elapsed() < Duration::from_millis(200), "cancel waited {:?}", started.elapsed());
+    assert_eq!(count_frames(&stream.captured(), &positions_cancel()), 1);
+
+    waiting.join().unwrap()?;
+    assert_eq!(count_frames(&stream.captured(), b"open-orders"), 1);
+    Ok(())
+}
+
+/// A status that arrived before the stream opened — an order filled between
+/// `submit()` and `wait_for_fill` — is the stream's first item.
+#[test]
+fn test_order_status_stream_starts_with_earlier_status() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
+    bus.dispatch()?;
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
+    Ok(())
+}
+
+/// The stream gets a copy: the `place_order` subscription for the same order
+/// and the order-update stream still receive the frame.
+#[test]
+fn test_order_status_stream_takes_nothing_from_other_routes() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let order = bus.send_order_request(OrderId::from(7), &[])?;
+    let updates = bus.create_order_update_subscription()?;
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    bus.dispatch()?;
+
+    assert_eq!(statuses.next_timeout(TICK).expect("status stream got no message")?.order_id(), Some(7));
+    assert_eq!(order.next_timeout(TICK).expect("order route got no message")?.order_id(), Some(7));
+    assert_eq!(updates.next_timeout(TICK).expect("update stream got no message")?.order_id(), Some(7));
+    Ok(())
+}
+
+/// A status for an order no route claims still reaches its status stream.
+#[test]
+fn test_order_status_stream_sees_unrouted_status() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    bus.dispatch()?;
+
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
+    Ok(())
+}
+
+#[test]
+fn test_order_status_stream_ends_on_reset_and_shutdown() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    bus.reset();
+    assert!(matches!(statuses.next_timeout(TICK), Some(Err(Error::ConnectionReset))));
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    bus.request_shutdown();
+    assert!(matches!(statuses.next_timeout(TICK), Some(Err(Error::Shutdown))));
+    assert!(matches!(bus.create_order_status_subscription(OrderId::from(7)), Err(Error::Shutdown)));
+    Ok(())
+}
+
+/// Dropping a status stream (as a returning `wait_for_fill` does) releases
+/// its registration, and the order's entry with it.
+#[test]
+fn test_dropped_order_status_stream_is_released() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    assert_eq!(bus.order_taps.status_streams(OrderId::from(7)), 1);
+    drop(statuses);
+    drain_cleanup_signals(&bus);
+
+    assert!(!bus.order_taps.has_status_entry(OrderId::from(7)), "status stream outlived its drop");
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    Ok(())
+}
+
+// ---- physical close with retained owners (#979) ----
+
+/// A connected `TcpSocket`, its peer, and the listener, kept for reconnects.
+fn tcp_socket_pair() -> (TcpSocket, std::net::TcpStream, std::net::TcpListener) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let socket = TcpSocket::connect(&address, true).unwrap();
+    let (peer, _) = listener.accept().unwrap();
+    (socket, peer, listener)
+}
+
+/// The peer reads EOF within 1s: the other end closed, not just went quiet.
+/// Bytes sent before the close are skipped.
+fn assert_peer_sees_eof(mut peer: std::net::TcpStream) {
+    use std::io::Read;
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    let mut buf = [0u8; 1024];
+    loop {
+        match peer.read(&mut buf) {
+            Ok(0) => return,
+            Ok(_) => continue,
+            Err(e) => panic!("TCP socket retained: {e:?}"),
+        }
+    }
+}
+
+/// Close sends FIN while every clone is alive, wakes a blocked read well before
+/// its timeout, and is terminal.
+#[test]
+fn test_close_wakes_a_blocked_read_and_is_terminal() {
+    let (socket, peer, _listener) = tcp_socket_pair();
+    let socket = Arc::new(socket);
+    let reading = socket.clone();
+    let started = Instant::now();
+    let read = std::thread::spawn(move || reading.read_message());
+    std::thread::sleep(Duration::from_millis(50));
+
+    socket.close();
+    let read = read.join().unwrap();
+    assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
+    assert!(started.elapsed() < TWS_READ_TIMEOUT, "close waited out the read timeout");
+    assert_peer_sees_eof(peer);
+
+    socket.close();
+    assert!(matches!(socket.read_message(), Err(Error::Shutdown)));
+    assert!(matches!(socket.write_all(&[1]), Err(Error::Shutdown)));
+    assert!(matches!(socket.reconnect(), Err(Error::Shutdown)));
+}
+
+/// A close while reconnect waits on a stuck writer gets through at once, and
+/// the reconnect then drops its new connection instead of installing it.
+#[test]
+fn test_close_during_reconnect_closes_the_new_connection() {
+    let (socket, _peer, listener) = tcp_socket_pair();
+    let socket = Arc::new(socket);
+    // A write stuck on the dying stream.
+    let writer = socket.writer.lock().unwrap();
+    let reconnect = std::thread::spawn({
+        let socket = socket.clone();
+        move || socket.reconnect()
+    });
+    let (new_peer, _) = listener.accept().unwrap();
+    // Reconnect has connected and holds the reader; it now waits on the writer.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while socket.reader.try_lock().is_ok() {
+        assert!(Instant::now() < deadline, "reconnect never took the reader");
+        std::thread::yield_now();
+    }
+
+    let (closed_send, closed) = std::sync::mpsc::channel();
+    std::thread::spawn({
+        let socket = socket.clone();
+        move || {
+            socket.close();
+            closed_send.send(()).unwrap();
+        }
+    });
+    closed.recv_timeout(Duration::from_secs(1)).expect("close waited on the reconnect");
+
+    drop(writer);
+    let reconnected = reconnect.join().unwrap();
+    assert!(matches!(reconnected, Err(Error::Shutdown)), "reconnect: {reconnected:?}");
+    assert_peer_sees_eof(new_peer);
+}
+
+/// A blocking client on a dispatching bus over loopback TCP, and the peer end.
+fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::net::TcpStream) {
+    let (socket, peer, _listener) = tcp_socket_pair();
+    let connection = Connection::stubbed(socket, 28);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    bus.process_messages(crate::server_versions::PROTOBUF_REST_MESSAGES_3).unwrap();
+    let client = Client::stubbed(bus.clone(), crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    (client, bus, peer)
+}
+
+/// Retained clients and subscriptions cannot retain a disconnected physical socket.
+#[test]
+fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
+    let (client, _bus, peer) = tcp_client_with_peer();
+    let _subscription = client.order_update_stream().unwrap();
+
+    client.disconnect();
+    assert_peer_sees_eof(peer);
+    assert!(!client.is_connected());
+    // A second disconnect on the closed socket is a no-op.
+    client.disconnect();
+}
+
+/// Dropping the client closes the socket a retained subscription still holds.
+#[test]
+fn test_client_drop_closes_tcp_with_retained_subscription() {
+    let (client, bus, peer) = tcp_client_with_peer();
+    let _subscription = client.order_update_stream().unwrap();
+
+    drop(client);
+    assert_peer_sees_eof(peer);
+    assert!(!bus.is_connected());
 }

@@ -181,7 +181,8 @@ use crossbeam::channel;
 use std::time::Duration;
 
 /// Test decoder for the collect tests: the value `-1` marks a snapshot-end
-/// sentinel (mirrors `TickTypes::SnapshotEnd`).
+/// sentinel (mirrors `TickTypes::SnapshotEnd`), `0` a batch end (mirrors
+/// `AccountSummaryResult::End`).
 #[derive(Debug, PartialEq)]
 struct CollectItem(i32);
 
@@ -194,6 +195,10 @@ impl StreamDecoder<CollectItem> for CollectItem {
 
     fn is_snapshot_end(&self) -> bool {
         self.0 == -1
+    }
+
+    fn is_batch_end(&self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -517,6 +522,120 @@ fn test_collect_to_end_without_end_marker_is_unexpected_end() {
     assert!(matches!(sub.collect_to_end(), Err(Error::UnexpectedEndOfStream)));
 }
 
+// --- collect_to_end_within -----------------------------------------------
+
+#[test]
+fn test_collect_to_end_within_returns_items_at_end_marker() {
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert_eq!(
+        sub.collect_to_end_within(Duration::from_secs(30)).unwrap(),
+        vec![CollectItem(10), CollectItem(20)]
+    );
+}
+
+#[test]
+fn test_collect_to_end_within_times_out_without_end_marker() {
+    // Channel stays open with no end marker; rows read before the deadline are dropped.
+    let (sub, _keep) = collect_subscription(vec![data(10)], true);
+
+    let started = Instant::now();
+    assert!(matches!(sub.collect_to_end_within(Duration::from_millis(50)), Err(Error::Timeout)));
+    assert!(started.elapsed() >= Duration::from_millis(50));
+}
+
+#[test]
+fn test_collect_to_end_within_deadline_holds_while_items_are_ready() {
+    // The whole result is already queued, but the deadline has passed.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::ZERO), Err(Error::Timeout)));
+}
+
+#[test]
+fn test_collect_to_end_within_returns_terminal_error() {
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::from_secs(30)), Err(Error::ConnectionReset)));
+}
+
+#[test]
+fn test_collect_to_end_within_closed_channel_is_unexpected_end() {
+    // A closed channel also makes `next_timeout` return `None`, but early:
+    // not a timeout.
+    let (sub, _keep) = collect_subscription(vec![data(10)], false);
+
+    let started = Instant::now();
+    assert!(matches!(
+        sub.collect_to_end_within(Duration::from_secs(30)),
+        Err(Error::UnexpectedEndOfStream)
+    ));
+    assert!(started.elapsed() < Duration::from_secs(1));
+}
+
+#[test]
+fn test_next_batch_closes_after_quiet_period() {
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20)], true);
+
+    assert_eq!(
+        sub.next_batch(Duration::from_millis(50)).unwrap().unwrap(),
+        vec![CollectItem(10), CollectItem(20)]
+    );
+}
+
+#[test]
+fn test_next_batch_closes_at_batch_end_with_marker_last() {
+    // A 30s quiet period would take in 30 if the marker didn't close the batch.
+    let (sub, _keep) = collect_subscription(vec![data(10), data(0), data(30)], true);
+
+    assert_eq!(
+        sub.next_batch(Duration::from_secs(30)).unwrap().unwrap(),
+        vec![CollectItem(10), CollectItem(0)]
+    );
+}
+
+#[test]
+fn test_next_batch_waits_for_first_item() {
+    let (sub, keep) = collect_subscription(vec![], true);
+    let sender = keep.unwrap();
+    let start = std::time::Instant::now();
+    let late = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        sender.send(data(10)).unwrap();
+        sender
+    });
+
+    let batch = sub.next_batch(Duration::from_millis(50)).unwrap().unwrap();
+    let _sender = late.join().unwrap();
+
+    assert_eq!(batch, vec![CollectItem(10)]);
+    assert!(start.elapsed() >= Duration::from_millis(150));
+}
+
+#[test]
+fn test_next_batch_at_stream_end() {
+    let (sub, _keep) = collect_subscription(vec![data(10)], false);
+    assert_eq!(sub.next_batch(Duration::from_secs(30)).unwrap().unwrap(), vec![CollectItem(10)]);
+    assert!(sub.next_batch(Duration::from_secs(30)).is_none());
+
+    let (empty, _keep) = collect_subscription(vec![], false);
+    assert!(empty.next_batch(Duration::from_secs(30)).is_none());
+}
+
+#[test]
+fn test_next_batch_returns_terminal_error() {
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(sub.next_batch(Duration::from_secs(30)), Some(Err(Error::ConnectionReset))));
+}
+
+#[test]
+fn test_collect_to_end_within_stops_at_snapshot_end() {
+    let (sub, _keep) = collect_subscription(vec![data(10), data(-1), data(20)], true);
+
+    assert_eq!(sub.collect_to_end_within(Duration::from_secs(30)).unwrap(), vec![CollectItem(10)]);
+}
+
 // --- cancel_and_drain ----------------------------------------------------
 
 /// Decodes the integer at field 1, and has a cancel message.
@@ -590,6 +709,19 @@ fn test_drain_deadline_is_unconfirmed() {
         Drained::Unconfirmed
     );
     assert!(started.elapsed() >= Duration::from_millis(50));
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[test]
+fn test_drain_after_collect_timeout() {
+    // `collect_to_end_within` borrows, so a timeout can chain into the drain.
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1)]);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::from_millis(20)), Err(Error::Timeout)));
+    assert_eq!(
+        sub.cancel_and_drain(Instant::now() + Duration::from_millis(20)).unwrap(),
+        Drained::Unconfirmed
+    );
     assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
 }
 

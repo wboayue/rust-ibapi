@@ -13,11 +13,12 @@ pub mod types;
 use crate::contracts::Contract;
 use crate::Error;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 // Public types - always available regardless of feature flags
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 /// Account information as it appears in the TWS' Account Summary Window
 pub struct AccountSummary {
     /// The account identifier.
@@ -144,9 +145,96 @@ impl AccountSummaryTags {
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
+    ///
+    /// After [`End`](Self::End), TWS keeps sending rows on the same subscription.
     Summary(AccountSummary),
-    /// End marker for a batch of account summaries
+    /// End marker for the initial snapshot of account summaries.
+    ///
+    /// An `End` does not follow the rows TWS pushes later, so a consumer that wants complete
+    /// updates must decide for itself when a pushed batch is finished. See
+    /// [`Client::account_summary_snapshots`](crate::Client::account_summary_snapshots).
     End,
+}
+
+/// The latest account summary values, keyed by account, tag and currency.
+///
+/// Built from the rows of an account summary subscription with [`apply`](Self::apply). A push after
+/// the initial snapshot need not resend every row, so each snapshot holds the most recent value of
+/// every row seen so far, not just the latest batch.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct AccountSummarySnapshot {
+    rows: BTreeMap<(String, String, String), AccountSummary>,
+}
+
+impl AccountSummarySnapshot {
+    /// Stores a row as the latest value for its account, tag and currency.
+    ///
+    /// Returns `true` when the row was new or changed a value, `false` when it repeated the stored
+    /// row. Use it to fold an [`account_summary`](crate::Client::account_summary) subscription
+    /// yourself, e.g. with your own batching.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::{AccountSummary, AccountSummarySnapshot};
+    ///
+    /// let mut snapshot = AccountSummarySnapshot::default();
+    /// let row = AccountSummary {
+    ///     account: "DU1234567".to_string(),
+    ///     tag: "NetLiquidation".to_string(),
+    ///     value: "100.0".to_string(),
+    ///     currency: "USD".to_string(),
+    /// };
+    ///
+    /// assert!(snapshot.apply(row.clone()));
+    /// assert!(!snapshot.apply(row));
+    /// ```
+    pub fn apply(&mut self, summary: AccountSummary) -> bool {
+        let key = (summary.account.clone(), summary.tag.clone(), summary.currency.clone());
+        if self.rows.get(&key) == Some(&summary) {
+            return false;
+        }
+        self.rows.insert(key, summary);
+        true
+    }
+
+    /// Returns the latest row for an account, tag and currency.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountSummarySnapshot;
+    ///
+    /// let snapshot = AccountSummarySnapshot::default();
+    /// assert!(snapshot.get("DU1234567", "NetLiquidation", "USD").is_none());
+    /// ```
+    pub fn get(&self, account: &str, tag: &str, currency: &str) -> Option<&AccountSummary> {
+        self.rows.get(&(account.to_string(), tag.to_string(), currency.to_string()))
+    }
+
+    /// Iterates over the latest rows, ordered by account, tag and currency.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountSummarySnapshot;
+    ///
+    /// let snapshot = AccountSummarySnapshot::default();
+    /// assert_eq!(snapshot.iter().count(), 0);
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &AccountSummary> {
+        self.rows.values()
+    }
+
+    /// Returns the number of rows.
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Returns `true` when no row has been received.
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
 }
 
 /// Aggregated profit and loss metrics for the entire account.
@@ -448,7 +536,13 @@ pub struct VerificationResult {
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
-mod sync;
+pub(crate) mod sync;
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::AccountSummarySnapshots;
+
+#[cfg(feature = "async")]
+pub use r#async::AccountSummarySnapshots;
 
 #[cfg(feature = "async")]
 mod r#async;

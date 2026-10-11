@@ -124,6 +124,20 @@ fn check_stream<D: StreamDecoder<D>>(roster: &mut Roster) {
         .extend(check_decoder(std::any::type_name::<D>(), D::RESPONSE_MESSAGE_IDS, |message| {
             <D as StreamDecoder<D>>::decode(&context, message).map(|_| ())
         }));
+    // Compared as sets of discriminants: declaration order doesn't matter.
+    let ends: BTreeSet<i32> = D::RESPONSE_MESSAGE_IDS
+        .iter()
+        .filter(|kind| matches!(<D as StreamDecoder<D>>::decode(&context, &probe(**kind)), Err(Error::EndOfStream)))
+        .map(|kind| *kind as i32)
+        .collect();
+    let declared: BTreeSet<i32> = D::END_MESSAGES.iter().map(|kind| *kind as i32).collect();
+    if ends != declared {
+        roster.failures.push(format!(
+            "{} declares END_MESSAGES {:?}, but `decode` ends the stream on message ids {ends:?}",
+            std::any::type_name::<D>(),
+            D::END_MESSAGES
+        ));
+    }
 }
 
 /// The tick driver (`market_data/historical/common/tick.rs::classify`) filters on
@@ -147,7 +161,7 @@ fn check_all() -> Roster {
     use crate::market_data::historical::{HistoricalBarUpdate, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
     use crate::news::{NewsArticle, NewsBulletin};
-    use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
+    use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
     use crate::scanner::ScannerData;
     use crate::wsh::{WshEventData, WshMetadata};
 
@@ -174,6 +188,7 @@ fn check_all() -> Roster {
     check_stream::<NewsArticle>(&mut roster);
     check_stream::<NewsBulletin>(&mut roster);
     check_stream::<CancelOrder>(&mut roster);
+    check_stream::<OrderStatus>(&mut roster);
     check_stream::<Executions>(&mut roster);
     check_stream::<ExerciseOptions>(&mut roster);
     check_stream::<OrderUpdate>(&mut roster);

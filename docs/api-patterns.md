@@ -75,7 +75,12 @@ impl Client {
 
 When the helper doesn't fit, build on `client.request()` directly: the
 `RequestBuilder` holds the minted id (`builder.request_id()` for the encoder)
-and sends with `send`, `send_bounded` or `send_with_context`.
+and sends with `send`, `send_capped` or `send_with_context`. `send_capped`
+takes a builder's `buffer_limit` and reads the cap's end markers from the
+decoder's `StreamDecoder::END_MESSAGES` (a test checks the list matches the
+`decode` arms that end the stream). With none, only an error ends a capped
+stream. A builder that exposes `request_id()` before sending mints the id
+in its constructor and sends with `client.request_with_id(id)` instead.
 
 ### Shared-Channel Requests
 
@@ -602,24 +607,21 @@ let handles: Vec<_> = contracts
 ```
 
 ### Rate Limiting
+Install a `RateLimiter` on the client instead of pacing requests by hand. Pass
+clones of one limiter to every client on the same gateway; see the
+`RateLimiter` docs for what is counted, how cancels are treated and the
+default.
 ```rust
-use std::time::{Duration, Instant};
+use ibapi::{Client, RateLimiter};
 
-struct RateLimiter {
-    last_request: Instant,
-    min_interval: Duration,
-}
-
-impl RateLimiter {
-    fn wait_if_needed(&mut self) {
-        let elapsed = self.last_request.elapsed();
-        if elapsed < self.min_interval {
-            thread::sleep(self.min_interval - elapsed);
-        }
-        self.last_request = Instant::now();
-    }
-}
+let client = Client::builder()
+    .address("127.0.0.1:4002")
+    .client_id(100)
+    .rate_limiter(RateLimiter::default())
+    .connect()
+    .await?;
 ```
+Historical-data pacing (error 162) is a separate limit the library does not enforce.
 
 ### Reconnection Handling
 ```rust

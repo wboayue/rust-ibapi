@@ -1,6 +1,7 @@
 //! Synchronous implementation of account management functionality
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use time::OffsetDateTime;
 
@@ -10,6 +11,7 @@ use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, Error};
 
+use super::common::snapshots::SnapshotBuilder;
 use super::common::{decoders, encoders};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
@@ -171,6 +173,14 @@ impl Client {
 
     /// Requests a specific account's summary. Subscribes to the account summary as presented in the TWS' Account Summary tab. Data received is specified by using a specific tags value.
     ///
+    /// # Subscription lifetime
+    ///
+    /// The subscription stays open until it is dropped or cancelled. TWS first sends the requested
+    /// tags followed by [`AccountSummaryResult::End`], then keeps pushing
+    /// [`AccountSummaryResult::Summary`] rows without another `End`: when values change, and
+    /// periodically, when a push can resend rows whose values did not change. Dropping the subscription cancels
+    /// the request.
+    ///
     /// # Arguments
     /// * `group` - Set to "All" to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
     /// * `tags`  - List of the desired tags.
@@ -194,6 +204,60 @@ impl Client {
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
         request_helpers::blocking::request_with_id(self, Features::ACCOUNT_SUMMARY, |id| {
             encoders::encode_request_account_summary(id, group, tags)
+        })
+    }
+
+    /// Subscribe to account summary updates as complete snapshots.
+    ///
+    /// Wraps [`account_summary`](Self::account_summary) and keeps the latest value of every row, so
+    /// each [`AccountSummarySnapshot`] holds the whole account rather than only the rows TWS pushed
+    /// last. TWS sends one `End` marker after the initial snapshot and none after the rows it pushes
+    /// later, so the first snapshot is emitted at the first `End`, even when empty, and each later
+    /// one once no row has arrived for `quiet`. Pushes arrive when values change and periodically
+    /// (IB documents every three minutes), and a push can resend unchanged rows. A later snapshot is
+    /// emitted only when a row changed a value since the previous one. Choose `quiet` longer than
+    /// the gap between the rows of one push, which arrive within milliseconds of each other.
+    ///
+    /// To fold the rows with your own batching instead, use [`AccountSummarySnapshot::apply`].
+    ///
+    /// Notices that arrive on the subscription are logged at `warn!`. For other streams that dump
+    /// then push, batch with [`Subscription::next_batch`](crate::subscriptions::Subscription::next_batch).
+    ///
+    /// Dropping the returned iterator cancels the subscription.
+    ///
+    /// # Arguments
+    /// * `group` - Set to "All" to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
+    /// * `tags`  - List of the desired tags.
+    /// * `quiet` - How long without a row completes a pushed update.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::AccountSummaryTags;
+    /// use ibapi::accounts::types::AccountGroup;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let group = AccountGroup("All".to_string());
+    /// let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    ///
+    /// let snapshots = client
+    ///     .account_summary_snapshots(&group, tags, Duration::from_secs(1))
+    ///     .expect("error requesting account summary");
+    /// for snapshot in snapshots {
+    ///     let snapshot = snapshot.expect("account summary error");
+    ///     println!("{} rows", snapshot.len());
+    /// }
+    /// ```
+    pub fn account_summary_snapshots(&self, group: &AccountGroup, tags: &[&str], quiet: Duration) -> Result<AccountSummarySnapshots, Error> {
+        let subscription = self.account_summary(group, tags)?;
+
+        Ok(AccountSummarySnapshots {
+            subscription,
+            builder: SnapshotBuilder::default(),
+            quiet,
         })
     }
 
@@ -494,6 +558,51 @@ impl Client {
             || encoders::encode_verify_message(api_data),
             expect_proto(decoders::decode_verify_completed_proto),
         )
+    }
+}
+
+/// Complete account summary snapshots from [`Client::account_summary_snapshots`].
+pub struct AccountSummarySnapshots {
+    subscription: Subscription<AccountSummaryResult>,
+    builder: SnapshotBuilder,
+    quiet: Duration,
+}
+
+impl std::fmt::Debug for AccountSummarySnapshots {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountSummarySnapshots")
+            .field("quiet", &self.quiet)
+            .finish_non_exhaustive()
+    }
+}
+
+impl AccountSummarySnapshots {
+    /// Cancels the underlying subscription. Iteration then ends, after a final snapshot of any rows
+    /// not yet emitted.
+    pub fn cancel(&self) {
+        self.subscription.cancel();
+    }
+}
+
+impl Iterator for AccountSummarySnapshots {
+    type Item = Result<AccountSummarySnapshot, Error>;
+
+    /// Returns the next snapshot, or `None` once the subscription has ended.
+    ///
+    /// A snapshot completes at an `End` marker or after the `quiet` period without a row. Rows
+    /// received before the subscription ends are returned as a final snapshot.
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.subscription.next_batch(self.quiet) {
+                Some(Ok(batch)) => {
+                    if let Some(snapshot) = self.builder.fold(batch) {
+                        return Some(Ok(snapshot));
+                    }
+                }
+                Some(Err(e)) => return Some(Err(e)),
+                None => return self.builder.flush().map(Ok),
+            }
+        }
     }
 }
 

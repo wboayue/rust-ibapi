@@ -18,7 +18,9 @@ use crate::errors::Error;
 struct Inner {
     inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
-    closed: bool,
+    hung_up: bool,
+    /// Set by `AsyncIo::close`; unlike `hung_up`, `reopen` keeps it.
+    retired: bool,
     /// Remaining `reconnect()` calls that should fail before one succeeds.
     reconnect_failures: usize,
 }
@@ -44,15 +46,15 @@ impl MemoryStream {
 
     /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
     /// matching `AsyncTcpSocket::read_message`'s behavior on a closed peer.
-    pub fn close(&self) {
-        self.inner.lock().unwrap().closed = true;
+    pub fn hang_up(&self) {
+        self.inner.lock().unwrap().hung_up = true;
         self.notify.notify_waiters();
     }
 
-    /// Undo a `close`, so a stream broken to trigger a reconnect can serve
+    /// Undo a `hang_up`, so a stream broken to trigger a reconnect can serve
     /// the replayed handshake and stay readable afterwards.
     pub fn reopen(&self) {
-        self.inner.lock().unwrap().closed = false;
+        self.inner.lock().unwrap().hung_up = false;
     }
 
     /// Schedule the next `count` `reconnect()` calls to fail with
@@ -80,10 +82,13 @@ impl AsyncIo for MemoryStream {
 
             {
                 let mut inner = self.inner.lock().unwrap();
+                if inner.retired {
+                    return Err(Error::Shutdown);
+                }
                 if let Some(body) = inner.inbound.pop_front() {
                     return Ok(body);
                 }
-                if inner.closed {
+                if inner.hung_up {
                     return Err(Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed")));
                 }
             }
@@ -93,8 +98,19 @@ impl AsyncIo for MemoryStream {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.inner.lock().unwrap().outbound.extend_from_slice(buf);
+        let mut inner = self.inner.lock().unwrap();
+        if inner.retired {
+            return Err(Error::Shutdown);
+        }
+        inner.outbound.extend_from_slice(buf);
         Ok(())
+    }
+
+    /// Terminal, like TCP: unlike `hang_up`, `reopen` can't undo
+    /// it. Same as the sync `MemoryStream`'s `Io::close`.
+    async fn close(&self) {
+        self.inner.lock().unwrap().retired = true;
+        self.notify.notify_waiters();
     }
 }
 
@@ -104,6 +120,9 @@ impl AsyncReconnect for MemoryStream {
         // Scope the std::sync MutexGuard so it cannot be held across a future .await.
         let should_fail = {
             let mut inner = self.inner.lock().unwrap();
+            if inner.retired {
+                return Err(Error::Shutdown);
+            }
             if inner.reconnect_failures > 0 {
                 inner.reconnect_failures -= 1;
                 true

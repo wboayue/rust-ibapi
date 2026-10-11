@@ -1,6 +1,7 @@
 pub(super) mod constants;
 pub(super) mod decoders;
 pub(crate) mod encoders;
+pub(super) mod snapshots;
 pub(super) mod stream_decoders;
 
 #[cfg(test)]

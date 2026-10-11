@@ -2,6 +2,7 @@
 
 use super::common::{decoders, encoders};
 use super::*;
+use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
@@ -86,17 +87,9 @@ impl Client {
             )?
         }
 
-        let request_id = self.mint_request_id();
-        let request = encoders::encode_scanner_subscription(request_id.raw(), subscription, filter)?;
-        let internal_subscription = self.send_request(request_id, request).await?;
-
-        Ok(Subscription::new_from_internal(
-            internal_subscription,
-            self.message_bus.clone(),
-            Some(request_id.raw()),
-            None,
-            self.decoder_context(),
-        ))
+        let builder = self.request();
+        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription, filter)?;
+        builder.send(request).await
     }
 }
 

@@ -1,5 +1,7 @@
 //! Common utilities for subscription processing
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::errors::Error;
@@ -71,6 +73,72 @@ pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Opti
             None
         }
         Err(e) => Some(Err(e)),
+    }
+}
+
+/// Why a collect loop stopped.
+#[derive(Debug)]
+pub(crate) enum CollectStop {
+    /// TWS sent the end marker.
+    EndMarker,
+    /// The stream ended without the end marker (a closed channel).
+    Closed,
+    /// The deadline passed first.
+    Deadline,
+    /// A snapshot-end sentinel arrived, or the caller's stop predicate fired.
+    Stopped,
+    /// A terminal error.
+    Error(Error),
+}
+
+impl CollectStop {
+    /// The `collect_to_end` result: complete rows, or why they aren't.
+    pub(crate) fn into_result<T>(self, rows: Vec<T>) -> Result<Vec<T>, Error> {
+        match self {
+            CollectStop::EndMarker | CollectStop::Stopped => Ok(rows),
+            CollectStop::Closed => Err(Error::UnexpectedEndOfStream),
+            CollectStop::Deadline => Err(Error::Timeout),
+            CollectStop::Error(e) => Err(e),
+        }
+    }
+
+    /// The `next_batch` result: the rows read, `None` once the stream has ended
+    /// with none, or the terminal error (rows of the partial batch dropped).
+    pub(crate) fn into_batch<T>(self, rows: Vec<T>) -> Option<Result<Vec<T>, Error>> {
+        match self {
+            CollectStop::Error(e) => Some(Err(e)),
+            _ => (!rows.is_empty()).then_some(Ok(rows)),
+        }
+    }
+}
+
+/// How long a collect loop reads, generic over the side's `Instant`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Bound<I> {
+    /// Until the stream ends or the loop is told to stop.
+    None,
+    /// Until a fixed instant.
+    At(I),
+    /// Until this long passes without a row, counted from the latest row; no
+    /// limit before the first.
+    Idle(Duration),
+}
+
+/// Applies one item to `rows`. Returns `Some` when collection ends: on a
+/// terminal error, a snapshot-end sentinel (not appended), or once `stop`
+/// fires on the rows (the triggering row is appended). Notices are logged.
+pub(crate) fn collect_step<T: StreamDecoder<T>>(
+    rows: &mut Vec<T>,
+    item: Result<SubscriptionItem<T>, Error>,
+    stop: &mut impl FnMut(&[T]) -> bool,
+) -> Option<CollectStop> {
+    match filter_notice(item)? {
+        Ok(value) if value.is_snapshot_end() => Some(CollectStop::Stopped),
+        Ok(value) => {
+            rows.push(value);
+            stop(rows).then_some(CollectStop::Stopped)
+        }
+        Err(e) => Some(CollectStop::Error(e)),
     }
 }
 
@@ -192,6 +260,14 @@ pub(crate) trait StreamDecoder<T> {
     /// handshake is their only caller now.
     fn decode(context: &DecoderContext, message: &ResponseMessage) -> Result<T, Error>;
 
+    /// The messages TWS sends after the last item, which `decode` turns into
+    /// `Error::EndOfStream`. **Exactly** those: `response_message_ids_tests.rs`
+    /// checks the list against the `decode` arms. A `buffer_limit` cap always
+    /// lets them through, so a result that fills the cap exactly still ends
+    /// normally. Empty (the default): the stream has no end marker, and only
+    /// an error ends a capped stream.
+    const END_MESSAGES: &'static [IncomingMessages] = &[];
+
     /// Keep a request-bound error notice nonterminal when this decoder knows
     /// the request remains active: the subscription yields it as
     /// `SubscriptionItem::Notice` and keeps reading. The notice keeps its
@@ -218,6 +294,14 @@ pub(crate) trait StreamDecoder<T> {
     /// Returns true if this decoded value represents the end of a snapshot subscription
     #[allow(unused)]
     fn is_snapshot_end(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this decoded value is an end marker that closes a batch
+    /// on a stream that stays open, such as the `End` after an initial dump.
+    /// [`next_batch`](crate::subscriptions::Subscription::next_batch) closes a
+    /// batch on it.
+    fn is_batch_end(&self) -> bool {
         false
     }
 }

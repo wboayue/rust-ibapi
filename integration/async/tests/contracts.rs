@@ -4,7 +4,8 @@ use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::subscriptions::{Drained, SubscriptionItem};
 use ibapi::Client;
 use ibapi::Error;
-use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, GATEWAY};
+use ibapi_integration_async::read_to_terminal;
+use ibapi_test::{rate_limit, yyyymm_months_from_now, ClientId, AAPL_CON_ID, GATEWAY};
 use serial_test::serial;
 
 #[tokio::test]
@@ -103,14 +104,7 @@ async fn contract_details_stream_buffer_limit_fails_a_stalled_reader() {
         .expect("subscribe failed");
     tokio::time::sleep(std::time::Duration::from_secs(2)).await; // stall: let TWS send far more than 5 rows
 
-    let mut rows = 0;
-    let outcome = loop {
-        match subscription.next().await {
-            Some(Ok(SubscriptionItem::Data(_))) => rows += 1,
-            Some(Ok(SubscriptionItem::Notice(notice))) => eprintln!("notice: {notice}"),
-            other => break other,
-        }
-    };
+    let (rows, outcome) = read_to_terminal(&mut subscription).await;
     // At least the 5 queued rows; more if TWS was still sending when the
     // reader woke and freed slots before the overflow.
     assert!(rows >= 5, "every queued row is delivered before the error, got {rows}");
@@ -283,4 +277,41 @@ async fn option_chain_returns_data() {
         .expect("option chain subscription error");
     assert!(!chain.expirations.is_empty());
     assert!(!chain.strikes.is_empty());
+}
+
+#[tokio::test]
+async fn option_chain_request_id_and_buffer_limit_read_to_end() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let request = client.option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID).buffer_limit(256);
+    assert!(request.request_id() > 0, "request id is known before sending");
+
+    let mut subscription = request.subscribe().await.expect("option_chain failed");
+    let (chains, outcome) = read_to_terminal(&mut subscription).await;
+    // A reader that keeps up never hits the cap; the stream ends on TWS's end marker.
+    assert!(outcome.is_none(), "got {outcome:?}");
+    assert!(chains > 0, "expected at least one chain");
+}
+
+#[tokio::test]
+async fn option_chain_buffer_limit_fails_a_stalled_reader() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let mut subscription = client
+        .option_chain("AAPL", SecurityType::Stock, AAPL_CON_ID)
+        .buffer_limit(3)
+        .subscribe()
+        .await
+        .expect("option_chain failed");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await; // stall: AAPL lists far more than 3 exchanges
+
+    let (chains, outcome) = read_to_terminal(&mut subscription).await;
+    assert!(chains >= 3, "every queued chain is delivered before the error, got {chains}");
+    assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 3 }))), "got {outcome:?}");
 }

@@ -213,6 +213,22 @@ if client.is_connected() {
 
 2. **Message Ordering**: TWS doesn't guarantee message ordering for different request types.
 
-3. **Rate Limiting**: TWS has rate limits. The library doesn't enforce these - applications must manage their request rates.
+3. **Rate Limiting**: TWS limits outbound messages. The library enforces this only when a client is built with `ClientBuilder::rate_limiter` (off by default); the limiter sits in the bus write funnel, so every message after the handshake is counted. See `RateLimiter` for the rules. Historical-data pacing and market-data lines remain the application's job.
 
 4. **Error Recovery**: Connection errors trigger automatic reconnection. Application errors must be handled by the caller.
+
+### Physical socket teardown
+
+Stopping dispatch does not release a socket whose bus still has owners, so
+shutdown closes it explicitly (`Io::close` / `AsyncIo::close`). Close is
+idempotent and terminal: pending and later I/O fails with `Error::Shutdown`, and
+reconnect refuses, so the retired socket can't be revived.
+
+- **Async:** disconnect closes both owned TCP halves before joining dispatch;
+  dispatcher exit performs the same close for best-effort client drop. Close
+  latches a flag first, which wakes blocked reads and writes so their locks free
+  up.
+- **Blocking:** `request_shutdown`, which every disconnect, drop and dispatcher
+  exit runs, shuts down both directions on a clone of the stream. That is
+  socket-level, so it sends FIN and fails I/O on every clone. Reconnect
+  re-checks the closed flag under the same lock before installing a new stream.

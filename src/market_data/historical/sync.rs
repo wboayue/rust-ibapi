@@ -262,7 +262,7 @@ pub(crate) fn historical_data(
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
 ) -> Result<HistoricalData, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, Some(what_to_show))?;
+    common::validate_historical_data(client.server_version(), contract, end_date, what_to_show)?;
 
     retry_on_connection_reset(client, || {
         let builder = client.request();
@@ -272,7 +272,7 @@ pub(crate) fn historical_data(
             end_date,
             duration,
             bar_size,
-            Some(what_to_show),
+            what_to_show,
             trading_hours.use_rth(),
             false,
             &Vec::<crate::contracts::TagValue>::default(),
@@ -310,6 +310,7 @@ pub(crate) fn historical_data_stream(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         check_version(client.server_version(), Features::TRADING_CLASS)?;
@@ -322,13 +323,13 @@ pub(crate) fn historical_data_stream(
         None, // IBKR requires end_date=None when keep_up_to_date=true
         duration,
         bar_size,
-        Some(what_to_show),
+        what_to_show,
         trading_hours.use_rth(),
         true, // keep_up_to_date — the whole point of .stream()
         &Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    builder.send::<HistoricalBarUpdate>(request)
+    builder.send_capped::<HistoricalBarUpdate>(request, buffer_limit)
 }
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the
@@ -371,7 +372,7 @@ pub(crate) fn historical_schedule(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
 ) -> Result<Schedule, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
+    common::validate_historical_data(client.server_version(), contract, end_date, WhatToShow::Schedule)?;
 
     request_helpers::blocking::one_shot_by_request_id(
         client,
@@ -382,7 +383,7 @@ pub(crate) fn historical_schedule(
                 end_date,
                 duration,
                 BarSize::Day,
-                Some(WhatToShow::Schedule),
+                WhatToShow::Schedule,
                 true,
                 false,
                 &Vec::<crate::contracts::TagValue>::default(),
@@ -627,7 +628,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
     /// Wait up to `duration` for the next item to arrive.
     ///
-    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next).
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next). `None` means
+    /// either that `duration` passed or that the stream ended; terminal errors
+    /// come as `Some(Err(_))`.
     ///
     /// # Examples
     ///

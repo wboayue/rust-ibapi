@@ -258,7 +258,7 @@ fn handshake_unexpected_eof_returns_connection_rejected() {
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
 
     // EOF before any handshake response: read_message → UnexpectedEof.
-    stream.close();
+    stream.hang_up();
 
     let err = connection.handshake().expect_err("must surface rejection error");
     match err {
@@ -305,6 +305,10 @@ impl Io for SlowSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf)
     }
+
+    fn close(&self) {
+        self.stream.close()
+    }
 }
 
 impl Reconnect for SlowSocket {
@@ -313,10 +317,6 @@ impl Reconnect for SlowSocket {
     }
 
     fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.stream.shutdown_read()
-    }
 }
 
 impl Stream for SlowSocket {}
@@ -419,6 +419,10 @@ impl Io for TestSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf)
     }
+
+    fn close(&self) {
+        self.stream.close()
+    }
 }
 
 impl Reconnect for TestSocket {
@@ -437,10 +441,6 @@ impl Reconnect for TestSocket {
     fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
         self.state.sleep_started.store(true, Ordering::SeqCst);
         shutdown.wait_timeout(duration)
-    }
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.stream.shutdown_read()
     }
 }
 
@@ -510,7 +510,7 @@ fn dispatcher_exits_when_shutdown_requested_during_reconnect() {
 
     // Break the read: the dispatcher enters reconnect and waits out its
     // backoff between failing connects.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect backoff to start", || socket.sleep_started());
 
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -556,7 +556,7 @@ fn dispatcher_exits_when_shutdown_requested_during_a_successful_reconnect() {
 
     // Break the read: the dispatcher enters reconnect, waits out its backoff
     // and blocks on the gated connect.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started());
 
     // Queue the handshake the post-reconnect session replays, then request
@@ -604,7 +604,7 @@ fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
 
     // Break the read: the dispatcher enters reconnect and blocks on the gated
     // connect, which only `release` below completes.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started());
 
     let item = subscription
@@ -659,7 +659,7 @@ fn one_shot_request_is_retried_after_the_reconnect() {
     wait_for("the first request", || count_writes(&stream, &request) == 1);
 
     // Break the connection while the one-shot is waiting for its answer.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started());
 
     // Nothing was resent into the reconnect: the retry is parked in

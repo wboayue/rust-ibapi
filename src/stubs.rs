@@ -39,7 +39,7 @@ pub(crate) struct MessageBusStub {
     /// Pre-built responses, served in order. When non-empty, supersedes
     /// `response_messages`.
     pub ordered_responses: Vec<ResponseMessage>,
-    /// The `limit` of each `send_request_bounded` call, in order. The stub
+    /// The `limit` of each bounded `send_request_capped` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
     pub buffer_limits: RwLock<Vec<usize>>,
     /// The request id of each `send_executions_request` call, in order.
@@ -57,6 +57,10 @@ pub(crate) struct MessageBusStub {
     /// logging a warning per subscription.
     #[cfg(feature = "sync")]
     signals: (channel::Sender<Signal>, channel::Receiver<Signal>),
+    /// Senders of stubbed status streams, held so a stream stays open after
+    /// its scripted items, as a real one does until its order ends.
+    #[cfg(feature = "async")]
+    status_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -79,6 +83,8 @@ impl Default for MessageBusStub {
             runtime: tokio::runtime::Handle::try_current().ok(),
             #[cfg(feature = "sync")]
             signals: channel::unbounded(),
+            #[cfg(feature = "async")]
+            status_senders: Mutex::default(),
         }
     }
 }
@@ -92,6 +98,12 @@ impl Drop for MessageBusStub {
 }
 
 impl MessageBusStub {
+    fn record_buffer_limit(&self, bound: Option<crate::transport::BufferBound>) {
+        if let Some(bound) = bound {
+            self.buffer_limits.write().unwrap().push(bound.limit);
+        }
+    }
+
     pub fn with_responses(response_messages: Vec<String>) -> Self {
         let mut stub = Self::default();
         stub.response_messages = response_messages;
@@ -213,17 +225,13 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
-    fn send_request(&self, request_id: RequestId, message: &[u8]) -> Result<InternalSubscription, Error> {
-        Ok(mock_request(self, MockRoute::Request(request_id), message))
-    }
-
-    fn send_request_bounded(
+    fn send_request_capped(
         &self,
         request_id: RequestId,
         message: &[u8],
-        bound: crate::transport::BufferBound,
+        bound: Option<crate::transport::BufferBound>,
     ) -> Result<InternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(bound.limit);
+        self.record_buffer_limit(bound);
         Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
 
@@ -234,6 +242,21 @@ impl MessageBus for MessageBusStub {
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message.to_vec());
         Ok(())
+    }
+
+    fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
+        // Nothing is written, so nothing is recorded.
+        let (sender, receiver) = channel::unbounded();
+        for item in self.routed_items_for_request() {
+            sender.send(item).unwrap();
+        }
+        Ok(SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals.0.clone())
+            .lease(Lease::new())
+            .order_status(order_id)
+            .build())
     }
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
@@ -331,17 +354,13 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
 #[cfg(feature = "async")]
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
-    async fn send_request(&self, _request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        Ok(self.seeded_subscription(message))
-    }
-
-    async fn send_request_bounded(
+    async fn send_request_capped(
         &self,
         _request_id: RequestId,
         message: Vec<u8>,
-        bound: crate::transport::BufferBound,
+        bound: Option<crate::transport::BufferBound>,
     ) -> Result<AsyncInternalSubscription, Error> {
-        self.buffer_limits.write().unwrap().push(bound.limit);
+        self.record_buffer_limit(bound);
         Ok(self.seeded_subscription(message))
     }
 
@@ -372,6 +391,16 @@ impl AsyncMessageBus for MessageBusStub {
             self.request_messages.write().unwrap().push(message);
         }
         Ok(())
+    }
+
+    async fn create_order_status_subscription(&self, _order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
+        // Nothing is written, so nothing is recorded.
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
+        for item in self.routed_items_for_request() {
+            sender.send(item).unwrap();
+        }
+        self.status_senders.lock().unwrap().push(sender);
+        Ok(AsyncInternalSubscription::new(receiver))
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {

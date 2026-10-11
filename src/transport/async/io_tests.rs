@@ -48,6 +48,25 @@ async fn abandon_write(socket: &AsyncTcpSocket, bytes: &[u8]) {
     assert!(written.is_err(), "write completed; the peer should not be reading yet");
 }
 
+/// Wait until a pending write holds the writer (stalled on the full buffer).
+async fn until_writer_held(socket: &AsyncTcpSocket) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while socket.writer.try_lock().is_ok() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("large write never took the writer");
+}
+
+/// The peer sees EOF: our side released its socket.
+pub(in crate::transport::r#async) async fn assert_peer_sees_eof(mut peer: TcpStream) {
+    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
+        .await
+        .expect("TCP socket retained");
+    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+}
+
 /// Everything the peer receives until the connection closes.
 fn read_to_end(mut peer: TcpStream) -> tokio::task::JoinHandle<Vec<u8>> {
     tokio::spawn(async move {
@@ -93,14 +112,7 @@ async fn test_write_abandoned_before_it_starts_sends_nothing() {
         let large = large.clone();
         async move { socket.write_all(&large).await }
     });
-    // Wait until the large write holds the writer (and stalls on the full buffer).
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while socket.writer.try_lock().is_ok() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("large write never took the writer");
+    until_writer_held(&socket).await;
     abandon_write(&socket, &[0xBB; 3]).await;
 
     let reader = read_to_end(peer);
@@ -130,4 +142,64 @@ async fn test_reconnect_clears_a_broken_connection() {
 
     peer.write_all(&encode_raw_length(&[0, 0, 0, 9, 42])).await.unwrap();
     assert_eq!(socket.read_message().await.unwrap(), [0, 0, 0, 9, 42]);
+}
+
+/// Terminal close interrupts a blocked read, releases TCP, and cannot reconnect.
+#[tokio::test]
+async fn test_physical_close_wakes_read_and_is_terminal() {
+    let (socket, peer, _listener) = socket_pair().await;
+    let reading = socket.clone();
+    let read = tokio::spawn(async move { reading.read_message().await });
+    tokio::task::yield_now().await;
+    tokio::time::timeout(Duration::from_secs(1), socket.close())
+        .await
+        .expect("close blocked on read");
+    let read = read.await.unwrap();
+    assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
+    assert_peer_sees_eof(peer).await;
+    socket.close().await;
+    assert!(matches!(socket.write_all(&[1]).await, Err(Error::Shutdown)));
+    assert!(matches!(socket.read_message().await, Err(Error::Shutdown)));
+    assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
+}
+
+/// A sender queued before close cannot write when its lock becomes available.
+#[tokio::test]
+async fn test_physical_close_prevents_a_queued_write() {
+    let (socket, peer, _listener) = socket_pair().await;
+    let writer = socket.writer.lock().await;
+    let sending = socket.clone();
+    let write = tokio::spawn(async move { sending.write_all(&[0xAA; 4]).await });
+    tokio::task::yield_now().await;
+    let closing = socket.clone();
+    let close = tokio::spawn(async move { closing.close().await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !socket.is_closed() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("close never latched");
+    drop(writer);
+    tokio::time::timeout(Duration::from_secs(1), close).await.unwrap().unwrap();
+    assert!(matches!(write.await.unwrap(), Err(Error::Shutdown)));
+    assert_peer_sees_eof(peer).await;
+}
+
+/// Close wakes a write stalled on a full send buffer, rather than waiting for
+/// the peer to drain it.
+#[tokio::test]
+async fn test_physical_close_wakes_a_backpressured_write() {
+    let (socket, _peer, _listener) = socket_pair().await;
+    let write = tokio::spawn({
+        let socket = socket.clone();
+        async move { socket.write_all(&vec![0xAA; LARGE]).await }
+    });
+    until_writer_held(&socket).await;
+
+    tokio::time::timeout(Duration::from_secs(1), socket.close())
+        .await
+        .expect("close blocked on write");
+    let written = write.await.unwrap();
+    assert!(matches!(written, Err(Error::Shutdown)), "write: {written:?}");
 }

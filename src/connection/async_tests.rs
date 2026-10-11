@@ -191,7 +191,7 @@ async fn handshake_unexpected_eof_returns_connection_rejected() {
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
 
     // EOF before any handshake response: read_message → UnexpectedEof.
-    stream.close();
+    stream.hang_up();
 
     let err = connection.handshake().await.expect_err("must surface rejection error");
     match err {
@@ -391,6 +391,10 @@ impl AsyncIo for TestSocket {
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf).await
     }
+
+    async fn close(&self) {
+        self.stream.close().await;
+    }
 }
 
 #[async_trait::async_trait]
@@ -485,7 +489,7 @@ async fn dispatcher_task_finishes_when_shutdown_requested_during_reconnect() {
 
     // Break the read: the dispatcher enters reconnect, waits out its backoff
     // and blocks on the gated connect.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started()).await;
 
     // Request shutdown the way `Client::drop` does, then let the connect and
@@ -533,7 +537,7 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
 
     // Break the read: the dispatcher enters reconnect and blocks on the gated
     // connect, which only `release` below completes.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started()).await;
 
     let item = tokio::time::timeout(Duration::from_secs(5), subscription.next())
@@ -589,7 +593,7 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     wait_for("the first request", || count_writes(&stream, &request) == 1).await;
 
     // Break the connection while the one-shot is waiting for its answer.
-    stream.close();
+    stream.hang_up();
     wait_for("reconnect to start", || socket.reconnect_started()).await;
 
     // Nothing was resent into the reconnect: the retry is parked in

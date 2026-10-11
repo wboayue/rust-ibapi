@@ -27,6 +27,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::HistoricalNewsEnd,
         IncomingMessages::TickNews,
     ];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::HistoricalNewsEnd];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {

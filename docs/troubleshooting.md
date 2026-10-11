@@ -66,22 +66,51 @@ Error: Connection timeout
 3. Ensure correct IP address (usually 127.0.0.1 for local)
 4. Try increasing connection timeout in code
 
-### Unrecognized Timezone From IB Gateway
+## Time Zones
 
-**Symptom:** `client.time_zone()` and `client.connection_time()` return `None`,
-and the connect logs a warning (historical-data decoding fails with the same
-text as `Error::UnsupportedTimeZone`):
+<!-- Anchor #gateway-time-zone is linked from Client::time_zone (sync + async),
+register_timezone_alias and Error::UnsupportedTimeZone; keep the heading. -->
+### Gateway Time Zone
+
+IB Gateway reports times as a wall-clock reading plus a zone name, such as
+`20261009 10:00:00 US/Eastern`. The crate resolves the name to an IANA zone to
+turn the reading into an instant. The zone is used in three places:
+
+| Where | Zone name comes from | If the name is unrecognized |
+|---|---|---|
+| `Client::time_zone()`, `Client::connection_time()` | the connection handshake (the gateway host's OS locale) | both `None`, warning logged at connect; the connection succeeds |
+| `HistoricalDataEnd` start/end | each timestamp, when the gateway sends instrument time zone (the default) | `Error::UnsupportedTimeZone` |
+| `HistoricalSchedule` sessions | the schedule's `time_zone` field | `Error::UnsupportedTimeZone` |
+
+It is not used anywhere else. Historical request end dates are always sent in
+UTC, and bar and tick timestamps arrive as epoch seconds. Text time fields such
+as `Execution::time` and `OrderState::completed_time` are passed through as the
+gateway sent them, not parsed. `Client::time_zone()` is informational: the crate
+never converts your data with it.
+
+Setting the gateway's "Send instrument-specific attributes ... in" option to
+UTC format makes `HistoricalDataEnd` timestamps zone-less, so they need no lookup.
+
+**Lookup order** (first match wins, names are matched exactly):
+1. Aliases you register (`register_timezone_alias`, `IBAPI_TIMEZONE_ALIASES`)
+2. The built-in alias table (non-standard names gateways are known to send, e.g. `BRT`, `China Standard Time`)
+3. Mojibake from a Chinese-locale gateway → `Asia/Shanghai`
+4. IANA names (`America/Sao_Paulo`, `US/Eastern`) and Windows registry ids (`E. South America Standard Time`)
+
+A reading in a daylight-saving fold (clocks went back) takes the earlier
+offset; one in a gap (clocks went forward) is pushed forward by the gap.
+
+### Unrecognized Time Zone
+
+**Symptom:** one of the outcomes in the table above, with this text in the
+connect warning or the error:
 ```
 unrecognized IB Gateway timezone "Some Standard Time"; register a mapping with
 `ibapi::register_timezone_alias("Some Standard Time", "<IANA-name>")` ...
 ```
 
-Names are matched exactly; a partial or unknown name is never guessed at.
-IB Gateway sends a free-form timezone string from the host machine's OS locale.
-On non-English Windows installations the string may be a Windows TZ name we
-don't recognize, mojibake from a non-UTF-8 locale, or any other label produced
-by the gateway's environment. The crate ships with a built-in mapping table,
-but you can extend it at runtime without rebuilding.
+On non-English Windows the name may be a locale-specific label or mojibake.
+Extend the alias table at runtime without rebuilding:
 
 **Option 1 — programmatic (one mapping at a time):**
 ```rust

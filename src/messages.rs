@@ -589,98 +589,206 @@ impl std::fmt::Display for OutgoingMessages {
     }
 }
 
+impl TryFrom<i32> for OutgoingMessages {
+    type Error = Error;
+
+    fn try_from(id: i32) -> Result<Self, Self::Error> {
+        match id {
+            1 => Ok(OutgoingMessages::RequestMarketData),
+            2 => Ok(OutgoingMessages::CancelMarketData),
+            3 => Ok(OutgoingMessages::PlaceOrder),
+            4 => Ok(OutgoingMessages::CancelOrder),
+            5 => Ok(OutgoingMessages::RequestOpenOrders),
+            6 => Ok(OutgoingMessages::RequestAccountData),
+            7 => Ok(OutgoingMessages::RequestExecutions),
+            8 => Ok(OutgoingMessages::RequestIds),
+            9 => Ok(OutgoingMessages::RequestContractData),
+            10 => Ok(OutgoingMessages::RequestMarketDepth),
+            11 => Ok(OutgoingMessages::CancelMarketDepth),
+            12 => Ok(OutgoingMessages::RequestNewsBulletins),
+            13 => Ok(OutgoingMessages::CancelNewsBulletin),
+            14 => Ok(OutgoingMessages::ChangeServerLog),
+            15 => Ok(OutgoingMessages::RequestAutoOpenOrders),
+            16 => Ok(OutgoingMessages::RequestAllOpenOrders),
+            17 => Ok(OutgoingMessages::RequestManagedAccounts),
+            18 => Ok(OutgoingMessages::RequestFA),
+            19 => Ok(OutgoingMessages::ReplaceFA),
+            20 => Ok(OutgoingMessages::RequestHistoricalData),
+            21 => Ok(OutgoingMessages::ExerciseOptions),
+            22 => Ok(OutgoingMessages::RequestScannerSubscription),
+            23 => Ok(OutgoingMessages::CancelScannerSubscription),
+            24 => Ok(OutgoingMessages::RequestScannerParameters),
+            25 => Ok(OutgoingMessages::CancelHistoricalData),
+            49 => Ok(OutgoingMessages::RequestCurrentTime),
+            50 => Ok(OutgoingMessages::RequestRealTimeBars),
+            51 => Ok(OutgoingMessages::CancelRealTimeBars),
+            52 => Ok(OutgoingMessages::RequestFundamentalData),
+            53 => Ok(OutgoingMessages::CancelFundamentalData),
+            54 => Ok(OutgoingMessages::ReqCalcImpliedVolat),
+            55 => Ok(OutgoingMessages::ReqCalcOptionPrice),
+            56 => Ok(OutgoingMessages::CancelImpliedVolatility),
+            57 => Ok(OutgoingMessages::CancelOptionPrice),
+            58 => Ok(OutgoingMessages::RequestGlobalCancel),
+            59 => Ok(OutgoingMessages::RequestMarketDataType),
+            61 => Ok(OutgoingMessages::RequestPositions),
+            62 => Ok(OutgoingMessages::RequestAccountSummary),
+            63 => Ok(OutgoingMessages::CancelAccountSummary),
+            64 => Ok(OutgoingMessages::CancelPositions),
+            65 => Ok(OutgoingMessages::VerifyRequest),
+            66 => Ok(OutgoingMessages::VerifyMessage),
+            67 => Ok(OutgoingMessages::QueryDisplayGroups),
+            68 => Ok(OutgoingMessages::SubscribeToGroupEvents),
+            69 => Ok(OutgoingMessages::UpdateDisplayGroup),
+            70 => Ok(OutgoingMessages::UnsubscribeFromGroupEvents),
+            71 => Ok(OutgoingMessages::StartApi),
+            72 => Ok(OutgoingMessages::VerifyAndAuthRequest),
+            73 => Ok(OutgoingMessages::VerifyAndAuthMessage),
+            74 => Ok(OutgoingMessages::RequestPositionsMulti),
+            75 => Ok(OutgoingMessages::CancelPositionsMulti),
+            76 => Ok(OutgoingMessages::RequestAccountUpdatesMulti),
+            77 => Ok(OutgoingMessages::CancelAccountUpdatesMulti),
+            78 => Ok(OutgoingMessages::RequestSecurityDefinitionOptionalParameters),
+            79 => Ok(OutgoingMessages::RequestSoftDollarTiers),
+            80 => Ok(OutgoingMessages::RequestFamilyCodes),
+            81 => Ok(OutgoingMessages::RequestMatchingSymbols),
+            82 => Ok(OutgoingMessages::RequestMktDepthExchanges),
+            83 => Ok(OutgoingMessages::RequestSmartComponents),
+            84 => Ok(OutgoingMessages::RequestNewsArticle),
+            85 => Ok(OutgoingMessages::RequestNewsProviders),
+            86 => Ok(OutgoingMessages::RequestHistoricalNews),
+            87 => Ok(OutgoingMessages::RequestHeadTimestamp),
+            88 => Ok(OutgoingMessages::RequestHistogramData),
+            89 => Ok(OutgoingMessages::CancelHistogramData),
+            90 => Ok(OutgoingMessages::CancelHeadTimestamp),
+            91 => Ok(OutgoingMessages::RequestMarketRule),
+            92 => Ok(OutgoingMessages::RequestPnL),
+            93 => Ok(OutgoingMessages::CancelPnL),
+            94 => Ok(OutgoingMessages::RequestPnLSingle),
+            95 => Ok(OutgoingMessages::CancelPnLSingle),
+            96 => Ok(OutgoingMessages::RequestHistoricalTicks),
+            97 => Ok(OutgoingMessages::RequestTickByTickData),
+            98 => Ok(OutgoingMessages::CancelTickByTickData),
+            99 => Ok(OutgoingMessages::RequestCompletedOrders),
+            100 => Ok(OutgoingMessages::RequestWshMetaData),
+            101 => Ok(OutgoingMessages::CancelWshMetaData),
+            102 => Ok(OutgoingMessages::RequestWshEventData),
+            103 => Ok(OutgoingMessages::CancelWshEventData),
+            104 => Ok(OutgoingMessages::RequestUserInfo),
+            105 => Ok(OutgoingMessages::RequestCurrentTimeInMillis),
+            106 => Ok(OutgoingMessages::CancelContractData),
+            107 => Ok(OutgoingMessages::CancelHistoricalTicks),
+            108 => Ok(OutgoingMessages::ReqConfig),
+            109 => Ok(OutgoingMessages::UpdateConfig),
+            n => Err(Error::parse_field(n.to_string(), "unknown outgoing message type")),
+        }
+    }
+}
+
 impl FromStr for OutgoingMessages {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse::<i32>() {
-            Ok(1) => Ok(OutgoingMessages::RequestMarketData),
-            Ok(2) => Ok(OutgoingMessages::CancelMarketData),
-            Ok(3) => Ok(OutgoingMessages::PlaceOrder),
-            Ok(4) => Ok(OutgoingMessages::CancelOrder),
-            Ok(5) => Ok(OutgoingMessages::RequestOpenOrders),
-            Ok(6) => Ok(OutgoingMessages::RequestAccountData),
-            Ok(7) => Ok(OutgoingMessages::RequestExecutions),
-            Ok(8) => Ok(OutgoingMessages::RequestIds),
-            Ok(9) => Ok(OutgoingMessages::RequestContractData),
-            Ok(10) => Ok(OutgoingMessages::RequestMarketDepth),
-            Ok(11) => Ok(OutgoingMessages::CancelMarketDepth),
-            Ok(12) => Ok(OutgoingMessages::RequestNewsBulletins),
-            Ok(13) => Ok(OutgoingMessages::CancelNewsBulletin),
-            Ok(14) => Ok(OutgoingMessages::ChangeServerLog),
-            Ok(15) => Ok(OutgoingMessages::RequestAutoOpenOrders),
-            Ok(16) => Ok(OutgoingMessages::RequestAllOpenOrders),
-            Ok(17) => Ok(OutgoingMessages::RequestManagedAccounts),
-            Ok(18) => Ok(OutgoingMessages::RequestFA),
-            Ok(19) => Ok(OutgoingMessages::ReplaceFA),
-            Ok(20) => Ok(OutgoingMessages::RequestHistoricalData),
-            Ok(21) => Ok(OutgoingMessages::ExerciseOptions),
-            Ok(22) => Ok(OutgoingMessages::RequestScannerSubscription),
-            Ok(23) => Ok(OutgoingMessages::CancelScannerSubscription),
-            Ok(24) => Ok(OutgoingMessages::RequestScannerParameters),
-            Ok(25) => Ok(OutgoingMessages::CancelHistoricalData),
-            Ok(49) => Ok(OutgoingMessages::RequestCurrentTime),
-            Ok(50) => Ok(OutgoingMessages::RequestRealTimeBars),
-            Ok(51) => Ok(OutgoingMessages::CancelRealTimeBars),
-            Ok(52) => Ok(OutgoingMessages::RequestFundamentalData),
-            Ok(53) => Ok(OutgoingMessages::CancelFundamentalData),
-            Ok(54) => Ok(OutgoingMessages::ReqCalcImpliedVolat),
-            Ok(55) => Ok(OutgoingMessages::ReqCalcOptionPrice),
-            Ok(56) => Ok(OutgoingMessages::CancelImpliedVolatility),
-            Ok(57) => Ok(OutgoingMessages::CancelOptionPrice),
-            Ok(58) => Ok(OutgoingMessages::RequestGlobalCancel),
-            Ok(59) => Ok(OutgoingMessages::RequestMarketDataType),
-            Ok(61) => Ok(OutgoingMessages::RequestPositions),
-            Ok(62) => Ok(OutgoingMessages::RequestAccountSummary),
-            Ok(63) => Ok(OutgoingMessages::CancelAccountSummary),
-            Ok(64) => Ok(OutgoingMessages::CancelPositions),
-            Ok(65) => Ok(OutgoingMessages::VerifyRequest),
-            Ok(66) => Ok(OutgoingMessages::VerifyMessage),
-            Ok(67) => Ok(OutgoingMessages::QueryDisplayGroups),
-            Ok(68) => Ok(OutgoingMessages::SubscribeToGroupEvents),
-            Ok(69) => Ok(OutgoingMessages::UpdateDisplayGroup),
-            Ok(70) => Ok(OutgoingMessages::UnsubscribeFromGroupEvents),
-            Ok(71) => Ok(OutgoingMessages::StartApi),
-            Ok(72) => Ok(OutgoingMessages::VerifyAndAuthRequest),
-            Ok(73) => Ok(OutgoingMessages::VerifyAndAuthMessage),
-            Ok(74) => Ok(OutgoingMessages::RequestPositionsMulti),
-            Ok(75) => Ok(OutgoingMessages::CancelPositionsMulti),
-            Ok(76) => Ok(OutgoingMessages::RequestAccountUpdatesMulti),
-            Ok(77) => Ok(OutgoingMessages::CancelAccountUpdatesMulti),
-            Ok(78) => Ok(OutgoingMessages::RequestSecurityDefinitionOptionalParameters),
-            Ok(79) => Ok(OutgoingMessages::RequestSoftDollarTiers),
-            Ok(80) => Ok(OutgoingMessages::RequestFamilyCodes),
-            Ok(81) => Ok(OutgoingMessages::RequestMatchingSymbols),
-            Ok(82) => Ok(OutgoingMessages::RequestMktDepthExchanges),
-            Ok(83) => Ok(OutgoingMessages::RequestSmartComponents),
-            Ok(84) => Ok(OutgoingMessages::RequestNewsArticle),
-            Ok(85) => Ok(OutgoingMessages::RequestNewsProviders),
-            Ok(86) => Ok(OutgoingMessages::RequestHistoricalNews),
-            Ok(87) => Ok(OutgoingMessages::RequestHeadTimestamp),
-            Ok(88) => Ok(OutgoingMessages::RequestHistogramData),
-            Ok(89) => Ok(OutgoingMessages::CancelHistogramData),
-            Ok(90) => Ok(OutgoingMessages::CancelHeadTimestamp),
-            Ok(91) => Ok(OutgoingMessages::RequestMarketRule),
-            Ok(92) => Ok(OutgoingMessages::RequestPnL),
-            Ok(93) => Ok(OutgoingMessages::CancelPnL),
-            Ok(94) => Ok(OutgoingMessages::RequestPnLSingle),
-            Ok(95) => Ok(OutgoingMessages::CancelPnLSingle),
-            Ok(96) => Ok(OutgoingMessages::RequestHistoricalTicks),
-            Ok(97) => Ok(OutgoingMessages::RequestTickByTickData),
-            Ok(98) => Ok(OutgoingMessages::CancelTickByTickData),
-            Ok(99) => Ok(OutgoingMessages::RequestCompletedOrders),
-            Ok(100) => Ok(OutgoingMessages::RequestWshMetaData),
-            Ok(101) => Ok(OutgoingMessages::CancelWshMetaData),
-            Ok(102) => Ok(OutgoingMessages::RequestWshEventData),
-            Ok(103) => Ok(OutgoingMessages::CancelWshEventData),
-            Ok(104) => Ok(OutgoingMessages::RequestUserInfo),
-            Ok(105) => Ok(OutgoingMessages::RequestCurrentTimeInMillis),
-            Ok(106) => Ok(OutgoingMessages::CancelContractData),
-            Ok(107) => Ok(OutgoingMessages::CancelHistoricalTicks),
-            Ok(108) => Ok(OutgoingMessages::ReqConfig),
-            Ok(109) => Ok(OutgoingMessages::UpdateConfig),
-            Ok(n) => Err(Error::parse_field(n.to_string(), "unknown outgoing message type")),
-            Err(_) => Err(Error::parse_field(s, "invalid outgoing message type")),
+        let id = s.parse::<i32>().map_err(|_| Error::parse_field(s, "invalid outgoing message type"))?;
+        OutgoingMessages::try_from(id)
+    }
+}
+
+impl OutgoingMessages {
+    /// Whether this message stops something already running: a `Cancel*`,
+    /// the global order cancel, or leaving display-group events. The outbound
+    /// rate limiter sends these without waiting. Exhaustive so a new variant
+    /// forces a decision.
+    ///
+    /// Cancels that reuse a request id with a flag, such as
+    /// `RequestAccountData` with `subscribe = false`, are not recognized and
+    /// wait like requests: slower, never over the limit.
+    pub(crate) fn is_cancel(self) -> bool {
+        match self {
+            OutgoingMessages::CancelMarketData
+            | OutgoingMessages::CancelOrder
+            | OutgoingMessages::CancelMarketDepth
+            | OutgoingMessages::CancelNewsBulletin
+            | OutgoingMessages::CancelScannerSubscription
+            | OutgoingMessages::CancelHistoricalData
+            | OutgoingMessages::CancelRealTimeBars
+            | OutgoingMessages::CancelFundamentalData
+            | OutgoingMessages::CancelImpliedVolatility
+            | OutgoingMessages::CancelOptionPrice
+            | OutgoingMessages::CancelAccountSummary
+            | OutgoingMessages::CancelPositions
+            | OutgoingMessages::CancelPositionsMulti
+            | OutgoingMessages::CancelAccountUpdatesMulti
+            | OutgoingMessages::CancelHistogramData
+            | OutgoingMessages::CancelHeadTimestamp
+            | OutgoingMessages::CancelPnL
+            | OutgoingMessages::CancelPnLSingle
+            | OutgoingMessages::CancelTickByTickData
+            | OutgoingMessages::CancelWshMetaData
+            | OutgoingMessages::CancelWshEventData
+            | OutgoingMessages::CancelContractData
+            | OutgoingMessages::CancelHistoricalTicks
+            | OutgoingMessages::RequestGlobalCancel
+            | OutgoingMessages::UnsubscribeFromGroupEvents => true,
+            OutgoingMessages::RequestMarketData
+            | OutgoingMessages::PlaceOrder
+            | OutgoingMessages::RequestOpenOrders
+            | OutgoingMessages::RequestAccountData
+            | OutgoingMessages::RequestExecutions
+            | OutgoingMessages::RequestIds
+            | OutgoingMessages::RequestContractData
+            | OutgoingMessages::RequestMarketDepth
+            | OutgoingMessages::RequestNewsBulletins
+            | OutgoingMessages::ChangeServerLog
+            | OutgoingMessages::RequestAutoOpenOrders
+            | OutgoingMessages::RequestAllOpenOrders
+            | OutgoingMessages::RequestManagedAccounts
+            | OutgoingMessages::RequestFA
+            | OutgoingMessages::ReplaceFA
+            | OutgoingMessages::RequestHistoricalData
+            | OutgoingMessages::ExerciseOptions
+            | OutgoingMessages::RequestScannerSubscription
+            | OutgoingMessages::RequestScannerParameters
+            | OutgoingMessages::RequestCurrentTime
+            | OutgoingMessages::RequestRealTimeBars
+            | OutgoingMessages::RequestFundamentalData
+            | OutgoingMessages::ReqCalcImpliedVolat
+            | OutgoingMessages::ReqCalcOptionPrice
+            | OutgoingMessages::RequestMarketDataType
+            | OutgoingMessages::RequestPositions
+            | OutgoingMessages::RequestAccountSummary
+            | OutgoingMessages::VerifyRequest
+            | OutgoingMessages::VerifyMessage
+            | OutgoingMessages::QueryDisplayGroups
+            | OutgoingMessages::SubscribeToGroupEvents
+            | OutgoingMessages::UpdateDisplayGroup
+            | OutgoingMessages::StartApi
+            | OutgoingMessages::VerifyAndAuthRequest
+            | OutgoingMessages::VerifyAndAuthMessage
+            | OutgoingMessages::RequestPositionsMulti
+            | OutgoingMessages::RequestAccountUpdatesMulti
+            | OutgoingMessages::RequestSecurityDefinitionOptionalParameters
+            | OutgoingMessages::RequestSoftDollarTiers
+            | OutgoingMessages::RequestFamilyCodes
+            | OutgoingMessages::RequestMatchingSymbols
+            | OutgoingMessages::RequestMktDepthExchanges
+            | OutgoingMessages::RequestSmartComponents
+            | OutgoingMessages::RequestNewsArticle
+            | OutgoingMessages::RequestNewsProviders
+            | OutgoingMessages::RequestHistoricalNews
+            | OutgoingMessages::RequestHeadTimestamp
+            | OutgoingMessages::RequestHistogramData
+            | OutgoingMessages::RequestMarketRule
+            | OutgoingMessages::RequestPnL
+            | OutgoingMessages::RequestPnLSingle
+            | OutgoingMessages::RequestHistoricalTicks
+            | OutgoingMessages::RequestTickByTickData
+            | OutgoingMessages::RequestCompletedOrders
+            | OutgoingMessages::RequestWshMetaData
+            | OutgoingMessages::RequestWshEventData
+            | OutgoingMessages::RequestUserInfo
+            | OutgoingMessages::RequestCurrentTimeInMillis
+            | OutgoingMessages::ReqConfig
+            | OutgoingMessages::UpdateConfig => false,
         }
     }
 }
@@ -696,6 +804,27 @@ pub(crate) fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8
     buf.write_i32::<BigEndian>(msg_id + PROTOBUF_MSG_ID).unwrap();
     buf.extend_from_slice(proto_bytes);
     buf
+}
+
+/// Split a frame body into its 4-byte BE message id, as sent (protobuf ids
+/// still carry the [`PROTOBUF_MSG_ID`] offset), and the payload. `None` if the
+/// body is too short to hold an id.
+pub(crate) fn split_message_id(frame: &[u8]) -> Option<(i32, &[u8])> {
+    let (header, payload) = frame.split_first_chunk::<MESSAGE_ID_LEN>()?;
+    Some((i32::from_be_bytes(*header), payload))
+}
+
+/// The request kind of an outbound frame body, or `None` if the id is missing
+/// or unknown.
+pub(crate) fn outgoing_message_type(frame: &[u8]) -> Option<OutgoingMessages> {
+    let (id, _) = split_message_id(frame)?;
+    let id = if id > PROTOBUF_MSG_ID { id - PROTOBUF_MSG_ID } else { id };
+    OutgoingMessages::try_from(id).ok()
+}
+
+/// Whether an outbound frame body is a cancel (see [`OutgoingMessages::is_cancel`]).
+pub(crate) fn is_cancel_frame(frame: &[u8]) -> bool {
+    outgoing_message_type(frame).is_some_and(OutgoingMessages::is_cancel)
 }
 
 /// Encode a length-prefixed raw message (4-byte BE length + data).

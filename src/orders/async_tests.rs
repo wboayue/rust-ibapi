@@ -2,7 +2,7 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId, REQUEST_ID_FLOOR};
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
-    proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    order_status_response, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
@@ -1179,4 +1179,62 @@ async fn order_methods_accept_typed_order_ids() {
     )
     .unwrap();
     assert_eq!(bracket[1].parent_id, 41, "bracket_order");
+}
+
+#[tokio::test]
+async fn wait_for_fill_waits_through_partial_fills() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(0.0).remaining(100.0)),
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0)),
+        order_status_response(order_status().status(OrderStatusKind::Filled).filled(100.0).remaining(0.0)),
+    ]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_secs(5)).await.unwrap();
+
+    assert!(matches!(&outcome, OrderOutcome::Filled(s) if s.filled == 100.0), "{outcome:?}");
+    assert_eq!(request_message_count(&message_bus), 0, "waiting writes nothing");
+}
+
+#[tokio::test]
+async fn wait_for_fill_times_out_with_last_status() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![order_status_response(
+        order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0),
+    )]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_millis(20)).await.unwrap();
+
+    assert!(matches!(&outcome, OrderOutcome::TimedOut(Some(s)) if s.filled == 40.0), "{outcome:?}");
+}
+
+#[tokio::test]
+async fn wait_for_fill_times_out_without_status() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_millis(20)).await.unwrap();
+
+    assert_eq!(outcome, OrderOutcome::TimedOut(None));
+}
+
+#[tokio::test]
+async fn wait_for_fill_fails_on_connection_reset() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]).with_connection_resets(1));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let result = client.wait_for_fill(13, Duration::from_secs(5)).await;
+
+    assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
+}
+
+#[tokio::test]
+async fn order_status_stream_yields_statuses_and_writes_nothing() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0)),
+        order_status_response(order_status().status(OrderStatusKind::Filled).filled(100.0).remaining(0.0)),
+    ]);
+
+    let statuses = crate::subscriptions::SubscriptionItemStreamExt::filter_data(client.order_status_stream(13).await.unwrap());
+    let filled: Vec<f64> = statuses.take(2).map(|status| status.unwrap().filled).collect().await;
+
+    assert_eq!(filled, [40.0, 100.0]);
+    assert_eq!(request_message_count(&message_bus), 0);
 }

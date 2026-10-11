@@ -28,6 +28,10 @@ pub(crate) trait AsyncIo {
     /// must fail with a connection-lost error (pending ones included), because
     /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    /// Release the physical stream, even while owners still hold it: pending
+    /// and later reads and writes fail with [`Error::Shutdown`], and
+    /// `reconnect` refuses. Idempotent.
+    async fn close(&self);
 }
 
 #[async_trait]
@@ -47,8 +51,12 @@ pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static +
 /// task and the request senders.
 #[derive(Debug)]
 pub(crate) struct AsyncTcpSocket {
-    reader: Mutex<OwnedReadHalf>,
-    writer: Mutex<OwnedWriteHalf>,
+    /// `None` once `close` has released them.
+    reader: Mutex<Option<OwnedReadHalf>>,
+    writer: Mutex<Option<OwnedWriteHalf>>,
+    /// Latched by `close`. Wakes pending reads and writes so `close` can take
+    /// their locks, and turns away whoever acquires a half after it.
+    closed: watch::Sender<bool>,
     /// True once a write stops mid-frame (see [`FrameProgress`]); cleared by
     /// `reconnect`. Writes refuse and reads fail while it is set, so the
     /// dispatcher reconnects.
@@ -66,8 +74,9 @@ impl AsyncTcpSocket {
         stream.set_nodelay(tcp_no_delay)?;
         let (read_half, write_half) = stream.into_split();
         Ok(Self {
-            reader: Mutex::new(read_half),
-            writer: Mutex::new(write_half),
+            reader: Mutex::new(Some(read_half)),
+            writer: Mutex::new(Some(write_half)),
+            closed: watch::Sender::new(false),
             broken: watch::Sender::new(false),
             connection_url: address.to_string(),
             tcp_no_delay,
@@ -75,8 +84,26 @@ impl AsyncTcpSocket {
         })
     }
 
-    fn is_broken(&self) -> bool {
-        *self.broken.borrow()
+    fn is_closed(&self) -> bool {
+        *self.closed.borrow()
+    }
+
+    /// The half behind a held lock, or [`Error::Shutdown`] once closed.
+    /// `interrupted` would catch a close too, but only after taking the lock.
+    fn open_half<'a, T>(&self, half: &'a mut Option<T>) -> Result<&'a mut T, Error> {
+        half.as_mut().filter(|_| !self.is_closed()).ok_or(Error::Shutdown)
+    }
+
+    /// Resolves once the socket is closed or a cut-off write breaks it, with
+    /// the error a pending read or write should fail with.
+    async fn interrupted(&self) -> Error {
+        let mut closed = self.closed.subscribe();
+        let mut broken = self.broken.subscribe();
+        tokio::select! {
+            biased;
+            _ = closed.wait_for(|closed| *closed) => Error::Shutdown,
+            _ = broken.wait_for(|broken| *broken) => Error::ConnectionReset,
+        }
     }
 }
 
@@ -125,19 +152,17 @@ where
 impl AsyncIo for AsyncTcpSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock().await;
-        let mut broken = self.broken.subscribe();
+        let reader = self.open_half(&mut reader)?;
         tokio::select! {
             biased;
-            _ = broken.wait_for(|broken| *broken) => Err(Error::ConnectionReset),
-            read = read_framed_message(&mut *reader, &self.tap) => read,
+            err = self.interrupted() => Err(err),
+            read = read_framed_message(reader, &self.tap) => read,
         }
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let mut writer = self.writer.lock().await;
-        if self.is_broken() {
-            return Err(Error::ConnectionReset);
-        }
+        let writer = self.open_half(&mut writer)?;
         // Declared after `writer`, so it drops first: a break lands while the
         // writer is still held, and cannot interleave with `reconnect`.
         let mut progress = FrameProgress {
@@ -145,24 +170,47 @@ impl AsyncIo for AsyncTcpSocket {
             len: buf.len(),
             remaining: buf,
         };
-        writer.write_all_buf(&mut progress.remaining).await?;
-        writer.flush().await?;
-        Ok(())
+        // Biased: an already broken or closed socket fails before the write
+        // sends a byte. Later, `close` wakes a backpressured write this way.
+        tokio::select! {
+            biased;
+            err = self.interrupted() => Err(err),
+            result = async {
+                writer.write_all_buf(&mut progress.remaining).await?;
+                writer.flush().await?;
+                Ok(())
+            } => result,
+        }
+    }
+
+    async fn close(&self) {
+        // Latch before locking: wakes the I/O holding the locks, and a
+        // reconnect that installs new halves first still loses them below.
+        self.closed.send_replace(true);
+        let mut reader = self.reader.lock().await;
+        let mut writer = self.writer.lock().await;
+        reader.take();
+        writer.take();
     }
 }
 
 #[async_trait]
 impl AsyncReconnect for AsyncTcpSocket {
     async fn reconnect(&self) -> Result<(), Error> {
+        if self.is_closed() {
+            return Err(Error::Shutdown);
+        }
         let stream = TcpStream::connect(&self.connection_url).await?;
         stream.set_nodelay(self.tcp_no_delay)?;
         let (new_reader, new_writer) = stream.into_split();
-        *self.reader.lock().await = new_reader;
-        {
-            let mut writer = self.writer.lock().await;
-            *writer = new_writer;
-            self.broken.send_replace(false);
+        let mut reader = self.reader.lock().await;
+        let mut writer = self.writer.lock().await;
+        if self.is_closed() {
+            return Err(Error::Shutdown);
         }
+        *reader = Some(new_reader);
+        *writer = Some(new_writer);
+        self.broken.send_replace(false);
         // One capture file per TCP stream: splicing two of them would read back
         // as a desync at the seam that never happened.
         self.tap.start_new_segment();
@@ -178,4 +226,4 @@ impl AsyncStream for AsyncTcpSocket {}
 
 #[cfg(test)]
 #[path = "io_tests.rs"]
-mod tests;
+pub(super) mod tests;

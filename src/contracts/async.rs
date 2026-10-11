@@ -18,6 +18,10 @@ impl Client {
     /// Collects every row before returning. To read rows as they arrive, stop reading early, or know the
     /// request id up front, use [Client::contract_details_stream].
     ///
+    /// Waits for TWS's end marker with no time bound. For a bound, use
+    /// [`contract_details_stream`](Self::contract_details_stream) and
+    /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within).
+    ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
     ///
@@ -50,6 +54,8 @@ impl Client {
     /// stop reading early, or know the request id before anything is sent.
     /// Dropping the subscription before the end sends TWS's native cancel
     /// (server 215+); rows TWS sends after that are discarded.
+    /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within)
+    /// collects the whole result within a time bound.
     /// Terminal: [`ContractDetailsBuilder::subscribe`].
     ///
     /// # Arguments
@@ -328,7 +334,7 @@ impl Client {
     /// }
     /// ```
     pub fn option_chain<'a>(&'a self, symbol: &'a str, security_type: SecurityType, contract_id: i32) -> OptionChainBuilder<'a, Self> {
-        OptionChainBuilder::new(self, symbol, security_type, contract_id)
+        OptionChainBuilder::new(self, symbol, security_type, contract_id, self.mint_request_id())
     }
 }
 
@@ -341,20 +347,9 @@ pub(in crate::contracts) async fn contract_details_stream(
     request_id: RequestId,
     buffer_limit: Option<usize>,
 ) -> Result<Subscription<ContractDetails>, Error> {
-    let buffer_limit = contract_details_builder::validate_buffer_limit(buffer_limit)?;
     verify::verify_contract(client.server_version(), contract)?;
     let packet = encoders::encode_request_contract_data(request_id.raw(), contract)?;
-    let request = client.request_with_id(request_id);
-    match buffer_limit {
-        Some(limit) => {
-            let bound = crate::transport::BufferBound {
-                limit,
-                end: crate::messages::IncomingMessages::ContractDataEnd,
-            };
-            request.send_bounded(packet, bound).await
-        }
-        None => request.send(packet).await,
-    }
+    client.request_with_id(request_id).send_capped(packet, buffer_limit).await
 }
 
 /// Request an underlying's option chain. Reached through
@@ -366,11 +361,11 @@ pub(in crate::contracts) async fn option_chain(
     exchange: Option<&str>,
     security_type: SecurityType,
     contract_id: i32,
+    request_id: RequestId,
+    buffer_limit: Option<usize>,
 ) -> Result<Subscription<OptionChain>, Error> {
-    request_helpers::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
-        encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
-    })
-    .await
+    let packet = encoders::encode_request_option_chain(request_id.raw(), symbol, exchange, security_type, contract_id)?;
+    client.request_with_id(request_id).send_capped(packet, buffer_limit).await
 }
 
 #[cfg(test)]
