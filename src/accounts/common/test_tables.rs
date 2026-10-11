@@ -2,14 +2,6 @@
 
 #[allow(unused_imports)]
 use crate::accounts::types::*;
-use crate::server_versions;
-
-/// Test case for server version compatibility checking
-#[derive(Debug, Clone)]
-pub struct VersionTestCase {
-    pub function_name: &'static str,
-    pub required_version: i32,
-}
 
 #[cfg(feature = "sync")]
 /// Test case for contract ID edge cases
@@ -88,26 +80,6 @@ pub enum SubscriptionType {
         tags: Vec<String>,
     },
 }
-
-// =============================================================================
-// Static Test Data Tables
-// =============================================================================
-
-/// Server version test cases
-pub const VERSION_TEST_CASES: &[VersionTestCase] = &[
-    VersionTestCase {
-        function_name: "Positions Multi",
-        required_version: server_versions::MODELS_SUPPORT,
-    },
-    VersionTestCase {
-        function_name: "Account Updates Multi",
-        required_version: server_versions::MODELS_SUPPORT,
-    },
-    VersionTestCase {
-        function_name: "Family Codes",
-        required_version: server_versions::REQ_FAMILY_CODES,
-    },
-];
 
 // =============================================================================
 // Dynamic Test Data Functions

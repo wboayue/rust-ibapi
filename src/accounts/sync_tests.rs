@@ -400,34 +400,6 @@ fn test_account_updates_multi() {
 // Additional comprehensive tests for sync module
 
 #[test]
-fn test_server_version_errors() {
-    use super::common::test_tables::VERSION_TEST_CASES;
-
-    let account = AccountId(TEST_ACCOUNT.to_string());
-
-    for test_case in VERSION_TEST_CASES {
-        let (client, _) = create_blocking_test_client_with_version(test_case.required_version - 1);
-
-        let result = match test_case.function_name {
-            "Positions Multi" => client.positions_multi(Some(&account), None).map(|_| ()),
-            "Account Updates Multi" => client.account_updates_multi(Some(&account), None).map(|_| ()),
-            "Family Codes" => client.family_codes().map(|_| ()),
-            _ => panic!("Unknown function: {}", test_case.function_name),
-        };
-
-        assert!(result.is_err(), "Expected version error for {}", test_case.function_name);
-        if let Err(error) = result {
-            assert!(
-                matches!(error, Error::ServerVersion(_, _, _)),
-                "Expected ServerVersion error for {}, got: {:?}",
-                test_case.function_name,
-                error
-            );
-        }
-    }
-}
-
-#[test]
 fn test_account_summary_comprehensive() {
     use super::common::test_tables::account_summary_tag_test_cases;
     use crate::accounts::AccountSummaryResult;
@@ -699,18 +671,6 @@ fn test_server_time_millis() {
 }
 
 #[test]
-fn test_server_time_millis_version_error() {
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS - 1);
-
-    let result = client.server_time_millis();
-    assert!(
-        matches!(result, Err(Error::ServerVersion(_, _, _))),
-        "expected ServerVersion error, got {result:?}"
-    );
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[test]
 fn test_server_time_millis_no_response() {
     let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS);
 
@@ -744,14 +704,6 @@ fn test_soft_dollar_tiers() {
 }
 
 #[test]
-fn test_soft_dollar_tiers_version_error() {
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::SOFT_DOLLAR_TIER - 1);
-    let result = client.soft_dollar_tiers();
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[test]
 fn test_user_info() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::UserInfo,
@@ -763,14 +715,6 @@ fn test_user_info() {
     assert_eq!(info.white_branding_id, "brand-xyz");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &user_info_request().request_id(TEST_REQ_ID_FIRST));
-}
-
-#[test]
-fn test_user_info_version_error() {
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::USER_INFO - 1);
-    let result = client.user_info();
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 #[test]
@@ -812,16 +756,6 @@ fn test_replace_fa() {
 }
 
 #[test]
-fn test_replace_fa_version_error() {
-    use crate::accounts::FaDataType;
-
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::REPLACE_FA_END - 1);
-    let result = client.replace_fa(FaDataType::Groups, "<x/>");
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[test]
 fn test_set_server_log_level() {
     use crate::accounts::ServerLogLevel;
 
@@ -845,14 +779,6 @@ fn test_verify_request() {
 }
 
 #[test]
-fn test_verify_request_version_error() {
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::LINKING - 1);
-    let result = client.verify_request("MyApp", "1.0");
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[test]
 fn test_verify_message() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyCompleted,
@@ -864,14 +790,6 @@ fn test_verify_message() {
     assert_eq!(result.error_text, "");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &verify_message_request().api_data("signed"));
-}
-
-#[test]
-fn test_verify_message_version_error() {
-    let (client, message_bus) = create_blocking_test_client_with_version(server_versions::LINKING - 1);
-    let result = client.verify_message("data");
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 fn summary_frame(tag: &str, value: &str, currency: &str) -> RoutedItem {

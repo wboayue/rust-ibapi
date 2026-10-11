@@ -396,34 +396,6 @@ async fn test_account_updates_multi() {
 // Additional comprehensive tests
 
 #[tokio::test]
-async fn test_server_version_errors() {
-    use super::common::test_tables::VERSION_TEST_CASES;
-
-    let account = AccountId(TEST_ACCOUNT.to_string());
-
-    for test_case in VERSION_TEST_CASES {
-        let (client, _) = create_test_client_with_version(test_case.required_version - 1);
-
-        let result = match test_case.function_name {
-            "Positions Multi" => client.positions_multi(Some(&account), None).await.map(|_| ()),
-            "Account Updates Multi" => client.account_updates_multi(Some(&account), None).await.map(|_| ()),
-            "Family Codes" => client.family_codes().await.map(|_| ()),
-            _ => panic!("Unknown function: {}", test_case.function_name),
-        };
-
-        assert!(result.is_err(), "Expected version error for {}", test_case.function_name);
-        if let Err(error) = result {
-            assert!(
-                matches!(error, Error::ServerVersion(_, _, _)),
-                "Expected ServerVersion error for {}, got: {:?}",
-                test_case.function_name,
-                error
-            );
-        }
-    }
-}
-
-#[tokio::test]
 async fn test_concurrent_subscriptions() {
     let (client, message_bus) = create_test_client();
 
@@ -534,14 +506,6 @@ async fn test_soft_dollar_tiers() {
 }
 
 #[tokio::test]
-async fn test_soft_dollar_tiers_version_error() {
-    let (client, message_bus) = create_test_client_with_version(server_versions::SOFT_DOLLAR_TIER - 1);
-    let result = client.soft_dollar_tiers().await;
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn test_user_info() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::UserInfo,
@@ -553,14 +517,6 @@ async fn test_user_info() {
     assert_eq!(info.white_branding_id, "brand-xyz");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &user_info_request().request_id(TEST_REQ_ID_FIRST));
-}
-
-#[tokio::test]
-async fn test_user_info_version_error() {
-    let (client, message_bus) = create_test_client_with_version(server_versions::USER_INFO - 1);
-    let result = client.user_info().await;
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 #[tokio::test]
@@ -605,16 +561,6 @@ async fn test_replace_fa() {
 }
 
 #[tokio::test]
-async fn test_replace_fa_version_error() {
-    use crate::accounts::FaDataType;
-
-    let (client, message_bus) = create_test_client_with_version(server_versions::REPLACE_FA_END - 1);
-    let result = client.replace_fa(FaDataType::Groups, "<x/>").await;
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn test_set_server_log_level() {
     use crate::accounts::ServerLogLevel;
 
@@ -641,14 +587,6 @@ async fn test_verify_request() {
 }
 
 #[tokio::test]
-async fn test_verify_request_version_error() {
-    let (client, message_bus) = create_test_client_with_version(server_versions::LINKING - 1);
-    let result = client.verify_request("MyApp", "1.0").await;
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn test_verify_message() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyCompleted,
@@ -660,14 +598,6 @@ async fn test_verify_message() {
     assert_eq!(result.error_text, "");
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &verify_message_request().api_data("signed"));
-}
-
-#[tokio::test]
-async fn test_verify_message_version_error() {
-    let (client, message_bus) = create_test_client_with_version(server_versions::LINKING - 1);
-    let result = client.verify_message("data").await;
-    assert!(matches!(result, Err(Error::ServerVersion(_, _, _))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 fn summary_frame(tag: &str, value: &str, currency: &str) -> RoutedItem {

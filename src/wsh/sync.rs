@@ -2,6 +2,7 @@
 
 use time::Date;
 
+use crate::client::blocking::ClientRequestBuilders;
 use crate::client::sync::Client;
 use crate::subscriptions::sync::Subscription;
 use crate::{
@@ -126,17 +127,17 @@ pub(crate) fn wsh_event_data_by_filter(
         check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    request_helpers::blocking::request_with_id(client, |request_id| {
-        encoders::encode_request_wsh_event_data(
-            request_id,
-            None,
-            Some(filter),
-            None, // start_date
-            None, // end_date
-            limit,
-            auto_fill,
-        )
-    })
+    let builder = client.request();
+    let request = encoders::encode_request_wsh_event_data(
+        builder.request_id(),
+        None,
+        Some(filter),
+        None, // start_date
+        None, // end_date
+        limit,
+        auto_fill,
+    )?;
+    builder.send(request)
 }
 
 #[cfg(test)]

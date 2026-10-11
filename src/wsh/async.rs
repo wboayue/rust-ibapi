@@ -2,6 +2,7 @@
 
 use time::Date;
 
+use crate::client::ClientRequestBuilders;
 use crate::{
     common::request_helpers::{self, expect_proto},
     protocol::{check_version, Features},
@@ -147,18 +148,17 @@ pub(crate) async fn wsh_event_data_by_filter(
         check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    request_helpers::request_with_id(client, |request_id| {
-        encoders::encode_request_wsh_event_data(
-            request_id,
-            None,
-            Some(filter),
-            None, // start_date
-            None, // end_date
-            limit,
-            auto_fill,
-        )
-    })
-    .await
+    let builder = client.request();
+    let request = encoders::encode_request_wsh_event_data(
+        builder.request_id(),
+        None,
+        Some(filter),
+        None, // start_date
+        None, // end_date
+        limit,
+        auto_fill,
+    )?;
+    builder.send(request).await
 }
 
 #[cfg(test)]

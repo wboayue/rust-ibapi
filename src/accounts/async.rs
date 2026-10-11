@@ -4,10 +4,9 @@ use std::time::Duration;
 
 use time::OffsetDateTime;
 
-use crate::client::ClientRequestBuilders;
+use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
-use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
@@ -45,12 +44,11 @@ impl Client {
     /// }
     /// ```
     pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        crate::common::request_helpers::shared_subscription(self, OutgoingMessages::RequestPositions, encoders::encode_request_positions).await
+        let request = encoders::encode_request_positions()?;
+        self.subscription().send_shared(OutgoingMessages::RequestPositions, request).await
     }
 
     /// Subscribe to streaming position updates scoped by account and model code.
-    ///
-    /// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
     ///
     /// # Arguments
     /// * `account`    - If an account Id is provided, only the account's positions belonging to the specified model will be delivered.
@@ -80,8 +78,6 @@ impl Client {
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<PositionUpdateMulti>, Error> {
-        check_version(self.server_version(), Features::MODELS_SUPPORT)?;
-
         let builder = self.request();
         let request = encoders::encode_request_positions_multi(builder.request_id(), account, model_code)?;
 
@@ -103,8 +99,6 @@ impl Client {
     /// }
     /// ```
     pub async fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        check_version(self.server_version(), Features::FAMILY_CODES)?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestFamilyCodes,
@@ -142,7 +136,9 @@ impl Client {
     /// }
     /// ```
     pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code)).await
+        let builder = self.request();
+        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        builder.send(request).await
     }
 
     /// Subscribe to real-time daily PnL updates for a single contract.
@@ -181,7 +177,9 @@ impl Client {
         contract_id: ContractId,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<PnLSingle>, Error> {
-        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_pnl_single(id, account, contract_id, model_code)).await
+        let builder = self.request();
+        let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
+        builder.send(request).await
     }
 
     /// Subscribe to account summary updates for a group of accounts.
@@ -220,7 +218,9 @@ impl Client {
     /// }
     /// ```
     pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_account_summary(id, group, tags)).await
+        let builder = self.request();
+        let request = encoders::encode_request_account_summary(builder.request_id(), group, tags)?;
+        builder.send(request).await
     }
 
     /// Subscribe to account summary updates as complete snapshots.
@@ -349,8 +349,6 @@ impl Client {
     ///
     /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
     ///
-    /// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
-    ///
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
@@ -391,8 +389,6 @@ impl Client {
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
-        check_version(self.server_version(), Features::MODELS_SUPPORT)?;
-
         let builder = self.request();
         let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
 
@@ -463,8 +459,6 @@ impl Client {
     /// }
     /// ```
     pub async fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
-        check_version(self.server_version(), Features::CURRENT_TIME_IN_MILLIS)?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
@@ -492,8 +486,6 @@ impl Client {
     /// }
     /// ```
     pub async fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
-        check_version(self.server_version(), Features::SOFT_DOLLAR_TIER)?;
-
         request_helpers::one_shot_by_request_id(
             self,
             encoders::encode_request_soft_dollar_tiers,
@@ -517,8 +509,6 @@ impl Client {
     /// }
     /// ```
     pub async fn user_info(&self) -> Result<UserInfo, Error> {
-        check_version(self.server_version(), Features::USER_INFO)?;
-
         request_helpers::one_shot_by_request_id(self, encoders::encode_request_user_info, expect_proto(decoders::decode_user_info_proto)).await
     }
 
@@ -570,8 +560,6 @@ impl Client {
     /// }
     /// ```
     pub async fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
-        check_version(self.server_version(), Features::REPLACE_FA_END)?;
-
         request_helpers::one_shot_by_request_id(
             self,
             move |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
@@ -617,8 +605,6 @@ impl Client {
     /// }
     /// ```
     pub async fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
-        check_version(self.server_version(), Features::LINKING)?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::VerifyRequest,
@@ -647,8 +633,6 @@ impl Client {
     /// }
     /// ```
     pub async fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
-        check_version(self.server_version(), Features::LINKING)?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::VerifyMessage,
