@@ -78,7 +78,7 @@ pub(crate) struct AsyncTcpSocket {
     /// Anything but `Live` wakes pending reads and writes and turns away
     /// whoever acquires a half after it. `Broken` once a write stops mid-frame
     /// (see [`FrameProgress`]), so reads fail and the dispatcher reconnects;
-    /// `Closed` lets `close` take the locks the I/O held.
+    /// `Closed` wakes the I/O holding the locks so `close` can take them.
     state: watch::Sender<SocketState>,
     connection_url: String,
     tcp_no_delay: bool,
@@ -138,9 +138,9 @@ impl AsyncTcpSocket {
     /// Resolves once the socket is closed or a cut-off write breaks it, with
     /// the error a pending read or write should fail with.
     async fn interrupted(&self) -> Error {
-        let mut state = self.state.subscribe();
+        let mut rx = self.state.subscribe();
         // `Err` is unreachable: `self` owns the sender.
-        let state = state.wait_for(|state| *state != SocketState::Live).await.map(|state| *state);
+        let state = rx.wait_for(|state| *state != SocketState::Live).await.map(|state| *state);
         state.ok().and_then(SocketState::error).unwrap_or(Error::Shutdown)
     }
 }
@@ -225,7 +225,7 @@ impl AsyncIo for AsyncTcpSocket {
     async fn close(&self) {
         // Latch before locking: wakes the I/O holding the locks, and a
         // reconnect that installs new halves first still loses them below.
-        self.state.send_replace(SocketState::Closed);
+        self.set_state(SocketState::Closed);
         let (mut reader, mut writer) = self.lock_halves().await;
         reader.take();
         writer.take();

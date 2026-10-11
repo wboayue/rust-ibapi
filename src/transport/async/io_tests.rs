@@ -163,6 +163,22 @@ async fn test_physical_close_wakes_read_and_is_terminal() {
     assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
 }
 
+/// Close overrides a break: I/O fails with `Shutdown`, not `ConnectionReset`,
+/// and reconnect refuses.
+#[tokio::test]
+async fn test_physical_close_overrides_a_broken_connection() {
+    let (socket, _peer, _listener) = socket_pair().await;
+    abandon_write(&socket, &vec![0xAA; LARGE]).await;
+    assert!(matches!(socket.write_all(&[0xCC; 3]).await, Err(Error::ConnectionReset)));
+
+    socket.close().await;
+    let read = socket.read_message().await;
+    assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
+    let written = socket.write_all(&[0xCC; 3]).await;
+    assert!(matches!(written, Err(Error::Shutdown)), "write: {written:?}");
+    assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
+}
+
 /// A sender queued before close cannot write when its lock becomes available.
 #[tokio::test]
 async fn test_physical_close_prevents_a_queued_write() {
