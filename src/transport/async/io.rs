@@ -84,16 +84,13 @@ impl AsyncTcpSocket {
         })
     }
 
-    fn is_broken(&self) -> bool {
-        *self.broken.borrow()
-    }
-
     fn is_closed(&self) -> bool {
         *self.closed.borrow()
     }
 
     /// The half behind a held lock, or [`Error::Shutdown`] once closed.
-    fn live<'a, T>(&self, half: &'a mut Option<T>) -> Result<&'a mut T, Error> {
+    /// `interrupted` would catch a close too, but only after taking the lock.
+    fn open_half<'a, T>(&self, half: &'a mut Option<T>) -> Result<&'a mut T, Error> {
         half.as_mut().filter(|_| !self.is_closed()).ok_or(Error::Shutdown)
     }
 
@@ -155,7 +152,7 @@ where
 impl AsyncIo for AsyncTcpSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock().await;
-        let reader = self.live(&mut reader)?;
+        let reader = self.open_half(&mut reader)?;
         tokio::select! {
             biased;
             err = self.interrupted() => Err(err),
@@ -165,10 +162,7 @@ impl AsyncIo for AsyncTcpSocket {
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let mut writer = self.writer.lock().await;
-        let writer = self.live(&mut writer)?;
-        if self.is_broken() {
-            return Err(Error::ConnectionReset);
-        }
+        let writer = self.open_half(&mut writer)?;
         // Declared after `writer`, so it drops first: a break lands while the
         // writer is still held, and cannot interleave with `reconnect`.
         let mut progress = FrameProgress {
@@ -176,7 +170,8 @@ impl AsyncIo for AsyncTcpSocket {
             len: buf.len(),
             remaining: buf,
         };
-        // A backpressured write holds the lock; `close` wakes it to take over.
+        // Biased: an already broken or closed socket fails before the write
+        // sends a byte. Later, `close` wakes a backpressured write this way.
         tokio::select! {
             biased;
             err = self.interrupted() => Err(err),
@@ -231,4 +226,4 @@ impl AsyncStream for AsyncTcpSocket {}
 
 #[cfg(test)]
 #[path = "io_tests.rs"]
-mod tests;
+pub(super) mod tests;

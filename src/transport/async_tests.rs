@@ -2330,6 +2330,24 @@ async fn test_drain_reports_shutdown() {
     assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
 }
 
+/// A read woken by `close` ends dispatch cleanly: requests end with
+/// `Shutdown`, not the `ConnectionReset` the reconnect path fails them with.
+#[tokio::test]
+async fn test_close_ends_dispatch_without_reconnecting() {
+    let (stream, bus) = make_bus();
+    let mut internal = bus.send_request(CONTRACT_REQUEST_ID, vec![]).await.unwrap();
+    bus.clone().process_messages(0, Duration::ZERO).unwrap();
+    tokio::task::yield_now().await;
+
+    AsyncIo::close(&stream).await;
+    let item = tokio::time::timeout(Duration::from_secs(1), internal.next())
+        .await
+        .expect("request never ended");
+    assert!(matches!(item, Some(Err(Error::Shutdown))), "got {item:?}");
+}
+
+use super::io::tests::assert_peer_sees_eof;
+
 /// A client on a dispatching bus over loopback TCP, and the peer end.
 async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncTcpSocket>>, tokio::net::TcpStream) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2341,15 +2359,6 @@ async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncT
         .unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer.unwrap().0)
-}
-
-/// The peer sees EOF: the client side released its socket.
-async fn assert_peer_sees_eof(mut peer: tokio::net::TcpStream) {
-    use tokio::io::AsyncReadExt;
-    let eof = tokio::time::timeout(Duration::from_secs(1), peer.read_u8())
-        .await
-        .expect("TCP socket retained");
-    assert_eq!(eof.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
 }
 
 /// Retained clients and subscriptions cannot retain a disconnected physical socket.

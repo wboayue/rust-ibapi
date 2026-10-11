@@ -708,9 +708,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             // without a shutdown request, and a live subscription holds the
             // bus, so without this its sender would never drop. Idempotent
             // when a shutdown already ran it.
-            message_bus.request_shutdown();
-            // Retained subscriptions must not keep the retired physical socket alive.
-            message_bus.connection.socket.close().await;
+            message_bus.retire().await;
         });
 
         // Store the task handle
@@ -806,6 +804,13 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts().await;
         self.order_taps.reset();
+    }
+
+    /// Shut down, then release the socket, which retained clients and
+    /// subscriptions would otherwise keep open. Idempotent.
+    async fn retire(&self) {
+        self.request_shutdown();
+        self.connection.socket.close().await;
     }
 
     /// End every subscription with `Error::Shutdown`, then close the channels.
@@ -1145,9 +1150,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn ensure_shutdown(&self) {
         debug!("ensure_shutdown called");
 
-        self.request_shutdown();
-        // Wake in-flight I/O and release both halves before joining the dispatcher.
-        self.connection.socket.close().await;
+        // Wakes the dispatcher's pending read, so the join below can't hang on it.
+        self.retire().await;
 
         // Wait for the processing task to finish
         let task_handle = {
