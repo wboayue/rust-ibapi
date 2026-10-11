@@ -33,12 +33,9 @@ give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one
 
 **There are two one-shot helpers, and both retry.** `one_shot_by_request_id` for a
 request-id request, `one_shot_shared` for a shared channel. Neither takes a
-`ProtocolFeature` — do the version check on the line above. Usually that is
-`check_version(server_version, Features::X)?`, but not always: `news` uses
-`check_server_version(..)` and `historical_data` uses `validate_historical_data(..)`, which is
-half of why a `feature` parameter cannot come back. 44 of the 54 one-shot sites check a version;
-the 10 that do not are `server_time`, `managed_accounts`, `request_fa`, `next_valid_order_id`,
-and `scanner_parameters`, none of which carries a `MinServerVer` in the C# client.
+`ProtocolFeature`. The handshake requires server version 213, so most one-shots need no check;
+one gated above that floor does it on the line above, as `config` does with
+`check_version(server_version, Features::CONFIG)?` (#978).
 
 Neither helper takes an `on_none` either: a closed stream is `Error::UnexpectedEndOfStream`.
 The ten sites where "TWS sent nothing" is a legitimate empty answer chain
