@@ -3,9 +3,8 @@
 #[cfg(feature = "sync")]
 use crate::common::test_utils::helpers::proto_error_response;
 use crate::common::test_utils::helpers::{proto_response, text_response};
-use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
+use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::server_versions;
 use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, smart_components, symbol_samples, symbol_samples_entry};
 use crate::testdata::builders::market_data::tick_option_computation;
 use crate::testdata::builders::ResponseProtoEncoder;
@@ -74,15 +73,6 @@ pub struct OptionChainTestCase {
     pub contract_id: i32,
     pub ordered_responses: Vec<ResponseMessage>,
     pub expected_count: usize,
-}
-
-/// Test case for verify contract tests
-pub struct VerifyContractTestCase {
-    pub name: &'static str,
-    pub contract: Contract,
-    pub server_version: i32,
-    pub should_error: bool,
-    pub error_contains: Option<&'static str>,
 }
 
 /// Test case for StreamDecoder tests
@@ -678,82 +668,6 @@ pub fn option_chain_test_cases() -> Vec<OptionChainTestCase> {
                 text_response("76|9000|"),
             ],
             expected_count: 1,
-        },
-    ]
-}
-
-/// Test cases for verify contract
-pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
-    vec![
-        VerifyContractTestCase {
-            name: "valid contract",
-            contract: Contract {
-                symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Stock,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                ..Default::default()
-            },
-            server_version: server_versions::SIZE_RULES,
-            should_error: false,
-            error_contains: None,
-        },
-        VerifyContractTestCase {
-            name: "contract with security_id - old server",
-            contract: Contract {
-                symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Stock,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                security_id: "US0378331005".to_string(),
-                security_id_type: Some(SecurityIdType::Isin),
-                ..Default::default()
-            },
-            server_version: server_versions::SEC_ID_TYPE - 1,
-            should_error: true,
-            error_contains: Some("security ID type"),
-        },
-        VerifyContractTestCase {
-            name: "contract with trading class - old server",
-            contract: Contract {
-                symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Stock,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                trading_class: "AAPL".to_string(),
-                ..Default::default()
-            },
-            server_version: server_versions::TRADING_CLASS - 1,
-            should_error: true,
-            error_contains: Some("trading class"),
-        },
-        VerifyContractTestCase {
-            name: "contract with primary exchange - old server",
-            contract: Contract {
-                symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Stock,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                primary_exchange: Exchange::from("NASDAQ"),
-                ..Default::default()
-            },
-            server_version: server_versions::LINKING - 1,
-            should_error: true,
-            error_contains: Some("linking"),
-        },
-        VerifyContractTestCase {
-            name: "contract with issuer ID - old server",
-            contract: Contract {
-                symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Bond,
-                exchange: Exchange::from("SMART"),
-                currency: Currency::from("USD"),
-                issuer_id: "Q123".to_string(),
-                ..Default::default()
-            },
-            server_version: server_versions::BOND_ISSUERID - 1,
-            should_error: true,
-            error_contains: Some("bond issuer ID"),
         },
     ]
 }

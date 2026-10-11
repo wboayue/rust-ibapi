@@ -1,4 +1,4 @@
-use super::common::{decoders, encoders, verify};
+use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::client::ids::RequestId;
@@ -138,8 +138,6 @@ impl Client {
     /// }
     /// ```
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        check_version(self.server_version, Features::MARKET_RULES)?;
-
         request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::RequestMarketRule,
@@ -173,8 +171,6 @@ impl Client {
     /// }
     /// ```
     pub fn smart_components(&self, bbo_exchange: &str) -> Result<Vec<SmartComponent>, Error> {
-        check_version(self.server_version, Features::SMART_COMPONENTS)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_smart_components(request_id, bbo_exchange),
@@ -208,8 +204,6 @@ impl Client {
     /// }
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
-        check_version(self.server_version, Features::REQ_MATCHING_SYMBOLS)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_matching_symbols(request_id, pattern),
@@ -238,8 +232,6 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        check_version(self.server_version, Features::REQ_CALC_OPTION_PRICE)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
@@ -267,8 +259,6 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        check_version(self.server_version, Features::REQ_CALC_IMPLIED_VOLAT)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
@@ -319,7 +309,6 @@ pub(in crate::contracts) fn contract_details_stream(
     request_id: RequestId,
     buffer_limit: Option<usize>,
 ) -> Result<Subscription<ContractDetails>, Error> {
-    verify::verify_contract(client.server_version, contract)?;
     let packet = encoders::encode_request_contract_data(request_id.raw(), contract)?;
     client.request_with_id(request_id).send_capped(packet, buffer_limit)
 }

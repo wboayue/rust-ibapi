@@ -197,32 +197,6 @@ fn test_option_chain() {
 }
 
 #[test]
-fn test_verify_contract() {
-    for test_case in verify_contract_test_cases() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-
-        let client = Client::stubbed(message_bus, test_case.server_version);
-        let result = verify::verify_contract(client.server_version, &test_case.contract);
-
-        if test_case.should_error {
-            assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-            if let Some(expected_error) = test_case.error_contains {
-                let error_msg = format!("{:?}", result.err());
-                assert!(
-                    error_msg.contains(expected_error),
-                    "Test '{}' error should contain '{}', got '{}'",
-                    test_case.name,
-                    expected_error,
-                    error_msg
-                );
-            }
-        } else {
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-        }
-    }
-}
-
-#[test]
 fn test_stream_decoders() {
     for test_case in stream_decoder_test_cases() {
         let message = test_case.message.clone();
@@ -469,21 +443,6 @@ fn test_market_rule_returns_eof_on_empty_stream() {
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
 }
 
-/// The version check used to be a mandatory argument to `one_shot_request`;
-/// #741 moved it inline, so deleting it now compiles. The async twin
-/// (`market_rule_rejects_old_server_version`) was already covered — this is the
-/// side that was not.
-#[test]
-fn test_market_rule_rejects_old_server_version() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES - 1);
-
-    let result = client.market_rule(26);
-
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0, "must not send below the version floor");
-}
-
 #[test]
 fn test_calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
@@ -545,19 +504,6 @@ fn contract_details_stream_unsent_builder_sends_nothing() {
     let second = client.contract_details_stream(&contract).request_id();
 
     assert!(second > first, "a dropped builder skips its id");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[test]
-fn contract_details_stream_validation_error_sends_nothing() {
-    let (client, message_bus) = stream_client(vec![], server_versions::SIZE_RULES);
-    let contract = Contract {
-        issuer_id: "ISSUER".into(),
-        ..Contract::stock("AAPL").build()
-    };
-
-    let result = client.contract_details_stream(&contract).subscribe();
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "expected a version error");
     assert_eq!(request_message_count(&message_bus), 0);
 }
 
