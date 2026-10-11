@@ -5,6 +5,7 @@ use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
 use crate::connection::sync::Connection;
 use crate::orders::OrderStatusKind;
 use crate::tests::assert_send_and_sync;
+use crate::transport::common::poison_with;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
 // Additional imports for connection tests
@@ -3546,14 +3547,7 @@ fn sender_hash_deliver_aliased_hands_the_item_back_when_unrouted() {
 #[test]
 fn sender_hash_recovers_from_a_poisoned_lock() {
     let (routes, receiver, _lease) = sender_hash_route();
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = routes.senders.write().unwrap();
-                panic!("poison the route lock");
-            })
-            .join();
-    });
+    poison_with(|| routes.senders.write().unwrap());
     assert!(routes.senders.is_poisoned());
 
     routes.deliver(&RequestId::nth(1), RoutedItem::Error(Error::Cancelled)).unwrap();
@@ -3568,14 +3562,7 @@ fn sender_hash_recovers_from_a_poisoned_lock() {
 #[test]
 fn notice_broadcaster_recovers_from_a_poisoned_lock() {
     let broadcaster = NoticeBroadcaster::new();
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = broadcaster.senders.lock().unwrap();
-                panic!("poison the broadcaster lock");
-            })
-            .join();
-    });
+    poison_with(|| broadcaster.senders.lock().unwrap());
     assert!(broadcaster.senders.is_poisoned());
 
     let receiver = broadcaster.subscribe();

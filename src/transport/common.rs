@@ -10,7 +10,7 @@ use crate::errors::Error;
 use crate::messages::{unknown_message_type_notice, IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN};
 use crate::subscriptions::common::RoutedItem;
 
-// Poison recovery. Every std lock in the transport guards state that each
+// Poison recovery. Locks taken through these helpers guard state that each
 // critical section leaves whole (single map/vec operations, flag stores), so a
 // panic elsewhere cannot break an invariant. Recover the guard rather than
 // cascade that panic into every later route, broadcast and teardown.
@@ -20,14 +20,28 @@ pub(crate) fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Read-lock `lock`, recovering the guard if a panicking holder poisoned it.
-pub(crate) fn read_lock<T: ?Sized>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    lock.read().unwrap_or_else(PoisonError::into_inner)
+/// Read-lock `rwlock`, recovering the guard if a panicking holder poisoned it.
+pub(crate) fn read_lock<T: ?Sized>(rwlock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    rwlock.read().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Write-lock `lock`, recovering the guard if a panicking holder poisoned it.
-pub(crate) fn write_lock<T: ?Sized>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    lock.write().unwrap_or_else(PoisonError::into_inner)
+/// Write-lock `rwlock`, recovering the guard if a panicking holder poisoned it.
+pub(crate) fn write_lock<T: ?Sized>(rwlock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    rwlock.write().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Poison a lock the way a panic would: hold the guard `acquire` returns
+/// while a scoped thread panics.
+#[cfg(test)]
+pub(crate) fn poison_with<G>(acquire: impl FnOnce() -> G + Send) {
+    std::thread::scope(|scope| {
+        let _ = scope
+            .spawn(|| {
+                let _guard = acquire();
+                panic!("poison the lock");
+            })
+            .join();
+    });
 }
 
 /// Sink for unrouted notices observed during the handshake. Production impls

@@ -315,14 +315,7 @@ impl<S: TapSender> OrderTaps<S> {
     /// Poison the state lock, as a panic while holding it would.
     #[cfg(feature = "sync")]
     pub(crate) fn poison(&self) {
-        std::thread::scope(|scope| {
-            let _ = scope
-                .spawn(|| {
-                    let _guard = self.state.lock().unwrap();
-                    panic!("poison the order taps");
-                })
-                .join();
-        });
+        super::common::poison_with(|| self.state.lock().unwrap());
         assert!(self.state.is_poisoned());
     }
 }

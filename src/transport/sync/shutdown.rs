@@ -1,9 +1,9 @@
 //! Latching shutdown signal shared by the blocking bus and its connection.
 
 use std::sync::{Condvar, Mutex, PoisonError};
+use std::time::Duration;
 
 use crate::transport::common::lock;
-use std::time::Duration;
 
 /// Records that shutdown was requested and wakes anyone waiting on it.
 ///

@@ -23,6 +23,7 @@ use crate::server_versions;
 use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::common::poison_with;
 
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
@@ -2445,14 +2446,7 @@ async fn test_abandoned_order_status_wait_is_released() {
 #[tokio::test]
 async fn notice_broadcaster_recovers_from_a_poisoned_lock() {
     let broadcaster = NoticeBroadcaster::new(broadcast::channel(4).0);
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = broadcaster.sender.lock().unwrap();
-                panic!("poison the broadcaster lock");
-            })
-            .join();
-    });
+    poison_with(|| broadcaster.sender.lock().unwrap());
     assert!(broadcaster.sender.is_poisoned());
 
     let mut receiver = broadcaster.subscribe();
