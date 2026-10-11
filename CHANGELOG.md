@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-10-11
+
 ### Added
 
+- `Client::wait_for_fill(order_id, timeout)` (async and blocking) waits until an order fills or ends and returns `orders::OrderOutcome`: `Filled`, `Ended` (cancelled or inactive first) or `TimedOut` with the last status seen; a timeout leaves the order working. It answers from the statuses this client has seen since connecting, so an order placed by another client, or one that finished before this connection, waits out the timeout. See `examples/{sync,async}/wait_for_fill.rs` (#951).
+- `Client::order_status_stream(order_id)` (async and blocking): the `OrderStatus` updates for one order, starting with the latest status this client has seen. Nothing is sent to TWS (#951).
+- `OrderStatus::outcome()`, the rule `wait_for_fill` uses: `Filled` for status `Filled` or nothing remaining after a fill, `Ended` for a terminal status, otherwise `None`. `OrderOutcome` is in the prelude (#951).
 - `Client::account_summary_snapshots(&group, tags, quiet)` (async and blocking) wraps `account_summary` and yields `AccountSummarySnapshot`, the latest value of every row by account, tag and currency. TWS sends one `End` after the first snapshot and none after the rows it pushes later, so a snapshot completes at an `End` or once no row has arrived for `quiet`, and only when a row changed a value. The blocking type is at `client::blocking::AccountSummarySnapshots` when both features are enabled (#957).
 - `Subscription::next_batch(quiet)` (async and blocking) returns the items that arrive together, closed by an end marker or by `quiet` without an item; for streams that dump then push without an end marker (account summary, account updates, positions and their multi variants). `account_summary_snapshots` is built on it (#977).
 - `AccountSummarySnapshot::apply` folds rows for callers with their own batching; `AccountSummarySnapshots::cancel` (async and blocking) cancels before resubscribing.
@@ -380,7 +385,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...v5.0.0
 [4.2.0]: https://github.com/wboayue/rust-ibapi/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/wboayue/rust-ibapi/compare/v4.0.1...v4.1.0

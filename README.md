@@ -23,13 +23,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 # Async only (default features)
-ibapi = "5.0"
+ibapi = "5.1"
 
 # Blocking only
-ibapi = { version = "5.0", default-features = false, features = ["sync"] }
+ibapi = { version = "5.1", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "5.0", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "5.1", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
