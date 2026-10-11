@@ -18,9 +18,9 @@ When a test asserts against a version-gated API — `Features::*`, `server_versi
 Never hardcode the wire value.
 
 ```rust
-let feature = Features::TICK_BY_TICK;
-assert_eq!(*required, feature.min_version);   // not `137`
-assert_eq!(name, feature.name);               // not `"tick-by-tick data"`
+let feature = Features::CONFIG;
+assert_eq!(*required, feature.min_version);   // not `219`
+assert_eq!(name, feature.name);               // not `"configuration"`
 ```
 
 Boundary cases then document themselves: `feature.min_version - 1` and `feature.min_version`.
