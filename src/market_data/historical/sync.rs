@@ -262,7 +262,7 @@ pub(crate) fn historical_data(
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
 ) -> Result<HistoricalData, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, Some(what_to_show))?;
+    common::validate_historical_data(client.server_version(), contract, end_date, what_to_show)?;
 
     retry_on_connection_reset(client, || {
         let builder = client.request();
@@ -272,7 +272,7 @@ pub(crate) fn historical_data(
             end_date,
             duration,
             bar_size,
-            Some(what_to_show),
+            what_to_show,
             trading_hours.use_rth(),
             false,
             &Vec::<crate::contracts::TagValue>::default(),
@@ -322,7 +322,7 @@ pub(crate) fn historical_data_stream(
         None, // IBKR requires end_date=None when keep_up_to_date=true
         duration,
         bar_size,
-        Some(what_to_show),
+        what_to_show,
         trading_hours.use_rth(),
         true, // keep_up_to_date — the whole point of .stream()
         &Vec::<crate::contracts::TagValue>::default(),
@@ -371,7 +371,7 @@ pub(crate) fn historical_schedule(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
 ) -> Result<Schedule, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, Some(WhatToShow::Schedule))?;
+    common::validate_historical_data(client.server_version(), contract, end_date, WhatToShow::Schedule)?;
 
     request_helpers::blocking::one_shot_by_request_id(
         client,
@@ -382,7 +382,7 @@ pub(crate) fn historical_schedule(
                 end_date,
                 duration,
                 BarSize::Day,
-                Some(WhatToShow::Schedule),
+                WhatToShow::Schedule,
                 true,
                 false,
                 &Vec::<crate::contracts::TagValue>::default(),
