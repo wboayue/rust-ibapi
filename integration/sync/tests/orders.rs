@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, OrderUpdate, PlaceOrder};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, PlaceOrder};
 use ibapi::subscriptions::sync::Subscription;
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Error, NoticeCategory};
@@ -470,4 +470,57 @@ fn preset_attached_orders_accepted() {
 
     rate_limit();
     let _ = client.cancel_order(ids.parent, "");
+}
+
+// #951: a working order times out with its latest status; once cancelled, a
+// second wait reports it ended.
+#[test]
+#[serial(orders)]
+fn wait_for_fill_times_out_then_ends_after_cancel() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+
+    rate_limit();
+    let order_id = client.order(&contract).buy(1).limit(1.0).submit().expect("submit failed");
+
+    let outcome = client.wait_for_fill(order_id, Duration::from_secs(3)).expect("first wait failed");
+    let Some(status) = (match outcome {
+        OrderOutcome::TimedOut(status) => status,
+        other => panic!("a far limit should still be working: {other:?}"),
+    }) else {
+        panic!("TWS sent no status within 3s");
+    };
+    assert_eq!(status.order_id, order_id.0);
+
+    rate_limit();
+    let _cancellation = client.cancel_order(order_id, "").expect("cancel_order failed");
+    match client.wait_for_fill(order_id, Duration::from_secs(10)).expect("second wait failed") {
+        OrderOutcome::Ended(status) => assert!(status.status.is_terminal(), "ended on {:?}", status.status),
+        other => panic!("cancelled order should end: {other:?}"),
+    }
+}
+
+// #951: a market fill reports Filled with nothing remaining.
+#[test]
+#[serial(orders)]
+fn wait_for_fill_reports_es_market_fill() {
+    require_globex_open();
+    let (client, _client_id) = connect();
+    let contract = front_month_es(&client);
+
+    rate_limit();
+    let order_id = client.next_order_id();
+    let _sub = client
+        .place_order(order_id, &contract, &market_order(Action::Buy, 1.0))
+        .expect("buy failed");
+
+    let outcome = client.wait_for_fill(order_id, Duration::from_secs(15));
+    flatten(&client, &contract);
+    match outcome.expect("wait failed") {
+        OrderOutcome::Filled(status) => {
+            assert_eq!(status.remaining, 0.0);
+            assert_eq!(status.filled, 1.0);
+        }
+        other => panic!("market order should fill: {other:?}"),
+    }
 }
