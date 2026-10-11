@@ -1,4 +1,5 @@
 use super::*;
+use crate::orders::OrderStatusKind;
 
 fn status(kind: OrderStatusKind, filled: f64, remaining: f64) -> OrderStatus {
     OrderStatus {

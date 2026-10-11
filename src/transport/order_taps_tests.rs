@@ -12,7 +12,7 @@ fn publish(taps: &Taps, order_id: i32, status: OrderStatusKind) {
 }
 
 fn status_stream(taps: &Taps, order_id: i32) -> (Receiver<RoutedItem>, Lease) {
-    let (_, receiver, lease) = taps.subscribe_status(OrderId::from(order_id), 0).expect("subscribe");
+    let NewTap { receiver, lease, .. } = taps.subscribe_status(OrderId::from(order_id), 0).expect("subscribe");
     (receiver, lease)
 }
 
@@ -134,7 +134,11 @@ fn oldest_latest_statuses_are_evicted_past_capacity() {
 #[test]
 fn reset_ends_status_streams_and_keeps_updates_and_latest() {
     let taps = Taps::default();
-    let (_, updates, _updates_lease) = taps.subscribe_updates(0).unwrap();
+    let NewTap {
+        receiver: updates,
+        lease: _updates_lease,
+        ..
+    } = taps.subscribe_updates(0).unwrap();
     publish(&taps, 7, OrderStatusKind::Submitted);
     let (receiver, _lease) = status_stream(&taps, 7);
     next_response(&receiver);
@@ -155,7 +159,11 @@ fn reset_ends_status_streams_and_keeps_updates_and_latest() {
 #[test]
 fn close_ends_every_stream_and_refuses_new_ones() {
     let taps = Taps::default();
-    let (_, updates, _updates_lease) = taps.subscribe_updates(0).unwrap();
+    let NewTap {
+        receiver: updates,
+        lease: _updates_lease,
+        ..
+    } = taps.subscribe_updates(0).unwrap();
     let (receiver, _lease) = status_stream(&taps, 7);
 
     taps.close();
@@ -169,12 +177,14 @@ fn close_ends_every_stream_and_refuses_new_ones() {
 #[test]
 fn update_stream_is_exclusive_until_released() {
     let taps = Taps::default();
-    let (_, _receiver, lease) = taps.subscribe_updates(0).unwrap();
+    let NewTap {
+        receiver: _receiver, lease, ..
+    } = taps.subscribe_updates(0).unwrap();
     assert!(matches!(taps.subscribe_updates(0), Err(Error::AlreadySubscribed)));
 
     let lease_ref = lease.downgrade();
     drop(lease);
-    let (_, _replacement, _new_lease) = taps.subscribe_updates(0).expect("a dead registration is replaced");
+    let _replacement = taps.subscribe_updates(0).expect("a dead registration is replaced");
     assert!(!taps.release_updates(&lease_ref), "a stale release leaves the replacement");
     assert!(taps.updates_lease().is_some());
 }

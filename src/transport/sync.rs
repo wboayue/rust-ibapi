@@ -18,7 +18,7 @@ use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length, Lease, LeaseRef};
-use super::order_taps::OrderTaps;
+use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
 use super::routing::{
@@ -939,7 +939,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
-        let (sender, receiver, lease) = self.order_taps.subscribe_status(order_id, 0)?;
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0)?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
@@ -954,7 +954,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         // created while a reconnect is in progress. The lease gives the
         // subscription's drop signal its identity — see
         // `clear_order_update_stream`.
-        let (sender, receiver, lease) = self.order_taps.subscribe_updates(0)?;
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_updates(0)?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)

@@ -28,8 +28,9 @@ pub(crate) trait TapSender: Clone + Send {
     /// A new channel. The sync channel is unbounded and ignores `capacity`.
     fn channel(capacity: usize) -> (Self, Self::Receiver);
 
-    /// Queue `item`; `false` when the receiver is gone.
-    fn send_item(&self, item: RoutedItem) -> bool;
+    /// Queue `item`; `false` when the receiver is gone. `label` names the
+    /// stream in a backlog warning.
+    fn send_item(&self, item: RoutedItem, label: &str) -> bool;
 }
 
 #[cfg(feature = "sync")]
@@ -40,10 +41,10 @@ impl TapSender for crossbeam::channel::Sender<RoutedItem> {
         crossbeam::channel::unbounded()
     }
 
-    fn send_item(&self, item: RoutedItem) -> bool {
+    fn send_item(&self, item: RoutedItem, label: &str) -> bool {
         let sent = self.send(item).is_ok();
         if sent {
-            super::sync::warn_if_backlogged(format_args!("order stream"), self.len());
+            super::sync::warn_if_backlogged(format_args!("{label}"), self.len());
         }
         sent
     }
@@ -57,14 +58,23 @@ impl TapSender for tokio::sync::broadcast::Sender<RoutedItem> {
         tokio::sync::broadcast::channel(capacity)
     }
 
-    fn send_item(&self, item: RoutedItem) -> bool {
+    fn send_item(&self, item: RoutedItem, _label: &str) -> bool {
         self.send(item).is_ok()
     }
 }
 
-/// A new tap: the sender the subscription keeps (sync uses it for its cancel
-/// notification), its receiver, and the lease that identifies it.
-pub(crate) type NewTap<S> = (S, <S as TapSender>::Receiver, Lease);
+const UPDATES: &str = "order update stream";
+const STATUS: &str = "order status stream";
+
+/// A new tap, for the subscription to hold.
+pub(crate) struct NewTap<S: TapSender> {
+    /// A sender clone; sync uses it for the subscription's cancel notification.
+    #[cfg_attr(not(feature = "sync"), allow(dead_code))]
+    pub(crate) sender: S,
+    pub(crate) receiver: S::Receiver,
+    /// Identifies the subscription to its cleanup signal.
+    pub(crate) lease: Lease,
+}
 
 struct Tap<S> {
     sender: S,
@@ -79,7 +89,7 @@ impl<S: TapSender> Tap<S> {
             sender: sender.clone(),
             lease: lease.downgrade(),
         };
-        (tap, (sender, receiver, lease))
+        (tap, NewTap { sender, receiver, lease })
     }
 
     /// Whether `lease` names this tap's subscription and it has gone.
@@ -168,7 +178,7 @@ impl<S: TapSender> OrderTaps<S> {
         let Some(tap) = state.updates.as_ref() else {
             return false;
         };
-        let sent = tap.sender.send_item(item);
+        let sent = tap.sender.send_item(item, UPDATES);
         if !sent {
             warn!("order update stream closed before its cleanup");
         }
@@ -196,7 +206,7 @@ impl<S: TapSender> OrderTaps<S> {
         let (tap, new) = Tap::<S>::open(capacity);
         let slot = state.statuses.entry(order_id).or_default();
         if let Some(latest) = &slot.latest {
-            tap.sender.send_item(latest.clone().into());
+            tap.sender.send_item(latest.clone().into(), STATUS);
         }
         slot.streams.push(tap);
         Ok(new)
@@ -227,7 +237,7 @@ impl<S: TapSender> OrderTaps<S> {
         };
         let mut state = self.lock();
         let slot = state.statuses.entry(order_id).or_default();
-        slot.streams.retain(|tap| tap.sender.send_item(message.clone().into()));
+        slot.streams.retain(|tap| tap.sender.send_item(message.clone().into(), STATUS));
         if slot.latest.replace(message.clone()).is_none() {
             state.recent.push_back(order_id);
             Self::evict_oldest(&mut state);
@@ -263,7 +273,7 @@ impl<S: TapSender> OrderTaps<S> {
         state.closed = true;
         // The subscription holds a sender clone, so only a sent item ends it.
         if let Some(tap) = state.updates.take() {
-            tap.sender.send_item(Error::Shutdown.into());
+            tap.sender.send_item(Error::Shutdown.into(), UPDATES);
         }
         Self::end_status_streams(&mut state, || Error::Shutdown);
     }
@@ -271,7 +281,7 @@ impl<S: TapSender> OrderTaps<S> {
     fn end_status_streams(state: &mut State<S>, error: impl Fn() -> Error) {
         for slot in state.statuses.values_mut() {
             for tap in slot.streams.drain(..) {
-                tap.sender.send_item(error().into());
+                tap.sender.send_item(error().into(), STATUS);
             }
         }
         state.statuses.retain(|_, slot| slot.latest.is_some());

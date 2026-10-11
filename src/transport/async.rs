@@ -39,7 +39,7 @@ use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessa
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame, Lease, LeaseRef};
-use super::order_taps::OrderTaps;
+use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
@@ -1121,7 +1121,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn create_order_status_subscription(&self, order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
         let capacity = ChannelClass::Order.capacity(self.channel_capacity);
-        let (_, receiver, lease) = self.order_taps.subscribe_status(order_id, capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity)?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderStatus(order_id))
             .class(ChannelClass::Order))
@@ -1129,7 +1129,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let capacity = ChannelClass::OrderStream.capacity(self.channel_capacity);
-        let (_, receiver, lease) = self.order_taps.subscribe_updates(capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity)?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
             .class(ChannelClass::OrderStream))
