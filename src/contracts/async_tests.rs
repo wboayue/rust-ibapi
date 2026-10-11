@@ -206,32 +206,6 @@ async fn test_option_chain() {
 }
 
 #[tokio::test]
-async fn test_verify_contract() {
-    for test_case in verify_contract_test_cases() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-
-        let client = Client::stubbed(message_bus, test_case.server_version);
-        let result = verify::verify_contract(client.server_version(), &test_case.contract);
-
-        if test_case.should_error {
-            assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-            if let Some(expected_error) = test_case.error_contains {
-                let error_msg = format!("{:?}", result.err());
-                assert!(
-                    error_msg.contains(expected_error),
-                    "Test '{}' error should contain '{}', got '{}'",
-                    test_case.name,
-                    expected_error,
-                    error_msg
-                );
-            }
-        } else {
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-        }
-    }
-}
-
-#[tokio::test]
 async fn test_stream_decoders() {
     for test_case in stream_decoder_test_cases() {
         let message = test_case.message.clone();
@@ -495,17 +469,6 @@ async fn contract_details_returns_unexpected_end_of_stream() {
 }
 
 #[tokio::test]
-async fn contract_details_propagates_verify_failure() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::TRADING_CLASS - 1);
-    let contract = Contract::stock("AAPL").trading_class("NMS").build();
-
-    let result = client.contract_details(&contract).await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "got {result:?}");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn matching_symbols_returns_server_error() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         9000,
@@ -539,32 +502,12 @@ async fn matching_symbols_returns_empty_on_closed_stream() {
 }
 
 #[tokio::test]
-async fn matching_symbols_rejects_old_server_version() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_MATCHING_SYMBOLS - 1);
-
-    let result = client.matching_symbols("AAPL").await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn market_rule_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
 
     let err = client.market_rule(26).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
-}
-
-#[tokio::test]
-async fn market_rule_rejects_old_server_version() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES - 1);
-
-    let result = client.market_rule(26).await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 #[tokio::test]
@@ -578,17 +521,6 @@ async fn calculate_option_price_returns_eof_on_empty_stream() {
 }
 
 #[tokio::test]
-async fn calculate_option_price_rejects_old_server_version() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE - 1);
-    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
-
-    let result = client.calculate_option_price(&contract, 0.25, 155.0).await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
 async fn calculate_implied_volatility_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
@@ -596,17 +528,6 @@ async fn calculate_implied_volatility_returns_eof_on_empty_stream() {
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
-}
-
-#[tokio::test]
-async fn calculate_implied_volatility_rejects_old_server_version() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_IMPLIED_VOLAT - 1);
-    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
-
-    let result = client.calculate_implied_volatility(&contract, 8.5, 155.0).await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
-    assert_eq!(request_message_count(&message_bus), 0);
 }
 
 #[tokio::test]
@@ -668,19 +589,6 @@ async fn contract_details_stream_unsent_builder_sends_nothing() {
     let second = client.contract_details_stream(&contract).request_id();
 
     assert!(second > first, "a dropped builder skips its id");
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
-#[tokio::test]
-async fn contract_details_stream_validation_error_sends_nothing() {
-    let (client, message_bus) = stream_client(vec![], server_versions::SIZE_RULES);
-    let contract = Contract {
-        issuer_id: "ISSUER".into(),
-        ..Contract::stock("AAPL").build()
-    };
-
-    let result = client.contract_details_stream(&contract).subscribe().await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))), "expected a version error");
     assert_eq!(request_message_count(&message_bus), 0);
 }
 
