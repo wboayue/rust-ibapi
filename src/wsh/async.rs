@@ -147,7 +147,7 @@ pub(crate) async fn wsh_event_data_by_filter(
         check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    request_helpers::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
+    request_helpers::request_with_id(client, |request_id| {
         encoders::encode_request_wsh_event_data(
             request_id,
             None,
