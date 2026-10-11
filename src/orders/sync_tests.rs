@@ -172,6 +172,35 @@ fn place_order_rejects_hedge_max_size_below_gate() {
     assert_eq!(request_message_count(&message_bus), 0);
 }
 
+// Each flag is rejected below its gate before anything is sent, and sent at it.
+#[test]
+fn place_order_gates_additional_order_params() {
+    use crate::orders::common::test_tables::ADDITIONAL_PARAM_GATES;
+
+    for gate in ADDITIONAL_PARAM_GATES {
+        let name = gate.name;
+        let contract = Contract::stock("TSLA").build();
+        let mut order = order_builder::market_order(Action::Buy, 100.0);
+        (gate.set)(&mut order);
+
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+        let client = Client::stubbed(message_bus.clone(), gate.version - 1);
+        match client.place_order(20, &contract, &order) {
+            Err(Error::ServerVersion(required, _, _)) => assert_eq!(required, gate.version, "{name}"),
+            Err(other) => panic!("{name}: expected ServerVersion error, got {other:?}"),
+            Ok(_) => panic!("{name}: expected place_order to be rejected below the gate"),
+        }
+        assert_eq!(request_message_count(&message_bus), 0, "{name}: sent below the gate");
+
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+        let client = Client::stubbed(message_bus.clone(), gate.version);
+        let _subscription = client
+            .place_order(20, &contract, &order)
+            .unwrap_or_else(|e| panic!("{name}: rejected at the gate: {e:?}"));
+        assert_eq!(request_message_count(&message_bus), 1, "{name}: not sent at the gate");
+    }
+}
+
 #[test]
 fn cancel_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
