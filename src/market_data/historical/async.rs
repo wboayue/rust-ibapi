@@ -57,8 +57,6 @@ impl Client {
     /// }
     /// ```
     pub async fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
-        check_version(self.server_version(), Features::HEAD_TIMESTAMP)?;
-
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
@@ -267,8 +265,6 @@ impl Client {
     /// }
     /// ```
     pub async fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
-        check_version(self.server_version(), Features::HISTOGRAM)?;
-
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
@@ -288,7 +284,7 @@ pub(crate) async fn historical_data(
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
 ) -> Result<HistoricalData, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, what_to_show)?;
+    common::validate_historical_data(end_date, what_to_show)?;
 
     retry_on_connection_reset(client, || async {
         let builder = client.request();
@@ -329,10 +325,6 @@ pub(crate) async fn historical_data_stream(
     trading_hours: TradingHours,
     buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
-    }
-
     let builder = client.request();
     let request = encoders::encode_request_historical_data(
         builder.request_id(),
@@ -364,8 +356,6 @@ pub(crate) async fn historical_ticks<T: TickDecoder<T> + Send>(
     trading_hours: TradingHours,
     ignore_size: bool,
 ) -> Result<TickSubscription<T>, Error> {
-    check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
-
     let builder = client.request();
     let request = encoders::encode_request_historical_ticks(
         builder.request_id(),
@@ -389,8 +379,6 @@ pub(crate) async fn historical_schedule(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
 ) -> Result<Schedule, Error> {
-    common::validate_historical_data(client.server_version(), contract, end_date, WhatToShow::Schedule)?;
-
     request_helpers::one_shot_by_request_id(
         client,
         |request_id| {

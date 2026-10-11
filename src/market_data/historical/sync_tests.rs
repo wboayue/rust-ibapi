@@ -429,33 +429,6 @@ fn test_historical_ticks_trade() {
 }
 
 #[test]
-fn test_historical_data_version_check() {
-    // Test with a server version that doesn't support trading class
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-
-    // Use an older server version
-    let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
-
-    // Create a contract with trading_class set
-    let mut contract = Contract::stock("MSFT").build();
-    contract.trading_class = "CLASS".to_string();
-
-    let end_date = datetime!(2023-04-15 16:31:22 UTC);
-    let duration = 2.days();
-    let bar_size = BarSize::Hour;
-    let trading_hours = TradingHours::Regular;
-
-    // This should return an error due to server version
-    let result = client
-        .historical_data(&contract, bar_size)
-        .duration(duration)
-        .ending(end_date)
-        .trading_hours(trading_hours)
-        .fetch();
-    assert!(result.is_err(), "Expected error due to server version incompatibility");
-}
-
-#[test]
 fn test_historical_data_adjusted_last_validation() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
 
@@ -1047,13 +1020,6 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 }
 
 #[test]
-fn test_head_timestamp_version_check() {
-    assert_version_check_fails(Features::HEAD_TIMESTAMP, |c| {
-        c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular)
-    });
-}
-
-#[test]
 fn test_head_timestamp_unexpected_response() {
     // 17 = HistoricalData — wrong type for head_timestamp (expects 88).
     assert_unexpected_response(server_versions::SIZE_RULES, "17|9000|20230315  09:30:00|20230315  10:30:00|0|", |c| {
@@ -1208,24 +1174,6 @@ fn test_historical_schedules_ending_now() {
 }
 
 #[test]
-fn test_historical_schedule_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| {
-        c.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch()
-    });
-}
-
-#[test]
-fn test_historical_schedule_trading_class_version_check() {
-    // contract.trading_class triggers the earlier TRADING_CLASS gate ahead of the
-    // HISTORICAL_SCHEDULE gate — pin below TRADING_CLASS so the former fires first.
-    let mut contract = Contract::stock("MSFT").build();
-    contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(Features::TRADING_CLASS, move |c| {
-        c.historical_schedules(&contract, Duration::days(1)).fetch()
-    });
-}
-
-#[test]
 fn test_historical_schedule_unexpected_response() {
     assert_unexpected_response(
         server_versions::HISTORICAL_SCHEDULE,
@@ -1262,13 +1210,6 @@ fn test_cancel_historical_ticks_version_check() {
 }
 
 #[test]
-fn test_histogram_data_version_check() {
-    assert_version_check_fails(Features::HISTOGRAM, |c| {
-        c.histogram_data(&Contract::stock("MSFT").build(), TradingHours::Regular, BarSize::Day)
-    });
-}
-
-#[test]
 fn test_histogram_data_empty_response_returns_empty_vec() {
     // None on the first subscription.next() → returns an empty Vec.
     let message_bus = Arc::new(MessageBusStub::default());
@@ -1279,36 +1220,6 @@ fn test_histogram_data_empty_response_returns_empty_vec() {
         .expect("histogram_data should succeed with empty result");
 
     assert!(histogram.is_empty(), "expected empty histogram, got {histogram:?}");
-}
-
-#[test]
-fn test_historical_data_streaming_trading_class_version_check() {
-    let mut contract = Contract::stock("MSFT").build();
-    contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(Features::TRADING_CLASS, move |c| {
-        c.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).stream()
-    });
-}
-
-#[test]
-fn test_historical_ticks_bid_ask_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks(&Contract::stock("MSFT").build(), 1).bid_ask(IgnoreSize::No)
-    });
-}
-
-#[test]
-fn test_historical_ticks_mid_point_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks(&Contract::stock("MSFT").build(), 1).mid_point()
-    });
-}
-
-#[test]
-fn test_historical_ticks_trade_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| {
-        c.historical_ticks(&Contract::stock("MSFT").build(), 1).trade()
-    });
 }
 
 #[test]

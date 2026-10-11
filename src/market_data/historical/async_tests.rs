@@ -274,16 +274,6 @@ async fn test_historical_data() {
 }
 
 #[tokio::test]
-async fn test_historical_data_version_check() {
-    let mut contract = test_contract();
-    contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).fetch().await
-    })
-    .await;
-}
-
-#[tokio::test]
 async fn test_historical_data_adjusted_last_validation() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -975,14 +965,6 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 }
 
 #[tokio::test]
-async fn test_head_timestamp_version_check() {
-    assert_version_check_fails(Features::HEAD_TIMESTAMP, |c| async move {
-        c.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await
-    })
-    .await;
-}
-
-#[tokio::test]
 async fn test_head_timestamp_unexpected_response() {
     // 17 = HistoricalData — wrong type for head_timestamp.
     assert_unexpected_response(
@@ -1084,26 +1066,6 @@ async fn test_historical_data_retries_a_connection_reset() {
 }
 
 #[tokio::test]
-async fn test_historical_schedules_ending_now_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_SCHEDULE, |c| async move {
-        c.historical_schedules(&test_contract(), Duration::days(1)).fetch().await
-    })
-    .await;
-}
-
-#[tokio::test]
-async fn test_historical_schedules_ending_now_trading_class_version_check() {
-    // contract.trading_class triggers the earlier TRADING_CLASS gate ahead of the
-    // HISTORICAL_SCHEDULE gate — pin below TRADING_CLASS so the former fires first.
-    let mut contract = test_contract();
-    contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_schedules(&contract, Duration::days(1)).fetch().await
-    })
-    .await;
-}
-
-#[tokio::test]
 async fn test_historical_schedules_unexpected_response() {
     // 17 = HistoricalData — wrong type for the schedule decoder (expects 106).
     assert_unexpected_response(
@@ -1111,30 +1073,6 @@ async fn test_historical_schedules_unexpected_response() {
         "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
         |c| async move { c.historical_schedules(&test_contract(), Duration::days(3)).fetch().await },
     )
-    .await;
-}
-
-#[tokio::test]
-async fn test_historical_ticks_bid_ask_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks(&test_contract(), 1).bid_ask(IgnoreSize::No).await
-    })
-    .await;
-}
-
-#[tokio::test]
-async fn test_historical_ticks_mid_point_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks(&test_contract(), 1).mid_point().await
-    })
-    .await;
-}
-
-#[tokio::test]
-async fn test_historical_ticks_trade_version_check() {
-    assert_version_check_fails(Features::HISTORICAL_TICKS, |c| async move {
-        c.historical_ticks(&test_contract(), 1).trade().await
-    })
     .await;
 }
 
@@ -1152,24 +1090,6 @@ async fn test_cancel_historical_ticks() {
 #[tokio::test]
 async fn test_cancel_historical_ticks_version_check() {
     assert_version_check_fails(Features::CANCEL_CONTRACT_DATA, |c| async move { c.cancel_historical_ticks(9000).await }).await;
-}
-
-#[tokio::test]
-async fn test_histogram_data_version_check() {
-    assert_version_check_fails(Features::HISTOGRAM, |c| async move {
-        c.histogram_data(&test_contract(), TradingHours::Regular, BarSize::Day).await
-    })
-    .await;
-}
-
-#[tokio::test]
-async fn test_historical_data_streaming_trading_class_version_check() {
-    let mut contract = test_contract();
-    contract.trading_class = "ES".to_owned();
-    assert_version_check_fails(Features::TRADING_CLASS, |c| async move {
-        c.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).stream().await
-    })
-    .await;
 }
 
 #[tokio::test]

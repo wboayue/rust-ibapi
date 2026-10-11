@@ -2,8 +2,7 @@ use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::contracts::{Contract, TagValue};
 use crate::messages::OutgoingMessages;
-use crate::protocol::{check_version, Features};
-use crate::{server_versions, Client, Error};
+use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{
@@ -34,8 +33,6 @@ impl Client {
     /// }
     /// ```
     pub async fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
-        self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
-
         let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
         self.send_message(message).await
     }
@@ -230,8 +227,6 @@ impl Client {
     /// }
     /// ```
     pub async fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
-        check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestMktDepthExchanges,
@@ -241,17 +236,6 @@ impl Client {
         .await
         .or_else(empty_on_end_of_stream)
     }
-}
-
-/// Validates that server supports the given request.
-pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
-    check_version(client.server_version(), Features::TICK_BY_TICK)?;
-
-    if number_of_ticks != 0 || ignore_size {
-        check_version(client.server_version(), Features::TICK_BY_TICK_IGNORE_SIZE)?;
-    }
-
-    Ok(())
 }
 
 pub(crate) async fn market_data(
@@ -287,12 +271,6 @@ pub(crate) async fn market_depth(
     smart_depth: SmartDepth,
 ) -> Result<Subscription<MarketDepths>, Error> {
     let is_smart_depth = matches!(smart_depth, SmartDepth::Yes);
-    if is_smart_depth {
-        check_version(client.server_version(), Features::SMART_DEPTH)?;
-    }
-    if !contract.primary_exchange.is_empty() {
-        check_version(client.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
-    }
 
     let builder = client.request();
     let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
@@ -308,8 +286,6 @@ pub(crate) async fn tick_by_tick<T: StreamDecoder<T> + Send + 'static>(
     number_of_ticks: i32,
     ignore_size: bool,
 ) -> Result<Subscription<T>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
     let builder = client.request();
     let request = encoders::encode_tick_by_tick(builder.request_id(), contract, tick_type, number_of_ticks, ignore_size)?;
     builder.send::<T>(request).await
