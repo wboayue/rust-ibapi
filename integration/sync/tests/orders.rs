@@ -473,7 +473,8 @@ fn preset_attached_orders_accepted() {
 }
 
 // #951: a working order times out with its latest status; once cancelled, a
-// second wait reports it ended.
+// second wait reports it ended. Asserts after the cancel, so a failure never
+// leaves the order working.
 #[test]
 #[serial(orders)]
 fn wait_for_fill_times_out_then_ends_after_cancel() {
@@ -483,24 +484,27 @@ fn wait_for_fill_times_out_then_ends_after_cancel() {
     rate_limit();
     let order_id = client.order(&contract).buy(1).limit(1.0).submit().expect("submit failed");
 
-    let outcome = client.wait_for_fill(order_id, Duration::from_secs(3)).expect("first wait failed");
-    let Some(status) = (match outcome {
-        OrderOutcome::TimedOut(status) => status,
-        other => panic!("a far limit should still be working: {other:?}"),
-    }) else {
-        panic!("TWS sent no status within 3s");
-    };
-    assert_eq!(status.order_id, order_id.0);
-
+    let working = client.wait_for_fill(order_id, Duration::from_secs(3));
     rate_limit();
     let _cancellation = client.cancel_order(order_id, "").expect("cancel_order failed");
-    match client.wait_for_fill(order_id, Duration::from_secs(10)).expect("second wait failed") {
-        OrderOutcome::Ended(status) => assert!(status.status.is_terminal(), "ended on {:?}", status.status),
+    let ended = client.wait_for_fill(order_id, Duration::from_secs(10));
+
+    match working.expect("first wait failed") {
+        OrderOutcome::TimedOut(Some(status)) => assert_eq!(status.order_id, order_id.0),
+        other => panic!("a far limit should time out still working: {other:?}"),
+    }
+    match ended.expect("second wait failed") {
+        OrderOutcome::Ended(status) => assert!(
+            matches!(status.status, OrderStatusKind::Cancelled | OrderStatusKind::ApiCancelled),
+            "ended on {:?}",
+            status.status
+        ),
         other => panic!("cancelled order should end: {other:?}"),
     }
 }
 
-// #951: a market fill reports Filled with nothing remaining.
+// #951: a market fill reports Filled with nothing remaining. Flattens only a
+// fill; anything else cancels the buy, so a failure never leaves a position.
 #[test]
 #[serial(orders)]
 fn wait_for_fill_reports_es_market_fill() {
@@ -509,13 +513,15 @@ fn wait_for_fill_reports_es_market_fill() {
     let contract = front_month_es(&client);
 
     rate_limit();
-    let order_id = client.next_order_id();
-    let _sub = client
-        .place_order(order_id, &contract, &market_order(Action::Buy, 1.0))
-        .expect("buy failed");
+    let order_id = client.order(&contract).buy(1).market().submit().expect("buy failed");
 
     let outcome = client.wait_for_fill(order_id, Duration::from_secs(15));
-    flatten(&client, &contract);
+    if matches!(outcome, Ok(OrderOutcome::Filled(_))) {
+        flatten(&client, &contract);
+    } else {
+        rate_limit();
+        let _ = client.cancel_order(order_id, "");
+    }
     match outcome.expect("wait failed") {
         OrderOutcome::Filled(status) => {
             assert_eq!(status.remaining, 0.0);
