@@ -305,6 +305,10 @@ impl Io for SlowSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf)
     }
+
+    fn close(&self) {
+        Io::close(&self.stream)
+    }
 }
 
 impl Reconnect for SlowSocket {
@@ -313,10 +317,6 @@ impl Reconnect for SlowSocket {
     }
 
     fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.stream.shutdown_read()
-    }
 }
 
 impl Stream for SlowSocket {}
@@ -419,6 +419,10 @@ impl Io for TestSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf)
     }
+
+    fn close(&self) {
+        Io::close(&self.stream)
+    }
 }
 
 impl Reconnect for TestSocket {
@@ -437,10 +441,6 @@ impl Reconnect for TestSocket {
     fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
         self.state.sleep_started.store(true, Ordering::SeqCst);
         shutdown.wait_timeout(duration)
-    }
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.stream.shutdown_read()
     }
 }
 

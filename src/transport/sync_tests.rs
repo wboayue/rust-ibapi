@@ -107,10 +107,6 @@ impl Reconnect for MockSocket {
         Err(mock_socket_error(ErrorKind::ConnectionRefused))
     }
     fn sleep(&self, _duration: std::time::Duration, _shutdown: &ShutdownSignal) {}
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.keep_alive.store(true, Ordering::SeqCst);
-        Ok(())
-    }
 }
 
 impl Stream for MockSocket {}
@@ -216,6 +212,10 @@ impl Io for MockSocket {
         self.responses_len.store(exchange.responses.len(), Ordering::SeqCst);
 
         Ok(())
+    }
+
+    fn close(&self) {
+        self.keep_alive.store(true, Ordering::SeqCst);
     }
 }
 
@@ -946,7 +946,7 @@ fn test_cleanup_thread_exits_promptly_on_shutdown() {
 }
 
 /// Dispatcher thread's blocked socket read is interrupted by
-/// `Reconnect::shutdown_read` from `request_shutdown`, instead of waiting
+/// `Io::close` from `request_shutdown`, instead of waiting
 /// up to the 1s `TWS_READ_TIMEOUT`. Companion to the cleanup-thread test;
 /// together they cover both threads `Client::drop` joins. Issue #523.
 #[test]
@@ -3071,10 +3071,11 @@ fn test_read_message_survives_a_socket_read_timeout_mid_frame() {
     peer.join().unwrap();
 }
 
-/// `shutdown_read` still breaks a read that is waiting out a stalled frame: the
-/// read ends as a lost connection right away, not after the stall limit.
+/// The socket shutdown `Io::close` performs still breaks a read that is waiting
+/// out a stalled frame: the read ends as a lost connection right away, not after
+/// the stall limit.
 #[test]
-fn test_shutdown_read_breaks_a_mid_frame_wait() {
+fn test_close_breaks_a_mid_frame_wait() {
     let read_timeout = Duration::from_millis(50);
     let (release_send, release) = std::sync::mpsc::channel::<()>();
     let (mut client, ready, peer) = socket_pair(read_timeout, move |mut socket, ready| {
@@ -3085,10 +3086,10 @@ fn test_shutdown_read_breaks_a_mid_frame_wait() {
     });
     ready.recv().unwrap();
 
-    let shutdown_handle = client.try_clone().unwrap();
+    let close_handle = client.try_clone().unwrap();
     let shutdown = std::thread::spawn(move || {
         std::thread::sleep(read_timeout * 3);
-        shutdown_handle.shutdown(std::net::Shutdown::Read).unwrap();
+        close_handle.shutdown(std::net::Shutdown::Both).unwrap();
     });
 
     let started = Instant::now();
@@ -3249,6 +3250,10 @@ impl Io for FailingWriteStream {
     fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
         Err(Error::ConnectionReset)
     }
+
+    fn close(&self) {
+        Io::close(&self.0)
+    }
 }
 
 impl Reconnect for FailingWriteStream {
@@ -3258,10 +3263,6 @@ impl Reconnect for FailingWriteStream {
 
     fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
         self.0.sleep(duration, shutdown)
-    }
-
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.0.shutdown_read()
     }
 }
 
@@ -3738,4 +3739,133 @@ fn test_dropped_order_status_stream_is_released() -> Result<(), Error> {
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
     Ok(())
+}
+
+// ---- physical close with retained owners (#979) ----
+
+/// A connected `TcpSocket`, its peer, and the listener, kept for reconnects.
+fn tcp_socket_pair() -> (Arc<TcpSocket>, std::net::TcpStream, std::net::TcpListener) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let socket = TcpSocket::connect(&address, true).unwrap();
+    let (peer, _) = listener.accept().unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    (Arc::new(socket), peer, listener)
+}
+
+/// The peer reads EOF: the other end closed, not just stopped reading.
+fn assert_peer_sees_eof(mut peer: std::net::TcpStream) {
+    use std::io::Read;
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    let read = peer.read(&mut [0u8; 1]);
+    assert!(matches!(read, Ok(0)), "TCP socket retained: {read:?}");
+}
+
+/// Close sends FIN while every clone is alive, wakes a blocked read well before
+/// its timeout, and is terminal.
+#[test]
+fn test_close_wakes_a_blocked_read_and_is_terminal() {
+    let (socket, peer, _listener) = tcp_socket_pair();
+    let reading = socket.clone();
+    let started = Instant::now();
+    let read = std::thread::spawn(move || reading.read_message());
+    std::thread::sleep(Duration::from_millis(50));
+
+    socket.close();
+    let read = read.join().unwrap();
+    assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
+    assert!(started.elapsed() < TWS_READ_TIMEOUT, "close waited out the read timeout");
+    assert_peer_sees_eof(peer);
+
+    socket.close();
+    assert!(matches!(socket.read_message(), Err(Error::Shutdown)));
+    assert!(matches!(socket.write_all(&[1]), Err(Error::Shutdown)));
+    assert!(matches!(socket.reconnect(), Err(Error::Shutdown)));
+}
+
+/// A close while reconnect waits on a stuck writer gets through at once, and
+/// the reconnect then drops its new connection instead of installing it.
+#[test]
+fn test_close_during_reconnect_closes_the_new_connection() {
+    let (socket, _peer, listener) = tcp_socket_pair();
+    // A write stuck on the dying stream.
+    let writer = socket.writer.lock().unwrap();
+    let reconnect = std::thread::spawn({
+        let socket = socket.clone();
+        move || socket.reconnect()
+    });
+    let (new_peer, _) = listener.accept().unwrap();
+    // Reconnect has connected and holds the reader; it now waits on the writer.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while socket.reader.try_lock().is_ok() {
+        assert!(Instant::now() < deadline, "reconnect never took the reader");
+        std::thread::yield_now();
+    }
+
+    let (closed_send, closed) = std::sync::mpsc::channel();
+    std::thread::spawn({
+        let socket = socket.clone();
+        move || {
+            socket.close();
+            closed_send.send(()).unwrap();
+        }
+    });
+    closed.recv_timeout(Duration::from_secs(1)).expect("close waited on the reconnect");
+
+    drop(writer);
+    let reconnected = reconnect.join().unwrap();
+    assert!(matches!(reconnected, Err(Error::Shutdown)), "reconnect: {reconnected:?}");
+    assert_peer_sees_eof(new_peer);
+}
+
+/// A blocking client on a dispatching bus over loopback TCP. The receiver
+/// reports whether the peer read EOF before its own 2s timeout.
+fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::sync::mpsc::Receiver<bool>) {
+    use std::io::Read;
+    let (eof_send, eof) = std::sync::mpsc::channel();
+    let (stream, ready, _peer) = socket_pair(TWS_READ_TIMEOUT, move |mut socket, ready| {
+        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        ready.send(()).unwrap();
+        let mut buf = [0u8; 1024];
+        let saw_eof = loop {
+            match socket.read(&mut buf) {
+                Ok(0) => break true,
+                Ok(_) => continue,
+                Err(_) => break false,
+            }
+        };
+        let _ = eof_send.send(saw_eof);
+    });
+    ready.recv().unwrap();
+    let address = stream.peer_addr().unwrap().to_string();
+    let connection = Connection::stubbed(TcpSocket::new(stream, &address, true).unwrap(), 28);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    bus.process_messages(crate::server_versions::PROTOBUF_REST_MESSAGES_3).unwrap();
+    let client = Client::stubbed(bus.clone(), crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    (client, bus, eof)
+}
+
+/// Retained clients and subscriptions cannot retain a disconnected physical socket.
+#[test]
+fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
+    let (client, _bus, eof) = tcp_client_with_peer();
+    let _subscription = client.order_update_stream().unwrap();
+
+    client.disconnect();
+    assert_eq!(eof.recv_timeout(Duration::from_secs(1)), Ok(true), "TCP socket retained");
+    assert!(!client.is_connected());
+    // A second disconnect on the closed socket is a no-op.
+    client.disconnect();
+}
+
+/// Dropping the client closes the socket a retained subscription still holds.
+#[test]
+fn test_client_drop_closes_tcp_with_retained_subscription() {
+    let (client, bus, eof) = tcp_client_with_peer();
+    let _subscription = client.order_update_stream().unwrap();
+
+    drop(client);
+    assert_eq!(eof.recv_timeout(Duration::from_secs(1)), Ok(true), "TCP socket retained");
+    assert!(!bus.is_connected());
 }

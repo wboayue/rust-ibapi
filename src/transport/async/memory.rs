@@ -106,7 +106,8 @@ impl AsyncIo for MemoryStream {
         Ok(())
     }
 
-    /// Terminal, like TCP: unlike the inherent `close`, `reopen` can't undo it.
+    /// Terminal, like TCP: unlike the inherent `close`, `reopen` can't undo
+    /// it. Same as the sync `MemoryStream`'s `Io::close`.
     async fn close(&self) {
         self.inner.lock().unwrap().retired = true;
         self.notify.notify_waiters();

@@ -217,11 +217,18 @@ if client.is_connected() {
 
 4. **Error Recovery**: Connection errors trigger automatic reconnection. Application errors must be handled by the caller.
 
-### Async physical socket teardown
+### Physical socket teardown
 
-Stopping dispatch does not release a socket whose bus still has owners. Explicit
-async disconnect closes both owned TCP halves before joining dispatch; dispatcher
-exit performs the same idempotent close for best-effort client drop. Close
-latches a flag first, which wakes blocked reads and writes so their locks free
-up and fails them with `Error::Shutdown`; queued I/O and reconnect check it, so
-the retired socket can't be revived.
+Stopping dispatch does not release a socket whose bus still has owners, so
+shutdown closes it explicitly (`Io::close` / `AsyncIo::close`). Close is
+idempotent and terminal: pending and later I/O fails with `Error::Shutdown`, and
+reconnect refuses, so the retired socket can't be revived.
+
+- **Async:** disconnect closes both owned TCP halves before joining dispatch;
+  dispatcher exit performs the same close for best-effort client drop. Close
+  latches a flag first, which wakes blocked reads and writes so their locks free
+  up.
+- **Blocking:** `request_shutdown`, which every disconnect, drop and dispatcher
+  exit runs, shuts down both directions on a clone of the stream. That is
+  socket-level, so it sends FIN and fails I/O on every clone. Reconnect
+  re-checks the closed flag under the same lock before installing a new stream.
