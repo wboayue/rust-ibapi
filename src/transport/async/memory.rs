@@ -19,6 +19,8 @@ struct Inner {
     inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
     closed: bool,
+    /// Set by `AsyncIo::close`; unlike `closed`, `reopen` keeps it.
+    retired: bool,
     /// Remaining `reconnect()` calls that should fail before one succeeds.
     reconnect_failures: usize,
 }
@@ -80,6 +82,9 @@ impl AsyncIo for MemoryStream {
 
             {
                 let mut inner = self.inner.lock().unwrap();
+                if inner.retired {
+                    return Err(Error::Shutdown);
+                }
                 if let Some(body) = inner.inbound.pop_front() {
                     return Ok(body);
                 }
@@ -93,14 +98,18 @@ impl AsyncIo for MemoryStream {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.inner.lock().unwrap().outbound.extend_from_slice(buf);
+        let mut inner = self.inner.lock().unwrap();
+        if inner.retired {
+            return Err(Error::Shutdown);
+        }
+        inner.outbound.extend_from_slice(buf);
         Ok(())
     }
 
-    /// Ends the inbound queue like a peer hang-up. Unlike TCP, tests can
-    /// `reopen` it; the bus never reconnects after closing, so it can't tell.
+    /// Terminal, like TCP: unlike the inherent `close`, `reopen` can't undo it.
     async fn close(&self) {
-        MemoryStream::close(self);
+        self.inner.lock().unwrap().retired = true;
+        self.notify.notify_waiters();
     }
 }
 
@@ -110,6 +119,9 @@ impl AsyncReconnect for MemoryStream {
         // Scope the std::sync MutexGuard so it cannot be held across a future .await.
         let should_fail = {
             let mut inner = self.inner.lock().unwrap();
+            if inner.retired {
+                return Err(Error::Shutdown);
+            }
             if inner.reconnect_failures > 0 {
                 inner.reconnect_failures -= 1;
                 true

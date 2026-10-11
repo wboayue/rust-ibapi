@@ -45,5 +45,18 @@ async fn trait_close_wakes_a_pending_reader() {
         .await
         .unwrap_or_else(|_| panic!("transport close did not wake {stream:?}"))
         .unwrap();
-    assert!(matches!(result, Err(Error::Io(ref error)) if error.kind() == io::ErrorKind::UnexpectedEof));
+    assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
+}
+
+/// Unlike the inherent `close`, the transport close survives `reopen`.
+#[tokio::test]
+async fn trait_close_is_terminal() {
+    let stream = MemoryStream::default();
+    AsyncIo::close(&stream).await;
+    stream.reopen();
+    stream.push_inbound(b"late".to_vec());
+    assert!(matches!(stream.read_message().await, Err(Error::Shutdown)));
+    assert!(matches!(stream.write_all(b"late").await, Err(Error::Shutdown)));
+    assert!(matches!(stream.reconnect().await, Err(Error::Shutdown)));
+    assert!(stream.captured().is_empty());
 }
