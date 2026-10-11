@@ -2,8 +2,8 @@
 
 use time::Date;
 
-use crate::client::ClientRequestBuilders;
 use crate::{
+    client::ClientRequestBuilders,
     common::request_helpers::{self, expect_proto},
     protocol::{check_version, Features},
     subscriptions::Subscription,
