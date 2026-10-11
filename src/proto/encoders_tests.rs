@@ -111,6 +111,18 @@ fn test_encode_order_deactivate() {
 }
 
 #[test]
+fn test_encode_order_route_marketable_to_bbo() {
+    let order = Order {
+        route_marketable_to_bbo: true,
+        ..Default::default()
+    };
+
+    let proto = encode_order(&order);
+
+    assert_eq!(proto.route_marketable_to_bbo, Some(1));
+}
+
+#[test]
 fn test_encode_order_default_fields_omitted() {
     let order = Order::default();
     let proto = encode_order(&order);
@@ -122,6 +134,8 @@ fn test_encode_order_default_fields_omitted() {
     assert!(proto.all_or_none.is_none());
     assert!(proto.hedge_max_size.is_none());
     assert!(proto.deactivate.is_none());
+    // `verify_order` gates these on the bool: absent when false, as C# checks presence.
+    assert!(proto.route_marketable_to_bbo.is_none());
 }
 
 #[test]
