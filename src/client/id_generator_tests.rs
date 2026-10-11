@@ -110,6 +110,29 @@ fn test_next_up_to_stops_at_max() {
     assert_eq!(gen.current(), 11, "a refused id leaves the counter put");
 }
 
+/// Racing callers each get a distinct id, together exactly the range up to
+/// `max`, and the counter stops one past it.
+#[test]
+fn test_next_up_to_is_unique_under_contention() {
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    const MAX: i32 = 9_999;
+    let gen = Arc::new(IdGenerator::new(0));
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let gen = Arc::clone(&gen);
+            std::thread::spawn(move || std::iter::from_fn(|| gen.next_up_to(MAX)).collect::<Vec<_>>())
+        })
+        .collect();
+
+    let ids: Vec<i32> = handles.into_iter().flat_map(|h| h.join().unwrap()).collect();
+    let unique: HashSet<i32> = ids.iter().copied().collect();
+    assert_eq!(ids.len(), unique.len(), "an id was issued twice");
+    assert_eq!(unique, (0..=MAX).collect::<HashSet<_>>());
+    assert_eq!(gen.current(), MAX + 1);
+}
+
 #[test]
 fn test_client_id_manager() {
     let manager = ClientIdManager::new(50).unwrap();

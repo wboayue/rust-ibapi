@@ -40,9 +40,16 @@ impl IdGenerator {
     /// Like [`next`](Self::next), but `None` once the next ID would exceed
     /// `max`; the counter then stays put.
     pub(crate) fn next_up_to(&self, max: i32) -> Option<i32> {
-        self.next_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| (id <= max).then(|| id + 1))
-            .ok()
+        // A CAS loop rather than `fetch_update` (deprecated in 1.99) or its
+        // replacement `try_update` (stable since 1.95, above our MSRV).
+        let mut id = self.next_id.load(Ordering::Relaxed);
+        while id <= max {
+            match self.next_id.compare_exchange_weak(id, id + 1, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return Some(id),
+                Err(current) => id = current,
+            }
+        }
+        None
     }
 
     /// Gets the current ID without incrementing
