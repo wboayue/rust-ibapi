@@ -123,12 +123,11 @@ async fn main() {
 
 #[cfg(feature = "sync")]
 impl<'a> ContractDetailsBuilder<'a, crate::client::sync::Client> {
-    /// Validate the contract and send the request once, returning a
-    /// subscription that yields one [`ContractDetails`] per matching contract
-    /// and ends when TWS has sent them all.
+    /// Send the request once, returning a subscription that yields one
+    /// [`ContractDetails`] per matching contract and ends when TWS has sent
+    /// them all.
     ///
-    /// A validation error is returned before anything is written. There is no
-    /// retry: after a connection reset, build a new request (new id).
+    /// There is no retry: after a connection reset, build a new request (new id).
     ///
     /// # Examples
     ///
@@ -169,12 +168,11 @@ impl<'a> ContractDetailsBuilder<'a, crate::client::sync::Client> {
 
 #[cfg(feature = "async")]
 impl<'a> ContractDetailsBuilder<'a, crate::client::r#async::Client> {
-    /// Validate the contract and send the request once, returning a
-    /// subscription that yields one [`ContractDetails`] per matching contract
-    /// and ends when TWS has sent them all.
+    /// Send the request once, returning a subscription that yields one
+    /// [`ContractDetails`] per matching contract and ends when TWS has sent
+    /// them all.
     ///
-    /// A validation error is returned before anything is written. There is no
-    /// retry: after a connection reset, build a new request (new id).
+    /// There is no retry: after a connection reset, build a new request (new id).
     ///
     /// # Examples
     ///
