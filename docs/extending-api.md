@@ -338,7 +338,7 @@ pub async fn my_api_call(&self) -> Result<MyData, Error> {
 
 // For requests with IDs and subscriptions (inside impl Client)
 pub fn my_subscription(&self) -> Result<Subscription<MyData>, Error> {
-    request_helpers::blocking::request_with_id(self, Features::MY_FEATURE, |request_id| {
+    request_helpers::blocking::request_with_id(self, |request_id| {
         encode_my_request(request_id)
     })
 }

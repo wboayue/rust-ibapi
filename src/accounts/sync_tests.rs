@@ -404,19 +404,14 @@ fn test_server_version_errors() {
     use super::common::test_tables::VERSION_TEST_CASES;
 
     let account = AccountId(TEST_ACCOUNT.to_string());
-    let group = AccountGroup("All".to_string());
 
     for test_case in VERSION_TEST_CASES {
         let (client, _) = create_blocking_test_client_with_version(test_case.required_version - 1);
 
         let result = match test_case.function_name {
-            "PnL" => client.pnl(&account, None).map(|_| ()),
-            "PnL Single" => client.pnl_single(&account, ContractId(1001), None).map(|_| ()),
-            "Account Summary" => client.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]).map(|_| ()),
             "Positions Multi" => client.positions_multi(Some(&account), None).map(|_| ()),
             "Account Updates Multi" => client.account_updates_multi(Some(&account), None).map(|_| ()),
             "Family Codes" => client.family_codes().map(|_| ()),
-            "Positions" => client.positions().map(|_| ()),
             _ => panic!("Unknown function: {}", test_case.function_name),
         };
 
@@ -685,25 +680,6 @@ fn test_account_updates_stream_handling() {
 
     assert!(request_message_count(&message_bus) >= 1, "Expected at least subscribe message");
     assert_request(&message_bus, 0, &request_account_updates().account(TEST_ACCOUNT));
-}
-
-#[test]
-fn test_error_propagation() {
-    // Test that encoding errors are properly propagated
-    let (_client, _) = create_blocking_test_client();
-
-    // These tests verify that version checks catch incompatible requests
-    // The actual encoding shouldn't fail in normal circumstances since
-    // we're using well-formed domain types, but version checks will prevent
-    // sending requests to incompatible servers
-
-    let account = AccountId(TEST_ACCOUNT.to_string());
-    let old_version_client = create_blocking_test_client_with_version(50).0; // Very old version
-
-    // All modern features should fail on old servers
-    assert!(old_version_client.pnl(&account, None).is_err());
-    assert!(old_version_client.positions().is_err());
-    assert!(old_version_client.account_summary(&AccountGroup("All".to_string()), &[]).is_err());
 }
 
 #[test]

@@ -203,7 +203,7 @@ async fn test_wsh_event_data_decode_table() {
 
 #[tokio::test]
 async fn test_wsh_event_data_by_filter_integration_table() {
-    use crate::wsh::common::test_tables::{event_data_by_filter_integration_test_cases, IntegrationExpectedResult};
+    use crate::wsh::common::test_tables::event_data_by_filter_integration_test_cases;
 
     for test_case in event_data_by_filter_integration_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
@@ -244,24 +244,10 @@ async fn test_wsh_event_data_by_filter_integration_table() {
                 }
                 result
             }
-            _ => by_filter(&client, "filter", None, None).await,
+            name => panic!("unknown test case: {name}"),
         };
 
-        match test_case.expected_result {
-            IntegrationExpectedResult::Success => {
-                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-            }
-            IntegrationExpectedResult::ServerVersionError => {
-                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                if let Err(error) = result {
-                    assert!(
-                        matches!(error, Error::ServerVersion(_, _, _)),
-                        "Test '{}' wrong error type",
-                        test_case.name
-                    );
-                }
-            }
-        }
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
     }
 }
 

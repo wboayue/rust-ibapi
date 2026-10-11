@@ -78,12 +78,7 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        request_helpers::blocking::shared_subscription(
-            self,
-            Features::POSITIONS,
-            OutgoingMessages::RequestPositions,
-            encoders::encode_request_positions,
-        )
+        request_helpers::blocking::shared_subscription(self, OutgoingMessages::RequestPositions, encoders::encode_request_positions)
     }
 
     /// Subscribes to [PositionUpdateMulti] updates for account and/or model.
@@ -138,7 +133,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::blocking::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
+        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code))
     }
 
     /// Requests real time updates for daily PnL of individual positions.
@@ -166,9 +161,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
-        request_helpers::blocking::request_with_id(self, Features::REALIZED_PNL, |id| {
-            encoders::encode_request_pnl_single(id, account, contract_id, model_code)
-        })
+        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl_single(id, account, contract_id, model_code))
     }
 
     /// Requests a specific account's summary. Subscribes to the account summary as presented in the TWS' Account Summary tab. Data received is specified by using a specific tags value.
@@ -202,9 +195,7 @@ impl Client {
     /// }
     /// ```
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        request_helpers::blocking::request_with_id(self, Features::ACCOUNT_SUMMARY, |id| {
-            encoders::encode_request_account_summary(id, group, tags)
-        })
+        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_account_summary(id, group, tags))
     }
 
     /// Subscribe to account summary updates as complete snapshots.

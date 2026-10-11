@@ -96,18 +96,6 @@ pub enum SubscriptionType {
 /// Server version test cases
 pub const VERSION_TEST_CASES: &[VersionTestCase] = &[
     VersionTestCase {
-        function_name: "PnL",
-        required_version: server_versions::PNL,
-    },
-    VersionTestCase {
-        function_name: "PnL Single",
-        required_version: server_versions::REALIZED_PNL,
-    },
-    VersionTestCase {
-        function_name: "Account Summary",
-        required_version: server_versions::ACCOUNT_SUMMARY,
-    },
-    VersionTestCase {
         function_name: "Positions Multi",
         required_version: server_versions::MODELS_SUPPORT,
     },
@@ -118,10 +106,6 @@ pub const VERSION_TEST_CASES: &[VersionTestCase] = &[
     VersionTestCase {
         function_name: "Family Codes",
         required_version: server_versions::REQ_FAMILY_CODES,
-    },
-    VersionTestCase {
-        function_name: "Positions",
-        required_version: server_versions::POSITIONS,
     },
 ];
 

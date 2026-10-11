@@ -54,21 +54,22 @@ that's the canonical home for builder usage. This section is just the pointer.
 ### Request-ID Requests
 
 For a streaming request routed by request id, use `request_helpers::request_with_id`:
-it checks the feature's server version, mints the request id, and hands the
-raw id to your encoder:
+it mints the request id and hands the raw id to your encoder. Gate a feature
+newer than the connection floor with `check_version` (see
+[Protocol Version Checking](#protocol-version-checking)) before calling it:
 
 ```rust
 // Sync mode (in domain/sync.rs as impl Client block)
 impl Client {
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::blocking::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
+        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code))
     }
 }
 
 // Async mode (in domain/async.rs as impl Client block)
 impl Client {
     pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code)).await
+        request_helpers::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code)).await
     }
 }
 ```
@@ -93,7 +94,6 @@ impl Client {
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
         request_helpers::blocking::shared_subscription(
             self,
-            Features::POSITIONS,
             OutgoingMessages::RequestPositions,
             encoders::encode_request_positions,
         )
@@ -105,7 +105,6 @@ impl Client {
     pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
         request_helpers::shared_subscription(
             self,
-            Features::POSITIONS,
             OutgoingMessages::RequestPositions,
             encoders::encode_request_positions,
         )

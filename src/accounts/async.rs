@@ -45,13 +45,7 @@ impl Client {
     /// }
     /// ```
     pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        crate::common::request_helpers::shared_subscription(
-            self,
-            Features::POSITIONS,
-            OutgoingMessages::RequestPositions,
-            encoders::encode_request_positions,
-        )
-        .await
+        crate::common::request_helpers::shared_subscription(self, OutgoingMessages::RequestPositions, encoders::encode_request_positions).await
     }
 
     /// Subscribe to streaming position updates scoped by account and model code.
@@ -148,7 +142,7 @@ impl Client {
     /// }
     /// ```
     pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        crate::common::request_helpers::request_with_id(self, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code)).await
+        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code)).await
     }
 
     /// Subscribe to real-time daily PnL updates for a single contract.
@@ -187,10 +181,7 @@ impl Client {
         contract_id: ContractId,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<PnLSingle>, Error> {
-        crate::common::request_helpers::request_with_id(self, Features::REALIZED_PNL, |id| {
-            encoders::encode_request_pnl_single(id, account, contract_id, model_code)
-        })
-        .await
+        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_pnl_single(id, account, contract_id, model_code)).await
     }
 
     /// Subscribe to account summary updates for a group of accounts.
@@ -229,10 +220,7 @@ impl Client {
     /// }
     /// ```
     pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        crate::common::request_helpers::request_with_id(self, Features::ACCOUNT_SUMMARY, |id| {
-            encoders::encode_request_account_summary(id, group, tags)
-        })
-        .await
+        crate::common::request_helpers::request_with_id(self, |id| encoders::encode_request_account_summary(id, group, tags)).await
     }
 
     /// Subscribe to account summary updates as complete snapshots.

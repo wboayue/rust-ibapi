@@ -400,19 +400,14 @@ async fn test_server_version_errors() {
     use super::common::test_tables::VERSION_TEST_CASES;
 
     let account = AccountId(TEST_ACCOUNT.to_string());
-    let group = AccountGroup("All".to_string());
 
     for test_case in VERSION_TEST_CASES {
         let (client, _) = create_test_client_with_version(test_case.required_version - 1);
 
         let result = match test_case.function_name {
-            "PnL" => client.pnl(&account, None).await.map(|_| ()),
-            "PnL Single" => client.pnl_single(&account, ContractId(1001), None).await.map(|_| ()),
-            "Account Summary" => client.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]).await.map(|_| ()),
             "Positions Multi" => client.positions_multi(Some(&account), None).await.map(|_| ()),
             "Account Updates Multi" => client.account_updates_multi(Some(&account), None).await.map(|_| ()),
             "Family Codes" => client.family_codes().await.map(|_| ()),
-            "Positions" => client.positions().await.map(|_| ()),
             _ => panic!("Unknown function: {}", test_case.function_name),
         };
 
