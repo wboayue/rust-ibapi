@@ -4,7 +4,7 @@ use super::*;
 /// correct — if the consumer reaches the queue first it parks on `Notify` and
 /// the producer's `notify_one` wakes it; if the producer pushes first the
 /// consumer returns immediately. EOF surfaces as `Io(UnexpectedEof)` after
-/// `close`.
+/// `hang_up`.
 ///
 /// Pinned to `current_thread` so the producer task cannot run before the
 /// consumer arms its notify; that ordering is what exercises the wait path.
@@ -25,7 +25,7 @@ async fn round_trip_frame() {
     stream.write_all(b"out").await.unwrap();
     assert_eq!(stream.captured(), b"out");
 
-    stream.close();
+    stream.hang_up();
     let err = stream.read_message().await.unwrap_err();
     assert!(
         matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
@@ -40,7 +40,7 @@ async fn trait_close_wakes_a_pending_reader() {
     let reading = stream.clone();
     let read = tokio::spawn(async move { reading.read_message().await });
     tokio::task::yield_now().await;
-    AsyncIo::close(&stream).await;
+    stream.close().await;
     let result = tokio::time::timeout(Duration::from_secs(1), read)
         .await
         .unwrap_or_else(|_| panic!("transport close did not wake {stream:?}"))
@@ -48,11 +48,11 @@ async fn trait_close_wakes_a_pending_reader() {
     assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
 }
 
-/// Unlike the inherent `close`, the transport close survives `reopen`.
+/// Unlike `hang_up`, the transport close survives `reopen`.
 #[tokio::test]
 async fn trait_close_is_terminal() {
     let stream = MemoryStream::default();
-    AsyncIo::close(&stream).await;
+    stream.close().await;
     stream.reopen();
     stream.push_inbound(b"late".to_vec());
     assert!(matches!(stream.read_message().await, Err(Error::Shutdown)));

@@ -294,7 +294,7 @@ async fn test_shared_channel_routing_current_time() {
 async fn test_read_and_route_surfaces_eof() {
     let (stream, bus) = make_bus();
 
-    stream.close();
+    stream.hang_up();
     let err = bus.read_and_route_message().await.expect_err("dispatch should surface an error");
     assert!(
         matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
@@ -2096,7 +2096,7 @@ impl AsyncIo for FailingWriteStream {
     }
 
     async fn close(&self) {
-        AsyncIo::close(&self.0).await;
+        self.0.close().await;
     }
 }
 
@@ -2339,7 +2339,7 @@ async fn test_close_ends_dispatch_without_reconnecting() {
     bus.clone().process_messages(0, Duration::ZERO).unwrap();
     tokio::task::yield_now().await;
 
-    AsyncIo::close(&stream).await;
+    stream.close().await;
     let item = tokio::time::timeout(Duration::from_secs(1), internal.next())
         .await
         .expect("request never ended");

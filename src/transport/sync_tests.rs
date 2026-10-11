@@ -914,7 +914,7 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_request(RequestId::nth(100), &[])?;
 
-    stream.close();
+    stream.hang_up();
     let err = bus.dispatch().expect_err("dispatch should surface an error");
     assert!(matches!(err, Error::ConnectionFailed), "unexpected error: {err:?}");
 
@@ -3252,7 +3252,7 @@ impl Io for FailingWriteStream {
     }
 
     fn close(&self) {
-        Io::close(&self.0)
+        self.0.close()
     }
 }
 
@@ -3744,21 +3744,27 @@ fn test_dropped_order_status_stream_is_released() -> Result<(), Error> {
 // ---- physical close with retained owners (#979) ----
 
 /// A connected `TcpSocket`, its peer, and the listener, kept for reconnects.
-fn tcp_socket_pair() -> (Arc<TcpSocket>, std::net::TcpStream, std::net::TcpListener) {
+fn tcp_socket_pair() -> (TcpSocket, std::net::TcpStream, std::net::TcpListener) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let socket = TcpSocket::connect(&address, true).unwrap();
     let (peer, _) = listener.accept().unwrap();
-    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
-    (Arc::new(socket), peer, listener)
+    (socket, peer, listener)
 }
 
-/// The peer reads EOF: the other end closed, not just stopped reading.
+/// The peer reads EOF within 1s: the other end closed, not just went quiet.
+/// Bytes sent before the close are skipped.
 fn assert_peer_sees_eof(mut peer: std::net::TcpStream) {
     use std::io::Read;
     peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
-    let read = peer.read(&mut [0u8; 1]);
-    assert!(matches!(read, Ok(0)), "TCP socket retained: {read:?}");
+    let mut buf = [0u8; 1024];
+    loop {
+        match peer.read(&mut buf) {
+            Ok(0) => return,
+            Ok(_) => continue,
+            Err(e) => panic!("TCP socket retained: {e:?}"),
+        }
+    }
 }
 
 /// Close sends FIN while every clone is alive, wakes a blocked read well before
@@ -3766,6 +3772,7 @@ fn assert_peer_sees_eof(mut peer: std::net::TcpStream) {
 #[test]
 fn test_close_wakes_a_blocked_read_and_is_terminal() {
     let (socket, peer, _listener) = tcp_socket_pair();
+    let socket = Arc::new(socket);
     let reading = socket.clone();
     let started = Instant::now();
     let read = std::thread::spawn(move || reading.read_message());
@@ -3788,6 +3795,7 @@ fn test_close_wakes_a_blocked_read_and_is_terminal() {
 #[test]
 fn test_close_during_reconnect_closes_the_new_connection() {
     let (socket, _peer, listener) = tcp_socket_pair();
+    let socket = Arc::new(socket);
     // A write stuck on the dying stream.
     let writer = socket.writer.lock().unwrap();
     let reconnect = std::thread::spawn({
@@ -3818,42 +3826,25 @@ fn test_close_during_reconnect_closes_the_new_connection() {
     assert_peer_sees_eof(new_peer);
 }
 
-/// A blocking client on a dispatching bus over loopback TCP. The receiver
-/// reports whether the peer read EOF before its own 2s timeout.
-fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::sync::mpsc::Receiver<bool>) {
-    use std::io::Read;
-    let (eof_send, eof) = std::sync::mpsc::channel();
-    let (stream, ready, _peer) = socket_pair(TWS_READ_TIMEOUT, move |mut socket, ready| {
-        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-        ready.send(()).unwrap();
-        let mut buf = [0u8; 1024];
-        let saw_eof = loop {
-            match socket.read(&mut buf) {
-                Ok(0) => break true,
-                Ok(_) => continue,
-                Err(_) => break false,
-            }
-        };
-        let _ = eof_send.send(saw_eof);
-    });
-    ready.recv().unwrap();
-    let address = stream.peer_addr().unwrap().to_string();
-    let connection = Connection::stubbed(TcpSocket::new(stream, &address, true).unwrap(), 28);
+/// A blocking client on a dispatching bus over loopback TCP, and the peer end.
+fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::net::TcpStream) {
+    let (socket, peer, _listener) = tcp_socket_pair();
+    let connection = Connection::stubbed(socket, 28);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
     bus.process_messages(crate::server_versions::PROTOBUF_REST_MESSAGES_3).unwrap();
     let client = Client::stubbed(bus.clone(), crate::server_versions::PROTOBUF_REST_MESSAGES_3);
-    (client, bus, eof)
+    (client, bus, peer)
 }
 
 /// Retained clients and subscriptions cannot retain a disconnected physical socket.
 #[test]
 fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
-    let (client, _bus, eof) = tcp_client_with_peer();
+    let (client, _bus, peer) = tcp_client_with_peer();
     let _subscription = client.order_update_stream().unwrap();
 
     client.disconnect();
-    assert_eq!(eof.recv_timeout(Duration::from_secs(1)), Ok(true), "TCP socket retained");
+    assert_peer_sees_eof(peer);
     assert!(!client.is_connected());
     // A second disconnect on the closed socket is a no-op.
     client.disconnect();
@@ -3862,10 +3853,10 @@ fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
 /// Dropping the client closes the socket a retained subscription still holds.
 #[test]
 fn test_client_drop_closes_tcp_with_retained_subscription() {
-    let (client, bus, eof) = tcp_client_with_peer();
+    let (client, bus, peer) = tcp_client_with_peer();
     let _subscription = client.order_update_stream().unwrap();
 
     drop(client);
-    assert_eq!(eof.recv_timeout(Duration::from_secs(1)), Ok(true), "TCP socket retained");
+    assert_peer_sees_eof(peer);
     assert!(!bus.is_connected());
 }

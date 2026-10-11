@@ -4,7 +4,7 @@ use super::*;
 /// correct — if the consumer reaches `pop_front` first it parks on the
 /// `Condvar` and the producer's `notify_one` wakes it; if the producer pushes
 /// first the consumer returns immediately. EOF surfaces as `Io(UnexpectedEof)`
-/// after `close`.
+/// after `hang_up`.
 #[test]
 fn round_trip_frame() {
     let stream = MemoryStream::default();
@@ -21,7 +21,7 @@ fn round_trip_frame() {
     stream.write_all(b"out").unwrap();
     assert_eq!(stream.captured(), b"out");
 
-    stream.close();
+    stream.hang_up();
     let err = stream.read_message().unwrap_err();
     assert!(
         matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
@@ -29,11 +29,11 @@ fn round_trip_frame() {
     );
 }
 
-/// Unlike the inherent `close`, the transport close survives `reopen`.
+/// Unlike `hang_up`, the transport close survives `reopen`.
 #[test]
 fn trait_close_is_terminal() {
     let stream = MemoryStream::default();
-    Io::close(&stream);
+    stream.close();
     stream.reopen();
     stream.push_inbound(b"late".to_vec());
     assert!(matches!(stream.read_message(), Err(Error::Shutdown)));
@@ -49,6 +49,6 @@ fn trait_close_wakes_a_pending_reader() {
     let reading = stream.clone();
     let read = std::thread::spawn(move || reading.read_message());
     std::thread::sleep(std::time::Duration::from_millis(20));
-    Io::close(&stream);
+    stream.close();
     assert!(matches!(read.join().unwrap(), Err(Error::Shutdown)));
 }
