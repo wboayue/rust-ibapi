@@ -1,22 +1,18 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{BarSize, Duration};
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn concurrent_contract_details() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     let aapl = Contract::stock("AAPL").build();
     let msft = Contract::stock("MSFT").build();
     let tsla = Contract::stock("TSLA").build();
 
-    rate_limit();
-    rate_limit();
-    rate_limit();
     let (r1, r2, r3) = tokio::join!(
         client.contract_details(&aapl),
         client.contract_details(&msft),
@@ -38,14 +34,11 @@ async fn concurrent_contract_details() {
 #[tokio::test]
 async fn concurrent_historical_data() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     let aapl = Contract::stock("AAPL").build();
     let msft = Contract::stock("MSFT").build();
 
-    rate_limit();
-    rate_limit();
     let (r1, r2) = tokio::join!(
         client.historical_data(&aapl, BarSize::Day).duration(Duration::days(5)).fetch(),
         client.historical_data(&msft, BarSize::Day).duration(Duration::days(5)).fetch(),
@@ -61,16 +54,13 @@ async fn concurrent_historical_data() {
 #[tokio::test]
 async fn concurrent_subscriptions() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     let aapl = Contract::stock("AAPL").build();
     let msft = Contract::stock("MSFT").build();
 
-    rate_limit();
     let mut sub1 = client.market_data(&aapl).subscribe().await.expect("AAPL market_data failed");
 
-    rate_limit();
     let mut sub2 = client.market_data(&msft).subscribe().await.expect("MSFT market_data failed");
 
     let timeout = tokio::time::Duration::from_secs(15);
@@ -86,10 +76,8 @@ async fn concurrent_subscriptions() {
 async fn sequential_connect_disconnect() {
     // First connection
     let client_id1 = ClientId::get();
-    rate_limit();
-    let client1 = Client::connect(GATEWAY, client_id1.id()).await.expect("first connection failed");
+    let client1 = connect(&client_id1).await;
 
-    rate_limit();
     let time1 = client1.server_time().await.expect("first server_time failed");
     assert!(time1.year() >= 2025);
 
@@ -102,10 +90,8 @@ async fn sequential_connect_disconnect() {
 
     // Second connection with new ID
     let client_id2 = ClientId::get();
-    rate_limit();
-    let client2 = Client::connect(GATEWAY, client_id2.id()).await.expect("second connection failed");
+    let client2 = connect(&client_id2).await;
 
-    rate_limit();
     let time2 = client2.server_time().await.expect("second server_time failed");
     assert!(time2.year() >= 2025);
 }

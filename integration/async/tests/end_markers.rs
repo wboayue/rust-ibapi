@@ -24,7 +24,8 @@ use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
-use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::{require_globex_open, yyyymmdd_from_now, ClientId};
 use serial_test::serial;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
@@ -116,7 +117,6 @@ fn market_order(action: Action) -> Order {
 
 async fn front_month_es(client: &Client) -> Contract {
     let query = Contract::futures("ES").on_exchange("CME").any_month().build();
-    rate_limit();
     let details = client.contract_details(&query).await.expect("contract_details failed");
     let cutoff = yyyymmdd_from_now(7);
     details
@@ -128,7 +128,6 @@ async fn front_month_es(client: &Client) -> Contract {
 }
 
 async fn trade_and_wait(client: &Client, contract: &Contract, action: Action) {
-    rate_limit();
     let order_id = client.next_order_id();
     let mut sub = client
         .place_order(order_id, contract, &market_order(action))
@@ -166,29 +165,22 @@ async fn end_markers_after_initial_dump() {
     }
 
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Arc::new(Client::connect(GATEWAY, client_id.id()).await.expect("connection failed"));
-    rate_limit();
+    let client = Arc::new(connect(&client_id).await);
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     let account = AccountId::from(accounts[0].as_str());
     eprintln!("account {account}, observing {}s, fill={fill}", observe.as_secs());
 
     let group = AccountGroup("All".to_string());
-    rate_limit();
     let summary = client
         .account_summary(&group, AccountSummaryTags::ALL)
         .await
         .expect("account_summary failed");
-    rate_limit();
     let updates = client.account_updates(&account).await.expect("account_updates failed");
-    rate_limit();
     let updates_multi = client
         .account_updates_multi(Some(&account), None)
         .await
         .expect("account_updates_multi failed");
-    rate_limit();
     let positions = client.positions().await.expect("positions failed");
-    rate_limit();
     let positions_multi = client.positions_multi(Some(&account), None).await.expect("positions_multi failed");
 
     let mut merged = select_all(vec![
@@ -275,9 +267,7 @@ async fn account_summary_end_markers_by_tag_set() {
         // A fresh connection per case: TWS kept a cancelled request's slot on the
         // connection, so a third request on one client got 322.
         let client_id = ClientId::get();
-        rate_limit();
-        let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
-        rate_limit();
+        let client = connect(&client_id).await;
         let mut sub = client.account_summary(&group, tags).await.expect("account_summary failed");
         // One line per run of rows from the same account, and one per end marker.
         let mut runs: Vec<String> = Vec::new();
