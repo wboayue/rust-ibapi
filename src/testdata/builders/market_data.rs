@@ -143,14 +143,13 @@ impl RequestEncoder for HistoricalDataRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         let end_str = self.end_date.to_field();
-        let wts_str = self.what_to_show.to_field();
         proto::HistoricalDataRequest {
             req_id: Some(self.request_id),
             contract: Some(encode_contract(&self.contract)),
             end_date_time: some_str(&end_str),
             duration: Some(self.duration.to_field()),
             bar_size_setting: Some(self.bar_size.to_field()),
-            what_to_show: some_str(&wts_str),
+            what_to_show: Some(self.what_to_show.to_field()),
             use_rth: some_bool(self.use_rth),
             format_date: Some(DATE_FORMAT),
             keep_up_to_date: some_bool(self.keep_up_to_date),
