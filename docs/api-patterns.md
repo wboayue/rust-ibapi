@@ -361,36 +361,28 @@ For comprehensive conditional order documentation, see [Order Types - Conditiona
 
 ## Protocol Version Checking
 
-Use the protocol module for version-specific features:
+The handshake refuses servers below version 213 (`PROTOBUF_REST_MESSAGES_3`), so
+a feature at or below it needs no check; those `Features` constants are
+deprecated. Check only a feature above the floor, on the line before the request:
 
 ```rust
-use crate::messages::{encode_protobuf_message, OutgoingMessages};
-use crate::protocol::{check_version, Features, is_supported};
-use prost::Message;
+use crate::protocol::{check_version, is_supported, Features};
 
-// Check if feature is supported
-pub fn tick_by_tick_trades(&self, contract: &Contract) 
-    -> Result<Subscription<Trade>, Error> 
-{
-    check_version(self.server_version, Features::TICK_BY_TICK)?;
+// Gate a request (from `config/sync.rs`)
+pub fn config(&self) -> Result<Config, Error> {
+    check_version(self.server_version, Features::CONFIG)?;
     // ... implementation
 }
 
-// Conditional field encoding: encoders build a prost message and return the
-// framed bytes; a version-gated field stays `None` when unsupported
-pub fn encode_my_request(request: &MyRequest, server_version: i32) -> Result<Vec<u8>, Error> {
-    let mut proto = crate::proto::MyRequest {
-        req_id: Some(request.id),
-        ..Default::default()
-    };
-
-    if is_supported(server_version, Features::DECISION_MAKER) {
-        proto.decision_maker = Some(request.decision_maker.clone());
-    }
-
-    Ok(encode_protobuf_message(OutgoingMessages::MyRequest as i32, &proto.encode_to_vec()))
+// Conditional field encoding: a field gated above the floor stays `None`
+// when the server is too old
+if is_supported(server_version, Features::MY_FEATURE) {
+    proto.my_field = Some(request.my_field.clone());
 }
 ```
+
+Order fields gated above the floor are checked in `verify_order`
+(`orders/common/verify.rs`), mirroring C# `ValidateOrderParameters`.
 
 ## Subscription Patterns
 

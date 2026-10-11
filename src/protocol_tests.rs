@@ -9,19 +9,19 @@ fn protocol_feature_new_constructs_runtime_value() {
 
 #[test]
 fn check_version_accepts_when_above_minimum() {
-    let result = check_version(150, Features::POSITIONS);
-    assert!(result.is_ok());
+    let feature = Features::CONFIG;
+    assert!(check_version(feature.min_version + 1, feature).is_ok());
 }
 
 #[test]
 fn check_version_accepts_at_minimum_boundary() {
-    let feature = Features::TICK_BY_TICK;
+    let feature = Features::CONFIG;
     assert!(check_version(feature.min_version, feature).is_ok());
 }
 
 #[test]
 fn check_version_rejects_below_minimum_with_canonical_display() {
-    let feature = Features::TICK_BY_TICK;
+    let feature = Features::CONFIG;
     let actual_version = feature.min_version - 1;
     let err = check_version(actual_version, feature).unwrap_err();
     match &err {
@@ -43,22 +43,22 @@ fn check_version_rejects_below_minimum_with_canonical_display() {
 
 #[test]
 fn is_supported_returns_true_above_or_at_minimum() {
-    assert!(is_supported(150, Features::POSITIONS));
-    let feature = Features::TICK_BY_TICK;
+    let feature = Features::CONFIG;
+    assert!(is_supported(feature.min_version + 1, feature));
     assert!(is_supported(feature.min_version, feature));
 }
 
 #[test]
 fn is_supported_returns_false_below_minimum() {
-    assert!(!is_supported(50, Features::TICK_BY_TICK));
-    let feature = Features::TICK_BY_TICK;
+    let feature = Features::CONFIG;
     assert!(!is_supported(feature.min_version - 1, feature));
 }
 
 #[test]
 fn include_if_supported_invokes_closure_when_supported() {
+    let feature = Features::CONFIG;
     let mut called = false;
-    include_if_supported(150, Features::POSITIONS, || {
+    include_if_supported(feature.min_version + 1, feature, || {
         called = true;
     });
     assert!(called);
@@ -66,8 +66,9 @@ fn include_if_supported_invokes_closure_when_supported() {
 
 #[test]
 fn include_if_supported_skips_closure_when_unsupported() {
+    let feature = Features::CONFIG;
     let mut called = false;
-    include_if_supported(50, Features::TICK_BY_TICK, || {
+    include_if_supported(feature.min_version - 1, feature, || {
         called = true;
     });
     assert!(!called);
@@ -75,7 +76,7 @@ fn include_if_supported_skips_closure_when_unsupported() {
 
 #[test]
 fn include_if_supported_invokes_closure_at_minimum_boundary() {
-    let feature = Features::CASH_QTY;
+    let feature = Features::CONFIG;
     let mut called = false;
     include_if_supported(feature.min_version, feature, || {
         called = true;
