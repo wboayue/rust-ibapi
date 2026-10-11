@@ -1319,3 +1319,47 @@ async fn test_tick_subscription_returns_none_on_closed_channel() {
 
     assert!(subscription.next().await.is_none(), "closed channel yields None");
 }
+
+// ---- buffer_limit ----------------------------------------------------------
+
+#[tokio::test]
+async fn historical_data_stream_buffer_limit_reaches_the_bus() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let _bounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .stream()
+        .await
+        .expect("bounded stream failed");
+    let _unbounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
+        .await
+        .expect("unbounded stream failed");
+
+    assert_eq!(
+        *message_bus.buffer_limits.read().unwrap(),
+        vec![16],
+        "only the bounded request carries a limit"
+    );
+}
+
+#[tokio::test]
+async fn historical_data_fetch_rejects_buffer_limit() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let result = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .fetch()
+        .await;
+
+    assert!(matches!(result, Err(Error::InvalidArgument(_))), "got {result:?}");
+    assert!(message_bus.request_messages.read().unwrap().is_empty(), "nothing is sent");
+}

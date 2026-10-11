@@ -213,6 +213,6 @@ if client.is_connected() {
 
 2. **Message Ordering**: TWS doesn't guarantee message ordering for different request types.
 
-3. **Rate Limiting**: TWS has rate limits. The library doesn't enforce these - applications must manage their request rates.
+3. **Rate Limiting**: TWS limits outbound messages. The library enforces this only when a client is built with `ClientBuilder::rate_limiter` (off by default); the limiter sits in the bus write funnel, so every message after the handshake is counted. See `RateLimiter` for the rules. Historical-data pacing and market-data lines remain the application's job.
 
 4. **Error Recovery**: Connection errors trigger automatic reconnection. Application errors must be handled by the caller.

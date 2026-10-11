@@ -36,6 +36,7 @@ pub(crate) fn log_cancel_error(what: &str, error: &Error) {
 }
 
 pub(crate) mod common;
+pub use crate::transport::MAX_BUFFER_LIMIT;
 pub(crate) use common::{DecoderContext, StreamDecoder};
 pub use common::{Drained, SubscriptionItem};
 

@@ -40,7 +40,7 @@ fn fail_all_skips_a_closed_bounded_route() {
     let (sender, mut receiver) = broadcast::channel(4);
     let bound = BufferBound {
         limit: 1,
-        end: IncomingMessages::ContractDataEnd,
+        end: &[IncomingMessages::ContractDataEnd],
     };
     let lease = Lease::new();
     let route = Route::bounded(sender, lease.downgrade(), bound, Arc::new(AtomicUsize::new(0)));

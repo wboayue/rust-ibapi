@@ -73,7 +73,7 @@ pub enum Error {
     ConnectionRejected(String),
 
     /// IB Gateway sent a timezone name that could not be mapped to an IANA zone.
-    #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
+    #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. See https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
     UnsupportedTimeZone(String),
 
     /// Connection was reset by TWS/Gateway.
@@ -115,6 +115,12 @@ pub enum Error {
     /// Stream ended unexpectedly.
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
+
+    /// The deadline passed before the request ended. Says nothing about the
+    /// request at TWS, which may still be running; see
+    /// `Subscription::cancel_and_drain`.
+    #[error("timed out before the request ended")]
+    Timeout,
 
     /// A subscription with a buffer limit had `limit` unread items when
     /// another arrived. Terminal: every item queued before it was delivered,
@@ -355,6 +361,7 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::Timeout => Error::Timeout,
             Error::BufferLimitExceeded { limit } => Error::BufferLimitExceeded { limit: *limit },
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),

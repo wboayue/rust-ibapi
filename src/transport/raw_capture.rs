@@ -67,6 +67,8 @@ use log::{info, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
 
+use super::common::lock;
+
 static TAP_ID: AtomicUsize = AtomicUsize::new(0);
 
 /// Records the inbound byte stream, or does nothing at all.
@@ -214,7 +216,7 @@ impl Sink {
     /// capture may have a torn frame in it, but refusing to record from here on
     /// is strictly worse than continuing, so recover the guard.
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        lock(&self.state)
     }
 
     /// Open the file pair for `number`, or `None` with a warning if either file

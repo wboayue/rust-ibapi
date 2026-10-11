@@ -271,6 +271,19 @@ pub mod helpers {
         binary_proto(crate::messages::IncomingMessages::ExecutionData as i32, &response.to_proto())
     }
 
+    /// Proto-framed OrderStatus frame; `order_id` is at proto tag 1.
+    pub fn order_status_frame(order_id: i32, status: crate::orders::OrderStatusKind) -> Vec<u8> {
+        use crate::testdata::builders::ResponseProtoEncoder;
+        let response = crate::testdata::builders::orders::order_status().order_id(order_id).status(status);
+        binary_proto(crate::messages::IncomingMessages::OrderStatus as i32, &response.to_proto())
+    }
+
+    /// [`proto_response`] for an OrderStatus builder.
+    pub fn order_status_response(status: crate::testdata::builders::orders::OrderStatusResponse) -> crate::messages::ResponseMessage {
+        use crate::testdata::builders::ResponseProtoEncoder;
+        proto_response(crate::messages::IncomingMessages::OrderStatus, status.encode_proto())
+    }
+
     /// Stub [`StreamDecoder`](crate::subscriptions::StreamDecoder) that
     /// accepts `HistogramData` and decodes every frame to a unit value. For
     /// tests that care about routing/notices, not payloads.

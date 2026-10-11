@@ -336,6 +336,7 @@ pub(crate) async fn historical_data_stream(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         check_version(client.server_version(), Features::TRADING_CLASS)?;
@@ -354,7 +355,7 @@ pub(crate) async fn historical_data_stream(
         &Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    builder.send::<HistoricalBarUpdate>(request).await
+    builder.send_capped::<HistoricalBarUpdate>(request, buffer_limit).await
 }
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the

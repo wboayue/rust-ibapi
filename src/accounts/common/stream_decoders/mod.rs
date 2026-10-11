@@ -22,6 +22,10 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
         }
     }
 
+    fn is_batch_end(&self) -> bool {
+        matches!(self, AccountSummaryResult::End)
+    }
+
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_account_summary(request_id)
@@ -71,6 +75,10 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
         }
     }
 
+    fn is_batch_end(&self) -> bool {
+        matches!(self, PositionUpdate::PositionEnd)
+    }
+
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         encoders::encode_cancel_positions()
     }
@@ -85,6 +93,10 @@ impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
             _ => Err(Error::unexpected_response(message)),
         }
+    }
+
+    fn is_batch_end(&self) -> bool {
+        matches!(self, PositionUpdateMulti::PositionEnd)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -111,6 +123,10 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
         }
     }
 
+    fn is_batch_end(&self) -> bool {
+        matches!(self, AccountUpdate::End)
+    }
+
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         encoders::encode_cancel_account_updates()
     }
@@ -125,6 +141,10 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
             _ => Err(Error::unexpected_response(message)),
         }
+    }
+
+    fn is_batch_end(&self) -> bool {
+        matches!(self, AccountUpdateMulti::End)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {

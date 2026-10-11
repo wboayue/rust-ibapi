@@ -1509,3 +1509,44 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
     assert_eq!(tick.price, 14.00, "wrong price");
     assert!(subscription.next().is_none(), "should be done");
 }
+
+// ---- buffer_limit ----------------------------------------------------------
+
+#[test]
+fn historical_data_stream_buffer_limit_reaches_the_bus() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_blocking_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let _bounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .stream()
+        .expect("bounded stream failed");
+    let _unbounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
+        .expect("unbounded stream failed");
+
+    assert_eq!(
+        *message_bus.buffer_limits.read().unwrap(),
+        vec![16],
+        "only the bounded request carries a limit"
+    );
+}
+
+#[test]
+fn historical_data_fetch_rejects_buffer_limit() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_blocking_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let result = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .fetch();
+
+    assert!(matches!(result, Err(Error::InvalidArgument(_))), "got {result:?}");
+    assert!(message_bus.request_messages.read().unwrap().is_empty(), "nothing is sent");
+}

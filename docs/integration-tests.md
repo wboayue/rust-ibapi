@@ -74,6 +74,8 @@ let client = Client::connect("127.0.0.1:4002", 100)?;
 
 IBKR enforces a 50 requests/second limit. Call `rate_limit()` before each call that sends a message to the gateway (connect, server_time, market_data, place_order, etc.).
 
+(#971 tracks replacing this with the client-side `ibapi::RateLimiter`.)
+
 ```rust
 rate_limit();
 let client = Client::connect("127.0.0.1:4002", client_id.id())?;

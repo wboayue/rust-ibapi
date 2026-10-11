@@ -147,6 +147,8 @@ impl TokenBucket {
 }
 
 /// Block until a request token is available. Enforces 50 req/sec limit.
+///
+/// To be replaced by the client-side `ibapi::RateLimiter` (#971).
 pub fn rate_limit() {
     loop {
         let mut guard = RATE_LIMITER.lock().unwrap();

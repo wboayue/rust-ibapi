@@ -6,6 +6,8 @@
 //! binary-text-payload framing that `parse_raw_message` expects post-floor-213:
 //! `[4-byte BE msg_id][NUL-delimited remaining fields]`, produced by `body()`.
 
+use crate::common::test_utils::helpers::order_status_frame;
+use crate::orders::OrderStatusKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,6 +23,7 @@ use crate::server_versions;
 use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::transport::common::poison_with;
 
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
@@ -96,7 +99,7 @@ async fn test_channel_classes_under_small_channel_capacity() {
     assert_capacity_and_class("order", &mut order, send, ORDER_CAPACITY, ChannelClass::Order).await;
 
     let mut updates = bus.create_order_update_subscription().await.unwrap();
-    let sender = bus.order_update_stream.lock().unwrap().as_ref().unwrap().sender.clone();
+    let sender = bus.order_taps.updates_sender().unwrap();
     let send = || drop(sender.send(cancelled()));
     assert_capacity_and_class(
         "order update stream",
@@ -333,7 +336,7 @@ async fn test_create_order_update_subscription_after_shutdown_fails() {
 
     let err = mb.create_order_update_subscription().await.err().expect("subscribe after shutdown");
     assert!(matches!(err, Error::Shutdown), "got: {err:?}");
-    assert!(bus.order_update_stream.lock().unwrap().is_none());
+    assert!(bus.order_taps.updates_lease().is_none());
 }
 
 /// Shutdown ends a live notice stream, and one opened afterwards is already
@@ -478,10 +481,7 @@ async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_clea
     // before the frame is routed.
     let cleanup_gate = bus.cleanup_gate.lock().await;
     drop(updates);
-    assert!(
-        bus.order_update_stream.lock().unwrap().is_some(),
-        "the dropped stream is still registered"
-    );
+    assert!(bus.order_taps.updates_lease().is_some(), "the dropped stream is still registered");
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::OrderStatus as i32,
@@ -1852,10 +1852,7 @@ async fn test_drop_then_recreate_order_update_stream() {
 
     // Process s1's stale OrderUpdateStream signal; s2's registration survives.
     drain_cleanup_signals(&bus).await;
-    let sender = {
-        let stream = bus.order_update_stream.lock().unwrap();
-        stream.as_ref().expect("stale cleanup cleared the replacement stream").sender.clone()
-    };
+    let sender = bus.order_taps.updates_sender().expect("stale cleanup cleared the replacement stream");
     sender
         .send(RoutedItem::Error(Error::Cancelled))
         .expect("replacement stream has no receivers");
@@ -1865,7 +1862,7 @@ async fn test_drop_then_recreate_order_update_stream() {
 
     drop(s2);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream leaked");
+    assert!(bus.order_taps.updates_lease().is_none(), "order update stream leaked");
 }
 
 /// `reset_channels` after reconnect: every in-flight request and order
@@ -2148,7 +2145,7 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
 pub(super) fn bound(limit: usize) -> BufferBound {
     BufferBound {
         limit,
-        end: IncomingMessages::ContractDataEnd,
+        end: &[IncomingMessages::ContractDataEnd],
     }
 }
 
@@ -2187,7 +2184,7 @@ async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedIt
 #[tokio::test]
 async fn test_bounded_request_fails_after_limit_unread() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(RequestId::nth(100), vec![], bound(2)).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
     route_histograms(&stream, &bus, 4, RequestId::nth(100)).await;
 
@@ -2210,7 +2207,7 @@ async fn test_bounded_request_fails_after_limit_unread() {
 #[tokio::test]
 async fn test_bounded_request_counts_unread_not_total() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(RequestId::nth(100), vec![], bound(2)).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
     for _ in 0..6 {
         route_histograms(&stream, &bus, 1, RequestId::nth(100)).await;
@@ -2224,8 +2221,8 @@ async fn test_bounded_request_counts_unread_not_total() {
 #[tokio::test]
 async fn test_reset_skips_overflowed_route() {
     let (stream, bus) = make_bus();
-    let mut overflowed = bus.send_request_bounded(RequestId::nth(100), vec![], bound(1)).await.unwrap();
-    let mut at_limit = bus.send_request_bounded(RequestId::nth(200), vec![], bound(1)).await.unwrap();
+    let mut overflowed = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(1))).await.unwrap();
+    let mut at_limit = bus.send_request_capped(RequestId::nth(200), vec![], Some(bound(1))).await.unwrap();
 
     route_histograms(&stream, &bus, 2, RequestId::nth(100)).await;
     route_histograms(&stream, &bus, 1, RequestId::nth(200)).await;
@@ -2251,7 +2248,7 @@ async fn test_overflowed_subscription_cancels_on_drop() {
     use crate::contracts::ContractDetails;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_bounded(CONTRACT_REQUEST_ID, vec![], bound(1)).await.unwrap();
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
     let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -2286,7 +2283,7 @@ async fn test_bounded_request_end_marker_at_limit_still_ends() {
     // A result exactly `limit` rows long, read late: the end marker takes the
     // spare slot, so the stream ends normally and nothing is evicted.
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_bounded(CONTRACT_REQUEST_ID, vec![], bound(1)).await.unwrap();
+    let mut sub = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);
@@ -2327,4 +2324,135 @@ async fn test_drain_reports_shutdown() {
 
     let outcome: Result<Drained, Error> = drain.await.unwrap();
     assert!(matches!(outcome, Err(Error::Shutdown)), "got {outcome:?}");
+}
+
+// ---- outbound rate limiter (#950) ----
+
+/// A throttled send awaits rather than blocking the runtime: on a paused
+/// clock, a ticker task keeps running while the sends wait out the limit.
+#[tokio::test(start_paused = true)]
+async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    // Burst of 1, then one every 500 ms.
+    bus.set_rate_limiter(crate::RateLimiter::per_second(2));
+
+    let ticks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ticker = {
+        let ticks = ticks.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                ticks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        })
+    };
+
+    let started = std::time::Instant::now();
+    for _ in 0..4 {
+        bus.send_message(b"request".to_vec()).await?;
+    }
+    ticker.abort();
+
+    assert_eq!(count_frames(&stream.captured(), b"request"), 4);
+    assert!(ticks.load(std::sync::atomic::Ordering::Relaxed) > 0, "runtime blocked while throttled");
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "slept in real time: {:?}",
+        started.elapsed()
+    );
+    Ok(())
+}
+
+/// A status that arrived before the stream opened — an order filled between
+/// `submit()` and `wait_for_fill` — is the stream's first item.
+#[tokio::test]
+async fn test_order_status_stream_starts_with_earlier_status() {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
+    bus.read_and_route_message().await.unwrap();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
+}
+
+/// The stream gets a copy: the `place_order` subscription for the same order
+/// and the order-update stream still receive the frame.
+#[tokio::test]
+async fn test_order_status_stream_takes_nothing_from_other_routes() {
+    let (stream, bus) = make_bus();
+
+    let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
+    assert_eq!(next_message(&mut order).await.order_id(), Some(7));
+    assert_eq!(next_message(&mut updates).await.order_id(), Some(7));
+}
+
+/// A status for an order no route claims still reaches its status stream.
+#[tokio::test]
+async fn test_order_status_stream_sees_unrouted_status() {
+    let (stream, bus) = make_bus();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
+}
+
+#[tokio::test]
+async fn test_order_status_stream_ends_on_reset_and_shutdown() {
+    let (_stream, bus) = make_bus();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    bus.reset_channels().await;
+    let item = tokio::time::timeout(TICK, statuses.next_routed()).await.expect("no item");
+    assert!(matches!(item, Some(RoutedItem::Error(Error::ConnectionReset))), "{item:?}");
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    bus.request_shutdown();
+    let item = tokio::time::timeout(TICK, statuses.next_routed()).await.expect("no item");
+    assert!(matches!(item, Some(RoutedItem::Error(Error::Shutdown))), "{item:?}");
+    assert!(matches!(
+        bus.create_order_status_subscription(OrderId::from(7)).await,
+        Err(Error::Shutdown)
+    ));
+}
+
+/// A wait abandoned by its caller (an outer `timeout` or `select!` dropping
+/// the future) releases its status stream, and the order's entry with it.
+#[tokio::test]
+async fn test_abandoned_order_status_wait_is_released() {
+    let (_stream, bus) = make_bus();
+
+    let wait = async {
+        let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+        statuses.next_routed().await
+    };
+    assert!(tokio::time::timeout(Duration::from_millis(20), wait).await.is_err(), "nothing was sent");
+    drain_cleanup_signals(&bus).await;
+
+    assert!(!bus.order_taps.has_status_entry(OrderId::from(7)), "status stream outlived its wait");
+}
+
+/// A panic under the broadcaster lock must not end notice delivery or panic
+/// every later broadcast on the dispatcher task.
+#[tokio::test]
+async fn notice_broadcaster_recovers_from_a_poisoned_lock() {
+    let broadcaster = NoticeBroadcaster::new(broadcast::channel(4).0);
+    poison_with(|| broadcaster.sender.lock().unwrap());
+    assert!(broadcaster.sender.is_poisoned());
+
+    let mut receiver = broadcaster.subscribe();
+    broadcaster.broadcast(Notice::synthesized(1, "after poison".into()));
+    broadcaster.close();
+
+    assert_eq!(receiver.recv().await.unwrap().message, "after poison");
+    assert!(matches!(receiver.recv().await, Err(broadcast::error::RecvError::Closed)));
 }

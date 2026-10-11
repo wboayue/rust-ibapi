@@ -1,9 +1,12 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, WhatToShow};
+use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalBarUpdate, WhatToShow};
 use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
+use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
+use ibapi::Error;
+use ibapi_integration_async::read_to_terminal;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 use time::macros::datetime;
@@ -331,4 +334,59 @@ fn assert_bars_within(bars: &[Bar], start: OffsetDateTime, end: OffsetDateTime) 
     let (start, end) = (BarTimestamp::from(start), BarTimestamp::from(end));
     let outside: Vec<_> = bars.iter().map(|bar| bar.date).filter(|date| *date < start || *date >= end).collect();
     assert!(outside.is_empty(), "bars outside [{start:?}, {end:?}): {outside:?}");
+}
+
+#[tokio::test]
+#[serial(historical)]
+async fn historical_data_stream_buffer_limit_fails_a_stalled_reader() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let contract = Contract::stock("SPY").build();
+    let mut subscription = client
+        .historical_data(&contract, BarSize::Min15)
+        .duration(Duration::days(1))
+        .buffer_limit(1)
+        .stream()
+        .await
+        .expect("stream failed");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await; // stall: the initial bars and End both arrive
+
+    // `End` is an item on this stream, not an end marker: it overflows a cap of 1.
+    let (_, outcome) = read_to_terminal(&mut subscription).await;
+    assert!(matches!(outcome, Some(Err(Error::BufferLimitExceeded { limit: 1 }))), "got {outcome:?}");
+}
+
+#[tokio::test]
+#[serial(historical)]
+async fn historical_data_stream_buffer_limit_reader_keeps_up() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    rate_limit();
+    let contract = Contract::stock("SPY").build();
+    let mut subscription = client
+        .historical_data(&contract, BarSize::Min15)
+        .duration(Duration::days(1))
+        .buffer_limit(4)
+        .stream()
+        .await
+        .expect("stream failed");
+
+    let mut saw_bars = false;
+    loop {
+        match tokio::time::timeout(std::time::Duration::from_secs(30), subscription.next())
+            .await
+            .expect("timed out")
+        {
+            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) => saw_bars = !data.bars.is_empty(),
+            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { .. }))) => break,
+            Some(Ok(item)) => eprintln!("item: {item:?}"),
+            other => panic!("expected the initial bars then End, got {other:?}"),
+        }
+    }
+    assert!(saw_bars, "expected initial bars before End");
 }

@@ -28,19 +28,45 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+pub(crate) mod order_taps;
+pub(crate) mod rate_limiter;
+
 // Internal channel envelope shared across sync/async transports.
 #[cfg(any(feature = "sync", feature = "async"))]
 pub(crate) use crate::subscriptions::common::RoutedItem;
 
 /// A request route's unread-item cap (`buffer_limit`), opened with
-/// `send_request_bounded`.
+/// `send_request_capped`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferBound {
     /// The most unread items the route queues.
     pub limit: usize,
-    /// The request's end marker. It always gets through, like an error, so a
-    /// result that fills the cap exactly still ends normally.
-    pub end: crate::messages::IncomingMessages,
+    /// The request's end markers. They always get through, like an error, so
+    /// a result that fills the cap exactly still ends normally. Empty: only an
+    /// error ends the stream.
+    pub end: &'static [crate::messages::IncomingMessages],
+}
+
+/// The largest `buffer_limit`. The async client allocates its channel's slots
+/// up front: `limit + 1`, rounded up to a power of two. At this maximum that
+/// is 65,536 slots, a few MiB.
+pub const MAX_BUFFER_LIMIT: usize = 65_535;
+
+impl BufferBound {
+    /// The bound for a `buffer_limit` on a `T` stream, or `None` when unset.
+    /// Errors if `limit` is outside `1..=MAX_BUFFER_LIMIT`.
+    #[cfg(any(feature = "sync", feature = "async"))]
+    pub(crate) fn for_stream<T: crate::subscriptions::StreamDecoder<T>>(limit: Option<usize>) -> Result<Option<Self>, Error> {
+        let Some(limit) = limit else {
+            return Ok(None);
+        };
+        if !(1..=MAX_BUFFER_LIMIT).contains(&limit) {
+            return Err(Error::InvalidArgument(format!(
+                "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
+            )));
+        }
+        Ok(Some(Self { limit, end: T::END_MESSAGES }))
+    }
 }
 
 /// What a bounded route does with the next item.
@@ -86,7 +112,7 @@ impl BoundState {
         }
         let terminal = match item {
             RoutedItem::Error(_) => true,
-            RoutedItem::Response(message) => message.message_type() == self.bound.end,
+            RoutedItem::Response(message) => self.bound.end.contains(&message.message_type()),
             RoutedItem::Notice(_) => false,
         };
         if terminal {
@@ -220,12 +246,15 @@ impl SharedCounts {
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
-    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error>;
-
-    /// [`send_request`](Self::send_request) with a cap on unread items: see
-    /// [`BoundState::admit`]. Past the cap the route queues
+    /// Open a request-id route and write `packet`. With `bound`, unread items
+    /// are capped: see [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_bounded(&self, request_id: RequestId, packet: &[u8], bound: BufferBound) -> Result<InternalSubscription, Error>;
+    fn send_request_capped(&self, request_id: RequestId, packet: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error>;
+
+    /// [`send_request_capped`](Self::send_request_capped) without a cap.
+    fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error> {
+        self.send_request_capped(request_id, packet, None)
+    }
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
@@ -243,6 +272,10 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_message(&self, packet: &[u8]) -> Result<(), Error>;
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
+
+    /// A stream of `order_id`'s `OrderStatus` frames, copied alongside their
+    /// normal routing and starting with the latest one seen. Nothing is written.
+    fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 
@@ -266,6 +299,7 @@ pub(crate) struct InternalSubscription {
     pub(crate) request_id: Option<RequestId>, // initiating request id
     pub(crate) order_id: Option<OrderId>,     // initiating order id
     pub(crate) shared: Option<SharedTicket>,  // shared-channel identity, when routed by message type
+    order_status: Option<OrderId>,            // the order a status stream follows
 }
 
 #[cfg(feature = "sync")]
@@ -339,7 +373,7 @@ impl InternalSubscription {
     /// `create_order_update_subscription` can replace it before the cleanup
     /// thread runs. Cleanup itself matches identity only (see `Signal`).
     fn release(&self, cause: &str) {
-        let lease = self.lease.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        let lease = common::lock(&self.lease).take();
         let Some(lease) = lease else {
             return;
         };
@@ -352,10 +386,11 @@ impl InternalSubscription {
 
     /// The cleanup signal for this subscription, identified by `lease`.
     fn signal(&self, lease: LeaseRef) -> Signal {
-        match (self.request_id, self.order_id, self.shared) {
-            (Some(request_id), _, _) => Signal::Request(request_id, lease),
-            (_, Some(order_id), _) => Signal::Order(order_id, lease),
-            (_, _, Some(_)) => Signal::Shared(lease),
+        match (self.request_id, self.order_id, self.shared, self.order_status) {
+            (Some(request_id), _, _, _) => Signal::Request(request_id, lease),
+            (_, Some(order_id), _, _) => Signal::Order(order_id, lease),
+            (_, _, Some(_), _) => Signal::Shared(lease),
+            (_, _, _, Some(order_id)) => Signal::OrderStatus(order_id, lease),
             // No request, order id or shared ticket: the order update stream.
             _ => Signal::OrderUpdateStream(lease),
         }
@@ -407,6 +442,7 @@ pub(crate) enum Signal {
     Request(RequestId, LeaseRef),
     Order(OrderId, LeaseRef),
     OrderUpdateStream(LeaseRef),
+    OrderStatus(OrderId, LeaseRef),
     Shared(LeaseRef),
 }
 
@@ -420,6 +456,7 @@ pub(crate) struct SubscriptionBuilder {
     order_id: Option<OrderId>,
     request_id: Option<RequestId>,
     shared: Option<SharedTicket>,
+    order_status: Option<OrderId>,
 }
 
 #[cfg(feature = "sync")]
@@ -433,6 +470,7 @@ impl SubscriptionBuilder {
             order_id: None,
             request_id: None,
             shared: None,
+            order_status: None,
         }
     }
 
@@ -471,6 +509,12 @@ impl SubscriptionBuilder {
         self
     }
 
+    /// A status stream on `order_id` (`create_order_status_subscription`).
+    pub(crate) fn order_status(mut self, order_id: OrderId) -> Self {
+        self.order_status = Some(order_id);
+        self
+    }
+
     pub(crate) fn build(self) -> InternalSubscription {
         let (Some(receiver), Some(signaler), Some(lease)) = (self.receiver, self.signaler, self.lease) else {
             panic!("bad configuration");
@@ -483,6 +527,7 @@ impl SubscriptionBuilder {
             request_id: self.request_id,
             order_id: self.order_id,
             shared: self.shared,
+            order_status: self.order_status,
         }
     }
 }

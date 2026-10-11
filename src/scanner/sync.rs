@@ -1,10 +1,8 @@
 //! Synchronous implementation of scanner functionality
 
-use std::sync::Arc;
-
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::blocking::Subscription;
+use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::TagValue;
@@ -91,11 +89,9 @@ impl Client {
             )?
         }
 
-        let request_id = self.mint_request_id();
-        let request = encoders::encode_scanner_subscription(request_id.raw(), subscription, filter)?;
-        let subscription = self.send_request(request_id, request)?;
-
-        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+        let builder = self.request();
+        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription, filter)?;
+        builder.send(request)
     }
 }
 

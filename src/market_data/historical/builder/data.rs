@@ -24,6 +24,7 @@ pub struct HistoricalDataBuilder<'a, C> {
     duration: Option<Duration>,
     ending: Option<OffsetDateTime>,
     between: Option<(OffsetDateTime, OffsetDateTime)>,
+    buffer_limit: Option<usize>,
 }
 
 impl<'a, C> HistoricalDataBuilder<'a, C> {
@@ -37,6 +38,7 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
             duration: None,
             ending: None,
             between: None,
+            buffer_limit: None,
         }
     }
 
@@ -75,6 +77,112 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
+    }
+
+    /// Fail the [`stream`](Self::stream) instead of queueing more than `limit`
+    /// unread items.
+    ///
+    /// When `limit` items are unread and another arrives, the subscription
+    /// yields every queued item, then [`Error::BufferLimitExceeded`], then
+    /// ends. Same semantics and caveats as
+    /// [`ContractDetailsBuilder::buffer_limit`](crate::contracts::ContractDetailsBuilder::buffer_limit),
+    /// with one difference: this stream has no end marker (the
+    /// [`HistoricalBarUpdate::End`] after the initial bars is an item and
+    /// counts), so a reader that stops reading always overflows eventually.
+    /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
+    ///
+    /// [`fetch`](Self::fetch) returns a single response, so it rejects a
+    /// builder with a `buffer_limit` ([`Error::InvalidArgument`]).
+    ///
+    /// # Examples
+    #[cfg_attr(
+        feature = "sync",
+        doc = r#"
+```no_run
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use ibapi::market_data::historical::{BarSize, HistoricalBarUpdate, ToDuration};
+use ibapi::Error;
+
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+
+let contract = Contract::stock("SPY").build();
+let subscription = client
+    .historical_data(&contract, BarSize::Min15)
+    .duration(1.days())
+    .buffer_limit(64)
+    .stream()
+    .expect("streaming request failed");
+for update in subscription.iter_data() {
+    match update {
+        Ok(HistoricalBarUpdate::Update(bar)) => println!("{bar:?}"),
+        Ok(other) => println!("{other:?}"),
+        Err(Error::BufferLimitExceeded { limit }) => {
+            eprintln!("fell {limit} updates behind; stopping");
+            break;
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            break;
+        }
+    }
+}
+```
+"#
+    )]
+    #[cfg_attr(
+        feature = "async",
+        doc = r#"
+```no_run
+use ibapi::prelude::*;
+use ibapi::market_data::historical::HistoricalBarUpdate;
+use ibapi::Error;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+
+    let contract = Contract::stock("SPY").build();
+    let subscription = client
+        .historical_data(&contract, HistoricalBarSize::Min15)
+        .duration(1.days())
+        .buffer_limit(64)
+        .stream()
+        .await
+        .expect("streaming request failed");
+    let mut updates = subscription.filter_data();
+    while let Some(update) = updates.next().await {
+        match update {
+            Ok(HistoricalBarUpdate::Update(bar)) => println!("{bar:?}"),
+            Ok(other) => println!("{other:?}"),
+            Err(Error::BufferLimitExceeded { limit }) => {
+                eprintln!("fell {limit} updates behind; stopping");
+                break;
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        }
+    }
+}
+```
+"#
+    )]
+    pub fn buffer_limit(mut self, limit: usize) -> Self {
+        self.buffer_limit = Some(limit);
+        self
+    }
+
+    /// Resolve the builder for a one-shot [`fetch`](Self::fetch): the date spec,
+    /// and no `buffer_limit` (a single response has nothing to cap).
+    fn resolve_for_fetch(&self) -> Result<(Option<OffsetDateTime>, Duration), Error> {
+        if self.buffer_limit.is_some() {
+            return Err(Error::InvalidArgument(
+                "historical_data().fetch(): buffer_limit applies to .stream() only".to_owned(),
+            ));
+        }
+        self.resolve_date_spec()
     }
 
     /// Resolve the builder's date spec into (end_date, duration). Errors if the
@@ -178,7 +286,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// # let _ = bars;
     /// ```
     pub fn fetch(self) -> Result<HistoricalData, Error> {
-        let (end_date, duration) = self.resolve_date_spec()?;
+        let (end_date, duration) = self.resolve_for_fetch()?;
         let data = crate::market_data::historical::sync::historical_data(
             self.client,
             self.contract,
@@ -224,6 +332,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.buffer_limit,
         )
     }
 }
@@ -262,7 +371,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn fetch(self) -> Result<HistoricalData, Error> {
-        let (end_date, duration) = self.resolve_date_spec()?;
+        let (end_date, duration) = self.resolve_for_fetch()?;
         let data = crate::market_data::historical::r#async::historical_data(
             self.client,
             self.contract,
@@ -310,6 +419,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.buffer_limit,
         )
         .await
     }

@@ -40,6 +40,7 @@ use std::sync::Arc;
 use crate::connection::common::StartupMessage;
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
+use crate::transport::rate_limiter::RateLimiter;
 
 /// Configuration state shared by [`sync_impl::ClientBuilder`] and
 /// [`async_impl::ClientBuilder`]. Centralizes the field set and the
@@ -53,6 +54,8 @@ pub(super) struct BuilderState {
     pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
+    /// `None` (the default) sends without limit.
+    pub(super) rate_limiter: Option<RateLimiter>,
 }
 
 impl Default for BuilderState {
@@ -63,6 +66,7 @@ impl Default for BuilderState {
             tcp_no_delay: true,
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            rate_limiter: None,
         }
     }
 }
@@ -70,17 +74,23 @@ impl Default for BuilderState {
 /// Output of [`BuilderState::validate`]: same fields with `address` and
 /// `client_id` unwrapped. A struct (rather than a tuple) because the wide
 /// `Fn` trait object trips `clippy::type_complexity` in tuple form.
-pub(super) struct ValidatedPieces {
-    pub(super) address: String,
-    pub(super) client_id: i32,
-    pub(super) tcp_no_delay: bool,
-    pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+pub(crate) struct ValidatedPieces {
+    pub(crate) address: String,
+    pub(crate) client_id: i32,
+    pub(crate) tcp_no_delay: bool,
+    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
     /// `None` means retry forever.
-    pub(super) max_reconnect_attempts: Option<u32>,
+    pub(crate) max_reconnect_attempts: Option<u32>,
+    pub(crate) rate_limiter: Option<RateLimiter>,
 }
 
 impl BuilderState {
     pub(super) fn validate(self) -> Result<ValidatedPieces, Error> {
+        if self.rate_limiter.as_ref().is_some_and(|limiter| limiter.messages_per_second() == 0) {
+            return Err(Error::InvalidArgument(
+                "ClientBuilder: rate_limiter must allow at least 1 message per second".into(),
+            ));
+        }
         Ok(ValidatedPieces {
             address: self
                 .address
@@ -91,6 +101,7 @@ impl BuilderState {
             tcp_no_delay: self.tcp_no_delay,
             startup_callback: self.startup_callback,
             max_reconnect_attempts: self.max_reconnect_attempts,
+            rate_limiter: self.rate_limiter,
         })
     }
 }
@@ -106,6 +117,7 @@ pub mod sync_impl {
     use crate::connection::common::StartupMessage;
     use crate::errors::Error;
     use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
+    use crate::transport::rate_limiter::RateLimiter;
     use crate::transport::sync::NoticeBroadcaster;
 
     /// Builder for a synchronous [`Client`]. Acquire via
@@ -199,6 +211,27 @@ pub mod sync_impl {
             self
         }
 
+        /// Cap the messages sent to TWS with a [`RateLimiter`]. Default: no
+        /// limit. Pass clones of one limiter to every client connected to the
+        /// same gateway; see [`RateLimiter`] for what is counted and how.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # use ibapi::client::blocking::Client;
+        /// use ibapi::RateLimiter;
+        ///
+        /// let _ = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .rate_limiter(RateLimiter::default())
+        ///     .connect();
+        /// ```
+        pub fn rate_limiter(mut self, limiter: RateLimiter) -> Self {
+            self.state.rate_limiter = Some(limiter);
+            self
+        }
+
         /// Set a callback for unsolicited typed messages during the handshake.
         ///
         /// Fires for `OpenOrder`, `OrderStatus`, account updates, and other
@@ -273,15 +306,7 @@ pub mod sync_impl {
         }
 
         fn connect_with_broadcaster(self, broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
-            let pieces = self.state.validate()?;
-            Client::connect_with_pieces(
-                &pieces.address,
-                pieces.client_id,
-                pieces.tcp_no_delay,
-                pieces.startup_callback,
-                broadcaster,
-                pieces.max_reconnect_attempts,
-            )
+            Client::connect_with_pieces(self.state.validate()?, broadcaster)
         }
     }
 }
@@ -301,6 +326,7 @@ pub mod async_impl {
     use crate::messages::Notice;
     use crate::subscriptions::notice_stream::async_impl::NoticeStream;
     use crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY;
+    use crate::transport::rate_limiter::RateLimiter;
 
     /// Builder for an async [`Client`]. Acquire via
     /// [`Client::builder`](crate::Client::builder).
@@ -438,6 +464,29 @@ pub mod async_impl {
             self
         }
 
+        /// Cap the messages sent to TWS with a [`RateLimiter`]. Default: no
+        /// limit. Pass clones of one limiter to every client connected to the
+        /// same gateway; see [`RateLimiter`] for what is counted and how.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use ibapi::{Client, RateLimiter};
+        ///
+        /// let _client = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .rate_limiter(RateLimiter::default())
+        ///     .connect()
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn rate_limiter(mut self, limiter: RateLimiter) -> Self {
+            self.state.rate_limiter = Some(limiter);
+            self
+        }
+
         /// Set a callback for unsolicited typed messages during the handshake.
         ///
         /// Fires for `OpenOrder`, `OrderStatus`, account updates, and other
@@ -524,17 +573,7 @@ pub mod async_impl {
                 return Err(Error::InvalidArgument("ClientBuilder: channel_capacity must be at least 1".into()));
             }
             let channel_capacity = self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY);
-            let pieces = self.state.validate()?;
-            Client::connect_with_pieces(
-                &pieces.address,
-                pieces.client_id,
-                pieces.tcp_no_delay,
-                pieces.startup_callback,
-                sender,
-                pieces.max_reconnect_attempts,
-                channel_capacity,
-            )
-            .await
+            Client::connect_with_pieces(self.state.validate()?, sender, channel_capacity).await
         }
     }
 }

@@ -517,3 +517,40 @@ mod integration_tests {
         assert!(matches!(&results[2], PositionUpdate::PositionEnd));
     }
 }
+
+#[test]
+fn test_is_batch_end_marks_only_end_markers() {
+    // (name, is_batch_end, expected)
+    let cases = [
+        ("summary End", AccountSummaryResult::End.is_batch_end(), true),
+        (
+            "summary row",
+            AccountSummaryResult::Summary(AccountSummary::default()).is_batch_end(),
+            false,
+        ),
+        ("positions End", PositionUpdate::PositionEnd.is_batch_end(), true),
+        ("position", PositionUpdate::Position(Position::default()).is_batch_end(), false),
+        ("positions multi End", PositionUpdateMulti::PositionEnd.is_batch_end(), true),
+        (
+            "position multi",
+            PositionUpdateMulti::Position(PositionMulti::default()).is_batch_end(),
+            false,
+        ),
+        ("account updates End", AccountUpdate::End.is_batch_end(), true),
+        (
+            "account value",
+            AccountUpdate::AccountValue(AccountValue::default()).is_batch_end(),
+            false,
+        ),
+        ("account updates multi End", AccountUpdateMulti::End.is_batch_end(), true),
+        (
+            "account multi value",
+            AccountUpdateMulti::AccountMultiValue(AccountMultiValue::default()).is_batch_end(),
+            false,
+        ),
+    ];
+
+    for (name, actual, expected) in cases {
+        assert_eq!(actual, expected, "{name}");
+    }
+}

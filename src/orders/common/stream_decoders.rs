@@ -1,6 +1,6 @@
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::common::decoders;
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -44,6 +44,17 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
     }
 }
 
+impl StreamDecoder<OrderStatus> for OrderStatus {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus];
+
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OrderStatus, Error> {
+        match message.message_type() {
+            IncomingMessages::OrderStatus => decoders::decode_order_status(message),
+            _ => Err(Error::unexpected_response(message)),
+        }
+    }
+}
+
 impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus];
 
@@ -63,6 +74,7 @@ impl StreamDecoder<Orders> for Orders {
         IncomingMessages::OpenOrderEnd,
         IncomingMessages::CompletedOrdersEnd,
     ];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::OpenOrderEnd, IncomingMessages::CompletedOrdersEnd];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
@@ -81,6 +93,7 @@ impl StreamDecoder<Executions> for Executions {
         IncomingMessages::CommissionsReport,
         IncomingMessages::ExecutionDataEnd,
     ];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::ExecutionDataEnd];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Executions, Error> {
         match message.message_type() {

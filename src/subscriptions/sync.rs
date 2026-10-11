@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{
-    debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, DecoderContext, Drained, RoutedItem, SubscriptionItem,
+    collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext,
+    Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
@@ -21,7 +22,8 @@ use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 /// [next_timeout](Subscription::next_timeout) returns
 /// `Option<Result<SubscriptionItem<T>, Error>>`:
 ///
-/// * `None` — the stream has ended.
+/// * `None` — the stream has ended; from `try_next` and `next_timeout`, also
+///   that nothing arrived in time.
 /// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
 /// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice (a warning
 ///   code in [`WARNING_CODE_RANGE`](crate::messages::WARNING_CODE_RANGE) or
@@ -332,6 +334,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Same `SubscriptionItem<T>` shape as [`next`](Self::next): `Data`, `Notice`,
     /// or terminal error. Use [`timeout_iter_data`](Self::timeout_iter_data) when
     /// you want notices filtered.
+    ///
+    /// `None` means either that `timeout` passed or that the stream ended with
+    /// TWS's end marker; terminal errors, a TWS rejection included, come as
+    /// `Some(Err(_))`. To collect a whole result within a time bound, use
+    /// [`collect_to_end_within`](Self::collect_to_end_within), which tells the
+    /// two apart.
     pub fn next_timeout(&self, timeout: Duration) -> Option<Result<SubscriptionItem<T>, Error>> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
@@ -454,54 +462,154 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// });
     /// println!("collected {} ticks", ticks.len());
     /// ```
-    pub fn collect_until(&self, timeout: Duration, mut stop: impl FnMut(&[T]) -> bool) -> Vec<T> {
-        let deadline = Instant::now() + timeout;
-        let mut collected = Vec::new();
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                break;
-            }
-            match self.next_timeout(remaining) {
-                Some(Ok(SubscriptionItem::Data(value))) => {
-                    if value.is_snapshot_end() {
-                        break;
-                    }
-                    collected.push(value);
-                    if stop(&collected) {
-                        break;
-                    }
-                }
-                Some(Ok(SubscriptionItem::Notice(notice))) => warn!("ib notice on subscription: {notice}"),
-                Some(Err(e)) => {
-                    warn!("subscription error during collect: {e}");
-                    break;
-                }
-                // Per-item timeout (total deadline reached) or end of stream.
-                None => break,
-            }
+    pub fn collect_until(&self, timeout: Duration, stop: impl FnMut(&[T]) -> bool) -> Vec<T> {
+        let (rows, stopped) = self.collect_core(Bound::At(Instant::now() + timeout), stop);
+        if let CollectStop::Error(e) = stopped {
+            warn!("subscription error during collect: {e}");
         }
-        collected
+        rows
     }
 
-    /// Collects every data item until TWS's end marker. Notices are logged at
-    /// `warn!`. A terminal error is returned as is; a stream that ends without
-    /// the end marker (a closed channel) is `Error::UnexpectedEndOfStream`.
+    /// Collects every data item until TWS's end marker, or fails once `timeout`
+    /// passes.
     ///
-    /// For request-scoped streams that end, such as contract details. Blocks
-    /// until the end, so not for open-ended subscriptions like market data.
+    /// For requests that end, such as contract details, where a partial result
+    /// is not a result. Unlike [`collect_for`](Self::collect_for), running out
+    /// of time is an error, not a shorter `Vec`:
+    ///
+    /// | Outcome | Result |
+    /// |---|---|
+    /// | End marker (or snapshot end) | `Ok(rows)` |
+    /// | Terminal error, such as a TWS rejection ([`Error::Notice`]) | that error |
+    /// | Stream closed without the end marker | [`Error::UnexpectedEndOfStream`] |
+    /// | `timeout` passed | [`Error::Timeout`]; rows read so far are dropped |
+    ///
+    /// Notices are logged at `warn!`. A stream with no end marker (market data)
+    /// always ends in `Timeout`; use `collect_for` for those.
+    ///
+    /// After a timeout the request may still be running at TWS. Dropping the
+    /// subscription sends TWS's cancel, where the request type has one; to
+    /// learn whether the request is over before reusing its id, call
+    /// [`cancel_and_drain`](Self::cancel_and_drain).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Error;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client.contract_details_stream(&contract).subscribe().expect("request failed");
+    ///
+    /// match subscription.collect_to_end_within(Duration::from_secs(30)) {
+    ///     Ok(details) => println!("{} contracts", details.len()),
+    ///     Err(Error::Timeout) => eprintln!("no answer in 30s"), // drop sends the cancel
+    ///     Err(e) => eprintln!("request failed: {e}"),
+    /// }
+    /// ```
+    pub fn collect_to_end_within(&self, timeout: Duration) -> Result<Vec<T>, Error> {
+        let (rows, stopped) = self.collect_core(Bound::At(Instant::now() + timeout), |_| false);
+        stopped.into_result(rows)
+    }
+
+    /// Returns the next batch of data items: those that arrive together, closed
+    /// by `quiet` without an item or by a batch-end marker.
+    ///
+    /// For streams that send an initial dump ending in an end marker, then push
+    /// updates without one: account summary, account updates, positions and
+    /// their multi variants. Each push closes once `quiet` passes without a
+    /// row; choose `quiet` longer than the gap between the rows of one push. A
+    /// gap longer than `quiet` inside the initial dump splits it: the batch
+    /// ending in the marker completes it, so check `batch.last()`.
+    ///
+    /// On a stream that never pauses for `quiet`, such as market data, a batch
+    /// never closes.
+    ///
+    /// Blocks without a time limit until the first item arrives.
+    ///
+    /// | Outcome | Result |
+    /// |---|---|
+    /// | Batch-end marker | `Some(Ok(rows))`, the marker last |
+    /// | `quiet` passed after a row | `Some(Ok(rows))` |
+    /// | Stream ended | `Some(Ok(rows))` if any were read, else `None` |
+    /// | Terminal error | `Some(Err(_))`; rows of the partial batch are dropped |
+    ///
+    /// Notices are logged at `warn!`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::PositionUpdate;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let subscription = client.positions().expect("request failed");
+    ///
+    /// while let Some(batch) = subscription.next_batch(Duration::from_secs(1)) {
+    ///     let batch = batch.expect("positions error");
+    ///     let initial = matches!(batch.last(), Some(PositionUpdate::PositionEnd));
+    ///     println!("{} updates (initial dump: {initial})", batch.len());
+    /// }
+    /// ```
+    pub fn next_batch(&self, quiet: Duration) -> Option<Result<Vec<T>, Error>> {
+        let (rows, stopped) = self.collect_core(Bound::Idle(quiet), |rows| rows.last().is_some_and(T::is_batch_end));
+        stopped.into_batch(rows)
+    }
+
+    /// Collects every data item until TWS's end marker, with no time bound.
+    /// [`collect_to_end_within`](Self::collect_to_end_within) without the
+    /// timeout. Not for open-ended subscriptions like market data.
     pub(crate) fn collect_to_end(&self) -> Result<Vec<T>, Error> {
-        let mut collected = Vec::new();
-        while let Some(item) = self.next() {
-            match item? {
-                SubscriptionItem::Data(value) => collected.push(value),
-                SubscriptionItem::Notice(notice) => warn!("ib notice on subscription: {notice}"),
+        let (rows, stopped) = self.collect_core(Bound::None, |_| false);
+        stopped.into_result(rows)
+    }
+
+    /// The loop behind every `collect_*` and [`next_batch`](Self::next_batch):
+    /// reads until `bound` runs out, the end of the stream, or [`collect_step`]
+    /// says to stop.
+    fn collect_core(&self, bound: Bound<Instant>, mut stop: impl FnMut(&[T]) -> bool) -> (Vec<T>, CollectStop) {
+        let mut rows = Vec::new();
+        let mut deadline = match bound {
+            Bound::At(deadline) => Some(deadline),
+            Bound::None | Bound::Idle(_) => None,
+        };
+        loop {
+            let item = match deadline {
+                None => self.next(),
+                Some(deadline) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return (rows, CollectStop::Deadline);
+                    }
+                    self.next_timeout(remaining)
+                }
+            };
+            let Some(item) = item else {
+                // `next_timeout` returns `None` for a timeout and for a closed
+                // channel; only a timeout waits until the deadline.
+                let stopped = if self.ended_natively() {
+                    CollectStop::EndMarker
+                } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    CollectStop::Deadline
+                } else {
+                    CollectStop::Closed
+                };
+                return (rows, stopped);
+            };
+            let read = rows.len();
+            if let Some(stopped) = collect_step(&mut rows, item, &mut stop) {
+                return (rows, stopped);
+            }
+            if let Bound::Idle(quiet) = bound {
+                if rows.len() > read {
+                    deadline = Some(Instant::now() + quiet);
+                }
             }
         }
-        if !self.ended_natively() {
-            return Err(Error::UnexpectedEndOfStream);
-        }
-        Ok(collected)
     }
 }
 

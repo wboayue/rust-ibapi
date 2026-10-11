@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{binary_text, proto_error_response, proto_response, CapturingSink};
 use crate::messages::IncomingMessages;
-use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, UNKNOWN_MESSAGE_TYPE_CODE};
+use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, UNKNOWN_MESSAGE_TYPE_CODE};
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::TimeZone;
@@ -389,6 +389,14 @@ fn test_parse_connection_time_china_standard_time() {
     assert!(connection_time.is_some());
     assert!(timezone.is_some());
     assert_eq!(timezone.unwrap().name(), "Asia/Shanghai");
+}
+
+#[test]
+fn test_parse_connection_time_brasilia_standard_time() {
+    // As sent by a pt-BR 10.51 gateway (#964). Brazil has no DST since 2019.
+    let (connection_time, timezone) = parse_connection_time("20261009 10:00:00 Brasilia Standard Time");
+    assert_eq!(connection_time, Some(datetime!(2026-10-09 10:00:00 -03:00)));
+    assert_eq!(timezone.map(|tz| tz.name()), Some("America/Sao_Paulo"));
 }
 
 #[test]
@@ -1011,4 +1019,91 @@ fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
     let notice = sink.last().expect("notice sink should receive unknown-frame notice");
     assert_eq!(notice.code, HANDSHAKE_UNKNOWN_FRAME_CODE);
     assert!(notice.is_handshake_synthetic());
+}
+
+#[test]
+fn test_account_info_merge() {
+    let mut info = AccountInfo::default();
+
+    let complete = info.merge(AccountInfo {
+        next_order_id: Some(90),
+        managed_accounts: None,
+    });
+    assert!(!complete, "only next_order_id is set");
+
+    let complete = info.merge(AccountInfo::default());
+    assert!(!complete);
+    assert_eq!(info.next_order_id, Some(90), "absent field must not clear a set one");
+
+    let complete = info.merge(AccountInfo {
+        next_order_id: None,
+        managed_accounts: Some("DU1234567".to_owned()),
+    });
+    assert!(complete, "both fields set");
+    assert_eq!(info.next_order_id, Some(90));
+    assert_eq!(info.managed_accounts.as_deref(), Some("DU1234567"));
+}
+
+#[test]
+fn test_connection_metadata_apply_account_info() {
+    let mut metadata = ConnectionMetadata {
+        next_order_id: 1,
+        managed_accounts: "OLD".to_owned(),
+        ..Default::default()
+    };
+
+    metadata.apply_account_info(AccountInfo::default());
+    assert_eq!(metadata.next_order_id, 1);
+    assert_eq!(metadata.managed_accounts, "OLD");
+
+    metadata.apply_account_info(AccountInfo {
+        next_order_id: Some(90),
+        managed_accounts: Some("DU1234567".to_owned()),
+    });
+    assert_eq!(metadata.next_order_id, 90);
+    assert_eq!(metadata.managed_accounts, "DU1234567");
+}
+
+#[test]
+fn test_parse_handshake_ack() {
+    use std::io::ErrorKind;
+
+    enum Expect {
+        Ok(i32),
+        Rejected,
+        Io(ErrorKind),
+        Parse,
+    }
+
+    let valid = format!("{}\020230405 22:20:39 PST\0", server_versions::PROTOBUF_REST_MESSAGES_3);
+    let io = |kind| -> Result<Vec<u8>, Error> { Err(Error::Io(std::io::Error::from(kind))) };
+
+    let cases = [
+        (
+            "valid reply",
+            Ok(valid.into_bytes()),
+            Expect::Ok(server_versions::PROTOBUF_REST_MESSAGES_3),
+        ),
+        ("unexpected eof", io(ErrorKind::UnexpectedEof), Expect::Rejected),
+        ("other io error", io(ErrorKind::ConnectionReset), Expect::Io(ErrorKind::ConnectionReset)),
+        ("empty reply", Ok(Vec::new()), Expect::Parse),
+        ("non-numeric version", Ok(b"abc\020230405 22:20:39 PST\0".to_vec()), Expect::Parse),
+        ("missing time", Ok(b"213\0".to_vec()), Expect::Parse),
+    ];
+
+    let handler = ConnectionHandler::default();
+    for (name, input, expect) in cases {
+        let result = parse_handshake_ack(&handler, input);
+        match (expect, result) {
+            (Expect::Ok(version), Ok(ack)) => {
+                assert_eq!(ack.server_version, version, "{name}");
+                assert!(ack.connection_time.is_some(), "{name}");
+                assert!(ack.time_zone.is_some(), "{name}");
+            }
+            (Expect::Rejected, Err(Error::ConnectionRejected(msg))) => assert!(msg.contains("server may be rejecting"), "{name}: {msg}"),
+            (Expect::Io(kind), Err(Error::Io(err))) => assert_eq!(err.kind(), kind, "{name}"),
+            (Expect::Parse, Err(Error::Parse(..))) => {}
+            (_, other) => panic!("{name}: unexpected result {other:?}"),
+        }
+    }
 }

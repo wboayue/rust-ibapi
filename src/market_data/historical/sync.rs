@@ -309,6 +309,7 @@ pub(crate) fn historical_data_stream(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         check_version(client.server_version(), Features::TRADING_CLASS)?;
@@ -327,7 +328,7 @@ pub(crate) fn historical_data_stream(
         &Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    builder.send::<HistoricalBarUpdate>(request)
+    builder.send_capped::<HistoricalBarUpdate>(request, buffer_limit)
 }
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the
@@ -626,7 +627,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
     /// Wait up to `duration` for the next item to arrive.
     ///
-    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next).
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next). `None` means
+    /// either that `duration` passed or that the stream ended; terminal errors
+    /// come as `Some(Err(_))`.
     ///
     /// # Examples
     ///
