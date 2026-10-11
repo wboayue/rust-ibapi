@@ -18,6 +18,10 @@ impl Client {
     /// Collects every row before returning. To read rows as they arrive, stop reading early, or know the
     /// request id up front, use [Client::contract_details_stream].
     ///
+    /// Waits for TWS's end marker with no time bound. For a bound, use
+    /// [`contract_details_stream`](Self::contract_details_stream) and
+    /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within).
+    ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
     ///
@@ -50,6 +54,8 @@ impl Client {
     /// stop reading early, or know the request id before anything is sent.
     /// Dropping the subscription before the end sends TWS's native cancel
     /// (server 215+); rows TWS sends after that are discarded.
+    /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within)
+    /// collects the whole result within a time bound.
     /// Terminal: [`ContractDetailsBuilder::subscribe`].
     ///
     /// # Arguments

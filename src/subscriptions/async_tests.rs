@@ -862,6 +862,53 @@ async fn test_collect_to_end_without_end_marker_is_unexpected_end() {
     assert!(matches!(sub.collect_to_end().await, Err(Error::UnexpectedEndOfStream)));
 }
 
+// ---- collect_to_end_within --------------------------------------------------
+
+#[tokio::test]
+async fn test_collect_to_end_within_returns_items_at_end_marker() {
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert_eq!(
+        sub.collect_to_end_within(Duration::from_secs(30)).await.unwrap(),
+        vec![IntItem(10), IntItem(20)]
+    );
+}
+
+#[tokio::test]
+async fn test_collect_to_end_within_times_out_without_end_marker() {
+    // Channel stays open with no end marker; rows read before the deadline are dropped.
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::from_millis(50)).await, Err(Error::Timeout)));
+}
+
+#[tokio::test]
+async fn test_collect_to_end_within_returns_terminal_error() {
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(
+        sub.collect_to_end_within(Duration::from_secs(30)).await,
+        Err(Error::ConnectionReset)
+    ));
+}
+
+#[tokio::test]
+async fn test_collect_to_end_within_closed_channel_is_unexpected_end() {
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10)], false);
+
+    assert!(matches!(
+        sub.collect_to_end_within(Duration::from_secs(30)).await,
+        Err(Error::UnexpectedEndOfStream)
+    ));
+}
+
+#[tokio::test]
+async fn test_collect_to_end_within_stops_at_snapshot_end() {
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(-1), int_frame(20)], true);
+
+    assert_eq!(sub.collect_to_end_within(Duration::from_secs(30)).await.unwrap(), vec![IntItem(10)]);
+}
+
 // ---- cancel_and_drain -------------------------------------------------------
 
 fn drain_deadline() -> tokio::time::Instant {
@@ -890,6 +937,22 @@ async fn test_drain_cancels_then_sees_end() {
     f.tx.send(int_frame(1)).unwrap();
     f.tx.send(int_frame(-1)).unwrap();
 
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[tokio::test]
+async fn test_drain_after_collect_timeout() {
+    // `collect_to_end_within` borrows, so a timeout can chain into the drain.
+    let mut f = drain_fixture();
+    f.tx.send(int_frame(1)).unwrap();
+
+    assert!(matches!(
+        f.subscription.collect_to_end_within(Duration::from_millis(20)).await,
+        Err(Error::Timeout)
+    ));
+    f.tx.send(int_frame(-1)).unwrap();
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
     settle().await;
     assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");

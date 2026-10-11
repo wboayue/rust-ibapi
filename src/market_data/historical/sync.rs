@@ -627,7 +627,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
     /// Wait up to `duration` for the next item to arrive.
     ///
-    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next).
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next). `None` means
+    /// either that `duration` passed or that the stream ended; terminal errors
+    /// come as `Some(Err(_))`.
     ///
     /// # Examples
     ///

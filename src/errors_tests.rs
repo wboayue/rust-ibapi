@@ -53,6 +53,7 @@ fn error_display() {
         (Error::Shutdown, "Shutdown"),
         (Error::EndOfStream, "EndOfStream"),
         (Error::UnexpectedEndOfStream, "UnexpectedEndOfStream"),
+        (Error::Timeout, "timed out before the request ended"),
         (
             Error::BufferLimitExceeded { limit: 5 },
             "subscription buffer limit exceeded (5 unread items)",
@@ -255,6 +256,7 @@ fn clone_preserves_unit_variants() {
         Error::Shutdown,
         Error::EndOfStream,
         Error::UnexpectedEndOfStream,
+        Error::Timeout,
         Error::AlreadySubscribed,
     ] {
         let cloned = variant.clone();

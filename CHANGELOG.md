@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `subscriptions::MAX_BUFFER_LIMIT`, the largest `buffer_limit` for every builder (#902).
 - `RateLimiter` and `ClientBuilder::rate_limiter`: opt-in cap on the messages a client sends to TWS. `RateLimiter::per_second(n)` sends at most `n` messages in any one-second window (`Default` is 50); over-budget sends are delayed (sync blocks, async awaits), never rejected. Cancels count but go out at once. Clones share one budget, so clients of one gateway can be capped together. Off by default (#950).
 - Built-in time zone aliases `BRT` and `Brasilia Standard Time` (`America/Sao_Paulo`), sent by pt-BR IB Gateway builds 10.45 and 10.51. `E. South America Standard Time` already resolved. The troubleshooting guide now documents where the gateway time zone is used (#964).
+- `Subscription::collect_to_end_within(timeout)` (sync and async): collects a request's rows until TWS's end marker, or fails with the new `Error::Timeout`. Bounds `contract_details` and other requests that end; `contract_details()` itself still waits with no bound. A stream closed without the end marker is `UnexpectedEndOfStream`, and a terminal error is returned as is (#965).
 
 ### Deprecated
 

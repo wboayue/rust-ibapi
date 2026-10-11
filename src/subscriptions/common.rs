@@ -74,6 +74,51 @@ pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Opti
     }
 }
 
+/// Why a collect loop stopped.
+#[derive(Debug)]
+pub(crate) enum CollectStop {
+    /// TWS sent the end marker.
+    EndMarker,
+    /// The stream ended without the end marker (a closed channel).
+    Closed,
+    /// The deadline passed first.
+    Deadline,
+    /// A snapshot-end sentinel arrived, or the caller's stop predicate fired.
+    Stopped,
+    /// A terminal error.
+    Error(Error),
+}
+
+impl CollectStop {
+    /// The `collect_to_end` result: complete rows, or why they aren't.
+    pub(crate) fn into_result<T>(self, rows: Vec<T>) -> Result<Vec<T>, Error> {
+        match self {
+            CollectStop::EndMarker | CollectStop::Stopped => Ok(rows),
+            CollectStop::Closed => Err(Error::UnexpectedEndOfStream),
+            CollectStop::Deadline => Err(Error::Timeout),
+            CollectStop::Error(e) => Err(e),
+        }
+    }
+}
+
+/// Applies one item to `rows`. Returns `Some` when collection ends: on a
+/// terminal error, a snapshot-end sentinel (not appended), or once `stop`
+/// fires on the rows (the triggering row is appended). Notices are logged.
+pub(crate) fn collect_step<T: StreamDecoder<T>>(
+    rows: &mut Vec<T>,
+    item: Result<SubscriptionItem<T>, Error>,
+    stop: &mut impl FnMut(&[T]) -> bool,
+) -> Option<CollectStop> {
+    match filter_notice(item)? {
+        Ok(value) if value.is_snapshot_end() => Some(CollectStop::Stopped),
+        Ok(value) => {
+            rows.push(value);
+            stop(rows).then_some(CollectStop::Stopped)
+        }
+        Err(e) => Some(CollectStop::Error(e)),
+    }
+}
+
 /// Pre-classified channel item delivered from the dispatcher to subscriptions.
 /// `Response` carries raw bytes the decoder must still interpret; `Notice` and
 /// `Error` are pre-classified by the dispatcher so decoders never re-classify

@@ -173,3 +173,17 @@ fn test_debug_assert_request_id_routable_skips_unkeyed_subscriptions() {
     // legitimately declare types with no request id (positions, news bulletins).
     debug_assert_request_id_routable::<UnroutableDecoder, UnroutableDecoder>(None);
 }
+
+#[test]
+fn test_collect_stop_into_result() {
+    let rows = || vec![1, 2];
+
+    assert_eq!(CollectStop::EndMarker.into_result(rows()).unwrap(), vec![1, 2]);
+    assert_eq!(CollectStop::Stopped.into_result(rows()).unwrap(), vec![1, 2]);
+    assert!(matches!(CollectStop::Closed.into_result(rows()), Err(Error::UnexpectedEndOfStream)));
+    assert!(matches!(CollectStop::Deadline.into_result(rows()), Err(Error::Timeout)));
+    assert!(matches!(
+        CollectStop::Error(Error::ConnectionReset).into_result(rows()),
+        Err(Error::ConnectionReset)
+    ));
+}

@@ -116,6 +116,12 @@ pub enum Error {
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
 
+    /// The deadline passed before the request ended. Says nothing about the
+    /// request at TWS, which may still be running; see
+    /// `Subscription::cancel_and_drain`.
+    #[error("timed out before the request ended")]
+    Timeout,
+
     /// A subscription with a buffer limit had `limit` unread items when
     /// another arrived. Terminal: every item queued before it was delivered,
     /// and later frames for the request are discarded. Not a TWS error.
@@ -355,6 +361,7 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::Timeout => Error::Timeout,
             Error::BufferLimitExceeded { limit } => Error::BufferLimitExceeded { limit: *limit },
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),
             Error::Notice(n) => Error::Notice(n.clone()),

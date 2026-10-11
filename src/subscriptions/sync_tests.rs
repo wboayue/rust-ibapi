@@ -517,6 +517,56 @@ fn test_collect_to_end_without_end_marker_is_unexpected_end() {
     assert!(matches!(sub.collect_to_end(), Err(Error::UnexpectedEndOfStream)));
 }
 
+// --- collect_to_end_within -----------------------------------------------
+
+#[test]
+fn test_collect_to_end_within_returns_items_at_end_marker() {
+    let (sub, _keep) = collect_subscription(vec![data(10), data(20), RoutedItem::Error(Error::EndOfStream)], true);
+
+    assert_eq!(
+        sub.collect_to_end_within(Duration::from_secs(30)).unwrap(),
+        vec![CollectItem(10), CollectItem(20)]
+    );
+}
+
+#[test]
+fn test_collect_to_end_within_times_out_without_end_marker() {
+    // Channel stays open with no end marker; rows read before the deadline are dropped.
+    let (sub, _keep) = collect_subscription(vec![data(10)], true);
+
+    let started = Instant::now();
+    assert!(matches!(sub.collect_to_end_within(Duration::from_millis(50)), Err(Error::Timeout)));
+    assert!(started.elapsed() >= Duration::from_millis(50));
+}
+
+#[test]
+fn test_collect_to_end_within_returns_terminal_error() {
+    let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::ConnectionReset)], true);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::from_secs(30)), Err(Error::ConnectionReset)));
+}
+
+#[test]
+fn test_collect_to_end_within_closed_channel_is_unexpected_end() {
+    // A closed channel also makes `next_timeout` return `None`, but early:
+    // not a timeout.
+    let (sub, _keep) = collect_subscription(vec![data(10)], false);
+
+    let started = Instant::now();
+    assert!(matches!(
+        sub.collect_to_end_within(Duration::from_secs(30)),
+        Err(Error::UnexpectedEndOfStream)
+    ));
+    assert!(started.elapsed() < Duration::from_secs(1));
+}
+
+#[test]
+fn test_collect_to_end_within_stops_at_snapshot_end() {
+    let (sub, _keep) = collect_subscription(vec![data(10), data(-1), data(20)], true);
+
+    assert_eq!(sub.collect_to_end_within(Duration::from_secs(30)).unwrap(), vec![CollectItem(10)]);
+}
+
 // --- cancel_and_drain ----------------------------------------------------
 
 /// Decodes the integer at field 1, and has a cancel message.
@@ -590,6 +640,19 @@ fn test_drain_deadline_is_unconfirmed() {
         Drained::Unconfirmed
     );
     assert!(started.elapsed() >= Duration::from_millis(50));
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[test]
+fn test_drain_after_collect_timeout() {
+    // `collect_to_end_within` borrows, so a timeout can chain into the drain.
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1)]);
+
+    assert!(matches!(sub.collect_to_end_within(Duration::from_millis(20)), Err(Error::Timeout)));
+    assert_eq!(
+        sub.cancel_and_drain(Instant::now() + Duration::from_millis(20)).unwrap(),
+        Drained::Unconfirmed
+    );
     assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
 }
 

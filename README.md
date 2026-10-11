@@ -283,7 +283,7 @@ Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subs
 
 #### One-Shot Snapshot
 
-For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. The same `collect_for` / `collect_until` terminals are available on any `Subscription<T>`.
+For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. The same `collect_for` / `collect_until` terminals are available on any `Subscription<T>`. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`; `collect_for` returns whatever arrived in time instead.
 
 ```rust
 use ibapi::client::blocking::Client;
