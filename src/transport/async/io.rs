@@ -11,7 +11,7 @@ use log::warn;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{watch, Mutex, MutexGuard};
 
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
@@ -46,6 +46,27 @@ pub(crate) trait AsyncReconnect {
 
 pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
 
+/// Where an [`AsyncTcpSocket`] stands. `Live` and `Broken` alternate: a write
+/// cut off mid-frame breaks the socket, `reconnect` makes it live again.
+/// `Closed` is terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SocketState {
+    Live,
+    Broken,
+    Closed,
+}
+
+impl SocketState {
+    /// The error I/O fails with in this state; `None` while live.
+    fn error(self) -> Option<Error> {
+        match self {
+            Self::Live => None,
+            Self::Broken => Some(Error::ConnectionReset),
+            Self::Closed => Some(Error::Shutdown),
+        }
+    }
+}
+
 /// Production async stream over `tokio::net::TcpStream`. Holds the split halves
 /// behind `Mutex` so reads and writes can run concurrently from the dispatcher
 /// task and the request senders.
@@ -54,13 +75,11 @@ pub(crate) struct AsyncTcpSocket {
     /// `None` once `close` has released them.
     reader: Mutex<Option<OwnedReadHalf>>,
     writer: Mutex<Option<OwnedWriteHalf>>,
-    /// Latched by `close`. Wakes pending reads and writes so `close` can take
-    /// their locks, and turns away whoever acquires a half after it.
-    closed: watch::Sender<bool>,
-    /// True once a write stops mid-frame (see [`FrameProgress`]); cleared by
-    /// `reconnect`. Writes refuse and reads fail while it is set, so the
-    /// dispatcher reconnects.
-    broken: watch::Sender<bool>,
+    /// Anything but `Live` wakes pending reads and writes and turns away
+    /// whoever acquires a half after it. `Broken` once a write stops mid-frame
+    /// (see [`FrameProgress`]), so reads fail and the dispatcher reconnects;
+    /// `Closed` lets `close` take the locks the I/O held.
+    state: watch::Sender<SocketState>,
     connection_url: String,
     tcp_no_delay: bool,
     /// Byte-level capture of the inbound stream. Disabled unless
@@ -76,8 +95,7 @@ impl AsyncTcpSocket {
         Ok(Self {
             reader: Mutex::new(Some(read_half)),
             writer: Mutex::new(Some(write_half)),
-            closed: watch::Sender::new(false),
-            broken: watch::Sender::new(false),
+            state: watch::Sender::new(SocketState::Live),
             connection_url: address.to_string(),
             tcp_no_delay,
             tap: RawFrameTap::from_env(),
@@ -85,25 +103,45 @@ impl AsyncTcpSocket {
     }
 
     fn is_closed(&self) -> bool {
-        *self.closed.borrow()
+        *self.state.borrow() == SocketState::Closed
     }
 
-    /// The half behind a held lock, or [`Error::Shutdown`] once closed.
-    /// `interrupted` would catch a close too, but only after taking the lock.
+    /// Move to `to`, unless closed: a cut-off write or a reconnect landing
+    /// after `close` must not revive the socket.
+    fn set_state(&self, to: SocketState) {
+        self.state.send_if_modified(|state| {
+            let changed = *state != SocketState::Closed && *state != to;
+            if changed {
+                *state = to;
+            }
+            changed
+        });
+    }
+
+    /// Both halves, reader then writer. `close` and `reconnect` hold them
+    /// together only through here, so they cannot deadlock on the order.
+    async fn lock_halves(&self) -> (MutexGuard<'_, Option<OwnedReadHalf>>, MutexGuard<'_, Option<OwnedWriteHalf>>) {
+        let reader = self.reader.lock().await;
+        let writer = self.writer.lock().await;
+        (reader, writer)
+    }
+
+    /// The half behind a held lock, or the error the socket's state calls for.
+    /// `interrupted` would catch that too, but only after taking the lock.
     fn open_half<'a, T>(&self, half: &'a mut Option<T>) -> Result<&'a mut T, Error> {
-        half.as_mut().filter(|_| !self.is_closed()).ok_or(Error::Shutdown)
+        if let Some(err) = self.state.borrow().error() {
+            return Err(err);
+        }
+        half.as_mut().ok_or(Error::Shutdown)
     }
 
     /// Resolves once the socket is closed or a cut-off write breaks it, with
     /// the error a pending read or write should fail with.
     async fn interrupted(&self) -> Error {
-        let mut closed = self.closed.subscribe();
-        let mut broken = self.broken.subscribe();
-        tokio::select! {
-            biased;
-            _ = closed.wait_for(|closed| *closed) => Error::Shutdown,
-            _ = broken.wait_for(|broken| *broken) => Error::ConnectionReset,
-        }
+        let mut state = self.state.subscribe();
+        // `Err` is unreachable: `self` owns the sender.
+        let state = state.wait_for(|state| *state != SocketState::Live).await.map(|state| *state);
+        state.ok().and_then(SocketState::error).unwrap_or(Error::Shutdown)
     }
 }
 
@@ -123,7 +161,7 @@ impl Drop for FrameProgress<'_> {
         let written = self.len - self.remaining.len();
         if written > 0 && !self.remaining.is_empty() {
             warn!("write stopped after {written} of {} bytes; resetting the connection", self.len);
-            self.socket.broken.send_replace(true);
+            self.socket.set_state(SocketState::Broken);
         }
     }
 }
@@ -170,8 +208,9 @@ impl AsyncIo for AsyncTcpSocket {
             len: buf.len(),
             remaining: buf,
         };
-        // Biased: an already broken or closed socket fails before the write
-        // sends a byte. Later, `close` wakes a backpressured write this way.
+        // Biased: a break or close landing after `open_half` still fails
+        // before the write sends a byte. Later, `close` wakes a backpressured
+        // write this way.
         tokio::select! {
             biased;
             err = self.interrupted() => Err(err),
@@ -186,9 +225,8 @@ impl AsyncIo for AsyncTcpSocket {
     async fn close(&self) {
         // Latch before locking: wakes the I/O holding the locks, and a
         // reconnect that installs new halves first still loses them below.
-        self.closed.send_replace(true);
-        let mut reader = self.reader.lock().await;
-        let mut writer = self.writer.lock().await;
+        self.state.send_replace(SocketState::Closed);
+        let (mut reader, mut writer) = self.lock_halves().await;
         reader.take();
         writer.take();
     }
@@ -203,14 +241,13 @@ impl AsyncReconnect for AsyncTcpSocket {
         let stream = TcpStream::connect(&self.connection_url).await?;
         stream.set_nodelay(self.tcp_no_delay)?;
         let (new_reader, new_writer) = stream.into_split();
-        let mut reader = self.reader.lock().await;
-        let mut writer = self.writer.lock().await;
+        let (mut reader, mut writer) = self.lock_halves().await;
         if self.is_closed() {
             return Err(Error::Shutdown);
         }
         *reader = Some(new_reader);
         *writer = Some(new_writer);
-        self.broken.send_replace(false);
+        self.set_state(SocketState::Live);
         // One capture file per TCP stream: splicing two of them would read back
         // as a desync at the seam that never happened.
         self.tap.start_new_segment();

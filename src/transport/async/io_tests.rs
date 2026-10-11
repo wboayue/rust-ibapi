@@ -202,4 +202,6 @@ async fn test_physical_close_wakes_a_backpressured_write() {
         .expect("close blocked on write");
     let written = write.await.unwrap();
     assert!(matches!(written, Err(Error::Shutdown)), "write: {written:?}");
+    // The woken write was cut off mid-frame; that must not undo the close.
+    assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
 }
