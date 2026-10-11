@@ -58,20 +58,6 @@ mod sync_tests {
     }
 
     #[test]
-    fn a_date_filter_needs_the_server_version_for_it() {
-        // The version gate belongs to the setters, not the entry point: the bare
-        // request works at WSHE_CALENDAR, adding a date does not.
-        let (client, _bus) = create_blocking_test_client_with_version(server_versions::WSHE_CALENDAR);
-
-        let err = client
-            .wsh_event_data_by_contract(76792991)
-            .starting(date!(2024 - 01 - 01))
-            .fetch()
-            .expect_err("a date filter must be version-gated");
-        assert!(matches!(err, crate::Error::ServerVersion(..)), "got {err:?}");
-    }
-
-    #[test]
     fn filter_request_carries_the_filter_and_limit() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::WSH_EVENT_DATA_FILTERS_DATE);
 
@@ -126,19 +112,6 @@ mod async_tests {
         assert_eq!(request.fill_competitors, Some(true));
         assert_eq!(request.fill_portfolio, Some(false));
         assert_eq!(request.fill_watchlist, Some(true));
-    }
-
-    #[tokio::test]
-    async fn a_date_filter_needs_the_server_version_for_it() {
-        let (client, _bus) = create_test_client_with_version(server_versions::WSHE_CALENDAR);
-
-        let err = client
-            .wsh_event_data_by_contract(76792991)
-            .starting(date!(2024 - 01 - 01))
-            .fetch()
-            .await
-            .expect_err("a date filter must be version-gated");
-        assert!(matches!(err, crate::Error::ServerVersion(..)), "got {err:?}");
     }
 
     #[tokio::test]

@@ -7,7 +7,6 @@ use crate::client::sync::Client;
 use crate::subscriptions::sync::Subscription;
 use crate::{
     common::request_helpers::{self, expect_proto},
-    protocol::{check_version, Features},
     Error,
 };
 
@@ -28,8 +27,6 @@ impl Client {
     /// println!("{metadata:?}");
     /// ```
     pub fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
-        check_version(self.server_version, Features::WSHE_CALENDAR)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             encoders::encode_request_wsh_metadata,
@@ -40,8 +37,7 @@ impl Client {
     /// Build a request for Wall Street Horizon events on one contract.
     ///
     /// Terminal: [`WshEventDataBuilder::fetch`]. Optional narrowing via
-    /// `.starting()` / `.ending()` / `.limit()` / `.auto_fill()`, each of which
-    /// carries its own server-version requirement.
+    /// `.starting()` / `.ending()` / `.limit()` / `.auto_fill()`.
     ///
     /// # Arguments
     ///
@@ -98,16 +94,6 @@ pub(crate) fn wsh_event_data_by_contract(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<WshEventData, Error> {
-    check_version(client.server_version, Features::WSHE_CALENDAR)?;
-
-    if auto_fill.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
-    }
-
-    if start_date.is_some() || end_date.is_some() || limit.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
-    }
-
     request_helpers::blocking::one_shot_by_request_id(
         client,
         |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
@@ -123,10 +109,6 @@ pub(crate) fn wsh_event_data_by_filter(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<Subscription<WshEventData>, Error> {
-    if limit.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
-    }
-
     let builder = client.request();
     let request = encoders::encode_request_wsh_event_data(
         builder.request_id(),
