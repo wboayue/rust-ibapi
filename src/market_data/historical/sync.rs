@@ -280,24 +280,14 @@ pub(crate) fn historical_data(
 
         let subscription = builder.send_raw(request)?;
 
-        let mut data = match subscription.next() {
-            Some(Ok(message)) => decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?,
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        };
+        let message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
+        let mut data = decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?;
 
         // The end frame is a second read, which is why this is not a one-shot
-        // and cannot use the helpers in `common::request_helpers`.
-        match subscription.next() {
-            Some(Ok(end_message)) => {
-                let end_message = end_message.expect_type(IncomingMessages::HistoricalDataEnd)?;
-                let (start, end) = decoders::decode_historical_data_end(end_message)?;
-                data.start = start;
-                data.end = end;
-            }
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        }
+        // and cannot use the helpers in `common::request_helpers`. Only the end
+        // frame proves the download is complete, so a close before it is an error.
+        let end_message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
+        (data.start, data.end) = decoders::decode_historical_data_end(end_message.expect_type(IncomingMessages::HistoricalDataEnd)?)?;
 
         Ok(data)
     })

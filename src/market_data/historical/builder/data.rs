@@ -259,6 +259,13 @@ fn trim_to_range(mut data: HistoricalData, range: Option<(OffsetDateTime, Offset
 impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// Submit a one-shot request and return the [`HistoricalData`] bars.
     ///
+    /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
+    ///
+    /// # Errors
+    /// [`Error::UnexpectedEndOfStream`] if the response closes before the end marker,
+    /// so a partial download is never returned as complete;
+    /// [`Error::UnexpectedResponse`] if another message arrives in its place.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -340,6 +347,13 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
 #[cfg(feature = "async")]
 impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// Submit a one-shot request and return the [`HistoricalData`] bars.
+    ///
+    /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
+    ///
+    /// # Errors
+    /// [`Error::UnexpectedEndOfStream`] if the response closes before the end marker,
+    /// so a partial download is never returned as complete;
+    /// [`Error::UnexpectedResponse`] if another message arrives in its place.
     ///
     /// # Examples
     ///

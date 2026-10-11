@@ -1323,6 +1323,17 @@ async fn test_tick_subscription_returns_none_on_closed_channel() {
     assert!(subscription.next().await.is_none(), "closed channel yields None");
 }
 
+/// Fetch one day of daily bars against `responses`.
+async fn fetch_daily(responses: Vec<crate::messages::ResponseMessage>) -> (Result<HistoricalData, Error>, Arc<MessageBusStub>) {
+    let (client, bus) = create_test_client_with_ordered_proto_responses(responses);
+    let result = client
+        .historical_data(&test_contract(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch()
+        .await;
+    (result, bus)
+}
+
 /// A decoded batch alone cannot prove a finite request completed.
 #[tokio::test]
 async fn test_historical_data_requires_end_after_a_batch() {
@@ -1333,16 +1344,7 @@ async fn test_historical_data_requires_end_after_a_batch() {
         } else {
             response
         };
-        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-            IncomingMessages::HistoricalData,
-            response.encode_proto(),
-        )]));
-        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-        let result = client
-            .historical_data(&test_contract(), BarSize::Day)
-            .duration(Duration::seconds(86_400))
-            .fetch()
-            .await;
+        let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::HistoricalData, response.encode_proto())]).await;
         assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "populated={populated}: {result:?}");
         assert_eq!(request_message_count(&bus), 1, "bare closure must not replay the request");
     }
@@ -1352,13 +1354,7 @@ async fn test_historical_data_requires_end_after_a_batch() {
 #[tokio::test]
 async fn test_historical_data_requires_end_message_type() {
     let response = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
-    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![response.clone(), response]));
-    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-    let result = client
-        .historical_data(&test_contract(), BarSize::Day)
-        .duration(Duration::seconds(86_400))
-        .fetch()
-        .await;
+    let (result, bus) = fetch_daily(vec![response.clone(), response]).await;
     assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
     assert_eq!(request_message_count(&bus), 1);
 }
@@ -1366,17 +1362,18 @@ async fn test_historical_data_requires_end_message_type() {
 /// An empty result is valid when the broker explicitly completes the request.
 #[tokio::test]
 async fn test_historical_data_requires_end_accepts_completed_empty_batch() {
-    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+    let (result, bus) = fetch_daily(vec![
         proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
-        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
-    ]));
-    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-    let result = client
-        .historical_data(&test_contract(), BarSize::Day)
-        .duration(Duration::seconds(86_400))
-        .fetch()
-        .await
-        .unwrap();
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 10:30:00 UTC")
+                .encode_proto(),
+        ),
+    ])
+    .await;
+    let result = result.unwrap();
     assert!(result.bars.is_empty());
     assert_eq!(result.start, datetime!(2023-03-15 09:30:00 UTC));
     assert_eq!(result.end, datetime!(2023-03-15 10:30:00 UTC));

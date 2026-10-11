@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Async client: `disconnect()` and dropping the client now close the TCP connection even while subscriptions or client clones are still held (#966).
 - Blocking client: `disconnect()` and dropping the client now close the TCP connection even while subscriptions are still held. Previously only the read side was shut down, so TWS kept the session open (#979).
-- Finite historical fetches require HistoricalDataEnd before returning success in both clients. Closure after a batch returns UnexpectedEndOfStream; another message type returns UnexpectedResponse. Connection-reset retries retain their existing behavior.
+- `historical_data(..).fetch()` (sync and async) waits for TWS's end marker. A response that closed after the bars returned them as complete, with `start`/`end` left at the epoch; it is now `UnexpectedEndOfStream`, and a wrong second message is `UnexpectedResponse` (#967).
 - Blocking `order_update_stream()` can be reopened right after `cancel()`, while the old handle is still held; it used to return `AlreadySubscribed` until the cleanup thread caught up (#932).
 - Blocking client: cancelling or dropping a `contract_news` or `broad_tape_news` subscription now sends `cancelMktData`, as the async client already did. Previously no cancel was sent, and TWS kept the news subscription open until disconnect (#947).
 
