@@ -238,12 +238,6 @@ impl<S: Stream> Connection<S> {
         }
     }
 
-    /// Break any in-flight blocking read on the underlying socket so the
-    /// dispatcher exits promptly on shutdown.
-    pub(crate) fn shutdown_read(&self) -> Result<(), Error> {
-        self.socket.shutdown_read()
-    }
-
     /// Write raw bytes with a length prefix
     pub(crate) fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
         let packet = encode_raw_length(data);

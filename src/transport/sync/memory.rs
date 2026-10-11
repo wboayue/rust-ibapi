@@ -1,6 +1,6 @@
 //! In-memory frame-level `Stream` for transport tests.
 //!
-//! Mirrors `transport/async_memory.rs` for the sync transport. Operates at the
+//! Mirrors `transport/async/memory.rs` for the sync transport. Operates at the
 //! frame level (one push = one `read_message`-returnable body), since
 //! `Io::read_message` returns an already-unframed body — no byte-level waker
 //! plumbing required.
@@ -22,6 +22,8 @@ struct Inner {
     inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
     closed: bool,
+    /// Set by `Io::close`; unlike `closed`, `reopen` keeps it.
+    retired: bool,
 }
 
 /// In-memory sync stream. Cloning yields another handle to the same shared queues.
@@ -65,6 +67,9 @@ impl Io for MemoryStream {
         let (mutex, cv) = &*self.inner;
         let mut guard = mutex.lock()?;
         loop {
+            if guard.retired {
+                return Err(Error::Shutdown);
+            }
             if let Some(body) = guard.inbound.pop_front() {
                 return Ok(body);
             }
@@ -77,20 +82,32 @@ impl Io for MemoryStream {
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let (mutex, _) = &*self.inner;
-        mutex.lock()?.outbound.extend_from_slice(buf);
+        let mut inner = mutex.lock()?;
+        if inner.retired {
+            return Err(Error::Shutdown);
+        }
+        inner.outbound.extend_from_slice(buf);
         Ok(())
+    }
+
+    /// Terminal, like TCP: unlike the inherent `close`, `reopen` can't undo
+    /// it. Same as the async `MemoryStream`'s `AsyncIo::close`.
+    fn close(&self) {
+        let (mutex, cv) = &*self.inner;
+        mutex.lock().unwrap().retired = true;
+        cv.notify_all();
     }
 }
 
 impl Reconnect for MemoryStream {
     fn reconnect(&self) -> Result<(), Error> {
+        let (mutex, _) = &*self.inner;
+        if mutex.lock()?.retired {
+            return Err(Error::Shutdown);
+        }
         Ok(())
     }
     fn sleep(&self, _duration: std::time::Duration, _shutdown: &super::ShutdownSignal) {}
-    fn shutdown_read(&self) -> Result<(), Error> {
-        self.close();
-        Ok(())
-    }
 }
 
 impl Stream for MemoryStream {}
