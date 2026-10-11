@@ -1059,12 +1059,15 @@ async fn test_historical_data_retries_a_connection_reset() {
     // The case the async side never retried: a routed ConnectionReset came back
     // through `Some(Err(e))` and returned straight to the caller.
     let message_bus = Arc::new(
-        MessageBusStub::with_ordered_responses(vec![proto_response(
-            IncomingMessages::HistoricalData,
-            historical_data_response()
-                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
-                .encode_proto(),
-        )])
+        MessageBusStub::with_ordered_responses(vec![
+            proto_response(
+                IncomingMessages::HistoricalData,
+                historical_data_response()
+                    .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                    .encode_proto(),
+            ),
+            proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
+        ])
         .with_connection_resets(1),
     );
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -1318,6 +1321,63 @@ async fn test_tick_subscription_returns_none_on_closed_channel() {
         .expect("subscription should be created");
 
     assert!(subscription.next().await.is_none(), "closed channel yields None");
+}
+
+/// Fetch one day of daily bars against `responses`.
+async fn fetch_daily(responses: Vec<crate::messages::ResponseMessage>) -> (Result<HistoricalData, Error>, Arc<MessageBusStub>) {
+    let (client, bus) = create_test_client_with_ordered_proto_responses(responses);
+    let result = client
+        .historical_data(&test_contract(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch()
+        .await;
+    (result, bus)
+}
+
+/// A decoded batch alone cannot prove a finite request completed.
+#[tokio::test]
+async fn test_historical_data_requires_end_after_a_batch() {
+    for populated in [false, true] {
+        let response = historical_data_response();
+        let response = if populated {
+            response.bar(historical_data_daily_bar("20230315").ohlc(1.0, 2.0, 0.5, 1.5))
+        } else {
+            response
+        };
+        let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::HistoricalData, response.encode_proto())]).await;
+        assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "populated={populated}: {result:?}");
+        assert_eq!(request_message_count(&bus), 1, "bare closure must not replay the request");
+    }
+}
+
+/// A second data frame is not the completion marker.
+#[tokio::test]
+async fn test_historical_data_requires_end_message_type() {
+    let response = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let (result, bus) = fetch_daily(vec![response.clone(), response]).await;
+    assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
+    assert_eq!(request_message_count(&bus), 1);
+}
+
+/// An empty result is valid when the broker explicitly completes the request.
+#[tokio::test]
+async fn test_historical_data_requires_end_accepts_completed_empty_batch() {
+    let (result, bus) = fetch_daily(vec![
+        proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
+        proto_response(
+            IncomingMessages::HistoricalDataEnd,
+            historical_data_end_response()
+                .start_date_str("20230315 09:30:00 UTC")
+                .end_date_str("20230315 10:30:00 UTC")
+                .encode_proto(),
+        ),
+    ])
+    .await;
+    let result = result.unwrap();
+    assert!(result.bars.is_empty());
+    assert_eq!(result.start, datetime!(2023-03-15 09:30:00 UTC));
+    assert_eq!(result.end, datetime!(2023-03-15 10:30:00 UTC));
+    assert_eq!(request_message_count(&bus), 1);
 }
 
 // ---- buffer_limit ----------------------------------------------------------
