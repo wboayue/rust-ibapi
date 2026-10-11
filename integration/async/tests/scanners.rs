@@ -1,16 +1,14 @@
 use futures::StreamExt;
 use ibapi::scanner::ScannerSubscription;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn scanner_parameters_returns_xml() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let xml = tokio::time::timeout(tokio::time::Duration::from_secs(30), client.scanner_parameters())
         .await
         .expect("scanner_parameters timed out")
@@ -23,8 +21,7 @@ async fn scanner_parameters_returns_xml() {
 #[tokio::test]
 async fn scanner_subscription_top_gainers() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     let sub = ScannerSubscription {
         scan_code: Some("TOP_PERC_GAIN".to_string()),
@@ -34,7 +31,6 @@ async fn scanner_subscription_top_gainers() {
         ..Default::default()
     };
 
-    rate_limit();
     let mut subscription = client.scanner_subscription(&sub, &[]).await.expect("scanner_subscription failed");
 
     let results = (&mut subscription)

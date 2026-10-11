@@ -6,19 +6,17 @@ use ibapi::orders::conditions::{
 use ibapi::orders::{Action, Order, OrderCondition, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
-use ibapi_test::{condition_time_today, rate_limit, ClientId, AAPL_CON_ID, GATEWAY, SPY_CON_ID, TSLA_CON_ID};
+use ibapi_test::{condition_time_today, ClientId, AAPL_CON_ID, SPY_CON_ID, TSLA_CON_ID};
 use serial_test::serial;
 use tokio::time::{timeout, Duration};
 
 async fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = ibapi_integration_async::connect(&client_id).await;
     (client, client_id)
 }
 
 async fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order) {
-    rate_limit();
     let order_id = client.next_order_id();
     let mut subscription = client.place_order(order_id, contract, order).await.expect("place_order failed");
 
@@ -47,7 +45,6 @@ async fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order)
     }
     assert!(acknowledged, "no acknowledgement from TWS within timeout");
 
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await;
 }
 

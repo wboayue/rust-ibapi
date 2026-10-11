@@ -5,14 +5,14 @@ use ibapi::contracts::Contract;
 use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, PlaceOrder};
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
-use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
+use ibapi_integration_async::client_builder;
+use ibapi_test::{require_globex_open, yyyymmdd_from_now, ClientId};
 use serial_test::serial;
 use tokio::time::{timeout, Duration};
 
 async fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = ibapi_integration_async::connect(&client_id).await;
     (client, client_id)
 }
 
@@ -27,7 +27,6 @@ fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
 }
 
 async fn place_bracket_order(client: &Client, contract: &Contract) -> BracketOrderIds {
-    rate_limit();
     let ids = client
         .order(contract)
         .buy(1)
@@ -43,7 +42,6 @@ async fn place_bracket_order(client: &Client, contract: &Contract) -> BracketOrd
 }
 
 async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
-    rate_limit();
     let order_id = client
         .order(contract)
         .buy(1)
@@ -52,7 +50,6 @@ async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .await
         .expect("placing order after cancel should succeed");
     assert!(order_id.0 > 0, "new order id should be positive");
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await.expect("cleanup cancel failed");
     order_id
 }
@@ -62,7 +59,6 @@ async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
 async fn next_valid_order_id() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let id = client.next_valid_order_id().await.expect("next_valid_order_id failed");
     assert!(id > 0, "order id should be positive");
 }
@@ -72,7 +68,6 @@ async fn next_valid_order_id() {
 async fn open_orders() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let mut subscription = client.open_orders().await.expect("open_orders failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -82,7 +77,6 @@ async fn open_orders() {
 async fn all_open_orders() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let mut subscription = client.all_open_orders().await.expect("all_open_orders failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -92,7 +86,6 @@ async fn all_open_orders() {
 async fn completed_orders() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let mut subscription = client.completed_orders(false).await.expect("completed_orders failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -102,7 +95,6 @@ async fn completed_orders() {
 async fn completed_orders_api_only() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let mut subscription = client.completed_orders(true).await.expect("completed_orders api_only failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -115,7 +107,6 @@ async fn place_limit_buy() {
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Buy, 1.0, 1.0);
 
-    rate_limit();
     let order_id = client.next_order_id();
     let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
 
@@ -123,7 +114,6 @@ async fn place_limit_buy() {
     assert!(item.is_ok(), "order status timed out");
     assert!(item.unwrap().is_some(), "expected order status update");
 
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
@@ -135,7 +125,6 @@ async fn place_limit_sell() {
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Sell, 1.0, 9999.0);
 
-    rate_limit();
     let order_id = client.next_order_id();
     let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
 
@@ -143,7 +132,6 @@ async fn place_limit_sell() {
     assert!(item.is_ok(), "order status timed out");
     assert!(item.unwrap().is_some(), "expected order status update");
 
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
@@ -155,13 +143,11 @@ async fn cancel_order_succeeds() {
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Buy, 1.0, 1.0);
 
-    rate_limit();
     let order_id = client.next_order_id();
     let _subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
 
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    rate_limit();
     let mut cancel_sub = client.cancel_order(order_id, "").await.expect("cancel_order failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(10), cancel_sub.next()).await;
 }
@@ -171,7 +157,6 @@ async fn cancel_order_succeeds() {
 async fn global_cancel() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     client.global_cancel().await.expect("global_cancel failed");
 }
 
@@ -182,7 +167,6 @@ async fn order_builder_limit() {
 
     let contract = Contract::stock("AAPL").build();
 
-    rate_limit();
     let order_id = client
         .order(&contract)
         .buy(1)
@@ -194,7 +178,6 @@ async fn order_builder_limit() {
     assert!(order_id.0 > 0, "order id should be positive");
 
     // Cancel the placed order
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
@@ -206,7 +189,6 @@ async fn cancel_bracket_order() {
     let contract = Contract::stock("AAPL").build();
     let ids = place_bracket_order(&client, &contract).await;
 
-    rate_limit();
     let mut cancel_sub = client.cancel_order(ids.parent, "").await.expect("cancel_order failed");
 
     // TWS may push the parent's current working status (Submitted / PendingCancel)
@@ -247,7 +229,6 @@ async fn cancel_bracket_order_then_place_new_order() {
     let contract = Contract::stock("AAPL").build();
     let ids = place_bracket_order(&client, &contract).await;
 
-    rate_limit();
     let _cancel_sub = client.cancel_order(ids.parent, "").await.expect("cancel_order failed");
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
@@ -262,7 +243,6 @@ async fn global_cancel_bracket_order_then_place_new_order() {
     let contract = Contract::stock("AAPL").build();
     place_bracket_order(&client, &contract).await;
 
-    rate_limit();
     client.global_cancel().await.expect("global_cancel failed");
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
@@ -274,7 +254,6 @@ async fn global_cancel_bracket_order_then_place_new_order() {
 async fn executions_returns_subscription() {
     let (client, _client_id) = connect().await;
 
-    rate_limit();
     let mut subscription = client.executions(ExecutionFilter::default()).await.expect("executions failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -286,7 +265,6 @@ async fn place_pegged_to_benchmark() {
 
     let contract = Contract::stock("AAPL").build();
 
-    rate_limit();
     let details = client.contract_details(&contract).await.expect("contract_details failed");
     let reference_id = details[0].contract.contract_id;
 
@@ -301,7 +279,6 @@ async fn place_pegged_to_benchmark() {
         .build()
         .expect("pegged-to-benchmark build failed");
 
-    rate_limit();
     let order_id = client.next_order_id();
     let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
 
@@ -330,7 +307,6 @@ async fn place_pegged_to_benchmark() {
     }
     assert!(acknowledged, "no acknowledgement from TWS within timeout");
 
-    rate_limit();
     let _ = client.cancel_order(order_id, "").await;
 }
 
@@ -347,7 +323,6 @@ fn market_order(action: Action, quantity: f64) -> Order {
 /// still more than a week out, so a test never trades into expiry.
 async fn front_month_es(client: &Client) -> Contract {
     let query = Contract::futures("ES").on_exchange("CME").any_month().build();
-    rate_limit();
     let details = client.contract_details(&query).await.expect("contract_details failed");
     let cutoff = yyyymmdd_from_now(7);
     details
@@ -392,7 +367,6 @@ async fn observe_execution_then_commission(sub: &mut Subscription<PlaceOrder>) -
 /// Sell one contract at market and wait for the fill, so a failing assertion
 /// never leaves the paper account long ES.
 async fn flatten(client: &Client, contract: &Contract) {
-    rate_limit();
     let sell_id = client.next_order_id();
     let mut sell = client
         .place_order(sell_id, contract, &market_order(Action::Sell, 1.0))
@@ -420,7 +394,6 @@ async fn es_fill_delivers_execution_then_commission() {
     let (client, _client_id) = connect().await;
     let contract = front_month_es(&client).await;
 
-    rate_limit();
     let order_id = client.next_order_id();
     let mut sub = client
         .place_order(order_id, &contract, &market_order(Action::Buy, 1.0))
@@ -445,7 +418,6 @@ async fn preset_attached_orders_accepted() {
     let contract = Contract::stock("AAPL").build();
     let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
 
-    rate_limit();
     let ids = client
         .order(&contract)
         .buy(1)
@@ -479,7 +451,6 @@ async fn preset_attached_orders_accepted() {
     .expect("no attach outcome within 15s");
     println!("preset attached orders: {outcome}");
 
-    rate_limit();
     let _ = client.cancel_order(ids.parent, "").await;
 }
 
@@ -491,26 +462,17 @@ async fn preset_attached_orders_accepted() {
 #[serial(orders)]
 async fn order_update_stream_keeps_frames_under_small_channel_capacity() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::builder()
-        .address(GATEWAY)
-        .client_id(client_id.id())
-        .channel_capacity(1)
-        .connect()
-        .await
-        .expect("connection failed");
+    let client = client_builder(&client_id).channel_capacity(1).connect().await.expect("connection failed");
     let contract = Contract::stock("AAPL").build();
     let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
 
     // Place and cancel without reading, so every frame queues.
     let mut order_ids = Vec::new();
     for _ in 0..3 {
-        rate_limit();
         let order_id = client.order(&contract).buy(1).limit(1.0).submit().await.expect("submit failed");
         order_ids.push(order_id.0);
     }
     for &order_id in &order_ids {
-        rate_limit();
         let _ = client.cancel_order(order_id, "").await.expect("cancel failed");
     }
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -546,11 +508,9 @@ async fn wait_for_fill_times_out_then_ends_after_cancel() {
     let (client, _client_id) = connect().await;
     let contract = Contract::stock("AAPL").build();
 
-    rate_limit();
     let order_id = client.order(&contract).buy(1).limit(1.0).submit().await.expect("submit failed");
 
     let working = client.wait_for_fill(order_id, Duration::from_secs(3)).await;
-    rate_limit();
     let _cancellation = client.cancel_order(order_id, "").await.expect("cancel_order failed");
     let ended = client.wait_for_fill(order_id, Duration::from_secs(10)).await;
 
@@ -577,14 +537,12 @@ async fn wait_for_fill_reports_es_market_fill() {
     let (client, _client_id) = connect().await;
     let contract = front_month_es(&client).await;
 
-    rate_limit();
     let order_id = client.order(&contract).buy(1).market().submit().await.expect("buy failed");
 
     let outcome = client.wait_for_fill(order_id, Duration::from_secs(15)).await;
     if matches!(outcome, Ok(OrderOutcome::Filled(_))) {
         flatten(&client, &contract).await;
     } else {
-        rate_limit();
         let _ = client.cancel_order(order_id, "").await;
     }
     match outcome.expect("wait failed") {

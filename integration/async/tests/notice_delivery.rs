@@ -17,8 +17,8 @@ use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{order_builder, Action};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 use serial_test::serial;
 
 const TICK_BUDGET: Duration = Duration::from_secs(15);
@@ -28,10 +28,8 @@ const TICK_BUDGET: Duration = Duration::from_secs(15);
 #[tokio::test]
 async fn invalid_contract_terminates_with_error() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("DOES_NOT_EXIST_XYZ").build();
     let mut subscription = client.market_data(&contract).subscribe().await.expect("market_data subscribe failed");
 
@@ -61,17 +59,14 @@ async fn invalid_contract_terminates_with_error() {
 #[serial(orders)]
 async fn outside_rth_order_subscription_smoke() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let order_id = client.next_order_id();
     let mut order = order_builder::market_order(Action::Buy, 1.0);
     order.outside_rth = true;
     order.transmit = false;
 
-    rate_limit();
     let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place_order failed");
 
     let mut saw_notice = false;
@@ -107,8 +102,7 @@ async fn outside_rth_order_subscription_smoke() {
 #[tokio::test]
 async fn notice_stream_receives_global_notices() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     let mut stream = client.notice_stream().expect("notice_stream failed");
 

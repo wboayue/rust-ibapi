@@ -13,12 +13,12 @@
 
 use std::time::Duration;
 
-use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{order_builder, Action};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Error;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 use serial_test::serial;
 
 const TICK_BUDGET: Duration = Duration::from_secs(15);
@@ -30,10 +30,8 @@ const TICK_BUDGET: Duration = Duration::from_secs(15);
 #[test]
 fn invalid_contract_terminates_with_error() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("DOES_NOT_EXIST_XYZ").build();
     let subscription = client.market_data(&contract).subscribe().expect("market_data subscribe failed");
 
@@ -64,10 +62,8 @@ fn error_frame_routes_at_request_id_floor() {
     const REQUEST_ID_FLOOR: i32 = 1_500_000_000;
 
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("DOES_NOT_EXIST_XYZ").build();
     let request = client.contract_details_stream(&contract);
     assert!(request.request_id() >= REQUEST_ID_FLOOR, "request id {}", request.request_id());
@@ -88,17 +84,14 @@ fn error_frame_routes_at_request_id_floor() {
 #[serial(orders)]
 fn outside_rth_order_subscription_smoke() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let order_id = client.next_order_id();
     let mut order = order_builder::market_order(Action::Buy, 1.0);
     order.outside_rth = true;
     order.transmit = false;
 
-    rate_limit();
     let subscription = client.place_order(order_id, &contract, &order).expect("place_order failed");
 
     let mut saw_notice = false;
@@ -131,8 +124,7 @@ fn outside_rth_order_subscription_smoke() {
 #[test]
 fn notice_stream_receives_global_notices() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     let stream = client.notice_stream().expect("notice_stream failed");
 

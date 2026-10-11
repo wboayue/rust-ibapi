@@ -2,16 +2,14 @@ use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::market_data::{IgnoreSize, MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn market_data_snapshot() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .market_data(&contract)
@@ -32,10 +30,8 @@ async fn market_data_snapshot() {
 #[tokio::test]
 async fn market_data_streaming() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client.market_data(&contract).subscribe().await.expect("market_data streaming failed");
 
@@ -47,10 +43,8 @@ async fn market_data_streaming() {
 #[tokio::test]
 async fn market_data_generic_ticks() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .market_data(&contract)
@@ -67,16 +61,13 @@ async fn market_data_generic_ticks() {
 #[tokio::test]
 async fn switch_market_data_type() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     client
         .switch_market_data_type(MarketDataType::Delayed)
         .await
         .expect("switch to delayed failed");
 
-    rate_limit();
     client
         .switch_market_data_type(MarketDataType::Realtime)
         .await
@@ -86,10 +77,8 @@ async fn switch_market_data_type() {
 #[tokio::test]
 async fn realtime_bars_trades() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .realtime_bars(&contract)
@@ -107,10 +96,8 @@ async fn realtime_bars_trades() {
 #[tokio::test]
 async fn tick_by_tick_all_last() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client.tick_by_tick(&contract, 0).all_last().await.expect("tick_by_tick_all_last failed");
 
@@ -123,10 +110,8 @@ async fn tick_by_tick_all_last() {
 #[tokio::test]
 async fn tick_by_tick_bid_ask() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .tick_by_tick(&contract, 0)
@@ -144,10 +129,8 @@ async fn tick_by_tick_bid_ask() {
 #[tokio::test]
 async fn tick_by_tick_midpoint() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client.tick_by_tick(&contract, 0).mid_point().await.expect("tick_by_tick_midpoint failed");
 
@@ -160,10 +143,8 @@ async fn tick_by_tick_midpoint() {
 #[tokio::test]
 async fn market_depth_exchanges() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let exchanges = client.market_depth_exchanges().await.expect("market_depth_exchanges failed");
 
     assert!(!exchanges.is_empty(), "expected non-empty exchange list");
@@ -172,10 +153,8 @@ async fn market_depth_exchanges() {
 #[tokio::test]
 async fn market_depth_receives_data() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client.market_depth(&contract, 5).subscribe().await.expect("market_depth failed");
 

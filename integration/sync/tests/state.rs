@@ -1,35 +1,31 @@
-use ibapi::client::blocking::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 
 #[test]
 fn is_connected_after_connect() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     assert!(client.is_connected());
 }
 
 #[test]
 fn client_id_matches() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     assert_eq!(client.client_id(), client_id.id());
 }
 
 #[test]
 fn next_order_id_is_positive() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     assert!(client.next_order_id() > 0);
 }
 
 #[test]
 fn next_order_id_increments() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
     let first = client.next_order_id();
     let second = client.next_order_id();
     assert!(second > first);

@@ -4,15 +4,14 @@ use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
-use ibapi_test::{rate_limit, require_market_open, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::{require_market_open, ClientId};
 use serial_test::serial;
 
 async fn connect_and_get_account() -> (Client, AccountId, ClientId) {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert!(!accounts.is_empty());
     let account = AccountId::from(accounts[0].as_str());
@@ -22,10 +21,8 @@ async fn connect_and_get_account() -> (Client, AccountId, ClientId) {
 #[tokio::test]
 async fn server_time_millis_returns_recent_time() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let time = client.server_time_millis().await.expect("server_time_millis failed");
     let now = time::OffsetDateTime::now_utc();
 
@@ -35,10 +32,8 @@ async fn server_time_millis_returns_recent_time() {
 #[tokio::test]
 async fn managed_accounts_returns_list() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert!(!accounts.is_empty());
 }
@@ -46,10 +41,8 @@ async fn managed_accounts_returns_list() {
 #[tokio::test]
 async fn family_codes_succeeds() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let _codes = client.family_codes().await.expect("family_codes failed");
 }
 
@@ -58,7 +51,6 @@ async fn family_codes_succeeds() {
 async fn positions_receives_data() {
     let (client, _account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client.positions().await.expect("positions failed");
 
     // Consume with timeout - positions may be empty on paper account
@@ -70,7 +62,6 @@ async fn positions_receives_data() {
 async fn positions_multi_receives_data() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client.positions_multi(Some(&account), None).await.expect("positions_multi failed");
 
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
@@ -81,7 +72,6 @@ async fn positions_multi_receives_data() {
 async fn pnl_receives_updates() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client.pnl(&account, None).await.expect("pnl failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), subscription.next()).await;
@@ -94,7 +84,6 @@ async fn pnl_receives_updates() {
 async fn account_summary_all_tags() {
     let (client, _account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client
         .account_summary(&AccountGroup::from("All"), &["NetLiquidation", "TotalCashValue"])
         .await
@@ -110,7 +99,6 @@ async fn account_summary_all_tags() {
 async fn account_summary_specific_tag() {
     let (client, _account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client
         .account_summary(&AccountGroup::from("All"), &["NetLiquidation"])
         .await
@@ -126,7 +114,6 @@ async fn account_summary_specific_tag() {
 async fn account_updates_receives_data() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client.account_updates(&account).await.expect("account_updates failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), subscription.next()).await;
@@ -139,7 +126,6 @@ async fn account_updates_receives_data() {
 async fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    rate_limit();
     let mut subscription = client
         .account_updates_multi(Some(&account), None)
         .await
@@ -156,7 +142,6 @@ async fn pnl_single_receives_updates() {
 
     // Resolve AAPL contract_id
     let contract = Contract::stock("AAPL").build();
-    rate_limit();
     let details = client.contract_details(&contract).await.expect("contract_details failed");
     let con_id = details[0].contract.contract_id;
 
@@ -167,7 +152,6 @@ async fn pnl_single_receives_updates() {
         order_type: "MKT".into(),
         ..Default::default()
     };
-    rate_limit();
     let order_id = client.next_order_id();
     let mut sub = client.place_order(order_id, &contract, &buy).await.expect("buy failed");
     let filled = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
@@ -183,7 +167,6 @@ async fn pnl_single_receives_updates() {
     assert!(filled.is_ok(), "buy order did not fill within 5s");
 
     // Test pnl_single
-    rate_limit();
     let mut pnl_sub = client.pnl_single(&account, ContractId(con_id), None).await.expect("pnl_single failed");
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), pnl_sub.next()).await;
     assert!(item.is_ok(), "pnl_single timed out");
@@ -196,7 +179,6 @@ async fn pnl_single_receives_updates() {
         order_type: "MKT".into(),
         ..Default::default()
     };
-    rate_limit();
     let sell_id = client.next_order_id();
     let _ = client.place_order(sell_id, &contract, &sell).await;
 }
@@ -204,20 +186,16 @@ async fn pnl_single_receives_updates() {
 #[tokio::test]
 async fn soft_dollar_tiers_succeeds() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let _tiers = client.soft_dollar_tiers().await.expect("soft_dollar_tiers failed");
 }
 
 #[tokio::test]
 async fn user_info_succeeds() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let _info = client.user_info().await.expect("user_info failed");
 }
 
@@ -226,10 +204,8 @@ async fn set_server_log_level_succeeds() {
     use ibapi::accounts::ServerLogLevel;
 
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     client
         .set_server_log_level(ServerLogLevel::Detail)
         .await
@@ -244,10 +220,8 @@ async fn request_fa_groups() {
     use ibapi::accounts::FaDataType;
 
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let cfg = client.request_fa(FaDataType::Groups).await.expect("request_fa failed");
     assert_eq!(cfg.fa_data_type, FaDataType::Groups);
 }
@@ -260,13 +234,10 @@ async fn replace_fa_round_trip() {
     use ibapi::accounts::FaDataType;
 
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let original = client.request_fa(FaDataType::Groups).await.expect("request_fa failed");
 
-    rate_limit();
     let result = client.replace_fa(FaDataType::Groups, &original.xml).await.expect("replace_fa failed");
     assert!(!result.text.is_empty());
 }
@@ -281,12 +252,9 @@ async fn replace_fa_round_trip() {
 #[ignore]
 async fn verify_handshake() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let challenge = client.verify_request("rust-ibapi-test", "1.0").await.expect("verify_request failed");
 
-    rate_limit();
     let _result = client.verify_message(&challenge.api_data).await.expect("verify_message failed");
 }

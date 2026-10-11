@@ -8,28 +8,23 @@ See also: [integration/README.md](../integration/README.md) for setup and runnin
 
 | Crate | Path | Purpose |
 |-------|------|---------|
-| `ibapi-test` | `integration/common/` | Shared helpers (ClientId pool, rate limiter) |
-| `ibapi-integration-sync` | `integration/sync/` | Sync client tests |
-| `ibapi-integration-async` | `integration/async/` | Async client tests |
+| `ibapi-test` | `integration/common/` | Shared helpers (ClientId pool, market-hours checks) |
+| `ibapi-integration-sync` | `integration/sync/` | Sync client tests; `connect` / `client_builder` helpers in `src/lib.rs` |
+| `ibapi-integration-async` | `integration/async/` | Async client tests; `connect` / `client_builder` helpers in `src/lib.rs` |
 
-Tests go in `tests/`.
+Tests go in `tests/`. `ibapi-test` has no `ibapi` dependency, so helpers that need `ibapi` live in each test crate's `src/lib.rs`.
 
 ## Writing a Sync Test
 
 ```rust
-use std::sync::{Arc, Mutex};
-
-use ibapi::client::blocking::Client;
-use ibapi_test::{rate_limit, ClientId};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 
 #[test]
 fn my_sync_test() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id())
-        .expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let time = client.server_time().expect("failed to get server time");
     assert!(time.year() >= 2025);
 }
@@ -38,18 +33,14 @@ fn my_sync_test() {
 ## Writing an Async Test
 
 ```rust
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn my_async_test() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id())
-        .await
-        .expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let time = client.server_time().await.expect("failed to get server time");
     assert!(time.year() >= 2025);
 }
@@ -64,28 +55,27 @@ Never hardcode client IDs. `ClientId::get()` allocates a unique ID (range 200–
 ```rust
 // Good
 let client_id = ClientId::get();
-let client = Client::connect("127.0.0.1:4002", client_id.id())?;
+let client = connect(&client_id);
 
-// Bad — will conflict with parallel tests
+// Bad — hardcoded ID, and bypasses the shared rate limiter
 let client = Client::connect("127.0.0.1:4002", 100)?;
 ```
 
-### 2. Call `rate_limit()` before every API request
+### 2. Connect with `connect` or `client_builder`
 
-IBKR enforces a 50 requests/second limit. Call `rate_limit()` before each call that sends a message to the gateway (connect, server_time, market_data, place_order, etc.).
+IBKR limits API messages to 50 per second across all clients of a gateway. The crate's `connect(&client_id)` installs a `RateLimiter` shared by every client in the test binary, so each request, order and cancel is paced at the transport. Don't pace requests by hand.
 
-(#971 tracks replacing this with the client-side `ibapi::RateLimiter`.)
+Need builder options (`startup_callback`, `channel_capacity`, `connect_with_notice_stream`, ...)? Start from `client_builder(&client_id)`, which has the address, client ID and limiter set. Never call `Client::connect` directly: that client would bypass the shared budget.
 
 ```rust
-rate_limit();
-let client = Client::connect("127.0.0.1:4002", client_id.id())?;
-
-rate_limit();
+let client = connect(&client_id);
 let time = client.server_time()?;
-
-rate_limit();
 let details = client.contract_details(&contract)?;
+
+let (client, notices) = client_builder(&client_id).connect_with_notice_stream()?;
 ```
+
+Handshakes are not throttled; a handful of parallel connects stays well under the limit.
 
 ### 3. Use `#[serial]` for tests that modify shared gateway state
 
@@ -126,12 +116,12 @@ The `ClientId` guard returns its ID to the pool on drop. Ensure it outlives the 
 ```rust
 // Good — client_id lives for the entire test
 let client_id = ClientId::get();
-let client = Client::connect("127.0.0.1:4002", client_id.id())?;
+let client = connect(&client_id);
 // ... use client ...
 
-// Bad — ID returned to pool immediately, another test could reuse it
-let id = ClientId::get().id();
-let client = Client::connect("127.0.0.1:4002", id)?;
+// Bad — the temporary guard drops at the end of the statement, returning
+// the ID to the pool while the client still uses it
+let client = connect(&ClientId::get());
 ```
 
 ## Running

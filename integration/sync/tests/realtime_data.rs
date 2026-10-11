@@ -1,18 +1,16 @@
 use std::time::Duration;
 
-use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::{IgnoreSize, MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 
 #[test]
 fn market_data_snapshot() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client.market_data(&contract).snapshot().subscribe().expect("market_data snapshot failed");
 
@@ -29,10 +27,8 @@ fn market_data_snapshot() {
 #[test]
 fn market_data_streaming() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client.market_data(&contract).subscribe().expect("market_data streaming failed");
 
@@ -43,10 +39,8 @@ fn market_data_streaming() {
 #[test]
 fn market_data_generic_ticks() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client
         .market_data(&contract)
@@ -61,13 +55,10 @@ fn market_data_generic_ticks() {
 #[test]
 fn switch_market_data_type() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     client.switch_market_data_type(MarketDataType::Delayed).expect("switch to delayed failed");
 
-    rate_limit();
     client
         .switch_market_data_type(MarketDataType::Realtime)
         .expect("switch to realtime failed");
@@ -76,10 +67,8 @@ fn switch_market_data_type() {
 #[test]
 fn realtime_bars_trades() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client
         .realtime_bars(&contract)
@@ -95,10 +84,8 @@ fn realtime_bars_trades() {
 #[test]
 fn tick_by_tick_all_last() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client.tick_by_tick(&contract, 0).all_last().expect("tick_by_tick_all_last failed");
 
@@ -110,10 +97,8 @@ fn tick_by_tick_all_last() {
 #[test]
 fn tick_by_tick_bid_ask() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client
         .tick_by_tick(&contract, 0)
@@ -129,10 +114,8 @@ fn tick_by_tick_bid_ask() {
 #[test]
 fn tick_by_tick_midpoint() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client.tick_by_tick(&contract, 0).mid_point().expect("tick_by_tick_midpoint failed");
 
@@ -144,10 +127,8 @@ fn tick_by_tick_midpoint() {
 #[test]
 fn market_depth_exchanges() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let exchanges = client.market_depth_exchanges().expect("market_depth_exchanges failed");
 
     assert!(!exchanges.is_empty(), "expected non-empty exchange list");
@@ -156,10 +137,8 @@ fn market_depth_exchanges() {
 #[test]
 fn market_depth_receives_data() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let subscription = client.market_depth(&contract, 5).subscribe().expect("market_depth failed");
 

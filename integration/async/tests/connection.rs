@@ -1,19 +1,18 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ibapi::{Client, Error, StartupMessage};
-use ibapi_test::{rate_limit, ClientId};
+use ibapi::{Error, StartupMessage};
+use ibapi_integration_async::{client_builder, connect};
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn connect_to_gateway() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     assert!(client.server_version() > 0);
     assert!(client.connection_time().is_some());
 
-    rate_limit();
     let time = client.server_time().await.expect("failed to get server time");
     assert!(time.year() >= 2025);
 }
@@ -24,10 +23,7 @@ async fn builder_startup_callback_fires_during_handshake() {
     let count = Arc::new(Mutex::new(0_usize));
     let count_clone = count.clone();
 
-    rate_limit();
-    let client = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
+    let client = client_builder(&client_id)
         .startup_callback(move |msg| {
             if let StartupMessage::OpenOrder(ref o) = msg {
                 assert!(o.order_id >= 0);
@@ -46,14 +42,7 @@ async fn builder_startup_callback_fires_during_handshake() {
 async fn builder_tcp_no_delay_round_trips() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .tcp_no_delay(true)
-        .connect()
-        .await
-        .expect("connection failed");
+    let client = client_builder(&client_id).tcp_no_delay(true).connect().await.expect("connection failed");
 
     assert!(client.server_version() > 0);
 }
@@ -65,13 +54,7 @@ async fn builder_tcp_no_delay_round_trips() {
 async fn builder_notice_stream_receives_handshake_notices() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let (_client, mut notices) = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .connect_with_notice_stream()
-        .await
-        .expect("connection failed");
+    let (_client, mut notices) = client_builder(&client_id).connect_with_notice_stream().await.expect("connection failed");
 
     let mut codes: Vec<i32> = Vec::new();
     let collect = async {
@@ -102,13 +85,7 @@ async fn builder_notice_stream_survives_reconnect() {
     let captured: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
     let captured_clone = captured.clone();
 
-    rate_limit();
-    let (_client, mut notices) = Client::builder()
-        .address("127.0.0.1:4002")
-        .client_id(client_id.id())
-        .connect_with_notice_stream()
-        .await
-        .expect("connection failed");
+    let (_client, mut notices) = client_builder(&client_id).connect_with_notice_stream().await.expect("connection failed");
 
     // Drain on a background task — broadcaster lives on Connection, so the
     // stream survives gateway flaps.
@@ -136,8 +113,7 @@ async fn order_update_stream_ends_on_disconnect() {
 
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
     let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
 
     client.disconnect().await;
@@ -152,8 +128,7 @@ async fn order_update_stream_ends_on_disconnect() {
 async fn order_update_stream_after_disconnect_fails() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
     client.disconnect().await;
 
     match client.order_update_stream().await {
@@ -168,8 +143,7 @@ async fn order_update_stream_after_disconnect_fails() {
 async fn notice_stream_ends_on_disconnect() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
     let mut notices = client.notice_stream().expect("notice_stream failed");
 
     client.disconnect().await;
@@ -184,8 +158,7 @@ async fn notice_stream_ends_on_disconnect() {
 async fn notice_stream_after_disconnect_is_ended() {
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
     client.disconnect().await;
 
     let mut notices = client.notice_stream().expect("notice_stream failed");
@@ -204,8 +177,7 @@ async fn order_update_stream_ends_on_client_drop() {
 
     let client_id = ClientId::get();
 
-    rate_limit();
-    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
     let mut updates = client.order_update_stream().await.expect("order_update_stream failed");
 
     drop(client);

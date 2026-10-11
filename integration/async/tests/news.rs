@@ -1,15 +1,13 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_async::connect;
+use ibapi_test::ClientId;
 
 #[tokio::test]
 async fn news_providers() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let providers = client.news_providers().await.expect("news_providers failed");
 
     assert!(!providers.is_empty(), "expected at least one news provider");
@@ -18,10 +16,8 @@ async fn news_providers() {
 #[tokio::test]
 async fn news_bulletins() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let mut subscription = client.news_bulletins(true).await.expect("news_bulletins failed");
 
     // Bulletins may not arrive immediately - just verify subscription was created
@@ -31,11 +27,9 @@ async fn news_bulletins() {
 #[tokio::test]
 async fn historical_news() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     // Get AAPL contract_id
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let details = client.contract_details(&contract).await.expect("contract_details failed");
     let con_id = details[0].contract.contract_id;
@@ -43,7 +37,6 @@ async fn historical_news() {
     let end = time::OffsetDateTime::now_utc();
     let start = end - time::Duration::days(7);
 
-    rate_limit();
     let mut subscription = client
         .historical_news(con_id, &["BRFG"], start, end, 5)
         .await
@@ -56,10 +49,8 @@ async fn historical_news() {
 #[tokio::test]
 async fn contract_news() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client.contract_news(&contract, &["BRFG"]).await.expect("contract_news failed");
 
@@ -70,10 +61,8 @@ async fn contract_news() {
 #[tokio::test]
 async fn broad_tape_news() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
-    rate_limit();
     let mut subscription = client.broad_tape_news("BRFG").await.expect("broad_tape_news failed");
 
     // May not receive data on paper account
@@ -84,10 +73,8 @@ async fn broad_tape_news() {
 #[ignore]
 async fn news_article() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    let client = connect(&client_id).await;
 
     // Requires a valid article_id from a news provider subscription
-    rate_limit();
     let _article = client.news_article("BRFG", "BRFG$1234").await.expect("news_article failed");
 }

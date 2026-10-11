@@ -1,14 +1,12 @@
-use ibapi::client::blocking::Client;
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_integration_sync::connect;
+use ibapi_test::ClientId;
 
 #[test]
 #[ignore]
 fn wsh_metadata() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let metadata = client.wsh_metadata().expect("wsh_metadata failed");
     assert!(!metadata.data_json.is_empty());
 }
@@ -17,11 +15,9 @@ fn wsh_metadata() {
 #[ignore]
 fn wsh_event_data_by_contract() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
     // AAPL contract_id (commonly 265598)
-    rate_limit();
     let data = client
         .wsh_event_data_by_contract(265598)
         .fetch()
@@ -33,10 +29,8 @@ fn wsh_event_data_by_contract() {
 #[ignore]
 fn wsh_event_data_by_filter() {
     let client_id = ClientId::get();
-    rate_limit();
-    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+    let client = connect(&client_id);
 
-    rate_limit();
     let subscription = client
         .wsh_event_data_by_filter("{}")
         .subscribe()
