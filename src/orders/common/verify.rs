@@ -45,6 +45,18 @@ pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order) -> Resu
         client.check_version(server_versions::HEDGE_MAX_SIZE, "It does not support hedge_max_size parameter")?
     }
 
+    // Mirrors C# `ValidateOrderParameters`; the encoder sends each flag only when set.
+    if order.deactivate {
+        client.check_version(server_versions::ADDITIONAL_ORDER_PARAMS_1, "It does not support deactivate parameter")?
+    }
+
+    if order.route_marketable_to_bbo {
+        client.check_version(
+            server_versions::ADDITIONAL_ORDER_PARAMS_2,
+            "It does not support route_marketable_to_bbo parameter",
+        )?
+    }
+
     if order.preset_stop_loss_order_id.is_some() || order.preset_profit_taker_order_id.is_some() {
         client.check_version(server_versions::ATTACHED_ORDERS, "It does not support attached orders.")?
     }

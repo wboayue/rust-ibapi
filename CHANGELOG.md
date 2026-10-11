@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Async client: `disconnect()` and dropping the client now close the TCP connection even while subscriptions or client clones are still held (#966).
+- `place_order` / `submit_order` (sync and async) return `Error::ServerVersion` for `Order::deactivate` below server version 216 and `Order::route_marketable_to_bbo` below 217, as the C# client does. Previously both were sent unchecked (#978).
 - Blocking client: `disconnect()` and dropping the client now close the TCP connection even while subscriptions are still held. Previously only the read side was shut down, so TWS kept the session open (#979).
 - `historical_data(..).fetch()` (sync and async) waits for TWS's end marker. A response that closed after the bars returned them as complete, with `start`/`end` left at the epoch; it is now `UnexpectedEndOfStream`, and a wrong second message is `UnexpectedResponse` (#967).
 - Blocking `order_update_stream()` can be reopened right after `cancel()`, while the old handle is still held; it used to return `AlreadySubscribed` until the cleanup thread caught up (#932).

@@ -6,6 +6,9 @@ pub mod order_builder;
 pub(crate) mod stream_decoders;
 pub(super) mod verify;
 
+#[cfg(test)]
+pub(super) mod test_tables;
+
 // Narrow re-exports: only the handshake-time decoders escape the
 // `orders::common` boundary. The rest of `decoders` stays internal.
 pub(crate) use decoders::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
