@@ -262,9 +262,12 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
     ///
     /// # Errors
-    /// [`Error::UnexpectedEndOfStream`] if the response closes before the end marker,
-    /// so a partial download is never returned as complete;
-    /// [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::InvalidArgument`] for an invalid date range, or if
+    ///   [`buffer_limit`](Self::buffer_limit) is set; nothing is sent.
+    /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
+    /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
+    ///   marker, so a partial download is never returned as complete.
+    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
     ///
     /// # Examples
     ///
@@ -351,9 +354,12 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
     ///
     /// # Errors
-    /// [`Error::UnexpectedEndOfStream`] if the response closes before the end marker,
-    /// so a partial download is never returned as complete;
-    /// [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::InvalidArgument`] for an invalid date range, or if
+    ///   [`buffer_limit`](Self::buffer_limit) is set; nothing is sent.
+    /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
+    /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
+    ///   marker, so a partial download is never returned as complete.
+    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
     ///
     /// # Examples
     ///
