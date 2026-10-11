@@ -82,7 +82,7 @@ pub struct HistoricalDataRequestBuilder {
     pub end_date: Option<OffsetDateTime>,
     pub duration: Duration,
     pub bar_size: BarSize,
-    pub what_to_show: Option<HistoricalWhatToShow>,
+    pub what_to_show: HistoricalWhatToShow,
     pub use_rth: bool,
     pub keep_up_to_date: bool,
 }
@@ -95,7 +95,7 @@ impl Default for HistoricalDataRequestBuilder {
             end_date: None,
             duration: Duration::days(1),
             bar_size: BarSize::Day,
-            what_to_show: None,
+            what_to_show: HistoricalWhatToShow::Trades,
             use_rth: false,
             keep_up_to_date: false,
         }
@@ -123,7 +123,7 @@ impl HistoricalDataRequestBuilder {
         self.bar_size = v;
         self
     }
-    pub fn what_to_show(mut self, v: Option<HistoricalWhatToShow>) -> Self {
+    pub fn what_to_show(mut self, v: HistoricalWhatToShow) -> Self {
         self.what_to_show = v;
         self
     }
@@ -143,14 +143,13 @@ impl RequestEncoder for HistoricalDataRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         let end_str = self.end_date.to_field();
-        let wts_str = self.what_to_show.to_field();
         proto::HistoricalDataRequest {
             req_id: Some(self.request_id),
             contract: Some(encode_contract(&self.contract)),
             end_date_time: some_str(&end_str),
             duration: Some(self.duration.to_field()),
             bar_size_setting: Some(self.bar_size.to_field()),
-            what_to_show: some_str(&wts_str),
+            what_to_show: Some(self.what_to_show.to_field()),
             use_rth: some_bool(self.use_rth),
             format_date: Some(DATE_FORMAT),
             keep_up_to_date: some_bool(self.keep_up_to_date),

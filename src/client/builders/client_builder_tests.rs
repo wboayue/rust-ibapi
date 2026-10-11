@@ -3,6 +3,7 @@
 
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
+use crate::transport::rate_limiter::RateLimiter;
 
 use super::BuilderState;
 
@@ -32,6 +33,37 @@ fn validate_passes_reconnect_limit_through() {
     let mut unlimited = base();
     unlimited.max_reconnect_attempts = None;
     assert_eq!(unlimited.validate().expect("validate").max_reconnect_attempts, None);
+}
+
+fn connectable() -> BuilderState {
+    BuilderState {
+        address: Some("127.0.0.1:4002".into()),
+        client_id: Some(100),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn validate_passes_rate_limiter_through() {
+    assert!(
+        connectable().validate().expect("validate").rate_limiter.is_none(),
+        "limiter on by default"
+    );
+
+    // The pieces carry the caller's limiter, not a copy with its own budget.
+    let limiter = RateLimiter::per_second(10);
+    let mut state = connectable();
+    state.rate_limiter = Some(limiter.clone());
+    let passed = state.validate().expect("validate").rate_limiter.expect("limiter dropped");
+    passed.reserve(std::time::Instant::now(), false);
+    assert_eq!(limiter.reserved_until(), passed.reserved_until());
+}
+
+#[test]
+fn validate_rejects_zero_rate_limit() {
+    let mut state = connectable();
+    state.rate_limiter = Some(RateLimiter::per_second(0));
+    assert_invalid_argument(state.validate().err(), "rate_limiter");
 }
 
 #[cfg(feature = "sync")]
@@ -65,6 +97,13 @@ mod sync_tests {
     fn tcp_no_delay_defaults_on() {
         assert!(ClientBuilder::default().state.tcp_no_delay);
         assert!(!ClientBuilder::default().tcp_no_delay(false).state.tcp_no_delay);
+    }
+
+    #[test]
+    fn rate_limiter_configurator_sets_state() {
+        assert!(ClientBuilder::default().state.rate_limiter.is_none());
+        let builder = ClientBuilder::default().rate_limiter(crate::RateLimiter::per_second(7));
+        assert_eq!(builder.state.rate_limiter.map(|l| l.messages_per_second()), Some(7));
     }
 }
 
@@ -112,5 +151,12 @@ mod async_tests {
     fn tcp_no_delay_defaults_on() {
         assert!(ClientBuilder::default().state.tcp_no_delay);
         assert!(!ClientBuilder::default().tcp_no_delay(false).state.tcp_no_delay);
+    }
+
+    #[test]
+    fn rate_limiter_configurator_sets_state() {
+        assert!(ClientBuilder::default().state.rate_limiter.is_none());
+        let builder = ClientBuilder::default().rate_limiter(crate::RateLimiter::per_second(7));
+        assert_eq!(builder.state.rate_limiter.map(|l| l.messages_per_second()), Some(7));
     }
 }

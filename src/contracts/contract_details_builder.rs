@@ -9,11 +9,6 @@ use crate::client::ids::RequestId;
 use crate::contracts::{Contract, ContractDetails};
 use crate::Error;
 
-/// The largest [`ContractDetailsBuilder::buffer_limit`]. The async client
-/// allocates its channel's slots up front: `limit + 1`, rounded up to a power
-/// of two. At this maximum that is 65,536 slots, a few MiB.
-pub const MAX_BUFFER_LIMIT: usize = 65_535;
-
 /// Builder for a contract-details request that yields one [`ContractDetails`]
 /// per matching contract.
 ///
@@ -65,7 +60,7 @@ impl<'a, C> ContractDetailsBuilder<'a, C> {
     /// client capped by `ClientBuilder::channel_capacity` with the oldest rows
     /// dropped (reported as a lag notice).
     ///
-    /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`]; otherwise `subscribe`
+    /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT); otherwise `subscribe`
     /// returns [`Error::InvalidArgument`] without sending.
     ///
     /// On the async client only the original subscription's reads count. A
@@ -123,16 +118,6 @@ async fn main() {
     pub fn buffer_limit(mut self, limit: usize) -> Self {
         self.buffer_limit = Some(limit);
         self
-    }
-}
-
-/// `limit` if it is a valid [`ContractDetailsBuilder::buffer_limit`].
-pub(crate) fn validate_buffer_limit(limit: Option<usize>) -> Result<Option<usize>, Error> {
-    match limit {
-        Some(limit) if !(1..=MAX_BUFFER_LIMIT).contains(&limit) => Err(Error::InvalidArgument(format!(
-            "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
-        ))),
-        limit => Ok(limit),
     }
 }
 

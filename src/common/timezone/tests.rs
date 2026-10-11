@@ -48,6 +48,15 @@ fn test_find_timezone_singapore() {
 }
 
 #[test]
+fn test_find_timezone_brazil() {
+    // `E. South America Standard Time` is not in the alias table: time_tz maps
+    // Windows registry ids itself.
+    for name in ["BRT", "Brasilia Standard Time", "E. South America Standard Time"] {
+        assert_eq!(resolved_name(name), Some("America/Sao_Paulo"), "wrong mapping for {name}");
+    }
+}
+
+#[test]
 fn test_find_timezone_european_continental() {
     let cases = [
         ("E. Europe Standard Time", "Europe/Bucharest"),

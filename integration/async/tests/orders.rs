@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind, OrderUpdate, PlaceOrder};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, PlaceOrder};
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
 use ibapi_test::{rate_limit, require_globex_open, yyyymmdd_from_now, ClientId, GATEWAY};
@@ -535,4 +535,63 @@ async fn order_update_stream_keeps_frames_under_small_channel_capacity() {
     })
     .await;
     assert!(outcome.is_ok(), "terminal status seen for {cancelled:?} of {order_ids:?}");
+}
+
+// #951: a working order times out with its latest status; once cancelled, a
+// second wait reports it ended. Asserts after the cancel, so a failure never
+// leaves the order working.
+#[tokio::test]
+#[serial(orders)]
+async fn wait_for_fill_times_out_then_ends_after_cancel() {
+    let (client, _client_id) = connect().await;
+    let contract = Contract::stock("AAPL").build();
+
+    rate_limit();
+    let order_id = client.order(&contract).buy(1).limit(1.0).submit().await.expect("submit failed");
+
+    let working = client.wait_for_fill(order_id, Duration::from_secs(3)).await;
+    rate_limit();
+    let _cancellation = client.cancel_order(order_id, "").await.expect("cancel_order failed");
+    let ended = client.wait_for_fill(order_id, Duration::from_secs(10)).await;
+
+    match working.expect("first wait failed") {
+        OrderOutcome::TimedOut(Some(status)) => assert_eq!(status.order_id, order_id.0),
+        other => panic!("a far limit should time out still working: {other:?}"),
+    }
+    match ended.expect("second wait failed") {
+        OrderOutcome::Ended(status) => assert!(
+            matches!(status.status, OrderStatusKind::Cancelled | OrderStatusKind::ApiCancelled),
+            "ended on {:?}",
+            status.status
+        ),
+        other => panic!("cancelled order should end: {other:?}"),
+    }
+}
+
+// #951: a market fill reports Filled with nothing remaining. Flattens only a
+// fill; anything else cancels the buy, so a failure never leaves a position.
+#[tokio::test]
+#[serial(orders)]
+async fn wait_for_fill_reports_es_market_fill() {
+    require_globex_open();
+    let (client, _client_id) = connect().await;
+    let contract = front_month_es(&client).await;
+
+    rate_limit();
+    let order_id = client.order(&contract).buy(1).market().submit().await.expect("buy failed");
+
+    let outcome = client.wait_for_fill(order_id, Duration::from_secs(15)).await;
+    if matches!(outcome, Ok(OrderOutcome::Filled(_))) {
+        flatten(&client, &contract).await;
+    } else {
+        rate_limit();
+        let _ = client.cancel_order(order_id, "").await;
+    }
+    match outcome.expect("wait failed") {
+        OrderOutcome::Filled(status) => {
+            assert_eq!(status.remaining, 0.0);
+            assert_eq!(status.filled, 1.0);
+        }
+        other => panic!("market order should fill: {other:?}"),
+    }
 }

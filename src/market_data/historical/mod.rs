@@ -672,15 +672,6 @@ impl ToField for WhatToShow {
     }
 }
 
-impl ToField for Option<WhatToShow> {
-    fn to_field(&self) -> String {
-        match self {
-            Some(what_to_show) => what_to_show.to_string(),
-            None => "".into(),
-        }
-    }
-}
-
 // Re-export non-function items
 #[cfg(feature = "async")]
 pub use r#async::TickSubscription;

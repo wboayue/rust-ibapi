@@ -11,11 +11,17 @@
 //! with an empty chain or a rejection. See
 //! [param budget](../../docs/rules/style/param-budget.md).
 
+use crate::client::ids::RequestId;
 use crate::contracts::{OptionChain, SecurityType};
 use crate::Error;
 
 /// Builder for an underlying's option chain: one [`OptionChain`] per exchange the
 /// options trade on.
+///
+/// The request id is allocated when the builder is made, so a caller can record
+/// it before anything is written; `subscribe` sends once and never retries. TWS
+/// has no cancel for this request: dropping the subscription early only
+/// discards the rest of the chain.
 #[must_use = "OptionChainBuilder does nothing until you call .subscribe()"]
 pub struct OptionChainBuilder<'a, C> {
     client: &'a C,
@@ -23,17 +29,27 @@ pub struct OptionChainBuilder<'a, C> {
     security_type: SecurityType,
     contract_id: i32,
     exchange: Option<&'a str>,
+    request_id: RequestId,
+    buffer_limit: Option<usize>,
 }
 
 impl<'a, C> OptionChainBuilder<'a, C> {
-    pub(crate) fn new(client: &'a C, symbol: &'a str, security_type: SecurityType, contract_id: i32) -> Self {
+    pub(crate) fn new(client: &'a C, symbol: &'a str, security_type: SecurityType, contract_id: i32, request_id: RequestId) -> Self {
         Self {
             client,
             symbol,
             security_type,
             contract_id,
             exchange: None,
+            request_id,
+            buffer_limit: None,
         }
+    }
+
+    /// The request id `subscribe` will send. Allocated when the builder was
+    /// made; nothing has been written yet. A dropped builder skips the id.
+    pub fn request_id(&self) -> i32 {
+        self.request_id.raw()
     }
 
     /// Restrict the chain to options trading on one exchange.
@@ -46,12 +62,80 @@ impl<'a, C> OptionChainBuilder<'a, C> {
         self.exchange = Some(exchange);
         self
     }
+
+    /// Fail the stream instead of queueing more than `limit` unread chains.
+    ///
+    /// When `limit` items are unread and another arrives, the subscription
+    /// yields every queued item, then [`Error::BufferLimitExceeded`], then
+    /// ends. The end marker and errors always get through. Same semantics
+    /// and caveats as
+    /// [`ContractDetailsBuilder::buffer_limit`](crate::contracts::ContractDetailsBuilder::buffer_limit);
+    /// `limit` must be `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
+    ///
+    /// # Examples
+    #[cfg_attr(
+        feature = "sync",
+        doc = r#"
+```no_run
+use ibapi::client::blocking::Client;
+use ibapi::contracts::SecurityType;
+use ibapi::Error;
+
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+
+let request = client.option_chain("AAPL", SecurityType::Stock, 265598).buffer_limit(8);
+println!("request id: {}", request.request_id());
+
+let subscription = request.subscribe().expect("request option chain failed");
+for chain in subscription.iter_data() {
+    match chain {
+        Ok(chain) => println!("{}: {} strikes", chain.exchange, chain.strikes.len()),
+        Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} chains behind; stopping"),
+        Err(e) => eprintln!("error: {e}"),
+    }
+}
+```
+"#
+    )]
+    #[cfg_attr(
+        feature = "async",
+        doc = r#"
+```no_run
+use ibapi::prelude::*;
+use ibapi::Error;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+
+    let request = client.option_chain("AAPL", SecurityType::Stock, 265598).buffer_limit(8);
+    println!("request id: {}", request.request_id());
+
+    let subscription = request.subscribe().await.expect("request option chain failed");
+    let mut chains = subscription.filter_data();
+    while let Some(chain) = chains.next().await {
+        match chain {
+            Ok(chain) => println!("{}: {} strikes", chain.exchange, chain.strikes.len()),
+            Err(Error::BufferLimitExceeded { limit }) => eprintln!("fell {limit} chains behind; stopping"),
+            Err(e) => eprintln!("error: {e}"),
+        }
+    }
+}
+```
+"#
+    )]
+    pub fn buffer_limit(mut self, limit: usize) -> Self {
+        self.buffer_limit = Some(limit);
+        self
+    }
 }
 
 #[cfg(feature = "sync")]
 impl<'a> OptionChainBuilder<'a, crate::client::sync::Client> {
-    /// Submit the request and return a subscription yielding one [`OptionChain`]
-    /// per exchange. The subscription ends when TWS has sent every exchange.
+    /// Submit the request once and return a subscription yielding one
+    /// [`OptionChain`] per exchange. The subscription ends when TWS has sent
+    /// every exchange. There is no retry: after a connection reset, build a
+    /// new request (new id).
     ///
     /// # Examples
     ///
@@ -80,14 +164,24 @@ impl<'a> OptionChainBuilder<'a, crate::client::sync::Client> {
     ///     .expect("request option chain failed");
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<OptionChain>, Error> {
-        crate::contracts::sync::option_chain(self.client, self.symbol, self.exchange, self.security_type, self.contract_id)
+        crate::contracts::sync::option_chain(
+            self.client,
+            self.symbol,
+            self.exchange,
+            self.security_type,
+            self.contract_id,
+            self.request_id,
+            self.buffer_limit,
+        )
     }
 }
 
 #[cfg(feature = "async")]
 impl<'a> OptionChainBuilder<'a, crate::client::r#async::Client> {
-    /// Submit the request and return a subscription yielding one [`OptionChain`]
-    /// per exchange. The subscription ends when TWS has sent every exchange.
+    /// Submit the request once and return a subscription yielding one
+    /// [`OptionChain`] per exchange. The subscription ends when TWS has sent
+    /// every exchange. There is no retry: after a connection reset, build a
+    /// new request (new id).
     ///
     /// # Examples
     ///
@@ -121,6 +215,15 @@ impl<'a> OptionChainBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<OptionChain>, Error> {
-        crate::contracts::r#async::option_chain(self.client, self.symbol, self.exchange, self.security_type, self.contract_id).await
+        crate::contracts::r#async::option_chain(
+            self.client,
+            self.symbol,
+            self.exchange,
+            self.security_type,
+            self.contract_id,
+            self.request_id,
+            self.buffer_limit,
+        )
+        .await
     }
 }

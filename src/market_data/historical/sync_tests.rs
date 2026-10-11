@@ -253,7 +253,7 @@ fn test_historical_data() {
             .end_date(Some(end_date))
             .duration(duration)
             .bar_size(bar_size)
-            .what_to_show(Some(what_to_show))
+            .what_to_show(what_to_show)
             .use_rth(trading_hours.use_rth()),
     );
 }
@@ -316,7 +316,7 @@ fn test_historical_schedules() {
             .end_date(Some(end_date))
             .duration(duration)
             .bar_size(BarSize::Day)
-            .what_to_show(Some(WhatToShow::Schedule))
+            .what_to_show(WhatToShow::Schedule)
             .use_rth(true),
     );
 }
@@ -893,7 +893,7 @@ fn test_historical_data_streaming_with_updates() {
             .contract(&contract)
             .duration(Duration::days(1))
             .bar_size(BarSize::Hour)
-            .what_to_show(Some(WhatToShow::Trades))
+            .what_to_show(WhatToShow::Trades)
             .use_rth(true)
             .keep_up_to_date(true),
     );
@@ -1199,7 +1199,7 @@ fn test_historical_schedules_ending_now() {
             .contract(&contract)
             .duration(duration)
             .bar_size(BarSize::Day)
-            .what_to_show(Some(WhatToShow::Schedule))
+            .what_to_show(WhatToShow::Schedule)
             .use_rth(true),
     );
 }
@@ -1508,4 +1508,45 @@ fn test_tick_subscription_skips_unexpected_message_then_yields() {
         .expect("decode error");
     assert_eq!(tick.price, 14.00, "wrong price");
     assert!(subscription.next().is_none(), "should be done");
+}
+
+// ---- buffer_limit ----------------------------------------------------------
+
+#[test]
+fn historical_data_stream_buffer_limit_reaches_the_bus() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_blocking_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let _bounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .stream()
+        .expect("bounded stream failed");
+    let _unbounded = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
+        .expect("unbounded stream failed");
+
+    assert_eq!(
+        *message_bus.buffer_limits.read().unwrap(),
+        vec![16],
+        "only the bounded request carries a limit"
+    );
+}
+
+#[test]
+fn historical_data_fetch_rejects_buffer_limit() {
+    let (client, message_bus) = crate::common::test_utils::helpers::create_blocking_test_client();
+    let contract = Contract::stock("SPY").build();
+
+    let result = client
+        .historical_data(&contract, BarSize::Hour)
+        .duration(Duration::days(1))
+        .buffer_limit(16)
+        .fetch();
+
+    assert!(matches!(result, Err(Error::InvalidArgument(_))), "got {result:?}");
+    assert!(message_bus.request_messages.read().unwrap().is_empty(), "nothing is sent");
 }

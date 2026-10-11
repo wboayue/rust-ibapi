@@ -1727,6 +1727,63 @@ pub struct OrderStatus {
     pub market_cap_price: Option<f64>,
 }
 
+impl OrderStatus {
+    /// How the order ended, or `None` while it is still working (partial
+    /// fills included). The rule `wait_for_fill` applies to each status, for
+    /// waits built on `order_status_stream`.
+    ///
+    /// [`Filled`](OrderOutcome::Filled) for status
+    /// [`Filled`](OrderStatusKind::Filled), or nothing remaining after a fill
+    /// (market orders do not always report `Filled`);
+    /// [`Ended`](OrderOutcome::Ended) for any other
+    /// [terminal](OrderStatusKind::is_terminal) status.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::{OrderOutcome, OrderStatus, OrderStatusKind};
+    ///
+    /// let partial = OrderStatus { status: OrderStatusKind::Submitted, filled: 40.0, remaining: 60.0, ..Default::default() };
+    /// assert_eq!(partial.outcome(), None);
+    ///
+    /// let done = OrderStatus { filled: 100.0, remaining: 0.0, ..partial };
+    /// assert!(matches!(done.outcome(), Some(OrderOutcome::Filled(_))));
+    /// ```
+    pub fn outcome(&self) -> Option<OrderOutcome> {
+        // `filled > 0` keeps an early all-zero status from counting.
+        if self.status == OrderStatusKind::Filled || (self.remaining == 0.0 && self.filled > 0.0) {
+            Some(OrderOutcome::Filled(self.clone()))
+        } else if self.status.is_terminal() {
+            Some(OrderOutcome::Ended(self.clone()))
+        } else {
+            None
+        }
+    }
+}
+
+/// How an order ended, as reported by `Client::wait_for_fill`.
+///
+/// Each variant carries the order's last [`OrderStatus`]: `filled`,
+/// `remaining` and `average_fill_price` give the fill, which may be partial
+/// for [`Ended`](Self::Ended) and [`TimedOut`](Self::TimedOut).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum OrderOutcome {
+    /// The order filled completely: status [`Filled`](OrderStatusKind::Filled),
+    /// or nothing remaining after a fill (market orders do not always report
+    /// `Filled`).
+    Filled(OrderStatus),
+    /// The order ended without filling completely:
+    /// [`Cancelled`](OrderStatusKind::Cancelled),
+    /// [`ApiCancelled`](OrderStatusKind::ApiCancelled) or
+    /// [`Inactive`](OrderStatusKind::Inactive).
+    Ended(OrderStatus),
+    /// The wait timed out with the order still working. Carries the last
+    /// status seen, if any. The order is left alone; cancel it yourself if
+    /// you no longer want it.
+    TimedOut(Option<OrderStatus>),
+}
+
 /// Enumerates possible results from cancelling an order.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]

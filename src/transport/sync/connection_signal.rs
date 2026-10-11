@@ -4,6 +4,7 @@
 use std::sync::{Condvar, Mutex, PoisonError};
 
 use crate::errors::Error;
+use crate::transport::common::lock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
@@ -38,7 +39,7 @@ impl Default for ConnectionSignal {
 
 impl ConnectionSignal {
     pub(crate) fn is_connected(&self) -> bool {
-        *self.state.lock().unwrap_or_else(PoisonError::into_inner) == State::Connected
+        *lock(&self.state) == State::Connected
     }
 
     pub(crate) fn set_connected(&self) {
@@ -51,14 +52,14 @@ impl ConnectionSignal {
 
     /// Latch the terminal state and wake every waiter.
     pub(crate) fn shutdown(&self) {
-        *self.state.lock().unwrap_or_else(PoisonError::into_inner) = State::ShutDown;
+        *lock(&self.state) = State::ShutDown;
         self.changed.notify_all();
     }
 
     /// Block until the session is connected again, returning
     /// [`Error::Shutdown`] if it never will be.
     pub(crate) fn wait_connected(&self) -> Result<(), Error> {
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = lock(&self.state);
         loop {
             match *state {
                 State::Connected => return Ok(()),
@@ -69,7 +70,7 @@ impl ConnectionSignal {
     }
 
     fn set(&self, new_state: State) {
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = lock(&self.state);
         // Shutdown is terminal: a reconnect that lands after it must not
         // report the session live again.
         if *state == State::ShutDown {

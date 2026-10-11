@@ -24,6 +24,11 @@ const TIMEZONE_ALIASES: &[(&str, &str)] = &[
     ("British Summer Time", "Europe/London"),
     // Southeast Asia
     ("SGT", "Asia/Singapore"),
+    // South America. pt-BR gateways send `BRT` (10.45) and the Windows display
+    // name `Brasilia Standard Time` (10.51) (#964). The Windows registry id
+    // `E. South America Standard Time` resolves through time_tz's CLDR table.
+    ("BRT", "America/Sao_Paulo"),
+    ("Brasilia Standard Time", "America/Sao_Paulo"),
     // European continental (Windows names sent by IB Gateway on non-English Windows)
     ("E. Europe Standard Time", "Europe/Bucharest"),
     ("Eastern European Standard Time", "Europe/Athens"),
@@ -68,6 +73,9 @@ static TIMEZONE_REGISTRY: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::n
 /// Equivalent runtime configuration is available via the
 /// `IBAPI_TIMEZONE_ALIASES=name=iana;name=iana` environment variable, which
 /// seeds the registry on first lookup.
+///
+/// A mapping applies wherever the crate resolves a gateway zone name; see
+/// [Gateway Time Zone](https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone).
 ///
 /// # Example
 /// ```no_run

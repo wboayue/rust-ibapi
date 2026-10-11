@@ -90,6 +90,8 @@ tempfile = "3.13"
 # raw-capture env-var test; `with_var` only takes a blocking closure.
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 serial_test = "4.0.1"
+# Paused clock for the async rate-limiter test.
+tokio = { version = "1.41", features = ["test-util"] }
 toml = "1.0"
 # toml_edit = "0.22"  # Not needed - we're custom generating TOML
 
@@ -201,6 +203,11 @@ required-features = ["async"]
 [[example]]
 name = "async_place_order"
 path = "examples/async/place_order.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_wait_for_fill"
+path = "examples/async/wait_for_fill.rs"
 required-features = ["async"]
 
 [[example]]
@@ -458,6 +465,11 @@ required-features = ["sync"]
 [[example]]
 name = "submit_order"
 path = "examples/sync/submit_order.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "wait_for_fill"
+path = "examples/sync/wait_for_fill.rs"
 required-features = ["sync"]
 
 [[example]]

@@ -5,12 +5,13 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
+use super::ConnectionMetadata;
 use crate::accounts::AccountUpdate;
 use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
 use crate::messages::{
-    encode_length, encode_protobuf_message, unknown_message_type_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage,
-    HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, PROTOBUF_MSG_ID,
+    encode_length, encode_protobuf_message, split_message_id, unknown_message_type_notice, IncomingMessages, Notice, OutgoingMessages,
+    ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
@@ -137,6 +138,35 @@ pub trait ConnectionProtocol {
 pub struct AccountInfo {
     pub next_order_id: Option<i32>,
     pub managed_accounts: Option<String>,
+}
+
+/// `receive_account_info` gives up once more than this many frames have
+/// arrived without a complete [`AccountInfo`].
+pub(crate) const MAX_ACCOUNT_INFO_ATTEMPTS: i32 = 100;
+
+impl AccountInfo {
+    /// Takes each field `other` carries. Returns true once both fields are set.
+    pub(crate) fn merge(&mut self, other: AccountInfo) -> bool {
+        if other.next_order_id.is_some() {
+            self.next_order_id = other.next_order_id;
+        }
+        if other.managed_accounts.is_some() {
+            self.managed_accounts = other.managed_accounts;
+        }
+        self.next_order_id.is_some() && self.managed_accounts.is_some()
+    }
+}
+
+impl ConnectionMetadata {
+    /// Copies the fields `info` carries; absent fields leave the current value.
+    pub(crate) fn apply_account_info(&mut self, info: AccountInfo) {
+        if let Some(next_order_id) = info.next_order_id {
+            self.next_order_id = next_order_id;
+        }
+        if let Some(managed_accounts) = info.managed_accounts {
+            self.managed_accounts = managed_accounts;
+        }
+    }
 }
 
 /// Standard connection handler implementation
@@ -317,6 +347,39 @@ pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error>
     Ok(())
 }
 
+/// Handshake reply fields the connection keeps.
+#[derive(Debug)]
+pub(crate) struct HandshakeAck {
+    pub server_version: i32,
+    pub connection_time: Option<OffsetDateTime>,
+    pub time_zone: Option<&'static Tz>,
+}
+
+/// Parses the handshake reply into a [`HandshakeAck`]. A reply that ends in `UnexpectedEof` becomes
+/// [`Error::ConnectionRejected`].
+///
+/// The reply is read as raw text, bypassing `parse_raw_message`, which would
+/// misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
+pub(crate) fn parse_handshake_ack(handler: &ConnectionHandler, ack: Result<Vec<u8>, Error>) -> Result<HandshakeAck, Error> {
+    match ack {
+        Ok(data) => {
+            let raw_string = String::from_utf8_lossy(&data).into_owned();
+            let mut response = ResponseMessage::from(&raw_string);
+            let handshake_data = handler.parse_handshake_response(&mut response)?;
+            let (connection_time, time_zone) = parse_connection_time(&handshake_data.server_time);
+            Ok(HandshakeAck {
+                server_version: handshake_data.server_version,
+                connection_time,
+                time_zone,
+            })
+        }
+        Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => Err(Error::ConnectionRejected(format!(
+            "server may be rejecting connections from this host: {err}"
+        ))),
+        Err(err) => Err(err),
+    }
+}
+
 /// Parse connection time from TWS format
 /// Format: "20230105 22:20:39 PST"
 ///
@@ -365,13 +428,12 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
 /// stream fixtures, which supply bodies directly and skip the length prefix
 /// entirely. It used to index straight past the end and panic the dispatcher.
 pub fn parse_raw_message(data: &[u8]) -> Result<ResponseMessage, Error> {
-    let Some((header, payload)) = data.split_first_chunk::<MESSAGE_ID_LEN>() else {
+    let Some((msg_id, payload)) = split_message_id(data) else {
         return Err(Error::InvalidFrame(format!(
             "frame body of {} bytes cannot hold a message id",
             data.len()
         )));
     };
-    let msg_id = i32::from_be_bytes(*header);
 
     if msg_id > PROTOBUF_MSG_ID {
         let real_type = msg_id - PROTOBUF_MSG_ID;

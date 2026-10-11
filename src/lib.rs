@@ -226,6 +226,9 @@ pub use client::Client;
 pub use client::ClientBuilder;
 
 #[doc(inline)]
+pub use transport::rate_limiter::RateLimiter;
+
+#[doc(inline)]
 pub use messages::{ConnectivityStatus, IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
 
 #[doc(inline)]

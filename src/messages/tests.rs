@@ -1351,6 +1351,37 @@ fn test_outgoing_messages_from_str_comprehensive() {
 }
 
 #[test]
+fn test_outgoing_messages_try_from_round_trips() {
+    for id in -1..=120 {
+        if let Ok(message) = OutgoingMessages::try_from(id) {
+            assert_eq!(message as i32, id);
+        }
+    }
+}
+
+#[test]
+fn test_outgoing_messages_is_cancel() {
+    // Oracle independent of the match: the variant name.
+    for message in (0..=120).filter_map(|id| OutgoingMessages::try_from(id).ok()) {
+        let name = format!("{message:?}");
+        let expected = name.starts_with("Cancel") || matches!(name.as_str(), "RequestGlobalCancel" | "UnsubscribeFromGroupEvents");
+        assert_eq!(message.is_cancel(), expected, "{name}");
+    }
+}
+
+#[test]
+fn test_outgoing_message_type_of_frame() {
+    let proto = encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, b"payload");
+    assert_eq!(outgoing_message_type(&proto), Some(OutgoingMessages::CancelMarketData));
+
+    let text = (OutgoingMessages::RequestMarketData as i32).to_be_bytes();
+    assert_eq!(outgoing_message_type(&text), Some(OutgoingMessages::RequestMarketData));
+
+    assert_eq!(outgoing_message_type(&[0, 0, 0]), None, "short frame");
+    assert_eq!(outgoing_message_type(&encode_protobuf_message(999, b"")), None, "unknown id");
+}
+
+#[test]
 fn test_routes_by_request_id_comprehensive() {
     // Confirm the allow-list covers a representative slice across domains.
     assert!(routes_by_request_id(IncomingMessages::MarketDepthL2));

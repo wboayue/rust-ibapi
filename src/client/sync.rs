@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::client::builders::client_builder::sync_impl::ClientBuilder;
-use crate::connection::common::StartupMessage;
+use crate::client::builders::client_builder::ValidatedPieces;
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
@@ -91,21 +91,14 @@ impl Client {
     /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
     /// Builds the `Connection`, wraps it in a `TcpMessageBus`, and kicks off
     /// the dispatcher thread.
-    pub(crate) fn connect_with_pieces(
-        address: &str,
-        client_id: i32,
-        tcp_no_delay: bool,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-        notice_broadcaster: Arc<NoticeBroadcaster>,
-        max_reconnect_attempts: Option<u32>,
-    ) -> Result<Client, Error> {
+    pub(crate) fn connect_with_pieces(pieces: ValidatedPieces, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
         let connection = Connection::with_pieces(
-            address,
-            client_id,
-            tcp_no_delay,
-            startup_callback,
+            &pieces.address,
+            pieces.client_id,
+            pieces.tcp_no_delay,
+            pieces.startup_callback,
             notice_broadcaster,
-            max_reconnect_attempts,
+            pieces.max_reconnect_attempts,
         )?;
         let connection_metadata = connection.connection_metadata();
 
@@ -118,6 +111,9 @@ impl Client {
         // re-seeds it from the handshake's NextValidId; must be installed
         // before the dispatcher thread starts.
         message_bus.set_order_ids(client.id_manager.clone());
+        if let Some(limiter) = pieces.rate_limiter {
+            message_bus.set_rate_limiter(limiter);
+        }
 
         // Starts thread to read messages from TWS
         message_bus.process_messages(server_version)?;
@@ -177,14 +173,20 @@ impl Client {
         self.server_version
     }
 
-    /// The time of the server when the client connected
+    /// Returns the gateway's clock reading when the client connected, or
+    /// `None` if the zone is unrecognized (see [`time_zone`](Self::time_zone))
+    /// or the reading is malformed.
     pub fn connection_time(&self) -> Option<OffsetDateTime> {
         self.connection_time
     }
 
-    /// Returns the server's time zone, or `None` if the gateway sent a name
-    /// that no alias or IANA zone matches (logged as a warning at connect).
-    /// Map such a name with [`register_timezone_alias`](crate::register_timezone_alias).
+    /// Returns the time zone of the gateway host, from the connection handshake.
+    ///
+    /// Informational: the crate does not convert any data with it. `None` if
+    /// the gateway sent a name that no alias or IANA zone matches (logged as a
+    /// warning at connect). Map such a name with
+    /// [`register_timezone_alias`](crate::register_timezone_alias). See
+    /// [Gateway Time Zone](https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone).
     pub fn time_zone(&self) -> Option<&'static Tz> {
         self.time_zone
     }

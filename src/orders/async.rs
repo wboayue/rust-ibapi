@@ -3,10 +3,13 @@
 use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
-use crate::protocol::{check_version, Features};
-use crate::subscriptions::Subscription;
+use crate::subscriptions::{Subscription, SubscriptionItem};
 use crate::{Client, Error};
+use futures::StreamExt;
 
+use std::time::Duration;
+
+use super::common::fill::FillTracker;
 use super::common::{decoders, encoders, verify};
 use super::*;
 
@@ -148,8 +151,7 @@ impl Client {
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -187,8 +189,7 @@ impl Client {
     /// ```
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order, checked_id.value())?;
-        verify::verify_order_contract(self, contract, checked_id.value())?;
+        verify::verify_order(self, order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
@@ -234,10 +235,6 @@ impl Client {
     /// }
     /// ```
     pub async fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-        if !manual_order_cancel_time.is_empty() {
-            check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
-        }
-
         let order_id = order_id.into().checked()?;
         let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
@@ -263,8 +260,6 @@ impl Client {
     /// }
     /// ```
     pub async fn global_cancel(&self) -> Result<(), Error> {
-        check_version(self.server_version(), Features::REQ_GLOBAL_CANCEL)?;
-
         let message = encoders::encode_global_cancel()?;
         self.send_message(message).await?;
 
@@ -325,8 +320,6 @@ impl Client {
     /// }
     /// ```
     pub async fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
-        check_version(self.server_version(), Features::COMPLETED_ORDERS)?;
-
         let request = encoders::encode_completed_orders(api_only)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
@@ -467,6 +460,112 @@ impl Client {
             self.message_bus.clone(),
             self.decoder_context(),
         ))
+    }
+
+    /// Streams one order's status updates.
+    ///
+    /// Starts with the order's latest status, if this client has seen one
+    /// (the latest statuses of the 10,000 most recent orders are kept), then
+    /// yields each new [`OrderStatus`] as TWS sends it. The stream does not end
+    /// on its own when the order does; stop reading, or see
+    /// [`wait_for_fill`](Self::wait_for_fill) for the common case.
+    ///
+    /// Takes nothing from [`order_update_stream`](Self::order_update_stream) or
+    /// a [`place_order`](Self::place_order) subscription: all may be open at
+    /// once, as may several streams on one order. Nothing is sent to TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::subscriptions::SubscriptionItemStreamExt;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let order_id = client.order(&contract).buy(100).limit(150.0).submit().await.expect("order submission failed");
+    ///
+    ///     let mut statuses = client.order_status_stream(order_id).await.expect("stream failed").filter_data();
+    ///     while let Some(status) = statuses.next().await {
+    ///         let status = status.expect("stream error");
+    ///         println!("{}: {}/{} filled", status.status, status.filled, status.filled + status.remaining);
+    ///         if status.status.is_terminal() {
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn order_status_stream(&self, order_id: impl Into<OrderId>) -> Result<Subscription<OrderStatus>, Error> {
+        let internal_subscription = self.message_bus.create_order_status_subscription(order_id.into()).await?;
+        Ok(Subscription::new_from_internal_simple(
+            internal_subscription,
+            self.message_bus.clone(),
+            self.decoder_context(),
+        ))
+    }
+
+    /// Waits until an order fills or ends, or `timeout` elapses.
+    ///
+    /// Returns [`OrderOutcome::Filled`] when the order filled completely,
+    /// [`OrderOutcome::Ended`] when it was cancelled or became inactive first,
+    /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
+    /// out. A timeout leaves the order working; cancel it yourself if needed.
+    ///
+    /// Built on [`order_status_stream`](Self::order_status_stream), so an
+    /// order that already finished before the call is reported at once, as
+    /// long as this client saw its status since connecting. An order whose
+    /// statuses never reach this client (placed by another client, or
+    /// finished before this connection) waits out the timeout.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ConnectionReset`] if the connection drops during the wait,
+    /// [`Error::Shutdown`] if the client shuts down.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OrderOutcome;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     let order_id = client.order(&contract).buy(100).market().submit().await.expect("order submission failed");
+    ///
+    ///     match client.wait_for_fill(order_id, Duration::from_secs(30)).await.expect("wait failed") {
+    ///         OrderOutcome::Filled(status) => println!("filled {} @ {:?}", status.filled, status.average_fill_price),
+    ///         OrderOutcome::Ended(status) => println!("ended {:?} after {} filled", status.status, status.filled),
+    ///         OrderOutcome::TimedOut(status) => println!("still working: {status:?}"),
+    ///     }
+    /// }
+    /// ```
+    pub async fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
+        let mut statuses = self.order_status_stream(order_id).await?;
+        let mut tracker = FillTracker::default();
+
+        let wait = async {
+            while let Some(item) = statuses.next().await {
+                if let SubscriptionItem::Data(status) = item? {
+                    if let Some(outcome) = tracker.observe(status) {
+                        return Ok(outcome);
+                    }
+                }
+            }
+            Err(Error::UnexpectedEndOfStream)
+        };
+        match tokio::time::timeout(timeout, wait).await {
+            Ok(result) => result,
+            Err(_) => Ok(tracker.timed_out()),
+        }
     }
 
     /// Exercise or lapse an option position.
