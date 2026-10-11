@@ -53,62 +53,57 @@ that's the canonical home for builder usage. This section is just the pointer.
 
 ### Request-ID Requests
 
-For a streaming request routed by request id, use `request_helpers::request_with_id`:
-it mints the request id and hands the raw id to your encoder. Gate a feature
-newer than the connection floor with `check_version` (see
-[Protocol Version Checking](#protocol-version-checking)) before calling it:
+For a streaming request routed by request id, build on `client.request()`: the
+`RequestBuilder` holds the minted id (`builder.request_id()` for the encoder).
+Gate a feature newer than the connection floor with `check_version` (see
+[Protocol Version Checking](#protocol-version-checking)) first:
 
 ```rust
 // Sync mode (in domain/sync.rs as impl Client block)
 impl Client {
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code))
+        let builder = self.request();
+        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        builder.send(request)
     }
 }
 
 // Async mode (in domain/async.rs as impl Client block)
 impl Client {
     pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code)).await
+        let builder = self.request();
+        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        builder.send(request).await
     }
 }
 ```
 
-When the helper doesn't fit, build on `client.request()` directly: the
-`RequestBuilder` holds the minted id (`builder.request_id()` for the encoder)
-and sends with `send`, `send_capped` or `send_with_context`. `send_capped`
-takes a builder's `buffer_limit` and reads the cap's end markers from the
-decoder's `StreamDecoder::END_MESSAGES` (a test checks the list matches the
-`decode` arms that end the stream). With none, only an error ends a capped
-stream. A builder that exposes `request_id()` before sending mints the id
-in its constructor and sends with `client.request_with_id(id)` instead.
+Besides `send`, the builder sends with `send_capped` or `send_with_context`.
+`send_capped` takes a builder's `buffer_limit` and reads the cap's end markers
+from the decoder's `StreamDecoder::END_MESSAGES` (a test checks the list
+matches the `decode` arms that end the stream). With none, only an error ends
+a capped stream. A builder that exposes `request_id()` before sending mints
+the id in its constructor and sends with `client.request_with_id(id)` instead.
 
 ### Shared-Channel Requests
 
-For requests routed by message type (no request id), use
-`request_helpers::shared_subscription`:
+For requests routed by message type (no request id), send through
+`client.subscription()`:
 
 ```rust
 // Sync mode (in domain/sync.rs)
 impl Client {
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        request_helpers::blocking::shared_subscription(
-            self,
-            OutgoingMessages::RequestPositions,
-            encoders::encode_request_positions,
-        )
+        let request = encoders::encode_request_positions()?;
+        self.subscription().send_shared(OutgoingMessages::RequestPositions, request)
     }
 }
 
 // Async mode (in domain/async.rs)
 impl Client {
     pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        request_helpers::shared_subscription(
-            self,
-            OutgoingMessages::RequestPositions,
-            encoders::encode_request_positions,
-        )
-        .await
+        let request = encoders::encode_request_positions()?;
+        self.subscription().send_shared(OutgoingMessages::RequestPositions, request).await
     }
 }
 ```

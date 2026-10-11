@@ -5,10 +5,9 @@ use std::time::Duration;
 
 use time::OffsetDateTime;
 
-use crate::client::blocking::{ClientRequestBuilders, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
-use crate::protocol::{check_version, Features};
 use crate::{client::sync::Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
@@ -48,8 +47,6 @@ impl Client {
     /// println!("server time to the millisecond: {server_time:?}");
     /// ```
     pub fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
-        check_version(self.server_version, Features::CURRENT_TIME_IN_MILLIS)?;
-
         request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::RequestCurrentTimeInMillis,
@@ -78,7 +75,8 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        request_helpers::blocking::shared_subscription(self, OutgoingMessages::RequestPositions, encoders::encode_request_positions)
+        let request = encoders::encode_request_positions()?;
+        self.subscription().send_shared(OutgoingMessages::RequestPositions, request)
     }
 
     /// Subscribes to [PositionUpdateMulti] updates for account and/or model.
@@ -104,8 +102,6 @@ impl Client {
     /// }
     /// ```
     pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PositionUpdateMulti>, Error> {
-        check_version(self.server_version(), Features::MODELS_SUPPORT)?;
-
         let builder = self.request();
         let request = encoders::encode_request_positions_multi(builder.request_id(), account, model_code)?;
 
@@ -133,7 +129,9 @@ impl Client {
     /// }
     /// ```
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl(id, account, model_code))
+        let builder = self.request();
+        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        builder.send(request)
     }
 
     /// Requests real time updates for daily PnL of individual positions.
@@ -161,7 +159,9 @@ impl Client {
     /// }
     /// ```
     pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
-        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_pnl_single(id, account, contract_id, model_code))
+        let builder = self.request();
+        let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
+        builder.send(request)
     }
 
     /// Requests a specific account's summary. Subscribes to the account summary as presented in the TWS' Account Summary tab. Data received is specified by using a specific tags value.
@@ -195,7 +195,9 @@ impl Client {
     /// }
     /// ```
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        request_helpers::blocking::request_with_id(self, |id| encoders::encode_request_account_summary(id, group, tags))
+        let builder = self.request();
+        let request = encoders::encode_request_account_summary(builder.request_id(), group, tags)?;
+        builder.send(request)
     }
 
     /// Subscribe to account summary updates as complete snapshots.
@@ -335,8 +337,6 @@ impl Client {
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
-        check_version(self.server_version(), Features::MODELS_SUPPORT)?;
-
         let builder = self.request();
         let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
 
@@ -376,8 +376,6 @@ impl Client {
     /// println!("family codes: {codes:?}")
     /// ```
     pub fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        check_version(self.server_version, Features::FAMILY_CODES)?;
-
         request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::RequestFamilyCodes,
@@ -402,8 +400,6 @@ impl Client {
     /// }
     /// ```
     pub fn soft_dollar_tiers(&self) -> Result<Vec<crate::orders::SoftDollarTier>, Error> {
-        check_version(self.server_version, Features::SOFT_DOLLAR_TIER)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             encoders::encode_request_soft_dollar_tiers,
@@ -424,8 +420,6 @@ impl Client {
     /// println!("white branding id: {}", info.white_branding_id);
     /// ```
     pub fn user_info(&self) -> Result<UserInfo, Error> {
-        check_version(self.server_version, Features::USER_INFO)?;
-
         request_helpers::blocking::one_shot_by_request_id(self, encoders::encode_request_user_info, expect_proto(decoders::decode_user_info_proto))
     }
 
@@ -472,8 +466,6 @@ impl Client {
     /// println!("{}", result.text);
     /// ```
     pub fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
-        check_version(self.server_version, Features::REPLACE_FA_END)?;
-
         request_helpers::blocking::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
@@ -514,8 +506,6 @@ impl Client {
     /// println!("{}", challenge.api_data);
     /// ```
     pub fn verify_request(&self, api_name: &str, api_version: &str) -> Result<VerificationChallenge, Error> {
-        check_version(self.server_version, Features::LINKING)?;
-
         request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::VerifyRequest,
@@ -541,8 +531,6 @@ impl Client {
     /// }
     /// ```
     pub fn verify_message(&self, api_data: &str) -> Result<VerificationResult, Error> {
-        check_version(self.server_version, Features::LINKING)?;
-
         request_helpers::blocking::one_shot_shared(
             self,
             OutgoingMessages::VerifyMessage,
