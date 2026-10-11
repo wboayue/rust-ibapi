@@ -1224,3 +1224,17 @@ async fn wait_for_fill_fails_on_connection_reset() {
 
     assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
 }
+
+#[tokio::test]
+async fn order_status_stream_yields_statuses_and_writes_nothing() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0)),
+        order_status_response(order_status().status(OrderStatusKind::Filled).filled(100.0).remaining(0.0)),
+    ]);
+
+    let statuses = crate::subscriptions::SubscriptionItemStreamExt::filter_data(client.order_status_stream(13).await.unwrap());
+    let filled: Vec<f64> = statuses.take(2).map(|status| status.unwrap().filled).collect().await;
+
+    assert_eq!(filled, [40.0, 100.0]);
+    assert_eq!(request_message_count(&message_bus), 0);
+}

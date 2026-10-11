@@ -1,6 +1,6 @@
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::common::decoders;
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -39,6 +39,17 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
             IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(message)?)),
             IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(message)?)),
+            _ => Err(Error::unexpected_response(message)),
+        }
+    }
+}
+
+impl StreamDecoder<OrderStatus> for OrderStatus {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus];
+
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OrderStatus, Error> {
+        match message.message_type() {
+            IncomingMessages::OrderStatus => decoders::decode_order_status(message),
             _ => Err(Error::unexpected_response(message)),
         }
     }

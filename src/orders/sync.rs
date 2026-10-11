@@ -1,18 +1,18 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossbeam::channel::RecvTimeoutError;
-
 use super::common::fill::FillTracker;
 use super::common::{decoders, encoders, verify};
 use super::{
-    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderUpdate, Orders, PlaceOrder,
+    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderStatus, OrderUpdate, Orders,
+    PlaceOrder,
 };
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
+use crate::subscriptions::SubscriptionItem;
 use crate::{client::sync::Client, server_versions, Error};
 
 impl Client {
@@ -520,6 +520,42 @@ impl Client {
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 
+    /// Streams one order's status updates.
+    ///
+    /// Starts with the order's latest status, if this client has seen one
+    /// (the latest statuses of the 10,000 most recent orders are kept), then
+    /// yields each new [`OrderStatus`] as TWS sends it. The stream does not end
+    /// on its own when the order does; stop reading, or see
+    /// [`wait_for_fill`](Self::wait_for_fill) for the common case.
+    ///
+    /// Takes nothing from [`order_update_stream`](Self::order_update_stream) or
+    /// a [`place_order`](Self::place_order) subscription: all may be open at
+    /// once, as may several streams on one order. Nothing is sent to TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    /// let order_id = client.order(&contract).buy(100).limit(150.0).submit().expect("order submission failed");
+    ///
+    /// let statuses = client.order_status_stream(order_id).expect("stream failed");
+    /// for status in statuses.iter_data() {
+    ///     let status = status.expect("stream error");
+    ///     println!("{}: {}/{} filled", status.status, status.filled, status.filled + status.remaining);
+    ///     if status.status.is_terminal() {
+    ///         break;
+    ///     }
+    /// }
+    /// ```
+    pub fn order_status_stream(&self, order_id: impl Into<OrderId>) -> Result<Subscription<OrderStatus>, Error> {
+        let subscription = self.message_bus.create_order_status_subscription(order_id.into())?;
+        Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+    }
+
     /// Waits until an order fills or ends, or `timeout` elapses.
     ///
     /// Returns [`OrderOutcome::Filled`] when the order filled completely,
@@ -527,16 +563,11 @@ impl Client {
     /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
     /// out. A timeout leaves the order working; cancel it yourself if needed.
     ///
-    /// An order that already finished before the call is reported at once, as
-    /// long as its status reached this client since it connected. Statuses
-    /// only reach the client that placed the order (or client 0 with auto
-    /// bind), so an order placed elsewhere, or finished before this
-    /// connection, waits out the timeout.
-    ///
-    /// Uses neither [`order_update_stream`](Self::order_update_stream) nor the
-    /// [`place_order`](Self::place_order) subscription, and takes nothing from
-    /// them: both may be open at the same time, as may several waits on one
-    /// order.
+    /// Built on [`order_status_stream`](Self::order_status_stream), so an
+    /// order that already finished before the call is reported at once, as
+    /// long as this client saw its status since connecting. An order whose
+    /// statuses never reach this client (placed by another client, or
+    /// finished before this connection) waits out the timeout.
     ///
     /// # Errors
     ///
@@ -564,22 +595,27 @@ impl Client {
     /// }
     /// ```
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
-        let watch = self.message_bus.watch_order_status(order_id.into())?;
+        let statuses = self.order_status_stream(order_id)?;
         let mut tracker = FillTracker::default();
-
-        // No deadline for a timeout too large to represent; `recv_timeout`
-        // then waits without one.
+        // `None` for a timeout too large to represent: wait without one.
         let deadline = Instant::now().checked_add(timeout);
         loop {
-            let remaining = deadline.map_or(timeout, |deadline| deadline.saturating_duration_since(Instant::now()));
-            match watch.receiver.recv_timeout(remaining) {
-                Ok(item) => {
-                    if let Some(outcome) = tracker.on_item(item)? {
+            let item = match deadline {
+                Some(deadline) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
+                None => statuses.next(),
+            };
+            match item {
+                Some(Ok(SubscriptionItem::Data(status))) => {
+                    if let Some(outcome) = tracker.observe(status) {
                         return Ok(outcome);
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => return Ok(tracker.timed_out()),
-                Err(RecvTimeoutError::Disconnected) => return Err(Error::UnexpectedEndOfStream),
+                Some(Ok(SubscriptionItem::Notice(_))) => {}
+                Some(Err(error)) => return Err(error),
+                // `next_timeout` gives `None` at the deadline; before it, the
+                // stream ended.
+                None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Ok(tracker.timed_out()),
+                None => return Err(Error::UnexpectedEndOfStream),
             }
         }
     }

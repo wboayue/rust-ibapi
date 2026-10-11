@@ -1333,7 +1333,7 @@ fn test_order_update_stream_ends_on_shutdown() -> Result<(), Error> {
 
     let item = updates.next_timeout_routed(TICK);
     assert!(matches!(item, Some(RoutedItem::Error(Error::Shutdown))), "got: {item:?}");
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "slot should be released");
+    assert!(bus.order_taps.updates_lease().is_none(), "slot should be released");
     Ok(())
 }
 
@@ -2417,7 +2417,7 @@ fn test_cleanup_thread_processes_drop_signals() -> Result<(), Error> {
 
     assert!(!bus.requests.contains(&request_id), "request not cleaned");
     assert!(!bus.orders.contains(&order_id), "order not cleaned");
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "order update stream not cleared");
+    assert!(bus.order_taps.updates_lease().is_none(), "order update stream not cleared");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -2558,15 +2558,16 @@ fn test_cleanup_identity_guards() -> Result<(), Error> {
     bus.clean_order(order_id, &registered);
     assert!(!bus.orders.contains(&order_id), "matching lease failed to remove the registration");
 
-    let _stream_sub = bus.create_order_update_subscription()?;
+    let stream_sub = bus.create_order_update_subscription()?;
     bus.clear_order_update_stream(&foreign);
     assert!(
-        bus.order_update_stream.lock().unwrap().is_some(),
+        bus.order_taps.updates_lease().is_some(),
         "foreign lease cleared a live order update stream"
     );
-    let registered = bus.order_update_stream.lock().unwrap().as_ref().unwrap().lease.clone();
+    let registered = bus.order_taps.updates_lease().unwrap();
+    drop(stream_sub);
     bus.clear_order_update_stream(&registered);
-    assert!(bus.order_update_stream.lock().unwrap().is_none(), "matching lease failed to clear");
+    assert!(bus.order_taps.updates_lease().is_none(), "matching lease failed to clear");
 
     Ok(())
 }
@@ -3568,15 +3569,7 @@ fn sender_hash_recovers_from_a_poisoned_lock() {
 fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let stream_sub = bus.create_order_update_subscription()?;
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = bus.order_update_stream.lock().unwrap();
-                panic!("poison the order-update slot");
-            })
-            .join();
-    });
-    assert!(bus.order_update_stream.is_poisoned());
+    bus.order_taps.poison();
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::OpenOrder as i32,
@@ -3588,9 +3581,10 @@ fn test_order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
     bus.dispatch()?;
     assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
 
-    let registered = lock_slot(&bus.order_update_stream).as_ref().unwrap().lease.clone();
+    let registered = bus.order_taps.updates_lease().unwrap();
+    drop(stream_sub);
     bus.clear_order_update_stream(&registered);
-    assert!(lock_slot(&bus.order_update_stream).is_none(), "poisoned slot not cleared");
+    assert!(bus.order_taps.updates_lease().is_none(), "poisoned slot not cleared");
     Ok(())
 }
 
@@ -3656,63 +3650,81 @@ fn test_throttled_shared_subscribe_does_not_hold_up_shared_cancel() -> Result<()
     Ok(())
 }
 
-/// A status that arrived before the wait began — an order filled between
-/// `submit()` and `wait_for_fill` — is the first item the waiter receives.
+/// A status that arrived before the stream opened — an order filled between
+/// `submit()` and `wait_for_fill` — is the stream's first item.
 #[test]
-fn test_order_status_watch_sees_status_from_before_it() -> Result<(), Error> {
+fn test_order_status_stream_starts_with_earlier_status() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
     stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
     bus.dispatch()?;
 
-    let watch = bus.watch_order_status(OrderId::from(7))?;
-    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
     Ok(())
 }
 
-/// The waiter gets a copy: the `place_order` subscription for the same order
+/// The stream gets a copy: the `place_order` subscription for the same order
 /// and the order-update stream still receive the frame.
 #[test]
-fn test_order_status_watch_takes_nothing_from_other_routes() -> Result<(), Error> {
+fn test_order_status_stream_takes_nothing_from_other_routes() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
     let order = bus.send_order_request(OrderId::from(7), &[])?;
     let updates = bus.create_order_update_subscription()?;
-    let watch = bus.watch_order_status(OrderId::from(7))?;
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
 
     stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
-    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
+    assert_eq!(statuses.next_timeout(TICK).expect("status stream got no message")?.order_id(), Some(7));
     assert_eq!(order.next_timeout(TICK).expect("order route got no message")?.order_id(), Some(7));
     assert_eq!(updates.next_timeout(TICK).expect("update stream got no message")?.order_id(), Some(7));
     Ok(())
 }
 
-/// A status for an order no route claims still reaches the waiter.
+/// A status for an order no route claims still reaches its status stream.
 #[test]
-fn test_order_status_watch_sees_unrouted_status() -> Result<(), Error> {
+fn test_order_status_stream_sees_unrouted_status() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    let watch = bus.watch_order_status(OrderId::from(7))?;
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
     stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
-    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Response(m)) if m.order_id() == Some(7)));
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
     Ok(())
 }
 
 #[test]
-fn test_order_status_watch_ends_on_reset_and_shutdown() -> Result<(), Error> {
+fn test_order_status_stream_ends_on_reset_and_shutdown() -> Result<(), Error> {
     let (_stream, bus) = make_bus();
 
-    let watch = bus.watch_order_status(OrderId::from(7))?;
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
     bus.reset();
-    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Error(Error::ConnectionReset))));
+    assert!(matches!(statuses.next_timeout(TICK), Some(Err(Error::ConnectionReset))));
 
-    let watch = bus.watch_order_status(OrderId::from(7))?;
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
     bus.request_shutdown();
-    assert!(matches!(watch.receiver.recv_timeout(TICK), Ok(RoutedItem::Error(Error::Shutdown))));
-    assert!(matches!(bus.watch_order_status(OrderId::from(7)), Err(Error::Shutdown)));
+    assert!(matches!(statuses.next_timeout(TICK), Some(Err(Error::Shutdown))));
+    assert!(matches!(bus.create_order_status_subscription(OrderId::from(7)), Err(Error::Shutdown)));
+    Ok(())
+}
+
+/// Dropping a status stream (as a returning `wait_for_fill` does) releases
+/// its registration, and the order's entry with it.
+#[test]
+fn test_dropped_order_status_stream_is_released() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    assert_eq!(bus.order_taps.status_streams(OrderId::from(7)), 1);
+    drop(statuses);
+    drain_cleanup_signals(&bus);
+
+    assert!(!bus.order_taps.has_status_entry(OrderId::from(7)), "status stream outlived its drop");
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
     Ok(())
 }

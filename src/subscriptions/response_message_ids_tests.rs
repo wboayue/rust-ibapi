@@ -161,7 +161,7 @@ fn check_all() -> Roster {
     use crate::market_data::historical::{HistoricalBarUpdate, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
     use crate::news::{NewsArticle, NewsBulletin};
-    use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
+    use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
     use crate::scanner::ScannerData;
     use crate::wsh::{WshEventData, WshMetadata};
 
@@ -188,6 +188,7 @@ fn check_all() -> Roster {
     check_stream::<NewsArticle>(&mut roster);
     check_stream::<NewsBulletin>(&mut roster);
     check_stream::<CancelOrder>(&mut roster);
+    check_stream::<OrderStatus>(&mut roster);
     check_stream::<Executions>(&mut roster);
     check_stream::<ExerciseOptions>(&mut roster);
     check_stream::<OrderUpdate>(&mut roster);

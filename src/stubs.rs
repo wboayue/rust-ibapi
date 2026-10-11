@@ -57,6 +57,10 @@ pub(crate) struct MessageBusStub {
     /// logging a warning per subscription.
     #[cfg(feature = "sync")]
     signals: (channel::Sender<Signal>, channel::Receiver<Signal>),
+    /// Senders of stubbed status streams, held so a stream stays open after
+    /// its scripted items, as a real one does until its order ends.
+    #[cfg(feature = "async")]
+    status_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -79,6 +83,8 @@ impl Default for MessageBusStub {
             runtime: tokio::runtime::Handle::try_current().ok(),
             #[cfg(feature = "sync")]
             signals: channel::unbounded(),
+            #[cfg(feature = "async")]
+            status_senders: Mutex::default(),
         }
     }
 }
@@ -238,12 +244,19 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn watch_order_status(&self, _order_id: OrderId) -> Result<crate::transport::order_status_board::SyncOrderStatusWatch, Error> {
+    fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
+        // Nothing is written, so nothing is recorded.
         let (sender, receiver) = channel::unbounded();
         for item in self.routed_items_for_request() {
             sender.send(item).unwrap();
         }
-        Ok(crate::transport::order_status_board::OrderStatusWatch::detached(sender, receiver))
+        Ok(SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals.0.clone())
+            .lease(Lease::new())
+            .order_status(order_id)
+            .build())
     }
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
@@ -380,12 +393,14 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn watch_order_status(&self, _order_id: OrderId) -> Result<crate::transport::order_status_board::AsyncOrderStatusWatch, Error> {
-        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    async fn create_order_status_subscription(&self, _order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
+        // Nothing is written, so nothing is recorded.
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         for item in self.routed_items_for_request() {
             sender.send(item).unwrap();
         }
-        Ok(crate::transport::order_status_board::OrderStatusWatch::detached(sender, receiver))
+        self.status_senders.lock().unwrap().push(sender);
+        Ok(AsyncInternalSubscription::new(receiver))
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {

@@ -39,7 +39,7 @@ use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessa
 use crate::Error;
 
 use super::common::{log_orphan, report_unroutable_frame, Lease, LeaseRef};
-use super::order_status_board::{AsyncOrderStatusWatch, OrderStatusBoard};
+use super::order_taps::OrderTaps;
 use super::rate_limiter::RateLimiter;
 use super::routing::{
     classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
@@ -160,6 +160,7 @@ pub enum CleanupSignal {
     Order(OrderId, LeaseRef),
     Shared(SharedTicket),
     OrderUpdateStream(LeaseRef),
+    OrderStatus(OrderId, LeaseRef),
 }
 
 /// The registration a leased subscription releases: with the lease, it builds
@@ -169,6 +170,7 @@ pub(crate) enum RouteKey {
     Request(RequestId),
     Order(OrderId),
     OrderUpdateStream,
+    OrderStatus(OrderId),
 }
 
 impl RouteKey {
@@ -177,6 +179,7 @@ impl RouteKey {
             RouteKey::Request(request_id) => CleanupSignal::Request(request_id, lease),
             RouteKey::Order(order_id) => CleanupSignal::Order(order_id, lease),
             RouteKey::OrderUpdateStream => CleanupSignal::OrderUpdateStream(lease),
+            RouteKey::OrderStatus(order_id) => CleanupSignal::OrderStatus(order_id, lease),
         }
     }
 }
@@ -221,9 +224,9 @@ pub trait AsyncMessageBus: Send + Sync {
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
-    /// Wait on `order_id`'s `OrderStatus` frames, alongside their normal
-    /// routing. Nothing is written.
-    fn watch_order_status(&self, order_id: OrderId) -> Result<AsyncOrderStatusWatch, Error>;
+    /// A stream of `order_id`'s `OrderStatus` frames, copied alongside their
+    /// normal routing and starting with the latest one seen. Nothing is written.
+    async fn create_order_status_subscription(&self, order_id: OrderId) -> Result<AsyncInternalSubscription, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream;
 
@@ -447,12 +450,6 @@ impl Drop for AsyncInternalSubscription {
     }
 }
 
-/// Lock the order-update slot, recovering from poisoning: the slot holds no
-/// invariant a panic could break.
-fn lock_slot(slot: &std::sync::Mutex<Option<Route>>) -> std::sync::MutexGuard<'_, Option<Route>> {
-    slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     connection: Arc<AsyncConnection<S>>,
@@ -463,11 +460,9 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// order subscription is cleaned up.
     executions: Arc<SenderHash<String>>,
     shared_channels: SharedChannels,
-    /// Optional channel for order update stream. A std lock, like the
-    /// registries', so shutdown can empty it from `Drop`.
-    order_update_stream: Arc<std::sync::Mutex<Option<Route>>>,
-    /// Every `OrderStatus` frame, fanned out to `wait_for_fill` waiters.
-    order_statuses: Arc<OrderStatusBoard<mpsc::UnboundedSender<RoutedItem>>>,
+    /// The order-update stream and the per-order status streams. A std lock
+    /// inside, like the registries', so shutdown can close it from `Drop`.
+    order_taps: Arc<OrderTaps<broadcast::Sender<RoutedItem>>>,
     /// Capacity of the market-data channels this bus creates, and the
     /// order-class floors' override when larger (see [`ChannelClass`]).
     /// Default `BROADCAST_CHANNEL_CAPACITY`; see `ClientBuilder::channel_capacity`.
@@ -530,8 +525,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             orders: Arc::new(SenderHash::new()),
             executions: Arc::new(SenderHash::new()),
             shared_channels: SharedChannels::new(|request| ChannelClass::of_shared(request).capacity(channel_capacity)),
-            order_update_stream: Arc::new(std::sync::Mutex::new(None)),
-            order_statuses: Arc::default(),
+            order_taps: Arc::default(),
             channel_capacity,
             cleanup_sender,
             #[cfg(test)]
@@ -548,7 +542,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let requests = message_bus.requests.clone();
         let orders = message_bus.orders.clone();
         let executions = message_bus.executions.clone();
-        let order_update_stream = message_bus.order_update_stream.clone();
+        let order_taps = message_bus.order_taps.clone();
         #[cfg(test)]
         let cleanup_gate = message_bus.cleanup_gate.clone();
 
@@ -577,13 +571,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                         debug!("Subscription for shared channel {:?} ended (channel remains active)", ticket.message_type);
                     }
                     CleanupSignal::OrderUpdateStream(lease) => {
-                        let mut stream = lock_slot(&order_update_stream);
-                        let removed = stream.as_ref().is_some_and(|route| route.released(&lease));
-                        if removed {
-                            *stream = None;
-                        }
+                        let removed = order_taps.release_updates(&lease);
                         debug!("cleanup order update stream: removed={removed}");
                     }
+                    CleanupSignal::OrderStatus(order_id, lease) => order_taps.release_status(order_id, &lease),
                 }
             }
         });
@@ -811,7 +802,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // sessions, so they are not closed.
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts().await;
-        self.order_statuses.reset();
+        self.order_taps.reset();
     }
 
     /// End every subscription with `Error::Shutdown`, then close the channels.
@@ -831,12 +822,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // Execution aliases hold sender clones; clear them or the channels stay open.
         self.executions.clear();
         self.shared_channels.close(|| Error::Shutdown.into());
-        // After the flag: `create_order_update_subscription` checks it under
-        // the same lock, so no stream can register once this slot is emptied.
-        if let Some(route) = lock_slot(&self.order_update_stream).take() {
-            let _ = route.sender.send(Error::Shutdown.into());
-        }
-        self.order_statuses.close();
+        self.order_taps.close();
 
         self.connection.notice_broadcaster.close();
     }
@@ -895,7 +881,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
-        self.order_statuses.publish(&message);
+        self.order_taps.publish_status(&message);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {}
@@ -1061,15 +1047,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     fn send_order_update_item(&self, item: RoutedItem) -> bool {
-        let order_update_stream = lock_slot(&self.order_update_stream);
-        if let Some(route) = order_update_stream.as_ref() {
-            if let Err(e) = route.sender.send(item) {
-                warn!("error sending to order update stream: {e}");
-                return false;
-            }
-            return true;
-        }
-        false
+        self.order_taps.send_update(item)
     }
 
     // Registers a subscription of `message_type` and writes its request;
@@ -1141,32 +1119,17 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         self.write_message(&message).await
     }
 
-    fn watch_order_status(&self, order_id: OrderId) -> Result<AsyncOrderStatusWatch, Error> {
-        self.order_statuses.watch(order_id)
+    async fn create_order_status_subscription(&self, order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
+        let capacity = ChannelClass::Order.capacity(self.channel_capacity);
+        let (_, receiver, lease) = self.order_taps.subscribe_status(order_id, capacity)?;
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
+            .leased(lease, RouteKey::OrderStatus(order_id))
+            .class(ChannelClass::Order))
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
-        let mut order_update_stream = lock_slot(&self.order_update_stream);
-
-        // `request_shutdown` sets the flag before emptying this slot under the
-        // same lock, so no stream can register past shutdown.
-        if self.shutdown.is_requested() {
-            return Err(Error::Shutdown);
-        }
-
-        // A registration with a dead lease is a dropped stream whose cleanup
-        // signal has not been processed yet (see `SenderHash::release`);
-        // replace it rather than refusing, so drop-then-recreate never races
-        // the cleanup task.
-        if order_update_stream.as_ref().is_some_and(|route| route.lease.is_live()) {
-            return Err(Error::AlreadySubscribed);
-        }
-
-        let (sender, receiver) = broadcast::channel(ChannelClass::OrderStream.capacity(self.channel_capacity));
-        let lease = Lease::new();
-
-        *order_update_stream = Some(Route::unbounded(sender, lease.downgrade()));
-
+        let capacity = ChannelClass::OrderStream.capacity(self.channel_capacity);
+        let (_, receiver, lease) = self.order_taps.subscribe_updates(capacity)?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
             .class(ChannelClass::OrderStream))

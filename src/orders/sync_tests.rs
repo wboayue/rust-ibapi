@@ -1270,3 +1270,17 @@ fn wait_for_fill_fails_on_connection_reset() {
 
     assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
 }
+
+#[test]
+fn order_status_stream_yields_statuses_and_writes_nothing() {
+    let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        order_status_response(order_status().status(OrderStatusKind::Submitted).filled(40.0).remaining(60.0)),
+        order_status_response(order_status().status(OrderStatusKind::Filled).filled(100.0).remaining(0.0)),
+    ]);
+
+    let statuses = client.order_status_stream(13).unwrap();
+    let filled: Vec<f64> = statuses.iter_data().take(2).map(|status| status.unwrap().filled).collect();
+
+    assert_eq!(filled, [40.0, 100.0]);
+    assert_eq!(request_message_count(&message_bus), 0);
+}

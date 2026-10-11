@@ -18,7 +18,7 @@ use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
 use super::common::{log_orphan, report_unroutable_frame, validate_frame_length, Lease, LeaseRef};
-use super::order_status_board::{OrderStatusBoard, SyncOrderStatusWatch};
+use super::order_taps::OrderTaps;
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
 use super::routing::{
@@ -73,7 +73,7 @@ fn backlog_watermark_crossed(depth: usize) -> bool {
 }
 
 /// Warn when a queue's depth crosses a watermark; `label` names the queue.
-fn warn_if_backlogged(label: std::fmt::Arguments<'_>, depth: usize) {
+pub(super) fn warn_if_backlogged(label: std::fmt::Arguments<'_>, depth: usize) {
     if backlog_watermark_crossed(depth) {
         warn!("{label} at {depth} messages and growing — consumer is stalling");
     }
@@ -305,12 +305,6 @@ impl NoticeBroadcaster {
     }
 }
 
-/// Lock the order-update slot, recovering from poisoning: the slot holds no
-/// invariant a panic could break.
-fn lock_slot(slot: &Mutex<Option<Entry<RoutedItem>>>) -> MutexGuard<'_, Option<Entry<RoutedItem>>> {
-    slot.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
 #[derive(Debug)]
 pub struct TcpMessageBus<S: Stream> {
     connection: Connection<S>,
@@ -333,9 +327,8 @@ pub struct TcpMessageBus<S: Stream> {
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
-    order_update_stream: Mutex<Option<Entry<RoutedItem>>>,
-    /// Every `OrderStatus` frame, fanned out to `wait_for_fill` waiters.
-    order_statuses: Arc<OrderStatusBoard<Sender<RoutedItem>>>,
+    /// The order-update stream and the per-order status streams.
+    order_taps: OrderTaps<Sender<RoutedItem>>,
     /// Session state, and what `wait_connected` blocks on.
     connection_state: ConnectionSignal,
 }
@@ -360,8 +353,7 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown,
             order_ids: OnceLock::new(),
             rate_limiter: OnceLock::new(),
-            order_update_stream: Mutex::new(None),
-            order_statuses: Arc::default(),
+            order_taps: OrderTaps::default(),
             connection_state: ConnectionSignal::default(),
         })
     }
@@ -399,13 +391,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.connection_state.shutdown();
         self.shutdown.request();
 
-        // After the flag: `create_order_update_subscription` checks it under
-        // the same lock, so no stream can register once this slot is emptied.
-        // The subscription holds a sender clone, so only a sent item ends it.
-        if let Some(entry) = lock_slot(&self.order_update_stream).take() {
-            let _ = entry.sender.send(Error::Shutdown.into());
-        }
-        self.order_statuses.close();
+        self.order_taps.close();
 
         // bounded(1) + try_send: if a shutdown is already pending,
         // Err(Full) is the desired no-op (idempotent across duplicate calls).
@@ -473,7 +459,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.shared_channels.reset_counts();
         // Aliases of the routes just failed.
         self.executions.clear();
-        self.order_statuses.reset();
+        self.order_taps.reset();
     }
 
     // The three cleanup handlers below remove a registration only when it
@@ -508,11 +494,7 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn clear_order_update_stream(&self, lease: &LeaseRef) {
-        let mut stream = lock_slot(&self.order_update_stream);
-        let removed = stream.as_ref().is_some_and(|registered| registered.lease.is(lease));
-        if removed {
-            *stream = None;
-        }
+        let removed = self.order_taps.release_updates(lease);
         debug!("cleanup order_update_stream: removed={removed}");
     }
 
@@ -705,7 +687,7 @@ impl<S: Stream> TcpMessageBus<S> {
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
-        self.order_statuses.publish(&message);
+        self.order_taps.publish_status(&message);
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {
@@ -823,16 +805,7 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn send_order_update_item(&self, item: RoutedItem) -> bool {
-        let order_update_stream = lock_slot(&self.order_update_stream);
-        let Some(entry) = order_update_stream.as_ref() else {
-            return false;
-        };
-        if let Err(e) = entry.sender.send(item) {
-            warn!("error sending to order update stream: {e}");
-            return false;
-        }
-        warn_if_backlogged(format_args!("order update stream"), entry.sender.len());
-        true
+        self.order_taps.send_update(item)
     }
 
     // The cleanup thread receives signals as subscribers are cancelled or
@@ -852,6 +825,7 @@ impl<S: Stream> TcpMessageBus<S> {
                         Ok(Signal::Request(request_id, lease)) => message_bus.clean_request(request_id, &lease),
                         Ok(Signal::Order(order_id, lease)) => message_bus.clean_order(order_id, &lease),
                         Ok(Signal::OrderUpdateStream(lease)) => message_bus.clear_order_update_stream(&lease),
+                        Ok(Signal::OrderStatus(order_id, lease)) => message_bus.order_taps.release_status(order_id, &lease),
                         Ok(Signal::Shared(lease)) => message_bus.shared_channels.remove(&lease),
                         Err(_) => {
                             debug!("cleanup signal channel closed");
@@ -964,43 +938,29 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(())
     }
 
-    fn watch_order_status(&self, order_id: OrderId) -> Result<SyncOrderStatusWatch, Error> {
-        self.order_statuses.watch(order_id)
-    }
-
-    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
-        let mut order_update_stream = lock_slot(&self.order_update_stream);
-
-        // Not `ensure_connected`: nothing is written, and the stream may be
-        // created while a reconnect is in progress.
-        if self.is_shutting_down() {
-            return Err(Error::Shutdown);
-        }
-
-        // A registration with a dead lease is a cancelled or dropped stream
-        // whose cleanup signal has not been processed yet; replace it rather
-        // than refusing, so cancel- or drop-then-recreate never races the
-        // cleanup thread. Its stale signal then finds another lease and leaves
-        // the replacement alone.
-        if order_update_stream.as_ref().is_some_and(|registered| registered.lease.is_live()) {
-            return Err(Error::AlreadySubscribed);
-        }
-
-        let (sender, receiver) = channel::unbounded();
-        let lease = Lease::new();
-
-        *order_update_stream = Some(Entry::new(sender.clone(), lease.downgrade()));
-
-        // The lease gives the subscription's drop signal its identity — see
-        // `clear_order_update_stream`.
-        let subscription = SubscriptionBuilder::new()
+    fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
+        let (sender, receiver, lease) = self.order_taps.subscribe_status(order_id, 0)?;
+        Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
             .signaler(self.signals_send.clone())
             .lease(lease)
-            .build();
+            .order_status(order_id)
+            .build())
+    }
 
-        Ok(subscription)
+    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
+        // Not `ensure_connected`: nothing is written, and the stream may be
+        // created while a reconnect is in progress. The lease gives the
+        // subscription's drop signal its identity — see
+        // `clear_order_update_stream`.
+        let (sender, receiver, lease) = self.order_taps.subscribe_updates(0)?;
+        Ok(SubscriptionBuilder::new()
+            .receiver(receiver)
+            .sender(sender)
+            .signaler(self.signals_send.clone())
+            .lease(lease)
+            .build())
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {

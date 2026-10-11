@@ -4,8 +4,9 @@ use crate::common::request_helpers::{self, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::Subscription;
+use crate::subscriptions::{Subscription, SubscriptionItem};
 use crate::{Client, Error};
+use futures::StreamExt;
 
 use std::time::Duration;
 
@@ -472,6 +473,51 @@ impl Client {
         ))
     }
 
+    /// Streams one order's status updates.
+    ///
+    /// Starts with the order's latest status, if this client has seen one
+    /// (the latest statuses of the 10,000 most recent orders are kept), then
+    /// yields each new [`OrderStatus`] as TWS sends it. The stream does not end
+    /// on its own when the order does; stop reading, or see
+    /// [`wait_for_fill`](Self::wait_for_fill) for the common case.
+    ///
+    /// Takes nothing from [`order_update_stream`](Self::order_update_stream) or
+    /// a [`place_order`](Self::place_order) subscription: all may be open at
+    /// once, as may several streams on one order. Nothing is sent to TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::subscriptions::SubscriptionItemStreamExt;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let order_id = client.order(&contract).buy(100).limit(150.0).submit().await.expect("order submission failed");
+    ///
+    ///     let mut statuses = client.order_status_stream(order_id).await.expect("stream failed").filter_data();
+    ///     while let Some(status) = statuses.next().await {
+    ///         let status = status.expect("stream error");
+    ///         println!("{}: {}/{} filled", status.status, status.filled, status.filled + status.remaining);
+    ///         if status.status.is_terminal() {
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn order_status_stream(&self, order_id: impl Into<OrderId>) -> Result<Subscription<OrderStatus>, Error> {
+        let internal_subscription = self.message_bus.create_order_status_subscription(order_id.into()).await?;
+        Ok(Subscription::new_from_internal_simple(
+            internal_subscription,
+            self.message_bus.clone(),
+            self.decoder_context(),
+        ))
+    }
+
     /// Waits until an order fills or ends, or `timeout` elapses.
     ///
     /// Returns [`OrderOutcome::Filled`] when the order filled completely,
@@ -479,16 +525,11 @@ impl Client {
     /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
     /// out. A timeout leaves the order working; cancel it yourself if needed.
     ///
-    /// An order that already finished before the call is reported at once, as
-    /// long as its status reached this client since it connected. Statuses
-    /// only reach the client that placed the order (or client 0 with auto
-    /// bind), so an order placed elsewhere, or finished before this
-    /// connection, waits out the timeout.
-    ///
-    /// Uses neither [`order_update_stream`](Self::order_update_stream) nor the
-    /// [`place_order`](Self::place_order) subscription, and takes nothing from
-    /// them: both may be open at the same time, as may several waits on one
-    /// order.
+    /// Built on [`order_status_stream`](Self::order_status_stream), so an
+    /// order that already finished before the call is reported at once, as
+    /// long as this client saw its status since connecting. An order whose
+    /// statuses never reach this client (placed by another client, or
+    /// finished before this connection) waits out the timeout.
     ///
     /// # Errors
     ///
@@ -519,13 +560,15 @@ impl Client {
     /// }
     /// ```
     pub async fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
-        let mut watch = self.message_bus.watch_order_status(order_id.into())?;
+        let mut statuses = self.order_status_stream(order_id).await?;
         let mut tracker = FillTracker::default();
 
         let wait = async {
-            while let Some(item) = watch.receiver.recv().await {
-                if let Some(outcome) = tracker.on_item(item)? {
-                    return Ok(outcome);
+            while let Some(item) = statuses.next().await {
+                if let SubscriptionItem::Data(status) = item? {
+                    if let Some(outcome) = tracker.observe(status) {
+                        return Ok(outcome);
+                    }
                 }
             }
             Err(Error::UnexpectedEndOfStream)

@@ -28,7 +28,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-pub(crate) mod order_status_board;
+pub(crate) mod order_taps;
 pub(crate) mod rate_limiter;
 
 // Internal channel envelope shared across sync/async transports.
@@ -273,9 +273,9 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
 
-    /// Wait on `order_id`'s `OrderStatus` frames, alongside their normal
-    /// routing. Nothing is written.
-    fn watch_order_status(&self, order_id: OrderId) -> Result<order_status_board::SyncOrderStatusWatch, Error>;
+    /// A stream of `order_id`'s `OrderStatus` frames, copied alongside their
+    /// normal routing and starting with the latest one seen. Nothing is written.
+    fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error>;
 
     fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 
@@ -299,6 +299,7 @@ pub(crate) struct InternalSubscription {
     pub(crate) request_id: Option<RequestId>, // initiating request id
     pub(crate) order_id: Option<OrderId>,     // initiating order id
     pub(crate) shared: Option<SharedTicket>,  // shared-channel identity, when routed by message type
+    order_status: Option<OrderId>,            // the order a status stream follows
 }
 
 #[cfg(feature = "sync")]
@@ -385,10 +386,11 @@ impl InternalSubscription {
 
     /// The cleanup signal for this subscription, identified by `lease`.
     fn signal(&self, lease: LeaseRef) -> Signal {
-        match (self.request_id, self.order_id, self.shared) {
-            (Some(request_id), _, _) => Signal::Request(request_id, lease),
-            (_, Some(order_id), _) => Signal::Order(order_id, lease),
-            (_, _, Some(_)) => Signal::Shared(lease),
+        match (self.request_id, self.order_id, self.shared, self.order_status) {
+            (Some(request_id), _, _, _) => Signal::Request(request_id, lease),
+            (_, Some(order_id), _, _) => Signal::Order(order_id, lease),
+            (_, _, Some(_), _) => Signal::Shared(lease),
+            (_, _, _, Some(order_id)) => Signal::OrderStatus(order_id, lease),
             // No request, order id or shared ticket: the order update stream.
             _ => Signal::OrderUpdateStream(lease),
         }
@@ -440,6 +442,7 @@ pub(crate) enum Signal {
     Request(RequestId, LeaseRef),
     Order(OrderId, LeaseRef),
     OrderUpdateStream(LeaseRef),
+    OrderStatus(OrderId, LeaseRef),
     Shared(LeaseRef),
 }
 
@@ -453,6 +456,7 @@ pub(crate) struct SubscriptionBuilder {
     order_id: Option<OrderId>,
     request_id: Option<RequestId>,
     shared: Option<SharedTicket>,
+    order_status: Option<OrderId>,
 }
 
 #[cfg(feature = "sync")]
@@ -466,6 +470,7 @@ impl SubscriptionBuilder {
             order_id: None,
             request_id: None,
             shared: None,
+            order_status: None,
         }
     }
 
@@ -504,6 +509,12 @@ impl SubscriptionBuilder {
         self
     }
 
+    /// A status stream on `order_id` (`create_order_status_subscription`).
+    pub(crate) fn order_status(mut self, order_id: OrderId) -> Self {
+        self.order_status = Some(order_id);
+        self
+    }
+
     pub(crate) fn build(self) -> InternalSubscription {
         let (Some(receiver), Some(signaler), Some(lease)) = (self.receiver, self.signaler, self.lease) else {
             panic!("bad configuration");
@@ -516,6 +527,7 @@ impl SubscriptionBuilder {
             request_id: self.request_id,
             order_id: self.order_id,
             shared: self.shared,
+            order_status: self.order_status,
         }
     }
 }

@@ -1,10 +1,6 @@
 //! Shared state of one `wait_for_fill` (#951), for the sync and async clients.
 
-use super::decoders::decode_order_status;
-use crate::messages::ResponseMessage;
 use crate::orders::{OrderOutcome, OrderStatus, OrderStatusKind};
-use crate::transport::RoutedItem;
-use crate::Error;
 
 /// The last status seen, and whether a status ends the wait.
 #[derive(Debug, Default)]
@@ -13,27 +9,16 @@ pub(crate) struct FillTracker {
 }
 
 impl FillTracker {
-    /// Take one item from the waiter's channel. `Some` ends the wait; an
-    /// error (connection reset, shutdown) ends it as `Err`.
-    pub(crate) fn on_item(&mut self, item: RoutedItem) -> Result<Option<OrderOutcome>, Error> {
-        match item {
-            RoutedItem::Response(message) => self.observe(&message),
-            RoutedItem::Notice(_) => Ok(None),
-            RoutedItem::Error(error) => Err(error),
-        }
-    }
-
-    /// Take one `OrderStatus` frame. Partial fills keep the wait going.
-    fn observe(&mut self, message: &ResponseMessage) -> Result<Option<OrderOutcome>, Error> {
-        let status = decode_order_status(message)?;
+    /// Take one status; `Some` ends the wait. Partial fills keep it going.
+    pub(crate) fn observe(&mut self, status: OrderStatus) -> Option<OrderOutcome> {
         if is_filled(&status) {
-            return Ok(Some(OrderOutcome::Filled(status)));
+            return Some(OrderOutcome::Filled(status));
         }
         if status.status.is_terminal() {
-            return Ok(Some(OrderOutcome::Ended(status)));
+            return Some(OrderOutcome::Ended(status));
         }
         self.last = Some(status);
-        Ok(None)
+        None
     }
 
     /// The outcome when the time runs out.
