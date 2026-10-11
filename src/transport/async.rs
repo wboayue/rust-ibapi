@@ -690,7 +690,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                 continue;
                             }
                             Err(Error::Shutdown) => {
-                                error!("Received shutdown signal, stopping message processing.");
+                                // `close` wakes a pending read this way; a clean disconnect, not a failure.
+                                debug!("socket closed, stopping message processing");
                                 break;
                             }
                             Err(err) => {

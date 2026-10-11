@@ -97,6 +97,8 @@ impl AsyncIo for MemoryStream {
         Ok(())
     }
 
+    /// Ends the inbound queue like a peer hang-up. Unlike TCP, tests can
+    /// `reopen` it; the bus never reconnects after closing, so it can't tell.
     async fn close(&self) {
         MemoryStream::close(self);
     }

@@ -384,16 +384,16 @@ impl TestSocket {
 
 #[async_trait::async_trait]
 impl AsyncIo for TestSocket {
-    async fn close(&self) {
-        AsyncIo::close(&self.stream).await;
-    }
-
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.stream.read_message().await
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.stream.write_all(buf).await
+    }
+
+    async fn close(&self) {
+        AsyncIo::close(&self.stream).await;
     }
 }
 
