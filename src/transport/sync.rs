@@ -576,9 +576,9 @@ impl<S: Stream> TcpMessageBus<S> {
                 self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
                 Ok(())
             }
-            // Only `request_shutdown` closes the socket, so the session is already ending.
             Err(Error::Shutdown) => {
                 debug!("socket closed; dispatcher thread exiting");
+                self.request_shutdown();
                 Err(Error::Shutdown)
             }
             Err(err) => {
@@ -1198,6 +1198,11 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
 }
 
 /// What `close` shuts down, and whether it has.
+///
+/// Lock order: take this after `reader` / `writer`, never wait on them while
+/// holding it. `reconnect` and the error path of `read_message` / `write_all`
+/// follow it, and `close` takes only this, so a reconnect waiting behind a
+/// stuck write can never hold up the close that unsticks that write.
 #[derive(Debug)]
 struct CloseHandle {
     /// A clone of the active stream; `reconnect` refreshes it.
@@ -1260,9 +1265,7 @@ impl Reconnect for TcpSocket {
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
         stream.set_nodelay(self.tcp_no_delay)?;
 
-        // The close handle last: `close` takes only it, so a reconnect stuck
-        // on the writer (a write blocked on the dying stream) never holds up
-        // `close`, whose shutdown is what unsticks that write.
+        // The close handle last; see `CloseHandle` for the order.
         let mut reader = self.reader.lock()?;
         let mut writer = self.writer.lock()?;
         let mut handle = self.close_handle.lock()?;

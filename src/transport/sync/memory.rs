@@ -21,8 +21,8 @@ use crate::transport::sync::{Io, Reconnect, Stream};
 struct Inner {
     inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
-    closed: bool,
-    /// Set by `Io::close`; unlike `closed`, `reopen` keeps it.
+    hung_up: bool,
+    /// Set by `Io::close`; unlike `hung_up`, `reopen` keeps it.
     retired: bool,
 }
 
@@ -48,17 +48,17 @@ impl MemoryStream {
 
     /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
     /// matching `TcpSocket::read_message`'s behavior on a closed peer.
-    pub fn close(&self) {
+    pub fn hang_up(&self) {
         let (mutex, cv) = &*self.inner;
-        mutex.lock().unwrap().closed = true;
+        mutex.lock().unwrap().hung_up = true;
         cv.notify_all();
     }
 
-    /// Undo a `close`, so a stream broken to trigger a reconnect can serve
+    /// Undo a `hang_up`, so a stream broken to trigger a reconnect can serve
     /// the replayed handshake and stay readable afterwards.
     pub fn reopen(&self) {
         let (mutex, _) = &*self.inner;
-        mutex.lock().unwrap().closed = false;
+        mutex.lock().unwrap().hung_up = false;
     }
 }
 
@@ -73,7 +73,7 @@ impl Io for MemoryStream {
             if let Some(body) = guard.inbound.pop_front() {
                 return Ok(body);
             }
-            if guard.closed {
+            if guard.hung_up {
                 return Err(Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed")));
             }
             guard = cv.wait(guard)?;
@@ -90,7 +90,7 @@ impl Io for MemoryStream {
         Ok(())
     }
 
-    /// Terminal, like TCP: unlike the inherent `close`, `reopen` can't undo
+    /// Terminal, like TCP: unlike `hang_up`, `reopen` can't undo
     /// it. Same as the async `MemoryStream`'s `AsyncIo::close`.
     fn close(&self) {
         let (mutex, cv) = &*self.inner;

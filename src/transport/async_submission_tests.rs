@@ -45,7 +45,7 @@ impl AsyncIo for SubmissionStream {
     }
 
     async fn close(&self) {
-        AsyncIo::close(&self.inner).await;
+        self.inner.close().await;
     }
 }
 
