@@ -117,6 +117,8 @@ pub struct Order {
     pub transmit: bool,
     /// If set to true, the order is de-activated (inactive). Since TWS 10.48, `reqOpenOrders`
     /// returns de-activated orders; this flag distinguishes them from active orders.
+    ///
+    /// Requires TWS/Gateway server version 216 (`ADDITIONAL_ORDER_PARAMS_1`) or later.
     pub deactivate: bool,
     /// The order ID of the parent order, used for bracket and auto trailing stop orders.
     pub parent_id: i32,
@@ -438,6 +440,8 @@ pub struct Order {
     /// Used to specify "imbalance only open orders" or "imbalance only closing orders".
     pub imbalance_only: bool,
     /// Routes market order to Best Bid Offer.
+    ///
+    /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     pub route_marketable_to_bbo: bool,
     /// Parent order Id.
     pub parent_perm_id: Option<i64>,
