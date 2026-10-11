@@ -216,3 +216,12 @@ if client.is_connected() {
 3. **Rate Limiting**: TWS limits outbound messages. The library enforces this only when a client is built with `ClientBuilder::rate_limiter` (off by default); the limiter sits in the bus write funnel, so every message after the handshake is counted. See `RateLimiter` for the rules. Historical-data pacing and market-data lines remain the application's job.
 
 4. **Error Recovery**: Connection errors trigger automatic reconnection. Application errors must be handled by the caller.
+
+### Async physical socket teardown
+
+Stopping dispatch does not release a socket whose bus still has owners. Explicit
+async disconnect closes both owned TCP halves before joining dispatch; dispatcher
+exit performs the same idempotent close for best-effort client drop. A terminal
+close flag prevents queued I/O or reconnect from reviving the retired socket.
+Close signals blocked reads/writes before acquiring their locks, so teardown can
+release the halves without waiting indefinitely for network activity.

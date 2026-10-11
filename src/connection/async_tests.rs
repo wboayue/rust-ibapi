@@ -384,6 +384,10 @@ impl TestSocket {
 
 #[async_trait::async_trait]
 impl AsyncIo for TestSocket {
+    async fn close(&self) {
+        AsyncIo::close(&self.stream).await;
+    }
+
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.stream.read_message().await
     }
