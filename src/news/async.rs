@@ -7,7 +7,7 @@ use crate::common::request_helpers::{self, expect_proto};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
-use crate::{server_versions, Client, Error};
+use crate::{Client, Error};
 
 impl Client {
     /// Requests news providers which the user has subscribed to.
@@ -27,8 +27,6 @@ impl Client {
     /// }
     /// ```
     pub async fn news_providers(&self) -> Result<Vec<NewsProvider>, Error> {
-        self.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
-
         request_helpers::one_shot_shared(
             self,
             OutgoingMessages::RequestNewsProviders,
@@ -97,8 +95,6 @@ impl Client {
         end_time: OffsetDateTime,
         total_results: u8,
     ) -> Result<Subscription<NewsArticle>, Error> {
-        self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
-
         let builder = self.request();
         let request =
             encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
@@ -123,8 +119,6 @@ impl Client {
     /// }
     /// ```
     pub async fn news_article(&self, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
-        self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
-
         request_helpers::one_shot_by_request_id(
             self,
             |request_id| encoders::encode_request_news_article(request_id, provider_code, article_id),

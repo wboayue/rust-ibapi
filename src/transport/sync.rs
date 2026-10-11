@@ -34,8 +34,6 @@ use crate::messages::{
 use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
 
-// pub(crate) const MIN_SERVER_VERSION: i32 = 100;
-// pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// How long a frame may stall after its first byte before the read gives up

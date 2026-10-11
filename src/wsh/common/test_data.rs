@@ -56,8 +56,3 @@ pub const TEST_CONTRACT_ID: i32 = 12345;
 
 /// Common test filter
 pub const TEST_FILTER: &str = "earnings";
-
-/// Test server versions
-pub mod server_versions {
-    pub const OLD_VERSION: i32 = 100;
-}

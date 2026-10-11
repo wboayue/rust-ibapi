@@ -51,7 +51,7 @@ fn by_filter(client: &Client, filter: &str, limit: Option<i32>, auto_fill: Optio
 
 #[test]
 fn test_wsh_metadata_table() {
-    use crate::wsh::common::test_tables::{wsh_metadata_test_cases, ApiExpectedResult};
+    use crate::wsh::common::test_tables::wsh_metadata_test_cases;
 
     for test_case in wsh_metadata_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
@@ -59,20 +59,13 @@ fn test_wsh_metadata_table() {
         let client = Client::stubbed(message_bus, test_case.server_version);
         let result = client.wsh_metadata();
 
-        match test_case.expected_result {
-            ApiExpectedResult::Success { json } => {
-                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-                assert_eq!(result.unwrap().data_json, json, "Test '{}' json mismatch", test_case.name);
-            }
-            ApiExpectedResult::ServerVersionError => {
-                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                assert!(
-                    matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
-                    "Test '{}' wrong error type",
-                    test_case.name
-                );
-            }
-        }
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+        assert_eq!(
+            result.unwrap().data_json,
+            test_case.expected_json,
+            "Test '{}' json mismatch",
+            test_case.name
+        );
     }
 }
 
@@ -94,7 +87,7 @@ fn test_wsh_metadata_request_body() {
 
 #[test]
 fn test_wsh_event_data_by_contract_table() {
-    use crate::wsh::common::test_tables::{event_data_by_contract_test_cases, ApiExpectedResult};
+    use crate::wsh::common::test_tables::event_data_by_contract_test_cases;
 
     for test_case in event_data_by_contract_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.response_messages));
@@ -109,31 +102,24 @@ fn test_wsh_event_data_by_contract_table() {
             test_case.auto_fill,
         );
 
-        match test_case.expected_result {
-            ApiExpectedResult::Success { json } => {
-                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-                assert_eq!(result.unwrap().data_json, json, "Test '{}' json mismatch", test_case.name);
-                assert_request(
-                    &message_bus,
-                    0,
-                    &wsh_event_data_request()
-                        .request_id(TEST_REQ_ID_FIRST)
-                        .contract_id(Some(test_case.contract_id))
-                        .start_date(test_case.start_date)
-                        .end_date(test_case.end_date)
-                        .limit(test_case.limit)
-                        .auto_fill(test_case.auto_fill),
-                );
-            }
-            ApiExpectedResult::ServerVersionError => {
-                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                assert!(
-                    matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
-                    "Test '{}' wrong error type",
-                    test_case.name
-                );
-            }
-        }
+        assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+        assert_eq!(
+            result.unwrap().data_json,
+            test_case.expected_json,
+            "Test '{}' json mismatch",
+            test_case.name
+        );
+        assert_request(
+            &message_bus,
+            0,
+            &wsh_event_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract_id(Some(test_case.contract_id))
+                .start_date(test_case.start_date)
+                .end_date(test_case.end_date)
+                .limit(test_case.limit)
+                .auto_fill(test_case.auto_fill),
+        );
     }
 }
 
@@ -221,41 +207,6 @@ fn test_wsh_event_data_by_filter_integration_table() {
         };
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-    }
-}
-
-#[test]
-fn test_server_version_validation_table() {
-    use crate::wsh::common::test_tables::server_version_test_cases;
-
-    for test_case in server_version_test_cases() {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-
-        let client = Client::stubbed(message_bus, test_case.server_version);
-
-        let result = if let Some(contract_id) = test_case.contract_id {
-            by_contract(
-                &client,
-                contract_id,
-                test_case.start_date,
-                test_case.end_date,
-                test_case.limit,
-                test_case.auto_fill,
-            )
-        } else {
-            by_filter(&client, "filter", test_case.limit, test_case.auto_fill).map(|_| WshEventData { data_json: "".to_string() })
-        };
-
-        if test_case.expected_error {
-            assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-            assert!(
-                matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
-                "Test '{}' wrong error type",
-                test_case.name
-            );
-        } else {
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-        }
     }
 }
 

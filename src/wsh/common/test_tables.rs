@@ -60,32 +60,17 @@ pub struct ApiTestCase {
     pub name: &'static str,
     pub server_version: i32,
     pub response_messages: Vec<ResponseMessage>,
-    pub expected_result: ApiExpectedResult,
-}
-
-pub enum ApiExpectedResult {
-    Success { json: String },
-    ServerVersionError,
+    pub expected_json: String,
 }
 
 /// Test cases for wsh_metadata function
 pub fn wsh_metadata_test_cases() -> Vec<ApiTestCase> {
-    vec![
-        ApiTestCase {
-            name: "successful metadata request",
-            server_version: crate::server_versions::WSHE_CALENDAR,
-            response_messages: vec![metadata_response(9000, r#"{"validated":true,"data":{"metadata":"test"}}"#)],
-            expected_result: ApiExpectedResult::Success {
-                json: r#"{"validated":true,"data":{"metadata":"test"}}"#.to_string(),
-            },
-        },
-        ApiTestCase {
-            name: "server version too old",
-            server_version: 100,
-            response_messages: vec![],
-            expected_result: ApiExpectedResult::ServerVersionError,
-        },
-    ]
+    vec![ApiTestCase {
+        name: "successful metadata request",
+        server_version: crate::server_versions::WSHE_CALENDAR,
+        response_messages: vec![metadata_response(9000, r#"{"validated":true,"data":{"metadata":"test"}}"#)],
+        expected_json: r#"{"validated":true,"data":{"metadata":"test"}}"#.to_string(),
+    }]
 }
 
 /// Test case for wsh_event_data_by_contract
@@ -98,7 +83,7 @@ pub struct EventDataByContractTestCase {
     pub limit: Option<i32>,
     pub auto_fill: Option<AutoFill>,
     pub response_messages: Vec<ResponseMessage>,
-    pub expected_result: ApiExpectedResult,
+    pub expected_json: String,
 }
 
 pub fn event_data_by_contract_test_cases() -> Vec<EventDataByContractTestCase> {
@@ -116,9 +101,7 @@ pub fn event_data_by_contract_test_cases() -> Vec<EventDataByContractTestCase> {
                 watchlist: true,
             }),
             response_messages: vec![event_data_response(9001, r#"{"validated":true,"data":{"events":[]}}"#)],
-            expected_result: ApiExpectedResult::Success {
-                json: r#"{"validated":true,"data":{"events":[]}}"#.to_string(),
-            },
+            expected_json: r#"{"validated":true,"data":{"events":[]}}"#.to_string(),
         },
         EventDataByContractTestCase {
             name: "no filters",
@@ -129,20 +112,7 @@ pub fn event_data_by_contract_test_cases() -> Vec<EventDataByContractTestCase> {
             limit: None,
             auto_fill: None,
             response_messages: vec![event_data_response(9002, r#"{"events":[{"type":"earnings"}]}"#)],
-            expected_result: ApiExpectedResult::Success {
-                json: r#"{"events":[{"type":"earnings"}]}"#.to_string(),
-            },
-        },
-        EventDataByContractTestCase {
-            name: "date filters require newer version",
-            server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS,
-            contract_id: 12345,
-            start_date: Some(date!(2024 - 01 - 01)),
-            end_date: None,
-            limit: None,
-            auto_fill: None,
-            response_messages: vec![],
-            expected_result: ApiExpectedResult::ServerVersionError,
+            expected_json: r#"{"events":[{"type":"earnings"}]}"#.to_string(),
         },
     ]
 }
@@ -217,32 +187,5 @@ pub fn subscription_integration_test_cases() -> Vec<SubscriptionIntegrationTestC
             event_data_response(9000, r#"{"event":3}"#),
         ],
         expected_events: vec![r#"{"event":1}"#.to_string(), r#"{"event":2}"#.to_string(), r#"{"event":3}"#.to_string()],
-    }]
-}
-
-/// Test case for server version validation tests
-pub struct ServerVersionTestCase {
-    pub name: &'static str,
-    pub server_version: i32,
-    pub contract_id: Option<i32>,
-    pub start_date: Option<time::Date>,
-    pub end_date: Option<time::Date>,
-    pub limit: Option<i32>,
-    pub auto_fill: Option<AutoFill>,
-    pub expected_error: bool,
-}
-
-pub fn server_version_test_cases() -> Vec<ServerVersionTestCase> {
-    use time::macros::date;
-
-    vec![ServerVersionTestCase {
-        name: "contract request with date filters on old server version",
-        server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS,
-        contract_id: Some(12345),
-        start_date: Some(date!(2024 - 01 - 01)),
-        end_date: Some(date!(2024 - 12 - 31)),
-        limit: Some(100),
-        auto_fill: None,
-        expected_error: true,
     }]
 }

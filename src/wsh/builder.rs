@@ -43,32 +43,24 @@ impl<'a, C> WshEventDataBuilder<'a, C> {
     }
 
     /// Return events on or after `start_date`.
-    ///
-    /// Requires `server_versions::WSH_EVENT_DATA_FILTERS_DATE`.
     pub fn starting(mut self, start_date: Date) -> Self {
         self.start_date = Some(start_date);
         self
     }
 
     /// Return events on or before `end_date`.
-    ///
-    /// Requires `server_versions::WSH_EVENT_DATA_FILTERS_DATE`.
     pub fn ending(mut self, end_date: Date) -> Self {
         self.end_date = Some(end_date);
         self
     }
 
     /// Cap the number of events returned. TWS allows at most 100.
-    ///
-    /// Requires `server_versions::WSH_EVENT_DATA_FILTERS_DATE`.
     pub fn limit(mut self, limit: i32) -> Self {
         self.limit = Some(limit);
         self
     }
 
     /// Ask TWS to fill event data for related contracts. See [`AutoFill`].
-    ///
-    /// Requires `server_versions::WSH_EVENT_DATA_FILTERS`.
     pub fn auto_fill(mut self, auto_fill: AutoFill) -> Self {
         self.auto_fill = Some(auto_fill);
         self
@@ -95,8 +87,6 @@ impl<'a, C> WshEventFilterBuilder<'a, C> {
     }
 
     /// Cap the number of events returned. TWS allows at most 100.
-    ///
-    /// Requires `server_versions::WSH_EVENT_DATA_FILTERS_DATE`.
     pub fn limit(mut self, limit: i32) -> Self {
         self.limit = Some(limit);
         self
