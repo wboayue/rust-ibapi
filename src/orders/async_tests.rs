@@ -424,7 +424,7 @@ async fn test_executions() {
 
 #[tokio::test]
 async fn test_submit_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract {
@@ -760,7 +760,7 @@ async fn test_order_update_stream_ends_on_empty_action() {
 
 #[tokio::test]
 async fn test_order_update_stream_already_subscribed() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let stream1 = client.order_update_stream().await;
@@ -776,7 +776,7 @@ async fn test_order_update_stream_already_subscribed() {
 
 #[tokio::test]
 async fn test_order_update_stream_drop_releases_subscription() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let stream1 = client.order_update_stream().await.expect("failed to create initial order update stream");
@@ -790,7 +790,7 @@ async fn test_order_update_stream_drop_releases_subscription() {
 
 #[tokio::test]
 async fn test_global_cancel() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_GLOBAL_CANCEL);
 
     client.global_cancel().await.expect("failed to send global cancel");

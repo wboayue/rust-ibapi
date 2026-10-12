@@ -64,13 +64,13 @@ where
     assert!(err.to_string().contains(feature.name), "expected '{}', got: {err}", feature.name);
 }
 
-// Feeds a single wire-format response, asserts the call fails with
+// Feeds a single response of another message type, asserts the call fails with
 // `Error::UnexpectedResponse`. Pairs with `assert_version_check_fails`.
-fn assert_unexpected_response<F, T>(server_version: i32, response: &str, call: F)
+fn assert_unexpected_response<F, T>(server_version: i32, response: crate::messages::ResponseMessage, call: F)
 where
     F: FnOnce(Client) -> Result<T, Error>,
 {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![response.to_owned()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![response]));
     let client = Client::stubbed(message_bus, server_version);
     let Err(err) = call(client) else {
         panic!("expected UnexpectedResponse failure");
@@ -323,7 +323,7 @@ fn test_historical_schedules() {
 
 #[test]
 fn test_historical_ticks_bid_ask() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
@@ -359,7 +359,7 @@ fn test_historical_ticks_bid_ask() {
 
 #[test]
 fn test_historical_ticks_mid_point() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
@@ -394,7 +394,7 @@ fn test_historical_ticks_mid_point() {
 
 #[test]
 fn test_historical_ticks_trade() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
@@ -430,7 +430,7 @@ fn test_historical_ticks_trade() {
 
 #[test]
 fn test_historical_data_adjusted_last_validation() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("MSFT").build();
@@ -458,10 +458,11 @@ fn test_historical_data_adjusted_last_validation() {
 
 #[test]
 fn test_historical_data_error_response() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        // Respond with an error message
-        "3\09000\0200\0No security definition has been found for the request\0".to_owned(),
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        9000,
+        200,
+        "No security definition has been found for the request",
+    )]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("MSFT").build();
@@ -525,10 +526,11 @@ fn test_historical_data_up_to_the_second_advisory_is_skipped() {
 
 #[test]
 fn test_historical_data_unexpected_response() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        // Respond with an unexpected message type (using market data type message)
-        "58\09000\02\0".to_owned(),
-    ]));
+    // Respond with an unexpected message type (market data type).
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::MarketDataType,
+        Vec::new(),
+    )]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("MSFT").build();
@@ -559,7 +561,7 @@ fn test_tick_subscription_methods() {
     // For now, we'll use a minimal test to ensure the methods exist and are called correctly
     // Testing the subscription iterators fully would require more complex setup with mocked messages
 
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
@@ -898,7 +900,7 @@ fn test_historical_data_streaming_error_response() {
 
 #[test]
 fn test_tick_subscription_sends_cancel_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(100), &[]).unwrap();
 
@@ -914,7 +916,7 @@ fn test_tick_subscription_sends_cancel_on_drop() {
 
 #[test]
 fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(101), &[]).unwrap();
 
@@ -933,7 +935,7 @@ fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
 
 #[test]
 fn test_tick_subscription_drop_after_done_does_not_cancel() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(102), &[]).unwrap();
 
@@ -953,7 +955,7 @@ fn test_tick_subscription_drop_after_done_does_not_cancel() {
 
 #[test]
 fn test_tick_subscription_cancel_after_done_writes_nothing() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(103), &[]).unwrap();
     let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(103).raw(), message_bus.clone());
@@ -971,7 +973,7 @@ fn test_tick_subscription_cancel_after_done_writes_nothing() {
 
 #[test]
 fn test_streaming_subscription_sends_cancel_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);
@@ -995,7 +997,7 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
 
 #[test]
 fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     client.time_zone = Some(time_tz::timezones::db::UTC);
@@ -1022,9 +1024,11 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 #[test]
 fn test_head_timestamp_unexpected_response() {
     // 17 = HistoricalData — wrong type for head_timestamp (expects 88).
-    assert_unexpected_response(server_versions::SIZE_RULES, "17|9000|20230315  09:30:00|20230315  10:30:00|0|", |c| {
-        c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular)
-    });
+    assert_unexpected_response(
+        server_versions::SIZE_RULES,
+        proto_response(IncomingMessages::HistoricalData, Vec::new()),
+        |c| c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular),
+    );
 }
 
 #[test]
@@ -1177,7 +1181,7 @@ fn test_historical_schedules_ending_now() {
 fn test_historical_schedule_unexpected_response() {
     assert_unexpected_response(
         server_versions::HISTORICAL_SCHEDULE,
-        "17|9000|20230315  09:30:00|20230315  10:30:00|0|",
+        proto_response(IncomingMessages::HistoricalData, Vec::new()),
         |c| c.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch(),
     );
 }

@@ -41,12 +41,12 @@ fn test_subscription_skips_undeclared_messages_without_limit() {
     }
 
     // Many undeclared messages, then one the decoder declares.
-    let mut responses: Vec<String> = (0..20).map(|_| "2|stray".to_string()).collect();
-    responses.push("1|msg".to_string());
+    let mut responses: Vec<ResponseMessage> = (0..20).map(|_| ResponseMessage::from("2\0stray\0")).collect();
+    responses.push(ResponseMessage::from("1\0msg\0"));
     // Sentinel to avoid blocking on the channel after success
-    responses.push("1|done".to_string());
+    responses.push(ResponseMessage::from("1\0done\0"));
 
-    let stub = MessageBusStub::with_responses(responses);
+    let stub = MessageBusStub::with_ordered_responses(responses);
     let message_bus = Arc::new(stub);
 
     let sub: Subscription<DeclaresTickPrice> = {
@@ -154,9 +154,9 @@ fn test_routed_item_notice_surfaces_as_subscription_item() {
 
 #[test]
 fn test_no_retries_after_end_of_stream() {
-    let stub = MessageBusStub::with_responses(vec![
-        "1|data".to_string(),  // triggers EndOfStream via decoder
-        "1|stray".to_string(), // stray message after stream ended
+    let stub = MessageBusStub::with_ordered_responses(vec![
+        ResponseMessage::from("1\0data\0"),  // triggers EndOfStream via decoder
+        ResponseMessage::from("1\0stray\0"), // stray message after stream ended
     ]);
     let message_bus = Arc::new(stub);
 
@@ -330,7 +330,9 @@ fn test_declared_type_with_no_decode_arm_terminates() {
         }
     }
 
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["2|declared but unhandled".to_string()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![ResponseMessage::from(
+        "2\0declared but unhandled\0",
+    )]));
     let sub: Subscription<DeclaresMoreThanItHandles> = {
         let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
         Subscription::new(message_bus.clone(), internal, DecoderContext::default())

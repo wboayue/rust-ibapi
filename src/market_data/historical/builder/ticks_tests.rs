@@ -1,15 +1,10 @@
-// Fixture-only responses for each tick type. Decoder is not exercised; the
-// test asserts that the right wire request is sent.
-const TRADE_RESPONSE: &str = "98\09000\01\01681133400\00\011.63\024547\0ISLAND\0 O X\01\0";
-const BID_ASK_RESPONSE: &str = "97\09000\01\01681133399\00\011.63\011.83\02800\0100\01\0";
-const MID_POINT_RESPONSE: &str = "96\09000\01\01681133398\00\091.36\00\01\0";
-
+// The decoder is not exercised; each test asserts that the right wire request
+// is sent, so the stub needs no responses.
 #[cfg(feature = "sync")]
 mod sync_tests {
     use time::macros::datetime;
 
-    use super::{BID_ASK_RESPONSE, MID_POINT_RESPONSE, TRADE_RESPONSE};
-    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::WhatToShow;
     use crate::market_data::{IgnoreSize, TradingHours};
@@ -18,8 +13,7 @@ mod sync_tests {
 
     #[test]
     fn trade_terminal_round_trip() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![TRADE_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
@@ -44,8 +38,7 @@ mod sync_tests {
 
     #[test]
     fn mid_point_terminal_round_trip() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![MID_POINT_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 16:00:00 UTC);
 
@@ -71,8 +64,7 @@ mod sync_tests {
 
     #[test]
     fn bid_ask_terminal_passes_ignore_size_yes() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![BID_ASK_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
@@ -98,8 +90,7 @@ mod sync_tests {
 
     #[test]
     fn bid_ask_terminal_passes_ignore_size_no() {
-        let (client, bus) =
-            create_blocking_test_client_with_responses_and_version(vec![BID_ASK_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
 
         let _sub = client
@@ -125,8 +116,7 @@ mod sync_tests {
 mod async_tests {
     use time::macros::datetime;
 
-    use super::{BID_ASK_RESPONSE, MID_POINT_RESPONSE, TRADE_RESPONSE};
-    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::WhatToShow;
     use crate::market_data::{IgnoreSize, TradingHours};
@@ -135,7 +125,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn trade_terminal_round_trip() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![TRADE_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
@@ -161,7 +151,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn mid_point_terminal_round_trip() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![MID_POINT_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 16:00:00 UTC);
 
@@ -188,7 +178,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn bid_ask_terminal_passes_ignore_size_yes() {
-        let (client, bus) = create_test_client_with_responses_and_version(vec![BID_ASK_RESPONSE.to_owned()], server_versions::HISTORICAL_TICKS);
+        let (client, bus) = create_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 

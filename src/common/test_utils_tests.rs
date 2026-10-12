@@ -7,7 +7,7 @@ fn test_create_test_client() {
     let (client, message_bus) = create_test_client();
     assert_eq!(client.server_version(), server_versions::SIZE_RULES);
     assert!(message_bus.request_messages.read().unwrap().is_empty());
-    assert!(message_bus.response_messages.is_empty());
+    assert!(message_bus.ordered_responses.is_empty());
 }
 
 #[test]
@@ -16,15 +16,7 @@ fn test_create_test_client_with_version() {
     let (client, message_bus) = create_test_client_with_version(custom_version);
     assert_eq!(client.server_version(), custom_version);
     assert!(message_bus.request_messages.read().unwrap().is_empty());
-    assert!(message_bus.response_messages.is_empty());
-}
-
-#[test]
-fn test_create_test_client_with_responses() {
-    let responses = vec!["1|2|123|".to_string(), "2|2|456|".to_string()];
-    let (client, message_bus) = create_test_client_with_responses(responses.clone());
-    assert_eq!(client.server_version(), server_versions::SIZE_RULES);
-    assert_eq!(message_bus.response_messages, responses);
+    assert!(message_bus.ordered_responses.is_empty());
 }
 
 #[test]
@@ -112,15 +104,6 @@ fn assert_request_helper_panics_on_body_mismatch() {
 
     let expected = request_positions_multi().account("DU0000002");
     assert_request(&message_bus, 0, &expected);
-}
-
-#[test]
-fn test_create_test_client_with_responses_and_version() {
-    let responses = vec!["1|2|123|".to_string()];
-    let custom_version = 150;
-    let (client, message_bus) = create_test_client_with_responses_and_version(responses.clone(), custom_version);
-    assert_eq!(client.server_version(), custom_version);
-    assert_eq!(message_bus.response_messages, responses);
 }
 
 #[test]

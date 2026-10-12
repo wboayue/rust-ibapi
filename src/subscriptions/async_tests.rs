@@ -219,7 +219,7 @@ async fn test_subscription_lag_yields_gap_notice_then_items() {
     // Regression test for #779: falling behind the broadcast channel yields a
     // synthesized gap notice naming the dropped count, then the retained
     // items — not a silent resume.
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let (tx, rx) = broadcast::channel(2);
     for code in [2100, 2101, 2102, 2103] {
         tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();

@@ -35,9 +35,7 @@ const TEST_BROADCAST_CAPACITY: usize = 1024;
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
-    pub response_messages: Vec<String>,
-    /// Pre-built responses, served in order. When non-empty, supersedes
-    /// `response_messages`.
+    /// Pre-built responses, served in order.
     pub ordered_responses: Vec<ResponseMessage>,
     /// The `limit` of each bounded `send_request_capped` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
@@ -61,9 +59,6 @@ pub(crate) struct MessageBusStub {
     /// its scripted items, as a real one does until its order ends.
     #[cfg(feature = "async")]
     status_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
-    // pub next_request_id: i32,
-    // pub server_version: i32,
-    // pub order_id: i32,
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
@@ -73,7 +68,6 @@ impl Default for MessageBusStub {
     fn default() -> Self {
         Self {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
             ordered_responses: vec![],
             buffer_limits: RwLock::new(vec![]),
             #[cfg(feature = "async")]
@@ -102,12 +96,6 @@ impl MessageBusStub {
         if let Some(bound) = bound {
             self.buffer_limits.write().unwrap().push(bound.limit);
         }
-    }
-
-    pub fn with_responses(response_messages: Vec<String>) -> Self {
-        let mut stub = Self::default();
-        stub.response_messages = response_messages;
-        stub
     }
 
     /// Construct a stub that plays back an ordered sequence of pre-built
@@ -140,17 +128,9 @@ impl MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    /// Materialise configured responses as `ResponseMessage` instances.
-    /// Prefers `ordered_responses` over the legacy text-only
-    /// `response_messages` field; only one is non-empty per test.
+    /// The configured responses, as `ResponseMessage` instances.
     pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
-        if !self.ordered_responses.is_empty() {
-            return self.ordered_responses.clone();
-        }
-        self.response_messages
-            .iter()
-            .map(|m| ResponseMessage::from(&m.replace('|', "\0")))
-            .collect()
+        self.ordered_responses.clone()
     }
 
     /// Configured responses as the dispatcher would deliver them.
