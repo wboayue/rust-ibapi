@@ -487,6 +487,176 @@ async fn test_account_summary_multiple_tags() {
 }
 
 #[tokio::test]
+async fn test_pnl_comprehensive() {
+    use super::common::test_tables::pnl_parameter_test_cases;
+
+    let test_cases = pnl_parameter_test_cases();
+    let (client, message_bus) = create_test_client();
+    let account = AccountId(TEST_ACCOUNT.to_string());
+    let mut subscriptions = Vec::new();
+
+    // Create all subscriptions
+    for test_case in &test_cases {
+        let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
+        let sub = client
+            .pnl(&account, model_code.as_ref())
+            .await
+            .unwrap_or_else(|_| panic!("PnL request failed for {}", test_case.description));
+        subscriptions.push(sub);
+    }
+
+    // Drop subscriptions to trigger cancellation messages
+    drop(subscriptions);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let count = request_message_count(&message_bus);
+    assert!(
+        count >= test_cases.len() * 2,
+        "Expected at least {} messages (subscribe + cancel for each), got {}",
+        test_cases.len() * 2,
+        count
+    );
+}
+
+#[tokio::test]
+async fn test_pnl_single_edge_cases() {
+    use super::common::test_tables::contract_id_test_cases;
+
+    let test_cases = contract_id_test_cases();
+    let (client, message_bus) = create_test_client();
+    let account = AccountId(TEST_ACCOUNT.to_string());
+    let mut subscriptions = Vec::new();
+
+    // Create all subscriptions
+    for test_case in &test_cases {
+        let sub = client
+            .pnl_single(&account, test_case.contract_id, None)
+            .await
+            .unwrap_or_else(|_| panic!("PnL single failed for {}", test_case.description));
+        subscriptions.push(sub);
+    }
+
+    // Drop all subscriptions to trigger cancellation
+    drop(subscriptions);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let count = request_message_count(&message_bus);
+    assert!(
+        count >= test_cases.len() * 2,
+        "Expected at least {} messages (subscribe + cancel for each)",
+        test_cases.len() * 2
+    );
+}
+
+#[tokio::test]
+async fn test_positions_multi_parameter_combinations() {
+    use super::common::test_tables::positions_multi_parameter_test_cases;
+
+    let test_cases = positions_multi_parameter_test_cases();
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(IncomingMessages::PositionMulti, position_multi().encode_proto()),
+        proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let mut subscriptions = Vec::new();
+
+    // Create all subscriptions
+    for test_case in &test_cases {
+        let account = test_case.account.as_ref().map(|s| AccountId(s.clone()));
+        let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
+
+        let sub = client
+            .positions_multi(account.as_ref(), model_code.as_ref())
+            .await
+            .unwrap_or_else(|_| panic!("positions_multi failed for {}", test_case.description));
+        subscriptions.push(sub);
+    }
+
+    // Drop subscriptions to trigger cancellation messages
+    drop(subscriptions);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let count = request_message_count(&message_bus);
+    assert!(
+        count >= test_cases.len() * 2,
+        "Expected at least {} messages (subscribe + cancel for each)",
+        test_cases.len() * 2
+    );
+}
+
+#[tokio::test]
+async fn test_subscription_lifecycle() {
+    use super::common::test_tables::{subscription_lifecycle_test_cases, SubscriptionType};
+
+    let test_cases = subscription_lifecycle_test_cases();
+    let (client, message_bus) = create_test_client();
+
+    // Test each subscription type individually to avoid lifetime issues
+    for test_case in &test_cases {
+        match &test_case.subscription_type {
+            SubscriptionType::PnL { account, model_code } => {
+                let account_id = AccountId(account.clone());
+                let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                let sub = client
+                    .pnl(&account_id, model.as_ref())
+                    .await
+                    .unwrap_or_else(|_| panic!("PnL subscription failed for {}", test_case.description));
+                drop(sub);
+            }
+            SubscriptionType::Positions => {
+                let sub = client
+                    .positions()
+                    .await
+                    .unwrap_or_else(|_| panic!("Positions subscription failed for {}", test_case.description));
+                drop(sub);
+            }
+            SubscriptionType::AccountSummary { group, tags } => {
+                let group_id = AccountGroup(group.clone());
+                let tag_refs: Vec<&str> = tags.iter().map(|s| s.as_str()).collect();
+                let sub = client
+                    .account_summary(&group_id, &tag_refs)
+                    .await
+                    .unwrap_or_else(|_| panic!("Account Summary subscription failed for {}", test_case.description));
+                drop(sub);
+            }
+            SubscriptionType::PositionsMulti { account, model_code } => {
+                let account_id = account.as_ref().map(|s| AccountId(s.clone()));
+                let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                let sub = client
+                    .positions_multi(account_id.as_ref(), model.as_ref())
+                    .await
+                    .unwrap_or_else(|_| panic!("Positions Multi subscription failed for {}", test_case.description));
+                drop(sub);
+            }
+            SubscriptionType::PnLSingle {
+                account,
+                contract_id,
+                model_code,
+            } => {
+                let account_id = AccountId(account.clone());
+                let contract = ContractId(*contract_id);
+                let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                let sub = client
+                    .pnl_single(&account_id, contract, model.as_ref())
+                    .await
+                    .unwrap_or_else(|_| panic!("PnL Single subscription failed for {}", test_case.description));
+                drop(sub);
+            }
+        }
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let count = request_message_count(&message_bus);
+    assert!(
+        count >= test_cases.len() * 2,
+        "Expected subscribe and cancel messages for {} subscriptions, got {} messages",
+        test_cases.len(),
+        count
+    );
+}
+
+#[tokio::test]
 async fn test_soft_dollar_tiers() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::SoftDollarTier,
