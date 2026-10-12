@@ -511,8 +511,11 @@ impl Client {
     ///
     /// Starts with the order's latest status, if this client has seen one
     /// (the latest statuses of the 10,000 most recent orders are kept), then
-    /// yields each new [`OrderStatus`] as TWS sends it. The stream does not end
-    /// on its own when the order does; stop reading, or see
+    /// yields each new [`OrderStatus`] as TWS sends it. If TWS refuses the
+    /// order with an error before any status (e.g. 110, a price off the
+    /// minimum tick), the stream yields that error as [`Error::Notice`] and
+    /// ends; a stream opened later starts with it. Otherwise the stream does
+    /// not end on its own when the order does; stop reading, or see
     /// [`wait_for_fill`](Self::wait_for_fill) for the common case.
     ///
     /// Takes nothing from [`order_update_stream`](Self::order_update_stream) or
@@ -547,7 +550,9 @@ impl Client {
     ///
     /// Returns [`OrderOutcome::Filled`] when the order filled completely,
     /// [`OrderOutcome::Ended`] when it was cancelled or became inactive first,
-    /// and [`OrderOutcome::TimedOut`] with the last status seen when time runs
+    /// [`OrderOutcome::Rejected`] with TWS's error when TWS refused the order
+    /// without a status (e.g. 110, a price off the minimum tick), and
+    /// [`OrderOutcome::TimedOut`] with the last status seen when time runs
     /// out. A timeout leaves the order working; cancel it yourself if needed.
     ///
     /// Built on [`order_status_stream`](Self::order_status_stream), so an
@@ -579,6 +584,7 @@ impl Client {
     ///     OrderOutcome::Filled(status) => println!("filled {} @ {:?}", status.filled, status.average_fill_price),
     ///     OrderOutcome::Ended(status) => println!("ended {:?} after {} filled", status.status, status.filled),
     ///     OrderOutcome::TimedOut(status) => println!("still working: {status:?}"),
+    ///     OrderOutcome::Rejected(notice) => println!("rejected: {notice}"),
     /// }
     /// ```
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
@@ -598,7 +604,7 @@ impl Client {
                     }
                 }
                 Some(Ok(SubscriptionItem::Notice(_))) => {}
-                Some(Err(error)) => return Err(error),
+                Some(Err(error)) => return FillTracker::error(error),
                 // `next_timeout` gives `None` at the deadline; before it, the
                 // stream ended.
                 None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Ok(tracker.timed_out()),

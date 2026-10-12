@@ -22,6 +22,7 @@ fn report(outcome: &OrderOutcome) {
             status.filled + status.remaining
         ),
         OrderOutcome::TimedOut(None) => println!("timed out, no status seen"),
+        OrderOutcome::Rejected(notice) => println!("rejected: {notice}"),
     }
 }
 

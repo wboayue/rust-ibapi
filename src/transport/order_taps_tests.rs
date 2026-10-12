@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::{order_status_response, proto_response};
+use crate::messages::Notice;
 use crate::orders::OrderStatusKind;
 use crate::testdata::builders::orders::{execution_data, order_status};
 use crate::testdata::builders::ResponseProtoEncoder;
@@ -76,6 +77,89 @@ fn publish_ignores_other_frames() {
     ));
 
     assert!(receiver.try_recv().is_err());
+}
+
+/// Route an error frame with `code` for `id`, as the dispatcher does.
+fn reject(taps: &Taps, id: i32, code: i32) {
+    let payload = crate::transport::routing::DecodedError {
+        request_id: id,
+        error_code: code,
+        error_message: format!("error {code}"),
+        ..Default::default()
+    };
+    let item = match crate::transport::routing::classify_error(payload) {
+        crate::transport::routing::ErrorDisposition::Route(_, item) => item,
+        other => panic!("{id} should route, got {other:?}"),
+    };
+    taps.publish_rejection(WireId::classify(id).expect("routable id"), &item);
+}
+
+fn next_rejection(receiver: &Receiver<RoutedItem>) -> Notice {
+    match receiver.try_recv() {
+        Ok(RoutedItem::Error(Error::Notice(notice))) => notice,
+        other => panic!("expected a rejection, got {other:?}"),
+    }
+}
+
+#[test]
+fn rejection_reaches_open_streams_and_starts_later_ones() {
+    let taps = Taps::default();
+    let (open, _lease) = status_stream(&taps, 7);
+
+    reject(&taps, 7, 110);
+
+    assert_eq!(next_rejection(&open).code, 110);
+    assert_eq!(next_rejection(&status_stream(&taps, 7).0).code, 110, "a later stream starts with it");
+}
+
+#[test]
+fn rejection_after_a_status_is_ignored() {
+    let taps = Taps::default();
+    publish(&taps, 7, OrderStatusKind::Submitted);
+    let (receiver, _lease) = status_stream(&taps, 7);
+    next_response(&receiver);
+
+    // e.g. a refused modify: the order keeps working.
+    reject(&taps, 7, 110);
+
+    assert!(receiver.try_recv().is_err());
+    assert_eq!(next_response(&status_stream(&taps, 7).0).order_id(), Some(7), "latest status kept");
+}
+
+#[test]
+fn first_rejection_is_kept() {
+    let taps = Taps::default();
+    reject(&taps, 7, 110);
+    let (receiver, _lease) = status_stream(&taps, 7);
+    next_rejection(&receiver);
+
+    reject(&taps, 7, 10147);
+
+    assert!(receiver.try_recv().is_err(), "no second rejection");
+    assert_eq!(next_rejection(&status_stream(&taps, 7).0).code, 110);
+}
+
+#[test]
+fn status_after_rejection_replaces_it() {
+    let taps = Taps::default();
+    reject(&taps, 7, 110);
+
+    publish(&taps, 7, OrderStatusKind::Inactive);
+
+    assert_eq!(next_response(&status_stream(&taps, 7).0).order_id(), Some(7));
+}
+
+#[test]
+fn informational_and_request_errors_are_not_rejections() {
+    let taps = Taps::default();
+    let (order, _a) = status_stream(&taps, 7);
+
+    reject(&taps, 7, 2109); // a warning on the order
+    let request_id = crate::client::ids::REQUEST_ID_FLOOR;
+    reject(&taps, request_id, 200);
+
+    assert!(order.try_recv().is_err(), "warning");
+    assert!(!taps.has_status_entry(OrderId::from(request_id)), "request id");
 }
 
 #[test]

@@ -852,6 +852,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 self.shared_channels.fail_one_shot_channels(|| RoutedItem::Error(error.clone()));
             }
             ErrorDisposition::Route(id, item) => {
+                self.order_taps.publish_rejection(id, &item);
                 self.deliver(id, item, sent_to_update_stream).await;
             }
         }
