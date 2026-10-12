@@ -3495,6 +3495,23 @@ fn sender_hash_deliver_hands_the_item_back_when_unrouted() {
     assert!(matches!(item, Err(RoutedItem::Error(Error::Cancelled))));
 }
 
+/// A subscription dropped before its cleanup signal is processed is still
+/// registered at shutdown: failing it must not stop the others being failed.
+/// (That the failed send is silent, not warned, is unasserted: no log capture.)
+#[test]
+fn sender_hash_fail_all_skips_a_dropped_receiver_and_clears() {
+    let (routes, live, _lease) = sender_hash_route();
+    let (sender, dropped) = channel::unbounded();
+    let dropped_lease = Lease::new();
+    routes.insert(RequestId::nth(2), sender, dropped_lease.downgrade());
+    drop(dropped);
+
+    routes.fail_all(|| Error::Shutdown.into());
+
+    assert!(matches!(live.try_recv(), Ok(RoutedItem::Error(Error::Shutdown))));
+    assert!(!routes.contains(&RequestId::nth(1)) && !routes.contains(&RequestId::nth(2)));
+}
+
 #[test]
 fn sender_hash_deliver_aliased_aliases_the_route() {
     let (routes, receiver, lease) = sender_hash_route();

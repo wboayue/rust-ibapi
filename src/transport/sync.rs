@@ -1040,8 +1040,10 @@ impl Entry<RoutedItem> {
             },
             None => item,
         };
-        if let Err(err) = self.sender.send(item) {
-            warn!("error sending: {id:?}, {err}")
+        // An unbounded send fails only once the receiver is gone: the
+        // subscription was dropped and its cleanup signal hasn't run yet.
+        if self.sender.send(item).is_err() {
+            trace!("discarding item for dropped subscription {id:?}");
         } else {
             warn_if_backlogged(format_args!("subscription queue for {id:?}"), self.sender.len());
         }
@@ -1181,16 +1183,16 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
 
     /// Send `message_fn()` to every route, skipping closed bounded ones (their
     /// stream already ended), then clear them all under the same write lock,
-    /// so a route registered meanwhile can't be cleared unnotified.
+    /// so a route registered meanwhile can't be cleared unnotified. A send
+    /// fails only for a dropped subscription not yet cleaned up, which has
+    /// nobody to tell.
     pub fn fail_all<F>(&self, message_fn: F)
     where
         F: Fn() -> RoutedItem,
     {
         let mut senders = self.write();
         for entry in senders.values().filter(|entry| !entry.closed()) {
-            if let Err(e) = entry.sender.send(message_fn()) {
-                warn!("error sending notification: {e}");
-            }
+            let _ = entry.sender.send(message_fn());
         }
         senders.clear();
     }
