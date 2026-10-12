@@ -1040,10 +1040,10 @@ impl Entry<RoutedItem> {
             },
             None => item,
         };
-        // An unbounded send fails only once the receiver is gone: a subscription
-        // dropped whose cleanup signal hasn't been processed yet.
+        // An unbounded send fails only once the receiver is gone: the
+        // subscription was dropped and its cleanup signal hasn't run yet.
         if self.sender.send(item).is_err() {
-            trace!("dropping item for dropped subscription {id:?}");
+            trace!("discarding item for dropped subscription {id:?}");
         } else {
             warn_if_backlogged(format_args!("subscription queue for {id:?}"), self.sender.len());
         }
