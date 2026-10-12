@@ -1245,6 +1245,21 @@ async fn wait_for_fill_times_out_without_status() {
     assert_eq!(outcome, OrderOutcome::TimedOut(None));
 }
 
+/// An order TWS refuses with an error and no status (live: ES limit off the
+/// tick, 110) ends the wait at once instead of timing out.
+#[tokio::test]
+async fn wait_for_fill_reports_rejection_without_status() {
+    let (client, _) = create_test_client_with_ordered_proto_responses(vec![proto_error_response(
+        13,
+        110,
+        "The price does not conform to the minimum price variation for this contract.",
+    )]);
+
+    let outcome = client.wait_for_fill(13, Duration::from_secs(5)).await.unwrap();
+
+    assert!(matches!(&outcome, OrderOutcome::Rejected(n) if n.code == 110), "{outcome:?}");
+}
+
 #[tokio::test]
 async fn wait_for_fill_fails_on_connection_reset() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]).with_connection_resets(1));

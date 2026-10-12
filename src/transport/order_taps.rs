@@ -1,5 +1,6 @@
 //! Side channels on the order frames the dispatcher routes: the client-wide
-//! order-update stream, and per-order `OrderStatus` streams (#951).
+//! order-update stream, and per-order `OrderStatus` streams (#951), which also
+//! carry a rejection TWS reports without a status.
 //!
 //! Both are copies taken *in addition to* normal routing, so neither takes a
 //! frame from a `place_order` subscription or a shared channel. One type owns
@@ -11,8 +12,8 @@ use std::sync::{Mutex, MutexGuard};
 use log::warn;
 
 use super::common::{lock, Lease, LeaseRef};
-use crate::client::ids::OrderId;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::client::ids::{OrderId, WireId};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::transport::RoutedItem;
 use crate::Error;
 
@@ -98,8 +99,25 @@ impl<S: TapSender> Tap<S> {
     }
 }
 
+/// What a new status stream on an order starts with.
+enum Latest {
+    Status(ResponseMessage),
+    /// An error TWS sent for the order before any status: it never accepted
+    /// the order (e.g. 110, price off the tick), so no status will follow.
+    Rejected(Notice),
+}
+
+impl Latest {
+    fn item(&self) -> RoutedItem {
+        match self {
+            Latest::Status(message) => message.clone().into(),
+            Latest::Rejected(notice) => Error::Notice(notice.clone()).into(),
+        }
+    }
+}
+
 struct StatusSlot<S> {
-    latest: Option<ResponseMessage>,
+    latest: Option<Latest>,
     streams: Vec<Tap<S>>,
 }
 
@@ -115,7 +133,7 @@ impl<S> Default for StatusSlot<S> {
 struct State<S> {
     updates: Option<Tap<S>>,
     statuses: HashMap<OrderId, StatusSlot<S>>,
-    /// The orders holding a latest status, oldest first; at most
+    /// The orders holding a latest status or rejection, oldest first; at most
     /// [`LATEST_STATUS_CAPACITY`].
     recent: VecDeque<OrderId>,
     /// Set at shutdown; nothing subscribes after it.
@@ -195,8 +213,8 @@ impl<S: TapSender> OrderTaps<S> {
         released
     }
 
-    /// Open a status stream on `order_id`. The order's latest status, if any,
-    /// is queued first, under the same lock as the registration, so no frame
+    /// Open a status stream on `order_id`. The order's latest status or
+    /// rejection, if any, is queued first, under the same lock as the registration, so no frame
     /// falls between the two. Refused with [`Error::Shutdown`] once closed.
     pub(crate) fn subscribe_status(&self, order_id: OrderId, capacity: usize) -> Result<NewTap<S>, Error> {
         let mut state = self.lock();
@@ -206,7 +224,7 @@ impl<S: TapSender> OrderTaps<S> {
         let (tap, new) = Tap::<S>::open(capacity);
         let slot = state.statuses.entry(order_id).or_default();
         if let Some(latest) = &slot.latest {
-            tap.sender.send_item(latest.clone().into(), STATUS);
+            tap.sender.send_item(latest.item(), STATUS);
         }
         slot.streams.push(tap);
         Ok(new)
@@ -238,10 +256,32 @@ impl<S: TapSender> OrderTaps<S> {
         let mut state = self.lock();
         let slot = state.statuses.entry(order_id).or_default();
         slot.streams.retain(|tap| tap.sender.send_item(message.clone().into(), STATUS));
-        if slot.latest.replace(message.clone()).is_none() {
+        if slot.latest.replace(Latest::Status(message.clone())).is_none() {
             state.recent.push_back(order_id);
             Self::evict_oldest(&mut state);
         }
+    }
+
+    /// Record a terminal error frame on an order (`item` an `Error::Notice`
+    /// routed to an order id) as the order's rejection and send it to the
+    /// order's status streams, which end on it. Only before any status or
+    /// earlier rejection: once TWS has sent a status the order exists, and an
+    /// error (e.g. a refused modify) leaves it working; its statuses report
+    /// how it ends. Anything else is ignored.
+    pub(crate) fn publish_rejection(&self, id: WireId, item: &RoutedItem) {
+        let (WireId::Order(order_id), RoutedItem::Error(Error::Notice(notice))) = (id, item) else {
+            return;
+        };
+        let mut state = self.lock();
+        let slot = state.statuses.entry(order_id).or_default();
+        if slot.latest.is_some() {
+            return;
+        }
+        let latest = Latest::Rejected(notice.clone());
+        slot.streams.retain(|tap| tap.sender.send_item(latest.item(), STATUS));
+        slot.latest = Some(latest);
+        state.recent.push_back(order_id);
+        Self::evict_oldest(&mut state);
     }
 
     /// Drop the oldest latest statuses past [`LATEST_STATUS_CAPACITY`].
