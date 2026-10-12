@@ -2435,6 +2435,20 @@ async fn test_order_status_stream_starts_with_earlier_status() {
     assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
 }
 
+/// An order TWS refused with an error and no status (110) reaches a status
+/// stream opened afterwards, so `submit()` then `wait_for_fill` cannot miss it.
+#[tokio::test]
+async fn test_order_status_stream_starts_with_earlier_rejection() {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(helpers::error_frame(7, 110, "price off the tick"));
+    bus.read_and_route_message().await.unwrap();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    let item = tokio::time::timeout(TICK, statuses.next_routed()).await.expect("no item");
+    assert!(matches!(&item, Some(RoutedItem::Error(Error::Notice(n))) if n.code == 110), "{item:?}");
+}
+
 /// The stream gets a copy: the `place_order` subscription for the same order
 /// and the order-update stream still receive the frame.
 #[tokio::test]

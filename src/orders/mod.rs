@@ -1767,9 +1767,11 @@ impl OrderStatus {
 
 /// How an order ended, as reported by `Client::wait_for_fill`.
 ///
-/// Each variant carries the order's last [`OrderStatus`]: `filled`,
-/// `remaining` and `average_fill_price` give the fill, which may be partial
-/// for [`Ended`](Self::Ended) and [`TimedOut`](Self::TimedOut).
+/// [`Filled`](Self::Filled), [`Ended`](Self::Ended) and
+/// [`TimedOut`](Self::TimedOut) carry the order's last [`OrderStatus`]:
+/// `filled`, `remaining` and `average_fill_price` give the fill, which may be
+/// partial for `Ended` and `TimedOut`. [`Rejected`](Self::Rejected) carries
+/// TWS's error instead, since the order never got a status.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderOutcome {
@@ -1786,6 +1788,11 @@ pub enum OrderOutcome {
     /// status seen, if any. The order is left alone; cancel it yourself if
     /// you no longer want it.
     TimedOut(Option<OrderStatus>),
+    /// TWS refused the order with an error and no status, so it never
+    /// worked (e.g. 110, a price off the minimum tick). A rejection TWS
+    /// reports with an [`Inactive`](OrderStatusKind::Inactive) status, such as
+    /// 201 for insufficient margin, is [`Ended`](Self::Ended).
+    Rejected(crate::Notice),
 }
 
 /// Enumerates possible results from cancelling an order.

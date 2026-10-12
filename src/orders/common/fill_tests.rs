@@ -1,5 +1,6 @@
 use super::*;
 use crate::orders::OrderStatusKind;
+use crate::Notice;
 
 fn status(kind: OrderStatusKind, filled: f64, remaining: f64) -> OrderStatus {
     OrderStatus {
@@ -31,6 +32,7 @@ fn outcome_of_each_status() {
             Some(OrderOutcome::Filled(s)) => Some(("Filled", s)),
             Some(OrderOutcome::Ended(s)) => Some(("Ended", s)),
             Some(OrderOutcome::TimedOut(_)) => panic!("{name}: observe never times out"),
+            Some(OrderOutcome::Rejected(_)) => panic!("{name}: a status is never a rejection"),
             None => None,
         };
         assert_eq!(got.map(|(variant, _)| variant), expected, "{name}");
@@ -52,4 +54,18 @@ fn timed_out_carries_last_working_status() {
 #[test]
 fn timed_out_without_a_status() {
     assert_eq!(FillTracker::default().timed_out(), OrderOutcome::TimedOut(None));
+}
+
+#[test]
+fn error_of_a_notice_is_a_rejection() {
+    let notice = Notice {
+        code: 110,
+        message: "The price does not conform to the minimum price variation for this contract.".into(),
+        request_id: Some(13),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    };
+
+    assert_eq!(FillTracker::error(Error::Notice(notice.clone())).unwrap(), OrderOutcome::Rejected(notice));
+    assert!(matches!(FillTracker::error(Error::ConnectionReset), Err(Error::ConnectionReset)));
 }

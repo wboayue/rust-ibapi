@@ -3676,6 +3676,21 @@ fn test_order_status_stream_starts_with_earlier_status() -> Result<(), Error> {
     Ok(())
 }
 
+/// An order TWS refused with an error and no status (110) reaches a status
+/// stream opened afterwards, so `submit()` then `wait_for_fill` cannot miss it.
+#[test]
+fn test_order_status_stream_starts_with_earlier_rejection() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(helpers::error_frame(7, 110, "price off the tick"));
+    bus.dispatch()?;
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    let item = statuses.next_timeout(TICK).expect("no item");
+    assert!(matches!(&item, Err(Error::Notice(n)) if n.code == 110), "{item:?}");
+    Ok(())
+}
+
 /// The stream gets a copy: the `place_order` subscription for the same order
 /// and the order-update stream still receive the frame.
 #[test]

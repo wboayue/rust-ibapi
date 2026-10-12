@@ -1,6 +1,7 @@
 //! Shared state of one `wait_for_fill` (#951), for the sync and async clients.
 
 use crate::orders::{OrderOutcome, OrderStatus};
+use crate::Error;
 
 /// The last status seen, and whether a status ends the wait.
 #[derive(Debug, Default)]
@@ -16,6 +17,15 @@ impl FillTracker {
             self.last = Some(status);
         }
         outcome
+    }
+
+    /// The outcome for an error on the status stream: an order rejection
+    /// ([`Error::Notice`]) ends the wait; anything else fails it.
+    pub(crate) fn error(error: Error) -> Result<OrderOutcome, Error> {
+        match error {
+            Error::Notice(notice) => Ok(OrderOutcome::Rejected(notice)),
+            error => Err(error),
+        }
     }
 
     /// The outcome when the time runs out.

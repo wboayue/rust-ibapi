@@ -471,6 +471,26 @@ fn wait_for_fill_times_out_then_ends_after_cancel() {
     }
 }
 
+// #951: TWS refuses an order off the minimum tick with error 110 and no
+// status; the wait reports it at once. Cancels in case TWS ever accepts it.
+#[test]
+#[serial(orders)]
+fn wait_for_fill_reports_rejection_without_status() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+
+    let order_id = client.order(&contract).buy(1).limit(1.005).submit().expect("submit failed");
+
+    let outcome = client.wait_for_fill(order_id, Duration::from_secs(10));
+    if !matches!(outcome, Ok(OrderOutcome::Rejected(_))) {
+        let _ = client.cancel_order(order_id, "");
+    }
+    match outcome.expect("wait failed") {
+        OrderOutcome::Rejected(notice) => assert_eq!(notice.code, 110, "{notice}"),
+        other => panic!("an off-tick price should be rejected: {other:?}"),
+    }
+}
+
 // #951: a market fill reports Filled with nothing remaining. Flattens only a
 // fill; anything else cancels the buy, so a failure never leaves a position.
 #[test]
