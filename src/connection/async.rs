@@ -7,8 +7,8 @@ use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
-    StartupMessage, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
+    StartupHandshakeContext, StartupMessage, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -55,22 +55,15 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
 }
 
 impl AsyncConnection<AsyncTcpSocket> {
-    /// Create a connection from explicit pieces handed in by the builder.
+    /// Create a connection from the builder's validated `ConnectionConfig`.
     ///
     /// `notice_sender` is shared with any pre-bound `NoticeStream`; the builder
     /// allocates the broadcast channel before calling here. Persists across
     /// reconnects.
-    pub(crate) async fn with_pieces(
-        address: &str,
-        client_id: i32,
-        tcp_no_delay: bool,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-        notice_sender: broadcast::Sender<Notice>,
-        max_reconnect_attempts: Option<u32>,
-    ) -> Result<Self, Error> {
-        let socket = AsyncTcpSocket::connect(address, tcp_no_delay).await?;
-        let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_sender);
-        connection.max_reconnect_attempts = max_reconnect_attempts;
+    pub(crate) async fn with_pieces(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
+        let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
+        let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
+        connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection().await?;
         Ok(connection)
     }

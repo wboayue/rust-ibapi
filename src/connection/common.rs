@@ -1,5 +1,7 @@
 //! Common connection logic shared between sync and async implementations
 
+use std::sync::Arc;
+
 use log::{debug, error, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -94,6 +96,18 @@ impl StartupMessage {
 pub(crate) struct StartupHandshakeContext<'a> {
     pub startup: Option<&'a (dyn Fn(StartupMessage) + Send + Sync)>,
     pub notice_sink: &'a (dyn NoticeSink + Sync),
+}
+
+/// Connection settings `ClientBuilder` validates and hands through
+/// `Client::connect_with_pieces` to `Connection::with_pieces`: the options
+/// both transports share. Each side passes its notice sink alongside.
+pub(crate) struct ConnectionConfig {
+    pub(crate) address: String,
+    pub(crate) client_id: i32,
+    pub(crate) tcp_no_delay: bool,
+    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    /// `None` means retry forever.
+    pub(crate) max_reconnect_attempts: Option<u32>,
 }
 
 /// Data exchanged during the connection handshake

@@ -92,14 +92,7 @@ impl Client {
     /// Builds the `Connection`, wraps it in a `TcpMessageBus`, and kicks off
     /// the dispatcher thread.
     pub(crate) fn connect_with_pieces(pieces: ValidatedPieces, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
-        let connection = Connection::with_pieces(
-            &pieces.address,
-            pieces.client_id,
-            pieces.tcp_no_delay,
-            pieces.startup_callback,
-            notice_broadcaster,
-            pieces.max_reconnect_attempts,
-        )?;
+        let connection = Connection::with_pieces(pieces.connection, notice_broadcaster)?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);

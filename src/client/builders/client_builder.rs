@@ -37,7 +37,7 @@
 
 use std::sync::Arc;
 
-use crate::connection::common::StartupMessage;
+use crate::connection::common::{ConnectionConfig, StartupMessage};
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::rate_limiter::RateLimiter;
@@ -71,16 +71,10 @@ impl Default for BuilderState {
     }
 }
 
-/// Output of [`BuilderState::validate`]: same fields with `address` and
-/// `client_id` unwrapped. A struct (rather than a tuple) because the wide
-/// `Fn` trait object trips `clippy::type_complexity` in tuple form.
+/// Output of [`BuilderState::validate`]: the connection settings with
+/// `address` and `client_id` unwrapped, plus the client-side rate limiter.
 pub(crate) struct ValidatedPieces {
-    pub(crate) address: String,
-    pub(crate) client_id: i32,
-    pub(crate) tcp_no_delay: bool,
-    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-    /// `None` means retry forever.
-    pub(crate) max_reconnect_attempts: Option<u32>,
+    pub(crate) connection: ConnectionConfig,
     pub(crate) rate_limiter: Option<RateLimiter>,
 }
 
@@ -92,15 +86,17 @@ impl BuilderState {
             ));
         }
         Ok(ValidatedPieces {
-            address: self
-                .address
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?,
-            client_id: self
-                .client_id
-                .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
-            tcp_no_delay: self.tcp_no_delay,
-            startup_callback: self.startup_callback,
-            max_reconnect_attempts: self.max_reconnect_attempts,
+            connection: ConnectionConfig {
+                address: self
+                    .address
+                    .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?,
+                client_id: self
+                    .client_id
+                    .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
+                tcp_no_delay: self.tcp_no_delay,
+                startup_callback: self.startup_callback,
+                max_reconnect_attempts: self.max_reconnect_attempts,
+            },
             rate_limiter: self.rate_limiter,
         })
     }
