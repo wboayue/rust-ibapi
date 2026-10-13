@@ -28,6 +28,22 @@ fn validate_pct_vol(field: &'static str, value: f64) -> Result<(), ValidationErr
     }
 }
 
+/// Append `tag`/`value` to `params` when `value` is set.
+fn push_param_if_some(params: &mut Vec<TagValue>, tag: &str, value: Option<String>) {
+    if let Some(value) = value {
+        params.push(TagValue { tag: tag.to_string(), value });
+    }
+}
+
+/// Validate `value` against the PctVol range, then append it as `tag` when set.
+fn push_pct_vol_if_some(params: &mut Vec<TagValue>, field: &'static str, tag: &str, value: Option<f64>) -> Result<(), ValidationError> {
+    if let Some(v) = value {
+        validate_pct_vol(field, v)?;
+    }
+    push_param_if_some(params, tag, value.map(|v| v.to_string()));
+    Ok(())
+}
+
 /// Build params for a "windowed PctVol" strategy: a base/end participation
 /// rate plus optional active-window times. Shared by `PctVolSizeBuilder`
 /// (`"PctVolSz"`) and `PctVolTimeBuilder` (`"PctVolTm"`), which differ only
@@ -43,38 +59,11 @@ fn build_windowed_pct_vol(
 ) -> Result<AlgoParams, ValidationError> {
     let mut params = Vec::new();
 
-    if let Some(v) = start_pct_vol {
-        validate_pct_vol("start_pct_vol", v)?;
-        params.push(TagValue {
-            tag: "startPctVol".to_string(),
-            value: v.to_string(),
-        });
-    }
-    if let Some(v) = end_pct_vol {
-        validate_pct_vol("end_pct_vol", v)?;
-        params.push(TagValue {
-            tag: "endPctVol".to_string(),
-            value: v.to_string(),
-        });
-    }
-    if let Some(v) = start_time {
-        params.push(TagValue {
-            tag: "startTime".to_string(),
-            value: v,
-        });
-    }
-    if let Some(v) = end_time {
-        params.push(TagValue {
-            tag: "endTime".to_string(),
-            value: v,
-        });
-    }
-    if let Some(v) = no_take_liq {
-        params.push(TagValue {
-            tag: "noTakeLiq".to_string(),
-            value: v.to_field(),
-        });
-    }
+    push_pct_vol_if_some(&mut params, "start_pct_vol", "startPctVol", start_pct_vol)?;
+    push_pct_vol_if_some(&mut params, "end_pct_vol", "endPctVol", end_pct_vol)?;
+    push_param_if_some(&mut params, "startTime", start_time);
+    push_param_if_some(&mut params, "endTime", end_time);
+    push_param_if_some(&mut params, "noTakeLiq", no_take_liq.map(|v| v.to_field()));
 
     Ok(AlgoParams {
         strategy: strategy.to_string(),
@@ -187,43 +176,12 @@ impl VwapBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.allow_past_end_time {
-            params.push(TagValue {
-                tag: "allowPastEndTime".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.no_take_liq {
-            params.push(TagValue {
-                tag: "noTakeLiq".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.speed_up {
-            params.push(TagValue {
-                tag: "speedUp".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "allowPastEndTime", self.allow_past_end_time.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "noTakeLiq", self.no_take_liq.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "speedUp", self.speed_up.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "Vwap".to_string(),
@@ -316,30 +274,10 @@ impl TwapBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.strategy_type {
-            params.push(TagValue {
-                tag: "strategyType".to_string(),
-                value: v.as_str().to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.allow_past_end_time {
-            params.push(TagValue {
-                tag: "allowPastEndTime".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_param_if_some(&mut params, "strategyType", self.strategy_type.map(|v| v.as_str().to_string()));
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "allowPastEndTime", self.allow_past_end_time.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "Twap".to_string(),
@@ -410,31 +348,10 @@ impl PctVolBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.pct_vol {
-            validate_pct_vol("pct_vol", v)?;
-            params.push(TagValue {
-                tag: "pctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.no_take_liq {
-            params.push(TagValue {
-                tag: "noTakeLiq".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "pct_vol", "pctVol", self.pct_vol)?;
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "noTakeLiq", self.no_take_liq.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "PctVol".to_string(),
@@ -545,43 +462,12 @@ impl ArrivalPriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.risk_aversion {
-            params.push(TagValue {
-                tag: "riskAversion".to_string(),
-                value: v.as_str().to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.force_completion {
-            params.push(TagValue {
-                tag: "forceCompletion".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.allow_past_end_time {
-            params.push(TagValue {
-                tag: "allowPastEndTime".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
+        push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "forceCompletion", self.force_completion.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "allowPastEndTime", self.allow_past_end_time.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "ArrivalPx".to_string(),
@@ -650,12 +536,7 @@ impl AdaptiveBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.priority {
-            params.push(TagValue {
-                tag: "adaptivePriority".to_string(),
-                value: v.as_str().to_string(),
-            });
-        }
+        push_param_if_some(&mut params, "adaptivePriority", self.priority.map(|v| v.as_str().to_string()));
 
         Ok(AlgoParams {
             strategy: "Adaptive".to_string(),
@@ -727,31 +608,10 @@ impl ClosePriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.risk_aversion {
-            params.push(TagValue {
-                tag: "riskAversion".to_string(),
-                value: v.as_str().to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.force_completion {
-            params.push(TagValue {
-                tag: "forceCompletion".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
+        push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "forceCompletion", self.force_completion.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "ClosePx".to_string(),
@@ -821,30 +681,10 @@ impl DarkIceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.display_size {
-            params.push(TagValue {
-                tag: "displaySize".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.allow_past_end_time {
-            params.push(TagValue {
-                tag: "allowPastEndTime".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_param_if_some(&mut params, "displaySize", self.display_size.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "allowPastEndTime", self.allow_past_end_time.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "DarkIce".to_string(),
@@ -950,60 +790,15 @@ impl AccumulateDistributeBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.component_size {
-            params.push(TagValue {
-                tag: "componentSize".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.time_between_orders {
-            params.push(TagValue {
-                tag: "timeBetweenOrders".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.randomize_time_20 {
-            params.push(TagValue {
-                tag: "randomizeTime20".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.randomize_size_55 {
-            params.push(TagValue {
-                tag: "randomizeSize55".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.give_up {
-            params.push(TagValue {
-                tag: "giveUp".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.catch_up {
-            params.push(TagValue {
-                tag: "catchUp".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.wait_for_fill {
-            params.push(TagValue {
-                tag: "waitForFill".to_string(),
-                value: v.to_field(),
-            });
-        }
-        if let Some(v) = self.active_time_start {
-            params.push(TagValue {
-                tag: "activeTimeStart".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.active_time_end {
-            params.push(TagValue {
-                tag: "activeTimeEnd".to_string(),
-                value: v,
-            });
-        }
+        push_param_if_some(&mut params, "componentSize", self.component_size.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "timeBetweenOrders", self.time_between_orders.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "randomizeTime20", self.randomize_time_20.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "randomizeSize55", self.randomize_size_55.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "giveUp", self.give_up.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "catchUp", self.catch_up.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "waitForFill", self.wait_for_fill.map(|v| v.to_field()));
+        push_param_if_some(&mut params, "activeTimeStart", self.active_time_start);
+        push_param_if_some(&mut params, "activeTimeEnd", self.active_time_end);
 
         Ok(AlgoParams {
             strategy: "AD".to_string(),
@@ -1067,25 +862,9 @@ impl BalanceImpactRiskBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.risk_aversion {
-            params.push(TagValue {
-                tag: "riskAversion".to_string(),
-                value: v.as_str().to_string(),
-            });
-        }
-        if let Some(v) = self.force_completion {
-            params.push(TagValue {
-                tag: "forceCompletion".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
+        push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
+        push_param_if_some(&mut params, "forceCompletion", self.force_completion.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "BalanceImpactRisk".to_string(),
@@ -1133,13 +912,7 @@ impl MinimiseImpactBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
 
         Ok(AlgoParams {
             strategy: "MinImpact".to_string(),
@@ -1239,52 +1012,13 @@ impl PctVolPriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.pct_vol {
-            validate_pct_vol("pct_vol", v)?;
-            params.push(TagValue {
-                tag: "pctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.delta_pct_vol {
-            validate_pct_vol("delta_pct_vol", v)?;
-            params.push(TagValue {
-                tag: "deltaPctVol".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.min_pct_vol_4_px {
-            validate_pct_vol("min_pct_vol_4_px", v)?;
-            params.push(TagValue {
-                tag: "minPctVol4Px".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.max_pct_vol_4_px {
-            validate_pct_vol("max_pct_vol_4_px", v)?;
-            params.push(TagValue {
-                tag: "maxPctVol4Px".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.start_time {
-            params.push(TagValue {
-                tag: "startTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.end_time {
-            params.push(TagValue {
-                tag: "endTime".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.no_take_liq {
-            params.push(TagValue {
-                tag: "noTakeLiq".to_string(),
-                value: v.to_field(),
-            });
-        }
+        push_pct_vol_if_some(&mut params, "pct_vol", "pctVol", self.pct_vol)?;
+        push_pct_vol_if_some(&mut params, "delta_pct_vol", "deltaPctVol", self.delta_pct_vol)?;
+        push_pct_vol_if_some(&mut params, "min_pct_vol_4_px", "minPctVol4Px", self.min_pct_vol_4_px)?;
+        push_pct_vol_if_some(&mut params, "max_pct_vol_4_px", "maxPctVol4Px", self.max_pct_vol_4_px)?;
+        push_param_if_some(&mut params, "startTime", self.start_time);
+        push_param_if_some(&mut params, "endTime", self.end_time);
+        push_param_if_some(&mut params, "noTakeLiq", self.no_take_liq.map(|v| v.to_field()));
 
         Ok(AlgoParams {
             strategy: "PctVolPx".to_string(),
@@ -1543,42 +1277,12 @@ impl AccuDistrBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.time_between_orders {
-            params.push(TagValue {
-                tag: "timeBetweenOrders".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.route_order_type {
-            params.push(TagValue {
-                tag: "routeOrderType".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.component_size {
-            params.push(TagValue {
-                tag: "componentSize".to_string(),
-                value: v.to_string(),
-            });
-        }
-        if let Some(v) = self.active_time_start {
-            params.push(TagValue {
-                tag: "activeTimeStart".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.active_time_end {
-            params.push(TagValue {
-                tag: "activeTimeEnd".to_string(),
-                value: v,
-            });
-        }
-        if let Some(v) = self.active_time_tz {
-            params.push(TagValue {
-                tag: "activeTimeTz".to_string(),
-                value: v,
-            });
-        }
+        push_param_if_some(&mut params, "timeBetweenOrders", self.time_between_orders.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "routeOrderType", self.route_order_type);
+        push_param_if_some(&mut params, "componentSize", self.component_size.map(|v| v.to_string()));
+        push_param_if_some(&mut params, "activeTimeStart", self.active_time_start);
+        push_param_if_some(&mut params, "activeTimeEnd", self.active_time_end);
+        push_param_if_some(&mut params, "activeTimeTz", self.active_time_tz);
 
         Ok(AlgoParams {
             strategy: "AccuDistr".to_string(),
