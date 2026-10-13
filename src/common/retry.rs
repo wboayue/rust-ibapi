@@ -16,7 +16,7 @@ pub const DEFAULT_MAX_RETRIES: u32 = 3;
 
 // Sync implementations
 #[cfg(feature = "sync")]
-mod sync_retry {
+mod sync_impl {
     use super::*;
 
     /// What a retry waits on between attempts.
@@ -65,7 +65,7 @@ mod sync_retry {
 
 // Async implementations
 #[cfg(feature = "async")]
-mod async_retry {
+mod async_impl {
     use super::*;
     use async_trait::async_trait;
     use futures::Future;
@@ -125,15 +125,15 @@ mod async_retry {
 // Re-export based on feature flags
 #[cfg(feature = "sync")]
 pub mod blocking {
-    pub(crate) use super::sync_retry::*;
+    pub(crate) use super::sync_impl::*;
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 #[allow(unused_imports)]
-pub use sync_retry::*;
+pub use sync_impl::*;
 
 #[cfg(feature = "async")]
-pub use async_retry::*;
+pub use async_impl::*;
 
 #[cfg(test)]
 #[path = "retry_tests.rs"]
