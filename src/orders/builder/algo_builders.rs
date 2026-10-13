@@ -35,6 +35,15 @@ fn push_param_if_some(params: &mut Vec<TagValue>, tag: &str, value: Option<Strin
     }
 }
 
+/// Validate `value` against the PctVol range, then append it as `tag` when set.
+fn push_pct_vol_if_some(params: &mut Vec<TagValue>, field: &'static str, tag: &str, value: Option<f64>) -> Result<(), ValidationError> {
+    if let Some(v) = value {
+        validate_pct_vol(field, v)?;
+    }
+    push_param_if_some(params, tag, value.map(|v| v.to_string()));
+    Ok(())
+}
+
 /// Build params for a "windowed PctVol" strategy: a base/end participation
 /// rate plus optional active-window times. Shared by `PctVolSizeBuilder`
 /// (`"PctVolSz"`) and `PctVolTimeBuilder` (`"PctVolTm"`), which differ only
@@ -50,14 +59,8 @@ fn build_windowed_pct_vol(
 ) -> Result<AlgoParams, ValidationError> {
     let mut params = Vec::new();
 
-    if let Some(v) = start_pct_vol {
-        validate_pct_vol("start_pct_vol", v)?;
-    }
-    push_param_if_some(&mut params, "startPctVol", start_pct_vol.map(|v| v.to_string()));
-    if let Some(v) = end_pct_vol {
-        validate_pct_vol("end_pct_vol", v)?;
-    }
-    push_param_if_some(&mut params, "endPctVol", end_pct_vol.map(|v| v.to_string()));
+    push_pct_vol_if_some(&mut params, "start_pct_vol", "startPctVol", start_pct_vol)?;
+    push_pct_vol_if_some(&mut params, "end_pct_vol", "endPctVol", end_pct_vol)?;
     push_param_if_some(&mut params, "startTime", start_time);
     push_param_if_some(&mut params, "endTime", end_time);
     push_param_if_some(&mut params, "noTakeLiq", no_take_liq.map(|v| v.to_field()));
@@ -173,10 +176,7 @@ impl VwapBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol", self.max_pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
         push_param_if_some(&mut params, "startTime", self.start_time);
         push_param_if_some(&mut params, "endTime", self.end_time);
         push_param_if_some(&mut params, "allowPastEndTime", self.allow_past_end_time.map(|v| v.to_field()));
@@ -348,10 +348,7 @@ impl PctVolBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.pct_vol {
-            validate_pct_vol("pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "pctVol", self.pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "pct_vol", "pctVol", self.pct_vol)?;
         push_param_if_some(&mut params, "startTime", self.start_time);
         push_param_if_some(&mut params, "endTime", self.end_time);
         push_param_if_some(&mut params, "noTakeLiq", self.no_take_liq.map(|v| v.to_field()));
@@ -465,10 +462,7 @@ impl ArrivalPriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol", self.max_pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
         push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
         push_param_if_some(&mut params, "startTime", self.start_time);
         push_param_if_some(&mut params, "endTime", self.end_time);
@@ -614,10 +608,7 @@ impl ClosePriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol", self.max_pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
         push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
         push_param_if_some(&mut params, "startTime", self.start_time);
         push_param_if_some(&mut params, "forceCompletion", self.force_completion.map(|v| v.to_field()));
@@ -871,10 +862,7 @@ impl BalanceImpactRiskBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol", self.max_pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
         push_param_if_some(&mut params, "riskAversion", self.risk_aversion.map(|v| v.as_str().to_string()));
         push_param_if_some(&mut params, "forceCompletion", self.force_completion.map(|v| v.to_field()));
 
@@ -924,10 +912,7 @@ impl MinimiseImpactBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.max_pct_vol {
-            validate_pct_vol("max_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol", self.max_pct_vol.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "max_pct_vol", "maxPctVol", self.max_pct_vol)?;
 
         Ok(AlgoParams {
             strategy: "MinImpact".to_string(),
@@ -1027,22 +1012,10 @@ impl PctVolPriceBuilder {
     pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = self.pct_vol {
-            validate_pct_vol("pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "pctVol", self.pct_vol.map(|v| v.to_string()));
-        if let Some(v) = self.delta_pct_vol {
-            validate_pct_vol("delta_pct_vol", v)?;
-        }
-        push_param_if_some(&mut params, "deltaPctVol", self.delta_pct_vol.map(|v| v.to_string()));
-        if let Some(v) = self.min_pct_vol_4_px {
-            validate_pct_vol("min_pct_vol_4_px", v)?;
-        }
-        push_param_if_some(&mut params, "minPctVol4Px", self.min_pct_vol_4_px.map(|v| v.to_string()));
-        if let Some(v) = self.max_pct_vol_4_px {
-            validate_pct_vol("max_pct_vol_4_px", v)?;
-        }
-        push_param_if_some(&mut params, "maxPctVol4Px", self.max_pct_vol_4_px.map(|v| v.to_string()));
+        push_pct_vol_if_some(&mut params, "pct_vol", "pctVol", self.pct_vol)?;
+        push_pct_vol_if_some(&mut params, "delta_pct_vol", "deltaPctVol", self.delta_pct_vol)?;
+        push_pct_vol_if_some(&mut params, "min_pct_vol_4_px", "minPctVol4Px", self.min_pct_vol_4_px)?;
+        push_pct_vol_if_some(&mut params, "max_pct_vol_4_px", "maxPctVol4Px", self.max_pct_vol_4_px)?;
         push_param_if_some(&mut params, "startTime", self.start_time);
         push_param_if_some(&mut params, "endTime", self.end_time);
         push_param_if_some(&mut params, "noTakeLiq", self.no_take_liq.map(|v| v.to_field()));
