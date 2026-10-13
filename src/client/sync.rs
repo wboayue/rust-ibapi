@@ -104,7 +104,6 @@ impl Client {
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
-        let server_version = connection_metadata.server_version;
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
         // Share the order-ID generator with the bus so a successful reconnect
@@ -116,7 +115,7 @@ impl Client {
         }
 
         // Starts thread to read messages from TWS
-        message_bus.process_messages(server_version)?;
+        message_bus.process_messages()?;
 
         Ok(client)
     }

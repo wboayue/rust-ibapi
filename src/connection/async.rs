@@ -260,8 +260,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
     // asks server to start processing messages
     pub(crate) async fn start_api(&self) -> Result<(), Error> {
-        let server_version = self.server_version();
-        let data = self.connection_handler.format_start_api(self.client_id, server_version);
+        let data = self.connection_handler.format_start_api(self.client_id);
         self.write_raw(&data).await?;
         Ok(())
     }
@@ -272,10 +271,9 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         let mut attempts = 0;
         let ctx = self.handshake_context();
-        let server_version = self.server_version();
         loop {
             let mut message = self.read_message().await?;
-            let info = self.connection_handler.parse_account_info(server_version, &mut message, &ctx)?;
+            let info = self.connection_handler.parse_account_info(&mut message, &ctx)?;
 
             attempts += 1;
             if account_info.merge(info) || attempts > MAX_ACCOUNT_INFO_ATTEMPTS {

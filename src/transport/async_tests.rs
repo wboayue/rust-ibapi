@@ -377,7 +377,7 @@ async fn test_notice_stream_ends_on_request_shutdown_sync() {
 #[tokio::test]
 async fn test_order_update_stream_ends_on_request_shutdown_sync() {
     let (_, bus) = make_bus();
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     let mut updates = bus.create_order_update_subscription().await.unwrap();
 
     bus.request_shutdown_sync();
@@ -435,7 +435,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
     }
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
 
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     bus.request_shutdown_sync();
 
     for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
@@ -458,7 +458,7 @@ async fn test_shutdown_frame_ends_subscriptions_with_executions() {
     let message = next_message(&mut order).await;
     assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData);
 
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     stream.push_inbound((crate::messages::IncomingMessages::Shutdown as i32).to_be_bytes().to_vec());
 
     let drained = tokio::time::timeout(Duration::from_millis(500), async { while order.next().await.is_some() {} }).await;
@@ -1924,7 +1924,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     let mut notices = bus.connection.notice_broadcaster.subscribe();
 
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
 
     let notice = tokio::time::timeout(Duration::from_secs(2), notices.recv())
         .await
@@ -1940,7 +1940,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
 #[tokio::test]
 async fn test_ensure_shutdown_joins_processing_task() {
     let (_, bus) = make_bus();
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
@@ -1976,7 +1976,7 @@ async fn test_reconnect_raises_order_ids_from_handshake() {
     let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100).unwrap());
     bus.set_order_ids(order_ids.clone());
 
-    bus.clone().process_messages(0, Duration::from_millis(0)).expect("process_messages");
+    bus.clone().process_messages().expect("process_messages");
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     while order_ids.current_order_id() < 5000 {
@@ -2336,7 +2336,7 @@ async fn test_drain_reports_shutdown() {
 async fn test_close_ends_dispatch_without_reconnecting() {
     let (stream, bus) = make_bus();
     let mut internal = bus.send_request(CONTRACT_REQUEST_ID, vec![]).await.unwrap();
-    bus.clone().process_messages(0, Duration::ZERO).unwrap();
+    bus.clone().process_messages().unwrap();
     tokio::task::yield_now().await;
 
     stream.close().await;
@@ -2354,9 +2354,7 @@ async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncT
     let address = listener.local_addr().unwrap().to_string();
     let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
     let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
-    bus.clone()
-        .process_messages(server_versions::PROTOBUF_REST_MESSAGES_3, Duration::ZERO)
-        .unwrap();
+    bus.clone().process_messages().unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer.unwrap().0)
 }

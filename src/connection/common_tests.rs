@@ -8,8 +8,6 @@ use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::TimeZone;
 
-const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF_REST_MESSAGES_3;
-
 /// Test sink that drops every notice. Used when the test cares about the
 /// startup callback, not the notice fan-out.
 #[derive(Default)]
@@ -61,7 +59,7 @@ fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -82,7 +80,7 @@ fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -116,7 +114,7 @@ fn test_dispatch_unsolicited_account_value_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
     assert_eq!(got.key, "NetLiquidation");
     assert_eq!(got.value, "123456.78");
@@ -139,7 +137,7 @@ fn test_dispatch_unsolicited_open_order_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     assert!(*captured_clone.lock().unwrap(), "OpenOrderEnd not delivered as typed variant");
 }
 
@@ -156,7 +154,7 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     assert!(*captured_clone.lock().unwrap(), "End variant not delivered");
 }
 
@@ -171,7 +169,7 @@ fn test_dispatch_unsolicited_unknown_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire for unknown handshake frame");
     let notice = sink.last().expect("notice sink should receive unknown-frame notice");
@@ -190,7 +188,7 @@ fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
     let mut message = proto_error_response(-1, 2104, "Market data farm OK");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
 
     let got = sink.last().expect("notice sink didn't receive notice");
     assert_eq!(got.code, 2104);
@@ -203,7 +201,7 @@ fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     let mut message = proto_error_response(-1, 504, "Not connected");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
 
     assert_eq!(sink.last().expect("sink missed").code, 504);
 }
@@ -221,7 +219,6 @@ fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
     let sink = CapturingSink::default();
 
     dispatch_unsolicited_message(
-        TEST_SERVER_VERSION,
         &mut message,
         &StartupHandshakeContext {
             startup: Some(&startup_cb),
@@ -247,7 +244,7 @@ fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
         *fired_clone.lock().unwrap() = true;
     };
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    let result = handler.parse_account_info(&mut message, &startup_ctx(&cb));
     assert!(result.is_ok());
     assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for NextValidId");
 }
@@ -269,7 +266,7 @@ fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
         *fired_clone.lock().unwrap() = true;
     };
 
-    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    let result = handler.parse_account_info(&mut message, &startup_ctx(&cb));
     assert!(result.is_ok());
     assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for ManagedAccounts");
 }
@@ -288,16 +285,16 @@ fn test_parse_account_info_multiple_messages_callback() {
 
     // First message: OpenOrderEnd (unit marker — no decoder, callback fires).
     let mut msg1 = ResponseMessage::from("53\01\0");
-    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg1, &cbs).unwrap();
+    handler.parse_account_info(&mut msg1, &cbs).unwrap();
 
     // Second message: CompletedOrdersEnd (unit marker — callback fires).
     let mut msg2 = ResponseMessage::from("102\0");
-    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg2, &cbs).unwrap();
+    handler.parse_account_info(&mut msg2, &cbs).unwrap();
 
     // Third message: NextValidId (consumed internally — should NOT trigger callback)
     let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
     let mut msg3 = proto_response(IncomingMessages::NextValidId, bytes);
-    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg3, &cbs).unwrap();
+    handler.parse_account_info(&mut msg3, &cbs).unwrap();
 
     assert_eq!(*count.lock().unwrap(), 2, "callback should be invoked exactly twice");
 }
@@ -309,7 +306,7 @@ fn test_parse_account_info_next_valid_id_rejects_text_framing() {
     // direct hand-off to the shared assertion.
     let handler = ConnectionHandler::default();
     assert_rejects_text_framing(IncomingMessages::NextValidId, "9\01\01000\0", |message| {
-        handler.parse_account_info(TEST_SERVER_VERSION, &mut message.clone(), &empty_ctx())
+        handler.parse_account_info(&mut message.clone(), &empty_ctx())
     });
 }
 
@@ -317,7 +314,7 @@ fn test_parse_account_info_next_valid_id_rejects_text_framing() {
 fn test_parse_account_info_managed_accounts_rejects_text_framing() {
     let handler = ConnectionHandler::default();
     assert_rejects_text_framing(IncomingMessages::ManagedAccounts, "15\01\0DU123,DU456\0", |message| {
-        handler.parse_account_info(TEST_SERVER_VERSION, &mut message.clone(), &empty_ctx())
+        handler.parse_account_info(&mut message.clone(), &empty_ctx())
     });
 }
 
@@ -476,7 +473,7 @@ fn test_connection_handler_start_api() {
     use crate::messages::PROTOBUF_MSG_ID;
 
     let handler = ConnectionHandler::default();
-    let data = handler.format_start_api(123, server_versions::PROTOBUF);
+    let data = handler.format_start_api(123);
 
     // First 4 bytes: big-endian (StartApi=71 + 200)
     let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
@@ -490,7 +487,7 @@ fn test_connection_handler_start_api() {
 #[test]
 fn test_connection_handler_start_api_protobuf() {
     let handler = ConnectionHandler::default();
-    let data = handler.format_start_api(123, server_versions::PROTOBUF);
+    let data = handler.format_start_api(123);
 
     // First 4 bytes: msg_id (71 + 200 = 271)
     let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
@@ -667,7 +664,7 @@ fn test_parse_account_info_next_valid_id_protobuf() {
     let mut message = proto_response(IncomingMessages::NextValidId, bytes);
 
     let info = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .parse_account_info(&mut message, &empty_ctx())
         .expect("protobuf NextValidId must parse");
     assert_eq!(info.next_order_id, Some(4242));
     assert_eq!(info.managed_accounts, None);
@@ -685,7 +682,7 @@ fn test_parse_account_info_managed_accounts_protobuf() {
     let mut message = proto_response(IncomingMessages::ManagedAccounts, bytes);
 
     let info = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .parse_account_info(&mut message, &empty_ctx())
         .expect("protobuf ManagedAccounts must parse");
     assert_eq!(info.next_order_id, None);
     assert_eq!(info.managed_accounts, Some("DU111,DU222".to_string()));
@@ -698,7 +695,7 @@ fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
     let mut message = proto_response(IncomingMessages::NextValidId, vec![0xff, 0xff, 0xff]);
 
     let err = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .parse_account_info(&mut message, &empty_ctx())
         .expect_err("garbage protobuf must error");
     assert!(matches!(err, Error::ProtobufDecode(_)), "got {err:?}");
 }
@@ -709,7 +706,7 @@ fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
     let mut message = proto_response(IncomingMessages::ManagedAccounts, vec![0xff, 0xff, 0xff]);
 
     let err = handler
-        .parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_ctx())
+        .parse_account_info(&mut message, &empty_ctx())
         .expect_err("garbage protobuf must error");
     assert!(matches!(err, Error::ProtobufDecode(_)), "got {err:?}");
 }
@@ -719,7 +716,7 @@ fn test_dispatch_unsolicited_open_order_no_callback_is_noop() {
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0, "OpenOrder must not deliver to notice sink");
 }
 
@@ -728,7 +725,7 @@ fn test_dispatch_unsolicited_order_status_no_callback_is_noop() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -737,7 +734,7 @@ fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("53\01\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -758,7 +755,7 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
     );
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -774,7 +771,7 @@ fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -805,7 +802,7 @@ fn test_dispatch_unsolicited_execution_typed() {
         other => panic!("expected Execution, got {other:?}"),
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
     assert_eq!(got.contract.symbol.to_string(), "TSLA");
     assert_eq!(got.execution.shares, 100.0);
@@ -826,7 +823,7 @@ fn test_dispatch_unsolicited_commission_report_typed() {
         other => panic!("expected CommissionReport, got {other:?}"),
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
     assert_eq!(got.commission, 2.5);
     assert_eq!(got.currency, "USD");
@@ -846,7 +843,7 @@ fn test_dispatch_unsolicited_completed_order_typed() {
         other => panic!("expected CompletedOrder, got {other:?}"),
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
     // Completed orders carry the sentinel order_id = -1 per decode_completed_order_proto.
     assert_eq!(got.order_id, -1);
@@ -867,7 +864,7 @@ fn test_dispatch_unsolicited_execution_data_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     assert!(*fired_clone.lock().unwrap(), "ExecutionDataEnd not delivered as typed variant");
 }
 
@@ -886,7 +883,7 @@ fn test_dispatch_unsolicited_completed_orders_end_typed() {
         }
     };
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_ctx(&cb));
+    dispatch_unsolicited_message(&mut message, &startup_ctx(&cb));
     assert!(*fired_clone.lock().unwrap(), "CompletedOrdersEnd not delivered as typed variant");
 }
 
@@ -900,7 +897,7 @@ fn test_dispatch_unsolicited_execution_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -917,7 +914,7 @@ fn test_dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -934,7 +931,7 @@ fn test_dispatch_unsolicited_completed_order_decode_failure_emits_notice() {
     let cb = move |_msg: StartupMessage| *cb_fired_clone.lock().unwrap() = true;
     let sink = CapturingSink::default();
 
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &full_ctx(&cb, &sink));
+    dispatch_unsolicited_message(&mut message, &full_ctx(&cb, &sink));
 
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
@@ -947,7 +944,7 @@ fn test_dispatch_unsolicited_execution_no_callback_is_noop() {
     let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0, "ExecutionData must not deliver to notice sink");
 }
 
@@ -956,7 +953,7 @@ fn test_dispatch_unsolicited_commission_report_no_callback_is_noop() {
     let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -965,7 +962,7 @@ fn test_dispatch_unsolicited_completed_order_no_callback_is_noop() {
     let mut message = ResponseMessage::from("101\0\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -974,7 +971,7 @@ fn test_dispatch_unsolicited_execution_data_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("55\01\042\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -983,7 +980,7 @@ fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("102\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     assert_eq!(sink.count(), 0);
 }
 
@@ -995,7 +992,7 @@ fn test_dispatch_unsolicited_unrecognized_id_raises_unknown_message_type() {
     let mut message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
 
     let notice = sink.last().expect("an unrecognized id must raise a notice");
     assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
@@ -1015,7 +1012,7 @@ fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
     let mut message = ResponseMessage::from("14\0\0");
 
     let sink = CapturingSink::default();
-    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_sink_ctx(&sink));
+    dispatch_unsolicited_message(&mut message, &notice_sink_ctx(&sink));
     let notice = sink.last().expect("notice sink should receive unknown-frame notice");
     assert_eq!(notice.code, HANDSHAKE_UNKNOWN_FRAME_CODE);
     assert!(notice.is_handshake_synthetic());
