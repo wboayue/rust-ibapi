@@ -55,7 +55,8 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
 }
 
 impl AsyncConnection<AsyncTcpSocket> {
-    /// Open the socket and run the TWS handshake for the builder's validated `ConnectionConfig`.
+    /// Open the socket and run the TWS handshake. Settings come from the
+    /// builder's validated `ConnectionConfig`.
     ///
     /// `notice_sender` is shared with any pre-bound `NoticeStream`; the builder
     /// allocates the broadcast channel before calling here. Persists across

@@ -51,7 +51,8 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
 }
 
 impl Connection<TcpSocket> {
-    /// Open the socket and run the TWS handshake for the builder's validated `ConnectionConfig`.
+    /// Open the socket and run the TWS handshake. Settings come from the
+    /// builder's validated `ConnectionConfig`.
     ///
     /// `notice_broadcaster` is shared with any pre-bound `NoticeStream`; the
     /// builder allocates it (and the matching receiver) before calling here.
