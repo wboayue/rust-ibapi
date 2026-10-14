@@ -151,7 +151,7 @@ impl Client {
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order)?;
+        verify::verify_order(self.server_version(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -189,7 +189,7 @@ impl Client {
     /// ```
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order)?;
+        verify::verify_order(self.server_version(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;

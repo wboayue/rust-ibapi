@@ -318,7 +318,7 @@ impl Client {
     /// ```
     pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order)?;
+        verify::verify_order(self.server_version(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;
@@ -383,7 +383,7 @@ impl Client {
     /// ```
     pub fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self, order)?;
+        verify::verify_order(self.server_version(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request)?;
