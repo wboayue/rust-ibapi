@@ -42,21 +42,6 @@ async fn accessors_round_trip() {
 }
 
 #[tokio::test]
-async fn check_server_version_branches() {
-    let client = stubbed_client();
-
-    client.check_server_version(SERVER_VERSION, "feature").expect("equal version succeeds");
-    client
-        .check_server_version(SERVER_VERSION - 1, "feature")
-        .expect("older version succeeds");
-
-    let err = client
-        .check_server_version(SERVER_VERSION + 100, "future_feature")
-        .expect_err("newer version fails");
-    assert!(matches!(err, Error::ServerVersion(_, _, _)), "got {err:?}");
-}
-
-#[tokio::test]
 async fn decoder_context_is_constructable() {
     let client = stubbed_client();
 

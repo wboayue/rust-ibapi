@@ -286,14 +286,6 @@ impl Client {
         self.id_manager.raise_order_id(order_id);
     }
 
-    /// Check server version requirement
-    pub(crate) fn check_server_version(&self, required_version: i32, feature: &str) -> Result<(), Error> {
-        if self.server_version < required_version {
-            return Err(Error::ServerVersion(required_version, self.server_version, feature.into()));
-        }
-        Ok(())
-    }
-
     pub(crate) async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.message_bus.send_request(request_id, message).await
     }
