@@ -103,15 +103,7 @@ impl Client {
         notice_sender: broadcast::Sender<Notice>,
         channel_capacity: usize,
     ) -> Result<Client, Error> {
-        let connection = AsyncConnection::with_pieces(
-            &pieces.address,
-            pieces.client_id,
-            pieces.tcp_no_delay,
-            pieces.startup_callback,
-            notice_sender,
-            pieces.max_reconnect_attempts,
-        )
-        .await?;
+        let connection = AsyncConnection::with_pieces(pieces.connection, notice_sender).await?;
         let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity)?);

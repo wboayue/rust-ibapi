@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use log::{debug, info};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupHandshakeContext,
-    StartupMessage, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
+    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -29,7 +29,7 @@ pub struct Connection<S: Stream> {
     pub(crate) connection_handler: ConnectionHandler,
     /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
     /// Fires on initial handshake *and* every auto-reconnect handshake.
-    startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    startup_callback: Option<StartupCallback>,
     /// Fan-out for unrouted notices. Shared with the bus (the bus reads via
     /// `self.connection.notice_broadcaster`) and any pre-bound `NoticeStream`
     /// the user obtained from `ClientBuilder::connect_with_notice_stream`.
@@ -51,22 +51,15 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
 }
 
 impl Connection<TcpSocket> {
-    /// Create a connection from explicit pieces handed in by the builder.
+    /// Create a connection from the builder's validated `ConnectionConfig`.
     ///
     /// `notice_broadcaster` is shared with any pre-bound `NoticeStream`; the
     /// builder allocates it (and the matching receiver) before calling here.
     /// Persists across reconnects.
-    pub(crate) fn with_pieces(
-        address: &str,
-        client_id: i32,
-        tcp_no_delay: bool,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
-        notice_broadcaster: Arc<NoticeBroadcaster>,
-        max_reconnect_attempts: Option<u32>,
-    ) -> Result<Self, Error> {
-        let socket = TcpSocket::connect(address, tcp_no_delay)?;
-        let mut connection = Self::with_socket(socket, client_id, startup_callback, notice_broadcaster);
-        connection.max_reconnect_attempts = max_reconnect_attempts;
+    pub(crate) fn with_pieces(config: ConnectionConfig, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Self, Error> {
+        let socket = TcpSocket::connect(&config.address, config.tcp_no_delay)?;
+        let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_broadcaster);
+        connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection()?;
         Ok(connection)
     }
@@ -79,7 +72,7 @@ impl<S: Stream> Connection<S> {
     pub(crate) fn with_socket(
         socket: S,
         client_id: i32,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        startup_callback: Option<StartupCallback>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
     ) -> Self {
         Self {

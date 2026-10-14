@@ -24,15 +24,15 @@ fn validate_passes_reconnect_limit_through() {
     };
 
     let pieces = base().validate().expect("validate");
-    assert_eq!(pieces.max_reconnect_attempts, Some(MAX_RECONNECT_ATTEMPTS));
+    assert_eq!(pieces.connection.max_reconnect_attempts, Some(MAX_RECONNECT_ATTEMPTS));
 
     let mut limited = base();
     limited.max_reconnect_attempts = Some(50);
-    assert_eq!(limited.validate().expect("validate").max_reconnect_attempts, Some(50));
+    assert_eq!(limited.validate().expect("validate").connection.max_reconnect_attempts, Some(50));
 
     let mut unlimited = base();
     unlimited.max_reconnect_attempts = None;
-    assert_eq!(unlimited.validate().expect("validate").max_reconnect_attempts, None);
+    assert_eq!(unlimited.validate().expect("validate").connection.max_reconnect_attempts, None);
 }
 
 fn connectable() -> BuilderState {
