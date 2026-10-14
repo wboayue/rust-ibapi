@@ -100,7 +100,7 @@ mod tests;
 
 // Sync implementations
 #[cfg(feature = "sync")]
-mod sync_helpers {
+mod sync_impl {
     use crate::client::blocking::ClientRequestBuilders;
     use crate::client::sync::Client;
     use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -139,7 +139,7 @@ mod sync_helpers {
 
 // Async implementations
 #[cfg(feature = "async")]
-mod async_helpers {
+mod async_impl {
     use crate::client::{Client, ClientRequestBuilders};
     use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::Error;
@@ -180,12 +180,12 @@ mod async_helpers {
 // Re-export based on feature flags
 #[cfg(feature = "sync")]
 pub mod blocking {
-    pub(crate) use super::sync_helpers::*;
+    pub(crate) use super::sync_impl::*;
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 #[allow(unused_imports)]
-pub use sync_helpers::*;
+pub use sync_impl::*;
 
 #[cfg(feature = "async")]
-pub use async_helpers::*;
+pub use async_impl::*;

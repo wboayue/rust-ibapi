@@ -8,6 +8,7 @@ triggers:
   - creating a new domain module
   - choosing between <domain>/sync.rs and <domain>/sync/mod.rs
   - placing a protobuf decoder or a shared proto converter
+  - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
 precedents: ["#657"]
@@ -24,6 +25,9 @@ cross-cutting client mechanics (connect, ids, server version, disconnect).
 - Public types go in `<domain>/mod.rs`, ungated by feature flags.
 - Prefer the flat `<domain>/sync.rs` over `<domain>/sync/mod.rs` — the project minimizes
   `mod.rs` files.
+- Keep builder per-feature `impl` blocks in the builder's own file unless the impls are large
+  enough to crowd out the shared builder code, in which case split them into sibling
+  `sync_impl.rs` / `async_impl.rs` files.
 
 Flat applies to the *main* file, not to everything beneath it. `<domain>/<side>.rs` with
 `<domain>/<side>/foo.rs` helpers underneath is canonical Rust and stays. Tests are governed
