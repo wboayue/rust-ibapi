@@ -55,12 +55,13 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
 }
 
 impl AsyncConnection<AsyncTcpSocket> {
-    /// Create a connection from the builder's validated `ConnectionConfig`.
+    /// Open the socket and run the TWS handshake. Settings come from the
+    /// builder's validated `ConnectionConfig`.
     ///
     /// `notice_sender` is shared with any pre-bound `NoticeStream`; the builder
     /// allocates the broadcast channel before calling here. Persists across
     /// reconnects.
-    pub(crate) async fn with_pieces(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
+    pub(crate) async fn connect(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
         let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
@@ -100,7 +101,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     /// Build a connection over an arbitrary `AsyncStream` without performing
-    /// the handshake. For tests; the production path uses `with_pieces` which
+    /// the handshake. For tests; the production path uses `connect` which
     /// runs `establish_connection` immediately after construction.
     #[cfg(test)]
     pub(crate) fn stubbed(socket: S, client_id: i32) -> Self {

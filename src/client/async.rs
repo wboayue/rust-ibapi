@@ -8,7 +8,7 @@ use time_tz::Tz;
 use tokio::sync::broadcast;
 
 use crate::client::builders::client_builder::async_impl::ClientBuilder;
-use crate::client::builders::client_builder::ValidatedPieces;
+use crate::client::builders::client_builder::ClientConfig;
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
 use crate::messages::{Notice, OutgoingMessages};
 use crate::transport::{
@@ -98,12 +98,12 @@ impl Client {
     /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
     /// Builds the `AsyncConnection`, wraps it in an `AsyncTcpMessageBus`, and
     /// kicks off the dispatcher task.
-    pub(crate) async fn connect_with_pieces(
-        pieces: ValidatedPieces,
+    pub(crate) async fn connect_with_config(
+        config: ClientConfig,
         notice_sender: broadcast::Sender<Notice>,
         channel_capacity: usize,
     ) -> Result<Client, Error> {
-        let connection = AsyncConnection::with_pieces(pieces.connection, notice_sender).await?;
+        let connection = AsyncConnection::connect(config.connection, notice_sender).await?;
         let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity)?);
@@ -114,7 +114,7 @@ impl Client {
         // re-seeds it from the handshake's NextValidId; must be installed
         // before the processing task starts.
         message_bus.set_order_ids(client.id_manager.clone());
-        if let Some(limiter) = pieces.rate_limiter {
+        if let Some(limiter) = config.rate_limiter {
             message_bus.set_rate_limiter(limiter);
         }
 
