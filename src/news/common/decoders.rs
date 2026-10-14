@@ -1,4 +1,3 @@
-use crate::proto::decoders::DecodeProto;
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 use time_tz::{timezones, PrimitiveDateTimeExt};
@@ -25,11 +24,11 @@ pub(crate) fn decode_news_providers_proto(p: crate::proto::NewsProviders) -> Res
 }
 
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
-    decode_news_bulletin_proto(message.require_proto()?)
+    decode_news_bulletin_proto(message.proto()?)
 }
 
 pub(in crate::news) fn decode_historical_news(message: &ResponseMessage) -> Result<NewsArticle, Error> {
-    decode_historical_news_proto(message.require_proto()?)
+    decode_historical_news_proto(message.proto()?)
 }
 
 fn try_parse_time_as_utc(time: &str) -> Option<OffsetDateTime> {
@@ -42,12 +41,10 @@ fn try_parse_time_as_utc(time: &str) -> Option<OffsetDateTime> {
 }
 
 pub(in crate::news) fn decode_tick_news(message: &ResponseMessage) -> Result<NewsArticle, Error> {
-    decode_tick_news_proto(message.require_proto()?)
+    decode_tick_news_proto(message.proto()?)
 }
 
-pub(crate) fn decode_tick_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
-    let p = crate::proto::TickNews::decode_proto(bytes)?;
-
+pub(crate) fn decode_tick_news_proto(p: crate::proto::TickNews) -> Result<NewsArticle, Error> {
     let millis = p.timestamp.unwrap_or_default();
     let time =
         OffsetDateTime::from_unix_timestamp_nanos((millis as i128) * 1_000_000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))?;
@@ -61,8 +58,7 @@ pub(crate) fn decode_tick_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error>
     })
 }
 
-pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {
-    let p = crate::proto::NewsBulletin::decode_proto(bytes)?;
+pub(crate) fn decode_news_bulletin_proto(p: crate::proto::NewsBulletin) -> Result<NewsBulletin, Error> {
     Ok(NewsBulletin {
         message_id: p.news_msg_id.unwrap_or_default(),
         message_type: p.news_msg_type.unwrap_or_default(),
@@ -78,9 +74,7 @@ pub(crate) fn decode_news_article_proto(p: crate::proto::NewsArticle) -> Result<
     })
 }
 
-pub(crate) fn decode_historical_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
-    let p = crate::proto::HistoricalNews::decode_proto(bytes)?;
-
+pub(crate) fn decode_historical_news_proto(p: crate::proto::HistoricalNews) -> Result<NewsArticle, Error> {
     let time = p.time.as_deref().and_then(try_parse_time_as_utc).unwrap_or(OffsetDateTime::UNIX_EPOCH);
 
     Ok(NewsArticle {

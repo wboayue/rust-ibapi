@@ -1,7 +1,6 @@
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
 
 use super::*;
-use prost::Message;
 use time::macros::{date, datetime};
 
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
@@ -14,7 +13,7 @@ use crate::testdata::builders::market_data::{
 use crate::testdata::builders::ResponseProtoEncoder;
 
 // ---------------------------------------------------------------------------
-// Happy-path proto decoders. Each test drives bytes through the `*_proto`
+// Happy-path proto decoders. Each test hands the proto struct to the `*_proto`
 // helper directly (scanner precedent: src/scanner/common/decoders_tests.rs).
 // ---------------------------------------------------------------------------
 
@@ -46,7 +45,7 @@ fn test_decode_historical_data_proto() {
         ],
     };
 
-    let bars = decode_historical_data_proto(&proto_msg.encode_to_vec()).unwrap();
+    let bars = decode_historical_data_proto(proto_msg).unwrap();
     assert_eq!(bars.len(), 2);
 
     assert_eq!(bars[0].date, BarTimestamp::DateTime(datetime!(2023-04-10 13:30:00 UTC)));
@@ -94,7 +93,7 @@ fn test_decode_historical_ticks_last_proto() {
         is_done: Some(true),
     };
 
-    let (ticks, done) = decode_historical_ticks_last_proto(&proto_msg.encode_to_vec()).unwrap();
+    let (ticks, done) = decode_historical_ticks_last_proto(proto_msg).unwrap();
     assert!(done);
     assert_eq!(ticks.len(), 2);
 
@@ -143,7 +142,7 @@ fn test_decode_historical_ticks_proto() {
         is_done: Some(false),
     };
 
-    let (ticks, done) = decode_historical_ticks_proto(&proto_msg.encode_to_vec()).unwrap();
+    let (ticks, done) = decode_historical_ticks_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 2);
     assert!(!done);
     assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
@@ -169,7 +168,7 @@ fn test_decode_historical_ticks_bid_ask_proto() {
         is_done: Some(true),
     };
 
-    let (ticks, done) = decode_historical_ticks_bid_ask_proto(&proto_msg.encode_to_vec()).unwrap();
+    let (ticks, done) = decode_historical_ticks_bid_ask_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 1);
     assert!(done);
     assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
@@ -214,7 +213,7 @@ fn test_decode_historical_data_end_proto() {
         end_date_str: Some("20260105 16:00:00 US/Eastern".into()),
     };
 
-    let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).unwrap();
+    let (start, end) = decode_historical_data_end_proto(proto_msg).unwrap();
     assert!(start < end);
     assert_eq!(start.year(), 2026);
     assert_eq!(end.year(), 2026);
@@ -240,7 +239,7 @@ fn test_decode_historical_data_end_accepted_renderings() {
             end_date_str: Some(rendering.into()),
         };
 
-        let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).unwrap();
+        let (start, end) = decode_historical_data_end_proto(proto_msg).unwrap();
         assert_eq!(start, expected, "rendering: {rendering:?}");
         assert_eq!(end, start, "rendering: {rendering:?}");
     }
@@ -335,7 +334,7 @@ fn test_decode_historical_data_update_proto() {
         }),
     };
 
-    let result = decode_historical_data_update_proto(&proto_msg.encode_to_vec()).unwrap();
+    let result = decode_historical_data_update_proto(proto_msg).unwrap();
     assert_eq!(result.open, 150.0);
     assert_eq!(result.high, 151.0);
     assert_eq!(result.low, 149.5);
@@ -353,7 +352,7 @@ fn test_decode_historical_data_update_proto_missing_bar_defaults() {
         historical_data_bar: None,
     };
 
-    let result = decode_historical_data_update_proto(&proto_msg.encode_to_vec()).unwrap();
+    let result = decode_historical_data_update_proto(proto_msg).unwrap();
     assert_eq!(result.count, 0);
     assert_eq!(result.date, BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
 }
@@ -423,7 +422,7 @@ fn test_decode_historical_ticks_last_rejects_text_framing() {
 // are Option<f64>.
 
 /// The builder stringifies an f64, so a malformed wire value needs raw proto.
-fn historical_data_bytes(volume: &str) -> Vec<u8> {
+fn historical_data_proto(volume: &str) -> crate::proto::HistoricalData {
     crate::proto::HistoricalData {
         req_id: Some(9000),
         historical_data_bars: vec![crate::proto::HistoricalDataBar {
@@ -437,17 +436,16 @@ fn historical_data_bytes(volume: &str) -> Vec<u8> {
             bar_count: Some(10),
         }],
     }
-    .encode_to_vec()
 }
 
 #[test]
 fn test_decode_historical_data_proto_rejects_malformed_volume() {
-    assert_decimal_parse_error(super::decode_historical_data_proto(&historical_data_bytes("abc")), "abc");
+    assert_decimal_parse_error(super::decode_historical_data_proto(historical_data_proto("abc")), "abc");
 }
 
 #[test]
 fn test_decode_historical_data_proto_preserves_fractional_volume() {
-    let bytes = historical_data_response()
+    let p = historical_data_response()
         .bar(
             historical_data_daily_bar("20230101")
                 .ohlc(100.0, 101.0, 99.0, 100.5)
@@ -455,25 +453,24 @@ fn test_decode_historical_data_proto_preserves_fractional_volume() {
                 .wap(100.25)
                 .count(10),
         )
-        .encode_proto();
+        .to_proto();
 
-    let bars = super::decode_historical_data_proto(&bytes).unwrap();
+    let bars = super::decode_historical_data_proto(p).unwrap();
     assert_eq!(bars[0].volume, 0.5);
 }
 
 #[test]
 fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
-    let bytes = crate::proto::HistoricalDataUpdate {
+    let p = crate::proto::HistoricalDataUpdate {
         req_id: Some(9000),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
             date: Some("20230101".into()),
             volume: Some("abc".into()),
             ..Default::default()
         }),
-    }
-    .encode_to_vec();
+    };
 
-    assert_decimal_parse_error(super::decode_historical_data_update_proto(&bytes), "abc");
+    assert_decimal_parse_error(super::decode_historical_data_update_proto(p), "abc");
 }
 
 // === tick and histogram sizes preserve fractional wire values (issue #716) ===
@@ -483,40 +480,40 @@ fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
 
 #[test]
 fn test_decode_historical_ticks_proto_preserves_fractional_size() {
-    let bytes = historical_ticks_response()
+    let p = historical_ticks_response()
         .tick(historical_tick_mid(1_681_133_400, 150.0, 0.5))
-        .encode_proto();
+        .to_proto();
 
-    let (ticks, _) = super::decode_historical_ticks_proto(&bytes).unwrap();
+    let (ticks, _) = super::decode_historical_ticks_proto(p).unwrap();
     assert_eq!(ticks[0].size, Some(0.5));
 }
 
 #[test]
 fn test_decode_historical_ticks_last_proto_preserves_fractional_size() {
-    let bytes = historical_ticks_last_response()
+    let p = historical_ticks_last_response()
         .tick(historical_tick_last(1_681_133_400, 150.0, 0.25, "NYSE"))
-        .encode_proto();
+        .to_proto();
 
-    let (ticks, _) = super::decode_historical_ticks_last_proto(&bytes).unwrap();
+    let (ticks, _) = super::decode_historical_ticks_last_proto(p).unwrap();
     assert_eq!(ticks[0].size, Some(0.25));
 }
 
 #[test]
 fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
-    let bytes = historical_ticks_bid_ask_response()
+    let p = historical_ticks_bid_ask_response()
         .tick(historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.5, 0.75))
-        .encode_proto();
+        .to_proto();
 
-    let (ticks, _) = super::decode_historical_ticks_bid_ask_proto(&bytes).unwrap();
+    let (ticks, _) = super::decode_historical_ticks_bid_ask_proto(p).unwrap();
     assert_eq!(ticks[0].size_bid, Some(0.5));
     assert_eq!(ticks[0].size_ask, Some(0.75));
 }
 
 #[test]
 fn test_decode_histogram_data_proto_preserves_fractional_size() {
-    let bytes = histogram_data_response().entry(histogram_entry(125.5, 0.5)).encode_proto();
+    let p = histogram_data_response().entry(histogram_entry(125.5, 0.5)).to_proto();
 
-    let entries = super::decode_histogram_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
+    let entries = super::decode_histogram_data_proto(p).unwrap();
     assert_eq!(entries[0].size, Some(0.5));
 }
 
@@ -524,23 +521,20 @@ fn test_decode_histogram_data_proto_preserves_fractional_size() {
 
 #[test]
 fn test_decode_histogram_data_proto_rejects_malformed_size() {
-    let bytes = histogram_data_response()
+    let p = histogram_data_response()
         .entry(histogram_entry(125.5, 0.0).size_wire(Some("abc")))
-        .encode_proto();
+        .to_proto();
 
-    assert_decimal_parse_error(
-        super::decode_histogram_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")),
-        "abc",
-    );
+    assert_decimal_parse_error(super::decode_histogram_data_proto(p), "abc");
 }
 
 #[test]
 fn test_decode_historical_ticks_proto_rejects_malformed_size() {
-    let bytes = historical_ticks_response()
+    let p = historical_ticks_response()
         .tick(historical_tick_mid(1_681_133_400, 150.0, 0.0).size_wire(Some("abc")))
-        .encode_proto();
+        .to_proto();
 
-    assert_decimal_parse_error(super::decode_historical_ticks_proto(&bytes), "abc");
+    assert_decimal_parse_error(super::decode_historical_ticks_proto(p), "abc");
 }
 
 /// `HistoricalDataEnd` echoes the requested window, and the schedule decoder
@@ -557,7 +551,7 @@ fn test_window_edge_in_dst_fold_or_gap_decodes() {
         start_date_str: Some("20251102 01:40:26 US/Eastern".into()),
         end_date_str: Some("20260829 04:33:35 US/Eastern".into()),
     };
-    let (start, end) = decode_historical_data_end_proto(&proto_msg.encode_to_vec()).expect("fold resolves");
+    let (start, end) = decode_historical_data_end_proto(proto_msg).expect("fold resolves");
     assert_eq!(start, datetime!(2025-11-02 05:40:26 UTC), "fold takes the earlier (EDT) offset");
     assert_eq!(end, datetime!(2026-08-29 08:33:35 UTC));
 

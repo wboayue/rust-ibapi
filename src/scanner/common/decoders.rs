@@ -1,5 +1,3 @@
-use crate::proto::decoders::DecodeProto;
-
 use crate::messages::ResponseMessage;
 use crate::Error;
 
@@ -16,12 +14,10 @@ pub(crate) fn decode_scanner_parameters_proto(p: crate::proto::ScannerParameters
 }
 
 pub(in crate::scanner) fn decode_scanner_data(message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    decode_scanner_data_proto(message.require_proto()?)
+    decode_scanner_data_proto(message.proto()?)
 }
 
-pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
-    let p = crate::proto::ScannerData::decode_proto(bytes)?;
-
+pub(crate) fn decode_scanner_data_proto(p: crate::proto::ScannerData) -> Result<Vec<ScannerData>, Error> {
     let mut results = Vec::with_capacity(p.scanner_data_element.len());
     for elem in p.scanner_data_element {
         let contract = elem

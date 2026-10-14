@@ -16,14 +16,14 @@ pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_optio
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
 pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
-    decode_contract_data_proto(message.require_proto()?)
+    decode_contract_data_proto(message.proto()?)
 }
 
 /// TWS answers a bond query with `BondContractData` (msg 18): the same
 /// `ContractData` proto as other securities, decoded with C#'s bond-only
 /// handling of the last trade date (`EDecoderUtils.SetLastTradeDate`).
 pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
-    let mut details = decode_contract_data_proto(message.require_proto()?)?;
+    let mut details = decode_contract_data_proto(message.proto()?)?;
     split_bond_last_trade_date(&mut details);
     Ok(details)
 }
@@ -50,17 +50,14 @@ fn split_bond_last_trade_date(details: &mut ContractDetails) {
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &ResponseMessage) -> Result<OptionChain, Error> {
-    decode_option_chain_proto(message.require_proto()?)
+    decode_option_chain_proto(message.proto()?)
 }
 
 // === Protobuf decoders ===
 
-use crate::proto::decoders::DecodeProto;
-
 use crate::contracts::PriceIncrement;
 
-pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
-    let p = crate::proto::ContractData::decode_proto(bytes)?;
+pub(crate) fn decode_contract_data_proto(p: crate::proto::ContractData) -> Result<ContractDetails, Error> {
     let proto_contract = crate::proto::decoders::required(p.contract.as_ref(), "contract", "ContractData")?;
     let proto_details = crate::proto::decoders::required(p.contract_details.as_ref(), "contract_details", "ContractData")?;
     crate::proto::decoders::decode_contract_details(proto_contract, proto_details)
@@ -98,8 +95,7 @@ pub(crate) fn decode_market_rule_proto(p: crate::proto::MarketRule) -> Result<Ma
     })
 }
 
-pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Error> {
-    let p = crate::proto::SecDefOptParameter::decode_proto(bytes)?;
+pub(crate) fn decode_option_chain_proto(p: crate::proto::SecDefOptParameter) -> Result<OptionChain, Error> {
     Ok(OptionChain {
         exchange: p.exchange.unwrap_or_default(),
         underlying_contract_id: p.underlying_con_id.unwrap_or_default(),

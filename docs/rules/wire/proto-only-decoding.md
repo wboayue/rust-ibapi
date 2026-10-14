@@ -8,14 +8,15 @@ triggers:
   - adding a StreamDecoder or TickDecoder impl
   - a subscription terminates on an unexpected message
   - adding a decode arm for a new message type
-symbols: [require_proto, process_decode_result, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
+symbols: [require_proto, ResponseMessage::proto, process_decode_result, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
 precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
-Every domain decoder reads its payload with `message.require_proto()` and feeds the bytes to
-`prost::Message::decode(...)`. There is no text branch and no format dispatch — `decode_proto_or_text`
+Every domain decoder reads its payload with `message.proto()`, which takes the bytes from
+`require_proto()` and decodes them through `DecodeProto::decode_proto` (prost's error becomes
+`Error::ProtobufDecode`). There is no text branch and no format dispatch — `decode_proto_or_text`
 was retired with the floor ratchet.
 
 **Decoding takes `&ResponseMessage`, never `&mut`.** Reading `raw_bytes` and handing it to `prost`
@@ -74,7 +75,7 @@ mistake specifically.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
-    decode_news_bulletin_proto(message.require_proto()?)
+    decode_news_bulletin_proto(message.proto()?)
 }
 ```
 

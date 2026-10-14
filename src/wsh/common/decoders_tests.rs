@@ -1,29 +1,26 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
-use prost::Message;
 
 #[test]
 fn test_decode_wsh_metadata_proto() {
-    let bytes = crate::proto::WshMetaData {
+    let proto_msg = crate::proto::WshMetaData {
         req_id: Some(1),
         data_json: Some(r#"{"key":"value"}"#.into()),
-    }
-    .encode_to_vec();
+    };
 
-    let result = decode_wsh_metadata_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
+    let result = decode_wsh_metadata_proto(proto_msg).unwrap();
     assert_eq!(result.data_json, r#"{"key":"value"}"#);
 }
 
 #[test]
 fn test_decode_wsh_event_data_proto() {
-    let bytes = crate::proto::WshEventData {
+    let proto_msg = crate::proto::WshEventData {
         req_id: Some(1),
         data_json: Some(r#"{"event":"earnings"}"#.into()),
-    }
-    .encode_to_vec();
+    };
 
-    let result = decode_wsh_event_data_proto(prost::Message::decode(&bytes[..]).expect("fixture must decode")).unwrap();
+    let result = decode_wsh_event_data_proto(proto_msg).unwrap();
     assert_eq!(result.data_json, r#"{"event":"earnings"}"#);
 }
 
