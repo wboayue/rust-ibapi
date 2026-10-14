@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::client::builders::client_builder::sync_impl::ClientBuilder;
-use crate::client::builders::client_builder::ValidatedPieces;
+use crate::client::builders::client_builder::ClientConfig;
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
@@ -91,8 +91,8 @@ impl Client {
     /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
     /// Builds the `Connection`, wraps it in a `TcpMessageBus`, and kicks off
     /// the dispatcher thread.
-    pub(crate) fn connect_with_pieces(pieces: ValidatedPieces, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
-        let connection = Connection::with_pieces(pieces.connection, notice_broadcaster)?;
+    pub(crate) fn connect_with_config(config: ClientConfig, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
+        let connection = Connection::connect(config.connection, notice_broadcaster)?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
@@ -103,7 +103,7 @@ impl Client {
         // re-seeds it from the handshake's NextValidId; must be installed
         // before the dispatcher thread starts.
         message_bus.set_order_ids(client.id_manager.clone());
-        if let Some(limiter) = pieces.rate_limiter {
+        if let Some(limiter) = config.rate_limiter {
             message_bus.set_rate_limiter(limiter);
         }
 

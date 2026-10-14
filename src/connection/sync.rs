@@ -51,12 +51,12 @@ impl<S: Stream> std::fmt::Debug for Connection<S> {
 }
 
 impl Connection<TcpSocket> {
-    /// Create a connection from the builder's validated `ConnectionConfig`.
+    /// Open the socket and run the TWS handshake for the builder's validated `ConnectionConfig`.
     ///
     /// `notice_broadcaster` is shared with any pre-bound `NoticeStream`; the
     /// builder allocates it (and the matching receiver) before calling here.
     /// Persists across reconnects.
-    pub(crate) fn with_pieces(config: ConnectionConfig, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Self, Error> {
+    pub(crate) fn connect(config: ConnectionConfig, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Self, Error> {
         let socket = TcpSocket::connect(&config.address, config.tcp_no_delay)?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_broadcaster);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;

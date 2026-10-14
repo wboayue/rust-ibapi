@@ -44,7 +44,7 @@ use crate::transport::rate_limiter::RateLimiter;
 /// [`async_impl::ClientBuilder`]. Centralizes the field set and the
 /// `InvalidArgument` validation messages so future configurators only need
 /// to be added in one place. Terminals call [`BuilderState::validate`] to
-/// extract the checked pieces.
+/// extract the checked [`ClientConfig`].
 pub(super) struct BuilderState {
     pub(super) address: Option<String>,
     pub(super) client_id: Option<i32>,
@@ -71,19 +71,19 @@ impl Default for BuilderState {
 
 /// Output of [`BuilderState::validate`]: the connection settings with
 /// `address` and `client_id` unwrapped, plus the client-side rate limiter.
-pub(crate) struct ValidatedPieces {
+pub(crate) struct ClientConfig {
     pub(crate) connection: ConnectionConfig,
     pub(crate) rate_limiter: Option<RateLimiter>,
 }
 
 impl BuilderState {
-    pub(super) fn validate(self) -> Result<ValidatedPieces, Error> {
+    pub(super) fn validate(self) -> Result<ClientConfig, Error> {
         if self.rate_limiter.as_ref().is_some_and(|limiter| limiter.messages_per_second() == 0) {
             return Err(Error::InvalidArgument(
                 "ClientBuilder: rate_limiter must allow at least 1 message per second".into(),
             ));
         }
-        Ok(ValidatedPieces {
+        Ok(ClientConfig {
             connection: ConnectionConfig {
                 address: self
                     .address
@@ -300,7 +300,7 @@ pub mod sync_impl {
         }
 
         fn connect_with_broadcaster(self, broadcaster: Arc<NoticeBroadcaster>) -> Result<Client, Error> {
-            Client::connect_with_pieces(self.state.validate()?, broadcaster)
+            Client::connect_with_config(self.state.validate()?, broadcaster)
         }
     }
 }
@@ -567,7 +567,7 @@ pub mod async_impl {
                 return Err(Error::InvalidArgument("ClientBuilder: channel_capacity must be at least 1".into()));
             }
             let channel_capacity = self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY);
-            Client::connect_with_pieces(self.state.validate()?, sender, channel_capacity).await
+            Client::connect_with_config(self.state.validate()?, sender, channel_capacity).await
         }
     }
 }
