@@ -6,7 +6,7 @@ use log::{debug, info};
 
 use super::common::{
     parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupHandshakeContext, StartupMessage, MAX_ACCOUNT_INFO_ATTEMPTS,
+    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -29,7 +29,7 @@ pub struct Connection<S: Stream> {
     pub(crate) connection_handler: ConnectionHandler,
     /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
     /// Fires on initial handshake *and* every auto-reconnect handshake.
-    startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    startup_callback: Option<StartupCallback>,
     /// Fan-out for unrouted notices. Shared with the bus (the bus reads via
     /// `self.connection.notice_broadcaster`) and any pre-bound `NoticeStream`
     /// the user obtained from `ClientBuilder::connect_with_notice_stream`.
@@ -72,7 +72,7 @@ impl<S: Stream> Connection<S> {
     pub(crate) fn with_socket(
         socket: S,
         client_id: i32,
-        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        startup_callback: Option<StartupCallback>,
         notice_broadcaster: Arc<NoticeBroadcaster>,
     ) -> Self {
         Self {

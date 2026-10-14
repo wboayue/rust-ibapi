@@ -35,9 +35,7 @@
 //! shape exactly — no `.await`, [`crate::client::blocking::NoticeStream`]
 //! instead of the async one.
 
-use std::sync::Arc;
-
-use crate::connection::common::{ConnectionConfig, StartupMessage};
+use crate::connection::common::{ConnectionConfig, StartupCallback};
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::rate_limiter::RateLimiter;
@@ -51,7 +49,7 @@ pub(super) struct BuilderState {
     pub(super) address: Option<String>,
     pub(super) client_id: Option<i32>,
     pub(super) tcp_no_delay: bool,
-    pub(super) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    pub(super) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
     /// `None` (the default) sends without limit.

@@ -98,14 +98,16 @@ pub(crate) struct StartupHandshakeContext<'a> {
     pub notice_sink: &'a (dyn NoticeSink + Sync),
 }
 
-/// Connection settings `ClientBuilder` validates and hands through
-/// `Client::connect_with_pieces` to `Connection::with_pieces`: the options
-/// both transports share. Each side passes its notice sink alongside.
+/// User callback for typed startup messages; fires on every handshake.
+pub(crate) type StartupCallback = Arc<dyn Fn(StartupMessage) + Send + Sync>;
+
+/// Validated connection settings shared by both transports. Each side passes
+/// its notice sink alongside.
 pub(crate) struct ConnectionConfig {
     pub(crate) address: String,
     pub(crate) client_id: i32,
     pub(crate) tcp_no_delay: bool,
-    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    pub(crate) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever.
     pub(crate) max_reconnect_attempts: Option<u32>,
 }
