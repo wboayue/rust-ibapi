@@ -1,9 +1,9 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, assert_request_proto, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
 use crate::market_data::realtime::{BidAsk, MidPoint, Trade};
-use crate::market_data::{IgnoreSize, SmartDepth, TradingHours};
+use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -15,6 +15,20 @@ use crate::testdata::builders::market_data::{
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 use time::OffsetDateTime;
+
+#[test]
+fn test_switch_market_data_type() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    client.switch_market_data_type(MarketDataType::Delayed).expect("request failed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    let expected = crate::proto::MarketDataTypeRequest {
+        market_data_type: Some(MarketDataType::Delayed as i32),
+    };
+    assert_request_proto(&message_bus, 0, OutgoingMessages::RequestMarketDataType, &expected);
+}
 
 #[test]
 fn test_realtime_bars() {

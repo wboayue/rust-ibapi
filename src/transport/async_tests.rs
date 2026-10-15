@@ -17,8 +17,9 @@ use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{
     binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, NoticeTestData, FARM_OK_MSG,
 };
+use crate::connection::common::ConnectionProtocol;
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{OutgoingMessages, TRANSPORT_RECONNECT_CODE};
+use crate::messages::{encode_raw_length, OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
 use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
@@ -1932,6 +1933,45 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
         .expect("notice stream closed");
     assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
     assert!(bus.is_connected(), "the notice must follow the session going live");
+}
+
+/// A market data type sent through the bus is re-sent by the reconnect, on
+/// the wire before the reconnect notice: a consumer acting on the notice
+/// already sees the new session with the type applied.
+#[tokio::test]
+async fn test_reconnect_replays_market_data_type_before_notice() {
+    let (stream, bus) = make_bus();
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
+
+    let packet = crate::market_data::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed).unwrap();
+    bus.send_market_data_type(packet.clone()).await.unwrap();
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+
+    bus.clone().process_messages().expect("process_messages");
+
+    let notice = tokio::time::timeout(Duration::from_secs(2), notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    let handler = &bus.connection.connection_handler;
+    let expected = [
+        encode_raw_length(&packet),
+        handler.format_handshake(),
+        encode_raw_length(&handler.format_start_api(28)),
+        encode_raw_length(&packet),
+    ]
+    .concat();
+    assert_eq!(
+        stream.captured(),
+        expected,
+        "the replay must be on the wire by the time the notice is published"
+    );
 }
 
 /// `ensure_shutdown` joins the running message-processing task and reports
