@@ -254,8 +254,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             Ok(HistoricalBarUpdate::End { start, end }) => {
-                println!("Stream ended: {} - {}", start, end);
-                break;
+                println!("Requested window {} - {}; updates follow", start, end);
             }
             Err(e) => {
                 eprintln!("Stream error: {e}");

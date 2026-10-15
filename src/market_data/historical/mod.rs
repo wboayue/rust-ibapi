@@ -445,23 +445,28 @@ pub struct HistoricalData {
 /// Update from historical data streaming with keepUpToDate=true.
 ///
 /// When requesting historical data with `keepUpToDate=true`, IBKR first sends
-/// the initial historical bars as a `Historical` variant, then continues
-/// streaming real-time updates for the current bar as `Update` variants.
-/// The current bar is updated approximately every 4-6 seconds until a new
-/// bar begins.
+/// the initial historical bars as a `Historical` variant, then an `End`
+/// variant with the requested window, then continues streaming real-time
+/// updates for the current bar as `Update` variants. The current bar is
+/// updated approximately every 4-6 seconds until a new bar begins. The
+/// subscription has no end marker; it runs until cancelled.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HistoricalBarUpdate {
     /// Initial batch of historical bars. Always received first.
+    ///
+    /// Its `start` and `end` are `OffsetDateTime::UNIX_EPOCH`: TWS sends the
+    /// window in a separate message, delivered as [`End`](Self::End).
     Historical(HistoricalData),
     /// Real-time update of the current (incomplete) bar.
     /// Multiple updates with the same timestamp will be sent as the bar builds.
     Update(Bar),
-    /// End of the streaming subscription.
+    /// The requested window. Follows `Historical`; the subscription stays
+    /// open and `Update` items come after it.
     End {
-        /// Start date of the historical data range.
+        /// Start of the requested window.
         start: OffsetDateTime,
-        /// End date of the historical data range.
+        /// End of the requested window.
         end: OffsetDateTime,
     },
 }
