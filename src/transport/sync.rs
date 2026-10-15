@@ -940,6 +940,13 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(())
     }
 
+    fn send_market_data_type(&self, message: &[u8]) -> Result<(), Error> {
+        // Remembered before the write: a reconnect between the two would
+        // otherwise replay the previous type after this call returned Ok.
+        self.connection.remember_market_data_type(message.to_vec());
+        self.write_message(message)
+    }
+
     fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
         let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0)?;
         Ok(SubscriptionBuilder::new()

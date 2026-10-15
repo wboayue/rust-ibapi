@@ -42,6 +42,10 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
+    /// The last `RequestMarketDataType` packet requested. TWS does not keep
+    /// the market data type across reconnects, so `establish_connection`
+    /// re-sends it after every reconnect handshake.
+    market_data_type_request: std::sync::Mutex<Option<Vec<u8>>>,
 }
 
 impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
@@ -91,6 +95,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             notice_broadcaster: NoticeBroadcaster::new(notice_sender),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             shutdown: Arc::new(ShutdownSignal::default()),
+            market_data_type_request: std::sync::Mutex::new(None),
         }
     }
 
@@ -136,10 +141,11 @@ impl<S: AsyncStream> AsyncConnection<S> {
         self.server_version_cache.load(Ordering::Acquire)
     }
 
-    /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
-    /// re-fires the persisted startup / notice callbacks. When every attempt
-    /// fails, returns the last attempt's error — a permanent cause (say, an
-    /// incompatible server version) must not exit as a generic failure.
+    /// Reconnect to TWS with fibonacci backoff. Replays the handshake,
+    /// re-fires the persisted startup / notice callbacks and re-sends the
+    /// remembered market data type. When every attempt fails, returns the
+    /// last attempt's error — a permanent cause (say, an incompatible server
+    /// version) must not exit as a generic failure.
     ///
     /// Returns [`Error::Shutdown`] once shutdown is requested. The backoff
     /// wait ends immediately on the request; a connect already in flight is
@@ -208,7 +214,23 @@ impl<S: AsyncStream> AsyncConnection<S> {
         require_protobuf_support(self.server_version())?;
         self.start_api().await?;
         self.receive_account_info().await?;
+        self.replay_market_data_type().await?;
         Ok(())
+    }
+
+    /// Keep `packet`, a `RequestMarketDataType`, for replay on reconnect.
+    pub(crate) fn remember_market_data_type(&self, packet: Vec<u8>) {
+        *self.market_data_type_request.lock().unwrap() = Some(packet);
+    }
+
+    /// Re-send the remembered market data type to the new session. No-op
+    /// until `remember_market_data_type` has been called.
+    async fn replay_market_data_type(&self) -> Result<(), Error> {
+        let packet = self.market_data_type_request.lock().unwrap().clone();
+        match packet {
+            Some(packet) => self.write_message(&packet).await,
+            None => Ok(()),
+        }
     }
 
     /// Write a protobuf message to the connection

@@ -37,6 +37,10 @@ pub struct Connection<S: Stream> {
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`Connection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
+    /// The last `RequestMarketDataType` packet requested. TWS does not keep
+    /// the market data type across reconnects, so `establish_connection`
+    /// re-sends it after every reconnect handshake.
+    market_data_type_request: Mutex<Option<Vec<u8>>>,
 }
 
 impl<S: Stream> std::fmt::Debug for Connection<S> {
@@ -89,6 +93,7 @@ impl<S: Stream> Connection<S> {
             startup_callback,
             notice_broadcaster,
             shutdown: Arc::new(ShutdownSignal::default()),
+            market_data_type_request: Mutex::new(None),
         }
     }
 
@@ -117,10 +122,11 @@ impl<S: Stream> Connection<S> {
         connection_metadata.server_version
     }
 
-    /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
-    /// re-fires the persisted startup / notice callbacks. When every attempt
-    /// fails, returns the last attempt's error — a permanent cause (say, an
-    /// incompatible server version) must not exit as a generic failure.
+    /// Reconnect to TWS with fibonacci backoff. Replays the handshake,
+    /// re-fires the persisted startup / notice callbacks and re-sends the
+    /// remembered market data type. When every attempt fails, returns the
+    /// last attempt's error — a permanent cause (say, an incompatible server
+    /// version) must not exit as a generic failure.
     ///
     /// Returns [`Error::Shutdown`] once shutdown is requested. The backoff
     /// wait ends immediately on the request; a connect already in flight is
@@ -187,7 +193,23 @@ impl<S: Stream> Connection<S> {
         require_protobuf_support(self.server_version())?;
         self.start_api()?;
         self.receive_account_info()?;
+        self.replay_market_data_type()?;
         Ok(())
+    }
+
+    /// Keep `packet`, a `RequestMarketDataType`, for replay on reconnect.
+    pub(crate) fn remember_market_data_type(&self, packet: Vec<u8>) {
+        *self.market_data_type_request.lock().unwrap() = Some(packet);
+    }
+
+    /// Re-send the remembered market data type to the new session. No-op
+    /// until `remember_market_data_type` has been called.
+    fn replay_market_data_type(&self) -> Result<(), Error> {
+        let packet = self.market_data_type_request.lock().unwrap().clone();
+        match packet {
+            Some(packet) => self.write_message(&packet),
+            None => Ok(()),
+        }
     }
 
     /// Write a protobuf message to the connection
@@ -298,6 +320,7 @@ impl<S: Stream> Connection<S> {
             startup_callback: None,
             notice_broadcaster: Arc::new(NoticeBroadcaster::new()),
             shutdown: Arc::new(ShutdownSignal::default()),
+            market_data_type_request: Mutex::new(None),
         }
     }
 

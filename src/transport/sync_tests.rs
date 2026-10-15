@@ -3152,6 +3152,43 @@ fn test_short_frame_body_reconnects() -> Result<(), Error> {
     Ok(())
 }
 
+/// A market data type sent through the bus is re-sent by the reconnect, on
+/// the wire before the reconnect notice: a consumer acting on the notice
+/// already sees the new session with the type applied.
+#[test]
+fn test_reconnect_replays_market_data_type_before_notice() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notices = bus.connection.notice_broadcaster.subscribe();
+
+    let packet = crate::market_data::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed)?;
+    bus.send_market_data_type(&packet)?;
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+
+    bus.dispatch()?;
+
+    let notice = notices.recv_timeout(TICK).expect("no reconnect notice on the notice fan-out");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    let handler = &bus.connection.connection_handler;
+    let expected = [
+        encode_raw_length(&packet),
+        handler.format_handshake(),
+        encode_raw_length(&handler.format_start_api(28)),
+        encode_raw_length(&packet),
+    ]
+    .concat();
+    assert_eq!(
+        stream.captured(),
+        expected,
+        "the replay must be on the wire by the time the notice is published"
+    );
+    Ok(())
+}
+
 /// Every send is refused while the session is down: nothing reaches the socket
 /// the reconnect is replacing, and nothing is registered on a channel no reset
 /// would clear again.

@@ -271,6 +271,10 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn send_message(&self, packet: &[u8]) -> Result<(), Error>;
 
+    /// Keeps `packet`, a `RequestMarketDataType`, so the connection re-sends
+    /// it after every reconnect, then writes it.
+    fn send_market_data_type(&self, packet: &[u8]) -> Result<(), Error>;
+
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
 
     /// A stream of `order_id`'s `OrderStatus` frames, copied alongside their

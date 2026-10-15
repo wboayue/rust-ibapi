@@ -216,6 +216,10 @@ pub trait AsyncMessageBus: Send + Sync {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
 
+    /// Keeps `message`, a `RequestMarketDataType`, so the connection re-sends
+    /// it after every reconnect, then writes it.
+    async fn send_market_data_type(&self, message: Vec<u8>) -> Result<(), Error>;
+
     /// Ends the subscription `ticket` names. `message` is the cancel to
     /// write for the last one; `None` for a stream TWS never cancels, which
     /// still releases the count.
@@ -1112,6 +1116,13 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
+        self.write_message(&message).await
+    }
+
+    async fn send_market_data_type(&self, message: Vec<u8>) -> Result<(), Error> {
+        // Remembered before the write: a reconnect between the two would
+        // otherwise replay the previous type after this call returned Ok.
+        self.connection.remember_market_data_type(message.clone());
         self.write_message(&message).await
     }
 
