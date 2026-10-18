@@ -3796,6 +3796,21 @@ fn test_order_status_stream_ignores_other_clients_status() -> Result<(), Error> 
     Ok(())
 }
 
+/// `wait_for_fill` sends `open_orders` and drops it at once: the reply's
+/// status still reaches the order's status stream.
+#[test]
+fn test_order_status_stream_sees_dropped_snapshot_reply() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    drop(bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders")?);
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    bus.dispatch()?;
+
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
+    Ok(())
+}
+
 #[test]
 fn test_order_status_stream_ends_on_reset_and_shutdown() -> Result<(), Error> {
     let (_stream, bus) = make_bus();

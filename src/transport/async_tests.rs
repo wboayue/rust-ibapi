@@ -2538,6 +2538,24 @@ async fn test_order_status_stream_ignores_other_clients_status() {
     );
 }
 
+/// `wait_for_fill` sends `open_orders` and drops it at once: the reply's
+/// status still reaches the order's status stream.
+#[tokio::test]
+async fn test_order_status_stream_sees_dropped_snapshot_reply() {
+    let (stream, bus) = make_bus();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    drop(
+        bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
+            .await
+            .unwrap(),
+    );
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
+}
+
 #[tokio::test]
 async fn test_order_status_stream_ends_on_reset_and_shutdown() {
     let (_stream, bus) = make_bus();

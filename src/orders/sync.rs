@@ -557,14 +557,18 @@ impl Client {
     ///
     /// Built on [`order_status_stream`](Self::order_status_stream), so an
     /// order that already finished before the call is reported at once, as
-    /// long as this client saw its status since connecting. An order whose
-    /// statuses never reach this client (placed by another client, or
-    /// finished before this connection) waits out the timeout.
+    /// long as this client saw its status since connecting. When it has seen
+    /// none, the wait first asks TWS for this client's open orders
+    /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
+    /// connection and still working is found. With client id 0, that request
+    /// also binds manual TWS orders to this client. An order that finished
+    /// before this connection, or one placed by another client, waits out the
+    /// timeout.
     ///
     /// # Errors
     ///
-    /// [`Error::ConnectionReset`] if the connection drops during the wait,
-    /// [`Error::Shutdown`] if the client shuts down.
+    /// [`Error::ConnectionReset`] if the connection is down or drops during
+    /// the wait, [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
     ///
@@ -590,12 +594,20 @@ impl Client {
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
         let statuses = self.order_status_stream(order_id)?;
         let mut tracker = FillTracker::default();
+        // Nothing queued: this client has no status for the order (e.g.
+        // placed on an earlier connection). Ask TWS for this client's open
+        // orders; their statuses reach `statuses` like any other.
+        let mut first = statuses.try_next();
+        if first.is_none() {
+            drop(self.open_orders()?);
+        }
         // `None` for a timeout too large to represent: wait without one.
         let deadline = Instant::now().checked_add(timeout);
         loop {
-            let item = match deadline {
-                Some(deadline) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
-                None => statuses.next(),
+            let item = match (first.take(), deadline) {
+                (Some(item), _) => Some(item),
+                (None, Some(deadline)) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
+                (None, None) => statuses.next(),
             };
             match item {
                 Some(Ok(SubscriptionItem::Data(status))) => {
