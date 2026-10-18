@@ -10,8 +10,6 @@ use crate::testdata::builders::ResponseProtoEncoder;
 
 #[test]
 fn test_decode_open_order_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::OpenOrder {
         order_id: Some(42),
         contract: Some(crate::proto::Contract {
@@ -36,10 +34,7 @@ fn test_decode_open_order_proto() {
         }),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_open_order_proto(&bytes).unwrap();
+    let result = decode_open_order_proto(proto_msg).unwrap();
     assert_eq!(result.order_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol.to_string(), "AAPL");
@@ -53,8 +48,6 @@ fn test_decode_open_order_proto() {
 
 #[test]
 fn test_decode_order_status_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::OrderStatus {
         order_id: Some(99),
         status: Some("Filled".into()),
@@ -69,10 +62,7 @@ fn test_decode_order_status_proto() {
         mkt_cap_price: Some(1.23),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_order_status_proto(&bytes).unwrap();
+    let result = decode_order_status_proto(proto_msg).unwrap();
     assert_eq!(result.order_id, 99);
     assert_eq!(result.status, OrderStatusKind::Filled);
     assert_eq!(result.filled, 50.0);
@@ -89,8 +79,6 @@ fn test_decode_order_status_proto() {
 #[test]
 fn test_decode_order_status_proto_missing_doubles() {
     // Regression: previously decoded to Some(0.0) via unwrap_or_default().
-    use prost::Message;
-
     let proto_msg = crate::proto::OrderStatus {
         order_id: Some(99),
         status: Some("Submitted".into()),
@@ -105,10 +93,7 @@ fn test_decode_order_status_proto_missing_doubles() {
         mkt_cap_price: None,
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_order_status_proto(&bytes).unwrap();
+    let result = decode_order_status_proto(proto_msg).unwrap();
     assert_eq!(result.average_fill_price, None);
     assert_eq!(result.last_fill_price, None);
     assert_eq!(result.market_cap_price, None);
@@ -118,8 +103,6 @@ fn test_decode_order_status_proto_missing_doubles() {
 fn test_decode_order_status_proto_rejects_empty_status() {
     // Missing or empty status must error rather than silently defaulting to
     // Submitted; matches the text decoder which fails on empty status fields.
-    use prost::Message;
-
     for status in [None, Some(String::new())] {
         let proto_msg = crate::proto::OrderStatus {
             order_id: Some(99),
@@ -135,17 +118,12 @@ fn test_decode_order_status_proto_rejects_empty_status() {
             mkt_cap_price: None,
         };
 
-        let mut bytes = Vec::new();
-        proto_msg.encode(&mut bytes).unwrap();
-
-        assert!(matches!(decode_order_status_proto(&bytes), Err(crate::Error::Parse(..))));
+        assert!(matches!(decode_order_status_proto(proto_msg), Err(crate::Error::Parse(..))));
     }
 }
 
 #[test]
 fn test_decode_commission_report_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec123".into()),
         commission_and_fees: Some(1.25),
@@ -155,10 +133,7 @@ fn test_decode_commission_report_proto() {
         yield_redemption_date: Some("20260101".into()),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_commission_report_proto(&bytes).unwrap();
+    let result = decode_commission_report_proto(proto_msg).unwrap();
     assert_eq!(result.execution_id, "exec123");
     assert_eq!(result.commission, 1.25);
     assert_eq!(result.currency, "USD");
@@ -169,8 +144,6 @@ fn test_decode_commission_report_proto() {
 
 #[test]
 fn test_decode_execution_data_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::ExecutionDetails {
         req_id: Some(42),
         contract: Some(crate::proto::Contract {
@@ -192,10 +165,7 @@ fn test_decode_execution_data_proto() {
         }),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_execution_data_proto(&bytes).unwrap();
+    let result = decode_execution_data_proto(proto_msg).unwrap();
     assert_eq!(result.request_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.execution.execution_id, "exec001");
@@ -207,8 +177,6 @@ fn test_decode_execution_data_proto() {
 
 #[test]
 fn test_decode_completed_order_proto() {
-    use prost::Message;
-
     let proto_msg = crate::proto::CompletedOrder {
         contract: Some(crate::proto::Contract {
             con_id: Some(265598),
@@ -231,10 +199,7 @@ fn test_decode_completed_order_proto() {
         }),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_completed_order_proto(&bytes).unwrap();
+    let result = decode_completed_order_proto(proto_msg).unwrap();
     // Completed orders always report `order_id = -1` (legacy text-decoder sentinel).
     assert_eq!(result.order_id, -1);
     assert_eq!(result.order.order_id, 200);
@@ -249,11 +214,11 @@ fn test_decode_completed_order_proto() {
 // =============================================================================
 
 #[test]
-fn test_decode_open_order_proto_round_trips_via_builder() {
+fn test_decode_open_order_proto_via_builder() {
     use crate::testdata::builders::orders::open_order;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let bytes = open_order()
+    let p = open_order()
         .order_id(42)
         .contract_id(265598)
         .symbol("AAPL")
@@ -261,9 +226,9 @@ fn test_decode_open_order_proto_round_trips_via_builder() {
         .order_type("LMT")
         .limit_price(Some(150.0))
         .status(OrderStatusKind::Submitted)
-        .encode_proto();
+        .to_proto();
 
-    let result = super::decode_open_order_proto(&bytes).unwrap();
+    let result = super::decode_open_order_proto(p).unwrap();
     assert_eq!(result.order_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
@@ -274,19 +239,19 @@ fn test_decode_open_order_proto_round_trips_via_builder() {
 }
 
 #[test]
-fn test_decode_completed_order_proto_round_trips_via_builder() {
+fn test_decode_completed_order_proto_via_builder() {
     use crate::testdata::builders::orders::completed_order;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let bytes = completed_order()
+    let p = completed_order()
         .symbol("AAPL")
         .security_type("STK")
         .total_quantity(100.0)
         .completed_time("20260101 12:00:00")
         .completed_status("Filled by Trader")
-        .encode_proto();
+        .to_proto();
 
-    let result = super::decode_completed_order_proto(&bytes).unwrap();
+    let result = super::decode_completed_order_proto(p).unwrap();
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
     assert_eq!(result.order.total_quantity, 100.0);
     assert_eq!(result.order_state.status, OrderStatusKind::Filled);
@@ -295,11 +260,11 @@ fn test_decode_completed_order_proto_round_trips_via_builder() {
 }
 
 #[test]
-fn test_decode_order_status_proto_round_trips_via_builder() {
+fn test_decode_order_status_proto_via_builder() {
     use crate::testdata::builders::orders::order_status;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let bytes = order_status()
+    let p = order_status()
         .order_id(99)
         .status(OrderStatusKind::Filled)
         .filled(50.0)
@@ -309,9 +274,9 @@ fn test_decode_order_status_proto_round_trips_via_builder() {
         .last_fill_price(Some(152.75))
         .client_id(7)
         .market_cap_price(Some(1.23))
-        .encode_proto();
+        .to_proto();
 
-    let result = super::decode_order_status_proto(&bytes).unwrap();
+    let result = super::decode_order_status_proto(p).unwrap();
     assert_eq!(result.order_id, 99);
     assert_eq!(result.status, OrderStatusKind::Filled);
     assert_eq!(result.filled, 50.0);
@@ -324,19 +289,19 @@ fn test_decode_order_status_proto_round_trips_via_builder() {
 }
 
 #[test]
-fn test_decode_commission_report_proto_round_trips_via_builder() {
+fn test_decode_commission_report_proto_via_builder() {
     use crate::testdata::builders::orders::commission_report;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let bytes = commission_report()
+    let p = commission_report()
         .execution_id("exec123")
         .commission(1.25)
         .currency("USD")
         .realized_pnl(Some(500.0))
         .yields(Some(f64::MAX))
-        .encode_proto();
+        .to_proto();
 
-    let result = super::decode_commission_report_proto(&bytes).unwrap();
+    let result = super::decode_commission_report_proto(p).unwrap();
     assert_eq!(result.execution_id, "exec123");
     assert_eq!(result.commission, 1.25);
     assert_eq!(result.currency, "USD");
@@ -345,11 +310,11 @@ fn test_decode_commission_report_proto_round_trips_via_builder() {
 }
 
 #[test]
-fn test_decode_execution_data_proto_round_trips_via_builder() {
+fn test_decode_execution_data_proto_via_builder() {
     use crate::testdata::builders::orders::execution_data;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let bytes = execution_data()
+    let p = execution_data()
         .request_id(42)
         .order_id(100)
         .contract_id(265598)
@@ -360,9 +325,9 @@ fn test_decode_execution_data_proto_round_trips_via_builder() {
         .shares(50.0)
         .price(152.5)
         .perm_id(99999)
-        .encode_proto();
+        .to_proto();
 
-    let result = super::decode_execution_data_proto(&bytes).unwrap();
+    let result = super::decode_execution_data_proto(p).unwrap();
     assert_eq!(result.request_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.execution.execution_id, "exec001");
@@ -421,34 +386,28 @@ fn test_decode_order_status_rejects_text_framing() {
 
 #[test]
 fn test_decode_order_status_proto_rejects_malformed_filled() {
-    use prost::Message;
-
-    let bytes = crate::proto::OrderStatus {
+    let p = crate::proto::OrderStatus {
         order_id: Some(1),
         status: Some("Submitted".into()),
         filled: Some("abc".into()),
         remaining: Some("0".into()),
         ..Default::default()
-    }
-    .encode_to_vec();
+    };
 
-    assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
+    assert_decimal_parse_error(super::decode_order_status_proto(p), "abc");
 }
 
 #[test]
 fn test_decode_order_status_proto_rejects_malformed_remaining() {
-    use prost::Message;
-
-    let bytes = crate::proto::OrderStatus {
+    let p = crate::proto::OrderStatus {
         order_id: Some(1),
         status: Some("Submitted".into()),
         filled: Some("0".into()),
         remaining: Some("abc".into()),
         ..Default::default()
-    }
-    .encode_to_vec();
+    };
 
-    assert_decimal_parse_error(super::decode_order_status_proto(&bytes), "abc");
+    assert_decimal_parse_error(super::decode_order_status_proto(p), "abc");
 }
 
 #[test]
@@ -505,8 +464,6 @@ fn order_binding_rejects_text_framing() {
 
 #[test]
 fn decode_open_order_proto_rejects_missing_submessages() {
-    use prost::Message;
-
     // #825 made a present-but-empty `action` Error::Parse, but the layer here
     // still defaulted a wholly absent `order` to Order::default() — action ==
     // Buy, the mishandling it removed. The reference client drops such a frame
@@ -527,7 +484,7 @@ fn decode_open_order_proto_rejects_missing_submessages() {
             ..Default::default()
         }),
     };
-    assert!(decode_open_order_proto(&full.encode_to_vec()).is_ok(), "control frame must decode");
+    assert!(decode_open_order_proto(full.clone()).is_ok(), "control frame must decode");
 
     for (name, frame) in [
         (
@@ -546,14 +503,12 @@ fn decode_open_order_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        assert_missing_field(decode_open_order_proto(&frame.encode_to_vec()), name, "OpenOrder");
+        assert_missing_field(decode_open_order_proto(frame), name, "OpenOrder");
     }
 }
 
 #[test]
 fn decode_completed_order_proto_rejects_missing_submessages() {
-    use prost::Message;
-
     let full = crate::proto::CompletedOrder {
         contract: Some(crate::proto::Contract {
             sec_type: Some("STK".into()),
@@ -568,7 +523,7 @@ fn decode_completed_order_proto_rejects_missing_submessages() {
             ..Default::default()
         }),
     };
-    assert!(decode_completed_order_proto(&full.encode_to_vec()).is_ok(), "control frame must decode");
+    assert!(decode_completed_order_proto(full.clone()).is_ok(), "control frame must decode");
 
     for (name, frame) in [
         (
@@ -587,14 +542,12 @@ fn decode_completed_order_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        assert_missing_field(decode_completed_order_proto(&frame.encode_to_vec()), name, "CompletedOrder");
+        assert_missing_field(decode_completed_order_proto(frame), name, "CompletedOrder");
     }
 }
 
 #[test]
 fn decode_execution_data_proto_rejects_missing_submessages() {
-    use prost::Message;
-
     // Same shape as the two above: EDecoder.cs's ExecutionDataEventProtoBuf
     // returns before eWrapper.execDetails(..) when either is null.
     let full = crate::proto::ExecutionDetails {
@@ -608,7 +561,7 @@ fn decode_execution_data_proto_rejects_missing_submessages() {
             ..Default::default()
         }),
     };
-    decode_execution_data_proto(&full.encode_to_vec()).expect("control frame must decode");
+    decode_execution_data_proto(full.clone()).expect("control frame must decode");
 
     for (name, frame) in [
         (
@@ -626,6 +579,6 @@ fn decode_execution_data_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        assert_missing_field(decode_execution_data_proto(&frame.encode_to_vec()), name, "ExecutionDetails");
+        assert_missing_field(decode_execution_data_proto(frame), name, "ExecutionDetails");
     }
 }

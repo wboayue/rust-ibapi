@@ -1,18 +1,16 @@
 //! Decoders for Wall Street Horizon messages. Proto-only; text framing
-//! surfaces as `Error::UnexpectedWireFormat` via `require_proto()`.
-
-use crate::proto::decoders::DecodeProto;
+//! surfaces as `Error::UnexpectedWireFormat` via `proto()`.
 
 use crate::messages::ResponseMessage;
 use crate::wsh::{WshEventData, WshMetadata};
 use crate::Error;
 
 pub(crate) fn decode_wsh_metadata(message: &ResponseMessage) -> Result<WshMetadata, Error> {
-    decode_wsh_metadata_proto(crate::proto::WshMetaData::decode_proto(message.require_proto()?)?)
+    decode_wsh_metadata_proto(message.proto()?)
 }
 
 pub(crate) fn decode_wsh_event_data(message: &ResponseMessage) -> Result<WshEventData, Error> {
-    decode_wsh_event_data_proto(crate::proto::WshEventData::decode_proto(message.require_proto()?)?)
+    decode_wsh_event_data_proto(message.proto()?)
 }
 
 pub(crate) fn decode_wsh_metadata_proto(p: crate::proto::WshMetaData) -> Result<WshMetadata, Error> {

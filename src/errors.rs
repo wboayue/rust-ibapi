@@ -230,7 +230,7 @@ impl From<crate::transport::routing::DecodedError> for Error {
 impl Error {
     /// Build an [`Error::ProtobufDecode`]. Crate-private so the prost error
     /// type stays out of the public API; decoders reach it through
-    /// `crate::proto::decoders::DecodeProto`.
+    /// `ResponseMessage::proto` (via `crate::proto::decoders::DecodeProto`).
     pub(crate) fn protobuf_decode(err: prost::DecodeError) -> Error {
         Error::ProtobufDecode(ProtobufDecodeError(err))
     }

@@ -1,5 +1,5 @@
 //! Decoders for configuration messages. Proto-only; text framing surfaces as
-//! `Error::UnexpectedWireFormat` via `require_proto()`.
+//! `Error::UnexpectedWireFormat` via `proto()`.
 
 use crate::config::{
     ApiConfig, ApiPrecautions, ApiSettings, Config, ConfigWarning, LockAndExit, MessageSetting, OrdersConfig, OrdersSmartRouting,

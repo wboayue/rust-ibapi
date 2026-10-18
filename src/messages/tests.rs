@@ -328,6 +328,25 @@ fn peek_int_rejects_proto_framed_message() {
 }
 
 #[test]
+fn proto_decodes_the_payload_as_the_requested_type() {
+    let message = ResponseMessage::from_protobuf(9, crate::proto::NextValidId { order_id: Some(7) }.encode_to_vec());
+    let p: crate::proto::NextValidId = message.proto().unwrap();
+    assert_eq!(p.order_id, Some(7));
+
+    let garbage = ResponseMessage::from_protobuf(9, vec![0xff, 0xff, 0xff]);
+    assert!(matches!(
+        garbage.proto::<crate::proto::NextValidId>(),
+        Err(crate::Error::ProtobufDecode(_))
+    ));
+
+    let text = ResponseMessage::from("9\01\07\0");
+    assert!(matches!(
+        text.proto::<crate::proto::NextValidId>(),
+        Err(crate::Error::UnexpectedWireFormat(_))
+    ));
+}
+
+#[test]
 fn test_text_framed_message_has_no_order_id_or_execution_id() {
     // order_id() and execution_id() require proto-framed payloads; a
     // text-framed message (raw_bytes = None) returns None regardless of the

@@ -1,7 +1,6 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::DecodeProto;
 use crate::proto::payload::ProtoPayload;
 use crate::Error;
 
@@ -88,10 +87,7 @@ pub(crate) fn expect_proto<P, R>(decode: impl Fn(P) -> Result<R, Error>) -> impl
 where
     P: ProtoPayload,
 {
-    move |message| {
-        let bytes = message.expect_type(P::MESSAGE_ID)?.require_proto()?;
-        decode(P::decode_proto(bytes)?)
-    }
+    move |message| decode(message.expect_type(P::MESSAGE_ID)?.proto()?)
 }
 
 #[cfg(test)]

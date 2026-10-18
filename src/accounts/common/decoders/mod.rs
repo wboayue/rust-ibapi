@@ -1,7 +1,5 @@
 use time::OffsetDateTime;
 
-use crate::proto::decoders::DecodeProto;
-
 use crate::messages::ResponseMessage;
 use crate::proto::decoders::{parse_decimal_or_zero, required};
 use crate::{proto, Error};
@@ -14,35 +12,35 @@ use crate::messages::IncomingMessages;
 use crate::orders::SoftDollarTier;
 
 pub(crate) fn decode_position(message: &ResponseMessage) -> Result<Position, Error> {
-    decode_position_proto(message.require_proto()?)
+    decode_position_proto(message.proto()?)
 }
 
 pub(crate) fn decode_position_multi(message: &ResponseMessage) -> Result<PositionMulti, Error> {
-    decode_position_multi_proto(message.require_proto()?)
+    decode_position_multi_proto(message.proto()?)
 }
 
 pub(crate) fn decode_pnl(message: &ResponseMessage) -> Result<PnL, Error> {
-    decode_pnl_proto(message.require_proto()?)
+    decode_pnl_proto(message.proto()?)
 }
 
 pub(crate) fn decode_pnl_single(message: &ResponseMessage) -> Result<PnLSingle, Error> {
-    decode_pnl_single_proto(message.require_proto()?)
+    decode_pnl_single_proto(message.proto()?)
 }
 
 pub(crate) fn decode_account_summary(message: &ResponseMessage) -> Result<AccountSummary, Error> {
-    decode_account_summary_proto(message.require_proto()?)
+    decode_account_summary_proto(message.proto()?)
 }
 
 pub(crate) fn decode_account_value(message: &ResponseMessage) -> Result<AccountValue, Error> {
-    decode_account_value_proto(message.require_proto()?)
+    decode_account_value_proto(message.proto()?)
 }
 
 pub(crate) fn decode_account_portfolio_value(message: &ResponseMessage) -> Result<AccountPortfolioValue, Error> {
-    decode_account_portfolio_value_proto(message.require_proto()?)
+    decode_account_portfolio_value_proto(message.proto()?)
 }
 
 pub(crate) fn decode_account_update_time(message: &ResponseMessage) -> Result<AccountUpdateTime, Error> {
-    decode_account_update_time_proto(message.require_proto()?)
+    decode_account_update_time_proto(message.proto()?)
 }
 
 pub(crate) fn decode_server_time_proto(proto: crate::proto::CurrentTime) -> Result<OffsetDateTime, Error> {
@@ -66,13 +64,12 @@ pub(crate) fn decode_managed_accounts_proto(p: crate::proto::ManagedAccounts) ->
 }
 
 pub(crate) fn decode_account_multi_value(message: &ResponseMessage) -> Result<AccountMultiValue, Error> {
-    decode_account_multi_value_proto(message.require_proto()?)
+    decode_account_multi_value_proto(message.proto()?)
 }
 
 // === Protobuf decoders ===
 
-pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
-    let p = proto::Position::decode_proto(bytes)?;
+pub(crate) fn decode_position_proto(p: crate::proto::Position) -> Result<Position, Error> {
     let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "Position")?)?;
     Ok(Position {
         account: p.account.unwrap_or_default(),
@@ -82,8 +79,7 @@ pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
     })
 }
 
-pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, Error> {
-    let p = proto::AccountValue::decode_proto(bytes)?;
+pub(crate) fn decode_account_value_proto(p: crate::proto::AccountValue) -> Result<AccountValue, Error> {
     Ok(AccountValue {
         key: p.key.unwrap_or_default(),
         value: p.value.unwrap_or_default(),
@@ -92,8 +88,7 @@ pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, E
     })
 }
 
-pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<AccountPortfolioValue, Error> {
-    let p = proto::PortfolioValue::decode_proto(bytes)?;
+pub(crate) fn decode_account_portfolio_value_proto(p: crate::proto::PortfolioValue) -> Result<AccountPortfolioValue, Error> {
     let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "PortfolioValue")?)?;
     Ok(AccountPortfolioValue {
         contract,
@@ -107,8 +102,7 @@ pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<Accou
     })
 }
 
-pub(crate) fn decode_pnl_proto(bytes: &[u8]) -> Result<PnL, Error> {
-    let p = proto::PnL::decode_proto(bytes)?;
+pub(crate) fn decode_pnl_proto(p: crate::proto::PnL) -> Result<PnL, Error> {
     Ok(PnL {
         daily_pnl: p.daily_pn_l.unwrap_or_default(),
         unrealized_pnl: proto::decoders::optional_f64(p.unrealized_pn_l),
@@ -116,8 +110,7 @@ pub(crate) fn decode_pnl_proto(bytes: &[u8]) -> Result<PnL, Error> {
     })
 }
 
-pub(crate) fn decode_pnl_single_proto(bytes: &[u8]) -> Result<PnLSingle, Error> {
-    let p = proto::PnLSingle::decode_proto(bytes)?;
+pub(crate) fn decode_pnl_single_proto(p: crate::proto::PnLSingle) -> Result<PnLSingle, Error> {
     Ok(PnLSingle {
         position: parse_decimal_or_zero(p.position.as_deref())?,
         daily_pnl: p.daily_pn_l.unwrap_or_default(),
@@ -127,8 +120,7 @@ pub(crate) fn decode_pnl_single_proto(bytes: &[u8]) -> Result<PnLSingle, Error> 
     })
 }
 
-pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummary, Error> {
-    let p = proto::AccountSummary::decode_proto(bytes)?;
+pub(crate) fn decode_account_summary_proto(p: crate::proto::AccountSummary) -> Result<AccountSummary, Error> {
     Ok(AccountSummary {
         account: p.account.unwrap_or_default(),
         tag: p.tag.unwrap_or_default(),
@@ -137,15 +129,13 @@ pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummar
     })
 }
 
-pub(crate) fn decode_account_update_time_proto(bytes: &[u8]) -> Result<AccountUpdateTime, Error> {
-    let p = proto::AccountUpdateTime::decode_proto(bytes)?;
+pub(crate) fn decode_account_update_time_proto(p: crate::proto::AccountUpdateTime) -> Result<AccountUpdateTime, Error> {
     Ok(AccountUpdateTime {
         timestamp: p.time_stamp.unwrap_or_default(),
     })
 }
 
-pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti, Error> {
-    let p = proto::PositionMulti::decode_proto(bytes)?;
+pub(crate) fn decode_position_multi_proto(p: crate::proto::PositionMulti) -> Result<PositionMulti, Error> {
     let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "PositionMulti")?)?;
     Ok(PositionMulti {
         account: p.account.unwrap_or_default(),
@@ -156,8 +146,7 @@ pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti,
     })
 }
 
-pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMultiValue, Error> {
-    let p = proto::AccountUpdateMulti::decode_proto(bytes)?;
+pub(crate) fn decode_account_multi_value_proto(p: crate::proto::AccountUpdateMulti) -> Result<AccountMultiValue, Error> {
     Ok(AccountMultiValue {
         account: p.account.unwrap_or_default(),
         model_code: p.model_code.unwrap_or_default(),

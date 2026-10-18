@@ -18,7 +18,7 @@ fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
 }
 
 pub(crate) fn decode_historical_data(message: &ResponseMessage) -> Result<HistoricalData, Error> {
-    let bars = decode_historical_data_proto(message.require_proto()?)?;
+    let bars = decode_historical_data_proto(message.proto()?)?;
     // start/end always come on the separate HistoricalDataEnd message at floor 210.
     Ok(HistoricalData {
         start: OffsetDateTime::UNIX_EPOCH,
@@ -28,19 +28,19 @@ pub(crate) fn decode_historical_data(message: &ResponseMessage) -> Result<Histor
 }
 
 pub(crate) fn decode_historical_data_end(message: &ResponseMessage) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
-    decode_historical_data_end_proto(message.require_proto()?)
+    decode_historical_data_end_proto(message.proto()?)
 }
 
 pub(crate) fn decode_historical_ticks_bid_ask(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
-    decode_historical_ticks_bid_ask_proto(message.require_proto()?)
+    decode_historical_ticks_bid_ask_proto(message.proto()?)
 }
 
 pub(crate) fn decode_historical_ticks_mid_point(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    decode_historical_ticks_proto(message.require_proto()?)
+    decode_historical_ticks_proto(message.proto()?)
 }
 
 pub(crate) fn decode_historical_ticks_last(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
-    decode_historical_ticks_last_proto(message.require_proto()?)
+    decode_historical_ticks_last_proto(message.proto()?)
 }
 
 /// Decode a HistoricalDataUpdate message (message type 90).
@@ -48,7 +48,7 @@ pub(crate) fn decode_historical_ticks_last(message: &ResponseMessage) -> Result<
 /// Sent when historical data is requested with `keepUpToDate=true`. IBKR
 /// emits updates approximately every 4-6 seconds for the current (incomplete) bar.
 pub(crate) fn decode_historical_data_update(message: &ResponseMessage) -> Result<Bar, Error> {
-    decode_historical_data_update_proto(message.require_proto()?)
+    decode_historical_data_update_proto(message.proto()?)
 }
 
 fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
@@ -99,13 +99,10 @@ fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Err
 
 // === Protobuf decoders ===
 
-use crate::proto::decoders::DecodeProto;
-
 use crate::proto;
 use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, ts};
 
-pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
-    let msg = proto::HistoricalData::decode_proto(bytes)?;
+pub(crate) fn decode_historical_data_proto(msg: crate::proto::HistoricalData) -> Result<Vec<Bar>, Error> {
     // Sized up front rather than `.collect::<Result<Vec<_>, _>>()`: collecting into
     // a Result goes through `process_results`, whose `size_hint` lower bound is 0
     // (it may short-circuit), so the Vec would grow by doubling. Bar responses run
@@ -139,9 +136,7 @@ pub(crate) fn decode_head_timestamp_proto(msg: crate::proto::HeadTimestamp) -> R
     parse_unix_seconds_str(&msg.head_timestamp.unwrap_or_default())
 }
 
-pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    let msg = proto::HistoricalTicks::decode_proto(bytes)?;
-
+pub(crate) fn decode_historical_ticks_proto(msg: crate::proto::HistoricalTicks) -> Result<(Vec<TickMidpoint>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks.len());
     for t in &msg.historical_ticks {
         ticks.push(TickMidpoint {
@@ -154,9 +149,7 @@ pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMid
     Ok((ticks, msg.is_done.unwrap_or_default()))
 }
 
-pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<TickLast>, bool), Error> {
-    let msg = proto::HistoricalTicksLast::decode_proto(bytes)?;
-
+pub(crate) fn decode_historical_ticks_last_proto(msg: crate::proto::HistoricalTicksLast) -> Result<(Vec<TickLast>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks_last.len());
     for t in msg.historical_ticks_last {
         let attr = t.tick_attrib_last;
@@ -176,9 +169,7 @@ pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<Ti
     Ok((ticks, msg.is_done.unwrap_or_default()))
 }
 
-pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec<TickBidAsk>, bool), Error> {
-    let msg = proto::HistoricalTicksBidAsk::decode_proto(bytes)?;
-
+pub(crate) fn decode_historical_ticks_bid_ask_proto(msg: crate::proto::HistoricalTicksBidAsk) -> Result<(Vec<TickBidAsk>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks_bid_ask.len());
     for t in &msg.historical_ticks_bid_ask {
         let attr = t.tick_attrib_bid_ask.as_ref();
@@ -198,8 +189,7 @@ pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec
     Ok((ticks, msg.is_done.unwrap_or_default()))
 }
 
-pub(crate) fn decode_historical_data_end_proto(bytes: &[u8]) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
-    let p = proto::HistoricalDataEnd::decode_proto(bytes)?;
+pub(crate) fn decode_historical_data_end_proto(p: crate::proto::HistoricalDataEnd) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
     let start = parse_historical_data_end_timestamp(p.start_date_str.as_deref().unwrap_or(""))?;
     let end = parse_historical_data_end_timestamp(p.end_date_str.as_deref().unwrap_or(""))?;
     Ok((start, end))
@@ -240,8 +230,7 @@ pub(crate) fn decode_historical_schedule_proto(p: crate::proto::HistoricalSchedu
     })
 }
 
-pub(crate) fn decode_historical_data_update_proto(bytes: &[u8]) -> Result<Bar, Error> {
-    let p = proto::HistoricalDataUpdate::decode_proto(bytes)?;
+pub(crate) fn decode_historical_data_update_proto(p: crate::proto::HistoricalDataUpdate) -> Result<Bar, Error> {
     decode_historical_data_bar(&p.historical_data_bar.unwrap_or_default(), 0)
 }
 

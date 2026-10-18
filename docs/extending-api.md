@@ -165,24 +165,29 @@ pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Re
 
 // src/<module>/common/decoders.rs
 //
-// The transport is protobuf-only. `require_proto()` hands back the payload from
-// `raw_bytes`, or returns `Error::UnexpectedWireFormat` if a text-framed message
-// reaches this decoder (a stale test fixture, or a future-version regression).
-// It fails the subscription; nothing here is silently skipped.
+// The transport is protobuf-only. `message.proto()` decodes the payload as the
+// type the `_proto` decoder takes, inferred from that parameter. It returns
+// `Error::UnexpectedWireFormat` if a text-framed message reaches this decoder
+// (a stale test fixture, or a future-version regression), and maps prost's
+// error to `Error::ProtobufDecode`. Either fails the subscription; nothing here
+// is silently skipped.
 pub(in crate::<module>) fn decode_my_response(message: &ResponseMessage) -> Result<MyData, Error> {
-    decode_my_response_proto(message.require_proto()?)
+    decode_my_response_proto(message.proto()?)
 }
 
-// `decode_proto` (trait `crate::proto::decoders::DecodeProto`) maps prost's
-// error to `Error::ProtobufDecode`; `Error` deliberately has no public
-// `From<prost::DecodeError>`, so `prost::Message::decode(..)?` won't compile.
-pub(crate) fn decode_my_response_proto(bytes: &[u8]) -> Result<MyData, Error> {
-    let p = crate::proto::MyResponse::decode_proto(bytes)?;
+// Takes the proto struct, not bytes, so tests build `crate::proto::MyResponse`
+// directly and `expect_proto` can pass it to a one-shot.
+pub(crate) fn decode_my_response_proto(p: crate::proto::MyResponse) -> Result<MyData, Error> {
     Ok(MyData {
         field: p.field.unwrap_or_default(),
     })
 }
 ```
+
+For a one-shot, add the payload to `impl_proto_payload!` in `src/proto/payload.rs`
+(`MyResponse => MyResponse`). That `ProtoPayload` impl carries the expected message type, so
+`expect_proto` takes only the decoder. Full detail:
+[one-shot narrowing](rules/wire/one-shot-narrowing.md).
 
 For any `String` field that looks like it carries a fixed vocabulary, verify against captured
 wire fixtures and the C# reference before typing it as an enum — field-name resemblance is
@@ -209,7 +214,7 @@ impl Client {
             self,
             OutgoingMessages::MyRequest,
             || encoders::encode_my_request(self.mint_request_id().raw(), param),
-            expect_proto(IncomingMessages::MyResponse, decoders::decode_my_response_proto),
+            expect_proto(decoders::decode_my_response_proto),
         )
     }
 }
@@ -231,7 +236,7 @@ impl Client {
             self,
             OutgoingMessages::MyRequest,
             || encoders::encode_my_request(self.mint_request_id().raw(), param),
-            expect_proto(IncomingMessages::MyResponse, decoders::decode_my_response_proto),
+            expect_proto(decoders::decode_my_response_proto),
         ).await
     }
 }
@@ -322,7 +327,7 @@ pub fn my_api_call(&self) -> Result<MyData, Error> {
         self,
         OutgoingMessages::MyRequest,
         || encode_my_request(self.mint_request_id().raw()),
-        expect_proto(IncomingMessages::MyResponse, decode_my_response_proto),
+        expect_proto(decode_my_response_proto),
     )
 }
 
@@ -332,7 +337,7 @@ pub async fn my_api_call(&self) -> Result<MyData, Error> {
         self,
         OutgoingMessages::MyRequest,
         || encode_my_request(self.mint_request_id().raw()),
-        expect_proto(IncomingMessages::MyResponse, decode_my_response_proto),
+        expect_proto(decode_my_response_proto),
     ).await
 }
 

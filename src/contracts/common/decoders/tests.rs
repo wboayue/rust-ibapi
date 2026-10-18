@@ -29,10 +29,7 @@ fn test_decode_contract_data_proto() {
         }),
     };
 
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
-
-    let result = decode_contract_data_proto(&bytes).unwrap();
+    let result = decode_contract_data_proto(proto_msg).unwrap();
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol.to_string(), "AAPL");
     assert_eq!(result.contract.currency.to_string(), "USD");
@@ -58,7 +55,7 @@ fn test_decode_contract_data_proto_rejects_missing_submessages() {
         }),
         contract_details: Some(crate::proto::ContractDetails::default()),
     };
-    decode_contract_data_proto(&full.encode_to_vec()).expect("control frame must decode");
+    decode_contract_data_proto(full.clone()).expect("control frame must decode");
 
     for (name, frame) in [
         (
@@ -76,7 +73,7 @@ fn test_decode_contract_data_proto_rejects_missing_submessages() {
             },
         ),
     ] {
-        assert_missing_field(decode_contract_data_proto(&frame.encode_to_vec()), name, "ContractData");
+        assert_missing_field(decode_contract_data_proto(frame), name, "ContractData");
     }
 }
 
@@ -153,10 +150,8 @@ fn test_decode_option_chain_proto() {
         expirations: vec!["20260619".into(), "20260918".into()],
         strikes: vec![150.0, 175.0, 200.0],
     };
-    let mut bytes = Vec::new();
-    proto_msg.encode(&mut bytes).unwrap();
 
-    let result = decode_option_chain_proto(&bytes).unwrap();
+    let result = decode_option_chain_proto(proto_msg).unwrap();
     assert_eq!(result.exchange, "SMART");
     assert_eq!(result.underlying_contract_id, 265598);
     assert_eq!(result.trading_class, "AAPL");
