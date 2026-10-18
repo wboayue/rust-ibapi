@@ -12,7 +12,7 @@ use crate::client::r#async::Client;
 use crate::common::test_utils::helpers::{
     binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
 };
-use crate::market_data::encoders::encode_request_market_data_type;
+use crate::market_data::realtime::common::encoders::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
 use crate::messages::{encode_raw_length, IncomingMessages};
 use crate::server_versions;
