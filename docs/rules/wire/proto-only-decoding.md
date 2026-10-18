@@ -46,11 +46,11 @@ control-flow signal: it terminates the subscription, loudly. Never `Error::NotIm
 text-framed message of every `IncomingMessages` discriminant and requires the two lists to
 agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
 anything else means an arm exists — `Ok`, `EndOfStream`, or the `UnexpectedWireFormat` that
-`require_proto()` raises on text framing. Declared-but-unhandled would also fail loudly at
+`proto()` raises on text framing. Declared-but-unhandled would also fail loudly at
 runtime via the backstop; handled-but-undeclared would not, which is why the test exists.
 
 That reading is exactly why a missing backstop is not a style question. A `decode` that dives
-straight into `require_proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
+straight into `proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
 reads it as claiming an arm for every discriminant it scans and can say nothing about it.
 
 **The const stays a slice even for the six single-type decoders, and the narrow stays a
@@ -88,13 +88,13 @@ mis-framed fixture vanished): the same variant is returned to users as a genuine
 one-shot call sites, so any decoder that reused it silently inherited "drop this". #732 moved
 the decision to the declared list, where it is data rather than an error code.
 
-`require_proto()` returns `Error::UnexpectedWireFormat`, distinct from `UnexpectedResponse`
-because the two failures look alike and are not:
+`proto()` (through `require_proto()`) returns `Error::UnexpectedWireFormat`, distinct from
+`UnexpectedResponse` because the two failures look alike and are not:
 
 | Call site | Meaning |
 |---|---|
 | `_ => Err(Error::unexpected_response(message))` | declared but unhandled — a bug in this impl |
-| `message.require_proto()?` | handled, but the framing is unreadable |
+| `message.proto()?` | handled, but the framing is unreadable |
 
 Both terminate. Neither is skipped. A mis-framed fixture therefore fails its test rather than
 leaving it green with the post-`next_data()` assertions unrun — see

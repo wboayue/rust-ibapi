@@ -51,7 +51,7 @@ fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a Captur
 
 #[test]
 fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
-    // Sparse text-framed OpenOrder — decoder calls require_proto() and rejects.
+    // Sparse text-framed OpenOrder — decoder calls proto() and rejects.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
     let cb_fired = Arc::new(Mutex::new(false));

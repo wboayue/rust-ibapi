@@ -987,13 +987,13 @@ impl ResponseMessage {
         self.raw_bytes.as_deref()
     }
 
-    /// Raw protobuf payload bytes for use by proto-only decoders. Text-framed
+    /// Raw protobuf payload bytes behind [`Self::proto`]. Text-framed
     /// arrival returns `Error::UnexpectedWireFormat`, which fails the
     /// subscription — the message was addressed to this decoder, so dropping it
     /// would lose data. Nothing here is skipped: whether a message belongs to a
     /// subscription is decided from `RESPONSE_MESSAGE_IDS` before decoding. See
     /// docs/rules/wire/proto-only-decoding.md.
-    pub(crate) fn require_proto(&self) -> Result<&[u8], crate::Error> {
+    fn require_proto(&self) -> Result<&[u8], crate::Error> {
         self.raw_bytes().ok_or_else(|| crate::Error::unexpected_wire_format(self))
     }
 
