@@ -298,10 +298,7 @@ fn status_without_client_id_is_kept() {
     let taps = taps();
     let mut status = order_status().order_id(7).to_proto();
     status.client_id = None;
-    taps.publish_status(&ResponseMessage::from_protobuf(
-        IncomingMessages::OrderStatus as i32,
-        prost::Message::encode_to_vec(&status),
-    ));
+    taps.publish_status(&proto_response(IncomingMessages::OrderStatus, prost::Message::encode_to_vec(&status)));
 
     let (receiver, _lease) = status_stream(&taps, 7);
     assert!(matches!(receiver.try_recv(), Ok(RoutedItem::Response(_))));
