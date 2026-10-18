@@ -271,10 +271,13 @@ pub mod helpers {
         binary_proto(crate::messages::IncomingMessages::ExecutionData as i32, &response.to_proto())
     }
 
-    /// Proto-framed OrderStatus frame; `order_id` is at proto tag 1.
-    pub fn order_status_frame(order_id: i32, status: crate::orders::OrderStatusKind) -> Vec<u8> {
+    /// Proto-framed OrderStatus frame for `client_id`'s order; `order_id` is at proto tag 1.
+    pub fn order_status_frame(client_id: i32, order_id: i32, status: crate::orders::OrderStatusKind) -> Vec<u8> {
         use crate::testdata::builders::ResponseProtoEncoder;
-        let response = crate::testdata::builders::orders::order_status().order_id(order_id).status(status);
+        let response = crate::testdata::builders::orders::order_status()
+            .client_id(client_id)
+            .order_id(order_id)
+            .status(status);
         binary_proto(crate::messages::IncomingMessages::OrderStatus as i32, &response.to_proto())
     }
 

@@ -893,6 +893,13 @@ struct ProtoIdEnvelope {
     pub id: Option<i32>,
 }
 
+/// Minimal envelope for `OrderStatus` reading only `client_id` (tag 9).
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct OrderStatusClientId {
+    #[prost(int32, optional, tag = "9")]
+    pub client_id: Option<i32>,
+}
+
 /// Minimal envelope for `ExecutionDetails` reading only the nested
 /// `execution.order_id` (tag 3 → tag 1) and `execution.exec_id` (tag 3 →
 /// tag 2). Skips the `contract` sub-message at tag 2, avoiding ~20 String
@@ -1077,6 +1084,17 @@ impl ResponseMessage {
             }
             _ => None,
         }
+    }
+
+    /// Try to extract the id of the client that placed the order an
+    /// `OrderStatus` reports (proto tag 9, via [`OrderStatusClientId`]).
+    /// `None` for any other message type.
+    pub fn client_id(&self) -> Option<i32> {
+        if self.message_type() != IncomingMessages::OrderStatus {
+            return None;
+        }
+        let p: OrderStatusClientId = prost::Message::decode(self.raw_bytes()?).ok()?;
+        p.client_id
     }
 
     /// Try to extract the execution id from the message.

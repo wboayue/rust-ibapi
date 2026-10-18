@@ -8,6 +8,13 @@ use crossbeam::channel::{Receiver, Sender};
 
 type Taps = OrderTaps<Sender<RoutedItem>>;
 
+/// The client id of the `order_status()` fixture.
+const CLIENT_ID: i32 = 100;
+
+fn taps() -> Taps {
+    Taps::new(CLIENT_ID)
+}
+
 fn publish(taps: &Taps, order_id: i32, status: OrderStatusKind) {
     taps.publish_status(&order_status_response(order_status().order_id(order_id).status(status)));
 }
@@ -33,7 +40,7 @@ fn next_response(receiver: &Receiver<RoutedItem>) -> ResponseMessage {
 
 #[test]
 fn status_stream_starts_with_latest_status() {
-    let taps = Taps::default();
+    let taps = taps();
     publish(&taps, 7, OrderStatusKind::Submitted);
     publish(&taps, 7, OrderStatusKind::Cancelled);
 
@@ -46,7 +53,7 @@ fn status_stream_starts_with_latest_status() {
 
 #[test]
 fn status_stream_of_unseen_order_starts_empty() {
-    let taps = Taps::default();
+    let taps = taps();
     publish(&taps, 7, OrderStatusKind::Filled);
 
     assert!(status_stream(&taps, 8).0.try_recv().is_err());
@@ -54,7 +61,7 @@ fn status_stream_of_unseen_order_starts_empty() {
 
 #[test]
 fn publish_reaches_every_stream_on_the_order_only() {
-    let taps = Taps::default();
+    let taps = taps();
     let (first, _a) = status_stream(&taps, 7);
     let (second, _b) = status_stream(&taps, 7);
     let (other, _c) = status_stream(&taps, 8);
@@ -68,7 +75,7 @@ fn publish_reaches_every_stream_on_the_order_only() {
 
 #[test]
 fn publish_ignores_other_frames() {
-    let taps = Taps::default();
+    let taps = taps();
     let (receiver, _lease) = status_stream(&taps, 7);
 
     taps.publish_status(&proto_response(
@@ -103,7 +110,7 @@ fn next_rejection(receiver: &Receiver<RoutedItem>) -> Notice {
 
 #[test]
 fn rejection_reaches_open_streams_and_starts_later_ones() {
-    let taps = Taps::default();
+    let taps = taps();
     let (open, _lease) = status_stream(&taps, 7);
 
     reject(&taps, 7, 110);
@@ -114,7 +121,7 @@ fn rejection_reaches_open_streams_and_starts_later_ones() {
 
 #[test]
 fn rejection_after_a_status_is_ignored() {
-    let taps = Taps::default();
+    let taps = taps();
     publish(&taps, 7, OrderStatusKind::Submitted);
     let (receiver, _lease) = status_stream(&taps, 7);
     next_response(&receiver);
@@ -128,7 +135,7 @@ fn rejection_after_a_status_is_ignored() {
 
 #[test]
 fn first_rejection_is_kept() {
-    let taps = Taps::default();
+    let taps = taps();
     reject(&taps, 7, 110);
     let (receiver, _lease) = status_stream(&taps, 7);
     next_rejection(&receiver);
@@ -141,7 +148,7 @@ fn first_rejection_is_kept() {
 
 #[test]
 fn status_after_rejection_replaces_it() {
-    let taps = Taps::default();
+    let taps = taps();
     reject(&taps, 7, 110);
 
     publish(&taps, 7, OrderStatusKind::Inactive);
@@ -151,7 +158,7 @@ fn status_after_rejection_replaces_it() {
 
 #[test]
 fn informational_and_request_errors_are_not_rejections() {
-    let taps = Taps::default();
+    let taps = taps();
     let (order, _a) = status_stream(&taps, 7);
 
     reject(&taps, 7, 2109); // a warning on the order
@@ -164,7 +171,7 @@ fn informational_and_request_errors_are_not_rejections() {
 
 #[test]
 fn release_removes_only_its_stream_then_the_empty_entry() {
-    let taps = Taps::default();
+    let taps = taps();
     let (_kept_receiver, kept) = status_stream(&taps, 7);
     let (_receiver, released) = status_stream(&taps, 7);
 
@@ -180,7 +187,7 @@ fn release_removes_only_its_stream_then_the_empty_entry() {
 
 #[test]
 fn release_keeps_entry_holding_a_latest_status() {
-    let taps = Taps::default();
+    let taps = taps();
     publish(&taps, 7, OrderStatusKind::Submitted);
     let (_receiver, lease) = status_stream(&taps, 7);
 
@@ -192,7 +199,7 @@ fn release_keeps_entry_holding_a_latest_status() {
 
 #[test]
 fn release_ignores_a_live_lease() {
-    let taps = Taps::default();
+    let taps = taps();
     let (_receiver, lease) = status_stream(&taps, 7);
 
     taps.release_status(OrderId::from(7), &lease.downgrade());
@@ -202,7 +209,7 @@ fn release_ignores_a_live_lease() {
 
 #[test]
 fn oldest_latest_statuses_are_evicted_past_capacity() {
-    let taps = Taps::default();
+    let taps = taps();
     let (watched, _lease) = status_stream(&taps, 0);
     for order_id in 0..=LATEST_STATUS_CAPACITY as i32 {
         publish(&taps, order_id, OrderStatusKind::Submitted);
@@ -217,7 +224,7 @@ fn oldest_latest_statuses_are_evicted_past_capacity() {
 
 #[test]
 fn reset_ends_status_streams_and_keeps_updates_and_latest() {
-    let taps = Taps::default();
+    let taps = taps();
     let NewTap {
         receiver: updates,
         lease: _updates_lease,
@@ -242,7 +249,7 @@ fn reset_ends_status_streams_and_keeps_updates_and_latest() {
 
 #[test]
 fn close_ends_every_stream_and_refuses_new_ones() {
-    let taps = Taps::default();
+    let taps = taps();
     let NewTap {
         receiver: updates,
         lease: _updates_lease,
@@ -260,7 +267,7 @@ fn close_ends_every_stream_and_refuses_new_ones() {
 
 #[test]
 fn update_stream_is_exclusive_until_released() {
-    let taps = Taps::default();
+    let taps = taps();
     let NewTap {
         receiver: _receiver, lease, ..
     } = taps.subscribe_updates(0).unwrap();
@@ -271,4 +278,28 @@ fn update_stream_is_exclusive_until_released() {
     let _replacement = taps.subscribe_updates(0).expect("a dead registration is replaced");
     assert!(!taps.release_updates(&lease_ref), "a stale release leaves the replacement");
     assert!(taps.updates_lease().is_some());
+}
+
+#[test]
+fn status_of_another_clients_order_is_ignored() {
+    let taps = taps();
+    let (receiver, _lease) = status_stream(&taps, 7);
+
+    let foreign = order_status().order_id(7).client_id(CLIENT_ID + 1).status(OrderStatusKind::Filled);
+    taps.publish_status(&order_status_response(foreign));
+
+    assert!(receiver.try_recv().is_err(), "not sent to the stream");
+    let (later, _lease) = status_stream(&taps, 7);
+    assert!(later.try_recv().is_err(), "not kept as the latest status");
+}
+
+#[test]
+fn status_without_client_id_is_kept() {
+    let taps = taps();
+    let mut status = order_status().order_id(7).to_proto();
+    status.client_id = None;
+    taps.publish_status(&proto_response(IncomingMessages::OrderStatus, prost::Message::encode_to_vec(&status)));
+
+    let (receiver, _lease) = status_stream(&taps, 7);
+    assert!(matches!(receiver.try_recv(), Ok(RoutedItem::Response(_))));
 }

@@ -29,9 +29,12 @@ use crate::transport::common::poison_with;
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
 /// binary-text-payload frames from `body()` inputs.
+/// The client id `make_bus` connects with.
+const CLIENT_ID: i32 = 28;
+
 fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
-    let connection = AsyncConnection::stubbed(stream.clone(), 28);
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
     (stream, bus)
@@ -2466,7 +2469,7 @@ async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error
 async fn test_order_status_stream_starts_with_earlier_status() {
     let (stream, bus) = make_bus();
 
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled));
     bus.read_and_route_message().await.unwrap();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
@@ -2497,7 +2500,7 @@ async fn test_order_status_stream_takes_nothing_from_other_routes() {
     let mut updates = bus.create_order_update_subscription().await.unwrap();
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
 
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
     bus.read_and_route_message().await.unwrap();
 
     assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
@@ -2511,10 +2514,28 @@ async fn test_order_status_stream_sees_unrouted_status() {
     let (stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
     bus.read_and_route_message().await.unwrap();
 
     assert_eq!(next_message(&mut statuses).await.order_id(), Some(7));
+}
+
+/// Order ids are unique per client only: another client's order 7 (e.g.
+/// from `all_open_orders`) is not this client's order 7.
+#[tokio::test]
+async fn test_order_status_stream_ignores_other_clients_status() {
+    let (stream, bus) = make_bus();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    stream.push_inbound(order_status_frame(CLIENT_ID + 1, 7, OrderStatusKind::Filled));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(tokio::time::timeout(TICK, statuses.next_routed()).await.is_err(), "open stream got it");
+    let mut later = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    assert!(
+        tokio::time::timeout(TICK, later.next_routed()).await.is_err(),
+        "later stream started with it"
+    );
 }
 
 #[tokio::test]
