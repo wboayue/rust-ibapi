@@ -5,11 +5,11 @@ use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
 use crate::subscriptions::{Subscription, SubscriptionItem};
 use crate::{Client, Error};
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 
 use std::time::Duration;
 
-use super::common::fill::FillTracker;
+use super::common::fill::{FillTracker, SNAPSHOT_END_WAIT};
 use super::common::{decoders, encoders, verify};
 use super::*;
 
@@ -521,14 +521,20 @@ impl Client {
     ///
     /// Built on [`order_status_stream`](Self::order_status_stream), so an
     /// order that already finished before the call is reported at once, as
-    /// long as this client saw its status since connecting. An order whose
-    /// statuses never reach this client (placed by another client, or
-    /// finished before this connection) waits out the timeout.
+    /// long as this client saw its status since connecting. When it has seen
+    /// none, the wait first asks TWS for this client's open orders
+    /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
+    /// connection and still working is found. Each such call sends one
+    /// request and reads its reply to the end before returning, which can
+    /// add a round trip to `timeout`. With client id 0, that request also
+    /// binds manual TWS orders to this client. An order that finished before
+    /// this connection, or one placed by another client, waits out the
+    /// timeout.
     ///
     /// # Errors
     ///
-    /// [`Error::ConnectionReset`] if the connection drops during the wait,
-    /// [`Error::Shutdown`] if the client shuts down.
+    /// [`Error::ConnectionReset`] if the connection is down or drops during
+    /// the wait, [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
     ///
@@ -557,9 +563,18 @@ impl Client {
     pub async fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
         let mut statuses = self.order_status_stream(order_id).await?;
         let mut tracker = FillTracker::default();
+        // Nothing ready: this client has no status for the order (e.g.
+        // placed on an earlier connection). Ask TWS for this client's open
+        // orders; their statuses reach `statuses` like any other.
+        let first = statuses.next().now_or_never();
+        let snapshot = match first {
+            None => Some(self.open_orders().await?),
+            Some(_) => None,
+        };
 
         let wait = async {
-            while let Some(item) = statuses.next().await {
+            let mut items = futures::stream::iter(first.flatten()).chain(statuses);
+            while let Some(item) = items.next().await {
                 match item {
                     Ok(SubscriptionItem::Data(status)) => {
                         if let Some(outcome) = tracker.observe(status) {
@@ -572,10 +587,15 @@ impl Client {
             }
             Err(Error::UnexpectedEndOfStream)
         };
-        match tokio::time::timeout(timeout, wait).await {
+        let outcome = match tokio::time::timeout(timeout, wait).await {
             Ok(result) => result,
             Err(_) => Ok(tracker.timed_out()),
+        };
+        // Read the snapshot through its end marker; see `SNAPSHOT_END_WAIT`.
+        if let Some(mut snapshot) = snapshot {
+            let _ = tokio::time::timeout(SNAPSHOT_END_WAIT, async { while snapshot.next().await.is_some() {} }).await;
         }
+        outcome
     }
 
     /// Exercise or lapse an option position.

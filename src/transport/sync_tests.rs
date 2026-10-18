@@ -3796,6 +3796,21 @@ fn test_order_status_stream_ignores_other_clients_status() -> Result<(), Error> 
     Ok(())
 }
 
+/// The status in `wait_for_fill`'s open-orders snapshot reply reaches the
+/// order's status stream as well as the snapshot.
+#[test]
+fn test_order_status_stream_sees_snapshot_reply() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    let _snapshot = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders")?;
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    bus.dispatch()?;
+
+    assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
+    Ok(())
+}
+
 #[test]
 fn test_order_status_stream_ends_on_reset_and_shutdown() -> Result<(), Error> {
     let (_stream, bus) = make_bus();
@@ -3947,4 +3962,50 @@ fn test_client_drop_closes_tcp_with_retained_subscription() {
     drop(client);
     assert_peer_sees_eof(peer);
     assert!(!bus.is_connected());
+}
+
+/// `wait_for_fill` on an order with no cached status sends `open_orders`.
+/// It returns only after that request's `OpenOrderEnd`, so the caller's next
+/// open-orders request cannot end on it and come back empty.
+#[test]
+fn test_wait_for_fill_snapshot_end_does_not_end_next_open_orders() {
+    use crate::orders::Orders;
+    use crate::subscriptions::SubscriptionItem;
+    use crate::testdata::builders::orders::{open_order, open_order_end};
+    use std::io::{Read, Write};
+
+    fn read_frame(peer: &mut std::net::TcpStream) {
+        let mut len = [0u8; 4];
+        peer.read_exact(&mut len).unwrap();
+        peer.read_exact(&mut vec![0u8; u32::from_be_bytes(len) as usize]).unwrap();
+    }
+    let end = encode_raw_length(&helpers::binary_proto(
+        IncomingMessages::OpenOrderEnd as i32,
+        &open_order_end().to_proto(),
+    ));
+    let order = encode_raw_length(&helpers::binary_proto(
+        IncomingMessages::OpenOrder as i32,
+        &open_order().order_id(7).to_proto(),
+    ));
+
+    let (client, _bus, mut peer) = tcp_client_with_peer();
+    let tws = thread::spawn(move || {
+        read_frame(&mut peer); // the snapshot
+        thread::sleep(Duration::from_millis(50));
+        peer.write_all(&end).unwrap();
+        read_frame(&mut peer); // the caller's open_orders
+        peer.write_all(&order).unwrap();
+        peer.write_all(&end).unwrap();
+        peer
+    });
+
+    let outcome = client.wait_for_fill(7, Duration::ZERO).unwrap();
+    assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
+    let orders = client.open_orders().unwrap();
+    let first = orders.next_timeout(Duration::from_secs(1));
+    assert!(
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order_id == 7),
+        "{first:?}"
+    );
+    drop(tws.join().unwrap());
 }

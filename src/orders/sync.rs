@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::common::fill::FillTracker;
+use super::common::fill::{FillTracker, SNAPSHOT_END_WAIT};
 use super::common::{decoders, encoders, verify};
 use super::{
     CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderStatus, OrderUpdate, Orders,
@@ -557,14 +557,20 @@ impl Client {
     ///
     /// Built on [`order_status_stream`](Self::order_status_stream), so an
     /// order that already finished before the call is reported at once, as
-    /// long as this client saw its status since connecting. An order whose
-    /// statuses never reach this client (placed by another client, or
-    /// finished before this connection) waits out the timeout.
+    /// long as this client saw its status since connecting. When it has seen
+    /// none, the wait first asks TWS for this client's open orders
+    /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
+    /// connection and still working is found. Each such call sends one
+    /// request and reads its reply to the end before returning, which can
+    /// add a round trip to `timeout`. With client id 0, that request also
+    /// binds manual TWS orders to this client. An order that finished before
+    /// this connection, or one placed by another client, waits out the
+    /// timeout.
     ///
     /// # Errors
     ///
-    /// [`Error::ConnectionReset`] if the connection drops during the wait,
-    /// [`Error::Shutdown`] if the client shuts down.
+    /// [`Error::ConnectionReset`] if the connection is down or drops during
+    /// the wait, [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
     ///
@@ -590,12 +596,21 @@ impl Client {
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
         let statuses = self.order_status_stream(order_id)?;
         let mut tracker = FillTracker::default();
+        // Nothing queued: this client has no status for the order (e.g.
+        // placed on an earlier connection). Ask TWS for this client's open
+        // orders; their statuses reach `statuses` like any other.
+        let mut first = statuses.try_next();
+        let snapshot = match first {
+            None => Some(self.open_orders()?),
+            Some(_) => None,
+        };
         // `None` for a timeout too large to represent: wait without one.
         let deadline = Instant::now().checked_add(timeout);
-        loop {
-            let item = match deadline {
-                Some(deadline) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
-                None => statuses.next(),
+        let mut wait = || loop {
+            let item = match (first.take(), deadline) {
+                (Some(item), _) => Some(item),
+                (None, Some(deadline)) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
+                (None, None) => statuses.next(),
             };
             match item {
                 Some(Ok(SubscriptionItem::Data(status))) => {
@@ -610,7 +625,14 @@ impl Client {
                 None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Ok(tracker.timed_out()),
                 None => return Err(Error::UnexpectedEndOfStream),
             }
+        };
+        let outcome = wait();
+        // Read the snapshot through its end marker; see `SNAPSHOT_END_WAIT`.
+        if let Some(snapshot) = snapshot {
+            let end = Instant::now() + SNAPSHOT_END_WAIT;
+            while snapshot.next_timeout(end.saturating_duration_since(Instant::now())).is_some() {}
         }
+        outcome
     }
 
     /// Exercise or lapse an option position.

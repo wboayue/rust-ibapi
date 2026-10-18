@@ -1236,13 +1236,17 @@ async fn wait_for_fill_times_out_with_last_status() {
     assert!(matches!(&outcome, OrderOutcome::TimedOut(Some(s)) if s.filled == 40.0), "{outcome:?}");
 }
 
+/// No status seen for the order (e.g. placed on an earlier connection): the
+/// wait asks TWS for this client's open orders, then waits as usual.
 #[tokio::test]
-async fn wait_for_fill_times_out_without_status() {
-    let (client, _) = create_test_client_with_ordered_proto_responses(vec![]);
+async fn wait_for_fill_asks_for_open_orders_when_status_unseen() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![]);
 
     let outcome = client.wait_for_fill(13, Duration::from_millis(20)).await.unwrap();
 
     assert_eq!(outcome, OrderOutcome::TimedOut(None));
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &open_orders_request());
 }
 
 /// An order TWS refuses with an error and no status (live: ES limit off the
