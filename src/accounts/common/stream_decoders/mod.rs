@@ -114,13 +114,7 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
     ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
-            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(message)?)),
-            IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
-            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
-            _ => Err(Error::unexpected_response(message)),
-        }
+        decoders::decode_account_update_message(message)
     }
 
     fn is_batch_end(&self) -> bool {

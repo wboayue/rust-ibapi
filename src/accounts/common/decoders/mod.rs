@@ -207,7 +207,8 @@ pub(crate) fn decode_verify_completed_proto(p: crate::proto::VerifyCompleted) ->
 }
 
 /// Dispatch an account-update frame to the right [`AccountUpdate`] variant by
-/// `IncomingMessages` type. Used by the connection layer's startup callback path.
+/// `IncomingMessages` type. Used by the connection layer's startup callback path
+/// and by `StreamDecoder<AccountUpdate>`.
 pub(crate) fn decode_account_update_message(message: &ResponseMessage) -> Result<AccountUpdate, Error> {
     match message.message_type() {
         IncomingMessages::AccountValue => decode_account_value(message).map(AccountUpdate::AccountValue),
