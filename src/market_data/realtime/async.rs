@@ -20,6 +20,11 @@ impl Client {
     /// [`TRANSPORT_RECONNECT_CODE`](crate::messages::TRANSPORT_RECONNECT_CODE)
     /// notice, so a reconnect does not revert it to realtime.
     ///
+    /// The type is kept even when this call returns `Err` (say, a write
+    /// refused while the session is down) and is sent on the next reconnect.
+    /// After an `Err`, call again to apply it to the current session; a
+    /// repeated call is harmless.
+    ///
     /// # Arguments
     /// * `market_data_type` - Type of market data to retrieve.
     ///
