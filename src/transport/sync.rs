@@ -333,6 +333,7 @@ pub struct TcpMessageBus<S: Stream> {
 
 impl<S: Stream> TcpMessageBus<S> {
     pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
+        let order_taps = OrderTaps::new(connection.client_id);
         let (signals_send, signals_recv) = channel::unbounded();
         let (shutdown_send, shutdown_recv) = channel::bounded(1);
         let shutdown = connection.shutdown_signal();
@@ -351,7 +352,7 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown,
             order_ids: OnceLock::new(),
             rate_limiter: OnceLock::new(),
-            order_taps: OrderTaps::default(),
+            order_taps,
             connection_state: ConnectionSignal::default(),
         })
     }

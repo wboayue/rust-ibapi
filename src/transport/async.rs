@@ -521,6 +521,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
         let shutdown = connection.shutdown_signal();
+        let order_taps = Arc::new(OrderTaps::new(connection.client_id));
 
         let message_bus = Self {
             connection: Arc::new(connection),
@@ -528,7 +529,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             orders: Arc::new(SenderHash::new()),
             executions: Arc::new(SenderHash::new()),
             shared_channels: SharedChannels::new(|request| ChannelClass::of_shared(request).capacity(channel_capacity)),
-            order_taps: Arc::default(),
+            order_taps,
             channel_capacity,
             cleanup_sender,
             #[cfg(test)]

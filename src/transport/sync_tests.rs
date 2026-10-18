@@ -771,9 +771,12 @@ fn test_request_encoding_roundtrip() {
 /// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
 /// binary-text-payload frames from `body()` inputs.
+/// The client id `make_bus` connects with.
+const CLIENT_ID: i32 = 28;
+
 fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
-    let connection = Connection::stubbed(stream.clone(), 28);
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
     (stream, bus)
@@ -3722,7 +3725,7 @@ fn test_throttled_shared_subscribe_does_not_hold_up_shared_cancel() -> Result<()
 fn test_order_status_stream_starts_with_earlier_status() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Filled));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled));
     bus.dispatch()?;
 
     let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
@@ -3755,7 +3758,7 @@ fn test_order_status_stream_takes_nothing_from_other_routes() -> Result<(), Erro
     let updates = bus.create_order_update_subscription()?;
     let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
 
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
     assert_eq!(statuses.next_timeout(TICK).expect("status stream got no message")?.order_id(), Some(7));
@@ -3770,10 +3773,26 @@ fn test_order_status_stream_sees_unrouted_status() -> Result<(), Error> {
     let (stream, bus) = make_bus();
 
     let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
-    stream.push_inbound(order_status_frame(7, OrderStatusKind::Submitted));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
     bus.dispatch()?;
 
     assert_eq!(statuses.next_timeout(TICK).expect("no status")?.order_id(), Some(7));
+    Ok(())
+}
+
+/// Order ids are unique per client only: another client's order 7 (e.g.
+/// from `all_open_orders`) is not this client's order 7.
+#[test]
+fn test_order_status_stream_ignores_other_clients_status() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let statuses = bus.create_order_status_subscription(OrderId::from(7))?;
+    stream.push_inbound(order_status_frame(CLIENT_ID + 1, 7, OrderStatusKind::Filled));
+    bus.dispatch()?;
+
+    assert!(statuses.next_timeout(TICK).is_none(), "open stream got it");
+    let later = bus.create_order_status_subscription(OrderId::from(7))?;
+    assert!(later.next_timeout(TICK).is_none(), "later stream started with it");
     Ok(())
 }
 

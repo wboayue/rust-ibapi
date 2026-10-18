@@ -403,6 +403,37 @@ fn test_order_id_protobuf_order_status() {
 }
 
 #[test]
+fn test_client_id_protobuf_order_status() {
+    let bytes = crate::proto::OrderStatus {
+        order_id: Some(99),
+        client_id: Some(7),
+        ..Default::default()
+    }
+    .encode_to_vec();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes);
+    assert_eq!(message.client_id(), Some(7));
+}
+
+#[test]
+fn test_client_id_none_when_absent_or_other_type() {
+    let bytes = crate::proto::OrderStatus {
+        order_id: Some(99),
+        ..Default::default()
+    }
+    .encode_to_vec();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes);
+    assert_eq!(message.client_id(), None, "absent");
+
+    let bytes = crate::proto::Order {
+        client_id: Some(7),
+        ..Default::default()
+    }
+    .encode_to_vec();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes);
+    assert_eq!(message.client_id(), None, "not an OrderStatus");
+}
+
+#[test]
 fn test_order_id_protobuf_execution_data_nested() {
     // ExecutionData carries order_id nested under `execution.order_id`,
     // not at proto tag 1 (which is req_id).

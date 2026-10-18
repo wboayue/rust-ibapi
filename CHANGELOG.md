@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `wait_for_fill` and `order_status_stream` ignore statuses of other clients' orders. Order ids are unique per client only, so after `all_open_orders` (or with a master client id) another client's order with the same id could end a wait with that order's fill or cancel (#993).
 - The market data type set with `switch_market_data_type` now survives an automatic reconnect: TWS does not keep it across reconnects, and the client re-sends it before the `TRANSPORT_RECONNECT_CODE` notice. Previously a subscription on the new session without a realtime entitlement got error 354 or the 10089 advisory instead of delayed ticks (#1016).
 
 ## [5.1.0] - 2026-10-11
