@@ -1578,7 +1578,9 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 /// alone: re-establish what the new session must provide (resubscribe
 /// requests), and reset connection-state conclusions — a recorded 1100 — to
 /// the fresh-connection baseline a new client starts from, then let the new
-/// connection's own notices re-derive the link state.
+/// connection's own notices re-derive the link state. The market data type
+/// set with `switch_market_data_type` needs no action: the reconnect re-sends
+/// it before this notice.
 ///
 /// Published once the reconnected session is live: the channel reset runs
 /// before the reconnect, so a consumer may resubscribe from inside its handler

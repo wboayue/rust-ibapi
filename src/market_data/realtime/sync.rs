@@ -198,6 +198,16 @@ impl Client {
 
     /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
     ///
+    /// TWS does not keep the type across reconnects. The client re-sends the
+    /// last type after every automatic reconnect, before the
+    /// [`TRANSPORT_RECONNECT_CODE`](crate::messages::TRANSPORT_RECONNECT_CODE)
+    /// notice, so a reconnect does not revert it to realtime.
+    ///
+    /// The type is kept even when this call returns `Err` (say, a write
+    /// refused while the session is down) and is sent on the next reconnect.
+    /// After an `Err`, call again to apply it to the current session; a
+    /// repeated call is harmless.
+    ///
     /// # Arguments
     /// * `market_data_type` - Type of market data to retrieve.
     ///
@@ -215,7 +225,7 @@ impl Client {
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
         let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
-        self.send_message(message)
+        self.message_bus.send_market_data_type(&message)
     }
 }
 

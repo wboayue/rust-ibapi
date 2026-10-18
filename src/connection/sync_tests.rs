@@ -11,7 +11,9 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{
     binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
 };
-use crate::messages::IncomingMessages;
+use crate::market_data::encoders::encode_request_market_data_type;
+use crate::market_data::MarketDataType;
+use crate::messages::{encode_raw_length, IncomingMessages};
 use crate::server_versions;
 use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus, STARTUP_TIMEOUT_LIMIT};
 use crate::transport::MessageBus;
@@ -109,6 +111,38 @@ fn reconnect_retries_after_transient_handshake_failure() {
     let metadata = connection.connection_metadata();
     assert_eq!(metadata.next_order_id, 90);
     assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
+}
+
+/// TWS does not keep the market data type across reconnects, so a reconnect
+/// must re-send the remembered request after the handshake. Nothing is sent
+/// until one has been remembered.
+#[test]
+fn reconnect_replays_market_data_type() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+
+    let session_start = [
+        connection.connection_handler.format_handshake(),
+        encode_raw_length(&connection.connection_handler.format_start_api(CLIENT_ID)),
+    ]
+    .concat();
+
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+    assert_eq!(stream.captured(), session_start, "nothing remembered: only the session start is sent");
+
+    let packet = encode_request_market_data_type(MarketDataType::Delayed).expect("encode");
+    connection.remember_market_data_type(packet.clone());
+
+    push_handshake(&stream);
+    connection.reconnect().expect("reconnect failed");
+
+    let expected = [session_start.clone(), session_start, encode_raw_length(&packet)].concat();
+    assert_eq!(
+        stream.captured(),
+        expected,
+        "the reconnect must re-send the market data type after the session start"
+    );
 }
 
 #[test]

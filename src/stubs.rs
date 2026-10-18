@@ -244,6 +244,11 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
+    fn send_market_data_type(&self, message: &[u8]) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message.to_vec());
+        Ok(())
+    }
+
     fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
         // Nothing is written, so nothing is recorded.
         let (sender, receiver) = channel::unbounded();
@@ -382,6 +387,11 @@ impl AsyncMessageBus for MessageBusStub {
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message);
+        Ok(())
+    }
+
+    async fn send_market_data_type(&self, message: Vec<u8>) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message);
         Ok(())
     }
