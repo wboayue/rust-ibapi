@@ -1,14 +1,14 @@
 //! Example: wait for every leg of a bracket order to finish.
 //!
 //! A bracket is done when each leg has reached a final state: the entry was cancelled
-//! (TWS cancels both exits) or rejected (both exits go `Inactive`), or the entry filled
+//! before any fill (TWS cancels both exits) or rejected (both exits go `Inactive`), or the entry filled
 //! and one exit filled (TWS cancels the other). Cancelling one exit also cancels the
 //! other but leaves the entry working. Calling `wait_for_fill` on each leg with one
 //! shared deadline covers every case: a leg that already finished returns at once from
 //! the status cache, so the total wait is the slowest leg.
 //!
 //! The entry is a buy limit far below the market, so the first wait times out with the
-//! bracket still working. Cancelling the entry cancels the children, and the second
+//! bracket still working. Cancelling the entry cancels the exits, and the second
 //! wait reports all three legs ended.
 //!
 //! # Usage
