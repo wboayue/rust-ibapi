@@ -1,5 +1,6 @@
 use crate::orders::Order;
 use crate::orders::OrderId;
+use crate::protocol::{check_version, ProtocolFeature};
 use crate::{server_versions, Error};
 
 /// `order_id` as an [`OrderId`], after checking it and every order id `order`
@@ -19,46 +20,31 @@ pub(crate) fn verify_order_ids(order_id: OrderId, order: &Order) -> Result<Order
     Ok(order_id)
 }
 
-pub(crate) trait VersionedClient {
-    fn check_version(&self, version: i32, message: &str) -> Result<(), Error>;
-}
-
-#[cfg(feature = "sync")]
-impl VersionedClient for crate::client::sync::Client {
-    fn check_version(&self, version: i32, message: &str) -> Result<(), Error> {
-        self.check_server_version(version, message)
-    }
-}
-
-#[cfg(feature = "async")]
-impl VersionedClient for crate::client::r#async::Client {
-    fn check_version(&self, version: i32, message: &str) -> Result<(), Error> {
-        self.check_server_version(version, message)
-    }
-}
-
 // Gates whose server version is at or below the connection floor
 // (`PROTOBUF_REST_MESSAGES_3`, 213) are omitted: they always pass, since the
 // handshake rejects older servers.
-pub(crate) fn verify_order(client: &impl VersionedClient, order: &Order) -> Result<(), Error> {
+const HEDGE_MAX_SIZE: ProtocolFeature = ProtocolFeature::new("hedge max size", server_versions::HEDGE_MAX_SIZE);
+const DEACTIVATE: ProtocolFeature = ProtocolFeature::new("deactivate", server_versions::ADDITIONAL_ORDER_PARAMS_1);
+const ROUTE_MARKETABLE_TO_BBO: ProtocolFeature = ProtocolFeature::new("route marketable to BBO", server_versions::ADDITIONAL_ORDER_PARAMS_2);
+const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("attached orders", server_versions::ATTACHED_ORDERS);
+
+/// Rejects `order` when it uses a field `server_version` does not support.
+pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Error> {
     if order.hedge_max_size.is_some() {
-        client.check_version(server_versions::HEDGE_MAX_SIZE, "It does not support hedge_max_size parameter")?
+        check_version(server_version, HEDGE_MAX_SIZE)?;
     }
 
     // Mirrors C# `ValidateOrderParameters`; the encoder sends each flag only when set.
     if order.deactivate {
-        client.check_version(server_versions::ADDITIONAL_ORDER_PARAMS_1, "It does not support deactivate parameter")?
+        check_version(server_version, DEACTIVATE)?;
     }
 
     if order.route_marketable_to_bbo {
-        client.check_version(
-            server_versions::ADDITIONAL_ORDER_PARAMS_2,
-            "It does not support route_marketable_to_bbo parameter",
-        )?
+        check_version(server_version, ROUTE_MARKETABLE_TO_BBO)?;
     }
 
     if order.preset_stop_loss_order_id.is_some() || order.preset_profit_taker_order_id.is_some() {
-        client.check_version(server_versions::ATTACHED_ORDERS, "It does not support attached orders.")?
+        check_version(server_version, ATTACHED_ORDERS)?;
     }
 
     Ok(())

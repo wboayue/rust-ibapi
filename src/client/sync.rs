@@ -316,14 +316,6 @@ impl Client {
     pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         self.message_bus.send_shared_request(message_id, &message)
     }
-
-    pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
-        if version <= self.server_version {
-            Ok(())
-        } else {
-            Err(Error::ServerVersion(version, self.server_version, message.into()))
-        }
-    }
 }
 
 impl Drop for Client {
