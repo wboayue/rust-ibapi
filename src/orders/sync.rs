@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::common::fill::{FillTracker, SNAPSHOT_END_WAIT};
+use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
 use super::common::{decoders, encoders, verify};
 use super::{
     CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderStatus, OrderUpdate, Orders,
@@ -511,7 +511,10 @@ impl Client {
     ///
     /// Starts with the order's latest status, if this client has seen one
     /// (the latest statuses of the 10,000 most recent orders are kept), then
-    /// yields each new [`OrderStatus`] as TWS sends it. If TWS refuses the
+    /// yields each new [`OrderStatus`] as TWS sends it. A reconnect keeps only
+    /// statuses of orders that ended: TWS does not replay what happened while
+    /// disconnected, so a working order's stream starts empty until its next
+    /// status. If TWS refuses the
     /// order with an error before any status (e.g. 110, a price off the
     /// minimum tick), the stream yields that error as [`Error::Notice`] and
     /// ends; a stream opened later starts with it. Otherwise the stream does
@@ -558,14 +561,16 @@ impl Client {
     /// Built on [`order_status_stream`](Self::order_status_stream), so an
     /// order that already finished before the call is reported at once, as
     /// long as this client saw its status since connecting. When it has seen
-    /// none, the wait first asks TWS for this client's open orders
-    /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
-    /// connection and still working is found. Each such call sends one
-    /// request and reads its reply to the end before returning, which can
-    /// add a round trip to `timeout`. With client id 0, that request also
-    /// binds manual TWS orders to this client. An order that finished before
-    /// this connection, or one placed by another client, waits out the
-    /// timeout.
+    /// none, the wait first looks the order up: an order this client's open
+    /// orders ([`open_orders`](Self::open_orders)) list is still working, and
+    /// the wait goes on; otherwise one found among
+    /// [`completed_orders`](Self::completed_orders) ends the wait at once,
+    /// with a status built from the completed order, whose fill prices are
+    /// `None` (see [`executions`](Self::executions) for them). Each lookup
+    /// reads its replies to the end, which can add a round trip to `timeout`.
+    /// With client id 0, the open-orders request also binds manual TWS orders
+    /// to this client. An order placed by another client, or one in neither
+    /// reply, waits out the timeout.
     ///
     /// # Errors
     ///
@@ -594,19 +599,22 @@ impl Client {
     /// }
     /// ```
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
+        let order_id = order_id.into();
         let statuses = self.order_status_stream(order_id)?;
         let mut tracker = FillTracker::default();
-        // Nothing queued: this client has no status for the order (e.g.
-        // placed on an earlier connection). Ask TWS for this client's open
-        // orders; their statuses reach `statuses` like any other.
-        let mut first = statuses.try_next();
-        let snapshot = match first {
-            None => Some(self.open_orders()?),
-            Some(_) => None,
-        };
         // `None` for a timeout too large to represent: wait without one.
         let deadline = Instant::now().checked_add(timeout);
-        let mut wait = || loop {
+        // Nothing queued: this client has no status for the order (e.g.
+        // placed on an earlier connection). Look it up.
+        let mut first = statuses.try_next();
+        if first.is_none() {
+            if let Some(status) = self.find_finished(order_id, deadline)? {
+                if let Some(outcome) = tracker.observe(status) {
+                    return Ok(outcome);
+                }
+            }
+        }
+        loop {
             let item = match (first.take(), deadline) {
                 (Some(item), _) => Some(item),
                 (None, Some(deadline)) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
@@ -625,14 +633,30 @@ impl Client {
                 None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Ok(tracker.timed_out()),
                 None => return Err(Error::UnexpectedEndOfStream),
             }
-        };
-        let outcome = wait();
-        // Read the snapshot through its end marker; see `SNAPSHOT_END_WAIT`.
-        if let Some(snapshot) = snapshot {
-            let end = Instant::now() + SNAPSHOT_END_WAIT;
-            while snapshot.next_timeout(end.saturating_duration_since(Instant::now())).is_some() {}
         }
-        outcome
+    }
+
+    /// Look up an order this client has no status for: `None` when this
+    /// client's open orders list it (their statuses reach the order's status
+    /// streams like any other) or neither reply does; otherwise its status
+    /// from completed orders. Each reply is read to its end marker.
+    fn find_finished(&self, order_id: OrderId, deadline: Option<Instant>) -> Result<Option<OrderStatus>, Error> {
+        let read = |subscription: Subscription<Orders>| match deadline {
+            Some(deadline) => subscription.collect_to_end_within(lookup_wait(deadline)),
+            None => subscription.collect_to_end(),
+        };
+        // A reply cut short (deadline, dropped connection) proves nothing:
+        // keep waiting; the status stream reports a dropped connection.
+        let Ok(open) = read(self.open_orders()?) else {
+            return Ok(None);
+        };
+        if lists_order(&open, order_id) {
+            return Ok(None);
+        }
+        let Ok(completed) = read(self.completed_orders(false)?) else {
+            return Ok(None);
+        };
+        Ok(completed_status(&completed, self.client_id(), order_id))
     }
 
     /// Exercise or lapse an option position.

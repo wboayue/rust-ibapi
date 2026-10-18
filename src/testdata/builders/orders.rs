@@ -694,6 +694,9 @@ pub struct CompletedOrderResponse {
     pub tif: String,
     pub account: String,
     pub perm_id: i64,
+    pub order_id: i32,
+    pub client_id: i32,
+    pub filled_quantity: f64,
     pub status: OrderStatusKind,
     pub trail_stop_price: Option<f64>,
     pub shareholder: String,
@@ -723,6 +726,9 @@ impl Default for CompletedOrderResponse {
             tif: "DAY".to_string(),
             account: TEST_ACCOUNT.to_string(),
             perm_id: 1377295418,
+            order_id: 0,
+            client_id: 0,
+            filled_quantity: 100.0,
             status: OrderStatusKind::Filled,
             trail_stop_price: None,
             shareholder: "Not an insider or substantial shareholder".to_string(),
@@ -797,6 +803,18 @@ impl CompletedOrderResponse {
         self.status = v;
         self
     }
+    pub fn order_id(mut self, v: i32) -> Self {
+        self.order_id = v;
+        self
+    }
+    pub fn client_id(mut self, v: i32) -> Self {
+        self.client_id = v;
+        self
+    }
+    pub fn filled_quantity(mut self, v: f64) -> Self {
+        self.filled_quantity = v;
+        self
+    }
     pub fn trail_stop_price(mut self, v: Option<f64>) -> Self {
         self.trail_stop_price = v;
         self
@@ -839,6 +857,9 @@ impl ResponseProtoEncoder for CompletedOrderResponse {
                 tif: Some(self.tif.clone()),
                 account: Some(self.account.clone()),
                 perm_id: Some(self.perm_id),
+                order_id: Some(self.order_id),
+                client_id: Some(self.client_id),
+                filled_quantity: Some(self.filled_quantity.to_string()),
                 trail_stop_price: self.trail_stop_price,
                 shareholder: some_str(&self.shareholder),
                 ..Default::default()
