@@ -58,7 +58,6 @@ pub(crate) fn encode_request_historical_data(
     what_to_show: WhatToShow,
     use_rth: bool,
     keep_up_to_date: bool,
-    chart_options: &[crate::contracts::TagValue],
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use crate::proto::encoders::{some_bool, some_str};
@@ -74,7 +73,7 @@ pub(crate) fn encode_request_historical_data(
         use_rth: some_bool(use_rth),
         format_date: Some(DATE_FORMAT),
         keep_up_to_date: some_bool(keep_up_to_date),
-        chart_options: crate::proto::encoders::tag_values_to_map(chart_options),
+        chart_options: Default::default(),
     };
     Ok(encode_protobuf_message(
         crate::messages::OutgoingMessages::RequestHistoricalData as i32,

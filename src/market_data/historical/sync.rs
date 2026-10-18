@@ -271,7 +271,6 @@ pub(crate) fn historical_data(
             what_to_show,
             trading_hours.use_rth(),
             false,
-            &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
         let subscription = builder.send_raw(request)?;
@@ -308,7 +307,6 @@ pub(crate) fn historical_data_stream(
         what_to_show,
         trading_hours.use_rth(),
         true, // keep_up_to_date — the whole point of .stream()
-        &Vec::<crate::contracts::TagValue>::default(),
     )?;
 
     builder.send_capped::<HistoricalBarUpdate>(request, buffer_limit)
@@ -355,17 +353,7 @@ pub(crate) fn historical_schedule(
     request_helpers::blocking::one_shot_by_request_id(
         client,
         |request_id| {
-            encoders::encode_request_historical_data(
-                request_id,
-                contract,
-                end_date,
-                duration,
-                BarSize::Day,
-                WhatToShow::Schedule,
-                true,
-                false,
-                &Vec::<crate::contracts::TagValue>::default(),
-            )
+            encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
         },
         expect_proto(decoders::decode_historical_schedule_proto),
     )
