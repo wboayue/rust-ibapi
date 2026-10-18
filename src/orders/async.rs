@@ -524,8 +524,9 @@ impl Client {
     /// long as this client saw its status since connecting. When it has seen
     /// none, the wait first asks TWS for this client's open orders
     /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
-    /// connection and still working is found. With client id 0, that request
-    /// also binds manual TWS orders to this client. An order that finished
+    /// connection and still working is found; each such call sends one
+    /// request. With client id 0, that request also binds manual TWS orders
+    /// to this client. An order that finished
     /// before this connection, or one placed by another client, waits out the
     /// timeout.
     ///
