@@ -69,3 +69,78 @@ fn error_of_a_notice_is_a_rejection() {
     assert_eq!(FillTracker::error(Error::Notice(notice.clone())).unwrap(), OrderOutcome::Rejected(notice));
     assert!(matches!(FillTracker::error(Error::ConnectionReset), Err(Error::ConnectionReset)));
 }
+
+fn order_row(client_id: i32, order_id: i32, kind: OrderStatusKind, filled: f64) -> Orders {
+    let mut data = OrderData::default();
+    data.order.client_id = client_id;
+    data.order.order_id = order_id;
+    data.order.perm_id = 900 + i64::from(order_id);
+    data.order.parent_id = 3;
+    data.order.total_quantity = 100.0;
+    data.order.filled_quantity = filled;
+    data.order_state.status = kind;
+    Orders::OrderData(data)
+}
+
+#[test]
+fn lists_order_by_order_or_status() {
+    let status_row = Orders::OrderStatus(OrderStatus {
+        order_id: 13,
+        ..Default::default()
+    });
+    let cases = [
+        ("order row", vec![order_row(7, 13, OrderStatusKind::Submitted, 0.0)], true),
+        ("status row", vec![status_row], true),
+        ("other order", vec![order_row(7, 14, OrderStatusKind::Submitted, 0.0)], false),
+        ("empty reply", Vec::new(), false),
+    ];
+    for (name, rows, expected) in cases {
+        assert_eq!(lists_order(&rows, OrderId(13)), expected, "{name}");
+    }
+}
+
+#[test]
+fn completed_status_matches_client_and_order() {
+    use OrderStatusKind::*;
+    let cases = [
+        ("match", vec![order_row(7, 13, Cancelled, 40.0)], Some(Cancelled)),
+        ("other client", vec![order_row(8, 13, Cancelled, 0.0)], None),
+        ("other order", vec![order_row(7, 14, Cancelled, 0.0)], None),
+        (
+            "last match wins",
+            vec![order_row(7, 13, Cancelled, 0.0), order_row(7, 13, Filled, 100.0)],
+            Some(Filled),
+        ),
+        ("empty reply", Vec::new(), None),
+    ];
+    for (name, rows, expected) in cases {
+        let found = completed_status(&rows, 7, OrderId(13));
+        assert_eq!(found.as_ref().map(|s| s.status.clone()), expected, "{name}");
+    }
+}
+
+#[test]
+fn completed_status_is_built_from_the_order() {
+    let found = completed_status(&[order_row(7, 13, OrderStatusKind::Cancelled, 40.0)], 7, OrderId(13));
+
+    let expected = OrderStatus {
+        order_id: 13,
+        status: OrderStatusKind::Cancelled,
+        filled: 40.0,
+        remaining: 60.0,
+        average_fill_price: None,
+        perm_id: 913,
+        parent_id: 3,
+        last_fill_price: None,
+        client_id: 7,
+        why_held: String::new(),
+        market_cap_price: None,
+    };
+    assert_eq!(found, Some(expected));
+}
+
+#[test]
+fn lookup_wait_is_at_least_the_minimum() {
+    assert_eq!(lookup_wait(Instant::now()), LOOKUP_MIN_WAIT);
+    assert!(lookup_wait(Instant::now() + Duration::from_secs(30)) > Duration::from_secs(29));
+}

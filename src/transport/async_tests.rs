@@ -2396,7 +2396,7 @@ async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncT
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
-    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), 42)).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), CLIENT_ID)).unwrap());
     bus.clone().process_messages().unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer.unwrap().0)
@@ -2426,47 +2426,148 @@ async fn test_client_drop_closes_tcp_with_retained_subscription() {
     assert!(!bus.is_connected());
 }
 
-/// `wait_for_fill` on an order with no cached status sends `open_orders`.
-/// It returns only after that request's `OpenOrderEnd`, so the caller's next
-/// open-orders request cannot end on it and come back empty.
-#[tokio::test]
-async fn test_wait_for_fill_snapshot_end_does_not_end_next_open_orders() {
-    use crate::orders::Orders;
-    use crate::testdata::builders::orders::{open_order, open_order_end};
-    use futures::StreamExt;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// ---- wait_for_fill lookup on a cache miss (#1020) ----
 
-    async fn read_frame(peer: &mut tokio::net::TcpStream) {
-        let len = peer.read_u32().await.unwrap();
-        peer.read_exact(&mut vec![0u8; len as usize]).await.unwrap();
-    }
-    let end = encode_raw_length(&helpers::binary_proto(
-        IncomingMessages::OpenOrderEnd as i32,
-        &open_order_end().to_proto(),
-    ));
-    let order = encode_raw_length(&helpers::binary_proto(
-        IncomingMessages::OpenOrder as i32,
-        &open_order().order_id(7).to_proto(),
-    ));
+async fn read_frame(peer: &mut tokio::net::TcpStream) {
+    use tokio::io::AsyncReadExt;
+    let len = peer.read_u32().await.unwrap();
+    peer.read_exact(&mut vec![0u8; len as usize]).await.unwrap();
+}
+
+/// A length-prefixed protobuf frame, as TWS writes it.
+fn tws_frame(message: IncomingMessages, proto: &impl prost::Message) -> Vec<u8> {
+    encode_raw_length(&helpers::binary_proto(message as i32, proto))
+}
+
+fn open_orders_end_frame() -> Vec<u8> {
+    tws_frame(
+        IncomingMessages::OpenOrderEnd,
+        &crate::testdata::builders::orders::open_order_end().to_proto(),
+    )
+}
+
+fn completed_orders_end_frame() -> Vec<u8> {
+    tws_frame(
+        IncomingMessages::CompletedOrdersEnd,
+        &crate::testdata::builders::orders::completed_orders_end().to_proto(),
+    )
+}
+
+/// On a cache miss `wait_for_fill` asks for open orders, then completed
+/// orders, and reads each reply to its end marker (sent late here), so the
+/// caller's next request of either kind cannot end on it and come back empty.
+#[tokio::test]
+async fn test_wait_for_fill_lookup_ends_do_not_end_next_requests() {
+    use crate::orders::Orders;
+    use crate::testdata::builders::orders::{completed_order, open_order};
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let order = tws_frame(IncomingMessages::OpenOrder, &open_order().order_id(7).to_proto());
+    let completed = tws_frame(IncomingMessages::CompletedOrder, &completed_order().order_id(9).to_proto());
 
     let (client, _bus, mut peer) = tcp_client_with_peer().await;
     let tws = tokio::spawn(async move {
-        read_frame(&mut peer).await; // the snapshot
+        read_frame(&mut peer).await; // the lookup's open orders
         tokio::time::sleep(Duration::from_millis(50)).await;
-        peer.write_all(&end).await.unwrap();
+        peer.write_all(&open_orders_end_frame()).await.unwrap();
+        read_frame(&mut peer).await; // the lookup's completed orders
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        peer.write_all(&completed_orders_end_frame()).await.unwrap();
+        read_frame(&mut peer).await; // the caller's completed_orders
+        peer.write_all(&completed).await.unwrap();
+        peer.write_all(&completed_orders_end_frame()).await.unwrap();
         read_frame(&mut peer).await; // the caller's open_orders
         peer.write_all(&order).await.unwrap();
-        peer.write_all(&end).await.unwrap();
+        peer.write_all(&open_orders_end_frame()).await.unwrap();
         peer
     });
 
     let outcome = client.wait_for_fill(7, Duration::ZERO).await.unwrap();
     assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
+    let mut orders = client.completed_orders(false).await.unwrap();
+    let first = tokio::time::timeout(Duration::from_secs(1), orders.next()).await.expect("no reply");
+    assert!(
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 9),
+        "{first:?}"
+    );
     let mut orders = client.open_orders().await.unwrap();
     let first = tokio::time::timeout(Duration::from_secs(1), orders.next()).await.expect("no reply");
     assert!(
-        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order_id == 7),
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 7),
         "{first:?}"
+    );
+    drop(tws.await.unwrap());
+}
+
+/// An order missing from open orders but among completed ones (e.g. it ended
+/// before this connection) ends the wait at once, with no fill prices.
+#[tokio::test]
+async fn test_wait_for_fill_finds_order_among_completed() {
+    use crate::orders::{OrderOutcome, OrderStatusKind};
+    use crate::testdata::builders::orders::completed_order;
+    use tokio::io::AsyncWriteExt;
+
+    let (client, _bus, mut peer) = tcp_client_with_peer().await;
+    let completed = tws_frame(
+        IncomingMessages::CompletedOrder,
+        &completed_order()
+            .client_id(client.client_id())
+            .order_id(7)
+            .status(OrderStatusKind::Cancelled)
+            .total_quantity(100.0)
+            .filled_quantity(40.0)
+            .to_proto(),
+    );
+    let tws = tokio::spawn(async move {
+        read_frame(&mut peer).await;
+        peer.write_all(&open_orders_end_frame()).await.unwrap();
+        read_frame(&mut peer).await;
+        peer.write_all(&completed).await.unwrap();
+        peer.write_all(&completed_orders_end_frame()).await.unwrap();
+        peer
+    });
+
+    let started = std::time::Instant::now();
+    let outcome = client.wait_for_fill(7, Duration::from_secs(10)).await.unwrap();
+
+    assert!(started.elapsed() < Duration::from_secs(5), "waited {:?}", started.elapsed());
+    let OrderOutcome::Ended(status) = outcome else {
+        panic!("{outcome:?}");
+    };
+    assert_eq!(status.status, OrderStatusKind::Cancelled);
+    assert_eq!((status.filled, status.remaining), (40.0, 60.0));
+    assert_eq!(status.average_fill_price, None);
+    drop(tws.await.unwrap());
+}
+
+/// An order open orders list is working: its status reaches the wait and no
+/// completed-orders request follows.
+#[tokio::test]
+async fn test_wait_for_fill_skips_completed_when_order_is_open() {
+    use crate::orders::{OrderOutcome, OrderStatusKind};
+    use crate::testdata::builders::orders::open_order;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let order = tws_frame(IncomingMessages::OpenOrder, &open_order().order_id(7).to_proto());
+    let status = encode_raw_length(&helpers::order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+
+    let (client, _bus, mut peer) = tcp_client_with_peer().await;
+    let tws = tokio::spawn(async move {
+        read_frame(&mut peer).await;
+        peer.write_all(&order).await.unwrap();
+        peer.write_all(&status).await.unwrap();
+        peer.write_all(&open_orders_end_frame()).await.unwrap();
+        let next = tokio::time::timeout(Duration::from_millis(300), peer.read_u32()).await;
+        assert!(next.is_err(), "unexpected request: {next:?}");
+        peer
+    });
+
+    let outcome = client.wait_for_fill(7, Duration::from_millis(100)).await.unwrap();
+
+    assert!(
+        matches!(&outcome, OrderOutcome::TimedOut(Some(s)) if s.status == OrderStatusKind::Submitted),
+        "{outcome:?}"
     );
     drop(tws.await.unwrap());
 }

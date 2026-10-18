@@ -405,7 +405,7 @@ fn test_reconnect_failed() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
 
-    let connection = Connection::stubbed(socket, 28);
+    let connection = Connection::stubbed(socket, CLIENT_ID);
     connection.establish_connection()?;
 
     let _ = connection.read_message();
@@ -439,7 +439,7 @@ fn test_reconnect_success() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
-    let connection = Connection::stubbed(socket, 28);
+    let connection = Connection::stubbed(socket, CLIENT_ID);
     connection.establish_connection()?;
 
     let _ = connection.read_message();
@@ -3932,7 +3932,7 @@ fn test_close_during_reconnect_closes_the_new_connection() {
 /// A blocking client on a dispatching bus over loopback TCP, and the peer end.
 fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::net::TcpStream) {
     let (socket, peer, _listener) = tcp_socket_pair();
-    let connection = Connection::stubbed(socket, 28);
+    let connection = Connection::stubbed(socket, CLIENT_ID);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
     bus.process_messages().unwrap();
@@ -3964,48 +3964,153 @@ fn test_client_drop_closes_tcp_with_retained_subscription() {
     assert!(!bus.is_connected());
 }
 
-/// `wait_for_fill` on an order with no cached status sends `open_orders`.
-/// It returns only after that request's `OpenOrderEnd`, so the caller's next
-/// open-orders request cannot end on it and come back empty.
+// ---- wait_for_fill lookup on a cache miss (#1020) ----
+
+fn read_frame(peer: &mut std::net::TcpStream) {
+    use std::io::Read;
+    let mut len = [0u8; 4];
+    peer.read_exact(&mut len).unwrap();
+    peer.read_exact(&mut vec![0u8; u32::from_be_bytes(len) as usize]).unwrap();
+}
+
+/// A length-prefixed protobuf frame, as TWS writes it.
+fn tws_frame(message: IncomingMessages, proto: &impl prost::Message) -> Vec<u8> {
+    encode_raw_length(&helpers::binary_proto(message as i32, proto))
+}
+
+fn open_orders_end_frame() -> Vec<u8> {
+    tws_frame(
+        IncomingMessages::OpenOrderEnd,
+        &crate::testdata::builders::orders::open_order_end().to_proto(),
+    )
+}
+
+fn completed_orders_end_frame() -> Vec<u8> {
+    tws_frame(
+        IncomingMessages::CompletedOrdersEnd,
+        &crate::testdata::builders::orders::completed_orders_end().to_proto(),
+    )
+}
+
+/// On a cache miss `wait_for_fill` asks for open orders, then completed
+/// orders, and reads each reply to its end marker (sent late here), so the
+/// caller's next request of either kind cannot end on it and come back empty.
 #[test]
-fn test_wait_for_fill_snapshot_end_does_not_end_next_open_orders() {
+fn test_wait_for_fill_lookup_ends_do_not_end_next_requests() {
     use crate::orders::Orders;
     use crate::subscriptions::SubscriptionItem;
-    use crate::testdata::builders::orders::{open_order, open_order_end};
-    use std::io::{Read, Write};
+    use crate::testdata::builders::orders::{completed_order, open_order};
+    use std::io::Write;
 
-    fn read_frame(peer: &mut std::net::TcpStream) {
-        let mut len = [0u8; 4];
-        peer.read_exact(&mut len).unwrap();
-        peer.read_exact(&mut vec![0u8; u32::from_be_bytes(len) as usize]).unwrap();
-    }
-    let end = encode_raw_length(&helpers::binary_proto(
-        IncomingMessages::OpenOrderEnd as i32,
-        &open_order_end().to_proto(),
-    ));
-    let order = encode_raw_length(&helpers::binary_proto(
-        IncomingMessages::OpenOrder as i32,
-        &open_order().order_id(7).to_proto(),
-    ));
+    let order = tws_frame(IncomingMessages::OpenOrder, &open_order().order_id(7).to_proto());
+    let completed = tws_frame(IncomingMessages::CompletedOrder, &completed_order().order_id(9).to_proto());
 
     let (client, _bus, mut peer) = tcp_client_with_peer();
     let tws = thread::spawn(move || {
-        read_frame(&mut peer); // the snapshot
+        read_frame(&mut peer); // the lookup's open orders
         thread::sleep(Duration::from_millis(50));
-        peer.write_all(&end).unwrap();
+        peer.write_all(&open_orders_end_frame()).unwrap();
+        read_frame(&mut peer); // the lookup's completed orders
+        thread::sleep(Duration::from_millis(50));
+        peer.write_all(&completed_orders_end_frame()).unwrap();
+        read_frame(&mut peer); // the caller's completed_orders
+        peer.write_all(&completed).unwrap();
+        peer.write_all(&completed_orders_end_frame()).unwrap();
         read_frame(&mut peer); // the caller's open_orders
         peer.write_all(&order).unwrap();
-        peer.write_all(&end).unwrap();
+        peer.write_all(&open_orders_end_frame()).unwrap();
         peer
     });
 
     let outcome = client.wait_for_fill(7, Duration::ZERO).unwrap();
     assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
+    let orders = client.completed_orders(false).unwrap();
+    let first = orders.next_timeout(Duration::from_secs(1));
+    assert!(
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 9),
+        "{first:?}"
+    );
     let orders = client.open_orders().unwrap();
     let first = orders.next_timeout(Duration::from_secs(1));
     assert!(
-        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order_id == 7),
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 7),
         "{first:?}"
+    );
+    drop(tws.join().unwrap());
+}
+
+/// An order missing from open orders but among completed ones (e.g. it ended
+/// before this connection) ends the wait at once, with no fill prices.
+#[test]
+fn test_wait_for_fill_finds_order_among_completed() {
+    use crate::orders::{OrderOutcome, OrderStatusKind};
+    use crate::testdata::builders::orders::completed_order;
+    use std::io::Write;
+
+    let (client, _bus, mut peer) = tcp_client_with_peer();
+    let completed = tws_frame(
+        IncomingMessages::CompletedOrder,
+        &completed_order()
+            .client_id(client.client_id())
+            .order_id(7)
+            .status(OrderStatusKind::Cancelled)
+            .total_quantity(100.0)
+            .filled_quantity(40.0)
+            .to_proto(),
+    );
+    let tws = thread::spawn(move || {
+        read_frame(&mut peer);
+        peer.write_all(&open_orders_end_frame()).unwrap();
+        read_frame(&mut peer);
+        peer.write_all(&completed).unwrap();
+        peer.write_all(&completed_orders_end_frame()).unwrap();
+        peer
+    });
+
+    let started = Instant::now();
+    let outcome = client.wait_for_fill(7, Duration::from_secs(10)).unwrap();
+
+    assert!(started.elapsed() < Duration::from_secs(5), "waited {:?}", started.elapsed());
+    let OrderOutcome::Ended(status) = outcome else {
+        panic!("{outcome:?}");
+    };
+    assert_eq!(status.status, OrderStatusKind::Cancelled);
+    assert_eq!((status.filled, status.remaining), (40.0, 60.0));
+    assert_eq!(status.average_fill_price, None);
+    drop(tws.join().unwrap());
+}
+
+/// An order open orders list is working: its status reaches the wait and no
+/// completed-orders request follows.
+#[test]
+fn test_wait_for_fill_skips_completed_when_order_is_open() {
+    use crate::orders::{OrderOutcome, OrderStatusKind};
+    use crate::testdata::builders::orders::open_order;
+    use std::io::{ErrorKind, Read, Write};
+
+    let order = tws_frame(IncomingMessages::OpenOrder, &open_order().order_id(7).to_proto());
+    let status = encode_raw_length(&helpers::order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+
+    let (client, _bus, mut peer) = tcp_client_with_peer();
+    let tws = thread::spawn(move || {
+        read_frame(&mut peer);
+        peer.write_all(&order).unwrap();
+        peer.write_all(&status).unwrap();
+        peer.write_all(&open_orders_end_frame()).unwrap();
+        peer.set_read_timeout(Some(Duration::from_millis(300))).unwrap();
+        let next = peer.read(&mut [0u8; 4]);
+        assert!(
+            matches!(&next, Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)),
+            "unexpected request: {next:?}"
+        );
+        peer
+    });
+
+    let outcome = client.wait_for_fill(7, Duration::from_millis(100)).unwrap();
+
+    assert!(
+        matches!(&outcome, OrderOutcome::TimedOut(Some(s)) if s.status == OrderStatusKind::Submitted),
+        "{outcome:?}"
     );
     drop(tws.join().unwrap());
 }
