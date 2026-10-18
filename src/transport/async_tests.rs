@@ -26,12 +26,13 @@ use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::common::poison_with;
 
+/// The client id the test buses connect with. Order fixtures default to
+/// client 100, so a frame for this client's own order sets it explicitly.
+const CLIENT_ID: i32 = 28;
+
 /// Wrap a fresh `MemoryStream` in a stubbed `AsyncTcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
 /// binary-text-payload frames from `body()` inputs.
-/// The client id `make_bus` connects with.
-const CLIENT_ID: i32 = 28;
-
 fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
@@ -429,8 +430,8 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
     let mut executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
 
     // Mapped by order id, and by request id where no order channel matches.
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
     for (name, sub) in [("order", &mut order), ("executions", &mut executions)] {
@@ -457,7 +458,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
 async fn test_shutdown_frame_ends_subscriptions_with_executions() {
     let (stream, bus) = make_bus();
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
     bus.read_and_route_message().await.unwrap();
     let message = next_message(&mut order).await;
     assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData);
@@ -1399,7 +1400,7 @@ async fn test_execution_data_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
@@ -1412,7 +1413,7 @@ async fn test_execution_data_falls_back_to_request_channel() {
     let request_id = RequestId::nth(99);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
@@ -1424,7 +1425,7 @@ async fn test_execution_data_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     assert!(unrelated.try_next_routed().is_none(), "unrelated sub got an orphan message");
@@ -1487,7 +1488,7 @@ async fn test_commission_report_routes_via_execution_id_mapping() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -1529,8 +1530,8 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
@@ -1551,7 +1552,7 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
 async fn test_execution_alias_kept_while_a_clone_is_alive() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
     bus.read_and_route_message().await.unwrap();
 
     let clone = order.clone();
@@ -1570,10 +1571,10 @@ async fn test_execution_alias_kept_while_a_clone_is_alive() {
 async fn test_stale_cleanup_keeps_newer_execution_aliases() {
     let (stream, bus) = make_bus();
     let sub_a = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_frame(0, 42, "exec-a"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 42, "exec-a"));
     bus.read_and_route_message().await.unwrap();
     let sub_b = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
-    stream.push_inbound(execution_data_frame(0, 42, "exec-b"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 42, "exec-b"));
     bus.read_and_route_message().await.unwrap();
 
     drop(sub_a);
@@ -2179,7 +2180,10 @@ async fn order_binding_reaches_updates_without_using_raw_order_id() {
     let (stream, bus) = make_bus();
     let mut order_sub = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
     let mut update_sub = bus.create_order_update_subscription().await.unwrap();
-    stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
+    stream.push_inbound(binary_proto(
+        IncomingMessages::OrderBound as i32,
+        &order_bound().client_id(CLIENT_ID).to_proto(),
+    ));
     bus.read_and_route_message().await.unwrap();
     let message = next_message(&mut update_sub).await;
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
@@ -2682,6 +2686,91 @@ async fn test_order_status_stream_ignores_other_clients_status() {
         tokio::time::timeout(TICK, later.next_routed()).await.is_err(),
         "later stream started with it"
     );
+}
+
+// ---- other clients' order frames (#1021) ----
+
+fn foreign_open_order_frame(order_id: i32) -> Vec<u8> {
+    let order = crate::testdata::builders::orders::open_order()
+        .order_id(order_id)
+        .client_id(CLIENT_ID + 1);
+    binary_proto(IncomingMessages::OpenOrder as i32, &order.to_proto())
+}
+
+fn commission_frame(execution_id: &str) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some(execution_id.into()),
+            ..Default::default()
+        },
+    )
+}
+
+/// Order ids are unique per client only: another client's `OpenOrder` and
+/// `OrderStatus` for an id this client also uses answer `all_open_orders`,
+/// and reach neither this client's order route nor its update stream.
+#[tokio::test]
+async fn test_foreign_order_frames_reach_only_shared_channel() {
+    let (stream, bus) = make_bus();
+    let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let mut all_open = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, vec![]).await.unwrap();
+
+    stream.push_inbound(foreign_open_order_frame(7));
+    stream.push_inbound(order_status_frame(CLIENT_ID + 1, 7, OrderStatusKind::Submitted));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut all_open).await.message_type(), IncomingMessages::OpenOrder);
+    assert_eq!(next_message(&mut all_open).await.message_type(), IncomingMessages::OrderStatus);
+    assert!(tokio::time::timeout(TICK, order_route.next()).await.is_err(), "order route got it");
+    assert!(tokio::time::timeout(TICK, updates.next()).await.is_err(), "update stream got it");
+}
+
+/// Another client's execution still answers an `executions()` request (its
+/// filter can name that client), with its commission report; one TWS sends
+/// unprompted reaches neither this client's order route nor its update stream.
+#[tokio::test]
+async fn test_foreign_execution_answers_requests_only() {
+    let (stream, bus) = make_bus();
+    let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let request_id = RequestId::nth(99);
+    let mut request = bus.send_request(request_id, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, -1, 7, "exec-2"));
+    for _ in 0..3 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert_eq!(next_message(&mut request).await.message_type(), IncomingMessages::ExecutionData);
+    assert_eq!(next_message(&mut request).await.message_type(), IncomingMessages::CommissionsReport);
+    assert!(
+        tokio::time::timeout(TICK, request.next()).await.is_err(),
+        "request got the unprompted one"
+    );
+    assert!(tokio::time::timeout(TICK, order_route.next()).await.is_err(), "order route got it");
+    while let Ok(Some(item)) = tokio::time::timeout(TICK, updates.next()).await {
+        let message_type = item.unwrap().message_type();
+        assert_ne!(message_type, IncomingMessages::ExecutionData, "update stream got it");
+    }
+}
+
+#[tokio::test]
+async fn test_foreign_order_bound_is_ignored() {
+    let (stream, bus) = make_bus();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+
+    stream.push_inbound(binary_proto(
+        IncomingMessages::OrderBound as i32,
+        &order_bound().client_id(CLIENT_ID + 1).to_proto(),
+    ));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(tokio::time::timeout(TICK, updates.next()).await.is_err());
 }
 
 /// The status in `wait_for_fill`'s open-orders snapshot reply reaches the

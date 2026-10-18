@@ -8,11 +8,8 @@ use crossbeam::channel::{Receiver, Sender};
 
 type Taps = OrderTaps<Sender<RoutedItem>>;
 
-/// The client id of the `order_status()` fixture.
-const CLIENT_ID: i32 = 100;
-
 fn taps() -> Taps {
-    Taps::new(CLIENT_ID)
+    Taps::new()
 }
 
 fn publish(taps: &Taps, order_id: i32, status: OrderStatusKind) {
@@ -323,28 +320,4 @@ fn update_stream_is_exclusive_until_released() {
     let _replacement = taps.subscribe_updates(0).expect("a dead registration is replaced");
     assert!(!taps.release_updates(&lease_ref), "a stale release leaves the replacement");
     assert!(taps.updates_lease().is_some());
-}
-
-#[test]
-fn status_of_another_clients_order_is_ignored() {
-    let taps = taps();
-    let (receiver, _lease) = status_stream(&taps, 7);
-
-    let foreign = order_status().order_id(7).client_id(CLIENT_ID + 1).status(OrderStatusKind::Filled);
-    taps.publish_status(&order_status_response(foreign));
-
-    assert!(receiver.try_recv().is_err(), "not sent to the stream");
-    let (later, _lease) = status_stream(&taps, 7);
-    assert!(later.try_recv().is_err(), "not kept as the latest status");
-}
-
-#[test]
-fn status_without_client_id_is_kept() {
-    let taps = taps();
-    let mut status = order_status().order_id(7).to_proto();
-    status.client_id = None;
-    taps.publish_status(&proto_response(IncomingMessages::OrderStatus, prost::Message::encode_to_vec(&status)));
-
-    let (receiver, _lease) = status_stream(&taps, 7);
-    assert!(matches!(receiver.try_recv(), Ok(RoutedItem::Response(_))));
 }

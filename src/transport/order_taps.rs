@@ -144,10 +144,6 @@ struct State<S> {
 /// The order-update stream and the per-order status streams of one bus.
 pub(crate) struct OrderTaps<S> {
     state: Mutex<State<S>>,
-    /// This connection's client id. Order ids are unique per client only, so
-    /// statuses of other clients' orders (e.g. from `all_open_orders`) are
-    /// kept out of the status streams.
-    client_id: i32,
 }
 
 impl<S> std::fmt::Debug for OrderTaps<S> {
@@ -157,8 +153,8 @@ impl<S> std::fmt::Debug for OrderTaps<S> {
 }
 
 impl<S: TapSender> OrderTaps<S> {
-    /// Taps for a connection with `client_id`.
-    pub(crate) fn new(client_id: i32) -> Self {
+    /// Empty taps. The dispatcher keeps other clients' frames out (#1021).
+    pub(crate) fn new() -> Self {
         Self {
             state: Mutex::new(State {
                 updates: None,
@@ -166,7 +162,6 @@ impl<S: TapSender> OrderTaps<S> {
                 recent: VecDeque::new(),
                 closed: false,
             }),
-            client_id,
         }
     }
 
@@ -249,14 +244,10 @@ impl<S: TapSender> OrderTaps<S> {
     }
 
     /// Record an `OrderStatus` frame as its order's latest status and copy it
-    /// to the order's status streams; any other frame, or a status of another
-    /// client's order, is ignored. A status without a client id is kept.
-    /// Streams whose receiver has gone are dropped.
+    /// to the order's status streams; any other frame is ignored. Streams
+    /// whose receiver has gone are dropped.
     pub(crate) fn publish_status(&self, message: &ResponseMessage) {
         if message.message_type() != IncomingMessages::OrderStatus {
-            return;
-        }
-        if message.client_id().is_some_and(|client_id| client_id != self.client_id) {
             return;
         }
         let Some(order_id) = message.order_id().map(OrderId::from) else {

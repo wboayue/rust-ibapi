@@ -262,9 +262,10 @@ pub mod helpers {
     /// Proto-framed ExecutionData frame. `request_id` is at proto tag 1; the
     /// dispatcher's `order_id` / `execution_id` accessors read the nested
     /// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
-    pub fn execution_data_frame(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
+    pub fn execution_data_frame(client_id: i32, request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
         use crate::testdata::builders::ResponseProtoEncoder;
         let response = crate::testdata::builders::orders::execution_data()
+            .client_id(client_id)
             .request_id(request_id)
             .order_id(order_id)
             .execution_id(execution_id);
