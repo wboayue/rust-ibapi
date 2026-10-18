@@ -23,13 +23,10 @@ pub(crate) fn verify_order_ids(order_id: OrderId, order: &Order) -> Result<Order
 // Gates whose server version is at or below the connection floor
 // (`PROTOBUF_REST_MESSAGES_3`, 213) are omitted: they always pass, since the
 // handshake rejects older servers.
-const HEDGE_MAX_SIZE: ProtocolFeature = ProtocolFeature::new("It does not support hedge_max_size parameter", server_versions::HEDGE_MAX_SIZE);
-const DEACTIVATE: ProtocolFeature = ProtocolFeature::new("It does not support deactivate parameter", server_versions::ADDITIONAL_ORDER_PARAMS_1);
-const ROUTE_MARKETABLE_TO_BBO: ProtocolFeature = ProtocolFeature::new(
-    "It does not support route_marketable_to_bbo parameter",
-    server_versions::ADDITIONAL_ORDER_PARAMS_2,
-);
-const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("It does not support attached orders.", server_versions::ATTACHED_ORDERS);
+const HEDGE_MAX_SIZE: ProtocolFeature = ProtocolFeature::new("hedge max size", server_versions::HEDGE_MAX_SIZE);
+const DEACTIVATE: ProtocolFeature = ProtocolFeature::new("deactivate", server_versions::ADDITIONAL_ORDER_PARAMS_1);
+const ROUTE_MARKETABLE_TO_BBO: ProtocolFeature = ProtocolFeature::new("route marketable to BBO", server_versions::ADDITIONAL_ORDER_PARAMS_2);
+const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("attached orders", server_versions::ATTACHED_ORDERS);
 
 /// Rejects `order` when it uses a field `server_version` does not support.
 pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Error> {
