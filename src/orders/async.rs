@@ -466,7 +466,10 @@ impl Client {
     ///
     /// Starts with the order's latest status, if this client has seen one
     /// (the latest statuses of the 10,000 most recent orders are kept), then
-    /// yields each new [`OrderStatus`] as TWS sends it. If TWS refuses the
+    /// yields each new [`OrderStatus`] as TWS sends it. A reconnect keeps only
+    /// statuses of orders that ended: TWS does not replay what happened while
+    /// disconnected, so a working order's stream starts empty until its next
+    /// status. If TWS refuses the
     /// order with an error before any status (e.g. 110, a price off the
     /// minimum tick), the stream yields that error as [`Error::Notice`] and
     /// ends; a stream opened later starts with it. Otherwise the stream does
