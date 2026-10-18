@@ -1,8 +1,16 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
+use std::time::Duration;
+
 use crate::messages::ResponseMessage;
 use crate::proto::payload::ProtoPayload;
 use crate::Error;
+
+/// How long a one-shot on a shared channel waits for its frame before failing
+/// with [`Error::Timeout`]. A shared response carries no request id, so a
+/// frame TWS never sends (or sent before the subscription existed) would
+/// otherwise block the caller for good.
+pub(crate) const ONE_SHOT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Fold a one-shot subscription's single response into a result.
 ///
@@ -97,15 +105,29 @@ mod tests;
 // Sync implementations
 #[cfg(feature = "sync")]
 mod sync_impl {
+    use std::time::{Duration, Instant};
+
     use crate::client::blocking::ClientRequestBuilders;
     use crate::client::sync::Client;
     use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::Error;
 
-    /// One-shot request answered on the shared channel for its message type.
+    /// One-shot request answered on the shared channel for its message type,
+    /// within [`ONE_SHOT_TIMEOUT`](super::ONE_SHOT_TIMEOUT).
     pub fn one_shot_shared<R>(
         client: &Client,
         message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        one_shot_shared_within(client, message_type, super::ONE_SHOT_TIMEOUT, encoder, processor)
+    }
+
+    /// [`one_shot_shared`] with the wait for the frame bounded by `timeout`.
+    pub fn one_shot_shared_within<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        timeout: Duration,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -113,7 +135,41 @@ mod sync_impl {
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
-            super::fold_one_shot(subscription.next(), &processor)
+            super::fold_one_shot(subscription.next_before(Instant::now() + timeout)?, &processor)
+        })
+    }
+
+    /// [`one_shot_shared`] for a response another caller's request of the same
+    /// type can also produce: `processor` answers `Ok(None)` for a frame that is
+    /// not this request's, and the next frame is read, until
+    /// [`ONE_SHOT_TIMEOUT`](super::ONE_SHOT_TIMEOUT) passes.
+    pub fn one_shot_shared_matching<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<Option<R>, Error>,
+    ) -> Result<R, Error> {
+        one_shot_shared_matching_within(client, message_type, super::ONE_SHOT_TIMEOUT, encoder, processor)
+    }
+
+    /// [`one_shot_shared_matching`] with the wait for the frame bounded by `timeout`.
+    pub fn one_shot_shared_matching_within<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        timeout: Duration,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<Option<R>, Error>,
+    ) -> Result<R, Error> {
+        crate::common::retry::blocking::retry_on_connection_reset(client, || {
+            let request = encoder()?;
+            let subscription = client.shared_request(message_type).send_raw(request)?;
+            let deadline = Instant::now() + timeout;
+
+            loop {
+                if let Some(result) = super::fold_one_shot(subscription.next_before(deadline)?, &processor)? {
+                    return Ok(result);
+                }
+            }
         })
     }
 
@@ -136,14 +192,30 @@ mod sync_impl {
 // Async implementations
 #[cfg(feature = "async")]
 mod async_impl {
+    use std::time::Duration;
+
+    use tokio::time::Instant;
+
     use crate::client::{Client, ClientRequestBuilders};
     use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::Error;
 
-    /// One-shot request answered on the shared channel for its message type.
+    /// One-shot request answered on the shared channel for its message type,
+    /// within [`ONE_SHOT_TIMEOUT`](super::ONE_SHOT_TIMEOUT).
     pub async fn one_shot_shared<R>(
         client: &Client,
         message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        one_shot_shared_within(client, message_type, super::ONE_SHOT_TIMEOUT, encoder, processor).await
+    }
+
+    /// [`one_shot_shared`] with the wait for the frame bounded by `timeout`.
+    pub async fn one_shot_shared_within<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        timeout: Duration,
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -151,7 +223,42 @@ mod async_impl {
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
-            super::fold_one_shot(subscription.next().await, &processor)
+            super::fold_one_shot(subscription.next_before(Instant::now() + timeout).await?, &processor)
+        })
+        .await
+    }
+
+    /// [`one_shot_shared`] for a response another caller's request of the same
+    /// type can also produce: `processor` answers `Ok(None)` for a frame that is
+    /// not this request's, and the next frame is read, until
+    /// [`ONE_SHOT_TIMEOUT`](super::ONE_SHOT_TIMEOUT) passes.
+    pub async fn one_shot_shared_matching<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<Option<R>, Error>,
+    ) -> Result<R, Error> {
+        one_shot_shared_matching_within(client, message_type, super::ONE_SHOT_TIMEOUT, encoder, processor).await
+    }
+
+    /// [`one_shot_shared_matching`] with the wait for the frame bounded by `timeout`.
+    pub async fn one_shot_shared_matching_within<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        timeout: Duration,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
+        processor: impl Fn(&ResponseMessage) -> Result<Option<R>, Error>,
+    ) -> Result<R, Error> {
+        crate::common::retry::retry_on_connection_reset(client, || async {
+            let request = encoder()?;
+            let mut subscription = client.shared_request(message_type).send_raw(request).await?;
+            let deadline = Instant::now() + timeout;
+
+            loop {
+                if let Some(result) = super::fold_one_shot(subscription.next_before(deadline).await?, &processor)? {
+                    return Ok(result);
+                }
+            }
         })
         .await
     }

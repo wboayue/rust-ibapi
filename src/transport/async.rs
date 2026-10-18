@@ -390,6 +390,12 @@ impl AsyncInternalSubscription {
         }
     }
 
+    /// [`next`](Self::next) bounded by `deadline`: `Err(Error::Timeout)` once
+    /// it passes, `Ok(None)` when the stream has ended.
+    pub(crate) async fn next_before(&mut self, deadline: tokio::time::Instant) -> Result<Option<Result<ResponseMessage, Error>>, Error> {
+        tokio::time::timeout_at(deadline, self.next()).await.map_err(|_| Error::Timeout)
+    }
+
     pub async fn next(&mut self) -> Option<Result<ResponseMessage, Error>> {
         loop {
             let item = std::future::poll_fn(|cx| self.poll_next_routed(cx)).await?;

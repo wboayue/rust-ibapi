@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         LazyLock, Mutex, RwLock,
     },
 };
@@ -61,6 +61,13 @@ pub(crate) struct MessageBusStub {
     /// its scripted items, as a real one does until its order ends.
     #[cfg(feature = "async")]
     status_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
+    /// Keep every stubbed subscription open after its scripted items, as a
+    /// real one is until TWS answers. See [`MessageBusStub::keeping_channels_open`].
+    keep_open: AtomicBool,
+    #[cfg(feature = "sync")]
+    open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
+    #[cfg(feature = "async")]
+    open_async_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
     // pub next_request_id: i32,
     // pub server_version: i32,
     // pub order_id: i32,
@@ -85,6 +92,11 @@ impl Default for MessageBusStub {
             signals: channel::unbounded(),
             #[cfg(feature = "async")]
             status_senders: Mutex::default(),
+            keep_open: AtomicBool::new(false),
+            #[cfg(feature = "sync")]
+            open_sync_senders: Mutex::default(),
+            #[cfg(feature = "async")]
+            open_async_senders: Mutex::default(),
         }
     }
 }
@@ -133,6 +145,14 @@ impl MessageBusStub {
     /// the wire produces makes the tests that depend on it worthless.
     pub fn with_connection_resets(self, count: usize) -> Self {
         self.connection_resets.store(count, Ordering::SeqCst);
+        self
+    }
+
+    /// Keep each subscription's channel open after the configured responses
+    /// instead of closing it, so a reader waits as it would for a frame TWS
+    /// has not sent; for timeout tests.
+    pub fn keeping_channels_open(self) -> Self {
+        self.keep_open.store(true, Ordering::SeqCst);
         self
     }
 
@@ -195,6 +215,9 @@ impl MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         for item in self.routed_items_for_request() {
             sender.send(item).unwrap();
+        }
+        if self.keep_open.load(Ordering::SeqCst) {
+            self.open_async_senders.lock().unwrap().push(sender.clone());
         }
 
         AsyncInternalSubscription::new(receiver)
@@ -342,6 +365,9 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
 
     for item in stub.routed_items_for_request() {
         sender.send(item).unwrap();
+    }
+    if stub.keep_open.load(Ordering::SeqCst) {
+        stub.open_sync_senders.lock().unwrap().push(sender.clone());
     }
 
     let subscription = SubscriptionBuilder::new()

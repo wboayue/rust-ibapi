@@ -7,7 +7,7 @@ pub(crate) mod common;
 use std::{sync::Mutex, time::Duration};
 
 #[cfg(feature = "sync")]
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::{Receiver, RecvTimeoutError, Sender};
 
 #[cfg(feature = "sync")]
 use common::{Lease, LeaseRef};
@@ -315,6 +315,26 @@ impl InternalSubscription {
     /// Blocks until next message become available.
     pub(crate) fn next(&self) -> Option<Response> {
         Self::receive(self.pick_receiver()?)
+    }
+
+    /// [`next`](Self::next) bounded by `deadline`: `Err(Error::Timeout)` once
+    /// it passes, `Ok(None)` when the stream has ended.
+    pub(crate) fn next_before(&self, deadline: std::time::Instant) -> Result<Option<Response>, Error> {
+        let Some(receiver) = self.pick_receiver() else {
+            return Ok(None);
+        };
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            match receiver.recv_timeout(remaining) {
+                Ok(item) => {
+                    if let Some(legacy) = item.into_legacy() {
+                        return Ok(Some(legacy));
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => return Err(Error::Timeout),
+                Err(RecvTimeoutError::Disconnected) => return Ok(None),
+            }
+        }
     }
 
     /// Returns message if available or immediately returns None.

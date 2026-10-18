@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- One-shot requests answered on a shared channel (`managed_accounts`, `server_time`, `family_codes`, `request_fa`, `next_valid_order_id` and the other request-id-less calls) fail with `Error::Timeout` after 30 seconds instead of blocking forever when TWS never answers (#TBD).
+- `request_fa` returns the dataset it asked for. Previously, with a `request_fa` for another dataset in flight, it could return that dataset's `FaConfig` (#TBD).
 - `wait_for_fill` and `order_status_stream` ignore statuses of other clients' orders. Order ids are unique per client only, so after `all_open_orders` (or with a master client id) another client's order with the same id could end a wait with that order's fill or cancel (#993).
 - The market data type set with `switch_market_data_type` now survives an automatic reconnect: TWS does not keep it across reconnects, and the client re-sends it before the `TRANSPORT_RECONNECT_CODE` notice. Previously a subscription on the new session without a realtime entitlement got error 354 or the 10089 advisory instead of delayed ticks (#1016).
 

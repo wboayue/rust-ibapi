@@ -440,11 +440,11 @@ impl Client {
     /// println!("{}", cfg.xml);
     /// ```
     pub fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
-        request_helpers::blocking::one_shot_shared(
+        request_helpers::blocking::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestFA,
             || encoders::encode_request_fa(fa_data_type as i32),
-            expect_proto(decoders::decode_receive_fa_proto),
+            decoders::receive_fa_for(fa_data_type),
         )
     }
 
