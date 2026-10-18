@@ -25,9 +25,10 @@ cross-cutting client mechanics (connect, ids, server version, disconnect).
 - Public types go in `<domain>/mod.rs`, ungated by feature flags.
 - Prefer the flat `<domain>/sync.rs` over `<domain>/sync/mod.rs` — the project minimizes
   `mod.rs` files.
-- Keep builder per-feature `impl` blocks in the builder's own file unless the impls are large
-  enough to crowd out the shared builder code, in which case split them into sibling
-  `sync_impl.rs` / `async_impl.rs` files.
+- Builder per-feature `impl` blocks: a single-file builder keeps them in that file as
+  `#[cfg(feature)] impl` blocks; a directory builder (`mod.rs` only re-exports) puts them in
+  sibling `sync_impl.rs` / `async_impl.rs` files. Inline per-feature submodules elsewhere are
+  named `sync_impl` / `async_impl`.
 
 Flat applies to the *main* file, not to everything beneath it. `<domain>/<side>.rs` with
 `<domain>/<side>/foo.rs` helpers underneath is canonical Rust and stays. Tests are governed
