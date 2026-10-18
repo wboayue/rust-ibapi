@@ -211,6 +211,11 @@ path = "examples/async/wait_for_fill.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_wait_for_bracket"
+path = "examples/async/wait_for_bracket.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_realtime_bars"
 path = "examples/async/realtime_bars.rs"
 required-features = ["async"]
@@ -470,6 +475,11 @@ required-features = ["sync"]
 [[example]]
 name = "wait_for_fill"
 path = "examples/sync/wait_for_fill.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "wait_for_bracket"
+path = "examples/sync/wait_for_bracket.rs"
 required-features = ["sync"]
 
 [[example]]
