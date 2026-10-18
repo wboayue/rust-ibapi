@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::common::fill::FillTracker;
+use super::common::fill::{FillTracker, SNAPSHOT_END_WAIT};
 use super::common::{decoders, encoders, verify};
 use super::{
     CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderStatus, OrderUpdate, Orders,
@@ -560,10 +560,11 @@ impl Client {
     /// long as this client saw its status since connecting. When it has seen
     /// none, the wait first asks TWS for this client's open orders
     /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
-    /// connection and still working is found; each such call sends one
-    /// request. With client id 0, that request also binds manual TWS orders
-    /// to this client. An order that finished
-    /// before this connection, or one placed by another client, waits out the
+    /// connection and still working is found. Each such call sends one
+    /// request and reads its reply to the end before returning, which can
+    /// add a round trip to `timeout`. With client id 0, that request also
+    /// binds manual TWS orders to this client. An order that finished before
+    /// this connection, or one placed by another client, waits out the
     /// timeout.
     ///
     /// # Errors
@@ -599,12 +600,13 @@ impl Client {
         // placed on an earlier connection). Ask TWS for this client's open
         // orders; their statuses reach `statuses` like any other.
         let mut first = statuses.try_next();
-        if first.is_none() {
-            drop(self.open_orders()?);
-        }
+        let snapshot = match first {
+            None => Some(self.open_orders()?),
+            Some(_) => None,
+        };
         // `None` for a timeout too large to represent: wait without one.
         let deadline = Instant::now().checked_add(timeout);
-        loop {
+        let mut wait = || loop {
             let item = match (first.take(), deadline) {
                 (Some(item), _) => Some(item),
                 (None, Some(deadline)) => statuses.next_timeout(deadline.saturating_duration_since(Instant::now())),
@@ -623,7 +625,14 @@ impl Client {
                 None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Ok(tracker.timed_out()),
                 None => return Err(Error::UnexpectedEndOfStream),
             }
+        };
+        let outcome = wait();
+        // Read the snapshot through its end marker; see `SNAPSHOT_END_WAIT`.
+        if let Some(snapshot) = snapshot {
+            let end = Instant::now() + SNAPSHOT_END_WAIT;
+            while snapshot.next_timeout(end.saturating_duration_since(Instant::now())).is_some() {}
         }
+        outcome
     }
 
     /// Exercise or lapse an option position.

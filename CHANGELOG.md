@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `wait_for_fill` on an order this client has no status for asks TWS for this client's open orders (`open_orders`) before waiting, so an order placed on an earlier connection and still working is found instead of timing out. With client id 0, that request also binds manual TWS orders to the client (#993).
+- `wait_for_fill` on an order this client has no status for asks TWS for this client's open orders (`open_orders`) before waiting, so an order placed on an earlier connection and still working is found instead of timing out. It reads that reply to its end before returning, so a later `open_orders` cannot end on it; this can add a round trip to the timeout. With client id 0, that request also binds manual TWS orders to the client (#993).
 
 ### Fixed
 

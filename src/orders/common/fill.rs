@@ -1,7 +1,14 @@
 //! Shared state of one `wait_for_fill` (#951), for the sync and async clients.
 
+use std::time::Duration;
+
 use crate::orders::{OrderOutcome, OrderStatus};
 use crate::Error;
+
+/// How long `wait_for_fill` reads its open-orders snapshot for the end marker
+/// before returning. TWS sends it milliseconds after the orders; read through
+/// it, a later open-orders request cannot end on this one's marker.
+pub(crate) const SNAPSHOT_END_WAIT: Duration = Duration::from_secs(1);
 
 /// The last status seen, and whether a status ends the wait.
 #[derive(Debug, Default)]
@@ -29,8 +36,8 @@ impl FillTracker {
     }
 
     /// The outcome when the time runs out.
-    pub(crate) fn timed_out(self) -> OrderOutcome {
-        OrderOutcome::TimedOut(self.last)
+    pub(crate) fn timed_out(&mut self) -> OrderOutcome {
+        OrderOutcome::TimedOut(self.last.take())
     }
 }
 

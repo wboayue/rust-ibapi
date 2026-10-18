@@ -2426,6 +2426,51 @@ async fn test_client_drop_closes_tcp_with_retained_subscription() {
     assert!(!bus.is_connected());
 }
 
+/// `wait_for_fill` on an order with no cached status sends `open_orders`.
+/// It returns only after that request's `OpenOrderEnd`, so the caller's next
+/// open-orders request cannot end on it and come back empty.
+#[tokio::test]
+async fn test_wait_for_fill_snapshot_end_does_not_end_next_open_orders() {
+    use crate::orders::Orders;
+    use crate::testdata::builders::orders::{open_order, open_order_end};
+    use futures::StreamExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn read_frame(peer: &mut tokio::net::TcpStream) {
+        let len = peer.read_u32().await.unwrap();
+        peer.read_exact(&mut vec![0u8; len as usize]).await.unwrap();
+    }
+    let end = encode_raw_length(&helpers::binary_proto(
+        IncomingMessages::OpenOrderEnd as i32,
+        &open_order_end().to_proto(),
+    ));
+    let order = encode_raw_length(&helpers::binary_proto(
+        IncomingMessages::OpenOrder as i32,
+        &open_order().order_id(7).to_proto(),
+    ));
+
+    let (client, _bus, mut peer) = tcp_client_with_peer().await;
+    let tws = tokio::spawn(async move {
+        read_frame(&mut peer).await; // the snapshot
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        peer.write_all(&end).await.unwrap();
+        read_frame(&mut peer).await; // the caller's open_orders
+        peer.write_all(&order).await.unwrap();
+        peer.write_all(&end).await.unwrap();
+        peer
+    });
+
+    let outcome = client.wait_for_fill(7, Duration::ZERO).await.unwrap();
+    assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
+    let mut orders = client.open_orders().await.unwrap();
+    let first = tokio::time::timeout(Duration::from_secs(1), orders.next()).await.expect("no reply");
+    assert!(
+        matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order_id == 7),
+        "{first:?}"
+    );
+    drop(tws.await.unwrap());
+}
+
 // ---- outbound rate limiter (#950) ----
 
 /// A throttled send awaits rather than blocking the runtime: on a paused
@@ -2538,18 +2583,17 @@ async fn test_order_status_stream_ignores_other_clients_status() {
     );
 }
 
-/// `wait_for_fill` sends `open_orders` and drops it at once: the reply's
-/// status still reaches the order's status stream.
+/// The status in `wait_for_fill`'s open-orders snapshot reply reaches the
+/// order's status stream as well as the snapshot.
 #[tokio::test]
-async fn test_order_status_stream_sees_dropped_snapshot_reply() {
+async fn test_order_status_stream_sees_snapshot_reply() {
     let (stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
-    drop(
-        bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
-            .await
-            .unwrap(),
-    );
+    let _snapshot = bus
+        .send_shared_request(OutgoingMessages::RequestOpenOrders, b"open-orders".to_vec())
+        .await
+        .unwrap();
     stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
     bus.read_and_route_message().await.unwrap();
 

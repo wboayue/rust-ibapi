@@ -9,7 +9,7 @@ use futures::{FutureExt, StreamExt};
 
 use std::time::Duration;
 
-use super::common::fill::FillTracker;
+use super::common::fill::{FillTracker, SNAPSHOT_END_WAIT};
 use super::common::{decoders, encoders, verify};
 use super::*;
 
@@ -524,10 +524,11 @@ impl Client {
     /// long as this client saw its status since connecting. When it has seen
     /// none, the wait first asks TWS for this client's open orders
     /// ([`open_orders`](Self::open_orders)), so an order placed on an earlier
-    /// connection and still working is found; each such call sends one
-    /// request. With client id 0, that request also binds manual TWS orders
-    /// to this client. An order that finished
-    /// before this connection, or one placed by another client, waits out the
+    /// connection and still working is found. Each such call sends one
+    /// request and reads its reply to the end before returning, which can
+    /// add a round trip to `timeout`. With client id 0, that request also
+    /// binds manual TWS orders to this client. An order that finished before
+    /// this connection, or one placed by another client, waits out the
     /// timeout.
     ///
     /// # Errors
@@ -566,9 +567,10 @@ impl Client {
         // placed on an earlier connection). Ask TWS for this client's open
         // orders; their statuses reach `statuses` like any other.
         let first = statuses.next().now_or_never();
-        if first.is_none() {
-            drop(self.open_orders().await?);
-        }
+        let snapshot = match first {
+            None => Some(self.open_orders().await?),
+            Some(_) => None,
+        };
 
         let wait = async {
             let mut items = futures::stream::iter(first.flatten()).chain(statuses);
@@ -585,10 +587,15 @@ impl Client {
             }
             Err(Error::UnexpectedEndOfStream)
         };
-        match tokio::time::timeout(timeout, wait).await {
+        let outcome = match tokio::time::timeout(timeout, wait).await {
             Ok(result) => result,
             Err(_) => Ok(tracker.timed_out()),
+        };
+        // Read the snapshot through its end marker; see `SNAPSHOT_END_WAIT`.
+        if let Some(mut snapshot) = snapshot {
+            let _ = tokio::time::timeout(SNAPSHOT_END_WAIT, async { while snapshot.next().await.is_some() {} }).await;
         }
+        outcome
     }
 
     /// Exercise or lapse an option position.
