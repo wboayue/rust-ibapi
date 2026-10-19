@@ -7,7 +7,7 @@ fn test_create_test_client() {
     let (client, message_bus) = create_test_client();
     assert_eq!(client.server_version(), server_versions::SIZE_RULES);
     assert!(message_bus.request_messages.read().unwrap().is_empty());
-    assert!(message_bus.response_messages.is_empty());
+    assert!(message_bus.ordered_responses.is_empty());
 }
 
 #[test]
@@ -16,15 +16,7 @@ fn test_create_test_client_with_version() {
     let (client, message_bus) = create_test_client_with_version(custom_version);
     assert_eq!(client.server_version(), custom_version);
     assert!(message_bus.request_messages.read().unwrap().is_empty());
-    assert!(message_bus.response_messages.is_empty());
-}
-
-#[test]
-fn test_create_test_client_with_responses() {
-    let responses = vec!["1|2|123|".to_string(), "2|2|456|".to_string()];
-    let (client, message_bus) = create_test_client_with_responses(responses.clone());
-    assert_eq!(client.server_version(), server_versions::SIZE_RULES);
-    assert_eq!(message_bus.response_messages, responses);
+    assert!(message_bus.ordered_responses.is_empty());
 }
 
 #[test]
@@ -115,15 +107,6 @@ fn assert_request_helper_panics_on_body_mismatch() {
 }
 
 #[test]
-fn test_create_test_client_with_responses_and_version() {
-    let responses = vec!["1|2|123|".to_string()];
-    let custom_version = 150;
-    let (client, message_bus) = create_test_client_with_responses_and_version(responses.clone(), custom_version);
-    assert_eq!(client.server_version(), custom_version);
-    assert_eq!(message_bus.response_messages, responses);
-}
-
-#[test]
 #[should_panic(expected = "Expected at least 2 request messages, got 0")]
 fn assert_request_msg_id_panics_on_short_buffer() {
     let (_client, message_bus) = create_test_client();
@@ -182,4 +165,12 @@ fn assert_request_proto_panics_on_body_mismatch() {
         ..Default::default()
     };
     assert_request_proto(&message_bus, 0, OutgoingMessages::RequestAccountSummary, &expected);
+}
+
+#[test]
+fn test_text_response_translates_pipes_to_nul() {
+    let mut message = text_response("1|9001|payload");
+    assert_eq!(message.next_string().unwrap(), "1");
+    assert_eq!(message.next_string().unwrap(), "9001");
+    assert_eq!(message.next_string().unwrap(), "payload");
 }

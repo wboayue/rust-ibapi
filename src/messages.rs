@@ -900,6 +900,42 @@ struct OrderStatusClientId {
     pub client_id: Option<i32>,
 }
 
+/// Minimal envelope for `OpenOrder` reading only `order.clientId` (tag 3 →
+/// tag 1), skipping the contract and order state.
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct OpenOrderClientId {
+    #[prost(message, optional, tag = "3")]
+    pub order: Option<ClientIdAt1>,
+}
+
+/// An `Order` read for its `clientId` (tag 1) only.
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct ClientIdAt1 {
+    #[prost(int32, optional, tag = "1")]
+    pub client_id: Option<i32>,
+}
+
+/// Minimal envelope for `ExecutionDetails` reading only
+/// `execution.clientId` (tag 3 → tag 10).
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct ExecutionClientId {
+    #[prost(message, optional, tag = "3")]
+    pub execution: Option<ExecutionClientIdField>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct ExecutionClientIdField {
+    #[prost(int32, optional, tag = "10")]
+    pub client_id: Option<i32>,
+}
+
+/// Minimal envelope for `OrderBound` reading only `clientId` (tag 2).
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct OrderBoundClientId {
+    #[prost(int32, optional, tag = "2")]
+    pub client_id: Option<i32>,
+}
+
 /// Minimal envelope for `ExecutionDetails` reading only the nested
 /// `execution.order_id` (tag 3 → tag 1) and `execution.exec_id` (tag 3 →
 /// tag 2). Skips the `contract` sub-message at tag 2, avoiding ~20 String
@@ -1086,15 +1122,25 @@ impl ResponseMessage {
         }
     }
 
-    /// Try to extract the id of the client that placed the order an
-    /// `OrderStatus` reports (proto tag 9, via [`OrderStatusClientId`]).
+    /// Try to extract the id of the client that placed the order a frame
+    /// reports: `OrderStatus` (tag 9), `OpenOrder` (`order.clientId`),
+    /// `ExecutionData` (`execution.clientId`) and `OrderBound` (tag 2).
     /// `None` for any other message type.
     pub fn client_id(&self) -> Option<i32> {
-        if self.message_type() != IncomingMessages::OrderStatus {
-            return None;
+        let raw = self.raw_bytes()?;
+        match self.message_type() {
+            IncomingMessages::OrderStatus => prost::Message::decode(raw).ok().and_then(|p: OrderStatusClientId| p.client_id),
+            IncomingMessages::OpenOrder => prost::Message::decode(raw)
+                .ok()
+                .and_then(|p: OpenOrderClientId| p.order)
+                .and_then(|order| order.client_id),
+            IncomingMessages::ExecutionData => prost::Message::decode(raw)
+                .ok()
+                .and_then(|p: ExecutionClientId| p.execution)
+                .and_then(|execution| execution.client_id),
+            IncomingMessages::OrderBound => prost::Message::decode(raw).ok().and_then(|p: OrderBoundClientId| p.client_id),
+            _ => None,
         }
-        let p: OrderStatusClientId = prost::Message::decode(self.raw_bytes()?).ok()?;
-        p.client_id
     }
 
     /// Try to extract the execution id from the message.

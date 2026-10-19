@@ -169,11 +169,30 @@ pub(crate) enum OrderRoutingStrategy {
     SharedOnly,
     /// Route by order_id only.
     ByOrderId,
+    /// Another client's execution: answer a request only, recording its
+    /// execution id so the commission report follows.
+    ByRequestId,
+    /// Deliver nowhere.
+    Ignore,
+}
+
+/// Whether `message` reports another client's order: its client id is set
+/// and is not `client_id`. A frame without one is taken as this client's.
+pub(crate) fn is_foreign(message: &ResponseMessage, client_id: i32) -> bool {
+    message.client_id().is_some_and(|id| id != client_id)
 }
 
 /// Determine the routing strategy for an order-related message type.
-pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStrategy {
+///
+/// `foreign` marks a frame for another client's order (its client id is not
+/// this connection's, e.g. from `all_open_orders`). Order ids are unique per
+/// client only, so such a frame skips the order routes and this client's
+/// streams: it can only answer a request (#1021).
+pub(crate) fn order_routing_strategy(message_type: IncomingMessages, foreign: bool) -> OrderRoutingStrategy {
     match message_type {
+        IncomingMessages::OrderBound if foreign => OrderRoutingStrategy::Ignore,
+        IncomingMessages::ExecutionData if foreign => OrderRoutingStrategy::ByRequestId,
+        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus if foreign => OrderRoutingStrategy::SharedOnly,
         IncomingMessages::OrderBound => OrderRoutingStrategy::OrderUpdateOnly,
         IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
         IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,

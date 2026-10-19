@@ -80,7 +80,7 @@ mod sync_tests {
 
     use super::historical_data_response_pair;
     use crate::client::blocking::Client;
-    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::market_data::TradingHours;
@@ -193,7 +193,7 @@ mod sync_tests {
 
     #[test]
     fn fetch_without_date_spec_errors() {
-        let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client.historical_data(&contract, BarSize::Hour).fetch();
@@ -206,7 +206,7 @@ mod sync_tests {
 
     #[test]
     fn between_with_duration_errors() {
-        let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-08 0:00 UTC);
         let end = datetime!(2026-04-15 0:00 UTC);
@@ -225,7 +225,7 @@ mod sync_tests {
 
     #[test]
     fn between_with_inverted_range_errors() {
-        let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client
@@ -241,7 +241,7 @@ mod sync_tests {
 
     #[test]
     fn stream_rejects_ending() {
-        let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client
@@ -255,7 +255,7 @@ mod sync_tests {
 
     #[test]
     fn stream_rejects_between() {
-        let (client, _bus) = create_blocking_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client
@@ -274,7 +274,7 @@ mod async_tests {
 
     use super::historical_data_response_pair;
     use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_responses_and_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::server_versions;
@@ -360,7 +360,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn fetch_without_date_spec_errors() {
-        let (client, _bus) = create_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client.historical_data(&contract, BarSize::Hour).fetch().await;
@@ -373,7 +373,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn stream_rejects_ending() {
-        let (client, _bus) = create_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client
@@ -388,7 +388,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn stream_rejects_between() {
-        let (client, _bus) = create_test_client_with_responses_and_version(vec![], server_versions::SIZE_RULES);
+        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
 
         let result = client

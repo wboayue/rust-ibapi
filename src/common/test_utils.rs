@@ -14,21 +14,7 @@ pub mod helpers {
 
     /// Creates a test client with a specific server version
     pub fn create_test_client_with_version(server_version: i32) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
-        let client = Client::stubbed(message_bus.clone(), server_version);
-        (client, message_bus)
-    }
-
-    /// Creates a test client with specified response messages
-    pub fn create_test_client_with_responses(responses: Vec<String>) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-        (client, message_bus)
-    }
-
-    /// Creates a test client with specified response messages and server version
-    pub fn create_test_client_with_responses_and_version(responses: Vec<String>, server_version: i32) -> (Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
+        let message_bus = Arc::new(MessageBusStub::default());
         let client = Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
     }
@@ -48,20 +34,7 @@ pub mod helpers {
 
     #[cfg(feature = "sync")]
     pub fn create_blocking_test_client_with_version(server_version: i32) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
-        create_blocking_test_client_with_responses_and_version(vec![], server_version)
-    }
-
-    #[cfg(feature = "sync")]
-    pub fn create_blocking_test_client_with_responses(responses: Vec<String>) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
-        create_blocking_test_client_with_responses_and_version(responses, server_versions::SIZE_RULES)
-    }
-
-    #[cfg(feature = "sync")]
-    pub fn create_blocking_test_client_with_responses_and_version(
-        responses: Vec<String>,
-        server_version: i32,
-    ) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
-        let message_bus = Arc::new(MessageBusStub::with_responses(responses));
+        let message_bus = Arc::new(MessageBusStub::default());
         let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_version);
         (client, message_bus)
     }
@@ -262,9 +235,10 @@ pub mod helpers {
     /// Proto-framed ExecutionData frame. `request_id` is at proto tag 1; the
     /// dispatcher's `order_id` / `execution_id` accessors read the nested
     /// `execution.{order_id, exec_id}` sub-message via `ExecutionDetailsMinimal`.
-    pub fn execution_data_frame(request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
+    pub fn execution_data_frame(client_id: i32, request_id: i32, order_id: i32, execution_id: &str) -> Vec<u8> {
         use crate::testdata::builders::ResponseProtoEncoder;
         let response = crate::testdata::builders::orders::execution_data()
+            .client_id(client_id)
             .request_id(request_id)
             .order_id(order_id)
             .execution_id(execution_id);

@@ -22,7 +22,7 @@ use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
 use super::routing::{
-    classify_error, determine_routing, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
+    classify_error, determine_routing, is_foreign, order_routing_strategy, order_update_notice, DecodedError, ErrorDisposition, OrderRoutingStrategy,
     RoutingDecision,
 };
 use super::{
@@ -333,7 +333,7 @@ pub struct TcpMessageBus<S: Stream> {
 
 impl<S: Stream> TcpMessageBus<S> {
     pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
-        let order_taps = OrderTaps::new(connection.client_id);
+        let order_taps = OrderTaps::new();
         let (signals_send, signals_recv) = channel::unbounded();
         let (shutdown_send, shutdown_recv) = channel::bounded(1);
         let shutdown = connection.shutdown_signal();
@@ -686,11 +686,14 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn process_orders(&self, message: ResponseMessage) {
-        let strategy = order_routing_strategy(message.message_type());
+        let foreign = is_foreign(&message, self.connection.client_id);
+        let strategy = order_routing_strategy(message.message_type(), foreign);
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
 
-        self.order_taps.publish_status(&message);
+        if !foreign {
+            self.order_taps.publish_status(&message);
+        }
 
         match strategy {
             OrderRoutingStrategy::OrderUpdateOnly => {
@@ -741,6 +744,13 @@ impl<S: Stream> TcpMessageBus<S> {
             OrderRoutingStrategy::SharedOnly => {
                 self.shared_channels.send_message(message.message_type(), &message);
             }
+            OrderRoutingStrategy::ByRequestId => {
+                let execution_id = message.execution_id();
+                if let Err(item) = self.deliver_to_order_or_request(None, message_request_id, message.into(), execution_id.as_ref()) {
+                    debug!("another client's execution answers no request: {item:?}");
+                }
+            }
+            OrderRoutingStrategy::Ignore => {}
             OrderRoutingStrategy::ByOrderId => {
                 warn!("unhandled order message type: {message:?}");
             }

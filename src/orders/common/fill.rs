@@ -1,7 +1,57 @@
 //! Shared state of one `wait_for_fill` (#951), for the sync and async clients.
 
-use crate::orders::{OrderOutcome, OrderStatus};
+use std::time::{Duration, Instant};
+
+use crate::client::ids::OrderId;
+use crate::orders::{OrderData, OrderOutcome, OrderStatus, Orders};
 use crate::Error;
+
+/// The least time `wait_for_fill` gives each lookup reply (open orders, then
+/// completed orders) to reach its end marker, even past the deadline. TWS
+/// sends it milliseconds after the orders; read through it, a later request
+/// of the same kind cannot end on this one's marker.
+pub(crate) const LOOKUP_MIN_WAIT: Duration = Duration::from_secs(1);
+
+/// How long to read a lookup reply for, waiting until `deadline` but at least
+/// [`LOOKUP_MIN_WAIT`].
+pub(crate) fn lookup_wait(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now()).max(LOOKUP_MIN_WAIT)
+}
+
+/// Whether an open-orders reply lists `order_id`, so the order is working.
+pub(crate) fn lists_order(rows: &[Orders], order_id: OrderId) -> bool {
+    rows.iter().any(|row| match row {
+        Orders::OrderData(data) => data.order.order_id == order_id.value(),
+        Orders::OrderStatus(status) => status.order_id == order_id.value(),
+    })
+}
+
+/// The status of `order_id`, placed by `client_id`, in a completed-orders
+/// reply; the last match wins. Built from the order, which has no fill
+/// prices: they are `None`.
+pub(crate) fn completed_status(rows: &[Orders], client_id: i32, order_id: OrderId) -> Option<OrderStatus> {
+    rows.iter().rev().find_map(|row| match row {
+        Orders::OrderData(data) if data.order.client_id == client_id && data.order.order_id == order_id.value() => Some(status_of_completed(data)),
+        _ => None,
+    })
+}
+
+fn status_of_completed(data: &OrderData) -> OrderStatus {
+    let order = &data.order;
+    OrderStatus {
+        order_id: order.order_id,
+        status: data.order_state.status.clone(),
+        filled: order.filled_quantity,
+        remaining: order.total_quantity - order.filled_quantity,
+        average_fill_price: None,
+        perm_id: order.perm_id,
+        parent_id: order.parent_id,
+        last_fill_price: None,
+        client_id: order.client_id,
+        why_held: String::new(),
+        market_cap_price: None,
+    }
+}
 
 /// The last status seen, and whether a status ends the wait.
 #[derive(Debug, Default)]
@@ -29,8 +79,8 @@ impl FillTracker {
     }
 
     /// The outcome when the time runs out.
-    pub(crate) fn timed_out(self) -> OrderOutcome {
-        OrderOutcome::TimedOut(self.last)
+    pub(crate) fn timed_out(&mut self) -> OrderOutcome {
+        OrderOutcome::TimedOut(self.last.take())
     }
 }
 

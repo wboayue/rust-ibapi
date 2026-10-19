@@ -8,11 +8,8 @@ use crossbeam::channel::{Receiver, Sender};
 
 type Taps = OrderTaps<Sender<RoutedItem>>;
 
-/// The client id of the `order_status()` fixture.
-const CLIENT_ID: i32 = 100;
-
 fn taps() -> Taps {
-    Taps::new(CLIENT_ID)
+    Taps::new()
 }
 
 fn publish(taps: &Taps, order_id: i32, status: OrderStatusKind) {
@@ -223,14 +220,14 @@ fn oldest_latest_statuses_are_evicted_past_capacity() {
 }
 
 #[test]
-fn reset_ends_status_streams_and_keeps_updates_and_latest() {
+fn reset_ends_status_streams_and_keeps_updates_and_final_latest() {
     let taps = taps();
     let NewTap {
         receiver: updates,
         lease: _updates_lease,
         ..
     } = taps.subscribe_updates(0).unwrap();
-    publish(&taps, 7, OrderStatusKind::Submitted);
+    publish(&taps, 7, OrderStatusKind::Filled);
     let (receiver, _lease) = status_stream(&taps, 7);
     next_response(&receiver);
 
@@ -241,10 +238,55 @@ fn reset_ends_status_streams_and_keeps_updates_and_latest() {
     assert_eq!(
         next_response(&status_stream(&taps, 7).0).order_id(),
         Some(7),
-        "a reset keeps the latest status"
+        "a reset keeps a final status"
     );
     assert!(taps.send_update(order_status_response(order_status()).into()));
     assert!(updates.try_recv().is_ok(), "a reset keeps the update stream");
+}
+
+/// TWS does not replay what happened while disconnected, so only statuses
+/// no later frame can change survive a reset (#1031).
+#[test]
+fn reset_keeps_only_latest_that_cannot_change() {
+    use OrderStatusKind::*;
+    let cases = [
+        ("pre-submitted", PreSubmitted, false),
+        ("submitted", Submitted, false),
+        ("filled", Filled, true),
+        ("cancelled", Cancelled, true),
+        ("inactive", Inactive, true),
+    ];
+    for (name, status, kept) in cases {
+        let taps = taps();
+        publish(&taps, 7, status);
+
+        taps.reset();
+
+        assert_eq!(status_stream(&taps, 7).0.try_recv().is_ok(), kept, "{name}");
+        assert_eq!(taps.recent_len(), usize::from(kept), "{name}: recent follows the latest");
+    }
+}
+
+#[test]
+fn reset_keeps_a_rejection() {
+    let taps = taps();
+    reject(&taps, 7, 110);
+
+    taps.reset();
+
+    assert_eq!(next_rejection(&status_stream(&taps, 7).0).code, 110);
+}
+
+/// A status dropped by a reset and seen again counts once toward the capacity.
+#[test]
+fn status_after_reset_is_recent_once() {
+    let taps = taps();
+    publish(&taps, 7, OrderStatusKind::Submitted);
+    taps.reset();
+
+    publish(&taps, 7, OrderStatusKind::Submitted);
+
+    assert_eq!(taps.recent_len(), 1);
 }
 
 #[test]
@@ -278,28 +320,4 @@ fn update_stream_is_exclusive_until_released() {
     let _replacement = taps.subscribe_updates(0).expect("a dead registration is replaced");
     assert!(!taps.release_updates(&lease_ref), "a stale release leaves the replacement");
     assert!(taps.updates_lease().is_some());
-}
-
-#[test]
-fn status_of_another_clients_order_is_ignored() {
-    let taps = taps();
-    let (receiver, _lease) = status_stream(&taps, 7);
-
-    let foreign = order_status().order_id(7).client_id(CLIENT_ID + 1).status(OrderStatusKind::Filled);
-    taps.publish_status(&order_status_response(foreign));
-
-    assert!(receiver.try_recv().is_err(), "not sent to the stream");
-    let (later, _lease) = status_stream(&taps, 7);
-    assert!(later.try_recv().is_err(), "not kept as the latest status");
-}
-
-#[test]
-fn status_without_client_id_is_kept() {
-    let taps = taps();
-    let mut status = order_status().order_id(7).to_proto();
-    status.client_id = None;
-    taps.publish_status(&proto_response(IncomingMessages::OrderStatus, prost::Message::encode_to_vec(&status)));
-
-    let (receiver, _lease) = status_stream(&taps, 7);
-    assert!(matches!(receiver.try_recv(), Ok(RoutedItem::Response(_))));
 }

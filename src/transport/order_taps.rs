@@ -14,6 +14,7 @@ use log::warn;
 use super::common::{lock, Lease, LeaseRef};
 use crate::client::ids::{OrderId, WireId};
 use crate::messages::{IncomingMessages, Notice, ResponseMessage};
+use crate::orders::common::decoders::decode_order_status;
 use crate::transport::RoutedItem;
 use crate::Error;
 
@@ -143,10 +144,6 @@ struct State<S> {
 /// The order-update stream and the per-order status streams of one bus.
 pub(crate) struct OrderTaps<S> {
     state: Mutex<State<S>>,
-    /// This connection's client id. Order ids are unique per client only, so
-    /// statuses of other clients' orders (e.g. from `all_open_orders`) are
-    /// kept out of the status streams.
-    client_id: i32,
 }
 
 impl<S> std::fmt::Debug for OrderTaps<S> {
@@ -156,8 +153,8 @@ impl<S> std::fmt::Debug for OrderTaps<S> {
 }
 
 impl<S: TapSender> OrderTaps<S> {
-    /// Taps for a connection with `client_id`.
-    pub(crate) fn new(client_id: i32) -> Self {
+    /// Empty taps. The dispatcher keeps other clients' frames out (#1021).
+    pub(crate) fn new() -> Self {
         Self {
             state: Mutex::new(State {
                 updates: None,
@@ -165,7 +162,6 @@ impl<S: TapSender> OrderTaps<S> {
                 recent: VecDeque::new(),
                 closed: false,
             }),
-            client_id,
         }
     }
 
@@ -248,14 +244,10 @@ impl<S: TapSender> OrderTaps<S> {
     }
 
     /// Record an `OrderStatus` frame as its order's latest status and copy it
-    /// to the order's status streams; any other frame, or a status of another
-    /// client's order, is ignored. A status without a client id is kept.
-    /// Streams whose receiver has gone are dropped.
+    /// to the order's status streams; any other frame is ignored. Streams
+    /// whose receiver has gone are dropped.
     pub(crate) fn publish_status(&self, message: &ResponseMessage) {
         if message.message_type() != IncomingMessages::OrderStatus {
-            return;
-        }
-        if message.client_id().is_some_and(|client_id| client_id != self.client_id) {
             return;
         }
         let Some(order_id) = message.order_id().map(OrderId::from) else {
@@ -308,10 +300,21 @@ impl<S: TapSender> OrderTaps<S> {
     }
 
     /// End every status stream with [`Error::ConnectionReset`]. The
-    /// order-update stream and the latest statuses survive a reconnect: the
-    /// orders still live in TWS.
+    /// order-update stream survives a reconnect, and so do latest statuses
+    /// that cannot change (an order that ended, or a rejection). TWS does not
+    /// replay what happened while disconnected, so any other status may be
+    /// stale and is dropped: a stream opened later starts empty, and
+    /// `wait_for_fill` looks the order up (#1031).
     pub(crate) fn reset(&self) {
-        Self::end_status_streams(&mut self.lock(), || Error::ConnectionReset);
+        let mut state = self.lock();
+        for slot in state.statuses.values_mut() {
+            if matches!(&slot.latest, Some(Latest::Status(message)) if !is_final(message)) {
+                slot.latest = None;
+            }
+        }
+        Self::end_status_streams(&mut state, || Error::ConnectionReset);
+        let State { statuses, recent, .. } = &mut *state;
+        recent.retain(|order_id| statuses.get(order_id).is_some_and(|slot| slot.latest.is_some()));
     }
 
     /// End every stream with [`Error::Shutdown`] and refuse later subscribes.
@@ -336,6 +339,12 @@ impl<S: TapSender> OrderTaps<S> {
     }
 }
 
+/// Whether an `OrderStatus` frame reports how its order ended, so no later
+/// status can change it. One that does not decode is treated as working.
+fn is_final(message: &ResponseMessage) -> bool {
+    decode_order_status(message).is_ok_and(|status| status.outcome().is_some())
+}
+
 #[cfg(test)]
 impl<S: TapSender> OrderTaps<S> {
     /// The order-update stream's lease, if one is registered.
@@ -353,6 +362,12 @@ impl<S: TapSender> OrderTaps<S> {
     #[cfg(feature = "sync")]
     pub(crate) fn status_streams(&self, order_id: OrderId) -> usize {
         self.lock().statuses.get(&order_id).map_or(0, |slot| slot.streams.len())
+    }
+
+    /// How many orders hold a latest status or rejection.
+    #[cfg(feature = "sync")]
+    pub(crate) fn recent_len(&self) -> usize {
+        self.lock().recent.len()
     }
 
     /// Whether `order_id` has an entry at all.

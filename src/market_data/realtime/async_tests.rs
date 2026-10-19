@@ -1,5 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, assert_request_proto, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{
+    assert_request, assert_request_proto, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
 use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth};
@@ -606,7 +608,7 @@ async fn test_basic_market_data() {
 
 #[tokio::test]
 async fn test_market_data_with_combo_legs() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
@@ -637,7 +639,7 @@ async fn test_market_data_with_combo_legs() {
 
 #[tokio::test]
 async fn test_market_data_with_delta_neutral() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
@@ -665,7 +667,7 @@ async fn test_market_data_with_delta_neutral() {
 
 #[tokio::test]
 async fn test_market_data_regulatory_snapshot() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
     let contract = Contract {
@@ -703,7 +705,7 @@ async fn test_market_data_regulatory_snapshot() {
 
 #[tokio::test]
 async fn subscription_cancel_only_sends_once() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("AAPL").build();
@@ -735,7 +737,7 @@ async fn subscription_cancel_only_sends_once() {
 async fn test_text_framed_fixture_fails_the_subscription() {
     // Payload beyond the message id and request id is irrelevant — the decoder
     // rejects on framing before reading a field.
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["50\0\09000\0".to_owned()]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("50\0\09000\0")]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
 

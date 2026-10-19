@@ -1,4 +1,4 @@
-pub(super) mod decoders;
+pub(crate) mod decoders;
 pub(crate) mod encoders;
 pub(crate) mod fill;
 /// Helpers for constructing commonly used order templates.

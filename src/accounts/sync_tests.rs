@@ -485,12 +485,7 @@ fn test_pnl_comprehensive() {
     drop(subscriptions);
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each), got {}",
-        test_cases.len() * 2,
-        count
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[test]
@@ -514,11 +509,7 @@ fn test_pnl_single_edge_cases() {
     drop(subscriptions);
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each)",
-        test_cases.len() * 2
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[test]
@@ -548,11 +539,7 @@ fn test_positions_multi_parameter_combinations() {
     drop(subscriptions);
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each)",
-        test_cases.len() * 2
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[test]
@@ -612,12 +599,7 @@ fn test_subscription_lifecycle() {
     }
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected subscribe and cancel messages for {} subscriptions, got {} messages",
-        test_cases.len(),
-        count
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use crate::contracts::{Contract, TagValue};
 use crate::market_data::realtime::WhatToShow;
+use crate::market_data::MarketDataType;
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
@@ -128,6 +129,21 @@ pub(crate) fn encode_cancel_market_data(request_id: i32) -> Result<Vec<u8>, Erro
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelMarketData, OutgoingMessages::CancelMarketData)
 }
 
+pub(crate) fn encode_request_market_data_type(market_data_type: MarketDataType) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::MarketDataTypeRequest {
+        market_data_type: Some(market_data_type as i32),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestMarketDataType as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
 // Per-encoder body assertions live in the migrated sync/async tests via
 // `assert_request<B>(builder)`; cancel encoders are exercised through their
 // production paths (e.g. subscription drop handlers).
+#[cfg(test)]
+#[path = "encoders_tests.rs"]
+mod tests;

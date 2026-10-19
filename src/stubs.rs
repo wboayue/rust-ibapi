@@ -35,9 +35,7 @@ const TEST_BROADCAST_CAPACITY: usize = 1024;
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
-    pub response_messages: Vec<String>,
-    /// Pre-built responses, served in order. When non-empty, supersedes
-    /// `response_messages`.
+    /// Pre-built responses, served in order.
     pub ordered_responses: Vec<ResponseMessage>,
     /// The `limit` of each bounded `send_request_capped` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
@@ -68,9 +66,6 @@ pub(crate) struct MessageBusStub {
     open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
     #[cfg(feature = "async")]
     open_async_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
-    // pub next_request_id: i32,
-    // pub server_version: i32,
-    // pub order_id: i32,
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
@@ -80,7 +75,6 @@ impl Default for MessageBusStub {
     fn default() -> Self {
         Self {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
             ordered_responses: vec![],
             buffer_limits: RwLock::new(vec![]),
             #[cfg(feature = "async")]
@@ -114,12 +108,6 @@ impl MessageBusStub {
         if let Some(bound) = bound {
             self.buffer_limits.write().unwrap().push(bound.limit);
         }
-    }
-
-    pub fn with_responses(response_messages: Vec<String>) -> Self {
-        let mut stub = Self::default();
-        stub.response_messages = response_messages;
-        stub
     }
 
     /// Construct a stub that plays back an ordered sequence of pre-built
@@ -160,19 +148,6 @@ impl MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    /// Materialise configured responses as `ResponseMessage` instances.
-    /// Prefers `ordered_responses` over the legacy text-only
-    /// `response_messages` field; only one is non-empty per test.
-    pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
-        if !self.ordered_responses.is_empty() {
-            return self.ordered_responses.clone();
-        }
-        self.response_messages
-            .iter()
-            .map(|m| ResponseMessage::from(&m.replace('|', "\0")))
-            .collect()
-    }
-
     /// Configured responses as the dispatcher would deliver them.
     ///
     /// The stub has no dispatcher, so it used to hand every fixture over as
@@ -185,7 +160,7 @@ impl MessageBusStub {
     /// This is the same blind spot `debug_assert_request_id_routable` covers
     /// from the routing side — stub tests inject below `determine_routing`.
     pub(crate) fn routed_items(&self) -> Vec<RoutedItem> {
-        self.response_messages_decoded().into_iter().map(classify_like_dispatcher).collect()
+        self.ordered_responses.iter().cloned().map(classify_like_dispatcher).collect()
     }
 
     /// What one request's subscription receives.

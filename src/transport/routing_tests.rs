@@ -668,3 +668,44 @@ fn test_order_message_types_route_by_order_id() {
         );
     }
 }
+
+#[test]
+fn test_order_routing_strategy_for_own_and_foreign_frames() {
+    use IncomingMessages as M;
+    use OrderRoutingStrategy as S;
+    let cases = [
+        (M::OpenOrder, S::OrderOrShared, S::SharedOnly),
+        (M::OrderStatus, S::OrderOrShared, S::SharedOnly),
+        (M::ExecutionData, S::ExecutionData, S::ByRequestId),
+        (M::OrderBound, S::OrderUpdateOnly, S::Ignore),
+        // No client id on the wire: never foreign, listed for completeness.
+        (M::CommissionsReport, S::ByExecutionId, S::ByExecutionId),
+        (M::ExecutionDataEnd, S::ExecutionDataEnd, S::ExecutionDataEnd),
+        (M::CompletedOrder, S::SharedOnly, S::SharedOnly),
+        (M::OpenOrderEnd, S::SharedOnly, S::SharedOnly),
+    ];
+    for (message_type, own, foreign) in cases {
+        assert_eq!(order_routing_strategy(message_type, false), own, "{message_type:?} own");
+        assert_eq!(order_routing_strategy(message_type, true), foreign, "{message_type:?} foreign");
+    }
+}
+
+#[test]
+fn test_is_foreign_compares_client_ids() {
+    let status = |client_id: Option<i32>| {
+        let body = crate::proto::OrderStatus {
+            order_id: Some(7),
+            client_id,
+            ..Default::default()
+        };
+        proto_response(IncomingMessages::OrderStatus, body.encode_to_vec())
+    };
+    let cases = [
+        ("same client", Some(28), false),
+        ("other client", Some(29), true),
+        ("no client id", None, false),
+    ];
+    for (name, client_id, expected) in cases {
+        assert_eq!(is_foreign(&status(client_id), 28), expected, "{name}");
+    }
+}

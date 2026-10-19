@@ -3,37 +3,27 @@ use super::*;
 use crate::common::test_utils::helpers::text_response;
 use crate::messages::ResponseMessage;
 
-fn sample_response_messages() -> Vec<String> {
-    vec!["1|9001|".to_string(), "2|9002|".to_string()]
+fn sample_response_messages() -> Vec<ResponseMessage> {
+    vec![text_response("1|9001|"), text_response("2|9002|")]
 }
 
 #[test]
 fn default_creates_empty_stub() {
     let stub = MessageBusStub::default();
     assert!(stub.request_messages().is_empty());
-    assert!(stub.response_messages.is_empty());
-    assert!(stub.ordered_responses.is_empty());
-    assert!(stub.response_messages_decoded().is_empty());
-}
-
-#[test]
-fn with_responses_stores_text_payloads() {
-    let stub = MessageBusStub::with_responses(sample_response_messages());
-    assert_eq!(stub.response_messages, sample_response_messages());
     assert!(stub.ordered_responses.is_empty());
 }
 
 #[test]
 fn with_ordered_responses_stores_messages() {
-    let messages = vec![text_response("1|9001|"), text_response("2|9002|")];
+    let messages = sample_response_messages();
     let stub = MessageBusStub::with_ordered_responses(messages.clone());
-    assert!(stub.response_messages.is_empty());
     assert_eq!(stub.ordered_responses.len(), messages.len());
 }
 
 #[test]
 fn with_connection_resets_replaces_the_leading_responses() {
-    let stub = MessageBusStub::with_responses(sample_response_messages()).with_connection_resets(2);
+    let stub = MessageBusStub::with_ordered_responses(sample_response_messages()).with_connection_resets(2);
 
     // A reset carries no responses at all — the socket dropped before any arrived.
     for attempt in 0..2 {
@@ -51,7 +41,7 @@ fn with_connection_resets_replaces_the_leading_responses() {
 
 #[test]
 fn without_connection_resets_every_request_gets_the_responses() {
-    let stub = MessageBusStub::with_responses(sample_response_messages());
+    let stub = MessageBusStub::with_ordered_responses(sample_response_messages());
     assert_eq!(stub.routed_items_for_request().len(), 2);
     assert_eq!(stub.routed_items_for_request().len(), 2);
 }
@@ -68,28 +58,6 @@ fn request_messages_returns_clone() {
     let mut snapshot = snapshot;
     snapshot.clear();
     assert_eq!(stub.request_messages(), vec![b"hello".to_vec()]);
-}
-
-#[test]
-fn response_messages_decoded_translates_pipe_to_nul() {
-    let stub = MessageBusStub::with_responses(vec!["1|9001|payload".to_string()]);
-    let decoded = stub.response_messages_decoded();
-    assert_eq!(decoded.len(), 1);
-    let mut msg = decoded.into_iter().next().unwrap();
-    assert_eq!(msg.next_string().unwrap(), "1");
-    assert_eq!(msg.next_string().unwrap(), "9001");
-    assert_eq!(msg.next_string().unwrap(), "payload");
-}
-
-#[test]
-fn response_messages_decoded_prefers_ordered_responses() {
-    let mut stub = MessageBusStub::with_ordered_responses(vec![text_response("X|1|")]);
-    // text payloads are deliberately ignored when ordered_responses is non-empty
-    stub.response_messages = vec!["should-not-decode".to_string()];
-    let decoded = stub.response_messages_decoded();
-    assert_eq!(decoded.len(), 1);
-    let mut msg = decoded.into_iter().next().unwrap();
-    assert_eq!(msg.next_string().unwrap(), "X");
 }
 
 #[cfg(feature = "sync")]
@@ -110,7 +78,7 @@ mod sync_tests {
 
     #[test]
     fn send_request_captures_message_and_yields_responses() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|hi".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|hi")]);
         let sub = MessageBus::send_request(&stub, RequestId::nth(42), b"req-bytes").expect("send_request");
 
         assert_eq!(stub.request_messages(), vec![b"req-bytes".to_vec()]);
@@ -120,7 +88,7 @@ mod sync_tests {
 
     #[test]
     fn send_order_request_captures_and_yields() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let sub = MessageBus::send_order_request(&stub, OrderId::from(7), b"order-bytes").expect("send_order_request");
 
         assert_eq!(stub.request_messages(), vec![b"order-bytes".to_vec()]);
@@ -137,7 +105,7 @@ mod sync_tests {
 
     #[test]
     fn send_shared_request_sets_message_type() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let sub = MessageBus::send_shared_request(&stub, OutgoingMessages::RequestMarketData, b"shared-bytes").expect("send_shared_request");
 
         assert_eq!(stub.request_messages(), vec![b"shared-bytes".to_vec()]);
@@ -159,7 +127,7 @@ mod sync_tests {
 
     #[test]
     fn create_order_update_subscription_then_already_subscribed() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let _sub = MessageBus::create_order_update_subscription(&stub).expect("first subscribe");
 
         match MessageBus::create_order_update_subscription(&stub) {
@@ -205,7 +173,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn send_request_captures_and_yields() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let mut sub = AsyncMessageBus::send_request(&stub, RequestId::nth(1), b"req".to_vec())
             .await
             .expect("send_request");
@@ -216,7 +184,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn send_order_request_captures_and_yields() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let mut sub = AsyncMessageBus::send_order_request(&stub, OrderId::from(2), b"order".to_vec())
             .await
             .expect("send_order_request");
@@ -227,7 +195,7 @@ mod async_tests {
 
     #[tokio::test]
     async fn send_shared_request_captures_and_yields() {
-        let stub = MessageBusStub::with_responses(vec!["1|9001|".to_string()]);
+        let stub = MessageBusStub::with_ordered_responses(vec![text_response("1|9001|")]);
         let mut sub = AsyncMessageBus::send_shared_request(&stub, OutgoingMessages::RequestMarketData, b"shared".to_vec())
             .await
             .expect("send_shared_request");

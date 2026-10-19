@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `examples/{sync,async}/wait_for_bracket.rs`: wait for every leg of a bracket order with three `wait_for_fill` calls sharing one deadline (#993).
+
+### Changed
+
+- `wait_for_fill` on an order this client has no status for asks TWS for this client's open orders (`open_orders`) before waiting, so an order placed on an earlier connection and still working is found instead of timing out. It reads that reply to its end before returning, so a later `open_orders` cannot end on it; this can add a round trip to the timeout. With client id 0, that request also binds manual TWS orders to the client (#993).
+- `wait_for_fill` on an order missing from that open-orders reply looks it up in `completed_orders` and, if found, ends at once with `Filled` or `Ended`, so an order that finished before this connection no longer waits out the timeout. The status is built from the completed order: its fill prices (`average_fill_price`, `last_fill_price`) are `None` (#1020).
+
 ### Fixed
 
 - One-shot requests answered on a shared channel (`managed_accounts`, `server_time`, `family_codes`, `request_fa`, `next_valid_order_id` and the other request-id-less calls) fail with `Error::Timeout` after 30 seconds instead of blocking forever when TWS never answers (#1029).
 - `request_fa` returns the dataset it asked for. Previously, with a `request_fa` for another dataset in flight, it could return that dataset's `FaConfig`. Likewise `market_rule` returns the rule it asked for, not a concurrent `market_rule`'s (#1029).
-- `wait_for_fill` and `order_status_stream` ignore statuses of other clients' orders. Order ids are unique per client only, so after `all_open_orders` (or with a master client id) another client's order with the same id could end a wait with that order's fill or cancel (#993).
+- Another client's order frames no longer reach this client's order routes, `order_update_stream`, `wait_for_fill` or `order_status_stream`. Order ids are unique per client only, so with `all_open_orders` (or a master client id) another client's `OpenOrder`/`OrderStatus` for an id this client also used went to this client's `place_order` subscription and could end a wait with that order's fill or cancel, and `all_open_orders` came back without it. Those frames now go only to `all_open_orders`; another client's executions still answer an `executions()` request. With a master client id, `order_update_stream` no longer reports other clients' orders: use `all_open_orders` and `executions` for those (#993, #1021).
+- After a reconnect, `wait_for_fill` no longer trusts a working order's cached status: TWS does not replay what happened while disconnected, so the cache keeps only statuses of orders that ended (and rejections), and the wait looks other orders up again. Previously an order cached as `Submitted` that filled during the outage waited out the timeout. A new `order_status_stream` on such an order starts empty until its next status (#1031).
 - The market data type set with `switch_market_data_type` now survives an automatic reconnect: TWS does not keep it across reconnects, and the client re-sends it before the `TRANSPORT_RECONNECT_CODE` notice. Previously a subscription on the new session without a realtime entitlement got error 354 or the 10089 advisory instead of delayed ticks (#1016).
 
 ## [5.1.0] - 2026-10-11
