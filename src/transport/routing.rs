@@ -169,7 +169,8 @@ pub(crate) enum OrderRoutingStrategy {
     SharedOnly,
     /// Route by order_id only.
     ByOrderId,
-    /// Try request_id channel only. Store execution_id mapping.
+    /// Another client's execution: answer a request only, recording its
+    /// execution id so the commission report follows.
     ByRequestId,
     /// Deliver nowhere.
     Ignore,
