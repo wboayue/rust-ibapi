@@ -857,9 +857,9 @@ fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
 
 /// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
 /// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
-/// in `CHANNEL_MAPPINGS`. With no `send_order_request` subscriber for the
-/// incoming order_id, the `OrderOrShared` strategy in `process_orders` fans
-/// the message out to every shared subscriber registered for `OpenOrder`.
+/// in `CHANNEL_MAPPINGS`. The `OrderAndShared` strategy in `process_orders`
+/// fans every `OpenOrder` out to each shared subscriber, with or without an
+/// order id.
 #[test]
 fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -868,21 +868,60 @@ fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     let sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, &[])?;
     let sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, &[])?;
 
-    // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
-    // means the OrderOrShared strategy falls back to fan-out across shared subs.
+    for order_id in [Some(42), None] {
+        stream.push_inbound(binary_proto(
+            crate::messages::IncomingMessages::OpenOrder as i32,
+            &crate::proto::OpenOrder {
+                order_id,
+                ..Default::default()
+            },
+        ));
+        bus.dispatch()?;
+
+        for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
+            let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
+            assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder);
+            assert_eq!(msg.order_id(), order_id);
+        }
+    }
+    Ok(())
+}
+
+/// An order with a live `send_order_request` route still answers an
+/// open-orders request: `OpenOrder` and `OrderStatus` reach both (#1033).
+#[test]
+fn test_routed_order_also_reaches_open_orders() -> Result<(), Error> {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+
+    let order = bus.send_order_request(OrderId::from(42), &[])?;
+    let open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+
     stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::OpenOrder as i32,
+        M::OpenOrder as i32,
         &crate::proto::OpenOrder {
             order_id: Some(42),
             ..Default::default()
         },
     ));
+    stream.push_inbound(binary_proto(
+        M::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(42),
+            status: Some("Submitted".into()),
+            ..Default::default()
+        },
+    ));
+    bus.dispatch()?;
     bus.dispatch()?;
 
-    for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
-        let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
-        assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder);
-        assert_eq!(msg.order_id(), Some(42));
+    for (name, sub) in [("order", &order), ("open orders", &open_orders)] {
+        for expected in [M::OpenOrder, M::OrderStatus] {
+            let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("{name} got no {expected:?}"))?;
+            assert_eq!(msg.message_type(), expected, "{name}");
+            assert_eq!(msg.order_id(), Some(42), "{name}");
+        }
+        assert!(sub.try_next().is_none(), "{name} received an extra message");
     }
     Ok(())
 }

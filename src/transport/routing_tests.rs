@@ -674,8 +674,8 @@ fn test_order_routing_strategy_for_own_and_foreign_frames() {
     use IncomingMessages as M;
     use OrderRoutingStrategy as S;
     let cases = [
-        (M::OpenOrder, S::OrderOrShared, S::SharedOnly),
-        (M::OrderStatus, S::OrderOrShared, S::SharedOnly),
+        (M::OpenOrder, S::OrderAndShared, S::SharedOnly),
+        (M::OrderStatus, S::OrderAndShared, S::SharedOnly),
         (M::ExecutionData, S::ExecutionData, S::ByRequestId),
         (M::OrderBound, S::OrderUpdateOnly, S::Ignore),
         // No client id on the wire: never foreign, listed for completeness.

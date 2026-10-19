@@ -178,8 +178,8 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         Ok(())
     }
 
-    /// Whether a route is registered under `id`. For a caller whose miss
-    /// path still needs the message `deliver` would consume.
+    /// Whether a route is registered under `id`.
+    #[cfg(test)]
     pub(super) fn contains(&self, id: &K) -> bool {
         self.read().contains_key(id)
     }

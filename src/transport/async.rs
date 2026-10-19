@@ -920,21 +920,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     warn!("could not route ExecutionDataEnd message {item:?}");
                 }
             }
-            OrderRoutingStrategy::OrderOrShared => {
-                if let Some(order_id) = message_order_id {
-                    // `contains` first, not `deliver`'s hand-back: the shared
-                    // fallback needs the message, and a second lookup is
-                    // cheaper than cloning every frame.
-                    if self.orders.contains(&order_id) {
-                        let _ = self.orders.deliver(&order_id, message.into());
-                        return Ok(());
+            OrderRoutingStrategy::OrderAndShared => {
+                let shared = self.shared_channels.send_message(message.message_type(), &message);
+                let unrouted = match message_order_id {
+                    Some(order_id) => self.orders.deliver(&order_id, message.into()).err(),
+                    None => Some(message.into()),
+                };
+                if let Some(item) = unrouted {
+                    if !shared && !routed {
+                        warn!("could not route message {item:?}");
                     }
-                    if self.shared_channels.send_message(message.message_type(), &message) {
-                        return Ok(());
-                    }
-                }
-                if !routed {
-                    warn!("could not route message {:?}", message);
                 }
             }
             OrderRoutingStrategy::ByExecutionId => {

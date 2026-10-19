@@ -214,13 +214,16 @@ impl SharedChannels {
         selected
     }
 
-    // Deliver `message` to every live subscription registered for its type.
-    // With none, the frame is dropped: a shared response nobody asked for
-    // (e.g. `OpenOrder` from another client, or after the requester's drop).
-    fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
-        if self.send_to(|subscriber| subscriber.receives(message_type), || message.clone().into()) == 0 {
-            debug!("no shared subscription for {message_type:?}: frame dropped");
+    // Deliver `message` to every live subscription registered for its type;
+    // returns whether any was. With none, the frame is dropped: a shared
+    // response nobody asked for (e.g. `OpenOrder` from another client, or
+    // after the requester's drop).
+    fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) -> bool {
+        let delivered = self.send_to(|subscriber| subscriber.receives(message_type), || message.clone().into()) > 0;
+        if !delivered {
+            trace!("no shared subscription for {message_type:?}: frame dropped");
         }
+        delivered
     }
 
     // Deliver `message_fn()` once to every live subscription, then remove
@@ -713,19 +716,17 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("could not route message {item:?}");
                 }
             }
-            OrderRoutingStrategy::OrderOrShared => {
+            OrderRoutingStrategy::OrderAndShared => {
                 let sent_to_update_stream = self.send_order_update(&message);
-
-                if let Some(order_id) = message_order_id {
-                    if self.orders.contains(&order_id) {
-                        let _ = self.orders.deliver(&order_id, message.into());
-                    } else {
-                        self.shared_channels.send_message(message.message_type(), &message);
+                let shared = self.shared_channels.send_message(message.message_type(), &message);
+                let unrouted = match message_order_id {
+                    Some(order_id) => self.orders.deliver(&order_id, message.into()).err(),
+                    None => Some(message.into()),
+                };
+                if let Some(item) = unrouted {
+                    if !shared && !sent_to_update_stream {
+                        warn!("could not route message {item:?}");
                     }
-                    return;
-                }
-                if !sent_to_update_stream {
-                    warn!("could not route message {message:?}");
                 }
             }
             OrderRoutingStrategy::ByExecutionId => {
