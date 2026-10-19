@@ -62,40 +62,8 @@ impl PositionResponse {
         self.symbol = v.into();
         self
     }
-    pub fn security_type(mut self, v: impl Into<String>) -> Self {
-        self.security_type = v.into();
-        self
-    }
-    pub fn last_trade_date_or_contract_month(mut self, v: impl Into<String>) -> Self {
-        self.last_trade_date_or_contract_month = v.into();
-        self
-    }
-    pub fn strike(mut self, v: f64) -> Self {
-        self.strike = v;
-        self
-    }
-    pub fn right(mut self, v: impl Into<String>) -> Self {
-        self.right = v.into();
-        self
-    }
-    pub fn multiplier(mut self, v: impl Into<String>) -> Self {
-        self.multiplier = v.into();
-        self
-    }
     pub fn exchange(mut self, v: impl Into<String>) -> Self {
         self.exchange = v.into();
-        self
-    }
-    pub fn currency(mut self, v: impl Into<String>) -> Self {
-        self.currency = v.into();
-        self
-    }
-    pub fn local_symbol(mut self, v: impl Into<String>) -> Self {
-        self.local_symbol = v.into();
-        self
-    }
-    pub fn trading_class(mut self, v: impl Into<String>) -> Self {
-        self.trading_class = v.into();
         self
     }
     pub fn position(mut self, v: f64) -> Self {
@@ -205,40 +173,8 @@ impl PositionMultiResponse {
         self.symbol = v.into();
         self
     }
-    pub fn security_type(mut self, v: impl Into<String>) -> Self {
-        self.security_type = v.into();
-        self
-    }
-    pub fn last_trade_date_or_contract_month(mut self, v: impl Into<String>) -> Self {
-        self.last_trade_date_or_contract_month = v.into();
-        self
-    }
-    pub fn strike(mut self, v: f64) -> Self {
-        self.strike = v;
-        self
-    }
-    pub fn right(mut self, v: impl Into<String>) -> Self {
-        self.right = v.into();
-        self
-    }
-    pub fn multiplier(mut self, v: impl Into<String>) -> Self {
-        self.multiplier = v.into();
-        self
-    }
     pub fn exchange(mut self, v: impl Into<String>) -> Self {
         self.exchange = v.into();
-        self
-    }
-    pub fn currency(mut self, v: impl Into<String>) -> Self {
-        self.currency = v.into();
-        self
-    }
-    pub fn local_symbol(mut self, v: impl Into<String>) -> Self {
-        self.local_symbol = v.into();
-        self
-    }
-    pub fn trading_class(mut self, v: impl Into<String>) -> Self {
-        self.trading_class = v.into();
         self
     }
     pub fn position(mut self, v: f64) -> Self {

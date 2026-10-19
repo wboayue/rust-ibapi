@@ -239,32 +239,8 @@ impl Default for PortfolioValueResponse {
 }
 
 impl PortfolioValueResponse {
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
     pub fn contract_id(mut self, v: i32) -> Self {
         self.contract_id = v;
-        self
-    }
-    pub fn symbol(mut self, v: impl Into<String>) -> Self {
-        self.symbol = v.into();
-        self
-    }
-    pub fn exchange(mut self, v: impl Into<String>) -> Self {
-        self.exchange = v.into();
-        self
-    }
-    pub fn position(mut self, v: f64) -> Self {
-        self.position = v;
-        self
-    }
-    pub fn market_price(mut self, v: f64) -> Self {
-        self.market_price = v;
-        self
-    }
-    pub fn market_value(mut self, v: f64) -> Self {
-        self.market_value = v;
         self
     }
 }
@@ -310,13 +286,6 @@ impl Default for AccountDownloadEndResponse {
     }
 }
 
-impl AccountDownloadEndResponse {
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-}
-
 impl ResponseProtoEncoder for AccountDownloadEndResponse {
     type Proto = proto::AccountDataEnd;
 
@@ -353,10 +322,6 @@ impl Default for AccountUpdateMultiResponse {
 }
 
 impl AccountUpdateMultiResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = v.into();
         self
@@ -412,14 +377,6 @@ pub struct FamilyCodesResponse {
 }
 
 impl FamilyCodesResponse {
-    pub fn codes<I>(mut self, codes: I) -> Self
-    where
-        I: IntoIterator<Item = FamilyCodeEntry>,
-    {
-        self.codes = codes.into_iter().collect();
-        self
-    }
-
     pub fn push(mut self, account_id: impl Into<String>, family_code: impl Into<String>) -> Self {
         self.codes.push(FamilyCodeEntry {
             account_id: account_id.into(),
@@ -530,10 +487,6 @@ impl Default for PnLResponse {
 }
 
 impl PnLResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn daily_pnl(mut self, v: f64) -> Self {
         self.daily_pnl = v;
         self
@@ -587,10 +540,6 @@ impl Default for PnLSingleResponse {
 }
 
 impl PnLSingleResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn position(mut self, v: f64) -> Self {
         self.position = v;
         self
@@ -705,16 +654,8 @@ impl Default for AccountUpdatesRequestBuilder {
 }
 
 impl AccountUpdatesRequestBuilder {
-    pub fn subscribe(mut self, v: bool) -> Self {
-        self.subscribe = v;
-        self
-    }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = Some(v.into());
-        self
-    }
-    pub fn no_account(mut self) -> Self {
-        self.account = None;
         self
     }
 }
@@ -757,14 +698,6 @@ impl AccountUpdatesMultiRequestBuilder {
     }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = Some(v.into());
-        self
-    }
-    pub fn no_account(mut self) -> Self {
-        self.account = None;
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
         self
     }
     pub fn ledger_and_nlv(mut self, v: bool) -> Self {
@@ -815,14 +748,6 @@ impl PnLRequestBuilder {
         self.request_id = v;
         self
     }
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
-        self
-    }
     pub fn no_model_code(mut self) -> Self {
         self.model_code = None;
         self
@@ -866,18 +791,6 @@ impl Default for PnLSingleRequestBuilder {
 impl PnLSingleRequestBuilder {
     pub fn request_id(mut self, v: i32) -> Self {
         self.request_id = v;
-        self
-    }
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-    pub fn contract_id(mut self, v: i32) -> Self {
-        self.contract_id = v;
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
         self
     }
     pub fn no_model_code(mut self) -> Self {

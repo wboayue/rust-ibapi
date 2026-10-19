@@ -203,16 +203,8 @@ impl Default for OrderBoundResponse {
 }
 
 impl OrderBoundResponse {
-    pub fn perm_id(mut self, v: i64) -> Self {
-        self.perm_id = Some(v);
-        self
-    }
     pub fn client_id(mut self, v: i32) -> Self {
         self.client_id = Some(v);
-        self
-    }
-    pub fn order_id(mut self, v: i32) -> Self {
-        self.order_id = Some(v);
         self
     }
 }
@@ -526,10 +518,6 @@ impl OpenOrderResponse {
         self.limit_price = v;
         self
     }
-    pub fn aux_price(mut self, v: Option<f64>) -> Self {
-        self.aux_price = v;
-        self
-    }
     pub fn perm_id(mut self, v: i64) -> Self {
         self.perm_id = v;
         self
@@ -673,14 +661,6 @@ impl CompletedOrderResponse {
         self.last_trade_date_or_contract_month = v.into();
         self
     }
-    pub fn strike(mut self, v: f64) -> Self {
-        self.strike = v;
-        self
-    }
-    pub fn right(mut self, v: impl Into<String>) -> Self {
-        self.right = v.into();
-        self
-    }
     pub fn multiplier(mut self, v: impl Into<String>) -> Self {
         self.multiplier = v.into();
         self
@@ -695,10 +675,6 @@ impl CompletedOrderResponse {
     }
     pub fn trading_class(mut self, v: impl Into<String>) -> Self {
         self.trading_class = v.into();
-        self
-    }
-    pub fn action(mut self, v: impl Into<String>) -> Self {
-        self.action = v.into();
         self
     }
     pub fn total_quantity(mut self, v: f64) -> Self {
@@ -820,13 +796,6 @@ impl Default for ExecutionDataEndResponse {
     }
 }
 
-impl ExecutionDataEndResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-}
-
 impl ResponseProtoEncoder for ExecutionDataEndResponse {
     type Proto = proto::ExecutionDetailsEnd;
 
@@ -918,10 +887,6 @@ impl Default for CancelOrderRequestBuilder {
 impl CancelOrderRequestBuilder {
     pub fn order_id(mut self, v: i32) -> Self {
         self.order_id = v;
-        self
-    }
-    pub fn manual_order_cancel_time(mut self, v: impl Into<String>) -> Self {
-        self.manual_order_cancel_time = v.into();
         self
     }
 }
@@ -1040,13 +1005,6 @@ impl RequestEncoder for ExecutionsRequestBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct GlobalCancelRequestBuilder {
     pub manual_order_cancel_time: String,
-}
-
-impl GlobalCancelRequestBuilder {
-    pub fn manual_order_cancel_time(mut self, v: impl Into<String>) -> Self {
-        self.manual_order_cancel_time = v.into();
-        self
-    }
 }
 
 impl RequestEncoder for GlobalCancelRequestBuilder {

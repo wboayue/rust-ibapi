@@ -71,10 +71,6 @@ impl HistoricalNewsRequestBuilder {
         self.request_id = v;
         self
     }
-    pub fn contract_id(mut self, v: i32) -> Self {
-        self.contract_id = v;
-        self
-    }
     pub fn provider_codes<S: AsRef<str>>(mut self, v: &[S]) -> Self {
         self.provider_codes = v.iter().map(|s| s.as_ref().to_string()).collect();
         self

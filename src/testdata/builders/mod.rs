@@ -87,8 +87,7 @@ macro_rules! single_req_id_request_builder {
     };
 }
 
-/// Generates a typed builder for response messages whose only payload is a
-/// proto `req_id` field.
+/// Generates a builder for `*End` responses carrying only `req_id`.
 ///
 /// Used by sentinel-style `*End` responses (e.g. `AccountSummaryEnd`,
 /// `AccountUpdateMultiEnd`, `PositionMultiEnd`). The generated type owns a
@@ -105,13 +104,6 @@ macro_rules! request_id_response_builder {
                 Self {
                     request_id: $crate::common::test_utils::helpers::constants::TEST_TICKER_ID,
                 }
-            }
-        }
-
-        impl $builder {
-            pub fn request_id(mut self, v: i32) -> Self {
-                self.request_id = v;
-                self
             }
         }
 
@@ -147,30 +139,27 @@ macro_rules! empty_request_builder {
     };
 }
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
+#[cfg_attr(not(all(feature = "sync", feature = "async")), allow(dead_code))] // a single-feature build misses the other half's tests
 pub(crate) mod accounts;
 
 pub(crate) mod config;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
+#[cfg_attr(not(all(feature = "sync", feature = "async")), allow(dead_code))] // a single-feature build misses the other half's tests
 pub(crate) mod contracts;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod display_groups;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
+#[cfg_attr(not(all(feature = "sync", feature = "async")), allow(dead_code))] // a single-feature build misses the other half's tests
 pub(crate) mod market_data;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
+#[cfg_attr(not(all(feature = "sync", feature = "async")), allow(dead_code))] // a single-feature build misses the other half's tests
 pub(crate) mod news;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
+#[cfg_attr(not(all(feature = "sync", feature = "async")), allow(dead_code))] // a single-feature build misses the other half's tests
 pub(crate) mod orders;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod positions;
 
-#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod scanner;
 
 pub(crate) mod wsh;
