@@ -231,4 +231,5 @@ pub(crate) fn decode_account_update_message(message: &ResponseMessage) -> Result
 }
 
 #[cfg(test)]
+#[path = "decoders_tests.rs"]
 mod tests;

@@ -434,4 +434,5 @@ impl fmt::Display for ValidationError {
 impl std::error::Error for ValidationError {}
 
 #[cfg(test)]
+#[path = "types_tests.rs"]
 mod tests;

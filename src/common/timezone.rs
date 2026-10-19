@@ -203,4 +203,5 @@ fn parse_env_aliases(raw: &str) -> Vec<(String, String)> {
 }
 
 #[cfg(test)]
+#[path = "timezone_tests.rs"]
 mod tests;

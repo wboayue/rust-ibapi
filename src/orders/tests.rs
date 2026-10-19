@@ -286,7 +286,7 @@ fn reference_price_type_round_trips_every_wire_code() {
 /// releases because nothing made a missing variant loud — see
 /// `docs/migration-4.0.md` §13.
 ///
-/// `src/orders/builder/order_builder/tests.rs` drives the same variant list
+/// `src/orders/builder/order_builder_tests.rs` drives the same variant list
 /// through the builder and the proto encoder; this guard covers both tables.
 #[test]
 fn all_tifs_covers_every_variant() {

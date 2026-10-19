@@ -16,7 +16,7 @@ links from commits, PRs and code comments still lead somewhere.
 **Unblocked by:** a raw capture (`IBAPI_RAW_CAPTURE_DIR`) of a `HistoricalDataEnd` timestamp in a
 shape below, with the gateway version and API date/time setting that produced it.
 
-`parse_historical_data_end_timestamp` (`src/market_data/historical/common/decoders/mod.rs`) accepts exactly the shapes captured on a 213+ gateway. #808 first proposed six; review narrowed it to two, because a zone-less wall clock resolved in a guessed zone is a silently wrong instant, while an unknown shape is a loud decode error that a capture can fix.
+`parse_historical_data_end_timestamp` (`src/market_data/historical/common/decoders.rs`) accepts exactly the shapes captured on a 213+ gateway. #808 first proposed six; review narrowed it to two, because a zone-less wall clock resolved in a guessed zone is a silently wrong instant, while an unknown shape is a loud decode error that a capture can fix.
 
 ### Verified (accepted)
 

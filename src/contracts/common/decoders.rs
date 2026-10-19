@@ -129,4 +129,5 @@ pub(crate) fn decode_smart_components_proto(p: crate::proto::SmartComponents) ->
 }
 
 #[cfg(test)]
+#[path = "decoders_tests.rs"]
 mod tests;

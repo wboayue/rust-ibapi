@@ -638,4 +638,5 @@ impl LegBuilder {
 }
 
 #[cfg(test)]
+#[path = "builders_tests.rs"]
 mod tests;

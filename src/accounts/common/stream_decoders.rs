@@ -148,4 +148,5 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
 }
 
 #[cfg(test)]
+#[path = "stream_decoders_tests.rs"]
 mod tests;

@@ -60,4 +60,5 @@ pub fn validate_stop_price(action: &Action, stop_price: f64, current_price: Opti
 }
 
 #[cfg(test)]
+#[path = "validation_tests.rs"]
 mod tests;

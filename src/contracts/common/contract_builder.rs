@@ -503,4 +503,5 @@ impl ContractBuilder {
 }
 
 #[cfg(test)]
+#[path = "contract_builder_tests.rs"]
 mod tests;

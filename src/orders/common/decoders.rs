@@ -104,4 +104,5 @@ pub(crate) fn decode_next_valid_id_proto(p: crate::proto::NextValidId) -> Result
 }
 
 #[cfg(test)]
+#[path = "decoders_tests.rs"]
 mod tests;
