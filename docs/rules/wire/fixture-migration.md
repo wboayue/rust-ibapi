@@ -6,7 +6,7 @@ status: historical
 triggers:
   - deleting a text branch from a domain decoder
   - IBKR ships a newly proto-gated message family
-symbols: [text_response, proto_response, encode_pipe, encode_proto, ordered_responses]
+symbols: [text_response, proto_response, encode_proto, ordered_responses]
 related: [fixture-builders, floor-ratchet-splits, proto-only-decoding]
 precedents: ["#529", "#531", "#532", "#534", "#543"]
 memory: [project_protobuf_only, project_tickefp_unobserved]
@@ -17,7 +17,7 @@ memory: [project_protobuf_only, project_tickefp_unobserved]
 for the procedure, which applies again if IBKR ships a new gated family.
 
 After deleting a text branch from a domain decoder, find every `MessageBusStub` fixture still
-feeding text-framed responses for that message type — `text_response(builder.encode_pipe())`
+feeding text-framed responses for that message type — `text_response(...)`
 in `<domain>/{sync,async}_tests.rs` — and convert each to
 `proto_response(IncomingMessages::Foo, builder.encode_proto())`.
 
@@ -31,10 +31,8 @@ there is no other signal.
 
 ## Table-driven fixtures
 
-Rename the test-case struct field `response_messages: Vec<String>` to
-`ordered_responses: Vec<ResponseMessage>`. Use `proto_response(...)` for migrated types and
-`text_response(...)` for end markers, errors, and cross-domain shared decoders that were
-never migrated.
+Test-case tables carry `ordered_responses: Vec<ResponseMessage>`. Use `proto_response(...)`
+for migrated types and `text_response(...)` only for types with no proto decoder.
 
 ## TickEFP
 

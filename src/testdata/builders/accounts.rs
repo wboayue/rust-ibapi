@@ -2,7 +2,7 @@
 //!
 //! Excludes positions, which live in [`super::positions`].
 
-use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_MODEL_CODE, TEST_TICKER_ID};
 use crate::messages::OutgoingMessages;
 use crate::proto;
@@ -35,12 +35,6 @@ impl ManagedAccountsResponse {
     {
         self.accounts = accounts.into_iter().map(Into::into).collect();
         self
-    }
-}
-
-impl ResponseEncoder for ManagedAccountsResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["15".to_string(), "1".to_string(), self.accounts.join(",")]
     }
 }
 
@@ -114,23 +108,9 @@ impl ResponseProtoEncoder for AccountSummaryResponse {
     }
 }
 
-impl ResponseEncoder for AccountSummaryResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "63".to_string(),
-            "1".to_string(),
-            self.request_id.to_string(),
-            self.account.clone(),
-            self.tag.clone(),
-            self.value.clone(),
-            self.currency.clone(),
-        ]
-    }
-}
-
 // --- AccountSummaryEnd (msg 64) ---
 
-request_id_response_builder!(AccountSummaryEndResponse, "64", AccountSummaryEnd);
+request_id_response_builder!(AccountSummaryEndResponse, AccountSummaryEnd);
 
 // --- AccountValue (msg 6) ---
 
@@ -182,23 +162,6 @@ impl ResponseProtoEncoder for AccountValueResponse {
             currency: Some(self.currency.clone()),
             account_name: self.account.clone(),
         }
-    }
-}
-
-impl ResponseEncoder for AccountValueResponse {
-    fn fields(&self) -> Vec<String> {
-        let version = if self.account.is_some() { "2" } else { "1" };
-        let mut fields = vec![
-            "6".to_string(),
-            version.to_string(),
-            self.key.clone(),
-            self.value.clone(),
-            self.currency.clone(),
-        ];
-        if let Some(account) = &self.account {
-            fields.push(account.clone());
-        }
-        fields
     }
 }
 
@@ -276,32 +239,8 @@ impl Default for PortfolioValueResponse {
 }
 
 impl PortfolioValueResponse {
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
     pub fn contract_id(mut self, v: i32) -> Self {
         self.contract_id = v;
-        self
-    }
-    pub fn symbol(mut self, v: impl Into<String>) -> Self {
-        self.symbol = v.into();
-        self
-    }
-    pub fn exchange(mut self, v: impl Into<String>) -> Self {
-        self.exchange = v.into();
-        self
-    }
-    pub fn position(mut self, v: f64) -> Self {
-        self.position = v;
-        self
-    }
-    pub fn market_price(mut self, v: f64) -> Self {
-        self.market_price = v;
-        self
-    }
-    pub fn market_value(mut self, v: f64) -> Self {
-        self.market_value = v;
         self
     }
 }
@@ -347,13 +286,6 @@ impl Default for AccountDownloadEndResponse {
     }
 }
 
-impl AccountDownloadEndResponse {
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-}
-
 impl ResponseProtoEncoder for AccountDownloadEndResponse {
     type Proto = proto::AccountDataEnd;
 
@@ -361,12 +293,6 @@ impl ResponseProtoEncoder for AccountDownloadEndResponse {
         proto::AccountDataEnd {
             account_name: Some(self.account.clone()),
         }
-    }
-}
-
-impl ResponseEncoder for AccountDownloadEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["54".to_string(), "1".to_string(), self.account.clone()]
     }
 }
 
@@ -396,10 +322,6 @@ impl Default for AccountUpdateMultiResponse {
 }
 
 impl AccountUpdateMultiResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = v.into();
         self
@@ -437,24 +359,9 @@ impl ResponseProtoEncoder for AccountUpdateMultiResponse {
     }
 }
 
-impl ResponseEncoder for AccountUpdateMultiResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "73".to_string(),
-            "1".to_string(),
-            self.request_id.to_string(),
-            self.account.clone(),
-            self.model_code.clone(),
-            self.key.clone(),
-            self.value.clone(),
-            self.currency.clone(),
-        ]
-    }
-}
-
 // --- AccountUpdateMultiEnd (msg 74) ---
 
-request_id_response_builder!(AccountUpdateMultiEndResponse, "74", AccountUpdateMultiEnd);
+request_id_response_builder!(AccountUpdateMultiEndResponse, AccountUpdateMultiEnd);
 
 // --- FamilyCodes (msg 78) ---
 
@@ -470,14 +377,6 @@ pub struct FamilyCodesResponse {
 }
 
 impl FamilyCodesResponse {
-    pub fn codes<I>(mut self, codes: I) -> Self
-    where
-        I: IntoIterator<Item = FamilyCodeEntry>,
-    {
-        self.codes = codes.into_iter().collect();
-        self
-    }
-
     pub fn push(mut self, account_id: impl Into<String>, family_code: impl Into<String>) -> Self {
         self.codes.push(FamilyCodeEntry {
             account_id: account_id.into(),
@@ -501,17 +400,6 @@ impl ResponseProtoEncoder for FamilyCodesResponse {
                 })
                 .collect(),
         }
-    }
-}
-
-impl ResponseEncoder for FamilyCodesResponse {
-    fn fields(&self) -> Vec<String> {
-        let mut fields = vec!["78".to_string(), self.codes.len().to_string()];
-        for code in &self.codes {
-            fields.push(code.account_id.clone());
-            fields.push(code.family_code.clone());
-        }
-        fields
     }
 }
 
@@ -546,12 +434,6 @@ impl ResponseProtoEncoder for CurrentTimeResponse {
     }
 }
 
-impl ResponseEncoder for CurrentTimeResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["49".to_string(), "1".to_string(), self.timestamp.to_string()]
-    }
-}
-
 // --- CurrentTimeInMillis (msg 109) ---
 
 #[derive(Clone, Debug)]
@@ -583,12 +465,6 @@ impl ResponseProtoEncoder for CurrentTimeInMillisResponse {
     }
 }
 
-impl ResponseEncoder for CurrentTimeInMillisResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["109".to_string(), self.millis.to_string()]
-    }
-}
-
 // --- PnL (msg 94) ---
 
 #[derive(Clone, Debug)]
@@ -611,10 +487,6 @@ impl Default for PnLResponse {
 }
 
 impl PnLResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn daily_pnl(mut self, v: f64) -> Self {
         self.daily_pnl = v;
         self
@@ -639,19 +511,6 @@ impl ResponseProtoEncoder for PnLResponse {
             unrealized_pn_l: self.unrealized_pnl,
             realized_pn_l: self.realized_pnl,
         }
-    }
-}
-
-impl ResponseEncoder for PnLResponse {
-    fn fields(&self) -> Vec<String> {
-        let mut fields = vec!["94".to_string(), self.request_id.to_string(), self.daily_pnl.to_string()];
-        if let Some(u) = self.unrealized_pnl {
-            fields.push(u.to_string());
-        }
-        if let Some(r) = self.realized_pnl {
-            fields.push(r.to_string());
-        }
-        fields
     }
 }
 
@@ -681,10 +540,6 @@ impl Default for PnLSingleResponse {
 }
 
 impl PnLSingleResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn position(mut self, v: f64) -> Self {
         self.position = v;
         self
@@ -719,20 +574,6 @@ impl ResponseProtoEncoder for PnLSingleResponse {
             realized_pn_l: Some(self.realized_pnl),
             value: Some(self.value),
         }
-    }
-}
-
-impl ResponseEncoder for PnLSingleResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "95".to_string(),
-            self.request_id.to_string(),
-            self.position.to_string(),
-            self.daily_pnl.to_string(),
-            self.unrealized_pnl.to_string(),
-            self.realized_pnl.to_string(),
-            self.value.to_string(),
-        ]
     }
 }
 
@@ -813,16 +654,8 @@ impl Default for AccountUpdatesRequestBuilder {
 }
 
 impl AccountUpdatesRequestBuilder {
-    pub fn subscribe(mut self, v: bool) -> Self {
-        self.subscribe = v;
-        self
-    }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = Some(v.into());
-        self
-    }
-    pub fn no_account(mut self) -> Self {
-        self.account = None;
         self
     }
 }
@@ -865,14 +698,6 @@ impl AccountUpdatesMultiRequestBuilder {
     }
     pub fn account(mut self, v: impl Into<String>) -> Self {
         self.account = Some(v.into());
-        self
-    }
-    pub fn no_account(mut self) -> Self {
-        self.account = None;
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
         self
     }
     pub fn ledger_and_nlv(mut self, v: bool) -> Self {
@@ -923,14 +748,6 @@ impl PnLRequestBuilder {
         self.request_id = v;
         self
     }
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
-        self
-    }
     pub fn no_model_code(mut self) -> Self {
         self.model_code = None;
         self
@@ -974,18 +791,6 @@ impl Default for PnLSingleRequestBuilder {
 impl PnLSingleRequestBuilder {
     pub fn request_id(mut self, v: i32) -> Self {
         self.request_id = v;
-        self
-    }
-    pub fn account(mut self, v: impl Into<String>) -> Self {
-        self.account = v.into();
-        self
-    }
-    pub fn contract_id(mut self, v: i32) -> Self {
-        self.contract_id = v;
-        self
-    }
-    pub fn model_code(mut self, v: impl Into<String>) -> Self {
-        self.model_code = Some(v.into());
         self
     }
     pub fn no_model_code(mut self) -> Self {
@@ -1535,7 +1340,3 @@ pub fn verify_message_request() -> VerifyMessageRequestBuilder {
 pub fn verify_completed() -> VerifyCompletedResponse {
     VerifyCompletedResponse::default()
 }
-
-#[cfg(test)]
-#[path = "accounts_tests.rs"]
-mod tests;

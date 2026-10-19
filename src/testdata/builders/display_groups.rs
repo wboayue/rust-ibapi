@@ -20,11 +20,6 @@ impl Default for DisplayGroupUpdatedResponse {
 }
 
 impl DisplayGroupUpdatedResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-
     pub fn contract_info(mut self, v: impl Into<String>) -> Self {
         self.contract_info = v.into();
         self

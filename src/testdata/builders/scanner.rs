@@ -85,13 +85,6 @@ impl Default for ScannerParametersResponse {
     }
 }
 
-impl ScannerParametersResponse {
-    pub fn xml(mut self, v: impl Into<String>) -> Self {
-        self.xml = v.into();
-        self
-    }
-}
-
 impl ResponseProtoEncoder for ScannerParametersResponse {
     type Proto = proto::ScannerParameters;
 
@@ -116,10 +109,6 @@ pub struct ScannerDataRow {
 }
 
 impl ScannerDataRow {
-    pub fn exchange(mut self, v: impl Into<String>) -> Self {
-        self.exchange = v.into();
-        self
-    }
     pub fn market_name(mut self, v: impl Into<String>) -> Self {
         self.market_name = v.into();
         self
@@ -145,10 +134,6 @@ impl Default for ScannerDataResponse {
 impl ScannerDataResponse {
     pub fn request_id(mut self, v: i32) -> Self {
         self.request_id = v;
-        self
-    }
-    pub fn row(mut self, row: ScannerDataRow) -> Self {
-        self.rows.push(row);
         self
     }
     pub fn rows(mut self, rows: Vec<ScannerDataRow>) -> Self {

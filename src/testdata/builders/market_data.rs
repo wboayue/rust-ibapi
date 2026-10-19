@@ -689,10 +689,6 @@ impl Default for HeadTimestampResponse {
 }
 
 impl HeadTimestampResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn head_timestamp(mut self, v: impl Into<String>) -> Self {
         self.head_timestamp = v.into();
         self
@@ -728,10 +724,6 @@ impl Default for HistoricalDataResponse {
 }
 
 impl HistoricalDataResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn bar(mut self, b: HistoricalDataBarFields) -> Self {
         self.bars.push(b);
         self
@@ -771,10 +763,6 @@ impl Default for HistoricalDataEndResponse {
 }
 
 impl HistoricalDataEndResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn start_date_str(mut self, v: impl Into<String>) -> Self {
         self.start_date_str = v.into();
         self
@@ -812,10 +800,6 @@ impl Default for HistoricalDataUpdateResponse {
 }
 
 impl HistoricalDataUpdateResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn bar(mut self, b: HistoricalDataBarFields) -> Self {
         self.bar = Some(b);
         self
@@ -875,10 +859,6 @@ impl Default for HistoricalScheduleResponse {
 }
 
 impl HistoricalScheduleResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn start_date_time(mut self, v: impl Into<String>) -> Self {
         self.start_date_time = v.into();
         self
@@ -962,16 +942,8 @@ impl Default for HistoricalTicksResponse {
 }
 
 impl HistoricalTicksResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick(mut self, t: HistoricalTickMidFields) -> Self {
         self.ticks.push(t);
-        self
-    }
-    pub fn ticks(mut self, t: Vec<HistoricalTickMidFields>) -> Self {
-        self.ticks = t;
         self
     }
     pub fn done(mut self, v: bool) -> Self {
@@ -1024,14 +996,6 @@ pub fn historical_tick_last(time: i64, price: f64, size: f64, exchange: impl Int
 }
 
 impl HistoricalTickLastFields {
-    pub fn past_limit(mut self, v: bool) -> Self {
-        self.past_limit = v;
-        self
-    }
-    pub fn unreported(mut self, v: bool) -> Self {
-        self.unreported = v;
-        self
-    }
     pub fn special_conditions(mut self, v: impl Into<String>) -> Self {
         self.special_conditions = v.into();
         self
@@ -1056,10 +1020,6 @@ impl Default for HistoricalTicksLastResponse {
 }
 
 impl HistoricalTicksLastResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick(mut self, t: HistoricalTickLastFields) -> Self {
         self.ticks.push(t);
         self
@@ -1153,16 +1113,8 @@ impl Default for HistoricalTicksBidAskResponse {
 }
 
 impl HistoricalTicksBidAskResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick(mut self, t: HistoricalTickBidAskFields) -> Self {
         self.ticks.push(t);
-        self
-    }
-    pub fn ticks(mut self, t: Vec<HistoricalTickBidAskFields>) -> Self {
-        self.ticks = t;
         self
     }
     pub fn done(mut self, v: bool) -> Self {
@@ -1236,16 +1188,8 @@ impl Default for HistogramDataResponse {
 }
 
 impl HistogramDataResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn entry(mut self, e: HistogramDataEntryFields) -> Self {
         self.entries.push(e);
-        self
-    }
-    pub fn entries(mut self, e: Vec<HistogramDataEntryFields>) -> Self {
-        self.entries = e;
         self
     }
 }
@@ -1340,10 +1284,6 @@ impl Default for RealTimeBarTickResponse {
 }
 
 impl RealTimeBarTickResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn time(mut self, v: i64) -> Self {
         self.time = v;
         self
@@ -1417,10 +1357,6 @@ impl Default for TradeTickResponse {
 }
 
 impl TradeTickResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
@@ -1502,10 +1438,6 @@ impl Default for BidAskTickResponse {
 }
 
 impl BidAskTickResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn time(mut self, v: i64) -> Self {
         self.time = v;
         self
@@ -1564,10 +1496,6 @@ impl Default for MidPointTickResponse {
 }
 
 impl MidPointTickResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn time(mut self, v: i64) -> Self {
         self.time = v;
         self
@@ -1685,10 +1613,6 @@ impl Default for TickPriceResponse {
 }
 
 impl TickPriceResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
@@ -1739,10 +1663,6 @@ impl Default for TickSizeResponse {
 }
 
 impl TickSizeResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
@@ -1783,10 +1703,6 @@ impl Default for TickStringResponse {
 }
 
 impl TickStringResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
@@ -1827,10 +1743,6 @@ impl Default for TickGenericResponse {
 }
 
 impl TickGenericResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
@@ -1994,7 +1906,7 @@ pub fn tick_option_computation() -> TickOptionComputationResponse {
 }
 
 // Sentinel `*End` response (msg id 57) — same shape as AccountSummaryEnd etc.
-request_id_response_builder!(TickSnapshotEndResponse, "57", TickSnapshotEnd);
+request_id_response_builder!(TickSnapshotEndResponse, TickSnapshotEnd);
 
 pub fn tick_snapshot_end() -> TickSnapshotEndResponse {
     TickSnapshotEndResponse::default()

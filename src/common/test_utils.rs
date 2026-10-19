@@ -90,8 +90,8 @@ pub mod helpers {
     }
 
     /// Build a text-format `ResponseMessage` for use with
-    /// [`MessageBusStub::with_ordered_responses`]. Accepts pipe-delimited
-    /// builder output (`encode_pipe()`) or raw NUL-delimited literals.
+    /// [`MessageBusStub::with_ordered_responses`]. Accepts pipe-delimited or
+    /// raw NUL-delimited literals.
     pub fn text_response(s: impl Into<String>) -> crate::messages::ResponseMessage {
         crate::messages::ResponseMessage::from(&s.into().replace('|', "\0"))
     }
