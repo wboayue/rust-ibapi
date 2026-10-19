@@ -2,7 +2,7 @@
 
 #[cfg(feature = "sync")]
 use crate::common::test_utils::helpers::proto_error_response;
-use crate::common::test_utils::helpers::{proto_response, text_response};
+use crate::common::test_utils::helpers::{proto_response, text_response, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::testdata::builders::contracts::{contract_data, market_rule, option_chain, smart_components, symbol_samples, symbol_samples_entry};
@@ -401,6 +401,20 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].order_types[0], "ACTIVETIM");
                 assert_eq!(contracts[1].order_types.len(), 42);
             }),
+        },
+        ContractDetailsTestCase {
+            name: "empty response",
+            contract: Contract {
+                symbol: Symbol::from("TSLA"),
+                security_type: SecurityType::Stock,
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
+                ..Default::default()
+            },
+            ordered_responses: vec![contract_data_end(TEST_REQ_ID_FIRST)],
+            expected_request: "",
+            expected_count: 0,
+            validations: Box::new(|_| {}),
         },
     ]
 }
@@ -875,7 +889,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
         ContractDetailsErrorTestCase {
             name: "empty response (no contracts found)",
             contract: Contract::stock("NOEXIST").build(),
-            ordered_responses: vec![contract_data_end(9000)],
+            ordered_responses: vec![contract_data_end(TEST_REQ_ID_FIRST)],
             should_error: false,
             error_contains: None,
             expected_count: 0,
