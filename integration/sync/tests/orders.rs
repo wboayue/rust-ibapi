@@ -2,7 +2,9 @@ use std::time::{Duration, Instant};
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, PlaceOrder};
+use ibapi::orders::{
+    Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, Orders, PlaceOrder,
+};
 use ibapi::subscriptions::sync::Subscription;
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Error, NoticeCategory};
@@ -112,6 +114,41 @@ fn place_limit_buy() {
     assert!(item.is_some(), "expected order status update");
 
     // Cancel the order
+    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
+}
+
+/// An order with a live `place_order` subscription still answers this
+/// client's open-orders requests (#1033).
+#[test]
+#[serial(orders)]
+fn open_orders_include_order_with_live_subscription() {
+    let (client, _client_id) = connect();
+
+    let contract = Contract::stock("AAPL").build();
+    let order = limit_order(Action::Buy, 1.0, 1.0); // Far below market
+
+    let order_id = client.next_order_id();
+    let subscription = client.place_order(order_id, &contract, &order).expect("place_order failed");
+    // Until TWS acknowledges the order, an open-orders reply can predate it.
+    let acknowledged = std::iter::from_fn(|| subscription.next_timeout(Duration::from_secs(10)))
+        .any(|item| matches!(item, Ok(SubscriptionItem::Data(PlaceOrder::OpenOrder(_)))));
+    assert!(acknowledged, "no OpenOrder for order {order_id}");
+
+    for name in ["open_orders", "all_open_orders"] {
+        let reply = match name {
+            "open_orders" => client.open_orders(),
+            _ => client.all_open_orders(),
+        };
+        let rows = reply
+            .unwrap_or_else(|e| panic!("{name} failed: {e}"))
+            .collect_to_end_within(Duration::from_secs(10))
+            .unwrap_or_else(|e| panic!("{name} did not end: {e}"));
+        let found = rows
+            .iter()
+            .any(|row| matches!(row, Orders::OrderData(data) if data.order_id == order_id && data.order.client_id == client.client_id()));
+        assert!(found, "{name} is missing order {order_id}: {rows:?}");
+    }
+
     let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
 }
 
