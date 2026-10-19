@@ -9,14 +9,16 @@ use std::str::{self, FromStr};
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use crate::{Error, ToField};
+use crate::Error;
 
 mod notice;
 pub(crate) mod shared_channel_configuration;
 #[cfg(test)]
 mod tests;
+mod to_field;
 
 pub use notice::*;
+pub(crate) use to_field::{encode_option_field, ToField};
 
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;
