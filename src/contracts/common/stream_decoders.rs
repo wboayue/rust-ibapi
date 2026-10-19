@@ -3,6 +3,7 @@
 //! This module contains the StreamDecoder trait implementations that are shared
 //! between sync and async versions, avoiding code duplication.
 
+use crate::common::error_helpers;
 use crate::contracts::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
@@ -23,16 +24,13 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("request id required to cancel option calculations");
+        let request_id = error_helpers::require_request_id_for(request_id, "cancel option calculations")?;
         match context.and_then(|c| c.request_type) {
-            Some(OutgoingMessages::ReqCalcImpliedVolat) => {
-                encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
-            }
-            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
-            _ => panic!(
-                "Unsupported request message type option computation cancel: {:?}",
-                context.and_then(|c| c.request_type)
-            ),
+            Some(OutgoingMessages::ReqCalcImpliedVolat) => encoders::encode_cancel_implied_volatility(request_id),
+            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_price(request_id),
+            other => Err(Error::InvalidArgument(format!(
+                "Unsupported request message type option computation cancel: {other:?}"
+            ))),
         }
     }
 }
@@ -58,7 +56,7 @@ impl StreamDecoder<ContractDetails> for ContractDetails {
     /// subscription writes nothing.
     fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         check_version(server_version, Features::CANCEL_CONTRACT_DATA)?;
-        let request_id = request_id.ok_or_else(|| Error::InvalidArgument("request id required to cancel contract details".to_string()))?;
+        let request_id = error_helpers::require_request_id_for(request_id, "cancel contract details")?;
         encoders::encode_cancel_contract_data(request_id)
     }
 }

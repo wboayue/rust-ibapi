@@ -1,3 +1,4 @@
+use crate::common::error_helpers;
 use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
 use crate::scanner::common::decoders;
 use crate::scanner::common::encoders;
@@ -21,7 +22,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel scanner subscription")?;
         encoders::encode_cancel_scanner_subscription(request_id)
     }
 }

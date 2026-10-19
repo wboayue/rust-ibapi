@@ -16,6 +16,7 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use crate::common::error_helpers;
 use crate::contracts::OptionComputation;
 use crate::messages::{IncomingMessages, Notice, ResponseMessage, MARKET_DEPTH_RESET_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
@@ -71,7 +72,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel bid/ask ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
@@ -107,7 +108,7 @@ impl StreamDecoder<MidPoint> for MidPoint {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel mid point ticks");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel mid point ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
@@ -145,7 +146,7 @@ impl StreamDecoder<Bar> for Bar {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel realtime bars")?;
         common::encoders::encode_cancel_realtime_bars(request_id)
     }
 }
@@ -179,7 +180,7 @@ impl StreamDecoder<Trade> for Trade {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel trade ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
@@ -297,7 +298,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel market depth");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market depth")?;
         common::encoders::encode_cancel_market_depth(request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
     }
 }
@@ -369,7 +370,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market data")?;
         common::encoders::encode_cancel_market_data(request_id)
     }
 

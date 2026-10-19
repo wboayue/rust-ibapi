@@ -758,6 +758,20 @@ pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
             expected_msg_id: Ok(OutgoingMessages::CancelOptionPrice as i32 + 200),
         },
         CancelMessageTestCase {
+            name: "cancel option computation without request id",
+            decoder_type: "OptionComputation",
+            request_id: None,
+            request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
+            expected_msg_id: Err("Request ID required to cancel option calculations"),
+        },
+        CancelMessageTestCase {
+            name: "cancel option computation without request type",
+            decoder_type: "OptionComputation",
+            request_id: Some(9002),
+            request_type: None,
+            expected_msg_id: Err("Unsupported request message type option computation cancel: None"),
+        },
+        CancelMessageTestCase {
             name: "cancel option chain - not supported",
             decoder_type: "OptionChain",
             request_id: Some(9003),
