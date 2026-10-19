@@ -857,9 +857,9 @@ fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
 
 /// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
 /// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
-/// in `CHANNEL_MAPPINGS`. With no `send_order_request` subscriber for the
-/// incoming order_id, the `OrderOrShared` strategy in `process_orders` fans
-/// the message out to every shared subscriber registered for `OpenOrder`.
+/// in `CHANNEL_MAPPINGS`. The `OrderAndShared` strategy in `process_orders`
+/// fans every `OpenOrder` out to each shared subscriber, with or without an
+/// order id.
 #[test]
 fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -868,21 +868,21 @@ fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     let sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, &[])?;
     let sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, &[])?;
 
-    // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
-    // means the OrderOrShared strategy falls back to fan-out across shared subs.
-    stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::OpenOrder as i32,
-        &crate::proto::OpenOrder {
-            order_id: Some(42),
-            ..Default::default()
-        },
-    ));
-    bus.dispatch()?;
+    for order_id in [Some(42), None] {
+        stream.push_inbound(binary_proto(
+            crate::messages::IncomingMessages::OpenOrder as i32,
+            &crate::proto::OpenOrder {
+                order_id,
+                ..Default::default()
+            },
+        ));
+        bus.dispatch()?;
 
-    for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
-        let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
-        assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder);
-        assert_eq!(msg.order_id(), Some(42));
+        for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
+            let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
+            assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder);
+            assert_eq!(msg.order_id(), order_id);
+        }
     }
     Ok(())
 }

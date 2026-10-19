@@ -245,8 +245,8 @@ async fn test_order_id_correlation_with_interleaved_responses() {
 
 /// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
 /// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
-/// in `CHANNEL_MAPPINGS`. With no order subscriber for the incoming order_id,
-/// the OrderOrShared strategy fans the message out to every shared subscriber.
+/// in `CHANNEL_MAPPINGS`. The `OrderAndShared` strategy fans every `OpenOrder`
+/// out to each shared subscriber, with or without an order id.
 #[tokio::test]
 async fn test_shared_channel_fan_out_for_open_orders() {
     let (stream, bus) = make_bus();
@@ -255,21 +255,21 @@ async fn test_shared_channel_fan_out_for_open_orders() {
     let mut sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, vec![]).await.unwrap();
     let mut sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, vec![]).await.unwrap();
 
-    // OpenOrder carries `order_id` at proto tag 1; no matching order subscription
-    // means the OrderOrShared strategy falls back to fan-out across shared subs.
-    stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::OpenOrder as i32,
-        &crate::proto::OpenOrder {
-            order_id: Some(42),
-            ..Default::default()
-        },
-    ));
-    bus.read_and_route_message().await.unwrap();
+    for order_id in [Some(42), None] {
+        stream.push_inbound(binary_proto(
+            crate::messages::IncomingMessages::OpenOrder as i32,
+            &crate::proto::OpenOrder {
+                order_id,
+                ..Default::default()
+            },
+        ));
+        bus.read_and_route_message().await.unwrap();
 
-    for (name, sub) in [("open", &mut sub_open), ("all", &mut sub_all), ("auto", &mut sub_auto)] {
-        let msg = next_message(sub).await;
-        assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder, "sub_{name}");
-        assert_eq!(msg.order_id(), Some(42), "sub_{name}");
+        for (name, sub) in [("open", &mut sub_open), ("all", &mut sub_all), ("auto", &mut sub_auto)] {
+            let msg = next_message(sub).await;
+            assert_eq!(msg.message_type(), crate::messages::IncomingMessages::OpenOrder, "sub_{name}");
+            assert_eq!(msg.order_id(), order_id, "sub_{name}");
+        }
     }
 }
 

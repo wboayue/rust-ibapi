@@ -920,21 +920,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     warn!("could not route ExecutionDataEnd message {item:?}");
                 }
             }
-            OrderRoutingStrategy::OrderOrShared => {
-                if let Some(order_id) = message_order_id {
-                    // Both: the wire can't tell a snapshot reply from a live
-                    // update, so an open-orders request sees this client's
-                    // routed orders too, and the order route misses nothing (#1033).
-                    let shared = self.shared_channels.send_message(message.message_type(), &message);
-                    if let Err(item) = self.orders.deliver(&order_id, message.into()) {
-                        if !shared && !routed {
-                            warn!("could not route message {item:?}");
-                        }
+            OrderRoutingStrategy::OrderAndShared => {
+                let shared = self.shared_channels.send_message(message.message_type(), &message);
+                let unrouted = match message_order_id {
+                    Some(order_id) => self.orders.deliver(&order_id, message.into()).err(),
+                    None => Some(message.into()),
+                };
+                if let Some(item) = unrouted {
+                    if !shared && !routed {
+                        warn!("could not route message {item:?}");
                     }
-                    return Ok(());
-                }
-                if !routed {
-                    warn!("could not route message {:?}", message);
                 }
             }
             OrderRoutingStrategy::ByExecutionId => {

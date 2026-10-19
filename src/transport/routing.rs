@@ -161,8 +161,12 @@ pub(crate) enum OrderRoutingStrategy {
     ExecutionData,
     /// Try order_id channel, then request_id channel.
     ExecutionDataEnd,
-    /// Deliver to the order_id channel and to the shared channels.
-    OrderOrShared,
+    /// Deliver to the order_id channel and to the shared channels. The wire
+    /// can't tell an open-orders snapshot reply from a live update, so both
+    /// consumers get every frame: an open-orders request sees orders with a
+    /// live `place_order` subscription, and that subscription misses nothing
+    /// (#1033).
+    OrderAndShared,
     /// Route via execution_id only.
     ByExecutionId,
     /// Route to shared channel only.
@@ -196,7 +200,7 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages, foreign: bo
         IncomingMessages::OrderBound => OrderRoutingStrategy::OrderUpdateOnly,
         IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
         IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,
-        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => OrderRoutingStrategy::OrderOrShared,
+        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => OrderRoutingStrategy::OrderAndShared,
         IncomingMessages::CommissionsReport => OrderRoutingStrategy::ByExecutionId,
         IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => OrderRoutingStrategy::SharedOnly,
         _ => OrderRoutingStrategy::ByOrderId,
