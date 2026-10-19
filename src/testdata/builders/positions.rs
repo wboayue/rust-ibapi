@@ -4,15 +4,11 @@
 //! `PositionMulti` (71), and `PositionMultiEnd` (72) at the message version
 //! consumed by the current decoders.
 
-use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_TICKER_ID};
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::proto::encoders::{some_f64_ne, some_i32_ne, some_str};
-
-const POSITION_VERSION: i32 = 3;
-const POSITION_END_VERSION: i32 = 1;
-const POSITION_MULTI_VERSION: i32 = 3;
 
 #[derive(Clone, Debug)]
 pub struct PositionResponse {
@@ -112,29 +108,6 @@ impl PositionResponse {
     }
 }
 
-impl ResponseEncoder for PositionResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "61".to_string(),
-            POSITION_VERSION.to_string(),
-            self.account.clone(),
-            self.contract_id.to_string(),
-            self.symbol.clone(),
-            self.security_type.clone(),
-            self.last_trade_date_or_contract_month.clone(),
-            self.strike.to_string(),
-            self.right.clone(),
-            self.multiplier.clone(),
-            self.exchange.clone(),
-            self.currency.clone(),
-            self.local_symbol.clone(),
-            self.trading_class.clone(),
-            self.position.to_string(),
-            self.average_cost.to_string(),
-        ]
-    }
-}
-
 impl ResponseProtoEncoder for PositionResponse {
     type Proto = proto::Position;
 
@@ -163,12 +136,6 @@ impl ResponseProtoEncoder for PositionResponse {
 
 #[derive(Clone, Debug, Default)]
 pub struct PositionEndResponse;
-
-impl ResponseEncoder for PositionEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["62".to_string(), POSITION_END_VERSION.to_string()]
-    }
-}
 
 impl ResponseProtoEncoder for PositionEndResponse {
     type Proto = proto::PositionEnd;
@@ -288,31 +255,6 @@ impl PositionMultiResponse {
     }
 }
 
-impl ResponseEncoder for PositionMultiResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "71".to_string(),
-            POSITION_MULTI_VERSION.to_string(),
-            self.request_id.to_string(),
-            self.account.clone(),
-            self.contract_id.to_string(),
-            self.symbol.clone(),
-            self.security_type.clone(),
-            self.last_trade_date_or_contract_month.clone(),
-            self.strike.to_string(),
-            self.right.clone(),
-            self.multiplier.clone(),
-            self.exchange.clone(),
-            self.currency.clone(),
-            self.local_symbol.clone(),
-            self.trading_class.clone(),
-            self.position.to_string(),
-            self.average_cost.to_string(),
-            self.model_code.clone(),
-        ]
-    }
-}
-
 impl ResponseProtoEncoder for PositionMultiResponse {
     type Proto = proto::PositionMulti;
 
@@ -341,7 +283,7 @@ impl ResponseProtoEncoder for PositionMultiResponse {
     }
 }
 
-request_id_response_builder!(PositionMultiEndResponse, "72", PositionMultiEnd);
+request_id_response_builder!(PositionMultiEndResponse, PositionMultiEnd);
 
 // === Request builders ===
 
@@ -474,7 +416,3 @@ pub fn request_positions_multi() -> PositionsMultiRequestBuilder {
 pub fn cancel_positions_multi() -> CancelPositionsMultiRequestBuilder {
     CancelPositionsMultiRequestBuilder::default()
 }
-
-#[cfg(test)]
-#[path = "positions_tests.rs"]
-mod tests;

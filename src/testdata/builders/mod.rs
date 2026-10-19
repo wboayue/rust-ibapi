@@ -2,38 +2,13 @@
 //!
 //! Each per-domain submodule exposes builder structs (one per response message) with
 //! `Default` impls sourced from `crate::common::test_utils::helpers::constants` and
-//! fluent setters for individual fields. Builders implement [`ResponseEncoder`],
-//! which provides three on-the-wire formats:
-//!
-//! - `encode_pipe()` — pipe-delimited string, exercised by the builders' own tests.
-//! - `encode_null()` — NUL-delimited string (post-conversion form).
-//! - `encode_length_prefixed()` — 4-byte length prefix + NUL-delimited payload, for
-//!   `MemoryStream`-style listener fixtures.
+//! fluent setters for individual fields. Response builders implement
+//! [`ResponseProtoEncoder`]; request builders implement [`RequestEncoder`].
 //!
 //! Builders never touch production code; they are a test-only convenience layer.
 
-use crate::messages::{encode_protobuf_message, encode_raw_length, OutgoingMessages};
+use crate::messages::{encode_protobuf_message, OutgoingMessages};
 use prost::Message;
-
-/// Common encoder behavior for response builders.
-///
-/// Implementors only define [`fields`](Self::fields); the three encoder methods
-/// derive their behavior from the field list, eliminating per-struct boilerplate.
-pub(crate) trait ResponseEncoder {
-    fn fields(&self) -> Vec<String>;
-
-    fn encode_pipe(&self) -> String {
-        join_fields(&self.fields(), '|')
-    }
-
-    fn encode_null(&self) -> String {
-        join_fields(&self.fields(), '\0')
-    }
-
-    fn encode_length_prefixed(&self) -> Vec<u8> {
-        encode_raw_length(self.encode_null().as_bytes())
-    }
-}
 
 /// Common encoder behavior for outgoing-request builders.
 ///
@@ -113,14 +88,13 @@ macro_rules! single_req_id_request_builder {
 }
 
 /// Generates a typed builder for response messages whose only payload is a
-/// `request_id`: header (`msg_tag|"1"|request_id|`) + proto `req_id` field.
+/// proto `req_id` field.
 ///
 /// Used by sentinel-style `*End` responses (e.g. `AccountSummaryEnd`,
 /// `AccountUpdateMultiEnd`, `PositionMultiEnd`). The generated type owns a
-/// single `request_id: i32`, implements [`ResponseEncoder`] (for the text
-/// path), and [`ResponseProtoEncoder`] (for protobuf round-trips).
+/// single `request_id: i32` and implements [`ResponseProtoEncoder`].
 macro_rules! request_id_response_builder {
-    ($builder:ident, $msg_tag:literal, $proto_type:ident) => {
+    ($builder:ident, $proto_type:ident) => {
         #[derive(Clone, Debug)]
         pub struct $builder {
             pub request_id: i32,
@@ -138,12 +112,6 @@ macro_rules! request_id_response_builder {
             pub fn request_id(mut self, v: i32) -> Self {
                 self.request_id = v;
                 self
-            }
-        }
-
-        impl $crate::testdata::builders::ResponseEncoder for $builder {
-            fn fields(&self) -> Vec<String> {
-                vec![$msg_tag.to_string(), "1".to_string(), self.request_id.to_string()]
             }
         }
 
@@ -179,42 +147,30 @@ macro_rules! empty_request_builder {
     };
 }
 
-fn join_fields(fields: &[String], sep: char) -> String {
-    let mut out = fields.join(&sep.to_string());
-    out.push(sep);
-    out
-}
-
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod accounts;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod config;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod contracts;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod display_groups;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod market_data;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod news;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod orders;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod positions;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+#[allow(dead_code)] // setters cover every field; tests set only the ones they assert
 pub(crate) mod scanner;
 
-#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod wsh;
-
-#[cfg(test)]
-#[path = "tests.rs"]
-mod tests;

@@ -1994,7 +1994,7 @@ pub fn tick_option_computation() -> TickOptionComputationResponse {
 }
 
 // Sentinel `*End` response (msg id 57) — same shape as AccountSummaryEnd etc.
-request_id_response_builder!(TickSnapshotEndResponse, "57", TickSnapshotEnd);
+request_id_response_builder!(TickSnapshotEndResponse, TickSnapshotEnd);
 
 pub fn tick_snapshot_end() -> TickSnapshotEndResponse {
     TickSnapshotEndResponse::default()

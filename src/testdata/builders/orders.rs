@@ -1,6 +1,6 @@
 //! Builders for orders-domain response and request messages.
 
-use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
+use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
@@ -19,9 +19,6 @@ const TEST_TIME: &str = "20230224  12:04:56";
 // =============================================================================
 
 // --- OrderStatus (msg 3) ---
-//
-// Server version >= MARKET_CAP_PRICE (131): version field is dropped, market_cap_price emitted.
-// Tests run with SIZE_RULES (164), so we always emit the post-MARKET_CAP_PRICE shape.
 
 #[derive(Clone, Debug)]
 pub struct OrderStatusResponse {
@@ -95,29 +92,6 @@ impl OrderStatusResponse {
     }
 }
 
-fn opt_double_str(v: Option<f64>) -> String {
-    v.map(|x| x.to_string()).unwrap_or_default()
-}
-
-impl ResponseEncoder for OrderStatusResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "3".to_string(),
-            self.order_id.to_string(),
-            self.status.to_string(),
-            self.filled.to_string(),
-            self.remaining.to_string(),
-            opt_double_str(self.average_fill_price),
-            self.perm_id.to_string(),
-            self.parent_id.to_string(),
-            opt_double_str(self.last_fill_price),
-            self.client_id.to_string(),
-            self.why_held.clone(),
-            opt_double_str(self.market_cap_price),
-        ]
-    }
-}
-
 impl ResponseProtoEncoder for OrderStatusResponse {
     type Proto = proto::OrderStatus;
 
@@ -183,21 +157,6 @@ impl CommissionReportResponse {
     pub fn yields(mut self, v: Option<f64>) -> Self {
         self.yields = v;
         self
-    }
-}
-
-impl ResponseEncoder for CommissionReportResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "59".to_string(),
-            "1".to_string(),
-            self.execution_id.clone(),
-            self.commission.to_string(),
-            self.currency.clone(),
-            opt_double_str(self.realized_pnl),
-            opt_double_str(self.yields),
-            self.yield_redemption_date.clone(),
-        ]
     }
 }
 
@@ -271,9 +230,6 @@ impl ResponseProtoEncoder for OrderBoundResponse {
 }
 
 // --- ExecutionData (msg 11) ---
-//
-// Server version >= LAST_LIQUIDITY (136): version field dropped, model_code + last_liquidity emitted.
-// PENDING_PRICE_REVISION (178) and SUBMITTER (198) are above SIZE_RULES (164), so those fields are NOT emitted.
 
 #[derive(Clone, Debug)]
 pub struct ExecutionDataResponse {
@@ -282,10 +238,6 @@ pub struct ExecutionDataResponse {
     pub contract_id: i32,
     pub symbol: String,
     pub security_type: String,
-    pub last_trade_date_or_contract_month: String,
-    pub strike: f64,
-    pub right: String,
-    pub multiplier: String,
     pub exchange: String,
     pub currency: String,
     pub local_symbol: String,
@@ -317,10 +269,6 @@ impl Default for ExecutionDataResponse {
             contract_id: 76792991,
             symbol: "TSLA".to_string(),
             security_type: "STK".to_string(),
-            last_trade_date_or_contract_month: String::new(),
-            strike: 0.0,
-            right: String::new(),
-            multiplier: String::new(),
             exchange: "ISLAND".to_string(),
             currency: "USD".to_string(),
             local_symbol: "TSLA".to_string(),
@@ -398,44 +346,6 @@ impl ExecutionDataResponse {
     pub fn last_liquidity(mut self, v: i32) -> Self {
         self.last_liquidity = v;
         self
-    }
-}
-
-impl ResponseEncoder for ExecutionDataResponse {
-    fn fields(&self) -> Vec<String> {
-        vec![
-            "11".to_string(),
-            self.request_id.to_string(),
-            self.order_id.to_string(),
-            self.contract_id.to_string(),
-            self.symbol.clone(),
-            self.security_type.clone(),
-            self.last_trade_date_or_contract_month.clone(),
-            self.strike.to_string(),
-            self.right.clone(),
-            self.multiplier.clone(),
-            self.exchange.clone(),
-            self.currency.clone(),
-            self.local_symbol.clone(),
-            self.trading_class.clone(),
-            self.execution_id.clone(),
-            self.time.clone(),
-            self.account.clone(),
-            self.exec_exchange.clone(),
-            self.side.clone(),
-            self.shares.to_string(),
-            self.price.to_string(),
-            self.perm_id.to_string(),
-            self.client_id.to_string(),
-            self.liquidation.to_string(),
-            self.cumulative_quantity.to_string(),
-            self.average_price.to_string(),
-            self.order_reference.clone(),
-            self.ev_rule.clone(),
-            opt_double_str(self.ev_multiplier),
-            self.model_code.clone(),
-            self.last_liquidity.to_string(),
-        ]
     }
 }
 
@@ -887,12 +797,6 @@ impl ResponseProtoEncoder for CompletedOrderResponse {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OpenOrderEndResponse;
 
-impl ResponseEncoder for OpenOrderEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["53".to_string(), "1".to_string()]
-    }
-}
-
 impl ResponseProtoEncoder for OpenOrderEndResponse {
     type Proto = proto::OpenOrdersEnd;
 
@@ -923,12 +827,6 @@ impl ExecutionDataEndResponse {
     }
 }
 
-impl ResponseEncoder for ExecutionDataEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["55".to_string(), "1".to_string(), self.request_id.to_string()]
-    }
-}
-
 impl ResponseProtoEncoder for ExecutionDataEndResponse {
     type Proto = proto::ExecutionDetailsEnd;
 
@@ -943,12 +841,6 @@ impl ResponseProtoEncoder for ExecutionDataEndResponse {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompletedOrdersEndResponse;
-
-impl ResponseEncoder for CompletedOrdersEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["102".to_string()]
-    }
-}
 
 impl ResponseProtoEncoder for CompletedOrdersEndResponse {
     type Proto = proto::CompletedOrdersEnd;
@@ -1330,7 +1222,3 @@ pub fn next_valid_order_id_request() -> NextValidOrderIdRequestBuilder {
 pub fn exercise_options_request() -> ExerciseOptionsRequestBuilder {
     ExerciseOptionsRequestBuilder::default()
 }
-
-#[cfg(test)]
-#[path = "orders_tests.rs"]
-mod tests;
