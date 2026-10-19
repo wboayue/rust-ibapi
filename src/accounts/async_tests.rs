@@ -510,12 +510,7 @@ async fn test_pnl_comprehensive() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each), got {}",
-        test_cases.len() * 2,
-        count
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[tokio::test]
@@ -541,11 +536,7 @@ async fn test_pnl_single_edge_cases() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each)",
-        test_cases.len() * 2
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[tokio::test]
@@ -577,11 +568,7 @@ async fn test_positions_multi_parameter_combinations() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected at least {} messages (subscribe + cancel for each)",
-        test_cases.len() * 2
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[tokio::test]
@@ -648,12 +635,7 @@ async fn test_subscription_lifecycle() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let count = request_message_count(&message_bus);
-    assert!(
-        count >= test_cases.len() * 2,
-        "Expected subscribe and cancel messages for {} subscriptions, got {} messages",
-        test_cases.len(),
-        count
-    );
+    assert_eq!(count, test_cases.len() * 2, "subscribe + cancel for each case");
 }
 
 #[tokio::test]

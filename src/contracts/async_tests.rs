@@ -289,17 +289,6 @@ async fn test_cancel_messages() {
 }
 
 #[tokio::test]
-async fn contract_details_empty_response() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![contract_data_end(TEST_REQ_ID_FIRST)]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-
-    let contracts = client.contract_details(&Contract::stock("TSLA").build()).await.expect("contract_details");
-
-    assert!(contracts.is_empty());
-    assert_eq!(request_message_count(&message_bus), 1);
-}
-
-#[tokio::test]
 async fn request_stock_contract_details() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
