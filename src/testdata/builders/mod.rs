@@ -5,7 +5,7 @@
 //! fluent setters for individual fields. Builders implement [`ResponseEncoder`],
 //! which provides three on-the-wire formats:
 //!
-//! - `encode_pipe()` — pipe-delimited string for current `MessageBusStub` consumers.
+//! - `encode_pipe()` — pipe-delimited string, exercised by the builders' own tests.
 //! - `encode_null()` — NUL-delimited string (post-conversion form).
 //! - `encode_length_prefixed()` — 4-byte length prefix + NUL-delimited payload, for
 //!   `MemoryStream`-style listener fixtures.
@@ -183,20 +183,6 @@ fn join_fields(fields: &[String], sep: char) -> String {
     let mut out = fields.join(&sep.to_string());
     out.push(sep);
     out
-}
-
-/// Collect `encode_pipe()` outputs from a heterogeneous list of builders, ready
-/// to feed into `MessageBusStub::response_messages`.
-///
-/// Heterogeneous builders coerce to `&dyn ResponseEncoder` inside the slice
-/// literal, so call sites stay terse:
-/// ```ignore
-/// let responses = response_messages(&[&position(), &position_end()]);
-/// let (client, bus) = create_test_client_with_responses(responses);
-/// ```
-#[allow(dead_code)] // consumed by future domain test migrations
-pub(crate) fn response_messages(builders: &[&dyn ResponseEncoder]) -> Vec<String> {
-    builders.iter().map(|b| b.encode_pipe()).collect()
 }
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations

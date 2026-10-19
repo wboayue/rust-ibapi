@@ -12,10 +12,10 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
-    completed_orders_request, execution_data, executions_request, global_cancel_request, next_valid_order_id_request, open_order,
-    open_orders_request, order_bound, order_status, place_order_request,
+    completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_order_id_request, open_order,
+    open_order_end, open_orders_request, order_bound, order_status, place_order_request,
 };
-use crate::testdata::builders::{ResponseEncoder, ResponseProtoEncoder};
+use crate::testdata::builders::ResponseProtoEncoder;
 
 use super::*;
 use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
@@ -273,7 +273,7 @@ fn cancel_order_delivers_202_as_non_terminal_notice() {
 
 #[test]
 fn global_cancel() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.global_cancel();
@@ -306,7 +306,7 @@ fn cancel_order_cme_tagging() {
 
 #[test]
 fn global_cancel_cme_tagging() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
 
     let results = client.global_cancel();
@@ -394,9 +394,10 @@ fn completed_orders() {
 
 #[test]
 fn open_orders() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        crate::testdata::builders::orders::open_order_end().encode_pipe()
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OpenOrderEnd,
+        open_order_end().encode_proto(),
+    )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.open_orders();
@@ -407,9 +408,10 @@ fn open_orders() {
 
 #[test]
 fn all_open_orders() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        crate::testdata::builders::orders::open_order_end().encode_pipe()
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OpenOrderEnd,
+        open_order_end().encode_proto(),
+    )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.all_open_orders();
@@ -420,9 +422,10 @@ fn all_open_orders() {
 
 #[test]
 fn auto_open_orders() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        crate::testdata::builders::orders::open_order_end().encode_pipe()
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OpenOrderEnd,
+        open_order_end().encode_proto(),
+    )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let api_only = true;
@@ -434,9 +437,10 @@ fn auto_open_orders() {
 
 #[test]
 fn executions() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        crate::testdata::builders::orders::execution_data_end().encode_pipe(),
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::ExecutionDataEnd,
+        execution_data_end().encode_proto(),
+    )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let filter = ExecutionFilter {
@@ -474,7 +478,7 @@ fn executions() {
 
 #[test]
 fn encode_limit_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let order_id = 12;
@@ -501,7 +505,7 @@ fn encode_limit_order() {
 
 #[test]
 fn encode_combo_market_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let order_id = 12; // get next order id
@@ -593,7 +597,7 @@ fn exercise_options() {
 
 #[test]
 fn submit_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract {
@@ -849,7 +853,7 @@ fn order_update_stream_ends_on_empty_action() {
 
 #[test]
 fn order_update_stream_already_subscribed() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     // Create first subscription

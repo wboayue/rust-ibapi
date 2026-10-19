@@ -423,7 +423,7 @@ async fn request_future_contract_details() {
 
 #[tokio::test]
 async fn test_cancel_contract_details() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
 
     let result = client.cancel_contract_details(42).await;
