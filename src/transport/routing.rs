@@ -161,7 +161,7 @@ pub(crate) enum OrderRoutingStrategy {
     ExecutionData,
     /// Try order_id channel, then request_id channel.
     ExecutionDataEnd,
-    /// Try order_id channel, then shared channel.
+    /// Deliver to the order_id channel and to the shared channels.
     OrderOrShared,
     /// Route via execution_id only.
     ByExecutionId,

@@ -273,6 +273,44 @@ async fn test_shared_channel_fan_out_for_open_orders() {
     }
 }
 
+/// An order with a live `send_order_request` route still answers an
+/// open-orders request: `OpenOrder` and `OrderStatus` reach both (#1033).
+#[tokio::test]
+async fn test_routed_order_also_reaches_open_orders() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+
+    let mut order = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
+    let mut open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+
+    stream.push_inbound(binary_proto(
+        M::OpenOrder as i32,
+        &crate::proto::OpenOrder {
+            order_id: Some(42),
+            ..Default::default()
+        },
+    ));
+    stream.push_inbound(binary_proto(
+        M::OrderStatus as i32,
+        &crate::proto::OrderStatus {
+            order_id: Some(42),
+            status: Some("Submitted".into()),
+            ..Default::default()
+        },
+    ));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    for (name, sub) in [("order", &mut order), ("open orders", &mut open_orders)] {
+        for expected in [M::OpenOrder, M::OrderStatus] {
+            let msg = next_message(sub).await;
+            assert_eq!(msg.message_type(), expected, "{name}");
+            assert_eq!(msg.order_id(), Some(42), "{name}");
+        }
+        assert!(sub.try_next_routed().is_none(), "{name} received an extra message");
+    }
+}
+
 /// Shared-channel routing: `send_shared_request` for `RequestCurrentTime`
 /// receives the `CurrentTime` response via the channel mapping in
 /// `shared_channel_configuration::CHANNEL_MAPPINGS`.

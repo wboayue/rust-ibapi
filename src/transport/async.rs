@@ -922,16 +922,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
             OrderRoutingStrategy::OrderOrShared => {
                 if let Some(order_id) = message_order_id {
-                    // `contains` first, not `deliver`'s hand-back: the shared
-                    // fallback needs the message, and a second lookup is
-                    // cheaper than cloning every frame.
-                    if self.orders.contains(&order_id) {
-                        let _ = self.orders.deliver(&order_id, message.into());
-                        return Ok(());
+                    // Both: the wire can't tell a snapshot reply from a live
+                    // update, so an open-orders request sees this client's
+                    // routed orders too, and the order route misses nothing (#1033).
+                    let shared = self.shared_channels.send_message(message.message_type(), &message);
+                    if let Err(item) = self.orders.deliver(&order_id, message.into()) {
+                        if !shared && !routed {
+                            warn!("could not route message {item:?}");
+                        }
                     }
-                    if self.shared_channels.send_message(message.message_type(), &message) {
-                        return Ok(());
-                    }
+                    return Ok(());
                 }
                 if !routed {
                     warn!("could not route message {:?}", message);

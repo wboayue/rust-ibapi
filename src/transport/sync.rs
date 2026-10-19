@@ -717,11 +717,11 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(order_id) = message_order_id {
-                    if self.orders.contains(&order_id) {
-                        let _ = self.orders.deliver(&order_id, message.into());
-                    } else {
-                        self.shared_channels.send_message(message.message_type(), &message);
-                    }
+                    // Both: the wire can't tell a snapshot reply from a live
+                    // update, so an open-orders request sees this client's
+                    // routed orders too, and the order route misses nothing (#1033).
+                    self.shared_channels.send_message(message.message_type(), &message);
+                    let _ = self.orders.deliver(&order_id, message.into());
                     return;
                 }
                 if !sent_to_update_stream {
