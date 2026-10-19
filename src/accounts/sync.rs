@@ -460,7 +460,7 @@ impl Client {
         request_helpers::blocking::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestFA,
-            || encoders::encode_request_fa(fa_data_type as i32),
+            || encoders::encode_request_fa(fa_data_type),
             decoders::receive_fa_for(fa_data_type),
         )
     }
@@ -485,7 +485,7 @@ impl Client {
     pub fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
         request_helpers::blocking::one_shot_by_request_id(
             self,
-            |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
+            |request_id| encoders::encode_replace_fa(request_id, fa_data_type, xml),
             expect_proto(decoders::decode_replace_fa_end_proto),
         )
     }
@@ -503,7 +503,7 @@ impl Client {
     /// client.set_server_log_level(ServerLogLevel::Detail).expect("request failed");
     /// ```
     pub fn set_server_log_level(&self, log_level: ServerLogLevel) -> Result<(), Error> {
-        let message = encoders::encode_set_server_log_level(log_level as i32)?;
+        let message = encoders::encode_set_server_log_level(log_level)?;
         self.send_message(message)?;
         Ok(())
     }

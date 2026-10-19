@@ -1,4 +1,5 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use crate::accounts::{FaDataType, ServerLogLevel};
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
@@ -164,30 +165,32 @@ pub(in crate::accounts) fn encode_request_user_info(request_id: i32) -> Result<V
     crate::proto::encoders::encode_cancel_by_id!(request_id, UserInfoRequest, OutgoingMessages::RequestUserInfo)
 }
 
-pub(in crate::accounts) fn encode_request_fa(fa_data_type: i32) -> Result<Vec<u8>, Error> {
+pub(in crate::accounts) fn encode_request_fa(fa_data_type: FaDataType) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
     let request = crate::proto::FaRequest {
-        fa_data_type: Some(fa_data_type),
+        fa_data_type: Some(fa_data_type as i32),
     };
     Ok(encode_protobuf_message(OutgoingMessages::RequestFA as i32, &request.encode_to_vec()))
 }
 
-pub(in crate::accounts) fn encode_replace_fa(request_id: i32, fa_data_type: i32, xml: &str) -> Result<Vec<u8>, Error> {
+pub(in crate::accounts) fn encode_replace_fa(request_id: i32, fa_data_type: FaDataType, xml: &str) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
     let request = crate::proto::FaReplace {
         req_id: Some(request_id),
-        fa_data_type: Some(fa_data_type),
+        fa_data_type: Some(fa_data_type as i32),
         xml: Some(xml.to_string()),
     };
     Ok(encode_protobuf_message(OutgoingMessages::ReplaceFA as i32, &request.encode_to_vec()))
 }
 
-pub(in crate::accounts) fn encode_set_server_log_level(log_level: i32) -> Result<Vec<u8>, Error> {
+pub(in crate::accounts) fn encode_set_server_log_level(log_level: ServerLogLevel) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
-    let request = crate::proto::SetServerLogLevelRequest { log_level: Some(log_level) };
+    let request = crate::proto::SetServerLogLevelRequest {
+        log_level: Some(log_level as i32),
+    };
     Ok(encode_protobuf_message(
         OutgoingMessages::ChangeServerLog as i32,
         &request.encode_to_vec(),
