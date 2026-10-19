@@ -224,7 +224,7 @@ impl Client {
     /// println!("market data switched: {market_data_type:?}");
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
-        let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
+        let message = encoders::encode_request_market_data_type(market_data_type)?;
         self.message_bus.send_market_data_type(&message)
     }
 }

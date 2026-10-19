@@ -1947,7 +1947,8 @@ async fn test_reconnect_replays_market_data_type_before_notice() {
     let (stream, bus) = make_bus();
     let mut notices = bus.connection.notice_broadcaster.subscribe();
 
-    let packet = crate::market_data::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed).unwrap();
+    let packet =
+        crate::market_data::realtime::common::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed).unwrap();
     bus.send_market_data_type(packet.clone()).await.unwrap();
 
     stream.push_inbound(b"xx".to_vec());

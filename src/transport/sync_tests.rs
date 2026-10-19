@@ -3164,7 +3164,7 @@ fn test_reconnect_replays_market_data_type_before_notice() -> Result<(), Error> 
     let (stream, bus) = make_bus();
     let notices = bus.connection.notice_broadcaster.subscribe();
 
-    let packet = crate::market_data::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed)?;
+    let packet = crate::market_data::realtime::common::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed)?;
     bus.send_market_data_type(&packet)?;
 
     stream.push_inbound(b"xx".to_vec());
