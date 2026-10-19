@@ -489,11 +489,16 @@ See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/avail
 
 ### Connection Errors
 ```rust
+// The client reconnects on its own. A request sent while the connection is
+// down is refused with Error::ConnectionReset, which is_connection_lost()
+// matches. If reconnection is exhausted, is_connected() stays false and every
+// send keeps getting ConnectionReset, so bound the wait.
 match client.market_data(contract).subscribe() {
     Ok(subscription) => process_data(subscription),
-    Err(Error::NotConnected) => {
-        // Wait for reconnection
+    Err(e) if e.is_connection_lost() => {
+        let deadline = Instant::now() + Duration::from_secs(60);
         while !client.is_connected() {
+            if Instant::now() >= deadline { return Err(e); }
             thread::sleep(Duration::from_secs(1));
         }
         // Retry
@@ -611,8 +616,12 @@ Historical-data pacing (error 162) is a separate limit the library does not enfo
 
 ### Reconnection Handling
 ```rust
+let deadline = Instant::now() + Duration::from_secs(60);
 loop {
     if !client.is_connected() {
+        // Exhausted reconnection leaves this false, so bound the wait; the
+        // error returned is the one every send gets in that state
+        if Instant::now() >= deadline { return Err(Error::ConnectionReset); }
         log::info!("Waiting for reconnection...");
         thread::sleep(Duration::from_secs(5));
         continue;
@@ -620,7 +629,8 @@ loop {
 
     match perform_operation(&client) {
         Ok(result) => return Ok(result),
-        Err(Error::NotConnected) => continue,
+        // Lost mid-operation; the client is reconnecting
+        Err(e) if e.is_connection_lost() => continue,
         Err(e) => return Err(e),
     }
 }
@@ -661,24 +671,22 @@ impl<T> Iterator for Subscription<T> { /* ... */ }
 impl<T> Drop for Subscription<T> { /* ... */ }
 ```
 
-### Newtype Wrappers for Domain Constraints
+### Newtype Wrappers for Domain Ids
 ```rust
-// Bad: raw i32 allows invalid IDs and type confusion
+// Bad: raw i32 allows type confusion
 fn lookup(contract_id: i32, order_id: i32) -> Contract { /* ... */ }  // easy to swap args
 
 // Good: newtype wrappers prevent mistakes
-// Use newtype wrappers when:
-// - A primitive has domain constraints (non-zero, positive, etc.)
-// - Type confusion is possible (ContractId vs OrderId)
-pub struct ContractId(i32);
+// Use newtype wrappers when type confusion is possible (ContractId vs OrderId).
+// The crate's id newtypes (ContractId, OrderId, AccountId, ...) are transparent:
+// a public field, a From impl and Display. Construction does not validate the
+// value (an OrderId in the request-id range is rejected when an order uses it).
+pub struct ContractId(pub i32);
 
-impl ContractId {
-    pub fn new(id: i32) -> Result<Self, Error> {
-        if id <= 0 { return Err(Error::InvalidContractId); }
-        Ok(Self(id))
-    }
+impl From<i32> for ContractId {
+    fn from(id: i32) -> Self { Self(id) }
 }
 
-// Type system prevents invalid states
-fn lookup(id: ContractId) -> Contract { /* ... */ }  // Can't pass raw i32
+// Type system prevents swapped arguments
+fn lookup(id: ContractId) -> Contract { /* ... */ }  // Can't pass an OrderId
 ```
