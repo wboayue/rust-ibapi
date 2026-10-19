@@ -119,6 +119,10 @@ pub enum Error {
     /// The deadline passed before the request ended. Says nothing about the
     /// request at TWS, which may still be running; see
     /// `Subscription::cancel_and_drain`.
+    ///
+    /// Also returned by one-shot requests answered without a request id
+    /// (`server_time`, `managed_accounts`, `request_fa`, ...) when TWS sends
+    /// no answer within 30 seconds.
     #[error("timed out before the request ended")]
     Timeout,
 

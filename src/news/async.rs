@@ -12,6 +12,9 @@ use crate::{Client, Error};
 impl Client {
     /// Requests news providers which the user has subscribed to.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run

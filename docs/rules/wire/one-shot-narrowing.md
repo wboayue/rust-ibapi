@@ -8,7 +8,7 @@ triggers:
   - passing a processor to one_shot_shared or one_shot_by_request_id
   - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
+symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
 precedents: ["#736", "#738", "#740", "#741", "#745", "#749"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
@@ -31,15 +31,23 @@ the frame. A one-shot API's decoder therefore takes the *decoded* `prost` type, 
 give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one, which
 `expect_proto` will demand anyway since it cannot infer `MESSAGE_ID` otherwise.
 
-**There are two one-shot helpers, and both retry.** `one_shot_by_request_id` for a
-request-id request, `one_shot_shared` for a shared channel. Neither takes a
+**Every one-shot helper retries.** `one_shot_by_request_id` for a request-id request,
+`one_shot_shared` (or `one_shot_shared_matching`, below) for a shared channel. None takes a
 `ProtocolFeature`. The handshake requires server version 213, so most one-shots need no check;
 one gated above that floor does it on the line above, as `config` does with
 `check_version(server_version, Features::CONFIG)?` (#978).
 
-Neither helper takes an `on_none` either: a closed stream is `Error::UnexpectedEndOfStream`.
+No helper takes an `on_none` either: a closed stream is `Error::UnexpectedEndOfStream`.
 The ten sites where "TWS sent nothing" is a legitimate empty answer chain
 `.or_else(empty_on_end_of_stream)`.
+
+A shared one-shot waits at most `ONE_SHOT_TIMEOUT` for its frame and then fails with
+`Error::Timeout`: the frame carries no request id, so nothing else would end the wait. Every
+live subscription of a type receives every frame of that type, so a shared one-shot whose
+frames can belong to a concurrent caller goes through `one_shot_shared_matching`, whose
+processor answers `Ok(None)` for another caller's frame and reads on. `request_fa` (one
+`ReceiveFA` type for every dataset) and `market_rule` (one `MarketRule` type for every rule
+id) use it.
 
 A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
 `request_helpers` so that hand-rolling one is not reachable from a domain module.

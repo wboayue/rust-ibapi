@@ -18,6 +18,9 @@ use super::*;
 impl Client {
     /// TWS's current time. TWS is synchronized with the server (not local computer) using NTP and this function will receive the current time in TWS.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -37,6 +40,10 @@ impl Client {
     }
 
     /// Requests the current server time with millisecond precision.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -345,6 +352,9 @@ impl Client {
 
     /// Requests the accounts to which the logged user has access to.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -366,6 +376,10 @@ impl Client {
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -428,6 +442,9 @@ impl Client {
     /// # Arguments
     /// * `fa_data_type` - which FA dataset to fetch.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -440,11 +457,11 @@ impl Client {
     /// println!("{}", cfg.xml);
     /// ```
     pub fn request_fa(&self, fa_data_type: FaDataType) -> Result<FaConfig, Error> {
-        request_helpers::blocking::one_shot_shared(
+        request_helpers::blocking::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestFA,
             || encoders::encode_request_fa(fa_data_type as i32),
-            expect_proto(decoders::decode_receive_fa_proto),
+            decoders::receive_fa_for(fa_data_type),
         )
     }
 
@@ -495,6 +512,9 @@ impl Client {
     ///
     /// Most users will not call this directly; it is part of the IB Linking flow.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -515,6 +535,9 @@ impl Client {
     }
 
     /// Continue a TWS extension verification handshake by sending the API response data.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
     ///
     /// # Examples
     ///

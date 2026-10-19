@@ -12,6 +12,9 @@ use crate::Error;
 impl Client {
     /// Requests an XML list of scanner parameters valid in TWS.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run

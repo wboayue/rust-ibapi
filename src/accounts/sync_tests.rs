@@ -716,6 +716,32 @@ fn test_request_fa() {
 }
 
 #[test]
+fn test_request_fa_skips_another_datasets_frame() {
+    use crate::accounts::FaDataType;
+
+    // A concurrent request_fa(AccountAliases) was answered first; every
+    // live request_fa receives that frame too.
+    let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        proto_response(
+            IncomingMessages::ReceiveFA,
+            receive_fa()
+                .fa_data_type(FaDataType::AccountAliases as i32)
+                .xml("<aliases/>")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::ReceiveFA,
+            receive_fa().fa_data_type(FaDataType::Groups as i32).xml("<groups/>").encode_proto(),
+        ),
+    ]);
+
+    let cfg = client.request_fa(FaDataType::Groups).expect("request_fa failed");
+    assert_eq!(cfg.fa_data_type, FaDataType::Groups);
+    assert_eq!(cfg.xml, "<groups/>");
+    assert_eq!(request_message_count(&message_bus), 1);
+}
+
+#[test]
 fn test_replace_fa() {
     use crate::accounts::FaDataType;
 

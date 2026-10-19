@@ -222,6 +222,9 @@ impl Client {
 
     /// Requests venues for which market data is returned to market_depth (those with market makers)
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run

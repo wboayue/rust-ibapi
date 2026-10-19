@@ -116,6 +116,10 @@ impl Client {
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -138,11 +142,11 @@ impl Client {
     /// }
     /// ```
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        request_helpers::blocking::one_shot_shared(
+        request_helpers::blocking::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
-            expect_proto(decoders::decode_market_rule_proto),
+            decoders::market_rule_for(market_rule_id),
         )
     }
 

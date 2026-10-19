@@ -137,6 +137,9 @@ impl Client {
     /// # Arguments
     /// * `market_rule_id` - The market rule ID to query
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -153,11 +156,11 @@ impl Client {
     /// }
     /// ```
     pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
-        request_helpers::one_shot_shared(
+        request_helpers::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestMarketRule,
             || encoders::encode_request_market_rule(market_rule_id),
-            expect_proto(decoders::decode_market_rule_proto),
+            decoders::market_rule_for(market_rule_id),
         )
         .await
     }

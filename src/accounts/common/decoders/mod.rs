@@ -176,6 +176,17 @@ pub(crate) fn decode_user_info_proto(p: crate::proto::UserInfo) -> Result<UserIn
     })
 }
 
+/// The `ReceiveFA` processor for `request_fa(fa_data_type)`. TWS answers on
+/// the shared channel with no request id, so a frame of another dataset is a
+/// concurrent `request_fa`'s answer: `Ok(None)`, and the caller reads on.
+pub(crate) fn receive_fa_for(fa_data_type: FaDataType) -> impl Fn(&crate::messages::ResponseMessage) -> Result<Option<FaConfig>, Error> {
+    let decode = crate::common::request_helpers::expect_proto(decode_receive_fa_proto);
+    move |message| {
+        let config = decode(message)?;
+        Ok((config.fa_data_type == fa_data_type).then_some(config))
+    }
+}
+
 pub(crate) fn decode_receive_fa_proto(p: crate::proto::ReceiveFa) -> Result<FaConfig, Error> {
     let fa_data_type = p
         .fa_data_type
