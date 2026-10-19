@@ -162,7 +162,7 @@ Your IB account needs market data subscriptions:
 **Solution:**
 1. Subscribe to real-time data for the exchange
 2. For paper trading, ensure you have paper trading market data enabled
-3. Use `req_market_data_type(MarketDataType::Delayed)` to explicitly request delayed data
+3. Use `client.switch_market_data_type(MarketDataType::Delayed)` to explicitly request delayed data
 
 ## Order Issues
 
