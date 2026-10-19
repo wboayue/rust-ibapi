@@ -63,12 +63,6 @@ impl From<i32> for TriggerMethod {
     }
 }
 
-impl crate::ToField for TriggerMethod {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
 /// Price-based condition that activates an order when a contract reaches a specified price.
 ///
 /// This condition monitors the price of a specific contract and triggers when the price
