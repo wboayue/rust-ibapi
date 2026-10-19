@@ -12,12 +12,11 @@ fn default_creates_empty_stub() {
     let stub = MessageBusStub::default();
     assert!(stub.request_messages().is_empty());
     assert!(stub.ordered_responses.is_empty());
-    assert!(stub.response_messages_decoded().is_empty());
 }
 
 #[test]
 fn with_ordered_responses_stores_messages() {
-    let messages = vec![text_response("1|9001|"), text_response("2|9002|")];
+    let messages = sample_response_messages();
     let stub = MessageBusStub::with_ordered_responses(messages.clone());
     assert_eq!(stub.ordered_responses.len(), messages.len());
 }

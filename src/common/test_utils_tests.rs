@@ -166,3 +166,11 @@ fn assert_request_proto_panics_on_body_mismatch() {
     };
     assert_request_proto(&message_bus, 0, OutgoingMessages::RequestAccountSummary, &expected);
 }
+
+#[test]
+fn test_text_response_translates_pipes_to_nul() {
+    let mut message = text_response("1|9001|payload");
+    assert_eq!(message.next_string().unwrap(), "1");
+    assert_eq!(message.next_string().unwrap(), "9001");
+    assert_eq!(message.next_string().unwrap(), "payload");
+}

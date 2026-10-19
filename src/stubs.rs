@@ -128,11 +128,6 @@ impl MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    /// The configured responses, as `ResponseMessage` instances.
-    pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
-        self.ordered_responses.clone()
-    }
-
     /// Configured responses as the dispatcher would deliver them.
     ///
     /// The stub has no dispatcher, so it used to hand every fixture over as
@@ -145,7 +140,7 @@ impl MessageBusStub {
     /// This is the same blind spot `debug_assert_request_id_routable` covers
     /// from the routing side — stub tests inject below `determine_routing`.
     pub(crate) fn routed_items(&self) -> Vec<RoutedItem> {
-        self.response_messages_decoded().into_iter().map(classify_like_dispatcher).collect()
+        self.ordered_responses.iter().cloned().map(classify_like_dispatcher).collect()
     }
 
     /// What one request's subscription receives.
