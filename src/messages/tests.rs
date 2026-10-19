@@ -402,35 +402,91 @@ fn test_order_id_protobuf_order_status() {
     assert_eq!(message.order_id(), Some(99));
 }
 
+/// Each order frame's client id, read from where its proto carries it.
 #[test]
-fn test_client_id_protobuf_order_status() {
-    let bytes = crate::proto::OrderStatus {
+fn test_client_id_of_each_order_frame() {
+    use crate::proto;
+    let full_order = proto::OpenOrder {
         order_id: Some(99),
-        client_id: Some(7),
+        contract: Some(proto::Contract {
+            symbol: Some("AAPL".into()),
+            ..Default::default()
+        }),
+        order: Some(proto::Order {
+            client_id: Some(7),
+            order_id: Some(99),
+            ..Default::default()
+        }),
+        order_state: Some(proto::OrderState {
+            status: Some("Submitted".into()),
+            ..Default::default()
+        }),
+    };
+    let execution = proto::ExecutionDetails {
+        req_id: Some(-1),
+        execution: Some(proto::Execution {
+            order_id: Some(99),
+            client_id: Some(7),
+            ..Default::default()
+        }),
         ..Default::default()
+    };
+    let cases: Vec<(&str, IncomingMessages, Vec<u8>, Option<i32>)> = vec![
+        (
+            "order status",
+            IncomingMessages::OrderStatus,
+            proto::OrderStatus {
+                order_id: Some(99),
+                client_id: Some(7),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            Some(7),
+        ),
+        ("open order", IncomingMessages::OpenOrder, full_order.encode_to_vec(), Some(7)),
+        ("execution", IncomingMessages::ExecutionData, execution.encode_to_vec(), Some(7)),
+        (
+            "order bound",
+            IncomingMessages::OrderBound,
+            proto::OrderBound {
+                perm_id: Some(1),
+                client_id: Some(7),
+                order_id: Some(99),
+            }
+            .encode_to_vec(),
+            Some(7),
+        ),
+        (
+            "absent",
+            IncomingMessages::OrderStatus,
+            proto::OrderStatus {
+                order_id: Some(99),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            None,
+        ),
+        (
+            "open order without order",
+            IncomingMessages::OpenOrder,
+            proto::OpenOrder::default().encode_to_vec(),
+            None,
+        ),
+        (
+            "other type",
+            IncomingMessages::CommissionsReport,
+            proto::CommissionAndFeesReport {
+                exec_id: Some("e1".into()),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            None,
+        ),
+    ];
+    for (name, message_type, bytes, expected) in cases {
+        let message = ResponseMessage::from_protobuf(message_type as i32, bytes);
+        assert_eq!(message.client_id(), expected, "{name}");
     }
-    .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes);
-    assert_eq!(message.client_id(), Some(7));
-}
-
-#[test]
-fn test_client_id_none_when_absent_or_other_type() {
-    let bytes = crate::proto::OrderStatus {
-        order_id: Some(99),
-        ..Default::default()
-    }
-    .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes);
-    assert_eq!(message.client_id(), None, "absent");
-
-    let bytes = crate::proto::Order {
-        client_id: Some(7),
-        ..Default::default()
-    }
-    .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes);
-    assert_eq!(message.client_id(), None, "not an OrderStatus");
 }
 
 #[test]

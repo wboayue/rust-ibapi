@@ -768,12 +768,13 @@ fn test_request_encoding_roundtrip() {
 // `MemoryStream` lets tests push response frames freely and drive
 // `bus.dispatch()` directly.
 
+/// The client id the test buses connect with. Order fixtures default to
+/// client 100, so a frame for this client's own order sets it explicitly.
+const CLIENT_ID: i32 = 28;
+
 /// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. Pins
 /// `server_version` to the current floor so `parse_raw_message` produces
 /// binary-text-payload frames from `body()` inputs.
-/// The client id `make_bus` connects with.
-const CLIENT_ID: i32 = 28;
-
 fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
@@ -2208,7 +2209,7 @@ fn test_execution_data_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
@@ -2223,7 +2224,7 @@ fn test_execution_data_falls_back_to_request_channel() -> Result<(), Error> {
     let request_id = RequestId::nth(99);
     let sub = bus.send_request(request_id, &[])?;
 
-    stream.push_inbound(execution_data_frame(request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
@@ -2276,7 +2277,7 @@ fn test_commission_report_routes_via_execution_id_mapping() -> Result<(), Error>
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -2670,7 +2671,7 @@ fn test_execution_data_orphan_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let unrelated = bus.send_request(RequestId::nth(42), &[])?;
 
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
     bus.dispatch()?;
 
     assert!(unrelated.try_next().is_none(), "unrelated sub got an orphan message");
@@ -2721,8 +2722,8 @@ fn test_execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> 
 
     let order = bus.send_order_request(OrderId::from(7), &[])?;
     let executions = bus.send_request(RequestId::nth(99), &[])?;
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
-    stream.push_inbound(execution_data_frame(RequestId::nth(99).raw(), 0, "exec-request"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.dispatch()?;
     bus.dispatch()?;
     assert_eq!(bus.executions.len(), 2, "both executions mapped");
@@ -2750,7 +2751,7 @@ fn test_execution_aliases_pruned_on_cancel() -> Result<(), Error> {
 
     let order_id = OrderId::from(7);
     let order = bus.send_order_request(order_id, &[])?;
-    stream.push_inbound(execution_data_frame(0, 7, "exec-order"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
     bus.dispatch()?;
     order.cancel();
     drain_cleanup_signals(&bus);
@@ -2774,10 +2775,10 @@ fn test_stale_cleanup_keeps_newer_execution_aliases() -> Result<(), Error> {
     let handle = bus.start_cleanup_thread();
 
     let sub_a = bus.send_order_request(OrderId::from(42), &[])?;
-    stream.push_inbound(execution_data_frame(0, 42, "exec-a"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 42, "exec-a"));
     bus.dispatch()?;
     let sub_b = bus.send_order_request(OrderId::from(42), &[])?;
-    stream.push_inbound(execution_data_frame(0, 42, "exec-b"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 42, "exec-b"));
     bus.dispatch()?;
 
     drop(sub_a);
@@ -3338,7 +3339,10 @@ fn order_binding_reaches_updates_without_using_raw_order_id() {
     let (stream, bus) = make_bus();
     let order_sub = bus.send_order_request(OrderId::from(42), &[]).unwrap();
     let update_sub = bus.create_order_update_subscription().unwrap();
-    stream.push_inbound(binary_proto(IncomingMessages::OrderBound as i32, &order_bound().client_id(73).to_proto()));
+    stream.push_inbound(binary_proto(
+        IncomingMessages::OrderBound as i32,
+        &order_bound().client_id(CLIENT_ID).to_proto(),
+    ));
     bus.dispatch().unwrap();
     let message = update_sub.next_timeout(TICK).expect("update stream got no message").unwrap();
     assert_eq!(message.message_type(), IncomingMessages::OrderBound);
@@ -3793,6 +3797,94 @@ fn test_order_status_stream_ignores_other_clients_status() -> Result<(), Error> 
     assert!(statuses.next_timeout(TICK).is_none(), "open stream got it");
     let later = bus.create_order_status_subscription(OrderId::from(7))?;
     assert!(later.next_timeout(TICK).is_none(), "later stream started with it");
+    Ok(())
+}
+
+// ---- other clients' order frames (#1021) ----
+
+fn foreign_open_order_frame(order_id: i32) -> Vec<u8> {
+    let order = crate::testdata::builders::orders::open_order()
+        .order_id(order_id)
+        .client_id(CLIENT_ID + 1);
+    binary_proto(IncomingMessages::OpenOrder as i32, &order.to_proto())
+}
+
+fn commission_frame(execution_id: &str) -> Vec<u8> {
+    binary_proto(
+        IncomingMessages::CommissionsReport as i32,
+        &crate::proto::CommissionAndFeesReport {
+            exec_id: Some(execution_id.into()),
+            ..Default::default()
+        },
+    )
+}
+
+/// Order ids are unique per client only: another client's `OpenOrder` and
+/// `OrderStatus` for an id this client also uses answer `all_open_orders`,
+/// and reach neither this client's order route nor its update stream.
+#[test]
+fn test_foreign_order_frames_reach_only_shared_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_route = bus.send_order_request(OrderId::from(7), &[])?;
+    let updates = bus.create_order_update_subscription()?;
+    let all_open = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, b"all-open-orders")?;
+
+    stream.push_inbound(foreign_open_order_frame(7));
+    stream.push_inbound(order_status_frame(CLIENT_ID + 1, 7, OrderStatusKind::Submitted));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    let types: Vec<_> = std::iter::from_fn(|| all_open.next_timeout(TICK))
+        .map(|m| m.unwrap().message_type())
+        .collect();
+    assert_eq!(types, [IncomingMessages::OpenOrder, IncomingMessages::OrderStatus]);
+    assert!(order_route.next_timeout(TICK).is_none(), "order route got it");
+    assert!(updates.next_timeout(TICK).is_none(), "update stream got it");
+    Ok(())
+}
+
+/// Another client's execution still answers an `executions()` request (its
+/// filter can name that client), with its commission report; one TWS sends
+/// unprompted reaches neither this client's order route nor its update stream.
+#[test]
+fn test_foreign_execution_answers_requests_only() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_route = bus.send_order_request(OrderId::from(7), &[])?;
+    let updates = bus.create_order_update_subscription()?;
+    let request_id = RequestId::nth(99);
+    let request = bus.send_request(request_id, &[])?;
+
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, -1, 7, "exec-2"));
+    for _ in 0..3 {
+        bus.dispatch()?;
+    }
+
+    let types: Vec<_> = std::iter::from_fn(|| request.next_timeout(TICK))
+        .map(|m| m.unwrap().message_type())
+        .collect();
+    assert_eq!(types, [IncomingMessages::ExecutionData, IncomingMessages::CommissionsReport]);
+    assert!(order_route.next_timeout(TICK).is_none(), "order route got it");
+    let updates: Vec<_> = std::iter::from_fn(|| updates.next_timeout(TICK))
+        .map(|m| m.unwrap().message_type())
+        .collect();
+    assert!(!updates.contains(&IncomingMessages::ExecutionData), "update stream got {updates:?}");
+    Ok(())
+}
+
+#[test]
+fn test_foreign_order_bound_is_ignored() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let updates = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(binary_proto(
+        IncomingMessages::OrderBound as i32,
+        &order_bound().client_id(CLIENT_ID + 1).to_proto(),
+    ));
+    bus.dispatch()?;
+
+    assert!(updates.next_timeout(TICK).is_none());
     Ok(())
 }
 

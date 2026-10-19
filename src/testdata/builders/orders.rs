@@ -351,6 +351,10 @@ impl ExecutionDataResponse {
         self.request_id = v;
         self
     }
+    pub fn client_id(mut self, v: i32) -> Self {
+        self.client_id = v;
+        self
+    }
     pub fn order_id(mut self, v: i32) -> Self {
         self.order_id = v;
         self
@@ -542,6 +546,10 @@ impl Default for OpenOrderResponse {
 impl OpenOrderResponse {
     pub fn order_id(mut self, v: i32) -> Self {
         self.order_id = v;
+        self
+    }
+    pub fn client_id(mut self, v: i32) -> Self {
+        self.client_id = v;
         self
     }
     pub fn contract_id(mut self, v: i32) -> Self {

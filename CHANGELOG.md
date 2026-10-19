@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Another client's order frames no longer reach this client's order routes, `order_update_stream`, `wait_for_fill` or `order_status_stream`. Order ids are unique per client only, so with `all_open_orders` (or a master client id) another client's `OpenOrder`/`OrderStatus` for an id this client also used went to this client's `place_order` subscription and could end a wait with that order's fill or cancel, and `all_open_orders` came back without it. Those frames now go only to `all_open_orders`; another client's executions still answer an `executions()` request. With a master client id, `order_update_stream` no longer reports other clients' orders: use `all_open_orders` and `executions` for those (#993, #1021).
 - After a reconnect, `wait_for_fill` no longer trusts a working order's cached status: TWS does not replay what happened while disconnected, so the cache keeps only statuses of orders that ended (and rejections), and the wait looks other orders up again. Previously an order cached as `Submitted` that filled during the outage waited out the timeout. A new `order_status_stream` on such an order starts empty until its next status (#1031).
-- `wait_for_fill` and `order_status_stream` ignore statuses of other clients' orders. Order ids are unique per client only, so after `all_open_orders` (or with a master client id) another client's order with the same id could end a wait with that order's fill or cancel (#993).
 - The market data type set with `switch_market_data_type` now survives an automatic reconnect: TWS does not keep it across reconnects, and the client re-sends it before the `TRANSPORT_RECONNECT_CODE` notice. Previously a subscription on the new session without a realtime entitlement got error 354 or the 10089 advisory instead of delayed ticks (#1016).
 
 ## [5.1.0] - 2026-10-11
