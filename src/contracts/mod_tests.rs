@@ -354,3 +354,14 @@ fn test_is_bag() {
     };
     assert!(combo_contract.is_bag(), "Contract with combo legs should be a bag");
 }
+
+#[cfg(feature = "utoipa")]
+#[test]
+fn schema_derives_work() {
+    fn assert_schema<T: utoipa::ToSchema>() {}
+
+    assert_schema::<Contract>();
+    assert_schema::<ContractDetails>();
+    assert_schema::<SecurityType>();
+    assert_schema::<TagValue>();
+}

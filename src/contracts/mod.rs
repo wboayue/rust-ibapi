@@ -916,20 +916,6 @@ pub struct SmartComponent {
 // ContractBuilder is deprecated - use the new builder methods on Contract instead
 // e.g., Contract::stock(), Contract::call(), Contract::put(), etc.
 
-#[cfg(all(test, feature = "utoipa"))]
-mod utoipa_tests {
-    use super::*;
-    fn assert_schema<T: utoipa::ToSchema>() {}
-
-    #[test]
-    fn schema_derives_work() {
-        assert_schema::<Contract>();
-        assert_schema::<ContractDetails>();
-        assert_schema::<SecurityType>();
-        assert_schema::<TagValue>();
-    }
-}
-
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
