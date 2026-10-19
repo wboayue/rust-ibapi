@@ -14,7 +14,7 @@ pub(crate) const ONE_SHOT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Fold a one-shot subscription's single response into a result.
 ///
-/// Private on purpose. The only callers are the two retrying helpers below, and
+/// Private on purpose. The only callers are the retrying helpers below, and
 /// that is what makes "every one-shot retries" true — reachable from a domain
 /// module, it is a ready-made way to hand-roll a one-shot without retry, which
 /// is the bug #741 removed.
@@ -131,12 +131,7 @@ mod sync_impl {
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::blocking::retry_on_connection_reset(client, || {
-            let request = encoder()?;
-            let subscription = client.shared_request(message_type).send_raw(request)?;
-
-            super::fold_one_shot(subscription.next_before(Instant::now() + timeout)?, &processor)
-        })
+        one_shot_shared_matching_within(client, message_type, timeout, encoder, |message| processor(message).map(Some))
     }
 
     /// [`one_shot_shared`] for a response another caller's request of the same
@@ -166,6 +161,11 @@ mod sync_impl {
             let deadline = Instant::now() + timeout;
 
             loop {
+                // Checked before each read: a queued frame is returned even
+                // past the deadline, so a run of foreign frames would overrun it.
+                if Instant::now() >= deadline {
+                    return Err(Error::Timeout);
+                }
                 if let Some(result) = super::fold_one_shot(subscription.next_before(deadline)?, &processor)? {
                     return Ok(result);
                 }
@@ -219,13 +219,7 @@ mod async_impl {
         encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&ResponseMessage) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::retry_on_connection_reset(client, || async {
-            let request = encoder()?;
-            let mut subscription = client.shared_request(message_type).send_raw(request).await?;
-
-            super::fold_one_shot(subscription.next_before(Instant::now() + timeout).await?, &processor)
-        })
-        .await
+        one_shot_shared_matching_within(client, message_type, timeout, encoder, |message| processor(message).map(Some)).await
     }
 
     /// [`one_shot_shared`] for a response another caller's request of the same
@@ -255,6 +249,11 @@ mod async_impl {
             let deadline = Instant::now() + timeout;
 
             loop {
+                // Checked before each read: `timeout_at` polls the read first,
+                // so a run of queued foreign frames would overrun the deadline.
+                if Instant::now() >= deadline {
+                    return Err(Error::Timeout);
+                }
                 if let Some(result) = super::fold_one_shot(subscription.next_before(deadline).await?, &processor)? {
                     return Ok(result);
                 }

@@ -81,6 +81,17 @@ pub(crate) fn decode_symbol_samples_proto(p: crate::proto::SymbolSamples) -> Res
         .collect()
 }
 
+/// The `MarketRule` processor for `market_rule(market_rule_id)`. TWS answers
+/// on the shared channel with no request id, so a frame for another rule id
+/// is a concurrent `market_rule`'s answer: `Ok(None)`, and the caller reads on.
+pub(crate) fn market_rule_for(market_rule_id: i32) -> impl Fn(&ResponseMessage) -> Result<Option<MarketRule>, Error> {
+    let decode = crate::common::request_helpers::expect_proto(decode_market_rule_proto);
+    move |message| {
+        let rule = decode(message)?;
+        Ok((rule.market_rule_id == market_rule_id).then_some(rule))
+    }
+}
+
 pub(crate) fn decode_market_rule_proto(p: crate::proto::MarketRule) -> Result<MarketRule, Error> {
     Ok(MarketRule {
         market_rule_id: p.market_rule_id.unwrap_or_default(),

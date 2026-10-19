@@ -216,6 +216,25 @@ mod bounded_wait {
         assert!(matches!(error, Error::Timeout), "got {error:?}");
     }
 
+    #[cfg(feature = "sync")]
+    #[test]
+    fn test_sync_one_shot_shared_matching_stops_reading_at_the_deadline() {
+        use crate::client::blocking::Client;
+        use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
+        use std::cell::Cell;
+
+        // Foreign frames already queued: a passed deadline must not read them.
+        let client = Client::stubbed(silent_stub(3), server_versions::SIZE_RULES);
+        let seen = Cell::new(0);
+        let processor = |_: &ResponseMessage| {
+            seen.set(seen.get() + 1);
+            Ok(None::<()>)
+        };
+        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, Duration::ZERO, encoder, processor).unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert_eq!(seen.get(), 0);
+    }
+
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_async_one_shot_shared_times_out_without_a_frame() {
@@ -259,6 +278,27 @@ mod bounded_wait {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Timeout), "got {error:?}");
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_async_one_shot_shared_matching_stops_reading_at_the_deadline() {
+        use crate::common::request_helpers::one_shot_shared_matching_within;
+        use crate::Client;
+        use std::cell::Cell;
+
+        // Foreign frames already queued: a passed deadline must not read them.
+        let client = Client::stubbed(silent_stub(3), server_versions::SIZE_RULES);
+        let seen = Cell::new(0);
+        let processor = |_: &ResponseMessage| {
+            seen.set(seen.get() + 1);
+            Ok(None::<()>)
+        };
+        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, Duration::ZERO, encoder, processor)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert_eq!(seen.get(), 0);
     }
 }
 

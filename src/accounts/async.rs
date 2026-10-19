@@ -86,6 +86,9 @@ impl Client {
 
     /// Fetch the account family codes registered with the broker.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -397,6 +400,9 @@ impl Client {
 
     /// Fetch the list of accounts accessible to the current user.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -423,6 +429,9 @@ impl Client {
 
     /// Query the current server time reported by TWS or IB Gateway.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -446,6 +455,10 @@ impl Client {
     }
 
     /// Query the current server time in milliseconds reported by TWS or IB Gateway.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -516,6 +529,9 @@ impl Client {
     ///
     /// # Arguments
     /// * `fa_data_type` - which FA dataset to fetch.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
     ///
     /// # Examples
     ///
@@ -592,6 +608,9 @@ impl Client {
     ///
     /// Most users will not call this directly; it is part of the IB Linking flow.
     ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -615,6 +634,9 @@ impl Client {
     }
 
     /// Continue a TWS extension verification handshake by sending the API response data.
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
     ///
     /// # Examples
     ///

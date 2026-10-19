@@ -46,8 +46,8 @@ A shared one-shot waits at most `ONE_SHOT_TIMEOUT` for its frame and then fails 
 live subscription of a type receives every frame of that type, so a shared one-shot whose
 frames can belong to a concurrent caller goes through `one_shot_shared_matching`, whose
 processor answers `Ok(None)` for another caller's frame and reads on. `request_fa` (one
-`ReceiveFA` type for every dataset) uses it; `market_rule` (one `MarketRule` type for every
-rule id) is the other such site and does not use it yet.
+`ReceiveFA` type for every dataset) and `market_rule` (one `MarketRule` type for every rule
+id) use it.
 
 A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
 `request_helpers` so that hand-rolling one is not reachable from a domain module.

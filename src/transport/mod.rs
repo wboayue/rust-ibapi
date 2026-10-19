@@ -352,7 +352,7 @@ impl InternalSubscription {
     /// [`try_next`](Self::try_next).
     #[cfg(test)]
     pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Response> {
-        Self::timeout_receive(self.pick_receiver()?, timeout)
+        self.next_before(std::time::Instant::now() + timeout).ok().flatten()
     }
 
     /// Blocks until the next RoutedItem is available, exposing the typed
@@ -432,17 +432,6 @@ impl InternalSubscription {
     fn try_receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
         loop {
             if let Some(legacy) = receiver.try_recv().ok()?.into_legacy() {
-                return Some(legacy);
-            }
-        }
-    }
-
-    #[cfg(test)]
-    fn timeout_receive(receiver: &Receiver<RoutedItem>, timeout: Duration) -> Option<Response> {
-        let deadline = std::time::Instant::now() + timeout;
-        loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            if let Some(legacy) = receiver.recv_timeout(remaining).ok()?.into_legacy() {
                 return Some(legacy);
             }
         }
