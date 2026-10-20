@@ -3,9 +3,9 @@
 //!
 //! Clones one market data subscription so two tasks read the same ticks.
 //! Each clone has its own read position and sees every tick; TWS sees one
-//! request. Clones share one cancel: cancelling or dropping any clone ends
-//! the request for all of them, so both readers here stop at one shared
-//! deadline.
+//! request. A clone dropped early ends only that reader: the request is
+//! cancelled when the last clone is dropped. Here the printer stops after a
+//! few ticks while the counter keeps reading until its deadline.
 //!
 //! # Usage
 //!
@@ -29,34 +29,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = Contract::stock("AAPL").build();
     let subscription = client.market_data(&contract).subscribe().await?;
 
-    // Both readers stop at the same deadline, even if no tick arrives.
     let deadline = Instant::now() + Duration::from_secs(10);
-    let printer = tokio::spawn(consume("printer", subscription.clone(), deadline, true));
-    let counter = tokio::spawn(consume("counter", subscription.clone(), deadline, false));
+    let printer = tokio::spawn(read("printer", subscription.clone(), deadline, Some(5)));
+    let counter = tokio::spawn(read("counter", subscription.clone(), deadline, None));
+    // Only the readers' clones are left; the last one dropped cancels the request at TWS.
+    drop(subscription);
 
-    // The first reader to return drops its clone, which cancels the request at TWS.
     println!("printer read {} ticks", printer.await?);
     println!("counter read {} ticks", counter.await?);
     Ok(())
 }
 
-/// Reads ticks until `deadline`. Notices are logged at `warn`
+/// Reads up to `limit` ticks (printing them when limited), stopping at
+/// `deadline` even if no tick arrives. Notices are logged at `warn`
 /// (run with `RUST_LOG=warn` to see them).
-async fn consume(name: &'static str, subscription: Subscription<TickTypes>, deadline: Instant, print: bool) -> usize {
+async fn read(name: &'static str, subscription: Subscription<TickTypes>, deadline: Instant, limit: Option<usize>) -> usize {
     let mut ticks = subscription.filter_data();
     let mut count = 0;
-    while let Ok(Some(tick)) = timeout_at(deadline, ticks.next()).await {
-        match tick {
-            Ok(tick) => {
+    while limit.is_none_or(|limit| count < limit) {
+        match timeout_at(deadline, ticks.next()).await {
+            Ok(Some(Ok(tick))) => {
                 count += 1;
-                if print {
+                if limit.is_some() {
                     println!("[{name}] {tick:?}");
                 }
             }
-            Err(e) => {
+            Ok(Some(Err(e))) => {
                 eprintln!("[{name}] error: {e}");
                 break;
             }
+            Ok(None) | Err(_) => break,
         }
     }
     count
