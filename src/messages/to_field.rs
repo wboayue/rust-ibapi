@@ -1,5 +1,6 @@
-//! Text-wire field encoding: `ToField` and its impls for the field value
-//! types.
+//! IB's string encoding for field values (`bool` as `"1"`/`"0"`, `Date` as
+//! `YYYYMMDD`, `None` as empty), used for protobuf string fields and
+//! tag-value parameters.
 
 use std::sync::LazyLock;
 use time::{
