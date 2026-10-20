@@ -9,7 +9,7 @@
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --example async_historical_ticks_midpoint
+//! cargo run --example async_historical_ticks_mid_point
 //! ```
 //!
 //! # Configuration

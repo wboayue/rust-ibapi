@@ -256,8 +256,8 @@ path = "examples/async/tick_by_tick_last.rs"
 required-features = ["async"]
 
 [[example]]
-name = "async_historical_ticks_midpoint"
-path = "examples/async/historical_ticks_midpoint.rs"
+name = "async_historical_ticks_mid_point"
+path = "examples/async/historical_ticks_mid_point.rs"
 required-features = ["async"]
 
 [[example]]
@@ -268,11 +268,6 @@ required-features = ["async"]
 [[example]]
 name = "async_histogram_data"
 path = "examples/async/histogram_data.rs"
-required-features = ["async"]
-
-[[example]]
-name = "async_test_multiple_calls"
-path = "examples/async/test_multiple_calls.rs"
 required-features = ["async"]
 
 # Additional async examples
@@ -372,8 +367,8 @@ path = "examples/async/scanner_subscription_complex.rs"
 required-features = ["async"]
 
 [[example]]
-name = "async_test_clone_subscription"
-path = "examples/async/test_clone_subscription.rs"
+name = "async_subscription_fan_out"
+path = "examples/async/subscription_fan_out.rs"
 required-features = ["async"]
 
 # Sync-only examples
@@ -663,8 +658,8 @@ path = "examples/sync/tick_by_tick_last.rs"
 required-features = ["sync"]
 
 [[example]]
-name = "tick_by_tick_midpoint"
-path = "examples/sync/tick_by_tick_midpoint.rs"
+name = "tick_by_tick_mid_point"
+path = "examples/sync/tick_by_tick_mid_point.rs"
 required-features = ["sync"]
 
 [[example]]
