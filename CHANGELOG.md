@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `examples/{sync,async}/wait_for_bracket.rs`: wait for every leg of a bracket order with three `wait_for_fill` calls sharing one deadline (#993).
+- `ContractDetails::settlement_method`: how the product settles on expiry (`"Physical"` or `"Cash"`), from TWS API 10.50.
+- `Order::conditions_include_overnight`: evaluate order conditions during the OVERNIGHT session (with `include_overnight`). Needs server version 226 (`server_versions::CONDITIONS_INCLUDE_OVERNIGHT`); older servers reject the order with `Error::ServerVersion`. The client now advertises max server version 226.
+- `src/proto/protobuf.rs` regenerated from TWS API 1051.01 `.proto` files, which adds upstream field docs.
 
 ### Changed
 

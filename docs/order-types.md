@@ -512,6 +512,13 @@ let order_id = client.next_valid_order_id()?;
 client.submit_order(order_id, &contract, &order)?;
 ```
 
+To also evaluate conditions during the OVERNIGHT session, set `include_overnight` and `conditions_include_overnight` (requires server version 226):
+
+```rust
+order.include_overnight = true;
+order.conditions_include_overnight = true;
+```
+
 #### Cancel vs Activate on Condition
 
 By default, orders activate when conditions are met. Set `conditions_cancel_order = true` to reverse this so the condition cancels an unfilled order:

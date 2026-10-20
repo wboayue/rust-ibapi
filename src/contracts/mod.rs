@@ -640,6 +640,8 @@ pub struct ContractDetails {
     pub last_trade_time: String,
     /// Stock type.
     pub stock_type: String,
+    /// How the product settles on expiry: "Physical" or "Cash". Empty when TWS omits it.
+    pub settlement_method: String,
     /// The nine-character bond CUSIP. For Bonds only. Receiving CUSIPs requires a CUSIP market data subscription.
     pub cusip: String,
     /// Identifies the credit rating of the issuer. This field is not currently available from the TWS API. For Bonds only. A higher credit rating generally indicates a less risky investment. Bond ratings are from Moody's and S&P respectively. Not currently implemented due to bond market data restrictions.

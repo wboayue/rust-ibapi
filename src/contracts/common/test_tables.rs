@@ -156,6 +156,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].industry, "Consumer, Cyclical");
                 assert_eq!(contracts[0].category, "Auto Manufacturers");
                 assert_eq!(contracts[0].stock_type, "COMMON");
+                assert_eq!(contracts[0].settlement_method, "");
                 assert_eq!(contracts[0].min_size, Some(1.0));
                 assert_eq!(contracts[0].size_increment, Some(1.0));
                 assert_eq!(contracts[0].suggested_size_increment, Some(100.0));
@@ -194,6 +195,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                         .category("Indices")
                         .subcategory("Broad Market Equity Index")
                         .time_zone_id("US/Central")
+                        .settlement_method("Cash")
                         .encode_proto(),
                 ),
                 contract_data_end(9001),
@@ -209,6 +211,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20240621");
                 assert_eq!(contracts[0].long_name, "E-mini S&P 500");
                 assert_eq!(contracts[0].category, "Indices");
+                assert_eq!(contracts[0].settlement_method, "Cash");
             }),
         },
         ContractDetailsTestCase {

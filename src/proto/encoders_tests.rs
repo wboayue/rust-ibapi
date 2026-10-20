@@ -123,6 +123,18 @@ fn test_encode_order_route_marketable_to_bbo() {
 }
 
 #[test]
+fn test_encode_order_conditions_include_overnight() {
+    let order = Order {
+        conditions_include_overnight: true,
+        ..Default::default()
+    };
+
+    let proto = encode_order(&order);
+
+    assert_eq!(proto.conditions_include_overnight, Some(true));
+}
+
+#[test]
 fn test_encode_order_default_fields_omitted() {
     let order = Order::default();
     let proto = encode_order(&order);
@@ -136,6 +148,7 @@ fn test_encode_order_default_fields_omitted() {
     assert!(proto.deactivate.is_none());
     // `verify_order` gates these on the bool: absent when false, as C# checks presence.
     assert!(proto.route_marketable_to_bbo.is_none());
+    assert!(proto.conditions_include_overnight.is_none());
 }
 
 #[test]

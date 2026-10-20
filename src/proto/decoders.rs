@@ -382,6 +382,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.conditions = proto.conditions.iter().map(decode_order_condition).collect::<Result<_, _>>()?;
     order.conditions_cancel_order = proto.conditions_cancel_order.unwrap_or_default();
     order.conditions_ignore_rth = proto.conditions_ignore_rth.unwrap_or_default();
+    order.conditions_include_overnight = proto.conditions_include_overnight.unwrap_or_default();
 
     // models
     order.model_code = s(&proto.model_code);
@@ -627,6 +628,7 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
             .unwrap_or_default(),
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
+        settlement_method: s(&proto_details.settlement_method),
         // Absent means unset upstream (ContractDetails.cs ctor sets decimal.MaxValue),
         // and contracts without size rules really do omit these.
         min_size: parse_optional_decimal(proto_details.min_size.as_deref())?,
