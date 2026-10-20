@@ -3,11 +3,12 @@
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use futures::stream::Stream;
+use futures::task::AtomicWaker;
 use futures::StreamExt;
 use log::{debug, warn};
 
@@ -15,6 +16,7 @@ use super::common::{
     collect_step, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
+use crate::transport::common::lock;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
 
@@ -96,7 +98,9 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// Shared across clones — set by `cancel()` only: each clone yields
     /// `Err(Cancelled)` at its next poll, then ends. Not `cancelled`, which
     /// `cancel_and_drain` also sets while it keeps reading.
-    stopped: Arc<AtomicBool>,
+    stop: Arc<StopSignal>,
+    /// Per-clone — this clone's pending poll, registered with `stop`.
+    waker: Arc<AtomicWaker>,
     /// Shared across clones — set once a snapshot-end sentinel is observed, so drop/cancel
     /// skips the redundant cancel for an already-completed snapshot (mirrors the sync side).
     snapshot_ended: Arc<AtomicBool>,
@@ -122,7 +126,8 @@ impl<T: StreamDecoder<T>> Clone for Subscription<T> {
             shared: self.shared,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
-            stopped: self.stopped.clone(),
+            waker: self.stop.register(),
+            stop: self.stop.clone(),
             snapshot_ended: self.snapshot_ended.clone(),
             ended_natively: self.ended_natively.clone(),
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
@@ -151,6 +156,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         super::common::debug_assert_request_id_routable::<T, T>(request_id);
 
         let shared = internal.shared_ticket();
+        let stop = Arc::new(StopSignal::default());
+        let waker = stop.register();
         Self {
             subscription: internal,
             request_id,
@@ -158,7 +165,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             shared,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
-            stopped: Arc::new(AtomicBool::new(false)),
+            stop,
+            waker,
             snapshot_ended: Arc::new(AtomicBool::new(false)),
             ended_natively: Arc::new(AtomicBool::new(false)),
             stream_ended: AtomicBool::new(false),
@@ -521,7 +529,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
         }
 
         // `cancel()` ends the stream locally, reporting it once per clone.
-        if this.stopped.load(Ordering::Relaxed) {
+        // Register before checking, so a `cancel()` between the two still wakes this poll.
+        this.waker.register(cx.waker());
+        if this.stop.is_stopped() {
             this.stream_ended.store(true, Ordering::Relaxed);
             return Poll::Ready(Some(Err(Error::Cancelled)));
         }
@@ -595,10 +605,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Writes TWS's cancel unless the request has already finished (end
     /// marker or snapshot end) or its type has none. Either way the stream
     /// stops, for every clone: the next poll yields `Err(Error::Cancelled)`,
-    /// frames not yet read are skipped, and the stream ends. Idempotent.
+    /// frames not yet read are skipped, and the stream ends. A clone already
+    /// waiting in `next()` is woken to yield it. Idempotent.
     pub async fn cancel(&self) {
         // The route itself is released at drop, by liveness.
-        self.stopped.store(true, Ordering::Relaxed);
+        self.stop.stop();
 
         // One atomic swap, not a load then a store: clones share this flag,
         // and two tasks cancelling at once would otherwise both reach the
@@ -631,6 +642,40 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// error or a closed channel (both of which also end the stream).
     pub(crate) fn ended_natively(&self) -> bool {
         self.ended_natively.load(Ordering::Relaxed)
+    }
+}
+
+/// The stop `cancel()` sets, shared by a subscription's clones. Setting it
+/// wakes every clone's pending poll: an id-routed channel stays open after
+/// the cancel, so a clone waiting on it would otherwise wait for a frame
+/// that never comes (#1047).
+#[derive(Default)]
+struct StopSignal {
+    stopped: AtomicBool,
+    wakers: Mutex<Vec<Weak<AtomicWaker>>>,
+}
+
+impl StopSignal {
+    /// A waker slot for one clone; dropped with the clone.
+    fn register(&self) -> Arc<AtomicWaker> {
+        let waker = Arc::new(AtomicWaker::new());
+        let mut wakers = lock(&self.wakers);
+        wakers.retain(|w| w.strong_count() > 0);
+        wakers.push(Arc::downgrade(&waker));
+        waker
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
+    }
+
+    fn stop(&self) {
+        self.stopped.store(true, Ordering::Relaxed);
+        // Wake outside the lock: a waker may run code that registers a clone.
+        let wakers: Vec<_> = lock(&self.wakers).iter().filter_map(Weak::upgrade).collect();
+        for waker in wakers {
+            waker.wake();
+        }
     }
 }
 

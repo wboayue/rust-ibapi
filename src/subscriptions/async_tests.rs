@@ -496,6 +496,36 @@ async fn test_cancel_stops_every_clone() {
     }
 }
 
+/// `cancel()` wakes a clone already waiting in `next()`: the channel stays
+/// open, so no frame would wake it (#1047). Covers the original waiting and
+/// a clone cancelling, and the reverse.
+#[tokio::test]
+async fn test_cancel_wakes_waiting_clones() {
+    for cancel_from_clone in [false, true] {
+        let Fixture {
+            subscription,
+            tx: _tx,
+            bus: _bus,
+        } = subscription_with::<IntItem>(Some(123), None, DecoderContext::default());
+        let clone = subscription.clone();
+        let (mut waiter, canceller) = if cancel_from_clone {
+            (subscription, clone)
+        } else {
+            (clone, subscription)
+        };
+        let waiting = tokio::spawn(async move { waiter.next().await });
+        settle().await;
+        assert!(!waiting.is_finished(), "nothing to read yet");
+
+        canceller.cancel().await;
+        let item = tokio::time::timeout(Duration::from_secs(1), waiting)
+            .await
+            .expect("waiting clone not woken by cancel()")
+            .unwrap();
+        assert!(matches!(item, Some(Err(Error::Cancelled))), "{cancel_from_clone}: {item:?}");
+    }
+}
+
 /// A snapshot run to its sentinel, ready for `cancel()` or `Drop`. Its
 /// decoder defines a cancel message, so a skipped write is the snapshot check.
 async fn completed_snapshot() -> Fixture<CancellableSnapshotItem> {
