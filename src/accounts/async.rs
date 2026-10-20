@@ -550,7 +550,7 @@ impl Client {
         request_helpers::one_shot_shared_matching(
             self,
             OutgoingMessages::RequestFA,
-            move || encoders::encode_request_fa(fa_data_type as i32),
+            move || encoders::encode_request_fa(fa_data_type),
             decoders::receive_fa_for(fa_data_type),
         )
         .await
@@ -578,7 +578,7 @@ impl Client {
     pub async fn replace_fa(&self, fa_data_type: FaDataType, xml: &str) -> Result<ReplaceFaResult, Error> {
         request_helpers::one_shot_by_request_id(
             self,
-            move |request_id| encoders::encode_replace_fa(request_id, fa_data_type as i32, xml),
+            move |request_id| encoders::encode_replace_fa(request_id, fa_data_type, xml),
             expect_proto(decoders::decode_replace_fa_end_proto),
         )
         .await
@@ -599,7 +599,7 @@ impl Client {
     /// }
     /// ```
     pub async fn set_server_log_level(&self, log_level: ServerLogLevel) -> Result<(), Error> {
-        let message = encoders::encode_set_server_log_level(log_level as i32)?;
+        let message = encoders::encode_set_server_log_level(log_level)?;
         self.send_message(message).await?;
         Ok(())
     }

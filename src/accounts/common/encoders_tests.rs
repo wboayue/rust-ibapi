@@ -1,4 +1,5 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId};
+use crate::accounts::{FaDataType, ServerLogLevel};
 use crate::common::test_utils::helpers::assert_proto_msg_id;
 use crate::messages::OutgoingMessages;
 
@@ -190,7 +191,7 @@ fn test_encode_request_user_info() {
 
 #[test]
 fn test_encode_request_fa() {
-    let bytes = super::encode_request_fa(1).unwrap();
+    let bytes = super::encode_request_fa(FaDataType::Groups).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestFA);
 
     use prost::Message;
@@ -200,7 +201,7 @@ fn test_encode_request_fa() {
 
 #[test]
 fn test_encode_replace_fa() {
-    let bytes = super::encode_replace_fa(5000, 3, "<xml/>").unwrap();
+    let bytes = super::encode_replace_fa(5000, FaDataType::AccountAliases, "<xml/>").unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::ReplaceFA);
 
     use prost::Message;
@@ -212,7 +213,7 @@ fn test_encode_replace_fa() {
 
 #[test]
 fn test_encode_set_server_log_level() {
-    let bytes = super::encode_set_server_log_level(4).unwrap();
+    let bytes = super::encode_set_server_log_level(ServerLogLevel::Info).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::ChangeServerLog);
 
     use prost::Message;
