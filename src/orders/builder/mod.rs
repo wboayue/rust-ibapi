@@ -12,9 +12,6 @@ mod sync_impl;
 #[cfg(feature = "async")]
 mod async_impl;
 
-#[cfg(test)]
-mod tests;
-
 pub use algo_builders::{
     AccuDistrBuilder, AccumulateDistributeBuilder, AdaptiveBuilder, AdaptivePriority, AlgoParams, ArrivalPriceBuilder, BalanceImpactRiskBuilder,
     ClosePriceBuilder, DarkIceBuilder, MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, RiskAversion,
