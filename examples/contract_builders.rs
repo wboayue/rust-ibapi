@@ -1,7 +1,13 @@
-//! Example demonstrating the V2 contract builder API
+//! Contract builders example
 //!
-//! This example shows how to use the new type-safe contract builders
-//! to create various types of contracts.
+//! Builds stocks, options, futures, forex, crypto, and spreads with the
+//! typed `Contract::*` entry points. Runs offline; no gateway needed.
+//!
+//! # Usage
+//!
+//! ```bash
+//! cargo run --example contract_builders
+//! ```
 
 use ibapi::contracts::{Contract, ContractMonth, ExpirationDate, LegAction};
 

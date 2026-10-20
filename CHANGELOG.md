@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Examples renamed: `v2_contract_builder` → `contract_builders`, `async_historical_ticks_midpoint` → `async_historical_ticks_mid_point`, `tick_by_tick_midpoint` → `tick_by_tick_mid_point` (matching `.mid_point()`), `async_test_clone_subscription` → `async_subscription_fan_out` (rewritten as a fan-out example). `async_test_multiple_calls` removed (#1041). `async_historical_ticks_mid_point` no longer fails with TWS error 10187: its second request now has an end time, and its first starts three days back instead of at a 2024 date older than IBKR's tick history.
 - `wait_for_fill` on an order this client has no status for asks TWS for this client's open orders (`open_orders`) before waiting, so an order placed on an earlier connection and still working is found instead of timing out. It reads that reply to its end before returning, so a later `open_orders` cannot end on it; this can add a round trip to the timeout. With client id 0, that request also binds manual TWS orders to the client (#993).
 - `wait_for_fill` on an order missing from that open-orders reply looks it up in `completed_orders` and, if found, ends at once with `Filled` or `Ended`, so an order that finished before this connection no longer waits out the timeout. The status is built from the completed order: its fill prices (`average_fill_price`, `last_fill_price`) are `None` (#1020).
 

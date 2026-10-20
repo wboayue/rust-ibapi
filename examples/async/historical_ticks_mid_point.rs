@@ -9,7 +9,7 @@
 //! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
-//! cargo run --example async_historical_ticks_midpoint
+//! cargo run --example async_historical_ticks_mid_point
 //! ```
 //!
 //! # Configuration
@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use ibapi::prelude::*;
-use time::macros::datetime;
+use time::{Duration, OffsetDateTime};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,9 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nRetrieving historical midpoint ticks for EUR/USD");
 
-    // Request historical midpoint ticks from a specific time range
-    let start = datetime!(2024-01-05 15:00 UTC);
-    let end = datetime!(2024-01-05 15:05 UTC);
+    // The first ticks after a start three days back: IBKR keeps limited tick
+    // history, and three days back always reaches an open forex session.
+    let start = OffsetDateTime::now_utc() - Duration::days(3);
     let number_of_ticks = 1000; // Max 1000 ticks per request
     let trading_hours = TradingHours::Extended; // Include all hours for forex
 
@@ -46,13 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .starting(start)
-        .ending(end)
         .trading_hours(trading_hours)
         .mid_point()
         .await?
         .filter_data();
 
-    println!("Time range: {} to {}", start, end);
+    println!("Starting at: {}", start);
     println!("\nTime                     | Midpoint Price");
     println!("-------------------------|---------------");
 
@@ -101,11 +100,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Volatility (pips): {:.1}", std_dev * 10000.0);
     }
 
-    // Example 2: Request recent midpoint ticks (last hour)
-    println!("\n\nExample 2: Recent midpoint ticks (last hour)");
+    // Example 2: The most recent midpoint ticks, anchored at now (IBKR needs a start or an end)
+    println!("\n\nExample 2: Recent midpoint ticks");
     let contract2 = Contract::stock("AAPL").build();
 
-    let mut tick_subscription2 = client.historical_ticks(&contract2, 100).mid_point().await?.filter_data();
+    let mut tick_subscription2 = client
+        .historical_ticks(&contract2, 100)
+        .ending(OffsetDateTime::now_utc())
+        .mid_point()
+        .await?
+        .filter_data();
 
     println!("\nLast 10 midpoint ticks for AAPL:");
     println!("Time                     | Midpoint Price");

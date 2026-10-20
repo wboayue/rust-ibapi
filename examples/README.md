@@ -26,12 +26,12 @@ cargo run --no-default-features --features sync --example server_time
 Examples are organized by execution mode:
 - `sync/` - Synchronous examples using threads and blocking calls
 - `async/` - Asynchronous examples using Tokio and async/await
-- Root directory - Utility and debugging tools
+- Root directory - Demos that need no gateway connection (`contract_builders`, `conditional_orders`) and tools (`replay_raw_capture`)
 
 Examples cover these functional areas:
 - **Core**: Connection, market data, historical data, orders, account management, contracts
 - **Advanced**: News, scanners, WSH events, options, trading strategies  
-- **Utilities**: Message recording, debugging tools, builder demonstrations
+- **Utilities**: Raw-capture replay, offline contract and order construction
 
 ## Key Differences: Sync vs Async
 

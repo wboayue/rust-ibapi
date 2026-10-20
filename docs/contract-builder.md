@@ -19,7 +19,7 @@ The Contract Builder API provides a type-safe, ergonomic way to create contracts
 - [Strong Types](#strong-types)
 - [Type-State Pattern](#type-state-pattern)
 - [Error Handling](#error-handling)
-- [Migration from V1](#migration-from-v1)
+- [Typed Entry Points vs `ContractBuilder`](#typed-entry-points-vs-contractbuilder)
 - [Best Practices](#best-practices)
 
 ## Key Features
@@ -408,36 +408,32 @@ assert!(empty_spread.is_err());  // Spreads need at least one leg
 // let invalid = Contract::call("AAPL").build();  // Missing required fields
 ```
 
-## Migration from V1
+## Typed Entry Points vs `ContractBuilder`
 
-If you're upgrading from the old ContractBuilder API:
+The typed entry points (`Contract::stock()`, `Contract::call()`, ...) are the
+canonical way to build contracts: required fields are enforced at compile time
+and common cases need little boilerplate.
 
-### Old V1 API
-```rust
-use ibapi::contracts::{ContractBuilder, SecurityType};
-
-let contract = ContractBuilder::new()
-    .symbol("AAPL")
-    .security_type(SecurityType::Stock)
-    .exchange("SMART")
-    .currency("USD")
-    .build()?;
-```
-
-### New V2 API
 ```rust
 use ibapi::contracts::Contract;
 
 let contract = Contract::stock("AAPL").build();
 ```
 
-### Key Differences
+`ContractBuilder::new()` is the field-minimal escape hatch for security types
+with no typed entry point (warrants, `contract_id`-only lookups, ...). It
+checks fields at runtime, so `build()` returns a `Result`.
 
-1. **Entry Points**: Use `Contract::stock()`, `Contract::call()`, etc. instead of `ContractBuilder::new()`
-2. **Type Safety**: Required fields enforced at compile time
-3. **Strong Types**: Use `Exchange::from("SMART")` for type safety or pass string literals directly to builder methods
-4. **Smart Defaults**: Less boilerplate for common cases
-5. **No Runtime Validation**: Invalid states prevented by the type system
+```rust
+use ibapi::contracts::{ContractBuilder, SecurityType};
+
+let warrant = ContractBuilder::new()
+    .symbol("AAPL")
+    .security_type(SecurityType::Warrant)
+    .exchange("SMART")
+    .currency("USD")
+    .build()?;
+```
 
 ## Best Practices
 
