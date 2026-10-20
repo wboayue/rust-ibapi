@@ -90,28 +90,12 @@ pub(crate) fn encode_calculate_implied_volatility(
     ))
 }
 
-pub(crate) fn encode_cancel_option_computation(message_type: OutgoingMessages, request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    match message_type {
-        OutgoingMessages::CancelOptionPrice => {
-            let request = crate::proto::CancelCalculateOptionPrice { req_id: Some(request_id) };
-            Ok(encode_protobuf_message(
-                OutgoingMessages::CancelOptionPrice as i32,
-                &request.encode_to_vec(),
-            ))
-        }
-        OutgoingMessages::CancelImpliedVolatility => {
-            let request = crate::proto::CancelCalculateImpliedVolatility { req_id: Some(request_id) };
-            Ok(encode_protobuf_message(
-                OutgoingMessages::CancelImpliedVolatility as i32,
-                &request.encode_to_vec(),
-            ))
-        }
-        _ => Err(Error::InvalidArgument(format!(
-            "unexpected message type for cancel option computation: {message_type:?}"
-        ))),
-    }
+pub(crate) fn encode_cancel_option_price(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelCalculateOptionPrice, OutgoingMessages::CancelOptionPrice)
+}
+
+pub(crate) fn encode_cancel_implied_volatility(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelCalculateImpliedVolatility, OutgoingMessages::CancelImpliedVolatility)
 }
 
 pub(crate) fn encode_cancel_contract_data(request_id: i32) -> Result<Vec<u8>, Error> {

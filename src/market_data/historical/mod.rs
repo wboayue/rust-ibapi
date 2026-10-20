@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
+use crate::common::error_helpers;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
@@ -491,7 +492,7 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel historical data");
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel historical data")?;
         common::encoders::encode_cancel_historical_data(request_id)
     }
 }
