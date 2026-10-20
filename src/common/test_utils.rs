@@ -491,8 +491,8 @@ pub mod wire_enum {
     /// negative end guards a `From<i32>` that reaches for `.abs()` or `as u32`.
     const PROBE_CODES: std::ops::RangeInclusive<i32> = -8..=64;
 
-    /// Assert `From<i32>`, `From<T> for i32`, and `ToField` agree on a
-    /// hand-written `(variant, code)` table for an integer-coded wire enum,
+    /// Assert `From<i32>` and `From<T> for i32` agree on a hand-written
+    /// `(variant, code)` table for an integer-coded wire enum,
     /// **and that the table lists every code the enum models**.
     ///
     /// The completeness half is what the `_every_wire_code` in the callers'
@@ -503,16 +503,15 @@ pub mod wire_enum {
     /// (docs/rules/wire/enum-typing.md).
     ///
     /// Listing `Unknown(code)` rows in the table is still useful — only those
-    /// exercise `Into<i32>` and `ToField` on the payload variant — and costs
+    /// exercise `Into<i32>` on the payload variant — and costs
     /// nothing: a listed code is skipped by the probe that would re-derive it.
     pub fn check_wire_code_round_trip<T>(table: &[(T, i32)], unknown: fn(i32) -> T)
     where
-        T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug + crate::ToField,
+        T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug,
     {
         for &(variant, code) in table {
             assert_eq!(T::from(code), variant, "From({code})");
             assert_eq!(variant.into(), code, "i32::from({variant:?})");
-            assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
         }
 
         for code in PROBE_CODES {

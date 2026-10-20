@@ -63,7 +63,6 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::Contract;
-use crate::{encode_option_field, ToField};
 
 // Public types - always available regardless of feature flags
 
@@ -1015,12 +1014,6 @@ pub enum OcaType {
     Unknown(i32),
 }
 
-impl ToField for OcaType {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
 impl From<OcaType> for i32 {
     fn from(value: OcaType) -> i32 {
         match value {
@@ -1058,12 +1051,6 @@ pub enum OrderOrigin {
     Unknown(i32),
 }
 
-impl ToField for OrderOrigin {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
 impl From<OrderOrigin> for i32 {
     fn from(value: OrderOrigin) -> i32 {
         match value {
@@ -1097,12 +1084,6 @@ pub enum ShortSaleSlot {
     ThirdParty,
     /// Short sale slot code not modeled by this version of the API.
     Unknown(i32),
-}
-
-impl ToField for ShortSaleSlot {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
 }
 
 impl From<ShortSaleSlot> for i32 {
@@ -1139,18 +1120,6 @@ pub enum VolatilityType {
     Unknown(i32),
 }
 
-impl ToField for VolatilityType {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
-impl ToField for Option<VolatilityType> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
 impl From<VolatilityType> for i32 {
     fn from(value: VolatilityType) -> i32 {
         match value {
@@ -1181,18 +1150,6 @@ pub enum ReferencePriceType {
     NBBO,
     /// Reference price type code not modeled by this version of the API.
     Unknown(i32),
-}
-
-impl ToField for ReferencePriceType {
-    fn to_field(&self) -> String {
-        i32::from(*self).to_string()
-    }
-}
-
-impl ToField for Option<ReferencePriceType> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
 }
 
 impl From<ReferencePriceType> for i32 {
@@ -1240,12 +1197,6 @@ pub enum Rule80A {
     /// Rule 80A code not modeled by this version of the API. Carries the raw
     /// wire value as received on an inbound order; sent back unchanged.
     Unknown(String),
-}
-
-impl ToField for Option<Rule80A> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
 }
 
 impl Rule80A {
@@ -1472,12 +1423,6 @@ pub enum OrderOpenClose {
     /// Open/close value not modeled by this version of the API. Carries the
     /// raw wire value as received on an inbound order; sent back unchanged.
     Unknown(String),
-}
-
-impl ToField for Option<OrderOpenClose> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
 }
 
 impl OrderOpenClose {
