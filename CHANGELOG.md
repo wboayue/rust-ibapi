@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-10-20
+
 ### Added
 
 - `examples/{sync,async}/wait_for_bracket.rs`: wait for every leg of a bracket order with three `wait_for_fill` calls sharing one deadline (#993).
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `open_orders`, `all_open_orders` and `auto_open_orders` include this client's orders that have a live `place_order` subscription. Previously that subscription took their `OpenOrder`/`OrderStatus` frames and the open-orders reply came back without them, so `wait_for_fill` on such an order also sent a needless `completed_orders` request. Those frames now reach both; the `place_order` subscription receives the same frames as before. `auto_open_orders` now also sees updates for those orders (#1033).
 - After a reconnect, `wait_for_fill` no longer trusts a working order's cached status: TWS does not replay what happened while disconnected, so the cache keeps only statuses of orders that ended (and rejections), and the wait looks other orders up again. Previously an order cached as `Submitted` that filled during the outage waited out the timeout. A new `order_status_stream` on such an order starts empty until its next status (#1031).
 - The market data type set with `switch_market_data_type` now survives an automatic reconnect: TWS does not keep it across reconnects, and the client re-sends it before the `TRANSPORT_RECONNECT_CODE` notice. Previously a subscription on the new session without a realtime entitlement got error 354 or the 10089 advisory instead of delayed ticks (#1016).
+- The blocking client no longer logs `error sending notification` at shutdown, or on an item arriving, for a subscription dropped just before (#999).
 
 ## [5.1.0] - 2026-10-11
 
@@ -408,7 +411,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...v5.2.0
 [5.1.0]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...v5.0.0
 [4.2.0]: https://github.com/wboayue/rust-ibapi/compare/v4.1.0...v4.2.0
