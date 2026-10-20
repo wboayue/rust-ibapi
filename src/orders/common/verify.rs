@@ -27,6 +27,8 @@ const HEDGE_MAX_SIZE: ProtocolFeature = ProtocolFeature::new("hedge max size", s
 const DEACTIVATE: ProtocolFeature = ProtocolFeature::new("deactivate", server_versions::ADDITIONAL_ORDER_PARAMS_1);
 const ROUTE_MARKETABLE_TO_BBO: ProtocolFeature = ProtocolFeature::new("route marketable to BBO", server_versions::ADDITIONAL_ORDER_PARAMS_2);
 const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("attached orders", server_versions::ATTACHED_ORDERS);
+const CONDITIONS_INCLUDE_OVERNIGHT: ProtocolFeature =
+    ProtocolFeature::new("conditions include overnight", server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
 
 /// Rejects `order` when it uses a field `server_version` does not support.
 pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Error> {
@@ -45,6 +47,10 @@ pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Err
 
     if order.preset_stop_loss_order_id.is_some() || order.preset_profit_taker_order_id.is_some() {
         check_version(server_version, ATTACHED_ORDERS)?;
+    }
+
+    if order.conditions_include_overnight {
+        check_version(server_version, CONDITIONS_INCLUDE_OVERNIGHT)?;
     }
 
     Ok(())

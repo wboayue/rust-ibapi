@@ -245,6 +245,7 @@ pub fn encode_order(order: &Order) -> proto::Order {
         conditions: encode_conditions(&order.conditions),
         conditions_cancel_order: some_bool(order.conditions_cancel_order),
         conditions_ignore_rth: some_bool(order.conditions_ignore_rth),
+        conditions_include_overnight: some_bool(order.conditions_include_overnight),
         model_code: some_str(&order.model_code),
         ext_operator: some_str(&order.ext_operator),
         soft_dollar_tier: encode_soft_dollar_tier(&order.soft_dollar_tier),

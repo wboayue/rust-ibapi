@@ -339,3 +339,5 @@ pub const HEDGE_MAX_SIZE: i32 = 223;
 pub const USE_PRECISION_FROM_SEC_DEF: i32 = 224;
 /// Minimum server version for odd-lot bid/ask quotes.
 pub const ODD_LOT_BID_ASK_QUOTES: i32 = 225;
+/// Minimum server version for conditional orders that trigger during the OVERNIGHT session.
+pub const CONDITIONS_INCLUDE_OVERNIGHT: i32 = 226;

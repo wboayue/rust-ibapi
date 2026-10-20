@@ -494,6 +494,9 @@ pub struct Order {
     pub conditions_ignore_rth: bool,
     /// Conditions can determine if an order should become active or canceled.
     pub conditions_cancel_order: bool,
+    /// Indicates whether or not conditions will also be valid during the OVERNIGHT trading session.
+    /// Takes effect with [`include_overnight`](Self::include_overnight). Requires server version 226.
+    pub conditions_include_overnight: bool,
     /// Define the Soft Dollar Tier used for the order. Only provided for registered professional advisors and hedge and mutual funds.
     pub soft_dollar_tier: SoftDollarTier,
     /// Set to true to create tickets from API orders when TWS is used as an OMS.
@@ -656,6 +659,7 @@ impl Default for Order {
             conditions: vec![],
             conditions_ignore_rth: false,
             conditions_cancel_order: false,
+            conditions_include_overnight: false,
             soft_dollar_tier: SoftDollarTier::default(),
             is_oms_container: false,
             discretionary_up_to_limit_price: false,

@@ -349,6 +349,7 @@ pub struct ContractDataResponse {
     pub subcategory: String,
     pub time_zone_id: String,
     pub stock_type: String,
+    pub settlement_method: String,
     /// Default `"1"` is load-bearing — `test_contract_details` validators assert `min_size == 1.0`.
     pub min_size: String,
     /// Default `"1"` is load-bearing — see `min_size`.
@@ -381,6 +382,7 @@ impl Default for ContractDataResponse {
             subcategory: String::new(),
             time_zone_id: String::new(),
             stock_type: String::new(),
+            settlement_method: String::new(),
             min_size: "1".to_string(),
             size_increment: "1".to_string(),
             suggested_size_increment: "100".to_string(),
@@ -473,6 +475,10 @@ impl ContractDataResponse {
         self.stock_type = v.into();
         self
     }
+    pub fn settlement_method(mut self, v: impl Into<String>) -> Self {
+        self.settlement_method = v.into();
+        self
+    }
 }
 
 impl ResponseProtoEncoder for ContractDataResponse {
@@ -509,6 +515,7 @@ impl ResponseProtoEncoder for ContractDataResponse {
                 subcategory: some_str(&self.subcategory),
                 time_zone_id: some_str(&self.time_zone_id),
                 stock_type: some_str(&self.stock_type),
+                settlement_method: some_str(&self.settlement_method),
                 min_size: some_str(&self.min_size),
                 size_increment: some_str(&self.size_increment),
                 suggested_size_increment: some_str(&self.suggested_size_increment),

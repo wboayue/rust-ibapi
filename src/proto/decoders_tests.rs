@@ -316,6 +316,24 @@ fn decode_order_deactivate_absent_is_false() {
     assert!(!order.deactivate);
 }
 
+// === decode_order conditions_include_overnight ===
+
+#[test]
+fn decode_order_maps_conditions_include_overnight() {
+    let proto_order = proto::Order {
+        conditions_include_overnight: Some(true),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert!(order.conditions_include_overnight);
+}
+
+#[test]
+fn decode_order_conditions_include_overnight_absent_is_false() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(!order.conditions_include_overnight);
+}
+
 // === decode_order tif ===
 
 #[test]

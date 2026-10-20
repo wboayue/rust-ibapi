@@ -93,6 +93,14 @@ fn verify_order_gates_fields_above_the_floor() {
             },
             ATTACHED_ORDERS,
         ),
+        (
+            "conditions_include_overnight",
+            Order {
+                conditions_include_overnight: true,
+                ..Order::default()
+            },
+            CONDITIONS_INCLUDE_OVERNIGHT,
+        ),
     ];
     for (name, order, feature) in cases {
         assert!(verify_order(feature.min_version, &order).is_ok(), "{name} at its minimum version");
