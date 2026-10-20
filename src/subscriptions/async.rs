@@ -126,7 +126,7 @@ impl<T: StreamDecoder<T>> Clone for Subscription<T> {
             shared: self.shared,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
-            waker: self.stop.register(),
+            waker: self.stop.waker_slot(),
             stop: self.stop.clone(),
             snapshot_ended: self.snapshot_ended.clone(),
             ended_natively: self.ended_natively.clone(),
@@ -157,7 +157,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
         let shared = internal.shared_ticket();
         let stop = Arc::new(StopSignal::default());
-        let waker = stop.register();
+        let waker = stop.waker_slot();
         Self {
             subscription: internal,
             request_id,
@@ -657,7 +657,7 @@ struct StopSignal {
 
 impl StopSignal {
     /// A waker slot for one clone; dropped with the clone.
-    fn register(&self) -> Arc<AtomicWaker> {
+    fn waker_slot(&self) -> Arc<AtomicWaker> {
         let waker = Arc::new(AtomicWaker::new());
         let mut wakers = lock(&self.wakers);
         wakers.retain(|w| w.strong_count() > 0);
