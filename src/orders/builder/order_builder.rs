@@ -14,6 +14,7 @@ use crate::orders::{
 };
 
 #[cfg(test)]
+#[path = "order_builder_tests.rs"]
 mod tests;
 
 /// Builder for creating orders with a fluent interface

@@ -274,4 +274,5 @@ pub(crate) fn decode_market_depth_l2_proto(msg: crate::proto::MarketDepthL2) -> 
 }
 
 #[cfg(test)]
+#[path = "decoders_tests.rs"]
 mod tests;

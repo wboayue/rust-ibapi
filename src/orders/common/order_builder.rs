@@ -855,4 +855,5 @@ pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_p
 }
 
 #[cfg(test)]
+#[path = "order_builder_tests.rs"]
 mod tests;

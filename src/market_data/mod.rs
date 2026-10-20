@@ -96,5 +96,5 @@ impl From<i32> for MarketDataType {
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
+#[path = "mod_tests.rs"]
 mod tests;

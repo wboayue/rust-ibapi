@@ -235,4 +235,5 @@ pub(crate) fn decode_historical_data_update_proto(p: crate::proto::HistoricalDat
 }
 
 #[cfg(test)]
+#[path = "decoders_tests.rs"]
 mod tests;

@@ -591,4 +591,5 @@ impl fmt::Display for TickType {
 }
 
 #[cfg(test)]
+#[path = "tick_types_tests.rs"]
 mod tests;
