@@ -60,9 +60,11 @@ use crate::Error;
 /// runtime. If the client's runtime has shut down, nothing is sent: the
 /// connection went with it.
 ///
-/// Clones share one cancel: dropping or cancelling any clone ends the request
-/// for every clone. For a shared stream the clones count as one subscription,
-/// so the stream is cancelled at TWS even while another clone is still polling.
+/// Clones share the request: dropping a clone only ends that handle, and the
+/// request is cancelled when the last clone is dropped. For a shared stream the
+/// clones count as one subscription. [`cancel`](Self::cancel) on any clone ends
+/// the request for every clone; [`cancel_and_drain`](Self::cancel_and_drain)
+/// writes the cancel while the other clones keep reading up to TWS's end.
 ///
 /// When you only care about data, use the [`SubscriptionItemStreamExt::filter_data`]
 /// adapter to filter notices (logged at `warn!`):
@@ -82,10 +84,25 @@ use crate::Error;
 /// here. Subscribe to them via [`Client::notice_stream`](crate::Client::notice_stream)
 /// instead.
 #[allow(private_bounds)]
-#[must_use = "Subscription must be polled (via .next().await or .filter_data()) to receive data; dropping it cancels the request"]
+#[must_use = "Subscription must be polled (via .next().await or .filter_data()) to receive data; dropping its last clone cancels the request"]
 pub struct Subscription<T: StreamDecoder<T>> {
+    /// Shared across clones; dropped with the last one, which cancels the
+    /// request. Declared first so it drops before `subscription`, as the
+    /// cancel always has.
+    request: Arc<RequestState<T>>,
     subscription: AsyncInternalSubscription,
-    /// Metadata for cancellation
+    /// Per-clone — this clone's pending poll, registered with `request.stop`.
+    waker: Arc<AtomicWaker>,
+    /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
+    /// on one clone must not short-circuit other clones' polls.
+    stream_ended: AtomicBool,
+}
+
+/// What a subscription's clones share: the request's identity and lifecycle
+/// flags. Its `Drop` runs once, with the last clone, and cancels the request
+/// (#1049).
+#[allow(private_bounds)]
+struct RequestState<T: StreamDecoder<T>> {
     request_id: Option<i32>,
     order_id: Option<i32>,
     /// Set for shared-channel subscriptions (no request or order id), so the
@@ -93,47 +110,33 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// internal subscription's cleanup signal, never set by a caller.
     shared: Option<SharedTicket>,
     context: DecoderContext,
-    /// Shared across clones — one `cancel()` call disables future cancel sends from any clone.
-    cancelled: Arc<AtomicBool>,
-    /// Shared across clones — set by `cancel()` only: each clone yields
-    /// `Err(Cancelled)` at its next poll, then ends. Not `cancelled`, which
-    /// `cancel_and_drain` also sets while it keeps reading.
-    stop: Arc<StopSignal>,
-    /// Per-clone — this clone's pending poll, registered with `stop`.
-    waker: Arc<AtomicWaker>,
-    /// Shared across clones — set once a snapshot-end sentinel is observed, so drop/cancel
-    /// skips the redundant cancel for an already-completed snapshot (mirrors the sync side).
-    snapshot_ended: Arc<AtomicBool>,
-    /// Shared across clones — set only by the native end marker, not by errors:
-    /// once any clone has seen it, TWS has finished the request and there is
-    /// nothing left to cancel.
-    ended_natively: Arc<AtomicBool>,
-    /// Per-clone — each clone has its own `BroadcastStream` position, so a terminal event
-    /// on one clone must not short-circuit other clones' polls.
-    stream_ended: AtomicBool,
     message_bus: Arc<dyn AsyncMessageBus>,
-    /// `fn() -> T` rather than `T`: keeps the struct `Unpin`, `Send`, and `Sync`
-    /// regardless of `T`, which `poll_next` relies on to project to `&mut Self`.
+    /// Set by `cancel()` and `cancel_and_drain`: the cancel has been handled,
+    /// so no other path writes it again.
+    cancelled: AtomicBool,
+    /// Set by `cancel()` only: each clone yields `Err(Cancelled)` at its next
+    /// poll, then ends. Not `cancelled`, which `cancel_and_drain` also sets
+    /// while it keeps reading.
+    stop: StopSignal,
+    /// Set once a snapshot-end sentinel is observed, so drop/cancel skips the
+    /// redundant cancel for an already-completed snapshot (mirrors the sync side).
+    snapshot_ended: AtomicBool,
+    /// Set only by the native end marker, not by errors: once any clone has
+    /// seen it, TWS has finished the request and there is nothing left to cancel.
+    ended_natively: AtomicBool,
+    /// `fn() -> T` rather than `T`: keeps the struct `Send` and `Sync`
+    /// regardless of `T`.
     phantom: PhantomData<fn() -> T>,
 }
 
 impl<T: StreamDecoder<T>> Clone for Subscription<T> {
     fn clone(&self) -> Self {
         Self {
+            request: self.request.clone(),
             subscription: self.subscription.clone(),
-            request_id: self.request_id,
-            order_id: self.order_id,
-            shared: self.shared,
-            context: self.context.clone(),
-            cancelled: self.cancelled.clone(),
-            waker: self.stop.waker_slot(),
-            stop: self.stop.clone(),
-            snapshot_ended: self.snapshot_ended.clone(),
-            ended_natively: self.ended_natively.clone(),
+            waker: self.request.stop.waker_slot(),
             // Clone gets a fresh stream_ended — independent BroadcastStream position.
             stream_ended: AtomicBool::new(false),
-            message_bus: self.message_bus.clone(),
-            phantom: PhantomData,
         }
     }
 }
@@ -155,23 +158,23 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ) -> Self {
         super::common::debug_assert_request_id_routable::<T, T>(request_id);
 
-        let shared = internal.shared_ticket();
-        let stop = Arc::new(StopSignal::default());
-        let waker = stop.waker_slot();
-        Self {
-            subscription: internal,
+        let request = Arc::new(RequestState {
             request_id,
             order_id,
-            shared,
+            shared: internal.shared_ticket(),
             context,
-            cancelled: Arc::new(AtomicBool::new(false)),
-            stop,
-            waker,
-            snapshot_ended: Arc::new(AtomicBool::new(false)),
-            ended_natively: Arc::new(AtomicBool::new(false)),
-            stream_ended: AtomicBool::new(false),
             message_bus,
+            cancelled: AtomicBool::new(false),
+            stop: StopSignal::default(),
+            snapshot_ended: AtomicBool::new(false),
+            ended_natively: AtomicBool::new(false),
             phantom: PhantomData,
+        });
+        Self {
+            waker: request.stop.waker_slot(),
+            request,
+            subscription: internal,
+            stream_ended: AtomicBool::new(false),
         }
     }
 
@@ -187,7 +190,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
     /// Get the request ID associated with this subscription
     pub fn request_id(&self) -> Option<i32> {
-        self.request_id
+        self.request.request_id
     }
 }
 
@@ -469,7 +472,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// ```
     pub async fn cancel_and_drain(mut self, deadline: tokio::time::Instant) -> Result<Drained, Error> {
         // A finished snapshot is complete at TWS too; `cancel()` writes nothing for it.
-        if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
+        if self.ended_natively() || self.request.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
         // Ended with an error already: nothing more can arrive to confirm
@@ -477,7 +480,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Unconfirmed);
         }
-        if self.request_id.is_none() {
+        if self.request.request_id.is_none() {
             self.cancel().await;
             return Ok(Drained::Unconfirmed);
         }
@@ -486,10 +489,10 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         // subscription drops, so TWS's end marker can still reach us. The
         // write runs in its own task, as `Drop`'s does, so dropping this
         // future mid-write can't lose it: `cancelled` is already set.
-        if !self.cancelled.swap(true, Ordering::Relaxed) {
-            if let Some(message) = self.pending_cancel(self.request_id) {
-                let message_bus = self.message_bus.clone();
-                let write = self.message_bus.runtime_handle().spawn(async move {
+        if !self.request.cancelled.swap(true, Ordering::Relaxed) {
+            if let Some(message) = self.request.pending_cancel(self.request.request_id) {
+                let message_bus = self.request.message_bus.clone();
+                let write = self.request.message_bus.runtime_handle().spawn(async move {
                     if let Err(e) = message_bus.send_message(message).await {
                         log_cancel_error("subscription", &e);
                     }
@@ -520,8 +523,8 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Subscription<T> is auto-Unpin: BroadcastStream uses ReusableBoxFuture
-        // (boxed → Unpin externally), the phantom is `fn() -> T`, and every
-        // other field is Unpin. Safe to project to &mut Self.
+        // (boxed → Unpin externally), and every other field is an `Arc` or an
+        // atomic. Safe to project to &mut Self.
         let this = self.get_mut();
 
         if this.stream_ended.load(Ordering::Relaxed) {
@@ -531,19 +534,23 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
         // `cancel()` ends the stream locally, reporting it once per clone.
         // Register before checking, so a `cancel()` between the two still wakes this poll.
         this.waker.register(cx.waker());
-        if this.stop.is_stopped() {
+        if this.request.stop.is_stopped() {
             this.stream_ended.store(true, Ordering::Relaxed);
             return Poll::Ready(Some(Err(Error::Cancelled)));
         }
 
         let Subscription {
+            request,
             subscription,
-            context,
             stream_ended,
+            ..
+        } = this;
+        let RequestState {
+            context,
             snapshot_ended,
             ended_natively,
             ..
-        } = this;
+        } = &**request;
         // Drain the BroadcastStream synchronously while items are ready, so
         // skipped frames don't re-yield to the executor between
         // immediately-available items.
@@ -609,18 +616,19 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// waiting in `next()` is woken to yield it. Idempotent.
     pub async fn cancel(&self) {
         // The route itself is released at drop, by liveness.
-        self.stop.stop();
+        let request = &self.request;
+        request.stop.stop();
 
         // One atomic swap, not a load then a store: clones share this flag,
         // and two tasks cancelling at once would otherwise both reach the
         // bus, releasing a shared stream's count twice.
-        if self.cancelled.swap(true, Ordering::Relaxed) {
+        if request.cancelled.swap(true, Ordering::Relaxed) {
             return;
         }
 
-        let id = self.request_id.or(self.order_id);
-        let message = self.pending_cancel(id);
-        if let Err(e) = send_cancel(&self.message_bus, id, self.shared, message).await {
+        let id = request.id();
+        let message = request.pending_cancel(id);
+        if let Err(e) = send_cancel(&request.message_bus, id, request.shared, message).await {
             log_cancel_error("subscription", &e);
         }
     }
@@ -628,6 +636,20 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
 #[allow(private_bounds)]
 impl<T: StreamDecoder<T>> Subscription<T> {
+    /// Whether the stream ended with TWS's end marker, as opposed to an
+    /// error or a closed channel (both of which also end the stream).
+    pub(crate) fn ended_natively(&self) -> bool {
+        self.request.ended_natively.load(Ordering::Relaxed)
+    }
+}
+
+#[allow(private_bounds)]
+impl<T: StreamDecoder<T>> RequestState<T> {
+    /// The id a cancel names: the request id, else the order id.
+    fn id(&self) -> Option<i32> {
+        self.request_id.or(self.order_id)
+    }
+
     /// The cancel to write, if any. `None` when the type has none, or once a
     /// request-id stream has seen its end marker or a snapshot its end: the
     /// cancel would name a request TWS already finished.
@@ -636,12 +658,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return None;
         }
         T::cancel_message(self.context.server_version, id, Some(&self.context)).ok()
-    }
-
-    /// Whether the stream ended with TWS's end marker, as opposed to an
-    /// error or a closed channel (both of which also end the stream).
-    pub(crate) fn ended_natively(&self) -> bool {
-        self.ended_natively.load(Ordering::Relaxed)
     }
 }
 
@@ -698,19 +714,20 @@ async fn send_cancel(
     }
 }
 
-impl<T: StreamDecoder<T>> Drop for Subscription<T> {
+impl<T: StreamDecoder<T>> Drop for RequestState<T> {
+    /// Runs with the last clone: until then, the request is still in use.
     fn drop(&mut self) {
         debug!("dropping async subscription");
 
-        // Already cancelled, or being cancelled by a clone right now.
-        if self.cancelled.swap(true, Ordering::Relaxed) {
+        // `cancel()` or `cancel_and_drain` already handled the cancel.
+        if *self.cancelled.get_mut() {
             return;
         }
 
         // Decoders without a cancel message (the `StreamDecoder` default) return
         // `Err(NotImplemented)`; a shared subscription still has its count to
         // release, an id-routed one has nothing to do.
-        let id = self.request_id.or(self.order_id);
+        let id = self.id();
         let shared = self.shared;
         let message = self.pending_cancel(id);
         // Nothing to send and no count to release: nothing to spawn.

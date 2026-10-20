@@ -448,7 +448,7 @@ async fn test_subscription_cancel() {
 
     // Cancel the subscription: the decoder's cancel message goes to the bus.
     f.subscription.cancel().await;
-    assert!(f.subscription.cancelled.load(Ordering::Relaxed));
+    assert!(f.subscription.request.cancelled.load(Ordering::Relaxed));
     assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
 
     // Cancel again is a no-op.
@@ -462,7 +462,7 @@ async fn test_subscription_cancel_without_cancel_message_sends_nothing() {
     let f = subscription_with::<IntItem>(Some(123), None, DecoderContext::default());
 
     f.subscription.cancel().await;
-    assert!(f.subscription.cancelled.load(Ordering::Relaxed));
+    assert!(f.subscription.request.cancelled.load(Ordering::Relaxed));
     assert!(f.bus.request_messages().is_empty());
 }
 
@@ -526,6 +526,52 @@ async fn test_cancel_wakes_waiting_clones() {
     }
 }
 
+/// Dropping a clone ends only that handle: the other clones keep reading, and
+/// the request is cancelled once, when the last clone goes (#1049).
+#[tokio::test]
+async fn test_only_the_last_clone_dropped_cancels() {
+    let Fixture { subscription, tx, bus } = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
+
+    let mut reader = subscription.clone();
+    drop(subscription);
+    settle().await;
+    assert!(bus.request_messages().is_empty(), "a clone is still reading");
+    tx.send(int_frame(1)).unwrap();
+    assert!(matches!(
+        next_after_cancel(&mut reader).await,
+        Some(Ok(SubscriptionItem::Data(CancellableItem)))
+    ));
+
+    drop(reader);
+    settle().await;
+    assert_eq!(bus.request_messages(), vec![cancel_frame()]);
+}
+
+/// Clones dropped at once on many threads still write exactly one cancel.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_clones_dropped_concurrently_cancel_once() {
+    let f = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
+    let clones: Vec<_> = (0..16).map(|_| f.subscription.clone()).collect();
+    drop(f.subscription);
+
+    let barrier = Arc::new(std::sync::Barrier::new(clones.len()));
+    let threads: Vec<_> = clones
+        .into_iter()
+        .map(|clone| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                drop(clone);
+            })
+        })
+        .collect();
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
+}
+
 /// A snapshot run to its sentinel, ready for `cancel()` or `Drop`. Its
 /// decoder defines a cancel message, so a skipped write is the snapshot check.
 async fn completed_snapshot() -> Fixture<CancellableSnapshotItem> {
@@ -537,7 +583,7 @@ async fn completed_snapshot() -> Fixture<CancellableSnapshotItem> {
         Some(Ok(SubscriptionItem::Data(CancellableSnapshotItem(-1))))
     ));
     assert!(
-        f.subscription.snapshot_ended.load(Ordering::Relaxed),
+        f.subscription.request.snapshot_ended.load(Ordering::Relaxed),
         "sentinel must latch snapshot_ended"
     );
     f
@@ -576,9 +622,9 @@ async fn test_subscription_clone() {
     );
 
     let mut cloned = subscription.clone();
-    assert_eq!(cloned.request_id, Some(456));
-    assert_eq!(cloned.order_id, Some(789));
-    assert!(cloned.context.is_smart_depth);
+    assert_eq!(cloned.request_id(), Some(456));
+    assert_eq!(cloned.request.order_id, Some(789));
+    assert!(cloned.request.context.is_smart_depth);
 
     // Both clones receive frames sent after the clone; `stream_ended` is per clone.
     tx.send(int_frame(5)).unwrap();
@@ -611,7 +657,7 @@ async fn test_subscription_with_context() {
 
     let f = subscription_with::<IntItem>(None, None, context.clone());
 
-    assert_eq!(f.subscription.context, context);
+    assert_eq!(f.subscription.request.context, context);
 }
 
 #[tokio::test]
@@ -624,7 +670,7 @@ async fn test_subscription_new_from_internal_simple() {
         Subscription::new_from_internal_simple(internal, message_bus.clone(), DecoderContext::default());
 
     assert_eq!(subscription.request_id(), None);
-    assert_eq!(subscription.order_id, None);
+    assert_eq!(subscription.request.order_id, None);
 
     // No id, but the decoder's cancel message is still sent.
     subscription.cancel().await;
@@ -748,7 +794,7 @@ async fn test_collect_for_stops_at_snapshot_end() {
     let collected = sub.collect_for(Duration::from_secs(30)).await;
 
     assert_eq!(collected, vec![IntItem(10), IntItem(20)]);
-    assert!(sub.snapshot_ended.load(Ordering::Relaxed));
+    assert!(sub.request.snapshot_ended.load(Ordering::Relaxed));
 }
 
 #[tokio::test]
