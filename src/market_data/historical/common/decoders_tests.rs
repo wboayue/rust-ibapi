@@ -1,4 +1,4 @@
-use crate::common::test_utils::helpers::assert_decimal_parse_error;
+use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field};
 
 use super::*;
 use time::macros::{date, datetime};
@@ -346,15 +346,68 @@ fn test_decode_historical_data_update_proto() {
 }
 
 #[test]
-fn test_decode_historical_data_update_proto_missing_bar_defaults() {
+fn test_decode_historical_data_update_proto_missing_bar_is_parse_error() {
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: None,
     };
 
+    assert_missing_field(
+        decode_historical_data_update_proto(proto_msg),
+        "historical_data_bar",
+        "HistoricalDataUpdate",
+    );
+}
+
+/// A bar without a parsable `date` is a parse error on both decode paths.
+/// Previously it decoded as a bar dated `OffsetDateTime::UNIX_EPOCH`.
+#[test]
+fn test_decode_historical_data_bar_rejects_missing_or_malformed_date() {
+    let bar = |date: Option<&str>| crate::proto::HistoricalDataBar {
+        date: date.map(Into::into),
+        ..Default::default()
+    };
+    let batch = |date| {
+        decode_historical_data_proto(crate::proto::HistoricalData {
+            req_id: Some(1),
+            historical_data_bars: vec![bar(date)],
+        })
+    };
+    let update = |date| {
+        decode_historical_data_update_proto(crate::proto::HistoricalDataUpdate {
+            req_id: Some(1),
+            historical_data_bar: Some(bar(date)),
+        })
+    };
+
+    assert_missing_field(batch(None), "date", "HistoricalDataBar");
+    assert_missing_field(update(None), "date", "HistoricalDataBar");
+
+    for malformed in ["abc", "20231345", "2023-01-01", ""] {
+        for (path, result) in [
+            ("batch", batch(Some(malformed)).map(|_| ())),
+            ("update", update(Some(malformed)).map(|_| ())),
+        ] {
+            match result {
+                Err(Error::Parse(_, value, _)) => assert_eq!(value, malformed, "{path} path should carry the offending date"),
+                other => panic!("{path} path: expected Error::Parse for {malformed:?}, got {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn test_decode_historical_data_update_proto_missing_count_is_minus_one() {
+    let proto_msg = crate::proto::HistoricalDataUpdate {
+        req_id: Some(1),
+        historical_data_bar: Some(crate::proto::HistoricalDataBar {
+            date: Some("20230101".into()),
+            ..Default::default()
+        }),
+    };
+
     let result = decode_historical_data_update_proto(proto_msg).unwrap();
-    assert_eq!(result.count, 0);
-    assert_eq!(result.date, BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
+    assert_eq!(result.count, -1);
 }
 
 // ---------------------------------------------------------------------------
