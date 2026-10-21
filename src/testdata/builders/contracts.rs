@@ -255,8 +255,10 @@ impl RequestEncoder for CalculateImpliedVolatilityRequestBuilder {
 }
 
 // CancelOptionPrice / CancelImpliedVolatility builders intentionally omitted:
-// the production cancel path goes through `OptionComputation::cancel_message`
-// in `stream_decoders`, which is exercised end-to-end by `test_cancel_messages`.
+// `OptionComputation::cancel_message` in `stream_decoders` dispatches to the
+// two encoders and `test_cancel_messages` exercises it; no production path
+// sends either cancel yet (the option one-shots never create a typed
+// subscription, so nothing calls `cancel_message` outside tests).
 single_req_id_request_builder!(CancelContractDataRequestBuilder, CancelContractData, OutgoingMessages::CancelContractData);
 
 #[derive(Clone, Debug)]

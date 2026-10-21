@@ -6,6 +6,7 @@
 //!
 //! When subscribed to a display group, you receive updates whenever the user
 //! changes the contract displayed in that group within TWS.
+//! The groups visible in TWS can also be listed.
 
 pub(crate) mod common;
 

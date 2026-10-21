@@ -1,10 +1,11 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_proto_msg_id, proto_response};
+use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, proto_response, request_message_count};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
-use crate::testdata::builders::display_groups::display_group_updated;
+use crate::testdata::builders::display_groups::{display_group_list, display_group_updated, query_display_groups_request};
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
 use std::sync::Arc;
@@ -12,6 +13,20 @@ use std::sync::Arc;
 fn display_group_update_response(contract_info: &str) -> crate::messages::ResponseMessage {
     let bytes = display_group_updated().contract_info(contract_info).encode_proto();
     proto_response(IncomingMessages::DisplayGroupUpdated, bytes)
+}
+
+#[tokio::test]
+async fn test_display_groups() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::DisplayGroupList,
+        display_group_list().request_id(TEST_REQ_ID_FIRST).groups("3|1|2").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let groups = client.display_groups().await.expect("display_groups failed");
+    assert_eq!(groups, vec![3, 1, 2]);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &query_display_groups_request().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[tokio::test]

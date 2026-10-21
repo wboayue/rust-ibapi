@@ -5,9 +5,11 @@ use std::sync::Arc;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::client::sync::Client;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::transport::MessageBus;
 use crate::Error;
 
+use super::common::decoders;
 use super::common::stream_decoders::DisplayGroupUpdate;
 use super::encoders;
 
@@ -73,6 +75,32 @@ impl IntoIterator for DisplayGroupSubscription {
 }
 
 impl Client {
+    /// Returns the ids of the display groups visible in TWS, most used first.
+    ///
+    /// Display Groups are a TWS-only feature (not available in IB Gateway).
+    /// Pass an id to [`subscribe_to_group_events`](Self::subscribe_to_group_events).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// # fn main() -> Result<(), ibapi::Error> {
+    /// let client = Client::connect("127.0.0.1:7497", 100)?;
+    ///
+    /// let groups = client.display_groups()?;
+    /// println!("visible display groups: {groups:?}");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn display_groups(&self) -> Result<Vec<i32>, Error> {
+        request_helpers::blocking::one_shot_by_request_id(
+            self,
+            encoders::encode_query_display_groups,
+            expect_proto(decoders::decode_display_group_list_proto),
+        )
+    }
+
     /// Subscribes to display group events for the specified group.
     ///
     /// Display Groups are a TWS-only feature (not available in IB Gateway).
