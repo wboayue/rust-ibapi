@@ -37,7 +37,7 @@ fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     (stream, bus)
 }
 
@@ -50,7 +50,7 @@ async fn test_with_channel_capacity_bounds_request_channels() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2));
 
     let _sub = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
     let sender = bus.requests.sender(&RequestId::nth(1)).unwrap();
@@ -85,7 +85,7 @@ async fn test_channel_classes_under_small_channel_capacity() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 1).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 1));
     let cancelled = || RoutedItem::Error(Error::Cancelled);
 
     let mut market = bus.send_request(RequestId::nth(1), vec![]).await.unwrap();
@@ -1964,7 +1964,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
         stream.push_inbound(frame);
     }
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let mut notices = bus.connection.notice_broadcaster.subscribe();
 
     bus.clone().process_messages().expect("process_messages");
@@ -2055,7 +2055,7 @@ async fn test_reconnect_raises_order_ids_from_handshake() {
         stream.push_inbound(frame);
     }
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100).unwrap());
     bus.set_order_ids(order_ids.clone());
 
@@ -2204,7 +2204,7 @@ impl AsyncStream for FailingWriteStream {}
 async fn test_failed_write_leaves_no_registration() {
     let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
     assert!(mb.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await.is_err());
@@ -2439,7 +2439,7 @@ async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncT
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
-    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), CLIENT_ID)).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), CLIENT_ID)));
     bus.clone().process_messages().unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer.unwrap().0)

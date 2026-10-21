@@ -100,7 +100,7 @@ fn make_bus(mode: WriteMode) -> (SubmissionStream, Arc<AsyncTcpMessageBus<Submis
     let stream = SubmissionStream::default();
     *stream.mode.lock().unwrap() = mode;
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
-    (stream, Arc::new(AsyncTcpMessageBus::new(connection).unwrap()))
+    (stream, Arc::new(AsyncTcpMessageBus::new(connection)))
 }
 
 /// A caller that drops the submission while its write is pending (a timeout,
