@@ -95,7 +95,7 @@ impl Client {
         let connection = Connection::connect(config.connection, notice_broadcaster)?;
         let connection_metadata = connection.connection_metadata();
 
-        let message_bus = Arc::new(TcpMessageBus::new(connection)?);
+        let message_bus = Arc::new(TcpMessageBus::new(connection));
 
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
