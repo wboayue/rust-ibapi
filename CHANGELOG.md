@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Client::display_groups()` (async and blocking) returns the ids of the display groups visible in TWS, most used first; pass one to `subscribe_to_group_events` (#1058).
+
 ## [5.2.0] - 2026-10-20
 
 ### Added

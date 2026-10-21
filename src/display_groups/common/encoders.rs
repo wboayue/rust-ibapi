@@ -3,7 +3,6 @@
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
-#[allow(dead_code)]
 pub(crate) fn encode_query_display_groups(request_id: i32) -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_cancel_by_id!(request_id, QueryDisplayGroupsRequest, OutgoingMessages::QueryDisplayGroups)
 }

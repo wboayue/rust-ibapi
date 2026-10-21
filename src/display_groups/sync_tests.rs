@@ -1,10 +1,11 @@
 use super::*;
-use crate::common::test_utils::helpers::proto_response;
+use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
-use crate::testdata::builders::display_groups::display_group_updated;
+use crate::testdata::builders::display_groups::{display_group_list, display_group_updated, query_display_groups_request};
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 
@@ -25,6 +26,20 @@ fn assert_first_data_eq(item: Option<Result<SubscriptionItem<DisplayGroupUpdate>
         panic!("expected Data");
     };
     assert_eq!(update.contract_info, expected_contract_info);
+}
+
+#[test]
+fn test_display_groups() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::DisplayGroupList,
+        display_group_list().request_id(TEST_REQ_ID_FIRST).groups("3|1|2").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let groups = client.display_groups().expect("display_groups failed");
+    assert_eq!(groups, vec![3, 1, 2]);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &query_display_groups_request().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[test]
