@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use log::{debug, error, info, warn};
 use tokio::runtime::Handle;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -483,8 +483,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     cleanup_gate: Arc<tokio::sync::Mutex<()>>,
     /// Runtime the bus was built on; see [`AsyncMessageBus::runtime_handle`].
     runtime: Handle,
-    /// Handle to the message processing task
-    process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
+    /// Handle to the message processing task, set before `process_messages` returns.
+    process_task: std::sync::Mutex<Option<task::JoinHandle<()>>>,
     /// Latching shutdown flag, shared with the connection so a reconnect in
     /// progress sees the request.
     shutdown: Arc<ShutdownSignal>,
@@ -541,7 +541,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             #[cfg(test)]
             cleanup_gate: Arc::default(),
             runtime: Handle::current(),
-            process_task: Arc::new(RwLock::new(None)),
+            process_task: std::sync::Mutex::new(None),
             shutdown,
             order_ids: OnceLock::new(),
             rate_limiter: OnceLock::new(),
@@ -721,12 +721,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             message_bus.retire().await;
         });
 
-        // Store the task handle
-        let process_task = self.process_task.clone();
-        tokio::spawn(async move {
-            let mut task_guard = process_task.write().await;
-            *task_guard = Some(handle);
-        });
+        *lock(&self.process_task) = Some(handle);
 
         Ok(())
     }
@@ -1164,12 +1159,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         // Wakes the dispatcher's pending read, so the join below can't hang on it.
         self.retire().await;
 
-        // Wait for the processing task to finish
-        let task_handle = {
-            let mut task_guard = self.process_task.write().await;
-            task_guard.take()
-        };
-
+        // Wait for the processing task to finish; the guard is dropped before the await.
+        let task_handle = lock(&self.process_task).take();
         if let Some(handle) = task_handle {
             debug!("Waiting for processing task to finish");
             if let Err(e) = handle.await {

@@ -2018,19 +2018,15 @@ async fn test_reconnect_replays_market_data_type_before_notice() {
 }
 
 /// `ensure_shutdown` joins the running message-processing task and reports
-/// `is_connected() == false` afterwards. The handle is installed asynchronously
-/// (separate `tokio::spawn`), so we yield until it's set rather than sleeping.
+/// `is_connected() == false` afterwards. The handle is in place as soon as
+/// `process_messages` returns.
 #[tokio::test]
 async fn test_ensure_shutdown_joins_processing_task() {
     let (_, bus) = make_bus();
     bus.clone().process_messages().expect("process_messages");
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
-    while bus.process_task.read().await.is_none() {
-        assert!(tokio::time::Instant::now() < deadline, "process_task never installed");
-        tokio::task::yield_now().await;
-    }
+    assert!(lock(&bus.process_task).is_some(), "process_task installed by process_messages");
 
     mb.ensure_shutdown().await;
     assert!(!mb.is_connected());
