@@ -90,7 +90,7 @@ fn decode_pnl_proto_works() {
     };
 
     let result = super::decode_pnl_proto(proto_msg).unwrap();
-    assert_eq!(result.daily_pnl, 1234.56);
+    assert_eq!(result.daily_pnl, Some(1234.56));
     assert_eq!(result.unrealized_pnl, Some(500.0));
     assert_eq!(result.realized_pnl, None); // f64::MAX filtered out
 }
@@ -149,10 +149,43 @@ fn decode_pnl_single_proto_works() {
 
     let result = super::decode_pnl_single_proto(proto_msg).unwrap();
     assert_eq!(result.position, 500.0);
-    assert_eq!(result.daily_pnl, 1000.0);
-    assert_eq!(result.unrealized_pnl, 2000.0);
-    assert_eq!(result.realized_pnl, 500.0);
-    assert_eq!(result.value, 75000.0);
+    assert_eq!(result.daily_pnl, Some(1000.0));
+    assert_eq!(result.unrealized_pnl, Some(2000.0));
+    assert_eq!(result.realized_pnl, Some(500.0));
+    assert_eq!(result.value, Some(75000.0));
+}
+
+/// TWS leaves a PnL figure unset by omitting it or by sending `f64::MAX`;
+/// both decode as `None`.
+#[test]
+fn decode_pnl_unset_values() {
+    for unset in [None, Some(f64::MAX)] {
+        let pnl = super::decode_pnl_proto(crate::proto::PnL {
+            req_id: Some(1),
+            daily_pn_l: unset,
+            unrealized_pn_l: unset,
+            realized_pn_l: unset,
+        })
+        .unwrap();
+        assert_eq!(pnl.daily_pnl, None, "{unset:?}");
+        assert_eq!(pnl.unrealized_pnl, None, "{unset:?}");
+        assert_eq!(pnl.realized_pnl, None, "{unset:?}");
+
+        let single = super::decode_pnl_single_proto(crate::proto::PnLSingle {
+            req_id: Some(1),
+            position: Some("500".into()),
+            daily_pn_l: unset,
+            unrealized_pn_l: unset,
+            realized_pn_l: unset,
+            value: unset,
+        })
+        .unwrap();
+        assert_eq!(single.position, 500.0);
+        assert_eq!(single.daily_pnl, None, "{unset:?}");
+        assert_eq!(single.unrealized_pnl, None, "{unset:?}");
+        assert_eq!(single.realized_pnl, None, "{unset:?}");
+        assert_eq!(single.value, None, "{unset:?}");
+    }
 }
 
 #[test]
@@ -320,7 +353,7 @@ fn decode_pnl_proto_via_builder() {
 
     let result = super::decode_pnl_proto(p).unwrap();
 
-    assert_eq!(result.daily_pnl, 1234.56);
+    assert_eq!(result.daily_pnl, Some(1234.56));
     assert_eq!(result.unrealized_pnl, Some(500.0));
     assert_eq!(result.realized_pnl, Some(250.0));
 }
@@ -341,10 +374,10 @@ fn decode_pnl_single_proto_via_builder() {
     let result = super::decode_pnl_single_proto(p).unwrap();
 
     assert_eq!(result.position, 500.0);
-    assert_eq!(result.daily_pnl, 1000.0);
-    assert_eq!(result.unrealized_pnl, 2000.0);
-    assert_eq!(result.realized_pnl, 500.0);
-    assert_eq!(result.value, 75000.0);
+    assert_eq!(result.daily_pnl, Some(1000.0));
+    assert_eq!(result.unrealized_pnl, Some(2000.0));
+    assert_eq!(result.realized_pnl, Some(500.0));
+    assert_eq!(result.value, Some(75000.0));
 }
 
 #[test]

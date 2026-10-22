@@ -105,7 +105,7 @@ pub(crate) fn decode_account_portfolio_value_proto(p: crate::proto::PortfolioVal
 
 pub(crate) fn decode_pnl_proto(p: crate::proto::PnL) -> Result<PnL, Error> {
     Ok(PnL {
-        daily_pnl: p.daily_pn_l.unwrap_or_default(),
+        daily_pnl: proto::decoders::optional_f64(p.daily_pn_l),
         unrealized_pnl: proto::decoders::optional_f64(p.unrealized_pn_l),
         realized_pnl: proto::decoders::optional_f64(p.realized_pn_l),
     })
@@ -114,10 +114,10 @@ pub(crate) fn decode_pnl_proto(p: crate::proto::PnL) -> Result<PnL, Error> {
 pub(crate) fn decode_pnl_single_proto(p: crate::proto::PnLSingle) -> Result<PnLSingle, Error> {
     Ok(PnLSingle {
         position: required_decimal(p.position.as_deref(), "position", "PnLSingle")?,
-        daily_pnl: p.daily_pn_l.unwrap_or_default(),
-        unrealized_pnl: p.unrealized_pn_l.unwrap_or_default(),
-        realized_pnl: p.realized_pn_l.unwrap_or_default(),
-        value: p.value.unwrap_or_default(),
+        daily_pnl: proto::decoders::optional_f64(p.daily_pn_l),
+        unrealized_pnl: proto::decoders::optional_f64(p.unrealized_pn_l),
+        realized_pnl: proto::decoders::optional_f64(p.realized_pn_l),
+        value: proto::decoders::optional_f64(p.value),
     })
 }
 

@@ -241,11 +241,14 @@ impl AccountSummarySnapshot {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
-    /// DailyPnL for the position
-    pub daily_pnl: f64,
+    /// DailyPnL for the position.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    pub daily_pnl: Option<f64>,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
     pub unrealized_pnl: Option<f64>,
     /// RealizedPnL is the realized PnL for the position.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
     pub realized_pnl: Option<f64>,
 }
 
@@ -255,14 +258,18 @@ pub struct PnL {
 pub struct PnLSingle {
     /// Current size of the position
     pub position: f64,
-    /// DailyPnL for the position
-    pub daily_pnl: f64,
-    /// UnrealizedPnL is the total unrealized PnL for the position (since inception) updating in real time
-    pub unrealized_pnl: f64,
+    /// DailyPnL for the position.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    pub daily_pnl: Option<f64>,
+    /// UnrealizedPnL is the total unrealized PnL for the position (since inception) updating in real time.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    pub unrealized_pnl: Option<f64>,
     /// RealizedPnL is the realized PnL for the position.
-    pub realized_pnl: f64,
-    /// Current market value of the position
-    pub value: f64,
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    pub realized_pnl: Option<f64>,
+    /// Current market value of the position.
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    pub value: Option<f64>,
 }
 
 /// Open position held within the account.

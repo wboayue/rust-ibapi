@@ -86,7 +86,7 @@ mod pnl_tests {
 
         let result = PnL::decode(&test_context(), &message).unwrap();
 
-        assert_eq!(result.daily_pnl, 1234.56);
+        assert_eq!(result.daily_pnl, Some(1234.56));
         assert_eq!(result.unrealized_pnl, Some(2345.67));
         assert_eq!(result.realized_pnl, Some(3456.78));
     }
@@ -130,10 +130,10 @@ mod pnl_single_tests {
         let result = PnLSingle::decode(&test_context(), &message).unwrap();
 
         assert_eq!(result.position, 100.0);
-        assert_eq!(result.daily_pnl, 1234.56);
-        assert_eq!(result.unrealized_pnl, 2345.67);
-        assert_eq!(result.realized_pnl, 3456.78);
-        assert_eq!(result.value, 4567.89);
+        assert_eq!(result.daily_pnl, Some(1234.56));
+        assert_eq!(result.unrealized_pnl, Some(2345.67));
+        assert_eq!(result.realized_pnl, Some(3456.78));
+        assert_eq!(result.value, Some(4567.89));
     }
 
     #[test]
