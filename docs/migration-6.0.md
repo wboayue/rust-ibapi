@@ -469,3 +469,19 @@ match update? {
 ```
 
 Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The compiler finds every arm that reads `data.bars`, `data.start` or `data.end`. It does not catch the serialized form: `HistoricalBarUpdate` derives `Serialize` / `Deserialize`, and the `Historical` payload is now an array of bars (`{"Historical":[..]}`) where it was a `{start, end, bars}` object, so JSON written by 5.x does not deserialize. The `utoipa` schema is updated the same way. `historical_data(..).subscribe()`, new in 6.0, yields `HistoricalDataFrame::Bars(Vec<Bar>)` the same way; to trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from its `Bars` and `End` frames, as the `historical_data_subscribe` examples do.
+
+### 24. `ContractDetails::market_rule_ids` is `Vec<i32>`
+
+`ContractDetails::market_rule_ids` held TWS's comma-separated market rule ids as strings, although `Client::market_rule` takes an `i32`, so each id had to be parsed first. It is now `Vec<i32>`. An absent or empty list is still empty. A `contract_details` reply whose list has an entry that is not an integer now fails with `Error::Parse`, where 5.x kept the text.
+
+```rust,ignore
+// 5.x
+let rule_id: i32 = details.market_rule_ids.first().and_then(|id| id.parse().ok()).expect("no market rule ids");
+let rule = client.market_rule(rule_id)?;
+
+// 6.0
+let rule_id = *details.market_rule_ids.first().expect("no market rule ids");
+let rule = client.market_rule(rule_id)?;
+```
+
+Drop the `.parse()` and pass the id directly. The compiler finds every use that treats an id as a string. It does not catch two runtime differences: a non-integer id in a reply is now an `Error::Parse` from `contract_details`, and `ContractDetails` derives `Serialize` / `Deserialize`, so the ids now serialize as numbers and JSON written by 5.x, with string ids, no longer deserializes. The `utoipa` schema is an integer array.
