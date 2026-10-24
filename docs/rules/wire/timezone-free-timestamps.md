@@ -9,7 +9,7 @@ triggers:
   - reaching for find_timezone, resolve_local, time_tz, or a zone name lookup
   - assuming the gateway's, TWS login's, or host's time zone
   - formatting an OffsetDateTime for an outbound request
-symbols: [find_timezone, resolve_local, parse_connection_time, parse_historical_data_end_timestamp, parse_schedule_date_time, try_parse_time_as_utc, ToField, OffsetDateTime, formatDate]
+symbols: [find_timezone, resolve_local, parse_connection_time, parse_historical_data_end_timestamp, parse_schedule_date_time, parse_time_as_utc, ToField, OffsetDateTime, formatDate]
 related: [enum-typing, proto-only-decoding]
 precedents: ["#808", "#904", "#1148"]
 memory: []
@@ -28,7 +28,7 @@ host zone. Use a form that's the same everywhere, or hand the text to the caller
   (`YYYYMMDD` → `Date`), or a rendering that is UTC by definition (`YYYYMMDD-HH:MM:SS`, the
   gateway's UTC format). Parse it with one `format_description!`, not a list of guesses. A
   zone-less text is UTC only if a doc or a live capture says so (`docs/wire-facts/`), as for
-  historical news `time` (`news::common::decoders::try_parse_time_as_utc`, see
+  historical news `time` (`news::common::decoders::parse_time_as_utc`, see
   [news wire facts](../../wire-facts/news.md#historical-news-time-is-utc)).
 - **Inbound, only zoned or local text available:** pass it through as a `String` field. Don't
   resolve it. Leave the zone to the caller, who knows their gateway setup.

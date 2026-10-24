@@ -1,9 +1,9 @@
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
-use time_tz::{timezones, PrimitiveDateTimeExt};
 
 use super::super::{ArticleType, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
+use crate::proto::decoders::required;
 use crate::Error;
 
 // All originating outgoing-request gates for the news-domain messages
@@ -31,13 +31,13 @@ pub(in crate::news) fn decode_historical_news(message: &ResponseMessage) -> Resu
     decode_historical_news_proto(message.proto()?)
 }
 
-fn try_parse_time_as_utc(time: &str) -> Option<OffsetDateTime> {
+/// Parses a `HistoricalNews` `time` (`YYYY-MM-DD HH:MM:SS.f`, one or more
+/// fraction digits, UTC). The error carries the value.
+fn parse_time_as_utc(time: &str) -> Result<OffsetDateTime, Error> {
     let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
-    let dt = PrimitiveDateTime::parse(time, format).ok()?;
-    match dt.assume_timezone(timezones::db::UTC) {
-        time_tz::OffsetResult::Some(v) => Some(v),
-        _ => None,
-    }
+    PrimitiveDateTime::parse(time, format)
+        .map(PrimitiveDateTime::assume_utc)
+        .map_err(|e| Error::parse_field(time, e.to_string()))
 }
 
 pub(in crate::news) fn decode_tick_news(message: &ResponseMessage) -> Result<NewsArticle, Error> {
@@ -45,7 +45,7 @@ pub(in crate::news) fn decode_tick_news(message: &ResponseMessage) -> Result<New
 }
 
 pub(crate) fn decode_tick_news_proto(p: crate::proto::TickNews) -> Result<NewsArticle, Error> {
-    let millis = p.timestamp.unwrap_or_default();
+    let millis = required(p.timestamp, "timestamp", "TickNews")?;
     let time =
         OffsetDateTime::from_unix_timestamp_nanos((millis as i128) * 1_000_000).map_err(|e| Error::parse_field(millis.to_string(), e.to_string()))?;
 
@@ -86,7 +86,7 @@ fn decode_article_type(code: i32) -> Result<ArticleType, Error> {
 }
 
 pub(crate) fn decode_historical_news_proto(p: crate::proto::HistoricalNews) -> Result<NewsArticle, Error> {
-    let time = p.time.as_deref().and_then(try_parse_time_as_utc).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let time = parse_time_as_utc(required(p.time.as_deref(), "time", "HistoricalNews")?)?;
 
     Ok(NewsArticle {
         time,

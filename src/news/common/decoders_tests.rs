@@ -1,6 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_rejects_text_framing;
+use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::messages::IncomingMessages;
+use time::macros::datetime;
 
 #[test]
 fn decode_news_bulletin_proto_works() {
@@ -64,7 +65,36 @@ fn decode_historical_news_proto_works() {
     assert_eq!(result.provider_code, "BRFG");
     assert_eq!(result.article_id, "BRFG$12345");
     assert_eq!(result.headline, "Market Update");
-    assert_ne!(result.time, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!(result.time, datetime!(2023-04-10 13:30:00 UTC));
+}
+
+#[test]
+fn decode_historical_news_proto_missing_time_is_parse_error() {
+    let proto_msg = crate::proto::HistoricalNews {
+        req_id: Some(1),
+        time: None,
+        ..Default::default()
+    };
+
+    assert_missing_field(decode_historical_news_proto(proto_msg), "time", "HistoricalNews");
+}
+
+/// A malformed `time` is a parse error carrying the value. Previously it
+/// decoded as an article dated `OffsetDateTime::UNIX_EPOCH`.
+#[test]
+fn decode_historical_news_proto_rejects_malformed_time() {
+    for malformed in ["abc", "20230410 13:30:00", "2023-04-10", "2023-04-10 13:30:00", ""] {
+        let proto_msg = crate::proto::HistoricalNews {
+            req_id: Some(1),
+            time: Some(malformed.into()),
+            ..Default::default()
+        };
+
+        match decode_historical_news_proto(proto_msg) {
+            Err(Error::Parse(_, value, _)) => assert_eq!(value, malformed, "error should carry the offending time"),
+            other => panic!("expected Error::Parse for {malformed:?}, got {other:?}"),
+        }
+    }
 }
 
 #[test]
@@ -129,16 +159,33 @@ fn decode_tick_news_proto_works() {
     assert_eq!(result.time.unix_timestamp(), 1_672_531_200);
 }
 
+/// An absent `timestamp` is a missing-field error and an out-of-range one a
+/// parse error carrying the value. Previously an absent one decoded as an
+/// article dated `OffsetDateTime::UNIX_EPOCH`.
 #[test]
-fn decode_tick_news_proto_invalid_timestamp() {
-    let proto_msg = crate::proto::TickNews {
-        timestamp: Some(i64::MAX),
-        ..Default::default()
-    };
+fn decode_tick_news_proto_timestamp() {
+    let cases: [(Option<i64>, Option<OffsetDateTime>); 3] = [
+        (Some(1_672_531_200_000), Some(datetime!(2023-01-01 00:00:00 UTC))),
+        (None, None),
+        (Some(i64::MAX), None),
+    ];
 
-    let err = decode_tick_news_proto(proto_msg).unwrap_err();
-    let msg = err.to_string();
-    assert!(msg.contains(&i64::MAX.to_string()), "error should include the bad value: {msg}");
+    for (timestamp, expected) in cases {
+        let proto_msg = crate::proto::TickNews {
+            timestamp,
+            ..Default::default()
+        };
+        let result = decode_tick_news_proto(proto_msg);
+
+        match (timestamp, expected) {
+            (_, Some(time)) => assert_eq!(result.unwrap().time, time, "timestamp {timestamp:?}"),
+            (None, None) => assert_missing_field(result, "timestamp", "TickNews"),
+            (Some(value), None) => match result {
+                Err(Error::Parse(_, got, _)) => assert_eq!(got, value.to_string(), "error should carry the offending timestamp"),
+                other => panic!("expected Error::Parse for {value}, got {other:?}"),
+            },
+        }
+    }
 }
 
 #[test]

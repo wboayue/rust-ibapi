@@ -33,12 +33,12 @@ Promote one only with a capture (`IBAPI_RAW_CAPTURE_DIR`), recording the gateway
 | --- | --- | --- |
 | `20260101 09:30:00` (zone-less) | ib_insync `parseIBDatetime` tolerates it; pre-10.17 TWS | capture, and which zone it means (instrument? gateway host? UTC?). Most likely to be wrong if assumed UTC |
 | `20260101  09:30:00 ...` (two spaces) | ib_insync e286b0b; old text `historicalDataEnd` | capture on protobuf transport; if seen, collapse whitespace rather than special-case |
-| `2026-01-01 09:30:00[.0]` | news `try_parse_time_as_utc` parses this on `NewsArticle`; ib_async#230 | capture; if seen, share the parser with `src/news/common/decoders.rs` |
+| `2026-01-01 09:30:00[.0]` | news `parse_time_as_utc` parses the `.0` form on `NewsArticle`; ib_async#230 | capture; if seen, share the parser with `src/news/common/decoders.rs` |
 | `2026-01-01 09:30:00 UTC` | dashed date + zone | capture |
 
 ### Consolidation, when triggered
 
-- If a dashed-date shape is verified, fold `news::common::decoders::try_parse_time_as_utc` and this parser into one helper under `common::timezone` (review item 6 on #808).
+- If a dashed-date shape is verified, fold `news::common::decoders::parse_time_as_utc` and this parser into one helper under `common::timezone` (review item 6 on #808).
 - `parse_schedule_date_time` shares `DASHED_DATE_TIME` with the UTC rendering; keep that single constant if the format list grows.
 - `YYYYMMDD HH:MM:SS <zone>` splitter (from #859): `parse_connection_time` (`src/connection/common.rs`, soft on an unknown zone) and `parse_historical_data_end_timestamp` (hard on every failure) both split with `splitn(3, ' ')`. Error policies differ, so a shared helper could only return the parts (date, time, zone text). Land it when a third parser of this rendering appears.
 
