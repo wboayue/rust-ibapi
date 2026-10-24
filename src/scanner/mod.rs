@@ -105,6 +105,15 @@ pub struct ScannerData {
     pub rank: i32,
     /// The contract matching the scanner subscription.
     pub contract_details: crate::contracts::ContractDetails,
+    /// Optional string of the scanner row; IB's protocol definition marks it internal use only.
+    /// `""` when the row omits it.
+    pub distance: String,
+    /// Optional string of the scanner row; IB's protocol definition says it is always empty.
+    /// `""` when the row omits it.
+    pub benchmark: String,
+    /// Optional string of the scanner row; IB's protocol definition marks it internal use only.
+    /// `""` when the row omits it.
+    pub projection: String,
     /// Describes the combo legs when the scanner is returning EFP.
     pub leg: String,
 }

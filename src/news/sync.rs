@@ -1,5 +1,6 @@
 //! Synchronous implementation of news functionality
 
+use std::time::Instant;
 use time::OffsetDateTime;
 
 use super::common::{self, decoders, encoders};
@@ -7,6 +8,7 @@ use super::*;
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
+use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::Error;
@@ -119,6 +121,87 @@ impl Client {
         let request =
             encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
         builder.send(request)
+    }
+
+    /// Requests one page of historical news headlines: the articles and TWS's
+    /// `has_more` flag, which [`historical_news`](Self::historical_news)
+    /// discards. Waits for TWS's end frame.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
+    /// * `provider_codes` - A list of provider codes.
+    /// * `start_time`     - Marks the (exclusive) start of the date range.
+    /// * `end_time`       - Marks the (inclusive) end of the date range.
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300). TWS returns at most 300 for a
+    ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
+    ///
+    /// # Errors
+    /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedResponse`] on a frame of
+    /// another type; [`Error::UnexpectedEndOfStream`] if the request's channel closes
+    /// before the end frame; [`Error::Timeout`] if the page has not fully arrived within
+    /// the one-shot timeout (30 seconds by default); [`Error::ConnectionReset`] if the
+    /// connection drops on every retry (three), [`Error::Shutdown`] if the client shuts down.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use time::macros::datetime;
+    ///
+    /// # fn main() -> Result<(), ibapi::Error> {
+    /// let client = Client::connect("127.0.0.1:4002", 100)?;
+    ///
+    /// let page = client.historical_news_page(
+    ///     265598, // AAPL
+    ///     &["DJNL", "BRFG"],
+    ///     datetime!(2023-01-01 0:00 UTC),
+    ///     datetime!(2023-01-02 0:00 UTC),
+    ///     5,
+    /// )?;
+    ///
+    /// for article in &page.articles {
+    ///     println!("{:?}: {}", article.time, article.headline);
+    /// }
+    /// if page.has_more {
+    ///     println!("more headlines match the range");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    // Flat like `historical_news`: five required arguments, no defaults; see docs/rules/style/param-budget.md.
+    pub fn historical_news_page(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u16,
+    ) -> Result<HistoricalNewsPage, Error> {
+        let deadline = request_helpers::blocking::one_shot_deadline(self);
+        retry_on_connection_reset(self, deadline, || {
+            request_helpers::blocking::check_deadline(deadline)?;
+            let builder = self.request();
+            let request =
+                encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
+            let subscription = builder.send_raw(request)?;
+
+            // Only the end frame carries `has_more` and proves the page is
+            // complete, so a close before it is an error.
+            let mut page = HistoricalNewsPage::default();
+            loop {
+                let message = match deadline {
+                    None => subscription.next(),
+                    // `next_before` returns a queued frame even past the deadline, so check the clock first.
+                    Some(deadline) if Instant::now() >= deadline => return Err(Error::Timeout),
+                    Some(deadline) => subscription.next_before(deadline)?,
+                }
+                .ok_or(Error::UnexpectedEndOfStream)??;
+                if common::historical_news_page_step(&mut page, &message)? {
+                    return Ok(page);
+                }
+            }
+        })
     }
 
     /// Requests news article body given articleId.

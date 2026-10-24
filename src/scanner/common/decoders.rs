@@ -33,6 +33,9 @@ pub(crate) fn decode_scanner_data_proto(p: crate::proto::ScannerData) -> Result<
                 market_name: elem.market_name.unwrap_or_default(),
                 ..Default::default()
             },
+            distance: elem.distance.unwrap_or_default(),
+            benchmark: elem.benchmark.unwrap_or_default(),
+            projection: elem.projection.unwrap_or_default(),
             leg: elem.combo_key.unwrap_or_default(),
         });
     }

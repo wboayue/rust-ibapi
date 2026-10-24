@@ -17,8 +17,8 @@ fn decode_scanner_data_proto_works() {
                 }),
                 market_name: Some("NMS".into()),
                 distance: Some("1.5".into()),
-                benchmark: Some("".into()),
-                projection: Some("".into()),
+                benchmark: Some("SPX".into()),
+                projection: Some("0.25".into()),
                 combo_key: Some("".into()),
             },
             crate::proto::ScannerDataElement {
@@ -43,6 +43,13 @@ fn decode_scanner_data_proto_works() {
     assert_eq!(results[0].rank, 0);
     assert_eq!(results[0].contract_details.contract.contract_id, 265598);
     assert_eq!(results[0].contract_details.market_name, "NMS");
+    assert_eq!(results[0].distance, "1.5");
+    assert_eq!(results[0].benchmark, "SPX");
+    assert_eq!(results[0].projection, "0.25");
+    assert_eq!(results[1].rank, 1);
+    assert_eq!(results[1].distance, "");
+    assert_eq!(results[1].benchmark, "");
+    assert_eq!(results[1].projection, "");
 }
 
 #[test]

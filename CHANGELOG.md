@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
 - `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window: the trim `fetch()` applies after `between()`, for bars read another way, such as from a subscription (#1188).
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).
+- `Client::historical_news_page(contract_id, provider_codes, start_time, end_time, total_results)` (async and blocking) returns `news::HistoricalNewsPage`: the headlines as `articles`, and `has_more`, TWS's flag that more headlines than `total_results` match the range, so a range can be paged. `historical_news` still discards that flag (#1205).
 
 ### Changed
 
@@ -38,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `market_data` subscriptions yield `TickTypes::Reroute` and `market_depth` subscriptions `MarketDepths::Reroute` when TWS answers a CFD request with the underlying to request instead (`Reroute { contract_id, exchange }`); the stream ends after it, without a cancel. Previously they were dropped with an info-level log. Exhaustive matches on `TickTypes` and `MarketDepths` need the arm. See `docs/migration-6.0.md` §23 (#1197).
 - `ContractDetails::market_rule_ids` is now `Vec<i32>` instead of `Vec<String>`, so each id can be passed to `Client::market_rule` directly; serialized, the ids are numbers and the `utoipa` schema is an integer array; JSON with string ids no longer deserializes. A `contract_details` reply whose market rule ids include a non-integer entry now fails with `Error::Parse`. See `docs/migration-6.0.md` §24 (#1198).
 - `Client::notice_stream()` (async and blocking) returns the `NoticeStream` directly rather than in a `Result`; it never returned `Err`. Drop the `?` or `.expect(..)` after the call. See `docs/migration-6.0.md` §25 (#1199).
+- `ScannerData` gains `distance`, `benchmark` and `projection`, the three optional strings of a scanner row, which the decoder dropped; a string the row omits decodes to `""`. `distance` and `projection` are for IB's internal use and `benchmark` is always empty. A `ScannerData { .. }` literal that names every field needs the three new ones, and a `ScannerData` serialized before this change no longer deserializes. See `docs/migration-6.0.md` §27 (#1205).
 
 ### Removed
 

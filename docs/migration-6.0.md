@@ -523,3 +523,31 @@ let notices = client.notice_stream();
 ```
 
 Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.
+
+### 27. `ScannerData` gains `distance`, `benchmark` and `projection`; `historical_news_page`
+
+A scanner row carries three optional strings that the decoder dropped: `distance`, `benchmark`
+and `projection`. `ScannerData` now has them as public `String` fields, `""` when the row omits
+one. IB's protocol definition marks `distance` and `projection` internal use only and says
+`benchmark` is always empty; which rows carry them was not probed.
+
+- **A `ScannerData { .. }` literal that names every field** needs the three new ones. A literal
+  ending in `..Default::default()` compiles unchanged.
+- **Serde:** a `ScannerData` serialized by 5.x lacks the three fields and no longer
+  deserializes.
+
+```rust,ignore
+// 5.x
+let row = ScannerData { rank, contract_details, leg };
+
+// 6.0
+let row = ScannerData { rank, contract_details, leg, ..Default::default() };
+```
+
+The compiler flags the struct literals; it does not catch stored 5.x JSON, which fails only when
+it is read.
+
+The same release adds `Client::historical_news_page` (async and blocking), which takes the
+arguments of `historical_news` and returns `news::HistoricalNewsPage { articles, has_more }`.
+`has_more` is TWS's flag that more headlines than `total_results` match the range;
+`historical_news` discards it. `historical_news` is unchanged; use the new method to page a range.

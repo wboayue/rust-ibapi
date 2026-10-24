@@ -116,6 +116,121 @@ fn historical_news_works() {
 }
 
 #[test]
+fn historical_news_page() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalNews,
+            historical_news()
+                .request_id(TEST_REQ_ID_FIRST)
+                .time("2024-12-23 19:45:00.0")
+                .provider_code("DJ-N")
+                .article_id("DJ-N$19985fef")
+                .headline("First")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalNews,
+            historical_news()
+                .request_id(TEST_REQ_ID_FIRST)
+                .time("2024-12-23 18:45:00.0")
+                .provider_code("DJ-N")
+                .article_id("DJ-N$19985fee")
+                .headline("Second")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalNewsEnd,
+            historical_news_end().request_id(TEST_REQ_ID_FIRST).has_more(true).encode_proto(),
+        ),
+    ]));
+
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
+
+    let start_time = datetime!(2023-01-01 0:00 UTC);
+    let end_time = datetime!(2023-01-02 0:00 UTC);
+
+    let page = client
+        .historical_news_page(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 2)
+        .expect("request historical news page failed");
+
+    assert_request(
+        &message_bus,
+        0,
+        &historical_news_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .provider_codes(&["BZ", "DJ"])
+            .start_time(start_time)
+            .end_time(end_time)
+            .total_results(2),
+    );
+
+    assert_eq!(page.articles.len(), 2);
+    assert_eq!(page.articles[0].article_id, "DJ-N$19985fef");
+    assert_eq!(page.articles[0].headline, "First");
+    assert_eq!(page.articles[1].article_id, "DJ-N$19985fee");
+    assert_eq!(page.articles[1].headline, "Second");
+    assert!(page.has_more);
+}
+
+/// The deadline bounds the wait for the end frame: the queued article is read, the
+/// next read times out, and a queued article is not a page.
+#[test]
+fn historical_news_page_times_out_at_the_deadline() {
+    let message_bus = Arc::new(
+        MessageBusStub::with_ordered_responses(vec![proto_response(
+            IncomingMessages::HistoricalNews,
+            historical_news()
+                .request_id(TEST_REQ_ID_FIRST)
+                .time("2024-12-23 19:45:00.0")
+                .provider_code("DJ-N")
+                .article_id("DJ-N$19985fef")
+                .headline("First")
+                .encode_proto(),
+        )])
+        .keeping_channels_open(),
+    );
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_NEWS_DATA).with_one_shot_timeout(std::time::Duration::from_millis(50));
+
+    let error = client
+        .historical_news_page(
+            TEST_CONTRACT_ID,
+            &["BZ", "DJ"],
+            datetime!(2023-01-01 0:00 UTC),
+            datetime!(2023-01-02 0:00 UTC),
+            2,
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, crate::Error::Timeout), "got {error:?}");
+}
+
+#[test]
+fn historical_news_page_requires_end() {
+    let article = proto_response(
+        IncomingMessages::HistoricalNews,
+        historical_news().request_id(TEST_REQ_ID_FIRST).article_id("DJ-N$19985fef").encode_proto(),
+    );
+    let wrong_type = proto_response(IncomingMessages::NewsArticle, news_article().request_id(TEST_REQ_ID_FIRST).encode_proto());
+    for (responses, closed) in [(vec![article.clone()], true), (vec![article, wrong_type], false)] {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+        let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
+        let result = client.historical_news_page(
+            TEST_CONTRACT_ID,
+            &["BZ"],
+            datetime!(2023-01-01 0:00 UTC),
+            datetime!(2023-01-02 0:00 UTC),
+            2,
+        );
+        if closed {
+            assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
+        } else {
+            assert!(matches!(result, Err(crate::Error::UnexpectedResponse(_))), "{result:?}");
+        }
+        assert_eq!(request_message_count(&message_bus), 1);
+    }
+}
+
+#[test]
 fn news_article_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsArticle,
