@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
 
 #[test]
-fn test_decode_news_bulletin_proto() {
+fn decode_news_bulletin_proto_works() {
     let proto_msg = crate::proto::NewsBulletin {
         news_msg_id: Some(42),
         news_msg_type: Some(1),
@@ -19,7 +19,7 @@ fn test_decode_news_bulletin_proto() {
 }
 
 #[test]
-fn test_decode_news_article_proto() {
+fn decode_news_article_proto_works() {
     let proto_msg = crate::proto::NewsArticle {
         req_id: Some(1),
         article_type: Some(0),
@@ -32,7 +32,7 @@ fn test_decode_news_article_proto() {
 }
 
 #[test]
-fn test_decode_historical_news_proto() {
+fn decode_historical_news_proto_works() {
     let proto_msg = crate::proto::HistoricalNews {
         req_id: Some(1),
         time: Some("2023-04-10 13:30:00.000".into()),
@@ -49,7 +49,7 @@ fn test_decode_historical_news_proto() {
 }
 
 #[test]
-fn test_decode_news_providers_proto() {
+fn decode_news_providers_proto_works() {
     let proto_msg = crate::proto::NewsProviders {
         news_providers: vec![
             crate::proto::NewsProvider {
@@ -71,19 +71,19 @@ fn test_decode_news_providers_proto() {
 }
 
 #[test]
-fn test_decode_news_providers_proto_empty() {
+fn decode_news_providers_proto_empty() {
     let proto_msg = crate::proto::NewsProviders { news_providers: vec![] };
     let result = decode_news_providers_proto(proto_msg).unwrap();
     assert!(result.is_empty());
 }
 
 #[test]
-fn test_decode_news_bulletin_rejects_text_framing() {
+fn decode_news_bulletin_rejects_text_framing() {
     assert_rejects_text_framing(IncomingMessages::NewsBulletins, "14\01\01\02\0msg\0NYSE\0", decode_news_bulletin);
 }
 
 #[test]
-fn test_decode_historical_news_rejects_text_framing() {
+fn decode_historical_news_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalNews,
         "86\09000\02024-12-23 19:45:00.0\0DJ-N\0a\0h\0",
@@ -92,7 +92,7 @@ fn test_decode_historical_news_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_tick_news_proto() {
+fn decode_tick_news_proto_works() {
     let proto_msg = crate::proto::TickNews {
         req_id: Some(9000),
         timestamp: Some(1_672_531_200_000),
@@ -111,7 +111,7 @@ fn test_decode_tick_news_proto() {
 }
 
 #[test]
-fn test_decode_tick_news_proto_invalid_timestamp() {
+fn decode_tick_news_proto_invalid_timestamp() {
     let proto_msg = crate::proto::TickNews {
         timestamp: Some(i64::MAX),
         ..Default::default()
@@ -123,7 +123,7 @@ fn test_decode_tick_news_proto_invalid_timestamp() {
 }
 
 #[test]
-fn test_decode_tick_news_rejects_text_framing() {
+fn decode_tick_news_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::TickNews,
         "84\09000\01672531200\0BZ\0BZ$123\0Breaking\0extra\0",

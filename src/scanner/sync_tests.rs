@@ -15,7 +15,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 
 #[test]
-fn test_scanner165_noitems_keeps_queued_batches() {
+fn scanner165_noitems_keeps_queued_batches() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(no_items_then_batches()));
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let parameters = no_items_parameters();
@@ -45,7 +45,7 @@ fn test_scanner165_noitems_keeps_queued_batches() {
 }
 
 #[test]
-fn test_scanner165_other_failures_remain_terminal() {
+fn scanner165_other_failures_remain_terminal() {
     for &(code, message) in TERMINAL_SCANNER_ERRORS {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(error_then_empty_batch(code, message)));
         let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -59,7 +59,7 @@ fn test_scanner165_other_failures_remain_terminal() {
 }
 
 #[test]
-fn test_scanner165_noitems_remains_terminal_for_other_requests() {
+fn scanner165_noitems_remains_terminal_for_other_requests() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         TEST_REQ_ID_FIRST,
         HMDS_QUERY_MESSAGE_CODE,
@@ -71,7 +71,7 @@ fn test_scanner165_noitems_remains_terminal_for_other_requests() {
 }
 
 #[test]
-fn test_scanner_parameters() {
+fn scanner_parameters_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerParameters,
         scanner_parameters().encode_proto(),
@@ -89,7 +89,7 @@ fn test_scanner_parameters() {
 }
 
 #[test]
-fn test_scanner_subscription() {
+fn scanner_subscription() {
     let rows = vec![
         scanner_data_row(0, 670777621, "SVMH"),
         scanner_data_row(1, 536918651, "GTI"),

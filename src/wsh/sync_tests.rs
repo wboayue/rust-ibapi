@@ -50,7 +50,7 @@ fn by_filter(client: &Client, filter: &str, limit: Option<i32>, auto_fill: Optio
 }
 
 #[test]
-fn test_wsh_metadata_table() {
+fn wsh_metadata_table() {
     use crate::wsh::common::test_tables::wsh_metadata_test_cases;
 
     for test_case in wsh_metadata_test_cases() {
@@ -70,7 +70,7 @@ fn test_wsh_metadata_table() {
 }
 
 #[test]
-fn test_wsh_metadata_request_body() {
+fn wsh_metadata_request_body() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::WshMetaData,
         wsh_metadata_response()
@@ -86,7 +86,7 @@ fn test_wsh_metadata_request_body() {
 }
 
 #[test]
-fn test_wsh_event_data_by_contract_table() {
+fn wsh_event_data_by_contract_table() {
     use crate::wsh::common::test_tables::event_data_by_contract_test_cases;
 
     for test_case in event_data_by_contract_test_cases() {
@@ -124,7 +124,7 @@ fn test_wsh_event_data_by_contract_table() {
 }
 
 #[test]
-fn test_wsh_event_data_by_filter_subscription_sync() {
+fn wsh_event_data_by_filter_subscription_sync() {
     let event_response = |data| {
         proto_response(
             IncomingMessages::WshEventData,
@@ -161,7 +161,7 @@ fn test_wsh_event_data_by_filter_subscription_sync() {
 }
 
 #[test]
-fn test_wsh_event_data_by_filter_integration_table() {
+fn wsh_event_data_by_filter_integration_table() {
     use crate::wsh::common::test_tables::event_data_by_filter_integration_test_cases;
 
     for test_case in event_data_by_filter_integration_test_cases() {
@@ -211,7 +211,7 @@ fn test_wsh_event_data_by_filter_integration_table() {
 }
 
 #[test]
-fn test_subscription_integration_table() {
+fn subscription_integration_table() {
     use crate::wsh::common::test_tables::subscription_integration_test_cases;
 
     for test_case in subscription_integration_test_cases() {
@@ -242,7 +242,7 @@ fn test_subscription_integration_table() {
 }
 
 #[test]
-fn test_data_stream_cancel_message() {
+fn data_stream_cancel_message() {
     let request_id = test_data::REQUEST_ID_METADATA;
 
     let metadata_cancel = WshMetadata::cancel_message(0, Some(request_id), None).unwrap();
@@ -256,7 +256,7 @@ fn test_data_stream_cancel_message() {
 }
 
 #[test]
-fn test_wsh_metadata_decode_table() {
+fn wsh_metadata_decode_table() {
     use crate::subscriptions::DecoderContext;
     use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
@@ -270,7 +270,7 @@ fn test_wsh_metadata_decode_table() {
 }
 
 #[test]
-fn test_wsh_event_data_decode_table() {
+fn wsh_event_data_decode_table() {
     use crate::subscriptions::DecoderContext;
     use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 

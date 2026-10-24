@@ -20,7 +20,7 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 
 #[tokio::test]
-async fn test_switch_market_data_type() {
+async fn switch_market_data_type() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -34,7 +34,7 @@ async fn test_switch_market_data_type() {
 }
 
 #[tokio::test]
-async fn test_realtime_bars() {
+async fn realtime_bars() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::RealTimeBars,
@@ -120,7 +120,7 @@ async fn test_realtime_bars() {
 }
 
 #[tokio::test]
-async fn test_tick_by_tick_all_last() {
+async fn tick_by_tick_all_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
@@ -201,7 +201,7 @@ async fn test_tick_by_tick_all_last() {
 }
 
 #[tokio::test]
-async fn test_tick_by_tick_last() {
+async fn tick_by_tick_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
         trade_tick()
@@ -260,7 +260,7 @@ async fn test_tick_by_tick_last() {
 }
 
 #[tokio::test]
-async fn test_tick_by_tick_bid_ask() {
+async fn tick_by_tick_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
         bid_ask_tick()
@@ -316,7 +316,7 @@ async fn test_tick_by_tick_bid_ask() {
 }
 
 #[tokio::test]
-async fn test_tick_by_tick_midpoint() {
+async fn tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
@@ -388,7 +388,7 @@ async fn test_tick_by_tick_midpoint() {
 }
 
 #[tokio::test]
-async fn test_market_depth() {
+async fn market_depth() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::MarketDepth,
@@ -477,7 +477,7 @@ async fn test_market_depth() {
 }
 
 #[tokio::test]
-async fn test_market_depth_exchanges() {
+async fn market_depth_exchanges() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::MktDepthExchanges,
         mkt_depth_exchanges_response()
@@ -525,7 +525,7 @@ async fn test_market_depth_exchanges() {
 }
 
 #[tokio::test]
-async fn test_basic_market_data() {
+async fn basic_market_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         // tick_type 1 = Bid; size present + Bid → PriceSize variant.
         proto_response(
@@ -607,7 +607,7 @@ async fn test_basic_market_data() {
 }
 
 #[tokio::test]
-async fn test_market_data_with_combo_legs() {
+async fn market_data_with_combo_legs() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -638,7 +638,7 @@ async fn test_market_data_with_combo_legs() {
 }
 
 #[tokio::test]
-async fn test_market_data_with_delta_neutral() {
+async fn market_data_with_delta_neutral() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -666,7 +666,7 @@ async fn test_market_data_with_delta_neutral() {
 }
 
 #[tokio::test]
-async fn test_market_data_regulatory_snapshot() {
+async fn market_data_regulatory_snapshot() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
@@ -734,7 +734,7 @@ async fn subscription_cancel_only_sends_once() {
 ///
 /// See docs/rules/testing/fixture-builders.md.
 #[tokio::test]
-async fn test_text_framed_fixture_fails_the_subscription() {
+async fn text_framed_fixture_fails_the_subscription() {
     // Payload beyond the message id and request id is irrelevant — the decoder
     // rejects on framing before reading a field.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("50\0\09000\0")]));

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::thread;
 
 #[test]
-fn test_id_generator_basic() {
+fn id_generator_basic() {
     let gen = IdGenerator::new(100);
     assert_eq!(gen.current(), 100);
     assert_eq!(gen.next(), 100);
@@ -13,7 +13,7 @@ fn test_id_generator_basic() {
 }
 
 #[test]
-fn test_id_generator_raise() {
+fn id_generator_raise() {
     let gen = IdGenerator::new(100);
     assert_eq!(gen.next(), 100);
     gen.raise(200);
@@ -32,7 +32,7 @@ fn test_id_generator_raise() {
 /// server update racing `fetch_add` rewinds the counter and duplicates
 /// allocations; `fetch_max` makes every interleaving safe.
 #[test]
-fn test_id_generator_concurrent_next_and_raise() {
+fn id_generator_concurrent_next_and_raise() {
     let gen = Arc::new(IdGenerator::new(0));
 
     let raiser = {
@@ -62,7 +62,7 @@ fn test_id_generator_concurrent_next_and_raise() {
 }
 
 #[test]
-fn test_id_generator_thread_safe() {
+fn id_generator_thread_safe() {
     let gen = Arc::new(IdGenerator::new(0));
     let mut handles = vec![];
 
@@ -94,7 +94,7 @@ fn test_id_generator_thread_safe() {
 }
 
 #[test]
-fn test_request_id_generator() {
+fn request_id_generator() {
     let gen = IdGenerator::new_request_id_generator();
     assert_eq!(gen.current(), REQUEST_ID_FLOOR);
     assert_eq!(gen.next(), REQUEST_ID_FLOOR);
@@ -102,7 +102,7 @@ fn test_request_id_generator() {
 }
 
 #[test]
-fn test_next_up_to_stops_at_max() {
+fn next_up_to_stops_at_max() {
     let gen = IdGenerator::new(9);
     assert_eq!(gen.next_up_to(10), Some(9));
     assert_eq!(gen.next_up_to(10), Some(10));
@@ -113,7 +113,7 @@ fn test_next_up_to_stops_at_max() {
 /// Racing callers each get a distinct id, together exactly the range up to
 /// `max`, and the counter stops one past it.
 #[test]
-fn test_next_up_to_is_unique_under_contention() {
+fn next_up_to_is_unique_under_contention() {
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -134,7 +134,7 @@ fn test_next_up_to_is_unique_under_contention() {
 }
 
 #[test]
-fn test_client_id_manager() {
+fn client_id_manager() {
     let manager = ClientIdManager::new(50).unwrap();
 
     // Test request IDs
@@ -160,7 +160,7 @@ fn test_client_id_manager() {
 /// A seed in the request range would put every order the session places on
 /// request ids (#789).
 #[test]
-fn test_client_id_manager_rejects_seed_in_request_range() {
+fn client_id_manager_rejects_seed_in_request_range() {
     assert!(ClientIdManager::new(REQUEST_ID_FLOOR - 1).is_ok());
     let err = ClientIdManager::new(REQUEST_ID_FLOOR).unwrap_err();
     assert!(
@@ -172,7 +172,7 @@ fn test_client_id_manager_rejects_seed_in_request_range() {
 /// Request ids never reach the order range, and stop before `i32::MAX`, whose
 /// error frames TWS sends without an id.
 #[test]
-fn test_request_ids_stop_at_ceiling() {
+fn request_ids_stop_at_ceiling() {
     let manager = ClientIdManager::new(0).unwrap();
     manager.request_ids.raise(REQUEST_ID_CEILING);
     assert_eq!(manager.next_request_id().raw(), REQUEST_ID_CEILING);

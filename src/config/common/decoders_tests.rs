@@ -3,7 +3,7 @@ use crate::testdata::builders::config::config_response;
 use crate::testdata::builders::ResponseProtoEncoder;
 
 #[test]
-fn test_decode_config_proto_populated() {
+fn decode_config_proto_populated() {
     let p = config_response()
         .read_only_api(true)
         .socket_port(4002)
@@ -38,7 +38,7 @@ fn test_decode_config_proto_populated() {
 }
 
 #[test]
-fn test_decode_config_proto_empty() {
+fn decode_config_proto_empty() {
     let config = decode_config_proto(proto::ConfigResponse::default()).unwrap();
 
     assert_eq!(config, Config::default());
@@ -49,7 +49,7 @@ fn test_decode_config_proto_empty() {
 }
 
 #[test]
-fn test_decode_update_config_proto_populated() {
+fn decode_update_config_proto_populated() {
     let p = crate::testdata::builders::config::update_config_response()
         .status("warning")
         .message("please confirm")

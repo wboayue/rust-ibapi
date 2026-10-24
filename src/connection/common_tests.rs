@@ -50,7 +50,7 @@ fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a Captur
 }
 
 #[test]
-fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
+fn dispatch_unsolicited_open_order_decode_failure_emits_notice() {
     // Sparse text-framed OpenOrder — decoder calls proto() and rejects.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
@@ -72,7 +72,7 @@ fn test_dispatch_unsolicited_open_order_decode_failure_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
+fn dispatch_unsolicited_order_status_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -89,7 +89,7 @@ fn test_dispatch_unsolicited_order_status_decode_failure_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_account_value_typed() {
+fn dispatch_unsolicited_account_value_typed() {
     use crate::messages::IncomingMessages;
     use crate::testdata::builders::accounts::account_value;
     use crate::testdata::builders::ResponseProtoEncoder;
@@ -123,7 +123,7 @@ fn test_dispatch_unsolicited_account_value_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_open_order_end_typed() {
+fn dispatch_unsolicited_open_order_end_typed() {
     // OpenOrderEnd: msg_type=53, version=1
     let mut message = ResponseMessage::from("53\01\0");
 
@@ -142,7 +142,7 @@ fn test_dispatch_unsolicited_open_order_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_account_download_end_typed() {
+fn dispatch_unsolicited_account_download_end_typed() {
     // AccountDownloadEnd: msg_type=54, version=1, account
     let mut message = ResponseMessage::from("54\01\0DU1234567\0");
 
@@ -159,7 +159,7 @@ fn test_dispatch_unsolicited_account_download_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_unknown_emits_notice() {
+fn dispatch_unsolicited_unknown_emits_notice() {
     // NewsBulletins (msg_type=14) — no typed variant in StartupMessage.
     // Catch-all fires the notice sink with HANDSHAKE_UNKNOWN_FRAME_CODE.
     let mut message = ResponseMessage::from("14\0\0");
@@ -183,7 +183,7 @@ fn test_dispatch_unsolicited_unknown_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
+fn dispatch_unsolicited_notice_warning_invokes_notice_sink() {
     // Error frame with code 2104 (farm-status warning), proto-framed.
     let mut message = proto_error_response(-1, 2104, "Market data farm OK");
 
@@ -196,7 +196,7 @@ fn test_dispatch_unsolicited_notice_warning_invokes_notice_sink() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
+fn dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     // Error frame with code 504 — non-warning, non-system message.
     let mut message = proto_error_response(-1, 504, "Not connected");
 
@@ -207,7 +207,7 @@ fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
+fn dispatch_unsolicited_notice_only_fires_notice_sink() {
     // Error frame should fire the notice sink, NOT the startup callback.
     let mut message = proto_error_response(-1, 2104, "farm OK");
 
@@ -230,7 +230,7 @@ fn test_dispatch_unsolicited_notice_only_fires_notice_sink() {
 }
 
 #[test]
-fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
+fn parse_account_info_callback_not_invoked_for_next_valid_id() {
     use prost::Message;
 
     // NextValidId is consumed internally — neither callback fires.
@@ -250,7 +250,7 @@ fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
 }
 
 #[test]
-fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
+fn parse_account_info_callback_not_invoked_for_managed_accounts() {
     use prost::Message;
 
     let handler = ConnectionHandler::default();
@@ -272,7 +272,7 @@ fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
 }
 
 #[test]
-fn test_parse_account_info_multiple_messages_callback() {
+fn parse_account_info_multiple_messages_callback() {
     use prost::Message;
 
     let handler = ConnectionHandler::default();
@@ -300,7 +300,7 @@ fn test_parse_account_info_multiple_messages_callback() {
 }
 
 #[test]
-fn test_parse_account_info_next_valid_id_rejects_text_framing() {
+fn parse_account_info_next_valid_id_rejects_text_framing() {
     // The handshake is the one reader still advancing a cursor, so it takes
     // `&mut` where every decoder takes `&` — hence the clone rather than a
     // direct hand-off to the shared assertion.
@@ -311,7 +311,7 @@ fn test_parse_account_info_next_valid_id_rejects_text_framing() {
 }
 
 #[test]
-fn test_parse_account_info_managed_accounts_rejects_text_framing() {
+fn parse_account_info_managed_accounts_rejects_text_framing() {
     let handler = ConnectionHandler::default();
     assert_rejects_text_framing(IncomingMessages::ManagedAccounts, "15\01\0DU123,DU456\0", |message| {
         handler.parse_account_info(&mut message.clone(), &empty_ctx())
@@ -319,17 +319,17 @@ fn test_parse_account_info_managed_accounts_rejects_text_framing() {
 }
 
 #[test]
-fn test_require_protobuf_support_accepts_minimum() {
+fn require_protobuf_support_accepts_minimum() {
     require_protobuf_support(server_versions::PROTOBUF_REST_MESSAGES_3).expect("floor version must be accepted");
 }
 
 #[test]
-fn test_require_protobuf_support_accepts_newer() {
+fn require_protobuf_support_accepts_newer() {
     require_protobuf_support(server_versions::PROTOBUF_REST_MESSAGES_3 + 5).expect("newer versions must be accepted");
 }
 
 #[test]
-fn test_require_protobuf_support_rejects_older() {
+fn require_protobuf_support_rejects_older() {
     let actual = server_versions::PROTOBUF_REST_MESSAGES_3 - 1;
     let err = require_protobuf_support(actual).expect_err("older versions must be rejected");
 
@@ -350,7 +350,7 @@ fn test_require_protobuf_support_rejects_older() {
 }
 
 #[test]
-fn test_require_protobuf_support_rejects_previous_scan_data_floor() {
+fn require_protobuf_support_rejects_previous_scan_data_floor() {
     // Servers in [210, 212] don't yet emit the REST_MESSAGES_1/2 families
     // (ExerciseOptions, calc, FA, SecDefOpt, FamilyCodes, MarketRule, …) in
     // protobuf and we no longer carry text-decode fallback, so the floor
@@ -367,7 +367,7 @@ fn test_require_protobuf_support_rejects_previous_scan_data_floor() {
 }
 
 #[test]
-fn test_parse_connection_time() {
+fn parse_connection_time_works() {
     // TWS sends the abbreviation in force on the date: PST in winter, PDT in summer.
     let (connection_time, timezone) = parse_connection_time("20230105 22:20:39 PST");
     assert_eq!(connection_time, Some(datetime!(2023-01-05 22:20:39 -08:00)));
@@ -379,7 +379,7 @@ fn test_parse_connection_time() {
 }
 
 #[test]
-fn test_parse_connection_time_china_standard_time() {
+fn parse_connection_time_china_standard_time() {
     let example = "20230405 22:20:39 China Standard Time";
     let (connection_time, timezone) = parse_connection_time(example);
 
@@ -389,7 +389,7 @@ fn test_parse_connection_time_china_standard_time() {
 }
 
 #[test]
-fn test_parse_connection_time_brasilia_standard_time() {
+fn parse_connection_time_brasilia_standard_time() {
     // As sent by a pt-BR 10.51 gateway (#964). Brazil has no DST since 2019.
     let (connection_time, timezone) = parse_connection_time("20261009 10:00:00 Brasilia Standard Time");
     assert_eq!(connection_time, Some(datetime!(2026-10-09 10:00:00 -03:00)));
@@ -397,7 +397,7 @@ fn test_parse_connection_time_brasilia_standard_time() {
 }
 
 #[test]
-fn test_parse_connection_time_chinese_utf8() {
+fn parse_connection_time_chinese_utf8() {
     let example = "20230405 22:20:39 中国标准时间";
     let (connection_time, timezone) = parse_connection_time(example);
 
@@ -407,7 +407,7 @@ fn test_parse_connection_time_chinese_utf8() {
 }
 
 #[test]
-fn test_parse_connection_time_mojibake() {
+fn parse_connection_time_mojibake() {
     // Simulate GB2312 timezone decoded as UTF-8 lossy
     let example = "20230405 22:20:39 \u{FFFD}\u{FFFD}\u{FFFD}";
     let (connection_time, timezone) = parse_connection_time(example);
@@ -418,7 +418,7 @@ fn test_parse_connection_time_mojibake() {
 }
 
 #[test]
-fn test_parse_connection_time_unknown_timezone_is_soft() {
+fn parse_connection_time_unknown_timezone_is_soft() {
     // Only `Client::time_zone` and `connection_time` depend on the zone, so an
     // unmatched name leaves them unset instead of failing the handshake. A
     // partial name is not guessed at either (#809).
@@ -430,7 +430,7 @@ fn test_parse_connection_time_unknown_timezone_is_soft() {
 }
 
 #[test]
-fn test_parse_connection_time_in_dst_fold_resolves() {
+fn parse_connection_time_in_dst_fold_resolves() {
     // Connecting during a fall-back hour: the reading is ambiguous. It used to
     // log "Error setting timezone" and yield None; it now takes the earlier
     // occurrence like every other wall-clock reading from TWS.
@@ -440,7 +440,7 @@ fn test_parse_connection_time_in_dst_fold_resolves() {
 }
 
 #[test]
-fn test_parse_connection_time_short_input_still_ok() {
+fn parse_connection_time_short_input_still_ok() {
     // Truncated wire data — preserve current tolerance, no error.
     let (time, tz) = parse_connection_time("20230405");
     assert!(time.is_none());
@@ -448,7 +448,7 @@ fn test_parse_connection_time_short_input_still_ok() {
 }
 
 #[test]
-fn test_parse_connection_time_unparseable_date_still_ok() {
+fn parse_connection_time_unparseable_date_still_ok() {
     // Timezone resolves; only the wall-clock fails. Preserve tolerance.
     let (time, tz) = parse_connection_time("BADDATE 99:99:99 PST");
     assert!(time.is_none());
@@ -456,7 +456,7 @@ fn test_parse_connection_time_unparseable_date_still_ok() {
 }
 
 #[test]
-fn test_connection_handler_handshake() {
+fn connection_handler_handshake() {
     let handler = ConnectionHandler::default();
     let handshake = handler.format_handshake();
 
@@ -469,7 +469,7 @@ fn test_connection_handler_handshake() {
 }
 
 #[test]
-fn test_connection_handler_start_api() {
+fn connection_handler_start_api() {
     use crate::messages::PROTOBUF_MSG_ID;
 
     let handler = ConnectionHandler::default();
@@ -485,7 +485,7 @@ fn test_connection_handler_start_api() {
 }
 
 #[test]
-fn test_connection_handler_start_api_protobuf() {
+fn connection_handler_start_api_protobuf() {
     let handler = ConnectionHandler::default();
     let data = handler.format_start_api(123);
 
@@ -500,7 +500,7 @@ fn test_connection_handler_start_api_protobuf() {
 }
 
 #[test]
-fn test_parse_raw_message_protobuf() {
+fn parse_raw_message_protobuf() {
     use crate::messages::PROTOBUF_MSG_ID;
 
     // Simulate a protobuf message: msg_id = 5 + 200 = 205, then some payload
@@ -516,7 +516,7 @@ fn test_parse_raw_message_protobuf() {
 }
 
 #[test]
-fn test_parse_raw_message_binary_id_text_payload() {
+fn parse_raw_message_binary_id_text_payload() {
     // Simulate a text message at server >= 201: binary msg_id=9, then NUL-delimited text
     let data = binary_text(IncomingMessages::NextValidId as i32, "1\01000\0");
 
@@ -532,7 +532,7 @@ fn test_parse_raw_message_binary_id_text_payload() {
 /// bounds: the len is 0 but the index is 0") — in sync it killed the
 /// dispatcher thread, in async the dispatcher task.
 #[test]
-fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
+fn parse_raw_message_rejects_body_shorter_than_message_id() {
     for length in 0..MESSAGE_ID_LEN {
         let data = vec![0_u8; length];
         let err = parse_raw_message(&data).expect_err("a body too short for a message id must be rejected");
@@ -549,7 +549,7 @@ fn test_parse_raw_message_rejects_body_shorter_than_message_id() {
 /// this the id an unroutable-frame diagnostic needs is gone by the time routing
 /// sees the message — and the protobuf path has no `fields[0]` to fall back on.
 #[test]
-fn test_parse_raw_message_retains_an_unrecognized_message_id() {
+fn parse_raw_message_retains_an_unrecognized_message_id() {
     // Protobuf framing: wire id carries the PROTOBUF_MSG_ID offset, and
     // message_id() reports the value actually looked up.
     let message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
@@ -574,7 +574,7 @@ fn test_parse_raw_message_retains_an_unrecognized_message_id() {
 /// Some IB Gateway installations send timezone names in GB2312/GBK encoding
 /// (e.g., Chinese "中国标准时间" for "China Standard Time")
 #[test]
-fn test_non_utf8_handshake_response() {
+fn non_utf8_handshake_response() {
     // Actual bytes from issue #352: "173\020251205 23:13:45 中国标准时间\0"
     // where the Chinese characters are GB2312 encoded, not UTF-8
     let gb2312_bytes: Vec<u8> = vec![
@@ -609,7 +609,7 @@ fn test_non_utf8_handshake_response() {
 }
 
 #[test]
-fn test_startup_message_message_type_typed_variants() {
+fn startup_message_message_type_typed_variants() {
     use crate::accounts::{AccountPortfolioValue, AccountUpdateTime, AccountValue};
     use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 
@@ -655,7 +655,7 @@ fn test_startup_message_message_type_typed_variants() {
 }
 
 #[test]
-fn test_parse_account_info_next_valid_id_protobuf() {
+fn parse_account_info_next_valid_id_protobuf() {
     use prost::Message;
 
     let handler = ConnectionHandler::default();
@@ -671,7 +671,7 @@ fn test_parse_account_info_next_valid_id_protobuf() {
 }
 
 #[test]
-fn test_parse_account_info_managed_accounts_protobuf() {
+fn parse_account_info_managed_accounts_protobuf() {
     use prost::Message;
 
     let handler = ConnectionHandler::default();
@@ -689,7 +689,7 @@ fn test_parse_account_info_managed_accounts_protobuf() {
 }
 
 #[test]
-fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
+fn parse_account_info_next_valid_id_protobuf_decode_error() {
     // Garbage bytes for the NextValidId proto envelope.
     let handler = ConnectionHandler::default();
     let mut message = proto_response(IncomingMessages::NextValidId, vec![0xff, 0xff, 0xff]);
@@ -701,7 +701,7 @@ fn test_parse_account_info_next_valid_id_protobuf_decode_error() {
 }
 
 #[test]
-fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
+fn parse_account_info_managed_accounts_protobuf_decode_error() {
     let handler = ConnectionHandler::default();
     let mut message = proto_response(IncomingMessages::ManagedAccounts, vec![0xff, 0xff, 0xff]);
 
@@ -712,7 +712,7 @@ fn test_parse_account_info_managed_accounts_protobuf_decode_error() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_open_order_no_callback_is_noop() {
+fn dispatch_unsolicited_open_order_no_callback_is_noop() {
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
     let sink = CapturingSink::default();
@@ -721,7 +721,7 @@ fn test_dispatch_unsolicited_open_order_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_order_status_no_callback_is_noop() {
+fn dispatch_unsolicited_order_status_no_callback_is_noop() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
     let sink = CapturingSink::default();
@@ -730,7 +730,7 @@ fn test_dispatch_unsolicited_order_status_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
+fn dispatch_unsolicited_open_order_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("53\01\0");
 
     let sink = CapturingSink::default();
@@ -739,7 +739,7 @@ fn test_dispatch_unsolicited_open_order_end_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
+fn dispatch_unsolicited_account_update_no_callback_is_noop() {
     use crate::messages::IncomingMessages;
     use crate::testdata::builders::accounts::account_value;
     use crate::testdata::builders::ResponseProtoEncoder;
@@ -760,7 +760,7 @@ fn test_dispatch_unsolicited_account_update_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_account_value_decode_failure_emits_notice() {
+fn dispatch_unsolicited_account_value_decode_failure_emits_notice() {
     use crate::messages::IncomingMessages;
 
     // Garbage proto bytes for AccountValue: Error::ProtobufDecode surfaces as a synthesized notice.
@@ -789,7 +789,7 @@ fn proto_frame<B: crate::testdata::builders::ResponseProtoEncoder>(kind: Incomin
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_typed() {
+fn dispatch_unsolicited_execution_typed() {
     use crate::testdata::builders::orders::ExecutionDataResponse;
 
     let builder = ExecutionDataResponse::default().symbol("TSLA").shares(100.0).price(196.52);
@@ -810,7 +810,7 @@ fn test_dispatch_unsolicited_execution_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_commission_report_typed() {
+fn dispatch_unsolicited_commission_report_typed() {
     use crate::testdata::builders::orders::CommissionReportResponse;
 
     let builder = CommissionReportResponse::default().commission(2.5).currency("USD");
@@ -830,7 +830,7 @@ fn test_dispatch_unsolicited_commission_report_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_order_typed() {
+fn dispatch_unsolicited_completed_order_typed() {
     use crate::testdata::builders::orders::CompletedOrderResponse;
 
     let builder = CompletedOrderResponse::default();
@@ -850,7 +850,7 @@ fn test_dispatch_unsolicited_completed_order_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_data_end_typed() {
+fn dispatch_unsolicited_execution_data_end_typed() {
     // ExecutionDataEnd: msg_type=55, version=1, request_id=42
     let mut message = ResponseMessage::from("55\01\042\0");
 
@@ -869,7 +869,7 @@ fn test_dispatch_unsolicited_execution_data_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_orders_end_typed() {
+fn dispatch_unsolicited_completed_orders_end_typed() {
     // CompletedOrdersEnd: msg_type=102, no payload
     let mut message = ResponseMessage::from("102\0");
 
@@ -888,7 +888,7 @@ fn test_dispatch_unsolicited_completed_orders_end_typed() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_decode_failure_emits_notice() {
+fn dispatch_unsolicited_execution_decode_failure_emits_notice() {
     // Text-framed ExecutionData — decoder calls require_proto() and rejects it.
     let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
 
@@ -906,7 +906,7 @@ fn test_dispatch_unsolicited_execution_decode_failure_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
+fn dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -923,7 +923,7 @@ fn test_dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_order_decode_failure_emits_notice() {
+fn dispatch_unsolicited_completed_order_decode_failure_emits_notice() {
     let mut message = ResponseMessage::from("101\0\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -940,7 +940,7 @@ fn test_dispatch_unsolicited_completed_order_decode_failure_emits_notice() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_no_callback_is_noop() {
+fn dispatch_unsolicited_execution_no_callback_is_noop() {
     let mut message = ResponseMessage::from("11\042\013\0AAPL\0");
 
     let sink = CapturingSink::default();
@@ -949,7 +949,7 @@ fn test_dispatch_unsolicited_execution_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_commission_report_no_callback_is_noop() {
+fn dispatch_unsolicited_commission_report_no_callback_is_noop() {
     let mut message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
     let sink = CapturingSink::default();
@@ -958,7 +958,7 @@ fn test_dispatch_unsolicited_commission_report_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_order_no_callback_is_noop() {
+fn dispatch_unsolicited_completed_order_no_callback_is_noop() {
     let mut message = ResponseMessage::from("101\0\0");
 
     let sink = CapturingSink::default();
@@ -967,7 +967,7 @@ fn test_dispatch_unsolicited_completed_order_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_execution_data_end_no_callback_is_noop() {
+fn dispatch_unsolicited_execution_data_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("55\01\042\0");
 
     let sink = CapturingSink::default();
@@ -976,7 +976,7 @@ fn test_dispatch_unsolicited_execution_data_end_no_callback_is_noop() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
+fn dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
     let mut message = ResponseMessage::from("102\0");
 
     let sink = CapturingSink::default();
@@ -988,7 +988,7 @@ fn test_dispatch_unsolicited_completed_orders_end_no_callback_is_noop() {
 /// handshake too, not HANDSHAKE_UNKNOWN_FRAME_CODE: one condition, one code,
 /// whether or not a reconnect is in flight.
 #[test]
-fn test_dispatch_unsolicited_unrecognized_id_raises_unknown_message_type() {
+fn dispatch_unsolicited_unrecognized_id_raises_unknown_message_type() {
     let mut message = parse_raw_message(&helpers::unknown_message_frame()).expect("well-formed frame");
 
     let sink = CapturingSink::default();
@@ -1005,7 +1005,7 @@ fn test_dispatch_unsolicited_unrecognized_id_raises_unknown_message_type() {
 }
 
 #[test]
-fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
+fn dispatch_unsolicited_unknown_no_callback_still_notices() {
     // NewsBulletins (14). Unknown handshake kind always fires the notice
     // sink regardless of callback presence — synthesized notices target
     // `Client::notice_stream()`, decoupled from the typed startup callback.
@@ -1019,7 +1019,7 @@ fn test_dispatch_unsolicited_unknown_no_callback_still_notices() {
 }
 
 #[test]
-fn test_account_info_merge() {
+fn account_info_merge() {
     let mut info = AccountInfo::default();
 
     let complete = info.merge(AccountInfo {
@@ -1042,7 +1042,7 @@ fn test_account_info_merge() {
 }
 
 #[test]
-fn test_connection_metadata_apply_account_info() {
+fn connection_metadata_apply_account_info() {
     let mut metadata = ConnectionMetadata {
         next_order_id: 1,
         managed_accounts: "OLD".to_owned(),
@@ -1062,7 +1062,7 @@ fn test_connection_metadata_apply_account_info() {
 }
 
 #[test]
-fn test_parse_handshake_ack() {
+fn parse_handshake_ack_works() {
     use std::io::ErrorKind;
 
     enum Expect {

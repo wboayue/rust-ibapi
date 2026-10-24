@@ -6,7 +6,7 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
-fn test_message_recorder_new_with_empty_env_var() {
+fn message_recorder_new_with_empty_env_var() {
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(""), || {
         let recorder = MessageRecorder::from_env();
         assert!(!recorder.enabled);
@@ -15,7 +15,7 @@ fn test_message_recorder_new_with_empty_env_var() {
 }
 
 #[test]
-fn test_message_recorder_new_with_valid_env_var() {
+fn message_recorder_new_with_valid_env_var() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path().to_str().unwrap();
 
@@ -29,7 +29,7 @@ fn test_message_recorder_new_with_valid_env_var() {
 }
 
 #[test]
-fn test_record_request() {
+fn record_request() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path().to_str().unwrap();
 
@@ -54,7 +54,7 @@ fn test_record_request() {
 }
 
 #[test]
-fn test_record_response() {
+fn record_response() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path().to_str().unwrap();
 
@@ -79,7 +79,7 @@ fn test_record_response() {
 }
 
 #[test]
-fn test_record_response_writes_the_protobuf_frame() {
+fn record_response_writes_the_protobuf_frame() {
     // Every response at the protocol floor is proto-framed, and this used to
     // record `fields.join("\0")` — which for a proto message is the bare
     // message id, losing the entire payload.
@@ -106,7 +106,7 @@ fn test_record_response_writes_the_protobuf_frame() {
 }
 
 #[test]
-fn test_multiple_records() {
+fn multiple_records() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path().to_str().unwrap();
 
@@ -130,7 +130,7 @@ fn test_multiple_records() {
 }
 
 #[test]
-fn test_disabled_recorder() {
+fn disabled_recorder() {
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(""), || {
         let recorder = MessageRecorder::from_env();
         assert!(!recorder.enabled);
@@ -147,7 +147,7 @@ fn test_disabled_recorder() {
 /// report, so fabricating the id there destroys the one field that identifies
 /// the fault.
 #[test]
-fn test_record_response_keeps_an_unrecognized_message_id() {
+fn record_response_keeps_an_unrecognized_message_id() {
     use crate::common::test_utils::helpers::UNKNOWN_MESSAGE_ID;
 
     let temp_dir = TempDir::new().unwrap();
@@ -180,7 +180,7 @@ fn test_record_response_keeps_an_unrecognized_message_id() {
 /// `IBAPI_RECORDING_DIR` at a path that cannot become a directory used to
 /// panic inside `Client::connect`.
 #[test]
-fn test_unusable_recording_dir_downgrades_to_disabled() {
+fn unusable_recording_dir_downgrades_to_disabled() {
     let temp_dir = TempDir::new().unwrap();
     let occupied = temp_dir.path().join("not-a-directory");
     fs::write(&occupied, b"occupied").unwrap();

@@ -1,7 +1,7 @@
 use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field};
 
 #[test]
-fn test_decode_server_time_proto_via_builder() {
+fn decode_server_time_proto_via_builder() {
     use crate::testdata::builders::accounts::current_time;
     use crate::testdata::builders::ResponseProtoEncoder;
     use time::macros::datetime;
@@ -12,7 +12,7 @@ fn test_decode_server_time_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_server_time_millis_proto_via_builder() {
+fn decode_server_time_millis_proto_via_builder() {
     use crate::testdata::builders::accounts::current_time_in_millis;
     use crate::testdata::builders::ResponseProtoEncoder;
     use time::macros::datetime;
@@ -23,7 +23,7 @@ fn test_decode_server_time_millis_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_account_update_time_proto() {
+fn decode_account_update_time_proto_works() {
     let proto_msg = crate::proto::AccountUpdateTime {
         time_stamp: Some("12:34:56".into()),
     };
@@ -33,7 +33,7 @@ fn test_decode_account_update_time_proto() {
 }
 
 #[test]
-fn test_decode_position_proto() {
+fn decode_position_proto_works() {
     let proto_msg = crate::proto::Position {
         account: Some("DU1234".into()),
         contract: Some(crate::proto::Contract {
@@ -57,7 +57,7 @@ fn test_decode_position_proto() {
 }
 
 #[test]
-fn test_decode_position_proto_via_builder() {
+fn decode_position_proto_via_builder() {
     use crate::testdata::builders::positions::position;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -81,7 +81,7 @@ fn test_decode_position_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_pnl_proto() {
+fn decode_pnl_proto_works() {
     let proto_msg = crate::proto::PnL {
         req_id: Some(1),
         daily_pn_l: Some(1234.56),
@@ -96,7 +96,7 @@ fn test_decode_pnl_proto() {
 }
 
 #[test]
-fn test_decode_account_value_proto() {
+fn decode_account_value_proto_works() {
     let proto_msg = crate::proto::AccountValue {
         key: Some("NetLiquidation".into()),
         value: Some("100000".into()),
@@ -112,7 +112,7 @@ fn test_decode_account_value_proto() {
 }
 
 #[test]
-fn test_decode_account_portfolio_value_proto() {
+fn decode_account_portfolio_value_proto_works() {
     let proto_msg = crate::proto::PortfolioValue {
         contract: Some(crate::proto::Contract {
             sec_type: Some("STK".into()),
@@ -137,7 +137,7 @@ fn test_decode_account_portfolio_value_proto() {
 }
 
 #[test]
-fn test_decode_pnl_single_proto() {
+fn decode_pnl_single_proto_works() {
     let proto_msg = crate::proto::PnLSingle {
         req_id: Some(1),
         position: Some("500".into()),
@@ -156,7 +156,7 @@ fn test_decode_pnl_single_proto() {
 }
 
 #[test]
-fn test_decode_account_summary_proto() {
+fn decode_account_summary_proto_works() {
     let proto_msg = crate::proto::AccountSummary {
         req_id: Some(1),
         account: Some("DU1234".into()),
@@ -173,7 +173,7 @@ fn test_decode_account_summary_proto() {
 }
 
 #[test]
-fn test_decode_position_multi_proto() {
+fn decode_position_multi_proto_works() {
     let proto_msg = crate::proto::PositionMulti {
         req_id: Some(1),
         account: Some("DU1234".into()),
@@ -197,7 +197,7 @@ fn test_decode_position_multi_proto() {
 }
 
 #[test]
-fn test_decode_account_multi_value_proto() {
+fn decode_account_multi_value_proto_works() {
     let proto_msg = crate::proto::AccountUpdateMulti {
         req_id: Some(1),
         account: Some("DU1234".into()),
@@ -224,7 +224,7 @@ fn test_decode_account_multi_value_proto() {
 // here, not in a self-loop.
 
 #[test]
-fn test_decode_position_multi_proto_via_builder() {
+fn decode_position_multi_proto_via_builder() {
     use crate::testdata::builders::positions::position_multi;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -249,7 +249,7 @@ fn test_decode_position_multi_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_account_value_proto_via_builder() {
+fn decode_account_value_proto_via_builder() {
     use crate::testdata::builders::accounts::account_value;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -269,7 +269,7 @@ fn test_decode_account_value_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_account_summary_proto_via_builder() {
+fn decode_account_summary_proto_via_builder() {
     use crate::testdata::builders::accounts::account_summary;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -290,7 +290,7 @@ fn test_decode_account_summary_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_account_multi_value_proto_via_builder() {
+fn decode_account_multi_value_proto_via_builder() {
     use crate::testdata::builders::accounts::account_update_multi;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -312,7 +312,7 @@ fn test_decode_account_multi_value_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_pnl_proto_via_builder() {
+fn decode_pnl_proto_via_builder() {
     use crate::testdata::builders::accounts::pnl;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -326,7 +326,7 @@ fn test_decode_pnl_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_pnl_single_proto_via_builder() {
+fn decode_pnl_single_proto_via_builder() {
     use crate::testdata::builders::accounts::pnl_single;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -348,7 +348,7 @@ fn test_decode_pnl_single_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_managed_accounts_proto() {
+fn decode_managed_accounts_proto_works() {
     let proto_msg = crate::proto::ManagedAccounts {
         accounts_list: Some("DU1111,DU2222,DU3333".into()),
     };
@@ -358,7 +358,7 @@ fn test_decode_managed_accounts_proto() {
 }
 
 #[test]
-fn test_decode_managed_accounts_proto_skips_empty() {
+fn decode_managed_accounts_proto_skips_empty() {
     // Trailing comma is the wire shape TWS sometimes emits; empty fields filtered out.
     let proto_msg = crate::proto::ManagedAccounts {
         accounts_list: Some("DU1111,,DU2222,".into()),
@@ -369,7 +369,7 @@ fn test_decode_managed_accounts_proto_skips_empty() {
 }
 
 #[test]
-fn test_decode_managed_accounts_proto_empty_list() {
+fn decode_managed_accounts_proto_empty_list() {
     let proto_msg = crate::proto::ManagedAccounts { accounts_list: None };
 
     let result = super::decode_managed_accounts_proto(proto_msg).unwrap();
@@ -377,7 +377,7 @@ fn test_decode_managed_accounts_proto_empty_list() {
 }
 
 #[test]
-fn test_decode_family_codes_proto() {
+fn decode_family_codes_proto_works() {
     let proto_msg = crate::proto::FamilyCodes {
         family_codes: vec![
             crate::proto::FamilyCode {
@@ -400,7 +400,7 @@ fn test_decode_family_codes_proto() {
 }
 
 #[test]
-fn test_decode_family_codes_proto_empty() {
+fn decode_family_codes_proto_empty() {
     let proto_msg = crate::proto::FamilyCodes { family_codes: vec![] };
 
     let result = super::decode_family_codes_proto(proto_msg).unwrap();
@@ -408,7 +408,7 @@ fn test_decode_family_codes_proto_empty() {
 }
 
 #[test]
-fn test_decode_soft_dollar_tiers_proto_round_trip() {
+fn decode_soft_dollar_tiers_proto_round_trip() {
     let p = crate::proto::SoftDollarTiers {
         req_id: Some(1),
         soft_dollar_tiers: vec![
@@ -431,7 +431,7 @@ fn test_decode_soft_dollar_tiers_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_user_info_proto_round_trip() {
+fn decode_user_info_proto_round_trip() {
     let p = crate::proto::UserInfo {
         req_id: Some(1),
         white_branding_id: Some("brand-xyz".into()),
@@ -441,7 +441,7 @@ fn test_decode_user_info_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_receive_fa_proto_round_trip() {
+fn decode_receive_fa_proto_round_trip() {
     use crate::accounts::FaDataType;
 
     let p = crate::proto::ReceiveFa {
@@ -454,7 +454,7 @@ fn test_decode_receive_fa_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_receive_fa_rejects_invalid_fa_data_type() {
+fn decode_receive_fa_rejects_invalid_fa_data_type() {
     let p = crate::proto::ReceiveFa {
         fa_data_type: Some(2),
         xml: Some("<bad/>".into()),
@@ -464,7 +464,7 @@ fn test_decode_receive_fa_rejects_invalid_fa_data_type() {
 }
 
 #[test]
-fn test_decode_receive_fa_rejects_missing_fa_data_type() {
+fn decode_receive_fa_rejects_missing_fa_data_type() {
     let p = crate::proto::ReceiveFa {
         fa_data_type: None,
         xml: Some("<groups/>".into()),
@@ -474,7 +474,7 @@ fn test_decode_receive_fa_rejects_missing_fa_data_type() {
 }
 
 #[test]
-fn test_decode_replace_fa_end_proto_round_trip() {
+fn decode_replace_fa_end_proto_round_trip() {
     let p = crate::proto::ReplaceFaEnd {
         req_id: Some(7),
         text: Some("done".into()),
@@ -484,7 +484,7 @@ fn test_decode_replace_fa_end_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_verify_message_api_proto_round_trip() {
+fn decode_verify_message_api_proto_round_trip() {
     let p = crate::proto::VerifyMessageApi {
         api_data: Some("payload".into()),
     };
@@ -493,7 +493,7 @@ fn test_decode_verify_message_api_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_verify_completed_proto_round_trip() {
+fn decode_verify_completed_proto_round_trip() {
     let p = crate::proto::VerifyCompleted {
         is_successful: Some(true),
         error_text: Some(String::new()),
@@ -504,7 +504,7 @@ fn test_decode_verify_completed_proto_round_trip() {
 }
 
 #[test]
-fn test_decode_verify_completed_proto_failure_path() {
+fn decode_verify_completed_proto_failure_path() {
     let p = crate::proto::VerifyCompleted {
         is_successful: Some(false),
         error_text: Some("signature mismatch".into()),
@@ -517,7 +517,7 @@ fn test_decode_verify_completed_proto_failure_path() {
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
 
 #[test]
-fn test_decode_position_proto_preserves_fractional_position() {
+fn decode_position_proto_preserves_fractional_position() {
     // Crypto and fractional-share accounts really do report these; the old
     // `parse_f64` path happened to handle them, but nothing pinned it.
     use crate::testdata::builders::positions::position;
@@ -528,7 +528,7 @@ fn test_decode_position_proto_preserves_fractional_position() {
 }
 
 #[test]
-fn test_decode_position_proto_rejects_malformed_position() {
+fn decode_position_proto_rejects_malformed_position() {
     // The builder stringifies an f64, so a malformed wire value needs raw proto.
     let p = crate::proto::Position {
         account: Some("DU1234".into()),
@@ -545,7 +545,7 @@ fn test_decode_position_proto_rejects_malformed_position() {
 }
 
 #[test]
-fn test_decode_position_multi_proto_rejects_malformed_position() {
+fn decode_position_multi_proto_rejects_malformed_position() {
     let p = crate::proto::PositionMulti {
         req_id: Some(9000),
         account: Some("DU1234".into()),
@@ -563,7 +563,7 @@ fn test_decode_position_multi_proto_rejects_malformed_position() {
 }
 
 #[test]
-fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
+fn decode_account_portfolio_value_proto_rejects_malformed_position() {
     let p = crate::proto::PortfolioValue {
         contract: Some(crate::proto::Contract {
             sec_type: Some("STK".into()),
@@ -578,7 +578,7 @@ fn test_decode_account_portfolio_value_proto_rejects_malformed_position() {
 }
 
 #[test]
-fn test_decode_pnl_single_proto_rejects_malformed_position() {
+fn decode_pnl_single_proto_rejects_malformed_position() {
     let p = crate::proto::PnLSingle {
         req_id: Some(9000),
         position: Some("abc".into()),
@@ -592,7 +592,7 @@ fn test_decode_pnl_single_proto_rejects_malformed_position() {
 // reference clients (EDecoder.cs PositionEventProtoBuf and siblings) return
 // before the typed callback here.
 #[test]
-fn test_decode_position_frames_require_contract() {
+fn decode_position_frames_require_contract() {
     use crate::common::test_utils::helpers::constants::TEST_CONTRACT_ID;
     use crate::testdata::builders::accounts::portfolio_value;
     use crate::testdata::builders::positions::{position, position_multi};

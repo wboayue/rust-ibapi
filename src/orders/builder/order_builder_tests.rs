@@ -18,7 +18,7 @@ fn create_test_contract() -> Contract {
 struct MockClient;
 
 #[test]
-fn test_stop_order() {
+fn stop_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -32,7 +32,7 @@ fn test_stop_order() {
 }
 
 #[test]
-fn test_stop_limit_order() {
+fn stop_limit_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -45,7 +45,7 @@ fn test_stop_limit_order() {
 }
 
 #[test]
-fn test_trailing_stop_limit() {
+fn trailing_stop_limit() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -61,7 +61,7 @@ fn test_trailing_stop_limit() {
 }
 
 #[test]
-fn test_market_if_touched() {
+fn market_if_touched() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -73,7 +73,7 @@ fn test_market_if_touched() {
 }
 
 #[test]
-fn test_limit_if_touched() {
+fn limit_if_touched() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -86,7 +86,7 @@ fn test_limit_if_touched() {
 }
 
 #[test]
-fn test_market_to_limit() {
+fn market_to_limit() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -97,7 +97,7 @@ fn test_market_to_limit() {
 }
 
 #[test]
-fn test_block_order() {
+fn block_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -110,7 +110,7 @@ fn test_block_order() {
 }
 
 #[test]
-fn test_relative_order() {
+fn relative_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -123,7 +123,7 @@ fn test_relative_order() {
 }
 
 #[test]
-fn test_passive_relative() {
+fn passive_relative() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -135,7 +135,7 @@ fn test_passive_relative() {
 }
 
 #[test]
-fn test_midprice_order() {
+fn midprice_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -147,7 +147,7 @@ fn test_midprice_order() {
 }
 
 #[test]
-fn test_midprice_order_without_price_cap() {
+fn midprice_order_without_price_cap() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -159,7 +159,7 @@ fn test_midprice_order_without_price_cap() {
 }
 
 #[test]
-fn test_at_auction() {
+fn at_auction() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -171,7 +171,7 @@ fn test_at_auction() {
 }
 
 #[test]
-fn test_discretionary_amount() {
+fn discretionary_amount() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -183,7 +183,7 @@ fn test_discretionary_amount() {
 }
 
 #[test]
-fn test_sweep_to_fill() {
+fn sweep_to_fill() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -195,7 +195,7 @@ fn test_sweep_to_fill() {
 }
 
 #[test]
-fn test_time_conditions() {
+fn time_conditions() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -225,7 +225,7 @@ fn test_time_conditions() {
 }
 
 #[test]
-fn test_time_in_force_method() {
+fn time_in_force_method() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -359,7 +359,7 @@ fn good_till_date_without_a_date_fails_validation() {
 }
 
 #[test]
-fn test_good_till_date() {
+fn good_till_date() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -374,7 +374,7 @@ fn test_good_till_date() {
 }
 
 #[test]
-fn test_trading_hours_method() {
+fn trading_hours_method() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -398,7 +398,7 @@ fn test_trading_hours_method() {
 }
 
 #[test]
-fn test_order_attributes() {
+fn order_attributes() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -410,7 +410,7 @@ fn test_order_attributes() {
 }
 
 #[test]
-fn test_not_held_flag() {
+fn not_held_flag() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -421,7 +421,7 @@ fn test_not_held_flag() {
 }
 
 #[test]
-fn test_all_or_none_flag() {
+fn all_or_none_flag() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -432,7 +432,7 @@ fn test_all_or_none_flag() {
 }
 
 #[test]
-fn test_account() {
+fn account() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -443,7 +443,7 @@ fn test_account() {
 }
 
 #[test]
-fn test_parent_id() {
+fn parent_id() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -454,7 +454,7 @@ fn test_parent_id() {
 }
 
 #[test]
-fn test_parent_id_accepts_order_id() {
+fn parent_id_accepts_order_id() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -468,7 +468,7 @@ fn test_parent_id_accepts_order_id() {
 }
 
 #[test]
-fn test_oca_group_settings() {
+fn oca_group_settings() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -716,7 +716,7 @@ fn volatility_type_does_not_depend_on_volatility_being_set() {
 }
 
 #[test]
-fn test_algo_order_settings() {
+fn algo_order_settings() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -737,7 +737,7 @@ fn test_algo_order_settings() {
 }
 
 #[test]
-fn test_what_if_order() {
+fn what_if_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -748,7 +748,7 @@ fn test_what_if_order() {
 }
 
 #[test]
-fn test_custom_order_type() {
+fn custom_order_type() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -759,7 +759,7 @@ fn test_custom_order_type() {
 }
 
 #[test]
-fn test_volatility_order_missing_volatility() {
+fn volatility_order_missing_volatility() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -772,7 +772,7 @@ fn test_volatility_order_missing_volatility() {
 }
 
 #[test]
-fn test_volatility_order_with_volatility() {
+fn volatility_order_with_volatility() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -786,7 +786,7 @@ fn test_volatility_order_with_volatility() {
 }
 
 #[test]
-fn test_pegged_order_fields() {
+fn pegged_order_fields() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -802,7 +802,7 @@ fn test_pegged_order_fields() {
 }
 
 #[test]
-fn test_validation_errors() {
+fn validation_errors() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -826,7 +826,7 @@ fn test_validation_errors() {
 }
 
 #[test]
-fn test_validation_edge_cases() {
+fn validation_edge_cases() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -846,7 +846,7 @@ fn test_validation_edge_cases() {
 // ===== Bracket Order Tests =====
 
 #[test]
-fn test_bracket_order_build_details() {
+fn bracket_order_build_details() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -886,7 +886,7 @@ fn test_bracket_order_build_details() {
 }
 
 #[test]
-fn test_bracket_order_sell() {
+fn bracket_order_sell() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -913,7 +913,7 @@ fn test_bracket_order_sell() {
 }
 
 #[test]
-fn test_bracket_order_validation_buy() {
+fn bracket_order_validation_buy() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -929,7 +929,7 @@ fn test_bracket_order_validation_buy() {
 }
 
 #[test]
-fn test_bracket_order_missing_entry() {
+fn bracket_order_missing_entry() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -941,7 +941,7 @@ fn test_bracket_order_missing_entry() {
 }
 
 #[test]
-fn test_bracket_order_missing_take_profit() {
+fn bracket_order_missing_take_profit() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -953,7 +953,7 @@ fn test_bracket_order_missing_take_profit() {
 }
 
 #[test]
-fn test_bracket_order_missing_stop_loss() {
+fn bracket_order_missing_stop_loss() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -969,7 +969,7 @@ fn test_bracket_order_missing_stop_loss() {
 }
 
 #[test]
-fn test_bracket_order_invalid_prices_buy() {
+fn bracket_order_invalid_prices_buy() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -987,7 +987,7 @@ fn test_bracket_order_invalid_prices_buy() {
 }
 
 #[test]
-fn test_bracket_order_invalid_stop_buy() {
+fn bracket_order_invalid_stop_buy() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1005,7 +1005,7 @@ fn test_bracket_order_invalid_stop_buy() {
 }
 
 #[test]
-fn test_bracket_order_large_quantity() {
+fn bracket_order_large_quantity() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1023,7 +1023,7 @@ fn test_bracket_order_large_quantity() {
 }
 
 #[test]
-fn test_bracket_order_fractional_prices() {
+fn bracket_order_fractional_prices() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1041,7 +1041,7 @@ fn test_bracket_order_fractional_prices() {
 }
 
 #[test]
-fn test_bracket_order_parent_id_propagation() {
+fn bracket_order_parent_id_propagation() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1060,7 +1060,7 @@ fn test_bracket_order_parent_id_propagation() {
 }
 
 #[test]
-fn test_bracket_order_transmit_flags() {
+fn bracket_order_transmit_flags() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1082,7 +1082,7 @@ fn test_bracket_order_transmit_flags() {
 }
 
 #[test]
-fn test_bracket_order_action_reversal() {
+fn bracket_order_action_reversal() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1114,7 +1114,7 @@ fn test_bracket_order_action_reversal() {
 }
 
 #[test]
-fn test_bracket_order_types() {
+fn bracket_order_types() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1134,7 +1134,7 @@ fn test_bracket_order_types() {
 }
 
 #[test]
-fn test_bracket_order_inherits_outside_rth() {
+fn bracket_order_inherits_outside_rth() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1171,7 +1171,7 @@ fn test_bracket_order_inherits_outside_rth() {
 }
 
 #[test]
-fn test_bracket_order_with_missing_action() {
+fn bracket_order_with_missing_action() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1189,7 +1189,7 @@ fn test_bracket_order_with_missing_action() {
 // ===== Market Entry Bracket Order Tests =====
 
 #[test]
-fn test_bracket_order_market_entry_buy() {
+fn bracket_order_market_entry_buy() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1228,7 +1228,7 @@ fn test_bracket_order_market_entry_buy() {
 }
 
 #[test]
-fn test_bracket_order_market_entry_sell() {
+fn bracket_order_market_entry_sell() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1256,7 +1256,7 @@ fn test_bracket_order_market_entry_sell() {
 }
 
 #[test]
-fn test_bracket_order_market_entry_inherits_outside_rth() {
+fn bracket_order_market_entry_inherits_outside_rth() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1277,7 +1277,7 @@ fn test_bracket_order_market_entry_inherits_outside_rth() {
 }
 
 #[test]
-fn test_bracket_order_market_entry_quantity_propagation() {
+fn bracket_order_market_entry_quantity_propagation() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1297,7 +1297,7 @@ fn test_bracket_order_market_entry_quantity_propagation() {
 }
 
 #[test]
-fn test_bracket_order_market_entry_parent_id_propagation() {
+fn bracket_order_market_entry_parent_id_propagation() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1316,7 +1316,7 @@ fn test_bracket_order_market_entry_parent_id_propagation() {
 }
 
 #[test]
-fn test_market_on_close() {
+fn market_on_close() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1330,7 +1330,7 @@ fn test_market_on_close() {
 }
 
 #[test]
-fn test_limit_on_close() {
+fn limit_on_close() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1344,7 +1344,7 @@ fn test_limit_on_close() {
 }
 
 #[test]
-fn test_market_on_open() {
+fn market_on_open() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1359,7 +1359,7 @@ fn test_market_on_open() {
 }
 
 #[test]
-fn test_limit_on_open() {
+fn limit_on_open() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1374,7 +1374,7 @@ fn test_limit_on_open() {
 }
 
 #[test]
-fn test_market_with_protection() {
+fn market_with_protection() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1389,7 +1389,7 @@ fn test_market_with_protection() {
 }
 
 #[test]
-fn test_stop_with_protection() {
+fn stop_with_protection() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1403,7 +1403,7 @@ fn test_stop_with_protection() {
 }
 
 #[test]
-fn test_market_on_close_sell() {
+fn market_on_close_sell() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1416,7 +1416,7 @@ fn test_market_on_close_sell() {
 }
 
 #[test]
-fn test_limit_on_close_sell() {
+fn limit_on_close_sell() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1430,7 +1430,7 @@ fn test_limit_on_close_sell() {
 }
 
 #[test]
-fn test_stop_with_protection_buy() {
+fn stop_with_protection_buy() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -1446,7 +1446,7 @@ fn test_stop_with_protection_buy() {
 // ===== Conditional Order Tests =====
 
 #[test]
-fn test_single_price_condition() {
+fn single_price_condition() {
     use crate::orders::builder::price;
     use crate::orders::OrderCondition;
 
@@ -1474,7 +1474,7 @@ fn test_single_price_condition() {
 }
 
 #[test]
-fn test_multiple_and_conditions() {
+fn multiple_and_conditions() {
     use crate::orders::builder::{margin, price, time};
 
     let client = MockClient;
@@ -1502,7 +1502,7 @@ fn test_multiple_and_conditions() {
 }
 
 #[test]
-fn test_multiple_or_conditions() {
+fn multiple_or_conditions() {
     use crate::orders::builder::{price, volume};
 
     let client = MockClient;
@@ -1525,7 +1525,7 @@ fn test_multiple_or_conditions() {
 }
 
 #[test]
-fn test_or_condition_sets_conjunction_on_unknown() {
+fn or_condition_sets_conjunction_on_unknown() {
     use crate::orders::builder::price;
     use crate::orders::{OrderCondition, UnknownCondition};
 
@@ -1549,7 +1549,7 @@ fn test_or_condition_sets_conjunction_on_unknown() {
 }
 
 #[test]
-fn test_mixed_and_or_conditions() {
+fn mixed_and_or_conditions() {
     use crate::orders::builder::{margin, price, time, volume};
 
     let client = MockClient;
@@ -1583,7 +1583,7 @@ fn test_mixed_and_or_conditions() {
 }
 
 #[test]
-fn test_all_condition_types() {
+fn all_condition_types() {
     use crate::orders::builder::{execution, margin, percent_change, price, time, volume};
 
     let client = MockClient;
@@ -1604,7 +1604,7 @@ fn test_all_condition_types() {
 }
 
 #[test]
-fn test_condition_builder_conversion() {
+fn condition_builder_conversion() {
     use crate::orders::builder::price;
 
     let client = MockClient;
@@ -1621,7 +1621,7 @@ fn test_condition_builder_conversion() {
 }
 
 #[test]
-fn test_condition_with_existing_order_conditions() {
+fn condition_with_existing_order_conditions() {
     use crate::orders::builder::price;
     use crate::orders::conditions::MarginCondition;
     use crate::orders::OrderCondition;
@@ -1647,7 +1647,7 @@ fn test_condition_with_existing_order_conditions() {
 }
 
 #[test]
-fn test_less_than_conditions() {
+fn less_than_conditions() {
     use crate::orders::builder::{margin, percent_change, price, time, volume};
 
     let client = MockClient;
@@ -1679,7 +1679,7 @@ fn test_less_than_conditions() {
 }
 
 #[test]
-fn test_execution_condition_no_threshold() {
+fn execution_condition_no_threshold() {
     use crate::orders::builder::execution;
 
     let client = MockClient;

@@ -29,7 +29,7 @@ fn assert_first_data_eq(item: Option<Result<SubscriptionItem<DisplayGroupUpdate>
 }
 
 #[test]
-fn test_display_groups() {
+fn display_groups() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::DisplayGroupList,
         display_group_list().request_id(TEST_REQ_ID_FIRST).groups("3|1|2").encode_proto(),
@@ -43,7 +43,7 @@ fn test_display_groups() {
 }
 
 #[test]
-fn test_update_display_group() {
+fn update_display_group() {
     use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::messages::OutgoingMessages;
 
@@ -57,19 +57,19 @@ fn test_update_display_group() {
 }
 
 #[test]
-fn test_subscription_derefs_to_inner_for_next() {
+fn subscription_derefs_to_inner_for_next() {
     let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
     assert_first_data_eq(subscription.next(), "265598@SMART");
 }
 
 #[test]
-fn test_borrowed_into_iter_yields_subscription_items() {
+fn borrowed_into_iter_yields_subscription_items() {
     let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
     assert_first_data_eq((&subscription).into_iter().next(), "265598@SMART");
 }
 
 #[test]
-fn test_owned_into_iter_consumes_subscription() {
+fn owned_into_iter_consumes_subscription() {
     let (_bus, subscription) = stubbed_subscription(vec![display_group_update_response("265598@SMART")]);
     assert_first_data_eq(subscription.into_iter().next(), "265598@SMART");
 }

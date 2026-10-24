@@ -49,7 +49,7 @@ async fn by_filter(client: &Client, filter: &str, limit: Option<i32>, auto_fill:
 }
 
 #[tokio::test]
-async fn test_wsh_metadata_table() {
+async fn wsh_metadata_table() {
     use crate::wsh::common::test_tables::wsh_metadata_test_cases;
 
     for test_case in wsh_metadata_test_cases() {
@@ -69,7 +69,7 @@ async fn test_wsh_metadata_table() {
 }
 
 #[tokio::test]
-async fn test_wsh_metadata_request_body() {
+async fn wsh_metadata_request_body() {
     use crate::wsh::common::test_data::json_responses;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -87,7 +87,7 @@ async fn test_wsh_metadata_request_body() {
 }
 
 #[tokio::test]
-async fn test_wsh_event_data_by_contract_table() {
+async fn wsh_event_data_by_contract_table() {
     use crate::wsh::common::test_tables::event_data_by_contract_test_cases;
 
     for test_case in event_data_by_contract_test_cases() {
@@ -126,7 +126,7 @@ async fn test_wsh_event_data_by_contract_table() {
 }
 
 #[tokio::test]
-async fn test_wsh_event_data_by_filter_subscription_table() {
+async fn wsh_event_data_by_filter_subscription_table() {
     use crate::wsh::common::test_tables::subscription_test_cases;
 
     for test_case in subscription_test_cases() {
@@ -160,7 +160,7 @@ async fn test_wsh_event_data_by_filter_subscription_table() {
 }
 
 #[tokio::test]
-async fn test_wsh_metadata_decode_table() {
+async fn wsh_metadata_decode_table() {
     use crate::subscriptions::{DecoderContext, StreamDecoder};
     use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
@@ -174,7 +174,7 @@ async fn test_wsh_metadata_decode_table() {
 }
 
 #[tokio::test]
-async fn test_wsh_event_data_decode_table() {
+async fn wsh_event_data_decode_table() {
     use crate::subscriptions::{DecoderContext, StreamDecoder};
     use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 
@@ -188,7 +188,7 @@ async fn test_wsh_event_data_decode_table() {
 }
 
 #[tokio::test]
-async fn test_wsh_event_data_by_filter_integration_table() {
+async fn wsh_event_data_by_filter_integration_table() {
     use crate::wsh::common::test_tables::event_data_by_filter_integration_test_cases;
 
     for test_case in event_data_by_filter_integration_test_cases() {
@@ -238,7 +238,7 @@ async fn test_wsh_event_data_by_filter_integration_table() {
 }
 
 #[tokio::test]
-async fn test_subscription_integration_table() {
+async fn subscription_integration_table() {
     use crate::wsh::common::test_tables::subscription_integration_test_cases;
 
     for test_case in subscription_integration_test_cases() {
@@ -273,7 +273,7 @@ async fn test_subscription_integration_table() {
 }
 
 #[tokio::test]
-async fn test_data_stream_cancel_message() {
+async fn data_stream_cancel_message() {
     use crate::subscriptions::StreamDecoder;
     use crate::testdata::builders::RequestEncoder;
 

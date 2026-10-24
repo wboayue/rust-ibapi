@@ -24,7 +24,7 @@ fn values(snapshot: &AccountSummarySnapshot) -> Vec<(&str, &str, &str, &str)> {
 }
 
 #[test]
-fn test_fold_keeps_rows_not_resent_and_separates_keys() {
+fn fold_keeps_rows_not_resent_and_separates_keys() {
     let mut builder = SnapshotBuilder::default();
 
     builder.fold(vec![
@@ -48,7 +48,7 @@ fn test_fold_keeps_rows_not_resent_and_separates_keys() {
 }
 
 #[test]
-fn test_fold_emits_when_snapshot_completes() {
+fn fold_emits_when_snapshot_completes() {
     // (name, earlier batches, batch under test, emits)
     let cases: Vec<(&str, Vec<Batch>, Batch, bool)> = vec![
         (
@@ -96,7 +96,7 @@ fn test_fold_emits_when_snapshot_completes() {
 }
 
 #[test]
-fn test_flush_returns_rows_not_yet_emitted() {
+fn flush_returns_rows_not_yet_emitted() {
     let mut builder = SnapshotBuilder::default();
     assert!(builder.flush().is_none());
 

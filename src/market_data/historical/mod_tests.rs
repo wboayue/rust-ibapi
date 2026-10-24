@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_bar_size_to_string() {
+fn bar_size_to_string() {
     assert_eq!("1 secs", BarSize::Sec.to_string());
     assert_eq!("5 secs", BarSize::Sec5.to_string());
     assert_eq!("10 secs", BarSize::Sec10.to_string());
@@ -27,7 +27,7 @@ fn test_bar_size_to_string() {
 }
 
 #[test]
-fn test_bar_size_parse() {
+fn bar_size_parse() {
     assert_eq!("SEC".parse::<BarSize>(), Ok(BarSize::Sec));
     assert_eq!("SEC5".parse::<BarSize>(), Ok(BarSize::Sec5));
     assert_eq!("SEC10".parse::<BarSize>(), Ok(BarSize::Sec10));
@@ -53,7 +53,7 @@ fn test_bar_size_parse() {
 }
 
 #[test]
-fn test_what_to_show_to_string() {
+fn what_to_show_to_string() {
     assert_eq!("TRADES", WhatToShow::Trades.to_string());
     assert_eq!("MIDPOINT", WhatToShow::MidPoint.to_string());
     assert_eq!("BID", WhatToShow::Bid.to_string());
@@ -68,7 +68,7 @@ fn test_what_to_show_to_string() {
 }
 
 #[test]
-fn test_what_to_show_parse() {
+fn what_to_show_parse() {
     assert_eq!("TRADES".parse::<WhatToShow>(), Ok(WhatToShow::Trades));
     assert_eq!("MIDPOINT".parse::<WhatToShow>(), Ok(WhatToShow::MidPoint));
     assert_eq!("BID".parse::<WhatToShow>(), Ok(WhatToShow::Bid));
@@ -83,7 +83,7 @@ fn test_what_to_show_parse() {
 }
 
 #[test]
-fn test_duration() {
+fn duration() {
     assert_eq!(Duration::SECOND.to_field(), "1 S");
     assert_eq!(Duration::DAY.to_field(), "1 D");
     assert_eq!(Duration::WEEK.to_field(), "1 W");
@@ -98,7 +98,7 @@ fn test_duration() {
 }
 
 #[test]
-fn test_duration_parse() {
+fn duration_parse() {
     assert_eq!("1 S".parse(), Ok(Duration::seconds(1)));
     assert_eq!("2 D".parse(), Ok(Duration::days(2)));
     assert_eq!("3 W".parse(), Ok(Duration::weeks(3)));
@@ -126,7 +126,7 @@ fn test_duration_parse() {
 }
 
 #[test]
-fn test_historical_parse_error_display() {
+fn historical_parse_error_display() {
     let expected_int_error = "abc".parse::<i32>().unwrap_err();
 
     let cases = vec![
@@ -161,7 +161,7 @@ fn test_historical_parse_error_display() {
 }
 
 #[test]
-fn test_bar_timestamp_from_str_date() {
+fn bar_timestamp_from_str_date() {
     let ts: BarTimestamp = "20230411".parse().unwrap();
     assert_eq!(ts, BarTimestamp::Date(time::macros::date!(2023 - 04 - 11)));
     assert!(ts.is_date());
@@ -169,7 +169,7 @@ fn test_bar_timestamp_from_str_date() {
 }
 
 #[test]
-fn test_bar_timestamp_from_str_datetime() {
+fn bar_timestamp_from_str_datetime() {
     let ts: BarTimestamp = "1681133400".parse().unwrap();
     assert_eq!(ts, BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 13:30:00 UTC)));
     assert!(ts.is_date_time());
@@ -177,13 +177,13 @@ fn test_bar_timestamp_from_str_datetime() {
 }
 
 #[test]
-fn test_bar_timestamp_from_str_invalid() {
+fn bar_timestamp_from_str_invalid() {
     assert!("not-a-date".parse::<BarTimestamp>().is_err());
     assert!("".parse::<BarTimestamp>().is_err());
 }
 
 #[test]
-fn test_bar_timestamp_display_roundtrip_date() {
+fn bar_timestamp_display_roundtrip_date() {
     let ts = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
     assert_eq!(ts.to_string(), "20230411");
     let round_tripped: BarTimestamp = ts.to_string().parse().unwrap();
@@ -191,7 +191,7 @@ fn test_bar_timestamp_display_roundtrip_date() {
 }
 
 #[test]
-fn test_bar_timestamp_display_roundtrip_datetime() {
+fn bar_timestamp_display_roundtrip_datetime() {
     let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
     let ts = BarTimestamp::DateTime(dt);
     assert_eq!(ts.to_string(), "1681133400");
@@ -200,21 +200,21 @@ fn test_bar_timestamp_display_roundtrip_datetime() {
 }
 
 #[test]
-fn test_bar_timestamp_from_date() {
+fn bar_timestamp_from_date() {
     let d = time::macros::date!(2023 - 04 - 11);
     let ts: BarTimestamp = d.into();
     assert_eq!(ts, BarTimestamp::Date(d));
 }
 
 #[test]
-fn test_bar_timestamp_from_offset_date_time() {
+fn bar_timestamp_from_offset_date_time() {
     let dt = time::macros::datetime!(2023-04-10 13:30:00 UTC);
     let ts: BarTimestamp = dt.into();
     assert_eq!(ts, BarTimestamp::DateTime(dt));
 }
 
 #[test]
-fn test_bar_timestamp_ord_same_variant() {
+fn bar_timestamp_ord_same_variant() {
     let a = BarTimestamp::Date(time::macros::date!(2023 - 04 - 10));
     let b = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
     assert!(a < b);
@@ -225,7 +225,7 @@ fn test_bar_timestamp_ord_same_variant() {
 }
 
 #[test]
-fn test_bar_timestamp_ord_cross_variant() {
+fn bar_timestamp_ord_cross_variant() {
     let date = BarTimestamp::Date(time::macros::date!(2023 - 04 - 11));
     let before = BarTimestamp::DateTime(time::macros::datetime!(2023-04-10 23:59:59 UTC));
     let after = BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 00:00:01 UTC));
@@ -234,7 +234,7 @@ fn test_bar_timestamp_ord_cross_variant() {
 }
 
 #[test]
-fn test_bar_timestamp_sort() {
+fn bar_timestamp_sort() {
     let mut timestamps = [
         BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)),
         BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)),

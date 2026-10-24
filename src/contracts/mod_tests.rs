@@ -2,7 +2,7 @@ use super::*;
 use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 
 #[test]
-fn test_v2_builders() {
+fn v2_builders() {
     // Test stock builder
     let stock = Contract::stock("AAPL").build();
     assert_eq!(stock.symbol, Symbol::from("AAPL"), "stock.symbol");
@@ -134,7 +134,7 @@ fn all_security_types_covers_every_variant() {
 }
 
 #[test]
-fn test_security_type_display_all_variants() {
+fn security_type_display_all_variants() {
     let cases = [
         (SecurityType::Stock, "STK"),
         (SecurityType::Option, "OPT"),
@@ -160,7 +160,7 @@ fn test_security_type_display_all_variants() {
 }
 
 #[test]
-fn test_option_security_type_to_field() {
+fn option_security_type_to_field() {
     let some: Option<SecurityType> = Some(SecurityType::Option);
     assert_eq!(some.to_field(), "OPT");
     let none: Option<SecurityType> = None;
@@ -205,27 +205,27 @@ fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
 }
 
 #[test]
-fn test_bond_cusip_constructor() {
+fn bond_cusip_constructor() {
     assert_cusip_bond(Contract::bond_cusip("912810RN0"), "912810RN0");
 }
 
 #[test]
-fn test_bond_constructor_cusip_variant() {
+fn bond_constructor_cusip_variant() {
     assert_cusip_bond(Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0"))), "912810RN0");
 }
 
 #[test]
-fn test_bond_isin_constructor_currency_mapping() {
+fn bond_isin_constructor_currency_mapping() {
     assert_isin_currency_mapping(|isin| Contract::bond_isin(isin));
 }
 
 #[test]
-fn test_bond_constructor_isin_currency_mapping() {
+fn bond_constructor_isin_currency_mapping() {
     assert_isin_currency_mapping(|isin| Contract::bond(BondIdentifier::Isin(Isin::new(isin))));
 }
 
 #[test]
-fn test_combo_leg_open_close() {
+fn combo_leg_open_close() {
     // Test From<i32> implementation
     assert_eq!(ComboLegOpenClose::from(0), ComboLegOpenClose::Same, "0 should be Same");
     assert_eq!(ComboLegOpenClose::from(1), ComboLegOpenClose::Open, "1 should be Open");
@@ -243,14 +243,14 @@ fn test_combo_leg_open_close() {
 }
 
 #[test]
-fn test_combo_leg_open_close_unknown_value() {
+fn combo_leg_open_close_unknown_value() {
     // Values outside the documented 0..=3 range decode to Unknown rather than panicking
     assert_eq!(ComboLegOpenClose::from(4), ComboLegOpenClose::Unknown);
     assert_eq!(ComboLegOpenClose::from(-1), ComboLegOpenClose::Unknown);
 }
 
 #[test]
-fn test_tag_value_to_field() {
+fn tag_value_to_field() {
     // Test with multiple TagValue items
     let tag_values = vec![
         TagValue {
@@ -299,7 +299,7 @@ fn test_tag_value_to_field() {
 }
 
 #[test]
-fn test_is_bag() {
+fn is_bag() {
     // Test with a regular stock contract (not a bag/spread)
     let stock_contract = Contract::stock("AAPL").build();
     assert!(!stock_contract.is_bag(), "Stock contract should not be a bag");

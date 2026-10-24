@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_to_proto_settings_maps_renamed_fields() {
+fn to_proto_settings_maps_renamed_fields() {
     // The prost-generated names diverge from the domain names; this guards the
     // hand-written mapping for those fields specifically.
     let settings = ApiSettings {
@@ -25,7 +25,7 @@ fn test_to_proto_settings_maps_renamed_fields() {
 }
 
 #[test]
-fn test_to_proto_api_nests_precautions_and_settings() {
+fn to_proto_api_nests_precautions_and_settings() {
     let api = ApiConfig {
         precautions: Some(ApiPrecautions {
             bypass_bond_warning: Some(true),
@@ -44,7 +44,7 @@ fn test_to_proto_api_nests_precautions_and_settings() {
 }
 
 #[test]
-fn test_to_proto_orders_and_leaf_converters() {
+fn to_proto_orders_and_leaf_converters() {
     let orders = OrdersConfig {
         smart_routing: Some(OrdersSmartRouting {
             seek_price_improvement: Some(true),
@@ -79,7 +79,7 @@ fn test_to_proto_orders_and_leaf_converters() {
 }
 
 #[test]
-fn test_encode_update_config_frames_message_id() {
+fn encode_update_config_frames_message_id() {
     let request = proto::UpdateConfigRequest {
         req_id: Some(42),
         reset_api_order_sequence: Some(true),

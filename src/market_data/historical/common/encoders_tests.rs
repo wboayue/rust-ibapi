@@ -6,7 +6,7 @@ use time::macros::datetime;
 use time_tz::{self, PrimitiveDateTimeExt};
 
 #[test]
-fn test_encode_interval() {
+fn encode_interval() {
     let ny = time_tz::timezones::db::america::NEW_YORK;
 
     let empty_end: Option<OffsetDateTime> = None;
@@ -19,7 +19,7 @@ fn test_encode_interval() {
 }
 
 #[test]
-fn test_encode_cancel_histogram_data() {
+fn encode_cancel_histogram_data_works() {
     let bytes = encode_cancel_histogram_data(3000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelHistogramData);
     let req = crate::proto::CancelHistogramData::decode(&bytes[MESSAGE_ID_LEN..]).unwrap();
@@ -27,7 +27,7 @@ fn test_encode_cancel_histogram_data() {
 }
 
 #[test]
-fn test_encode_cancel_head_timestamp() {
+fn encode_cancel_head_timestamp_works() {
     let bytes = encode_cancel_head_timestamp(3000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelHeadTimestamp);
     let req = crate::proto::CancelHeadTimestamp::decode(&bytes[MESSAGE_ID_LEN..]).unwrap();

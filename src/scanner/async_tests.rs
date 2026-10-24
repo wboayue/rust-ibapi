@@ -15,7 +15,7 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn test_scanner165_noitems_keeps_queued_batches() {
+async fn scanner165_noitems_keeps_queued_batches() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(no_items_then_batches()));
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
     let parameters = no_items_parameters();
@@ -45,7 +45,7 @@ async fn test_scanner165_noitems_keeps_queued_batches() {
 }
 
 #[tokio::test]
-async fn test_scanner165_other_failures_remain_terminal() {
+async fn scanner165_other_failures_remain_terminal() {
     for &(code, message) in TERMINAL_SCANNER_ERRORS {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(error_then_empty_batch(code, message)));
         let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -59,7 +59,7 @@ async fn test_scanner165_other_failures_remain_terminal() {
 }
 
 #[tokio::test]
-async fn test_scanner165_noitems_remains_terminal_for_other_requests() {
+async fn scanner165_noitems_remains_terminal_for_other_requests() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         TEST_REQ_ID_FIRST,
         HMDS_QUERY_MESSAGE_CODE,
@@ -74,7 +74,7 @@ async fn test_scanner165_noitems_remains_terminal_for_other_requests() {
 }
 
 #[tokio::test]
-async fn test_scanner_parameters() {
+async fn scanner_parameters_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerParameters,
         scanner_parameters().encode_proto(),
@@ -92,7 +92,7 @@ async fn test_scanner_parameters() {
 }
 
 #[tokio::test]
-async fn test_scanner_subscription() {
+async fn scanner_subscription() {
     let rows = vec![
         scanner_data_row(0, 670777621, "SVMH"),
         scanner_data_row(1, 536918651, "GTI"),
@@ -197,7 +197,7 @@ async fn test_scanner_subscription() {
 }
 
 #[tokio::test]
-async fn test_scanner_subscription_drop_sends_cancel() {
+async fn scanner_subscription_drop_sends_cancel() {
     let rows = vec![scanner_data_row(0, 670777621, "SVMH")];
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerData,
@@ -230,7 +230,7 @@ async fn test_scanner_subscription_drop_sends_cancel() {
 }
 
 #[tokio::test]
-async fn test_scanner_subscription_no_double_cancel() {
+async fn scanner_subscription_no_double_cancel() {
     let rows = vec![scanner_data_row(0, 670777621, "SVMH")];
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::ScannerData,

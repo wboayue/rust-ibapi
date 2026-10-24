@@ -42,7 +42,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_retry_on_connection_reset_succeeds_first_try() {
+    fn retry_on_connection_reset_succeeds_first_try() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -56,7 +56,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_retry_on_connection_reset_succeeds_after_retry() {
+    fn retry_on_connection_reset_succeeds_after_retry() {
         let call_count = RefCell::new(0);
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -74,7 +74,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_retry_on_connection_reset_exceeds_max_retries() {
+    fn retry_on_connection_reset_exceeds_max_retries() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -88,7 +88,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_retry_on_connection_reset_other_error() {
+    fn retry_on_connection_reset_other_error() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -102,7 +102,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_retry_with_custom_limit() {
+    fn retry_with_custom_limit() {
         let call_count = RefCell::new(0);
         let custom_limit = 5;
         let waiter = TestWaiter::reconnecting();
@@ -124,7 +124,7 @@ mod sync_tests {
     /// completes is refused by the bus, which would spend the attempts on
     /// requests that never reach TWS.
     #[test]
-    fn test_retry_waits_for_the_reconnect_between_attempts() {
+    fn retry_waits_for_the_reconnect_between_attempts() {
         let waiter = TestWaiter::reconnecting();
         let call_count = RefCell::new(0);
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -143,7 +143,7 @@ mod sync_tests {
     /// A session that never comes back ends the retry with the waiter's
     /// error instead of looping.
     #[test]
-    fn test_retry_gives_up_when_the_session_is_gone() {
+    fn retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
         let mut call_count = 0;
         let result = blocking::retry_on_connection_reset(&waiter, || {
@@ -200,7 +200,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_retry_on_connection_reset_succeeds_first_try() {
+    async fn retry_on_connection_reset_succeeds_first_try() {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
@@ -220,7 +220,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_retry_on_connection_reset_succeeds_after_retry() {
+    async fn retry_on_connection_reset_succeeds_after_retry() {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
@@ -245,7 +245,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_retry_on_connection_reset_exceeds_max_retries() {
+    async fn retry_on_connection_reset_exceeds_max_retries() {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
@@ -265,7 +265,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_retry_on_connection_reset_other_error() {
+    async fn retry_on_connection_reset_other_error() {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
@@ -285,7 +285,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_retry_with_custom_limit() {
+    async fn retry_with_custom_limit() {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
         let custom_limit = 5;
@@ -313,7 +313,7 @@ mod async_tests {
     /// completes is refused by the bus, which would spend the attempts on
     /// requests that never reach TWS.
     #[tokio::test]
-    async fn test_retry_waits_for_the_reconnect_between_attempts() {
+    async fn retry_waits_for_the_reconnect_between_attempts() {
         let waiter = TestWaiter::reconnecting();
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
@@ -339,7 +339,7 @@ mod async_tests {
     /// A session that never comes back ends the retry with the waiter's
     /// error instead of looping.
     #[tokio::test]
-    async fn test_retry_gives_up_when_the_session_is_gone() {
+    async fn retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();

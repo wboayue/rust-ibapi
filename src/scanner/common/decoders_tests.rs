@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
 
 #[test]
-fn test_decode_scanner_data_proto() {
+fn decode_scanner_data_proto_works() {
     let proto_msg = crate::proto::ScannerData {
         req_id: Some(1),
         scanner_data_element: vec![
@@ -46,7 +46,7 @@ fn test_decode_scanner_data_proto() {
 }
 
 #[test]
-fn test_decode_scanner_parameters_proto() {
+fn decode_scanner_parameters_proto_works() {
     let xml = "<ScanParameterResponse><ScanTypeList /></ScanParameterResponse>";
     let proto_msg = crate::proto::ScannerParameters { xml: Some(xml.into()) };
     let result = decode_scanner_parameters_proto(proto_msg).unwrap();
@@ -54,14 +54,14 @@ fn test_decode_scanner_parameters_proto() {
 }
 
 #[test]
-fn test_decode_scanner_parameters_proto_empty() {
+fn decode_scanner_parameters_proto_empty() {
     let proto_msg = crate::proto::ScannerParameters { xml: None };
     let result = decode_scanner_parameters_proto(proto_msg).unwrap();
     assert_eq!(result, "");
 }
 
 #[test]
-fn test_decode_scanner_data_rejects_text_framing() {
+fn decode_scanner_data_rejects_text_framing() {
     // Servers ≥ the connection floor always emit ScannerData in proto.
     // Text-framed arrival raises `UnexpectedWireFormat` — the message was
     // addressed to this decoder, so it is not skippable. See

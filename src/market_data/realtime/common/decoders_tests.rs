@@ -27,7 +27,7 @@ mod realtime_bar_tests {
     }
 
     #[test]
-    fn test_decode_realtime_bar_proto() {
+    fn decode_realtime_bar_proto_works() {
         let bar = decode_realtime_bar_proto(fixture().to_proto()).expect("decode failed");
 
         assert_eq!(bar.date, OffsetDateTime::from_unix_timestamp(1678323335).unwrap());
@@ -41,21 +41,21 @@ mod realtime_bar_tests {
     }
 
     #[test]
-    fn test_decode_realtime_bar_through_wrapper() {
+    fn decode_realtime_bar_through_wrapper() {
         let message = proto_response(crate::messages::IncomingMessages::RealTimeBars, fixture().encode_proto());
         let bar = decode_realtime_bar(&message).expect("decode failed");
         assert_eq!(bar.open, 4028.75);
     }
 
     #[test]
-    fn test_decode_realtime_bar_invalid_proto_bytes() {
+    fn decode_realtime_bar_invalid_proto_bytes() {
         let message = proto_response(IncomingMessages::RealTimeBars, vec![0xff, 0xff, 0xff]);
         let result = decode_realtime_bar(&message);
         assert!(matches!(result, Err(crate::Error::ProtobufDecode(_))));
     }
 
     #[test]
-    fn test_decode_realtime_bar_rejects_text_framing() {
+    fn decode_realtime_bar_rejects_text_framing() {
         // Text arrival at a proto-only decoder surfaces UnexpectedWireFormat, which
         // the dispatcher raises rather than skipping — the message was addressed to
         // this decoder. See docs/rules/wire/proto-only-decoding.md.
@@ -82,7 +82,7 @@ mod trade_tick_tests {
     }
 
     #[test]
-    fn test_decode_trade_tick_proto_last() {
+    fn decode_trade_tick_proto_last() {
         let trade = decode_trade_tick_proto(fixture(1).to_proto()).expect("decode failed");
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(trade.price, 3895.25);
@@ -94,20 +94,20 @@ mod trade_tick_tests {
     }
 
     #[test]
-    fn test_decode_trade_tick_proto_all_last() {
+    fn decode_trade_tick_proto_all_last() {
         let trade = decode_trade_tick_proto(fixture(2).to_proto()).expect("decode failed");
         assert_eq!(trade.price, 3895.25);
     }
 
     #[test]
-    fn test_decode_trade_tick_proto_invalid_type() {
+    fn decode_trade_tick_proto_invalid_type() {
         // tick_type 3 = BidAsk — wrong feed for the trade decoder.
         let err = decode_trade_tick_proto(fixture(3).to_proto()).expect_err("should reject bid/ask tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
     }
 
     #[test]
-    fn test_decode_trade_tick_proto_absent_type() {
+    fn decode_trade_tick_proto_absent_type() {
         let mut msg = fixture(1).to_proto();
         msg.tick_type = None;
         let err = decode_trade_tick_proto(msg).expect_err("should reject absent tick type");
@@ -115,7 +115,7 @@ mod trade_tick_tests {
     }
 
     #[test]
-    fn test_decode_trade_tick_proto_missing_payload() {
+    fn decode_trade_tick_proto_missing_payload() {
         // Build a tick_type=1 envelope with no inner Tick variant.
         let msg = crate::proto::TickByTickData {
             req_id: Some(9000),
@@ -127,7 +127,7 @@ mod trade_tick_tests {
     }
 
     #[test]
-    fn test_decode_trade_tick_through_wrapper() {
+    fn decode_trade_tick_through_wrapper() {
         let message = proto_response(crate::messages::IncomingMessages::TickByTick, fixture(1).encode_proto());
         let trade = decode_trade_tick(&message).expect("decode failed");
         assert_eq!(trade.price, 3895.25);
@@ -145,7 +145,7 @@ mod bid_ask_tests {
     }
 
     #[test]
-    fn test_decode_bid_ask_proto_basic() {
+    fn decode_bid_ask_proto_basic() {
         let bid_ask = decode_bid_ask_tick_proto(fixture(3).to_proto()).expect("decode failed");
         assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap());
         assert_eq!(bid_ask.bid_price, 3895.50);
@@ -157,7 +157,7 @@ mod bid_ask_tests {
     }
 
     #[test]
-    fn test_decode_bid_ask_proto_attributes() {
+    fn decode_bid_ask_proto_attributes() {
         for (mask, expected_bid_past_low, expected_ask_past_high) in [(0, false, false), (1, true, false), (2, false, true), (3, true, true)] {
             let bid_ask = decode_bid_ask_tick_proto(fixture(mask).to_proto()).expect("decode failed");
             assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, expected_bid_past_low, "mask {mask}");
@@ -166,7 +166,7 @@ mod bid_ask_tests {
     }
 
     #[test]
-    fn test_decode_bid_ask_proto_invalid_type() {
+    fn decode_bid_ask_proto_invalid_type() {
         // tick_type 1 = Last — wrong feed.
         let msg = crate::proto::TickByTickData {
             req_id: Some(9000),
@@ -186,14 +186,14 @@ mod mid_point_tests {
     }
 
     #[test]
-    fn test_decode_mid_point_tick_proto() {
+    fn decode_mid_point_tick_proto_works() {
         let mid = decode_mid_point_tick_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(mid.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(mid.mid_point, 3895.375);
     }
 
     #[test]
-    fn test_decode_mid_point_tick_proto_invalid_type() {
+    fn decode_mid_point_tick_proto_invalid_type() {
         let msg = crate::proto::TickByTickData {
             req_id: Some(9000),
             tick_type: Some(1),
@@ -208,7 +208,7 @@ mod market_depth_tests {
     use super::*;
 
     #[test]
-    fn test_decode_market_depth_proto_basic() {
+    fn decode_market_depth_proto_basic() {
         let p = market_depth_response()
             .position(0)
             .operation(1)
@@ -225,7 +225,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_proto_operations() {
+    fn decode_market_depth_proto_operations() {
         for op in [0, 1, 2] {
             let p = market_depth_response().operation(op).side(1).price(185.50).size(100.0).to_proto();
             let depth = decode_market_depth_proto(p).expect("decode failed");
@@ -234,7 +234,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_proto_sides() {
+    fn decode_market_depth_proto_sides() {
         for side in [0, 1] {
             let p = market_depth_response().side(side).price(185.50).size(100.0).to_proto();
             let depth = decode_market_depth_proto(p).expect("decode failed");
@@ -243,7 +243,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_proto_missing_data() {
+    fn decode_market_depth_proto_missing_data() {
         let msg = crate::proto::MarketDepth {
             req_id: Some(9000),
             market_depth_data: None,
@@ -252,7 +252,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_l2_proto_missing_data() {
+    fn decode_market_depth_l2_proto_missing_data() {
         let msg = crate::proto::MarketDepthL2 {
             req_id: Some(9000),
             market_depth_data: None,
@@ -261,7 +261,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_l2_proto() {
+    fn decode_market_depth_l2_proto_works() {
         // L2 carries market_maker + is_smart_depth, fields the MarketDepthResponse builder
         // doesn't expose; build the proto directly.
         let proto_msg = crate::proto::MarketDepthL2 {
@@ -288,7 +288,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_l2_proto_default_smart_depth() {
+    fn decode_market_depth_l2_proto_default_smart_depth() {
         let proto_msg = crate::proto::MarketDepthL2 {
             req_id: Some(9000),
             market_depth_data: Some(crate::proto::MarketDepthData {
@@ -306,7 +306,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn test_decode_market_depth_exchanges_proto() {
+    fn decode_market_depth_exchanges_proto_works() {
         let p = mkt_depth_exchanges_response()
             .description(
                 depth_market_data_description()
@@ -344,7 +344,7 @@ mod tick_price_tests {
     }
 
     #[test]
-    fn test_decode_tick_price_proto_with_size() {
+    fn decode_tick_price_proto_with_size() {
         // TickType::Bid = 1, should produce PriceSize with BidSize.
         // attr_mask 0x5 = can_auto_execute + pre_open
         let result = decode_tick_price_proto(fixture(1, 0x5).to_proto()).expect("decode failed");
@@ -363,7 +363,7 @@ mod tick_price_tests {
     }
 
     #[test]
-    fn test_decode_tick_price_proto_unknown_type() {
+    fn decode_tick_price_proto_unknown_type() {
         // TickType 99 → Unknown size tick type → returns Price variant.
         let proto_msg = tick_price().tick_type(99).price(42.0).size(10.0).attr_mask(0x2).to_proto();
         match decode_tick_price_proto(proto_msg).expect("decode failed") {
@@ -376,7 +376,7 @@ mod tick_price_tests {
     }
 
     #[test]
-    fn test_decode_tick_price_proto_no_size() {
+    fn decode_tick_price_proto_no_size() {
         // size missing → Price variant (no size companion tick).
         let p = tick_price().tick_type(1).price(150.25).to_proto();
         match decode_tick_price_proto(p).expect("decode failed") {
@@ -394,14 +394,14 @@ mod tick_size_tests {
     }
 
     #[test]
-    fn test_decode_tick_size_proto() {
+    fn decode_tick_size_proto_works() {
         let result = decode_tick_size_proto(fixture(0).to_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::BidSize);
         assert_eq!(result.size, 500.0);
     }
 
     #[test]
-    fn test_decode_tick_size_proto_all_types() {
+    fn decode_tick_size_proto_all_types() {
         for (type_id, expected) in [
             (0, TickType::BidSize),
             (3, TickType::AskSize),
@@ -423,7 +423,7 @@ mod tick_string_tests {
     }
 
     #[test]
-    fn test_decode_tick_string_proto() {
+    fn decode_tick_string_proto_works() {
         let result = decode_tick_string_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::LastTimestamp);
         assert_eq!(result.value, "1681133400");
@@ -438,7 +438,7 @@ mod tick_generic_tests {
     }
 
     #[test]
-    fn test_decode_tick_generic_proto() {
+    fn decode_tick_generic_proto_works() {
         let result = decode_tick_generic_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::Halted);
         assert_eq!(result.value, 0.0);
@@ -449,7 +449,7 @@ mod tick_option_computation_tests {
     use super::*;
 
     #[test]
-    fn test_decode_tick_option_computation_proto() {
+    fn decode_tick_option_computation_proto_works() {
         let proto_msg = crate::proto::TickOptionComputation {
             req_id: Some(1),
             tick_type: Some(13), // ModelOption
@@ -478,7 +478,7 @@ mod tick_option_computation_tests {
     }
 
     #[test]
-    fn test_decode_tick_option_computation_proto_max_to_none() {
+    fn decode_tick_option_computation_proto_max_to_none() {
         // f64::MAX collapses to None via optional_f64.
         let proto_msg = crate::proto::TickOptionComputation {
             req_id: Some(1),
@@ -491,7 +491,7 @@ mod tick_option_computation_tests {
     }
 
     #[test]
-    fn test_decode_tick_option_computation_proto_not_computed_to_none() {
+    fn decode_tick_option_computation_proto_not_computed_to_none() {
         // TWS sends -1 (volatility, prices) or -2 (Greeks) for a value it has not computed yet.
         let proto_msg = crate::proto::TickOptionComputation {
             req_id: Some(1),
@@ -519,7 +519,7 @@ mod tick_option_computation_tests {
     }
 
     #[test]
-    fn test_decode_tick_option_computation_proto_keeps_real_negative_greeks() {
+    fn decode_tick_option_computation_proto_keeps_real_negative_greeks() {
         // The Greeks' sentinel is -2: -1 is a real delta (a deep in-the-money put) and a real theta.
         let proto_msg = crate::proto::TickOptionComputation {
             req_id: Some(1),
@@ -539,7 +539,7 @@ mod tick_request_parameters_tests {
     use super::*;
 
     #[test]
-    fn test_decode_tick_request_parameters_proto() {
+    fn decode_tick_request_parameters_proto_works() {
         let proto_msg = crate::proto::TickReqParams {
             req_id: Some(9000),
             min_tick: Some("0.01".into()),
@@ -560,7 +560,7 @@ mod market_data_type_tests {
     use crate::subscriptions::common::StreamDecoder;
 
     #[test]
-    fn test_decode_market_data_type_proto_helper() {
+    fn decode_market_data_type_proto_helper() {
         let proto_msg = crate::proto::MarketDataType {
             req_id: Some(9000),
             market_data_type: Some(3),
@@ -576,7 +576,7 @@ mod market_data_type_tests {
     }
 
     #[test]
-    fn test_decode_market_data_type_proto_through_tick_types() {
+    fn decode_market_data_type_proto_through_tick_types() {
         // Live TWS sends MarketDataType as protobuf (msg_id 258 → real_type 58).
         let proto_msg = crate::proto::MarketDataType {
             req_id: Some(9000),
@@ -592,7 +592,7 @@ mod market_data_type_tests {
     }
 
     #[test]
-    fn test_decode_tick_req_params_proto_through_tick_types() {
+    fn decode_tick_req_params_proto_through_tick_types() {
         let proto_msg = crate::proto::TickReqParams {
             req_id: Some(9000),
             min_tick: Some("0.01".into()),
@@ -614,7 +614,7 @@ mod market_data_type_tests {
     }
 
     #[test]
-    fn test_tick_types_decode_unknown_message_type_skips() {
+    fn tick_types_decode_unknown_message_type_skips() {
         // Unknown message types must skip-classify (UnexpectedResponse), not terminate.
         let message = ResponseMessage::from("92\0\0AccountCode\0DU12345\0\0DU12345\0");
         let context = DecoderContext::new(0);

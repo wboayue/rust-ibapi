@@ -2,7 +2,7 @@ use super::*;
 use crate::messages::ResponseMessage;
 
 #[test]
-fn test_is_undeclared() {
+fn is_undeclared_works() {
     // The skip decision, which used to live in an error variant.
     let ids = &[IncomingMessages::TickPrice, IncomingMessages::TickSize];
 
@@ -15,7 +15,7 @@ fn test_is_undeclared() {
 }
 
 #[test]
-fn test_decoder_context_default() {
+fn decoder_context_default() {
     let context = DecoderContext::default();
     assert_eq!(context.server_version, 0);
     assert!(context.request_type.is_none());
@@ -23,7 +23,7 @@ fn test_decoder_context_default() {
 }
 
 #[test]
-fn test_decoder_context_new() {
+fn decoder_context_new() {
     let context = DecoderContext::new(176);
     assert_eq!(context.server_version, 176);
     assert!(context.request_type.is_none());
@@ -31,7 +31,7 @@ fn test_decoder_context_new() {
 }
 
 #[test]
-fn test_decoder_context_builder() {
+fn decoder_context_builder() {
     let context = DecoderContext::new(176)
         .with_request_type(crate::messages::OutgoingMessages::RequestMarketData)
         .with_smart_depth(true);
@@ -42,7 +42,7 @@ fn test_decoder_context_builder() {
 }
 
 #[test]
-fn test_decoder_context_clone() {
+fn decoder_context_clone() {
     let context = DecoderContext {
         server_version: 176,
         is_smart_depth: true,
@@ -57,7 +57,7 @@ fn test_decoder_context_clone() {
 }
 
 #[test]
-fn test_decoder_context_equality() {
+fn decoder_context_equality() {
     struct TestCase {
         name: &'static str,
         context1: DecoderContext,
@@ -130,7 +130,7 @@ fn test_decoder_context_equality() {
 }
 
 #[test]
-fn test_decoder_context_debug_format() {
+fn decoder_context_debug_format() {
     let context = DecoderContext {
         server_version: 176,
         is_smart_depth: true,
@@ -163,19 +163,19 @@ impl StreamDecoder<UnroutableDecoder> for UnroutableDecoder {
 #[test]
 #[cfg(debug_assertions)]
 #[should_panic(expected = "has no `text_request_id_field` entry")]
-fn test_debug_assert_request_id_routable_rejects_unroutable_declaration() {
+fn debug_assert_request_id_routable_rejects_unroutable_declaration() {
     debug_assert_request_id_routable::<UnroutableDecoder, UnroutableDecoder>(Some(42));
 }
 
 #[test]
-fn test_debug_assert_request_id_routable_skips_unkeyed_subscriptions() {
+fn debug_assert_request_id_routable_skips_unkeyed_subscriptions() {
     // Order-id and shared-channel subscriptions pass `None`; their decoders
     // legitimately declare types with no request id (positions, news bulletins).
     debug_assert_request_id_routable::<UnroutableDecoder, UnroutableDecoder>(None);
 }
 
 #[test]
-fn test_collect_stop_into_result() {
+fn collect_stop_into_result() {
     let rows = || vec![1, 2];
 
     assert_eq!(CollectStop::EndMarker.into_result(rows()).unwrap(), vec![1, 2]);

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_what_to_show_display() {
+fn what_to_show_display() {
     assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
     assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
     assert_eq!(WhatToShow::Bid.to_string(), "BID");
@@ -12,7 +12,7 @@ fn test_what_to_show_display() {
 /// Only 317 becomes `Reset`; other notices on a depth stream, including the
 /// other data advisories, stay `Notice` (#899).
 #[test]
-fn test_market_depths_data_from_notice() {
+fn market_depths_data_from_notice() {
     let notice = |code| Notice::synthesized(code, String::new());
 
     assert_eq!(

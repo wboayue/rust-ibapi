@@ -13,7 +13,7 @@ fn stub(responses: Vec<crate::messages::ResponseMessage>) -> Arc<MessageBusStub>
 }
 
 #[tokio::test]
-async fn test_update_config_request_body() {
+async fn update_config_request_body() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response().request_id(TEST_REQ_ID_FIRST).status("ok").encode_proto(),
@@ -67,7 +67,7 @@ async fn test_update_config_request_body() {
 }
 
 #[tokio::test]
-async fn test_update_config_response_decoded() {
+async fn update_config_response_decoded() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response()
@@ -91,7 +91,7 @@ async fn test_update_config_response_decoded() {
 }
 
 #[tokio::test]
-async fn test_update_config_server_version_error() {
+async fn update_config_server_version_error() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::UPDATE_CONFIG - 1);
@@ -102,7 +102,7 @@ async fn test_update_config_server_version_error() {
 }
 
 #[tokio::test]
-async fn test_update_config_unexpected_end_of_stream() {
+async fn update_config_unexpected_end_of_stream() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::UPDATE_CONFIG);

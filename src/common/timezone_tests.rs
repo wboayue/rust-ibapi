@@ -11,44 +11,44 @@ fn resolved_name(name: &str) -> Option<&'static str> {
 }
 
 #[test]
-fn test_find_timezone_standard() {
+fn find_timezone_standard() {
     assert_eq!(resolved_name("America/New_York"), Some("America/New_York"));
     assert_eq!(resolved_name("US/Eastern"), Some("US/Eastern"));
     assert_eq!(resolved_name("Etc/GMT+4"), Some("Etc/GMT+4"));
 }
 
 #[test]
-fn test_find_timezone_china_utf8() {
+fn find_timezone_china_utf8() {
     assert_eq!(resolved_name("中国标准时间"), Some("Asia/Shanghai"));
     assert_eq!(resolved_name("北京时间"), Some("Asia/Shanghai"));
 }
 
 #[test]
-fn test_find_timezone_china_english() {
+fn find_timezone_china_english() {
     assert_eq!(resolved_name("China Standard Time"), Some("Asia/Shanghai"));
 }
 
 #[test]
-fn test_find_timezone_gmt() {
+fn find_timezone_gmt() {
     assert_eq!(resolved_name("Greenwich Mean Time"), Some("Europe/London"));
     assert_eq!(resolved_name("GMT Standard Time"), Some("Europe/London"));
     assert_eq!(resolved_name("British Summer Time"), Some("Europe/London"));
 }
 
 #[test]
-fn test_find_timezone_mojibake() {
+fn find_timezone_mojibake() {
     // Simulate GB2312 decoded as UTF-8 lossy (contains replacement characters)
     let mojibake = "test\u{FFFD}\u{FFFD}zone";
     assert_eq!(resolved_name(mojibake), Some("Asia/Shanghai"));
 }
 
 #[test]
-fn test_find_timezone_singapore() {
+fn find_timezone_singapore() {
     assert_eq!(resolved_name("SGT"), Some("Asia/Singapore"));
 }
 
 #[test]
-fn test_find_timezone_brazil() {
+fn find_timezone_brazil() {
     // `E. South America Standard Time` is not in the alias table: time_tz maps
     // Windows registry ids itself.
     for name in ["BRT", "Brasilia Standard Time", "E. South America Standard Time"] {
@@ -57,7 +57,7 @@ fn test_find_timezone_brazil() {
 }
 
 #[test]
-fn test_find_timezone_european_continental() {
+fn find_timezone_european_continental() {
     let cases = [
         ("E. Europe Standard Time", "Europe/Bucharest"),
         ("Eastern European Standard Time", "Europe/Athens"),
@@ -75,13 +75,13 @@ fn test_find_timezone_european_continental() {
 }
 
 #[test]
-fn test_find_timezone_passthrough() {
+fn find_timezone_passthrough() {
     // Unknown timezone names pass through unchanged
     assert!(resolved_name("Unknown/Timezone").is_none());
 }
 
 #[test]
-fn test_find_timezone_no_partial_match() {
+fn find_timezone_no_partial_match() {
     // time_tz's `find_by_name` is a substring match, which resolved these to
     // whichever containing zone hashed first (#809). Lookup is exact now.
     for name in ["GMT+1", "York", "Eastern", "BST", "JST", "IST"] {
@@ -92,7 +92,7 @@ fn test_find_timezone_no_partial_match() {
 }
 
 #[test]
-fn test_find_timezone_us_abbreviations() {
+fn find_timezone_us_abbreviations() {
     // Both halves of each pair map to one DST-observing zone, so the zone a
     // client reports does not depend on the season it connected in.
     let cases = [
@@ -111,7 +111,7 @@ fn test_find_timezone_us_abbreviations() {
 }
 
 #[test]
-fn test_find_timezone_registry_value_is_exact() {
+fn find_timezone_registry_value_is_exact() {
     // A registered alias resolves its target exactly too: a partial IANA name
     // is not completed to some zone that contains it.
     register_timezone_alias("__rust_ibapi_test_alias_partial", "New_York");
@@ -119,46 +119,46 @@ fn test_find_timezone_registry_value_is_exact() {
 }
 
 #[test]
-fn test_registry_overrides_builtin() {
+fn registry_overrides_builtin() {
     let mut reg = HashMap::new();
     reg.insert("China Standard Time".to_string(), "Europe/London".to_string());
     assert_eq!(map_timezone_name_with(&reg, "China Standard Time"), "Europe/London");
 }
 
 #[test]
-fn test_registry_adds_new_alias() {
+fn registry_adds_new_alias() {
     let mut reg = HashMap::new();
     reg.insert("Made Up Time".to_string(), "Asia/Tokyo".to_string());
     assert_eq!(map_timezone_name_with(&reg, "Made Up Time"), "Asia/Tokyo");
 }
 
 #[test]
-fn test_registry_falls_through_to_builtin() {
+fn registry_falls_through_to_builtin() {
     let reg = HashMap::new();
     assert_eq!(map_timezone_name_with(&reg, "China Standard Time"), "Asia/Shanghai");
 }
 
 #[test]
-fn test_registry_falls_through_to_mojibake() {
+fn registry_falls_through_to_mojibake() {
     let reg = HashMap::new();
     assert_eq!(map_timezone_name_with(&reg, "test\u{FFFD}\u{FFFD}"), "Asia/Shanghai");
 }
 
 #[test]
-fn test_registry_passthrough_unknown() {
+fn registry_passthrough_unknown() {
     let reg = HashMap::new();
     assert_eq!(map_timezone_name_with(&reg, "Some/Unknown"), "Some/Unknown");
 }
 
 #[test]
-fn test_register_timezone_alias_smoke() {
+fn register_timezone_alias_smoke() {
     // Unique key avoids collision with other tests touching the registry.
     register_timezone_alias("__rust_ibapi_test_alias_xyz", "America/New_York");
     assert_eq!(resolved_name("__rust_ibapi_test_alias_xyz"), Some("America/New_York"));
 }
 
 #[test]
-fn test_parse_env_aliases_basic() {
+fn parse_env_aliases_basic() {
     let pairs = parse_env_aliases("Foo=Asia/Tokyo;Bar=Europe/Berlin");
     assert_eq!(
         pairs,
@@ -170,7 +170,7 @@ fn test_parse_env_aliases_basic() {
 }
 
 #[test]
-fn test_parse_env_aliases_skips_malformed() {
+fn parse_env_aliases_skips_malformed() {
     let pairs = parse_env_aliases("Foo=Asia/Tokyo;garbage;Bar=Europe/Berlin");
     assert_eq!(
         pairs,
@@ -182,7 +182,7 @@ fn test_parse_env_aliases_skips_malformed() {
 }
 
 #[test]
-fn test_parse_env_aliases_trims_whitespace() {
+fn parse_env_aliases_trims_whitespace() {
     let pairs = parse_env_aliases(" Foo Standard Time = Asia/Tokyo ; Bar = Europe/Berlin ");
     assert_eq!(
         pairs,
@@ -194,13 +194,13 @@ fn test_parse_env_aliases_trims_whitespace() {
 }
 
 #[test]
-fn test_parse_env_aliases_empty() {
+fn parse_env_aliases_empty() {
     assert!(parse_env_aliases("").is_empty());
     assert!(parse_env_aliases(";;;").is_empty());
 }
 
 #[test]
-fn test_parse_env_aliases_skips_empty_sides() {
+fn parse_env_aliases_skips_empty_sides() {
     let pairs = parse_env_aliases("=Asia/Tokyo;Foo=;Bar=Europe/Berlin");
     assert_eq!(pairs, vec![("Bar".to_string(), "Europe/Berlin".to_string())]);
 }
@@ -210,7 +210,7 @@ fn test_parse_env_aliases_skips_empty_sides() {
 /// intervals are half-open in time-tz, so the gap's leading endpoint is the
 /// transition instant, not a nonexistent time.
 #[test]
-fn test_resolve_local_dst_fold_and_gap_policy() {
+fn resolve_local_dst_fold_and_gap_policy() {
     let eastern = timezones::db::america::NEW_YORK;
     let cases: &[(PrimitiveDateTime, OffsetDateTime, &str)] = &[
         (datetime!(2026-08-29 04:33:35), datetime!(2026-08-29 08:33:35 UTC), "unique reading, EDT"),
@@ -277,7 +277,7 @@ fn test_resolve_local_dst_fold_and_gap_policy() {
 /// The push-forward is by the gap's actual length, not a fixed hour: Lord Howe
 /// Island shifts by 30 minutes (02:00 +10:30 -> 02:30 +11:00 on 2025-10-05).
 #[test]
-fn test_resolve_local_half_hour_gap() {
+fn resolve_local_half_hour_gap() {
     let lord_howe = timezones::db::australia::LORD_HOWE;
     let pushed = resolve_local(datetime!(2025-10-05 02:15:00), lord_howe);
     assert_eq!(pushed, datetime!(2025-10-04 15:45:00 UTC));

@@ -1,14 +1,14 @@
 use super::*;
 
 #[test]
-fn test_algo_params_from_string() {
+fn algo_params_from_string() {
     let params: AlgoParams = "Vwap".into();
     assert_eq!(params.strategy, "Vwap");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_vwap_builder() {
+fn vwap_builder() {
     let params = VwapBuilder::new()
         .max_pct_vol(0.2)
         .start_time("09:00:00 US/Eastern")
@@ -32,7 +32,7 @@ fn test_vwap_builder() {
 }
 
 #[test]
-fn test_twap_builder() {
+fn twap_builder() {
     let params = TwapBuilder::new()
         .strategy_type(TwapStrategyType::MatchingMidpoint)
         .start_time("09:00:00 US/Eastern")
@@ -50,7 +50,7 @@ fn test_twap_builder() {
 }
 
 #[test]
-fn test_pct_vol_builder() {
+fn pct_vol_builder() {
     let params = PctVolBuilder::new()
         .pct_vol(0.15)
         .start_time("09:30:00 US/Eastern")
@@ -68,7 +68,7 @@ fn test_pct_vol_builder() {
 }
 
 #[test]
-fn test_arrival_price_builder() {
+fn arrival_price_builder() {
     let params = ArrivalPriceBuilder::new()
         .max_pct_vol(0.1)
         .risk_aversion(RiskAversion::Aggressive)
@@ -88,7 +88,7 @@ fn test_arrival_price_builder() {
 }
 
 #[test]
-fn test_builder_minimal() {
+fn builder_minimal() {
     let vwap = VwapBuilder::new().build().unwrap();
     assert_eq!(vwap.strategy, "Vwap");
     assert!(vwap.params.is_empty());
@@ -99,7 +99,7 @@ fn test_builder_minimal() {
 }
 
 #[test]
-fn test_pct_vol_out_of_range_errors() {
+fn pct_vol_out_of_range_errors() {
     let result = PctVolBuilder::new().pct_vol(0.8).build();
     assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
@@ -114,7 +114,7 @@ fn test_pct_vol_out_of_range_errors() {
 }
 
 #[test]
-fn test_pct_vol_valid_values_succeed() {
+fn pct_vol_valid_values_succeed() {
     let params = PctVolBuilder::new().pct_vol(0.25).build().unwrap();
     let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
     assert_eq!(find_param("pctVol"), Some(&"0.25".to_string()));
@@ -129,7 +129,7 @@ fn test_pct_vol_valid_values_succeed() {
 }
 
 #[test]
-fn test_pct_vol_boundary_values() {
+fn pct_vol_boundary_values() {
     assert!(VwapBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(PctVolBuilder::new().pct_vol(0.1).build().is_ok());
     assert!(ArrivalPriceBuilder::new().max_pct_vol(0.1).build().is_ok());
@@ -143,7 +143,7 @@ fn test_pct_vol_boundary_values() {
 }
 
 #[test]
-fn test_adaptive_builder() {
+fn adaptive_builder() {
     let params = AdaptiveBuilder::new().priority(AdaptivePriority::Urgent).build().unwrap();
 
     assert_eq!(params.strategy, "Adaptive");
@@ -154,7 +154,7 @@ fn test_adaptive_builder() {
 }
 
 #[test]
-fn test_adaptive_builder_priority_variants() {
+fn adaptive_builder_priority_variants() {
     let urgent = AdaptiveBuilder::new().priority(AdaptivePriority::Urgent).build().unwrap();
     assert_eq!(urgent.params[0].value, "Urgent");
 
@@ -166,14 +166,14 @@ fn test_adaptive_builder_priority_variants() {
 }
 
 #[test]
-fn test_adaptive_builder_minimal() {
+fn adaptive_builder_minimal() {
     let params = AdaptiveBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "Adaptive");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_close_price_builder() {
+fn close_price_builder() {
     let params = ClosePriceBuilder::new()
         .max_pct_vol(0.3)
         .risk_aversion(RiskAversion::Aggressive)
@@ -193,14 +193,14 @@ fn test_close_price_builder() {
 }
 
 #[test]
-fn test_close_price_builder_minimal() {
+fn close_price_builder_minimal() {
     let params = ClosePriceBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "ClosePx");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_close_price_pct_vol_boundary_values() {
+fn close_price_pct_vol_boundary_values() {
     assert!(ClosePriceBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(ClosePriceBuilder::new().max_pct_vol(0.5).build().is_ok());
 
@@ -211,7 +211,7 @@ fn test_close_price_pct_vol_boundary_values() {
 }
 
 #[test]
-fn test_dark_ice_builder() {
+fn dark_ice_builder() {
     let params = DarkIceBuilder::new()
         .display_size(100)
         .start_time("09:30:00 US/Eastern")
@@ -231,14 +231,14 @@ fn test_dark_ice_builder() {
 }
 
 #[test]
-fn test_dark_ice_builder_minimal() {
+fn dark_ice_builder_minimal() {
     let params = DarkIceBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "DarkIce");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_accumulate_distribute_builder() {
+fn accumulate_distribute_builder() {
     let params = AccumulateDistributeBuilder::new()
         .component_size(100)
         .time_between_orders(60)
@@ -268,14 +268,14 @@ fn test_accumulate_distribute_builder() {
 }
 
 #[test]
-fn test_accumulate_distribute_builder_minimal() {
+fn accumulate_distribute_builder_minimal() {
     let params = AccumulateDistributeBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "AD");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_balance_impact_risk_builder() {
+fn balance_impact_risk_builder() {
     let params = BalanceImpactRiskBuilder::new()
         .max_pct_vol(0.25)
         .risk_aversion(RiskAversion::Passive)
@@ -293,14 +293,14 @@ fn test_balance_impact_risk_builder() {
 }
 
 #[test]
-fn test_balance_impact_risk_builder_minimal() {
+fn balance_impact_risk_builder_minimal() {
     let params = BalanceImpactRiskBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "BalanceImpactRisk");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_balance_impact_risk_pct_vol_boundary_values() {
+fn balance_impact_risk_pct_vol_boundary_values() {
     assert!(BalanceImpactRiskBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(BalanceImpactRiskBuilder::new().max_pct_vol(0.5).build().is_ok());
 
@@ -311,7 +311,7 @@ fn test_balance_impact_risk_pct_vol_boundary_values() {
 }
 
 #[test]
-fn test_minimise_impact_builder() {
+fn minimise_impact_builder() {
     let params = MinimiseImpactBuilder::new().max_pct_vol(0.3).build().unwrap();
 
     assert_eq!(params.strategy, "MinImpact");
@@ -322,14 +322,14 @@ fn test_minimise_impact_builder() {
 }
 
 #[test]
-fn test_minimise_impact_builder_minimal() {
+fn minimise_impact_builder_minimal() {
     let params = MinimiseImpactBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "MinImpact");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_minimise_impact_pct_vol_boundary_values() {
+fn minimise_impact_pct_vol_boundary_values() {
     assert!(MinimiseImpactBuilder::new().max_pct_vol(0.1).build().is_ok());
     assert!(MinimiseImpactBuilder::new().max_pct_vol(0.5).build().is_ok());
 
@@ -340,7 +340,7 @@ fn test_minimise_impact_pct_vol_boundary_values() {
 }
 
 #[test]
-fn test_pct_vol_price_builder() {
+fn pct_vol_price_builder() {
     let params = PctVolPriceBuilder::new()
         .pct_vol(0.2)
         .delta_pct_vol(0.1)
@@ -366,14 +366,14 @@ fn test_pct_vol_price_builder() {
 }
 
 #[test]
-fn test_pct_vol_price_builder_minimal() {
+fn pct_vol_price_builder_minimal() {
     let params = PctVolPriceBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "PctVolPx");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_pct_vol_price_validates_all_rate_fields() {
+fn pct_vol_price_validates_all_rate_fields() {
     // Per IB docs (https://interactivebrokers.github.io/tws-api/ibalgos.html),
     // all four percentage fields are bounded to 0.1-0.5.
     assert!(PctVolPriceBuilder::new().pct_vol(0.1).build().is_ok());
@@ -422,7 +422,7 @@ fn test_pct_vol_price_validates_all_rate_fields() {
 }
 
 #[test]
-fn test_pct_vol_size_builder() {
+fn pct_vol_size_builder() {
     let params = PctVolSizeBuilder::new()
         .start_pct_vol(0.1)
         .end_pct_vol(0.4)
@@ -444,14 +444,14 @@ fn test_pct_vol_size_builder() {
 }
 
 #[test]
-fn test_pct_vol_size_builder_minimal() {
+fn pct_vol_size_builder_minimal() {
     let params = PctVolSizeBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "PctVolSz");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_pct_vol_size_validates_both_rates() {
+fn pct_vol_size_validates_both_rates() {
     assert!(PctVolSizeBuilder::new().start_pct_vol(0.1).end_pct_vol(0.5).build().is_ok());
 
     let err = PctVolSizeBuilder::new().start_pct_vol(0.05).build();
@@ -462,7 +462,7 @@ fn test_pct_vol_size_validates_both_rates() {
 }
 
 #[test]
-fn test_pct_vol_time_builder() {
+fn pct_vol_time_builder() {
     let params = PctVolTimeBuilder::new()
         .start_pct_vol(0.15)
         .end_pct_vol(0.35)
@@ -482,14 +482,14 @@ fn test_pct_vol_time_builder() {
 }
 
 #[test]
-fn test_pct_vol_time_builder_minimal() {
+fn pct_vol_time_builder_minimal() {
     let params = PctVolTimeBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "PctVolTm");
     assert!(params.params.is_empty());
 }
 
 #[test]
-fn test_pct_vol_time_validates_both_rates() {
+fn pct_vol_time_validates_both_rates() {
     assert!(PctVolTimeBuilder::new().start_pct_vol(0.1).end_pct_vol(0.5).build().is_ok());
 
     let err = PctVolTimeBuilder::new().start_pct_vol(0.05).build();
@@ -500,7 +500,7 @@ fn test_pct_vol_time_validates_both_rates() {
 }
 
 #[test]
-fn test_accu_distr_builder() {
+fn accu_distr_builder() {
     let params = AccuDistrBuilder::new()
         .time_between_orders(60)
         .route_order_type("LMT")
@@ -538,7 +538,7 @@ fn test_accu_distr_builder() {
 }
 
 #[test]
-fn test_accu_distr_builder_minimal() {
+fn accu_distr_builder_minimal() {
     let params = AccuDistrBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "AccuDistr");
     assert!(params.params.is_empty());

@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
-async fn test_positions() {
+async fn positions() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(IncomingMessages::Position, position().encode_proto()),
         proto_response(IncomingMessages::PositionEnd, position_end().encode_proto()),
@@ -55,7 +55,7 @@ async fn test_positions() {
 }
 
 #[tokio::test]
-async fn test_positions_multi() {
+async fn positions_multi() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(IncomingMessages::PositionMulti, position_multi().encode_proto()),
         proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto()),
@@ -98,7 +98,7 @@ async fn test_positions_multi() {
 }
 
 #[tokio::test]
-async fn test_account_summary() {
+async fn account_summary_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(IncomingMessages::AccountSummary, account_summary().encode_proto()),
         proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
@@ -143,7 +143,7 @@ async fn test_account_summary() {
 }
 
 #[tokio::test]
-async fn test_pnl() {
+async fn pnl() {
     let (client, message_bus) = create_test_client();
 
     let account = AccountId(TEST_ACCOUNT.to_string());
@@ -165,7 +165,7 @@ async fn test_pnl() {
 }
 
 #[tokio::test]
-async fn test_pnl_single() {
+async fn pnl_single() {
     let (client, message_bus) = create_test_client();
 
     let account = AccountId(TEST_ACCOUNT.to_string());
@@ -191,7 +191,7 @@ async fn test_pnl_single() {
 }
 
 #[tokio::test]
-async fn test_managed_accounts() {
+async fn managed_accounts_works() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
@@ -205,7 +205,7 @@ async fn test_managed_accounts() {
 }
 
 #[tokio::test]
-async fn test_managed_accounts_retry() {
+async fn managed_accounts_retry() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
@@ -219,7 +219,7 @@ async fn test_managed_accounts_retry() {
 }
 
 #[tokio::test]
-async fn test_server_time() {
+async fn server_time() {
     use time::macros::datetime;
 
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
@@ -239,7 +239,7 @@ async fn test_server_time() {
 }
 
 #[tokio::test]
-async fn test_family_codes() {
+async fn family_codes_works() {
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
@@ -292,7 +292,7 @@ async fn test_family_codes() {
 }
 
 #[tokio::test]
-async fn test_account_updates() {
+async fn account_updates() {
     use crate::accounts::AccountUpdate;
 
     let account_name = AccountId(TEST_ACCOUNT.to_string());
@@ -330,7 +330,7 @@ async fn test_account_updates() {
 }
 
 #[tokio::test]
-async fn test_account_updates_multi() {
+async fn account_updates_multi() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountUpdateMulti,
@@ -396,7 +396,7 @@ async fn test_account_updates_multi() {
 // Additional comprehensive tests
 
 #[tokio::test]
-async fn test_concurrent_subscriptions() {
+async fn concurrent_subscriptions() {
     let (client, message_bus) = create_test_client();
 
     let account1 = AccountId("ACCOUNT1".to_string());
@@ -425,7 +425,7 @@ async fn test_concurrent_subscriptions() {
 }
 
 #[tokio::test]
-async fn test_account_summary_multiple_tags() {
+async fn account_summary_multiple_tags() {
     use super::common::test_tables::account_summary_tag_test_cases;
 
     let test_cases = account_summary_tag_test_cases();
@@ -487,7 +487,7 @@ async fn test_account_summary_multiple_tags() {
 }
 
 #[tokio::test]
-async fn test_pnl_comprehensive() {
+async fn pnl_comprehensive() {
     use super::common::test_tables::pnl_parameter_test_cases;
 
     let test_cases = pnl_parameter_test_cases();
@@ -514,7 +514,7 @@ async fn test_pnl_comprehensive() {
 }
 
 #[tokio::test]
-async fn test_pnl_single_edge_cases() {
+async fn pnl_single_edge_cases() {
     use super::common::test_tables::contract_id_test_cases;
 
     let test_cases = contract_id_test_cases();
@@ -540,7 +540,7 @@ async fn test_pnl_single_edge_cases() {
 }
 
 #[tokio::test]
-async fn test_positions_multi_parameter_combinations() {
+async fn positions_multi_parameter_combinations() {
     use super::common::test_tables::positions_multi_parameter_test_cases;
 
     let test_cases = positions_multi_parameter_test_cases();
@@ -572,7 +572,7 @@ async fn test_positions_multi_parameter_combinations() {
 }
 
 #[tokio::test]
-async fn test_subscription_lifecycle() {
+async fn subscription_lifecycle() {
     use super::common::test_tables::{subscription_lifecycle_test_cases, SubscriptionType};
 
     let test_cases = subscription_lifecycle_test_cases();
@@ -639,7 +639,7 @@ async fn test_subscription_lifecycle() {
 }
 
 #[tokio::test]
-async fn test_soft_dollar_tiers() {
+async fn soft_dollar_tiers_works() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::SoftDollarTier,
         soft_dollar_tiers()
@@ -658,7 +658,7 @@ async fn test_soft_dollar_tiers() {
 }
 
 #[tokio::test]
-async fn test_user_info() {
+async fn user_info_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::UserInfo,
         user_info().request_id(TEST_REQ_ID_FIRST).white_branding_id("brand-xyz").encode_proto(),
@@ -672,7 +672,7 @@ async fn test_user_info() {
 }
 
 #[tokio::test]
-async fn test_request_fa() {
+async fn request_fa() {
     use crate::accounts::FaDataType;
 
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
@@ -688,7 +688,7 @@ async fn test_request_fa() {
 }
 
 #[tokio::test]
-async fn test_request_fa_skips_another_datasets_frame() {
+async fn request_fa_skips_another_datasets_frame() {
     use crate::accounts::FaDataType;
 
     // A concurrent request_fa(AccountAliases) was answered first; every
@@ -714,7 +714,7 @@ async fn test_request_fa_skips_another_datasets_frame() {
 }
 
 #[tokio::test]
-async fn test_replace_fa() {
+async fn replace_fa() {
     use crate::accounts::FaDataType;
 
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
@@ -739,7 +739,7 @@ async fn test_replace_fa() {
 }
 
 #[tokio::test]
-async fn test_set_server_log_level() {
+async fn set_server_log_level() {
     use crate::accounts::ServerLogLevel;
 
     let (client, message_bus) = create_test_client();
@@ -752,7 +752,7 @@ async fn test_set_server_log_level() {
 }
 
 #[tokio::test]
-async fn test_verify_request() {
+async fn verify_request_works() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyMessageApi,
         verify_message_api().api_data("challenge-payload").encode_proto(),
@@ -765,7 +765,7 @@ async fn test_verify_request() {
 }
 
 #[tokio::test]
-async fn test_verify_message() {
+async fn verify_message() {
     let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyCompleted,
         verify_completed().successful(true).error_text("").encode_proto(),
@@ -817,7 +817,7 @@ fn values(snapshot: &AccountSummarySnapshot) -> Vec<(&str, &str, &str)> {
 }
 
 #[tokio::test]
-async fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
+async fn account_summary_snapshots_emit_at_end_then_after_quiet_period() {
     let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -841,7 +841,7 @@ async fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
 }
 
 #[tokio::test]
-async fn test_account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_skip_end_without_changes() {
+async fn account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_skip_end_without_changes() {
     let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -860,7 +860,7 @@ async fn test_account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_sk
 }
 
 #[tokio::test]
-async fn test_account_summary_snapshots_return_pending_rows_when_subscription_ends() {
+async fn account_summary_snapshots_return_pending_rows_when_subscription_ends() {
     let (mut snapshots, tx) = snapshots_over_open_channel(Duration::from_secs(60));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -873,7 +873,7 @@ async fn test_account_summary_snapshots_return_pending_rows_when_subscription_en
 }
 
 #[tokio::test]
-async fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
+async fn client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountSummary,
@@ -907,7 +907,7 @@ async fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot
 }
 
 #[tokio::test]
-async fn test_account_summary_snapshots_cancel_sends_cancel_and_ends() {
+async fn account_summary_snapshots_cancel_sends_cancel_and_ends() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountSummary,

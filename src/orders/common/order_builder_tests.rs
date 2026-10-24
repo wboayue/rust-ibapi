@@ -8,7 +8,7 @@ mod basic_order_tests {
     use super::*;
 
     #[test]
-    fn test_market_order() {
+    fn market_order_works() {
         let order = market_order(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -24,7 +24,7 @@ mod basic_order_tests {
     }
 
     #[test]
-    fn test_limit_order() {
+    fn limit_order_works() {
         let order = limit_order(Action::Buy, 100.0, 50.25);
 
         assert_eq!(order.action, Action::Buy);
@@ -39,7 +39,7 @@ mod basic_order_tests {
     }
 
     #[test]
-    fn test_stop_order() {
+    fn stop_order() {
         let order = stop(Action::Sell, 100.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
@@ -50,7 +50,7 @@ mod basic_order_tests {
     }
 
     #[test]
-    fn test_market_if_touched() {
+    fn market_if_touched_works() {
         let order = market_if_touched(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -65,7 +65,7 @@ mod time_based_order_tests {
     use super::*;
 
     #[test]
-    fn test_market_on_close() {
+    fn market_on_close_works() {
         let order = market_on_close(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -74,7 +74,7 @@ mod time_based_order_tests {
     }
 
     #[test]
-    fn test_market_on_open() {
+    fn market_on_open_works() {
         let order = market_on_open(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -84,7 +84,7 @@ mod time_based_order_tests {
     }
 
     #[test]
-    fn test_limit_on_close() {
+    fn limit_on_close_works() {
         let order = limit_on_close(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -94,7 +94,7 @@ mod time_based_order_tests {
     }
 
     #[test]
-    fn test_limit_on_open() {
+    fn limit_on_open_works() {
         let order = limit_on_open(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -110,7 +110,7 @@ mod complex_order_tests {
     use super::*;
 
     #[test]
-    fn test_bracket_order() {
+    fn bracket_order_works() {
         let prices = BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -151,7 +151,7 @@ mod complex_order_tests {
     }
 
     #[test]
-    fn test_bracket_order_rejects_non_finite_prices() {
+    fn bracket_order_rejects_non_finite_prices() {
         let valid = BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -176,7 +176,7 @@ mod complex_order_tests {
     }
 
     #[test]
-    fn test_bracket_order_rejects_prices_on_the_wrong_side() {
+    fn bracket_order_rejects_prices_on_the_wrong_side() {
         // (action, take_profit, stop_loss) around an entry of 50.0
         let cases = [
             (Action::Buy, 45.0, 40.0),
@@ -197,7 +197,7 @@ mod complex_order_tests {
     }
 
     #[test]
-    fn test_one_cancels_all() {
+    fn one_cancels_all_works() {
         let order1 = limit_order(Action::Buy, 100.0, 50.0);
         let order2 = limit_order(Action::Sell, 100.0, 52.0);
         let orders = one_cancels_all("TestOCA", vec![order1, order2], OcaType::ReduceWithBlock);
@@ -215,7 +215,7 @@ mod complex_order_tests {
     }
 
     #[test]
-    fn test_trailing_stop_order() {
+    fn trailing_stop_order() {
         let order = trailing_stop(Action::Sell, 100.0, 5.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
@@ -231,7 +231,7 @@ mod combo_order_tests {
     use super::*;
 
     #[test]
-    fn test_combo_market_order() {
+    fn combo_market_order_works() {
         let order = non_guaranteed(combo_market_order(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
@@ -245,7 +245,7 @@ mod combo_order_tests {
     }
 
     #[test]
-    fn test_combo_limit_order() {
+    fn combo_limit_order_works() {
         let order = non_guaranteed(combo_limit_order(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
@@ -260,7 +260,7 @@ mod combo_order_tests {
     }
 
     #[test]
-    fn test_relative_limit_combo() {
+    fn relative_limit_combo_works() {
         let order = non_guaranteed(relative_limit_combo(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
@@ -275,7 +275,7 @@ mod combo_order_tests {
     }
 
     #[test]
-    fn test_limit_order_for_combo_with_leg_prices() {
+    fn limit_order_for_combo_with_leg_prices_works() {
         let leg_prices = vec![50.0, 45.0];
         let order = non_guaranteed(limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, leg_prices));
 
@@ -300,7 +300,7 @@ mod specialized_order_tests {
     use super::*;
 
     #[test]
-    fn test_pegged_to_market() {
+    fn pegged_to_market_works() {
         let order = pegged_to_market(Action::Buy, 100.0, 0.05);
 
         assert_eq!(order.action, Action::Buy);
@@ -310,7 +310,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_volatility_order() {
+    fn volatility_order() {
         let order = volatility(Action::Buy, 100.0, 0.04, VolatilityType::Daily);
 
         assert_eq!(order.action, Action::Buy);
@@ -321,7 +321,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_auction_relative() {
+    fn auction_relative_works() {
         let order = auction_relative(Action::Buy, 100.0, 0.05);
 
         assert_eq!(order.action, Action::Buy);
@@ -331,7 +331,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_block_order() {
+    fn block_order() {
         let order = block(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -342,7 +342,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_box_top() {
+    fn box_top_works() {
         let order = box_top(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -351,7 +351,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_sweep_to_fill() {
+    fn sweep_to_fill_works() {
         let order = sweep_to_fill(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -362,7 +362,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_discretionary() {
+    fn discretionary_works() {
         let order = discretionary(Action::Buy, 100.0, 50.0, 0.1);
 
         assert_eq!(order.action, Action::Buy);
@@ -373,7 +373,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_midpoint_match() {
+    fn midpoint_match_works() {
         let order = midpoint_match(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -382,7 +382,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_midprice_with_cap() {
+    fn midprice_with_cap() {
         let order = midprice(Action::Buy, 100.0, Some(50.0));
 
         assert_eq!(order.action, Action::Buy);
@@ -392,7 +392,7 @@ mod specialized_order_tests {
     }
 
     #[test]
-    fn test_midprice_without_cap() {
+    fn midprice_without_cap() {
         let order = midprice(Action::Buy, 100.0, None);
 
         assert_eq!(order.action, Action::Buy);
@@ -407,7 +407,7 @@ mod miscellaneous_order_tests {
     use super::*;
 
     #[test]
-    fn test_limit_order_with_cash_qty() {
+    fn limit_order_with_cash_qty_works() {
         let order = limit_order_with_cash_qty(Action::Buy, 50.0, 5000.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -417,7 +417,7 @@ mod miscellaneous_order_tests {
     }
 
     #[test]
-    fn test_limit_order_with_manual_order_time() {
+    fn limit_order_with_manual_order_time_works() {
         let order = limit_order_with_manual_order_time(Action::Buy, 100.0, 50.0, "20240101 10:00:00");
 
         assert_eq!(order.action, Action::Buy);
@@ -428,7 +428,7 @@ mod miscellaneous_order_tests {
     }
 
     #[test]
-    fn test_market_with_protection() {
+    fn market_with_protection_works() {
         let order = market_with_protection(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -437,7 +437,7 @@ mod miscellaneous_order_tests {
     }
 
     #[test]
-    fn test_stop_with_protection() {
+    fn stop_with_protection_works() {
         let order = stop_with_protection(Action::Sell, 100.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
@@ -447,7 +447,7 @@ mod miscellaneous_order_tests {
     }
 
     #[test]
-    fn test_ibkrats_limit_order() {
+    fn ibkrats_limit_order() {
         let order = limit_ibkrats(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
@@ -458,7 +458,7 @@ mod miscellaneous_order_tests {
     }
 
     #[test]
-    fn test_market_f_hedge() {
+    fn market_f_hedge_works() {
         let order = market_f_hedge(1001, Action::Buy);
 
         assert_eq!(order.action, Action::Buy);
@@ -489,7 +489,7 @@ mod adjustable_order_tests {
     }
 
     #[test]
-    fn test_adjust_to_stop() {
+    fn adjust_to_stop() {
         let order = attach(AdjustTo::Stop { stop_price: 46.0 });
 
         assert_attached_stop(&order);
@@ -499,7 +499,7 @@ mod adjustable_order_tests {
     }
 
     #[test]
-    fn test_adjust_to_stop_limit() {
+    fn adjust_to_stop_limit() {
         let order = attach(AdjustTo::StopLimit {
             stop_price: 46.0,
             limit_price: 47.0,
@@ -512,7 +512,7 @@ mod adjustable_order_tests {
     }
 
     #[test]
-    fn test_adjust_to_trail() {
+    fn adjust_to_trail() {
         // (trail, expected adjustable_trailing_unit, expected adjusted_trailing_amount)
         let cases = [(TrailBy::Amount(0.5), 0, 0.5), (TrailBy::Percent(2.0), 100, 2.0)];
 
@@ -533,7 +533,7 @@ mod additional_specialized_order_tests {
     use super::*;
 
     #[test]
-    fn test_relative_market_combo() {
+    fn relative_market_combo_works() {
         let order = non_guaranteed(relative_market_combo(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
@@ -547,7 +547,7 @@ mod additional_specialized_order_tests {
     }
 
     #[test]
-    fn test_passive_relative() {
+    fn passive_relative_works() {
         let order = passive_relative(
             Action::Buy,
             100.0, // quantity
@@ -561,7 +561,7 @@ mod additional_specialized_order_tests {
     }
 
     #[test]
-    fn test_at_auction() {
+    fn at_auction_works() {
         let order = at_auction(
             Action::Buy,
             100.0, // quantity
@@ -576,7 +576,7 @@ mod additional_specialized_order_tests {
     }
 
     #[test]
-    fn test_what_if_limit_order() {
+    fn what_if_limit_order_works() {
         let order = what_if_limit_order(
             Action::Buy,
             100.0, // quantity

@@ -46,7 +46,7 @@ const TICK: Duration = Duration::from_millis(100);
 /// `with_channel_capacity` reaches the per-request channels: a capacity-2
 /// channel holds at most 2 queued frames, evicting the oldest (#779).
 #[tokio::test]
-async fn test_with_channel_capacity_bounds_request_channels() {
+async fn with_channel_capacity_bounds_request_channels() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -81,7 +81,7 @@ async fn assert_capacity_and_class(name: &str, subscription: &mut AsyncInternalS
 /// the order-class floors, and each subscription carries its channel's class
 /// (#896).
 #[tokio::test]
-async fn test_channel_classes_under_small_channel_capacity() {
+async fn channel_classes_under_small_channel_capacity() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -126,7 +126,7 @@ async fn test_channel_classes_under_small_channel_capacity() {
 
 /// A `channel_capacity` above a floor raises the order-class channels too.
 #[test]
-fn test_channel_class_capacity() {
+fn channel_class_capacity() {
     assert_eq!(ChannelClass::MarketData.capacity(4), 4);
     assert_eq!(ChannelClass::Order.capacity(4), ORDER_CAPACITY);
     assert_eq!(ChannelClass::OrderStream.capacity(4), ORDER_STREAM_CAPACITY);
@@ -136,7 +136,7 @@ fn test_channel_class_capacity() {
 }
 
 #[test]
-fn test_shared_order_channels_are_order_class() {
+fn shared_order_channels_are_order_class() {
     for request in [
         OutgoingMessages::RequestOpenOrders,
         OutgoingMessages::RequestAllOpenOrders,
@@ -151,7 +151,7 @@ fn test_shared_order_channels_are_order_class() {
 /// A lag on an order-class subscription surfaces the order lag notice, and
 /// clones keep the class.
 #[tokio::test]
-async fn test_order_class_lag_surfaces_order_lag_notice() {
+async fn order_class_lag_surfaces_order_lag_notice() {
     let (sender, receiver) = broadcast::channel(1);
     let mut subscription = AsyncInternalSubscription::new(receiver).class(ChannelClass::Order);
     let mut clone = subscription.clone();
@@ -180,7 +180,7 @@ async fn next_message(sub: &mut AsyncInternalSubscription) -> ResponseMessage {
 /// Two in-flight `send_request` subscriptions: responses arrive in reverse order
 /// and each subscription receives only its own message.
 #[tokio::test]
-async fn test_request_id_correlation_with_interleaved_responses() {
+async fn request_id_correlation_with_interleaved_responses() {
     let (stream, bus) = make_bus();
 
     let (id_a, id_b) = (RequestId::nth(100), RequestId::nth(200));
@@ -207,7 +207,7 @@ async fn test_request_id_correlation_with_interleaved_responses() {
 /// Same shape as the request_id test but on the orders channel: two in-flight
 /// `send_order_request` subscriptions, OrderStatus responses interleaved.
 #[tokio::test]
-async fn test_order_id_correlation_with_interleaved_responses() {
+async fn order_id_correlation_with_interleaved_responses() {
     let (stream, bus) = make_bus();
 
     let mut sub_a = bus.send_order_request(OrderId::from(11), vec![]).await.unwrap();
@@ -248,7 +248,7 @@ async fn test_order_id_correlation_with_interleaved_responses() {
 /// in `CHANNEL_MAPPINGS`. The `OrderAndShared` strategy fans every `OpenOrder`
 /// out to each shared subscriber, with or without an order id.
 #[tokio::test]
-async fn test_shared_channel_fan_out_for_open_orders() {
+async fn shared_channel_fan_out_for_open_orders() {
     let (stream, bus) = make_bus();
 
     let mut sub_open = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
@@ -276,7 +276,7 @@ async fn test_shared_channel_fan_out_for_open_orders() {
 /// An order with a live `send_order_request` route still answers an
 /// open-orders request: `OpenOrder` and `OrderStatus` reach both (#1033).
 #[tokio::test]
-async fn test_routed_order_also_reaches_open_orders() {
+async fn routed_order_also_reaches_open_orders() {
     use crate::messages::IncomingMessages as M;
     let (stream, bus) = make_bus();
 
@@ -315,7 +315,7 @@ async fn test_routed_order_also_reaches_open_orders() {
 /// receives the `CurrentTime` response via the channel mapping in
 /// `shared_channel_configuration::CHANNEL_MAPPINGS`.
 #[tokio::test]
-async fn test_shared_channel_routing_current_time() {
+async fn shared_channel_routing_current_time() {
     let (stream, bus) = make_bus();
 
     let mut sub = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, vec![]).await.unwrap();
@@ -334,7 +334,7 @@ async fn test_shared_channel_routing_current_time() {
 /// drive `read_and_route_message` once to verify the error is surfaced rather
 /// than swallowed.)
 #[tokio::test]
-async fn test_read_and_route_surfaces_eof() {
+async fn read_and_route_surfaces_eof() {
     let (stream, bus) = make_bus();
 
     stream.hang_up();
@@ -347,7 +347,7 @@ async fn test_read_and_route_surfaces_eof() {
 
 /// `AsyncMessageBus::send_message` writes through to the connection.
 #[tokio::test]
-async fn test_send_message_writes_through() {
+async fn send_message_writes_through() {
     let (stream, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -360,7 +360,7 @@ async fn test_send_message_writes_through() {
 /// `AsyncMessageBus::create_order_update_subscription` returns
 /// `AlreadySubscribed` on duplicate calls.
 #[tokio::test]
-async fn test_create_order_update_subscription_is_unique() {
+async fn create_order_update_subscription_is_unique() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -372,7 +372,7 @@ async fn test_create_order_update_subscription_is_unique() {
 /// After shutdown, a new order-update stream is refused rather than stored
 /// as a sender nothing will ever drop (#871).
 #[tokio::test]
-async fn test_create_order_update_subscription_after_shutdown_fails() {
+async fn create_order_update_subscription_after_shutdown_fails() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
     mb.ensure_shutdown().await;
@@ -386,7 +386,7 @@ async fn test_create_order_update_subscription_after_shutdown_fails() {
 /// ended. Before, the connection kept the only sender alive and both waited
 /// forever (#871).
 #[tokio::test]
-async fn test_notice_stream_ends_on_shutdown() {
+async fn notice_stream_ends_on_shutdown() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
     let mut live = mb.notice_subscribe();
@@ -404,7 +404,7 @@ async fn test_notice_stream_ends_on_shutdown() {
 
 /// `request_shutdown_sync` (the `Drop` path) ends notice streams too.
 #[tokio::test]
-async fn test_notice_stream_ends_on_request_shutdown_sync() {
+async fn notice_stream_ends_on_request_shutdown_sync() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
     let mut live = mb.notice_subscribe();
@@ -418,7 +418,7 @@ async fn test_notice_stream_ends_on_request_shutdown_sync() {
 /// `Client::drop` calls `request_shutdown_sync`, which must end a live
 /// order-update stream (whose subscription holds the bus).
 #[tokio::test]
-async fn test_order_update_stream_ends_on_request_shutdown_sync() {
+async fn order_update_stream_ends_on_request_shutdown_sync() {
     let (_, bus) = make_bus();
     bus.clone().process_messages().expect("process_messages");
     let mut updates = bus.create_order_update_subscription().await.unwrap();
@@ -434,7 +434,7 @@ async fn test_order_update_stream_ends_on_request_shutdown_sync() {
 /// stream that simply closed. Through `request_shutdown_sync`, the
 /// `Client::drop` path, with no dispatcher to finish it.
 #[tokio::test]
-async fn test_shutdown_fails_every_subscription_then_ends_it() {
+async fn shutdown_fails_every_subscription_then_ends_it() {
     let (_, bus) = make_bus();
     let subscriptions = [
         ("request", bus.send_request(RequestId::nth(1), vec![]).await.unwrap()),
@@ -462,7 +462,7 @@ async fn test_shutdown_fails_every_subscription_then_ends_it() {
 /// there kept the channel open, and the subscription's reader waited forever
 /// after `Client::drop`.
 #[tokio::test]
-async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
+async fn subscriptions_with_executions_end_on_request_shutdown_sync() {
     let (stream, bus) = make_bus();
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let mut executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
@@ -493,7 +493,7 @@ async fn test_subscriptions_with_executions_end_on_request_shutdown_sync() {
 /// reaches `request_shutdown` with no reconnect reset before it, so it must
 /// drop execution-id aliases as well.
 #[tokio::test]
-async fn test_shutdown_frame_ends_subscriptions_with_executions() {
+async fn shutdown_frame_ends_subscriptions_with_executions() {
     let (stream, bus) = make_bus();
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
@@ -515,7 +515,7 @@ async fn test_shutdown_frame_ends_subscriptions_with_executions() {
 /// window fails the order-update send, and routing carries on: the frame still
 /// reaches the order's own subscription.
 #[tokio::test]
-async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_cleanup() {
+async fn order_frame_routes_while_a_dropped_order_update_stream_awaits_cleanup() {
     let (stream, bus) = make_bus();
     let mut order = bus.send_order_request(OrderId::from(22), vec![]).await.unwrap();
     let updates = bus.create_order_update_subscription().await.unwrap();
@@ -546,7 +546,7 @@ async fn test_order_frame_routes_while_a_dropped_order_update_stream_awaits_clea
 /// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
 /// false after `request_shutdown_sync` flips the flag.
 #[tokio::test]
-async fn test_is_connected_reflects_shutdown_flag() {
+async fn is_connected_reflects_shutdown_flag() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -566,7 +566,7 @@ async fn next_routed(sub: &mut AsyncInternalSubscription) -> RoutedItem {
 /// Warning code (2104) bound to a real request_id is delivered as a
 /// `RoutedItem::Notice` to the owning subscription — stream stays open.
 #[tokio::test]
-async fn test_warning_with_request_id_delivers_notice() {
+async fn warning_with_request_id_delivers_notice() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(42);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -596,7 +596,7 @@ async fn test_warning_with_request_id_delivers_notice() {
 /// and the stream stays open for the follow-up data — not routed as an error
 /// that would terminate the subscription.
 #[tokio::test]
-async fn test_data_advisory_with_request_id_keeps_stream_open() {
+async fn data_advisory_with_request_id_keeps_stream_open() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(42);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -624,7 +624,7 @@ async fn test_data_advisory_with_request_id_keeps_stream_open() {
 /// Hard error (code 200) bound to a real request_id is delivered as a
 /// `RoutedItem::Error` to the owning subscription.
 #[tokio::test]
-async fn test_hard_error_with_request_id_terminates_subscription() {
+async fn hard_error_with_request_id_terminates_subscription() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(42);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -646,7 +646,7 @@ async fn test_hard_error_with_request_id_terminates_subscription() {
 /// Warning with `UNSPECIFIED_REQUEST_ID` has no owner — log only, no channel
 /// write to an in-flight subscription.
 #[tokio::test]
-async fn test_warning_with_unspecified_id_is_log_only() {
+async fn warning_with_unspecified_id_is_log_only() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
 
@@ -661,7 +661,7 @@ async fn test_warning_with_unspecified_id_is_log_only() {
 /// *streaming* shared requests (`RequestPositions`) untouched — and still fans
 /// out to the global notice stream. Regression for #694 (callers hung forever).
 #[tokio::test]
-async fn test_request_less_hard_error_fails_one_shot_and_spares_stream() {
+async fn request_less_hard_error_fails_one_shot_and_spares_stream() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
     let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
@@ -699,7 +699,7 @@ async fn test_request_less_hard_error_fails_one_shot_and_spares_stream() {
 /// A request-less *warning* stays notice-only: it must not fail an in-flight
 /// one-shot shared request (only non-warning hard errors trip fail-fast).
 #[tokio::test]
-async fn test_request_less_warning_does_not_fail_one_shot() {
+async fn request_less_warning_does_not_fail_one_shot() {
     let (stream, bus) = make_bus();
     let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
 
@@ -714,7 +714,7 @@ async fn test_request_less_warning_does_not_fail_one_shot() {
 /// It must reach the notice stream without failing in-flight one-shot shared
 /// requests - `managed_accounts`, `server_time`, `next_valid_order_id`.
 #[tokio::test]
-async fn test_request_less_system_message_does_not_fail_one_shot() {
+async fn request_less_system_message_does_not_fail_one_shot() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
     let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
@@ -736,7 +736,7 @@ async fn test_request_less_system_message_does_not_fail_one_shot() {
 /// A notice bound to an id below the request floor is an order's: it goes to
 /// the order subscription for that id.
 #[tokio::test]
-async fn test_warning_with_order_id_routes_to_order_channel() {
+async fn warning_with_order_id_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
@@ -814,7 +814,7 @@ async fn wait_for_frames(stream: &MemoryStream, payload: &[u8], expected: usize)
 /// exactly one cancel. Subscriptions are built through the production
 /// `SubscriptionBuilder::send_shared`.
 #[tokio::test]
-async fn test_shared_subscription_cancel_waits_for_last_subscriber() {
+async fn shared_subscription_cancel_waits_for_last_subscriber() {
     use crate::accounts::PositionUpdate;
     use crate::client::builders::r#async::SubscriptionBuilder;
 
@@ -861,7 +861,7 @@ async fn test_shared_subscription_cancel_waits_for_last_subscriber() {
 /// drop can only reach the count because the subscription derives the type
 /// from the internal subscription's cleanup signal.
 #[tokio::test]
-async fn test_shared_subscription_without_cancel_message_releases_count() {
+async fn shared_subscription_without_cancel_message_releases_count() {
     use crate::orders::Orders;
 
     let (stream, bus) = make_bus();
@@ -886,7 +886,7 @@ async fn test_shared_subscription_without_cancel_message_releases_count() {
 /// A shared subscription that reads its end marker still releases its count on
 /// drop: the cancel-after-end guard applies only to request-id subscriptions.
 #[tokio::test]
-async fn test_shared_subscription_ended_natively_still_releases_count() {
+async fn shared_subscription_ended_natively_still_releases_count() {
     use crate::orders::Orders;
 
     let (stream, bus) = make_bus();
@@ -950,7 +950,7 @@ async fn wait_for_positions_live(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, ex
 /// cancel too (#848). Before, the count leaked and every later drop of the
 /// type withheld its cancel until the next reconnect.
 #[tokio::test]
-async fn test_shared_subscription_dropped_outside_runtime_cancels() {
+async fn shared_subscription_dropped_outside_runtime_cancels() {
     let (stream, bus) = make_bus();
     let cancel = positions_cancel();
 
@@ -970,7 +970,7 @@ async fn test_shared_subscription_dropped_outside_runtime_cancels() {
 /// the new session: a resubscription made after the reset is the only live one
 /// and its drop writes the cancel even while the dead handle is still held.
 #[tokio::test]
-async fn test_shared_count_restarts_after_reset() {
+async fn shared_count_restarts_after_reset() {
     let (stream, bus) = make_bus();
     let cancel = positions_cancel();
 
@@ -990,7 +990,7 @@ async fn test_shared_count_restarts_after_reset() {
 /// A handle from before the reset is dead: its drop must neither cancel on the
 /// new session, which has no such stream, nor touch the new session's count.
 #[tokio::test]
-async fn test_stale_shared_handle_neither_cancels_nor_decrements() {
+async fn stale_shared_handle_neither_cancels_nor_decrements() {
     let (stream, bus) = make_bus();
     let cancel = positions_cancel();
 
@@ -1011,7 +1011,7 @@ async fn test_stale_shared_handle_neither_cancels_nor_decrements() {
 /// The open-orders channel maps three response types. A reset that walked the
 /// channels by response type failed it three times; it must fail it once.
 #[tokio::test]
-async fn test_reset_fails_a_shared_channel_once() {
+async fn reset_fails_a_shared_channel_once() {
     let (_stream, bus) = make_bus();
     let mut open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
 
@@ -1054,7 +1054,7 @@ async fn account_updates_slot(bus: &AsyncTcpMessageBus<MemoryStream>) -> Option<
 /// The same account again shares the one TWS stream: both requests go out,
 /// and only the last cancel frees the slot.
 #[tokio::test]
-async fn test_account_updates_same_account_shares() {
+async fn account_updates_same_account_shares() {
     let (stream, bus) = make_bus();
     let cancel = account_updates_cancel();
 
@@ -1080,7 +1080,7 @@ async fn test_account_updates_same_account_shares() {
 /// subscription to its data. It is refused before anything is written, and
 /// the live subscription keeps its data.
 #[tokio::test]
-async fn test_account_updates_other_account_refused() {
+async fn account_updates_other_account_refused() {
     use crate::accounts::AccountUpdate;
 
     let (stream, bus) = make_bus();
@@ -1113,7 +1113,7 @@ async fn test_account_updates_other_account_refused() {
 /// accepted. `cancel().await` releases before it returns; a plain drop
 /// releases in a spawned task, so it is not used to switch.
 #[tokio::test]
-async fn test_account_updates_other_account_after_cancel() {
+async fn account_updates_other_account_after_cancel() {
     let (stream, bus) = make_bus();
 
     let first = account_updates_subscription(&bus, "DU1").await.unwrap();
@@ -1128,7 +1128,7 @@ async fn test_account_updates_other_account_after_cancel() {
 /// A reset ends every subscription, so the slot is free on the new session,
 /// and a dead handle's drop must not free the new account's slot.
 #[tokio::test]
-async fn test_account_updates_slot_restarts_after_reset() {
+async fn account_updates_slot_restarts_after_reset() {
     let (stream, bus) = make_bus();
 
     let old = account_updates_subscription(&bus, "DU1").await.unwrap();
@@ -1156,7 +1156,7 @@ async fn next_item<T: StreamDecoder<T> + Send + 'static>(sub: &mut Subscription<
 /// Code 2104 on a request id surfaces as `SubscriptionItem::Notice` without
 /// terminating; a follow-up data message arrives normally on the same stream.
 #[tokio::test]
-async fn test_subscription_notice_delivery_request_keyed() {
+async fn subscription_notice_delivery_request_keyed() {
     let (stream, bus, mut subscription) = make_request_subscription(RequestId::nth(42)).await;
 
     stream.push_inbound(farm_ok_frame_42());
@@ -1180,7 +1180,7 @@ async fn test_subscription_notice_delivery_request_keyed() {
 
 /// Partial entitlement can precede delayed Greeks on the same request.
 #[tokio::test]
-async fn test_subscription_10091_preserves_later_option_computation() {
+async fn subscription_10091_preserves_later_option_computation() {
     use crate::contracts::tick_types::TickType;
     use crate::market_data::realtime::TickTypes;
     use crate::testdata::builders::{market_data::tick_option_computation, ResponseProtoEncoder};
@@ -1227,7 +1227,7 @@ async fn test_subscription_10091_preserves_later_option_computation() {
 /// request. It must not end the depth stream (#806), and arrives as
 /// `MarketDepths::Reset` so `filter_data()` keeps it (#899).
 #[tokio::test]
-async fn test_subscription_317_yields_reset_then_rows() {
+async fn subscription_317_yields_reset_then_rows() {
     use crate::market_data::realtime::MarketDepths;
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
@@ -1275,7 +1275,7 @@ async fn test_subscription_317_yields_reset_then_rows() {
 
 /// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[tokio::test]
-async fn test_subscription_hard_error_terminates_stream() {
+async fn subscription_hard_error_terminates_stream() {
     let (stream, bus, mut subscription) = make_request_subscription(RequestId::nth(42)).await;
 
     let request_id = RequestId::nth(42);
@@ -1297,7 +1297,7 @@ async fn test_subscription_hard_error_terminates_stream() {
 
 /// Order-keyed notice: an id below the request floor reaches the order subscription.
 #[tokio::test]
-async fn test_subscription_notice_delivery_order_keyed() {
+async fn subscription_notice_delivery_order_keyed() {
     let (stream, bus, mut subscription) = make_order_subscription(OrderId::from(7)).await;
 
     stream.push_inbound(error_frame(7, 2109, "Outside RTH order warning"));
@@ -1314,7 +1314,7 @@ async fn test_subscription_notice_delivery_order_keyed() {
 
 /// Unrouted notice (UNSPECIFIED request_id) is log-only; no channel write.
 #[tokio::test]
-async fn test_subscription_unspecified_notice_not_delivered() {
+async fn subscription_unspecified_notice_not_delivered() {
     let (stream, bus, mut subscription) = make_request_subscription(RequestId::nth(42)).await;
 
     stream.push_inbound(farm_ok_frame_unrouted());
@@ -1326,7 +1326,7 @@ async fn test_subscription_unspecified_notice_not_delivered() {
 
 /// `data_stream()` filters `SubscriptionItem::Notice` and yields only data.
 #[tokio::test]
-async fn test_subscription_data_stream_filters_notices() {
+async fn subscription_data_stream_filters_notices() {
     let (stream, bus, subscription) = make_request_subscription(RequestId::nth(42)).await;
 
     let request_id = RequestId::nth(42);
@@ -1350,7 +1350,7 @@ async fn test_subscription_data_stream_filters_notices() {
 
 /// An unrouted warning is delivered to a `notice_stream` subscriber.
 #[tokio::test]
-async fn test_notice_stream_receives_unrouted_warning() {
+async fn notice_stream_receives_unrouted_warning() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
 
@@ -1367,7 +1367,7 @@ async fn test_notice_stream_receives_unrouted_warning() {
 
 /// Two `notice_subscribe` calls each receive every unrouted notice.
 #[tokio::test]
-async fn test_notice_stream_fans_out_to_multiple_subscribers() {
+async fn notice_stream_fans_out_to_multiple_subscribers() {
     let (stream, bus) = make_bus();
     let mut s1 = bus.notice_subscribe();
     let mut s2 = bus.notice_subscribe();
@@ -1383,7 +1383,7 @@ async fn test_notice_stream_fans_out_to_multiple_subscribers() {
 
 /// Severity-agnostic: an unrouted hard error also fans out.
 #[tokio::test]
-async fn test_notice_stream_receives_unrouted_hard_error() {
+async fn notice_stream_receives_unrouted_hard_error() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
 
@@ -1397,7 +1397,7 @@ async fn test_notice_stream_receives_unrouted_hard_error() {
 /// A routed notice (real `request_id`) goes to the owning subscription, NOT
 /// to the global notice stream.
 #[tokio::test]
-async fn test_notice_stream_skips_routed_notices() {
+async fn notice_stream_skips_routed_notices() {
     let (stream, bus, mut subscription) = make_request_subscription(RequestId::nth(42)).await;
     let mut notice_stream = bus.notice_subscribe();
 
@@ -1415,7 +1415,7 @@ async fn test_notice_stream_skips_routed_notices() {
 
 /// Late subscribers don't see prior notices (no replay buffer on broadcast).
 #[tokio::test]
-async fn test_notice_stream_late_subscriber_misses_prior() {
+async fn notice_stream_late_subscriber_misses_prior() {
     let (stream, bus) = make_bus();
 
     stream.push_inbound(farm_ok_frame_unrouted());
@@ -1434,7 +1434,7 @@ async fn test_notice_stream_late_subscriber_misses_prior() {
 // different fallback order (order_id → request_id, by execution_id, shared-only).
 
 #[tokio::test]
-async fn test_execution_data_routes_to_order_channel() {
+async fn execution_data_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
@@ -1446,7 +1446,7 @@ async fn test_execution_data_routes_to_order_channel() {
 }
 
 #[tokio::test]
-async fn test_execution_data_falls_back_to_request_channel() {
+async fn execution_data_falls_back_to_request_channel() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(99);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -1459,7 +1459,7 @@ async fn test_execution_data_falls_back_to_request_channel() {
 }
 
 #[tokio::test]
-async fn test_execution_data_orphan_dropped() {
+async fn execution_data_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
 
@@ -1470,7 +1470,7 @@ async fn test_execution_data_orphan_dropped() {
 }
 
 #[tokio::test]
-async fn test_execution_data_end_routes_to_order_channel() {
+async fn execution_data_end_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
@@ -1487,7 +1487,7 @@ async fn test_execution_data_end_routes_to_order_channel() {
 /// request-range id misses the order channel and falls back to the request
 /// channel.
 #[tokio::test]
-async fn test_execution_data_end_falls_back_to_request_channel() {
+async fn execution_data_end_falls_back_to_request_channel() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(7);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -1504,7 +1504,7 @@ async fn test_execution_data_end_falls_back_to_request_channel() {
 }
 
 #[tokio::test]
-async fn test_execution_data_end_orphan_dropped() {
+async fn execution_data_end_orphan_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
 
@@ -1522,7 +1522,7 @@ async fn test_execution_data_end_orphan_dropped() {
 /// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
 /// sender, and the CommissionsReport rides that mapping back to the same sub.
 #[tokio::test]
-async fn test_commission_report_routes_via_execution_id_mapping() {
+async fn commission_report_routes_via_execution_id_mapping() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
@@ -1545,7 +1545,7 @@ async fn test_commission_report_routes_via_execution_id_mapping() {
 }
 
 #[tokio::test]
-async fn test_commission_report_without_mapping_dropped() {
+async fn commission_report_without_mapping_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
@@ -1564,7 +1564,7 @@ async fn test_commission_report_without_mapping_dropped() {
 /// #880: an execution-id alias holds a sender clone, so it must go when the
 /// order or request subscription that owns it is dropped.
 #[tokio::test]
-async fn test_execution_aliases_pruned_when_subscriptions_drop() {
+async fn execution_aliases_pruned_when_subscriptions_drop() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
@@ -1587,7 +1587,7 @@ async fn test_execution_aliases_pruned_when_subscriptions_drop() {
 /// Each clone sends its own cleanup signal; the alias stays while any clone
 /// can still read the channel and goes with the last one.
 #[tokio::test]
-async fn test_execution_alias_kept_while_a_clone_is_alive() {
+async fn execution_alias_kept_while_a_clone_is_alive() {
     let (stream, bus) = make_bus();
     let order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
@@ -1606,7 +1606,7 @@ async fn test_execution_alias_kept_while_a_clone_is_alive() {
 /// A stale drop signal releases the old subscription's aliases and keeps those
 /// of a newer registration under the same order id.
 #[tokio::test]
-async fn test_stale_cleanup_keeps_newer_execution_aliases() {
+async fn stale_cleanup_keeps_newer_execution_aliases() {
     let (stream, bus) = make_bus();
     let sub_a = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
     stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 42, "exec-a"));
@@ -1626,7 +1626,7 @@ async fn test_stale_cleanup_keeps_newer_execution_aliases() {
 }
 
 #[tokio::test]
-async fn test_completed_order_routes_to_shared_channel() {
+async fn completed_order_routes_to_shared_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, vec![]).await.unwrap();
 
@@ -1638,7 +1638,7 @@ async fn test_completed_order_routes_to_shared_channel() {
 }
 
 #[tokio::test]
-async fn test_completed_orders_end_routes_to_shared_channel() {
+async fn completed_orders_end_routes_to_shared_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_shared_request(OutgoingMessages::RequestCompletedOrders, vec![]).await.unwrap();
 
@@ -1654,7 +1654,7 @@ async fn test_completed_orders_end_routes_to_shared_channel() {
 /// `send_order_update` fan-out: an OpenOrder reaches both an order subscription
 /// and the order-update stream when both are registered for the same order.
 #[tokio::test]
-async fn test_order_update_stream_receives_open_order() {
+async fn order_update_stream_receives_open_order() {
     let (stream, bus) = make_bus();
     let mut order_sub = bus.send_order_request(OrderId::from(42), vec![]).await.unwrap();
     let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
@@ -1675,7 +1675,7 @@ async fn test_order_update_stream_receives_open_order() {
 /// A targeted hard error reaches the order-update stream as a notice so the
 /// stream can continue with later order updates.
 #[tokio::test]
-async fn test_order_update_stream_receives_order_error_as_notice() {
+async fn order_update_stream_receives_order_error_as_notice() {
     let (stream, bus) = make_bus();
     let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
 
@@ -1706,7 +1706,7 @@ async fn test_order_update_stream_receives_order_error_as_notice() {
 /// An error with a request-range id stays on that request's subscription:
 /// the order-update stream must not receive a copy.
 #[tokio::test]
-async fn test_order_update_stream_skips_data_request_error() {
+async fn order_update_stream_skips_data_request_error() {
     let (stream, bus) = make_bus();
     let mut stream_sub = bus.create_order_update_subscription().await.unwrap();
     let request_id = RequestId::nth(42);
@@ -1728,7 +1728,7 @@ async fn test_order_update_stream_skips_data_request_error() {
 /// below sits at the same small number plus the floor, so the ids cannot
 /// collide; the collision itself is what the floor rules out.
 #[tokio::test]
-async fn test_issue_789_order_error_reaches_order_side() {
+async fn issue_789_order_error_reaches_order_side() {
     let (stream, bus) = make_bus();
     let order_id = OrderId::from(7);
     let mut request = bus.send_request(RequestId::nth(order_id.value()), vec![]).await.unwrap();
@@ -1762,7 +1762,7 @@ async fn test_issue_789_order_error_reaches_order_side() {
 
 /// #789: an error for a request that is gone is not published as order-bound.
 #[tokio::test]
-async fn test_issue_789_late_request_error_stays_off_order_stream() {
+async fn issue_789_late_request_error_stays_off_order_stream() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(5);
     drop(bus.send_request(request_id, vec![]).await.unwrap());
@@ -1781,7 +1781,7 @@ async fn test_issue_789_late_request_error_stays_off_order_stream() {
 /// Routed-but-orphan notice (real request_id, no matching sub) takes the
 /// `log_orphan` path, NOT the global notice stream.
 #[tokio::test]
-async fn test_warning_with_orphan_request_id_logs() {
+async fn warning_with_orphan_request_id_logs() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_request(RequestId::nth(42), vec![]).await.unwrap();
     let mut notice_stream = bus.notice_subscribe();
@@ -1817,7 +1817,7 @@ pub(super) async fn drain_cleanup_signals<S: AsyncStream>(bus: &Arc<AsyncTcpMess
 /// unregister a newer subscription under the same order id (place then cancel
 /// on one id). The stale signal has to find the replacement live and skip it.
 #[tokio::test]
-async fn test_stale_order_cleanup_preserves_newer_subscription() {
+async fn stale_order_cleanup_preserves_newer_subscription() {
     let (_, bus) = make_bus();
 
     let order_id = OrderId::from(42);
@@ -1844,7 +1844,7 @@ async fn test_stale_order_cleanup_preserves_newer_subscription() {
 /// Dropping a clone must not unregister the channel while a sibling is still
 /// consuming it; the registration goes away with the last holder.
 #[tokio::test]
-async fn test_dropping_clone_keeps_order_channel_registered() {
+async fn dropping_clone_keeps_order_channel_registered() {
     let (_, bus) = make_bus();
 
     let order_id = OrderId::from(7);
@@ -1864,7 +1864,7 @@ async fn test_dropping_clone_keeps_order_channel_registered() {
 /// drops after it: otherwise a concurrently processed signal could find the
 /// registration still live and skip the removal, leaking it.
 #[tokio::test]
-async fn test_cleanup_signal_follows_lease_release() {
+async fn cleanup_signal_follows_lease_release() {
     let (_, bus) = make_bus();
     let request_id = RequestId::nth(5);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -1883,7 +1883,7 @@ async fn test_cleanup_signal_follows_lease_release() {
 /// stream. The dead registration is replaced without waiting for the cleanup
 /// task, and the old stream's stale signal must not clear the replacement.
 #[tokio::test]
-async fn test_drop_then_recreate_order_update_stream() {
+async fn drop_then_recreate_order_update_stream() {
     let (_, bus) = make_bus();
 
     let s1 = bus.create_order_update_subscription().await.unwrap();
@@ -1912,7 +1912,7 @@ async fn test_drop_then_recreate_order_update_stream() {
 /// subscription receives `Error::ConnectionReset`, then the channel maps are
 /// cleared.
 #[tokio::test]
-async fn test_reset_channels_notifies_in_flight_subscriptions() {
+async fn reset_channels_notifies_in_flight_subscriptions() {
     let (_, bus) = make_bus();
 
     let mut req = bus.send_request(RequestId::nth(100), vec![]).await.unwrap();
@@ -1950,7 +1950,7 @@ async fn test_reset_channels_notifies_in_flight_subscriptions() {
 /// before the reconnect, so the notice cannot ride on it - and a consumer
 /// that resubscribes on it lands on the new session.
 #[tokio::test]
-async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
+async fn reconnect_publishes_reconnect_notice_to_notice_stream() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -1981,7 +1981,7 @@ async fn test_reconnect_publishes_reconnect_notice_to_notice_stream() {
 /// the wire before the reconnect notice: a consumer acting on the notice
 /// already sees the new session with the type applied.
 #[tokio::test]
-async fn test_reconnect_replays_market_data_type_before_notice() {
+async fn reconnect_replays_market_data_type_before_notice() {
     let (stream, bus) = make_bus();
     let mut notices = bus.connection.notice_broadcaster.subscribe();
 
@@ -2021,7 +2021,7 @@ async fn test_reconnect_replays_market_data_type_before_notice() {
 /// `is_connected() == false` afterwards. The handle is in place as soon as
 /// `process_messages` returns.
 #[tokio::test]
-async fn test_ensure_shutdown_joins_processing_task() {
+async fn ensure_shutdown_joins_processing_task() {
     let (_, bus) = make_bus();
     bus.clone().process_messages().expect("process_messages");
     let mb: &dyn AsyncMessageBus = bus.as_ref();
@@ -2038,7 +2038,7 @@ async fn test_ensure_shutdown_joins_processing_task() {
 /// seeded the generator and every reconnect silently discarded the value,
 /// leaving allocation stale against the server.
 #[tokio::test]
-async fn test_reconnect_raises_order_ids_from_handshake() {
+async fn reconnect_raises_order_ids_from_handshake() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -2068,7 +2068,7 @@ async fn test_reconnect_raises_order_ids_from_handshake() {
 }
 
 #[tokio::test]
-async fn test_send_shared_request_unsupported_returns_error() {
+async fn send_shared_request_unsupported_returns_error() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -2083,7 +2083,7 @@ async fn test_send_shared_request_unsupported_returns_error() {
 /// dropped anything no channel claimed without a log or an error, so a
 /// desynchronized stream was indistinguishable from an idle one.
 #[tokio::test]
-async fn test_unknown_message_id_reaches_the_notice_stream() {
+async fn unknown_message_id_reaches_the_notice_stream() {
     let (stream, bus) = make_bus();
     let mut notice_stream = bus.notice_subscribe();
 
@@ -2108,7 +2108,7 @@ async fn test_unknown_message_id_reaches_the_notice_stream() {
 /// the reconnect is replacing, and nothing is registered on a channel no reset
 /// would clear again.
 #[tokio::test]
-async fn test_sends_are_refused_while_disconnected() {
+async fn sends_are_refused_while_disconnected() {
     let (stream, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -2142,7 +2142,7 @@ async fn test_sends_are_refused_while_disconnected() {
 /// `wait_connected` holds the one-shot retry until the session is back, and a
 /// shutdown releases it rather than leaving the caller there for good.
 #[tokio::test]
-async fn test_wait_connected_returns_shutdown_when_the_bus_shuts_down() {
+async fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     let (_stream, bus) = make_bus();
     bus.connection_state.set_disconnected();
 
@@ -2197,7 +2197,7 @@ impl AsyncStream for FailingWriteStream {}
 /// `ensure_connected` check cannot close, where the session goes down between
 /// the check and the write.
 #[tokio::test]
-async fn test_failed_write_leaves_no_registration() {
+async fn failed_write_leaves_no_registration() {
     let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(AsyncTcpMessageBus::new(connection));
@@ -2268,7 +2268,7 @@ async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedIt
 }
 
 #[tokio::test]
-async fn test_bounded_request_fails_after_limit_unread() {
+async fn bounded_request_fails_after_limit_unread() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
@@ -2291,7 +2291,7 @@ async fn test_bounded_request_fails_after_limit_unread() {
 }
 
 #[tokio::test]
-async fn test_bounded_request_counts_unread_not_total() {
+async fn bounded_request_counts_unread_not_total() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
 
@@ -2305,7 +2305,7 @@ async fn test_bounded_request_counts_unread_not_total() {
 }
 
 #[tokio::test]
-async fn test_reset_skips_overflowed_route() {
+async fn reset_skips_overflowed_route() {
     let (stream, bus) = make_bus();
     let mut overflowed = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(1))).await.unwrap();
     let mut at_limit = bus.send_request_capped(RequestId::nth(200), vec![], Some(bound(1))).await.unwrap();
@@ -2330,7 +2330,7 @@ async fn test_reset_skips_overflowed_route() {
 }
 
 #[tokio::test]
-async fn test_overflowed_subscription_cancels_on_drop() {
+async fn overflowed_subscription_cancels_on_drop() {
     use crate::contracts::ContractDetails;
 
     let (stream, bus) = make_bus();
@@ -2365,7 +2365,7 @@ async fn test_overflowed_subscription_cancels_on_drop() {
 }
 
 #[tokio::test]
-async fn test_bounded_request_end_marker_at_limit_still_ends() {
+async fn bounded_request_end_marker_at_limit_still_ends() {
     // A result exactly `limit` rows long, read late: the end marker takes the
     // spare slot, so the stream ends normally and nothing is evicted.
     let (stream, bus) = make_bus();
@@ -2390,7 +2390,7 @@ async fn test_bounded_request_end_marker_at_limit_still_ends() {
 /// Shutdown fails the request with `Error::Shutdown`; the drain reports it, as
 /// the sync drain does.
 #[tokio::test]
-async fn test_drain_reports_shutdown() {
+async fn drain_reports_shutdown() {
     use crate::contracts::ContractDetails;
     use crate::subscriptions::Drained;
 
@@ -2415,7 +2415,7 @@ async fn test_drain_reports_shutdown() {
 /// A read woken by `close` ends dispatch cleanly: requests end with
 /// `Shutdown`, not the `ConnectionReset` the reconnect path fails them with.
 #[tokio::test]
-async fn test_close_ends_dispatch_without_reconnecting() {
+async fn close_ends_dispatch_without_reconnecting() {
     let (stream, bus) = make_bus();
     let mut internal = bus.send_request(CONTRACT_REQUEST_ID, vec![]).await.unwrap();
     bus.clone().process_messages().unwrap();
@@ -2443,7 +2443,7 @@ async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncT
 
 /// Retained clients and subscriptions cannot retain a disconnected physical socket.
 #[tokio::test]
-async fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
+async fn disconnect_closes_tcp_with_retained_client_and_subscription() {
     let (client, _bus, peer) = tcp_client_with_peer().await;
     let _subscription = client.order_update_stream().await.unwrap();
 
@@ -2456,7 +2456,7 @@ async fn test_disconnect_closes_tcp_with_retained_client_and_subscription() {
 
 /// Runtime-free Client::drop requests close; the dispatcher releases both halves.
 #[tokio::test]
-async fn test_client_drop_closes_tcp_with_retained_subscription() {
+async fn client_drop_closes_tcp_with_retained_subscription() {
     let (client, bus, peer) = tcp_client_with_peer().await;
     let _subscription = client.order_update_stream().await.unwrap();
 
@@ -2496,7 +2496,7 @@ fn completed_orders_end_frame() -> Vec<u8> {
 /// orders, and reads each reply to its end marker (sent late here), so the
 /// caller's next request of either kind cannot end on it and come back empty.
 #[tokio::test]
-async fn test_wait_for_fill_lookup_ends_do_not_end_next_requests() {
+async fn wait_for_fill_lookup_ends_do_not_end_next_requests() {
     use crate::orders::Orders;
     use crate::testdata::builders::orders::{completed_order, open_order};
     use futures::StreamExt;
@@ -2542,7 +2542,7 @@ async fn test_wait_for_fill_lookup_ends_do_not_end_next_requests() {
 /// An order missing from open orders but among completed ones (e.g. it ended
 /// before this connection) ends the wait at once, with no fill prices.
 #[tokio::test]
-async fn test_wait_for_fill_finds_order_among_completed() {
+async fn wait_for_fill_finds_order_among_completed() {
     use crate::orders::{OrderOutcome, OrderStatusKind};
     use crate::testdata::builders::orders::completed_order;
     use tokio::io::AsyncWriteExt;
@@ -2583,7 +2583,7 @@ async fn test_wait_for_fill_finds_order_among_completed() {
 /// An order open orders list is working: its status reaches the wait and no
 /// completed-orders request follows.
 #[tokio::test]
-async fn test_wait_for_fill_skips_completed_when_order_is_open() {
+async fn wait_for_fill_skips_completed_when_order_is_open() {
     use crate::orders::{OrderOutcome, OrderStatusKind};
     use crate::testdata::builders::orders::open_order;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -2616,7 +2616,7 @@ async fn test_wait_for_fill_skips_completed_when_order_is_open() {
 /// A throttled send awaits rather than blocking the runtime: on a paused
 /// clock, a ticker task keeps running while the sends wait out the limit.
 #[tokio::test(start_paused = true)]
-async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error> {
+async fn rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     // Burst of 1, then one every 500 ms.
     bus.set_rate_limiter(crate::RateLimiter::per_second(2));
@@ -2651,7 +2651,7 @@ async fn test_rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error
 /// A status that arrived before the stream opened — an order filled between
 /// `submit()` and `wait_for_fill` — is the stream's first item.
 #[tokio::test]
-async fn test_order_status_stream_starts_with_earlier_status() {
+async fn order_status_stream_starts_with_earlier_status() {
     let (stream, bus) = make_bus();
 
     stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled));
@@ -2664,7 +2664,7 @@ async fn test_order_status_stream_starts_with_earlier_status() {
 /// An order TWS refused with an error and no status (110) reaches a status
 /// stream opened afterwards, so `submit()` then `wait_for_fill` cannot miss it.
 #[tokio::test]
-async fn test_order_status_stream_starts_with_earlier_rejection() {
+async fn order_status_stream_starts_with_earlier_rejection() {
     let (stream, bus) = make_bus();
 
     stream.push_inbound(helpers::error_frame(7, 110, "price off the tick"));
@@ -2678,7 +2678,7 @@ async fn test_order_status_stream_starts_with_earlier_rejection() {
 /// The stream gets a copy: the `place_order` subscription for the same order
 /// and the order-update stream still receive the frame.
 #[tokio::test]
-async fn test_order_status_stream_takes_nothing_from_other_routes() {
+async fn order_status_stream_takes_nothing_from_other_routes() {
     let (stream, bus) = make_bus();
 
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
@@ -2695,7 +2695,7 @@ async fn test_order_status_stream_takes_nothing_from_other_routes() {
 
 /// A status for an order no route claims still reaches its status stream.
 #[tokio::test]
-async fn test_order_status_stream_sees_unrouted_status() {
+async fn order_status_stream_sees_unrouted_status() {
     let (stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
@@ -2708,7 +2708,7 @@ async fn test_order_status_stream_sees_unrouted_status() {
 /// Order ids are unique per client only: another client's order 7 (e.g.
 /// from `all_open_orders`) is not this client's order 7.
 #[tokio::test]
-async fn test_order_status_stream_ignores_other_clients_status() {
+async fn order_status_stream_ignores_other_clients_status() {
     let (stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
@@ -2746,7 +2746,7 @@ fn commission_frame(execution_id: &str) -> Vec<u8> {
 /// `OrderStatus` for an id this client also uses answer `all_open_orders`,
 /// and reach neither this client's order route nor its update stream.
 #[tokio::test]
-async fn test_foreign_order_frames_reach_only_shared_channel() {
+async fn foreign_order_frames_reach_only_shared_channel() {
     let (stream, bus) = make_bus();
     let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let mut updates = bus.create_order_update_subscription().await.unwrap();
@@ -2767,7 +2767,7 @@ async fn test_foreign_order_frames_reach_only_shared_channel() {
 /// filter can name that client), with its commission report; one TWS sends
 /// unprompted reaches neither this client's order route nor its update stream.
 #[tokio::test]
-async fn test_foreign_execution_answers_requests_only() {
+async fn foreign_execution_answers_requests_only() {
     let (stream, bus) = make_bus();
     let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let mut updates = bus.create_order_update_subscription().await.unwrap();
@@ -2795,7 +2795,7 @@ async fn test_foreign_execution_answers_requests_only() {
 }
 
 #[tokio::test]
-async fn test_foreign_order_bound_is_ignored() {
+async fn foreign_order_bound_is_ignored() {
     let (stream, bus) = make_bus();
     let mut updates = bus.create_order_update_subscription().await.unwrap();
 
@@ -2811,7 +2811,7 @@ async fn test_foreign_order_bound_is_ignored() {
 /// The status in `wait_for_fill`'s open-orders snapshot reply reaches the
 /// order's status stream as well as the snapshot.
 #[tokio::test]
-async fn test_order_status_stream_sees_snapshot_reply() {
+async fn order_status_stream_sees_snapshot_reply() {
     let (stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
@@ -2826,7 +2826,7 @@ async fn test_order_status_stream_sees_snapshot_reply() {
 }
 
 #[tokio::test]
-async fn test_order_status_stream_ends_on_reset_and_shutdown() {
+async fn order_status_stream_ends_on_reset_and_shutdown() {
     let (_stream, bus) = make_bus();
 
     let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
@@ -2847,7 +2847,7 @@ async fn test_order_status_stream_ends_on_reset_and_shutdown() {
 /// A wait abandoned by its caller (an outer `timeout` or `select!` dropping
 /// the future) releases its status stream, and the order's entry with it.
 #[tokio::test]
-async fn test_abandoned_order_status_wait_is_released() {
+async fn abandoned_order_status_wait_is_released() {
     let (_stream, bus) = make_bus();
 
     let wait = async {
@@ -2881,7 +2881,7 @@ async fn notice_broadcaster_recovers_from_a_poisoned_lock() {
 /// documented terminal error, so a retry loop can tell "reconnecting"
 /// (`ConnectionReset`) from "gone" (#1052).
 #[tokio::test]
-async fn test_exhausted_reconnect_refuses_later_sends_with_connection_failed() {
+async fn exhausted_reconnect_refuses_later_sends_with_connection_failed() {
     let stream = MemoryStream::default();
     let mut connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -2920,7 +2920,7 @@ async fn test_exhausted_reconnect_refuses_later_sends_with_connection_failed() {
 /// `ConnectionReset` that means "reconnecting", which would invite a retry
 /// against a client that is gone (#1052).
 #[tokio::test]
-async fn test_send_after_shutdown_fails_with_shutdown() {
+async fn send_after_shutdown_fails_with_shutdown() {
     let (_, bus) = make_bus();
     let mb: &dyn AsyncMessageBus = bus.as_ref();
     mb.ensure_shutdown().await;

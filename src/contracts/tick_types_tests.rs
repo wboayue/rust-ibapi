@@ -2,7 +2,7 @@
 use super::*;
 
 #[test]
-fn test_from_i32_all_values() {
+fn from_i32_all_values() {
     let test_cases = vec![
         (-1, TickType::Unknown),
         (0, TickType::BidSize),
@@ -128,7 +128,7 @@ fn test_from_i32_all_values() {
 }
 
 #[test]
-fn test_from_str_all_values() {
+fn from_str_all_values() {
     let test_cases = vec![
         ("bidSize", TickType::BidSize),
         ("bidPrice", TickType::Bid),
@@ -253,25 +253,25 @@ fn test_from_str_all_values() {
 }
 
 #[test]
-fn test_default() {
+fn default_works() {
     assert_eq!(TickType::default(), TickType::Unknown);
 }
 
 #[test]
-fn test_debug_output() {
+fn debug_output() {
     assert_eq!(format!("{:?}", TickType::Bid), "Bid");
     assert_eq!(format!("{:?}", TickType::AskSize), "AskSize");
     assert_eq!(format!("{:?}", TickType::DelayedYieldAsk), "DelayedYieldAsk");
 }
 
 #[test]
-fn test_partial_eq() {
+fn partial_eq() {
     assert_eq!(TickType::Last, TickType::Last);
     assert_ne!(TickType::High, TickType::Low);
 }
 
 #[test]
-fn test_edge_cases() {
+fn edge_cases() {
     // Test the lowest and highest defined values
     assert_eq!(TickType::from(0), TickType::BidSize);
     assert_eq!(TickType::from(110), TickType::OddLotAskExch);
@@ -286,14 +286,14 @@ fn test_edge_cases() {
 }
 
 #[test]
-fn test_case_sensitivity() {
+fn case_sensitivity() {
     assert_eq!(TickType::from("BIDSIZE"), TickType::Unknown);
     assert_eq!(TickType::from("bidSize"), TickType::BidSize);
     assert_eq!(TickType::from("BidSize"), TickType::Unknown);
 }
 
 #[test]
-fn test_display_output() {
+fn display_output() {
     let test_cases = [
         (TickType::Unknown, "Unknown"),
         (TickType::BidSize, "Bid Size"),

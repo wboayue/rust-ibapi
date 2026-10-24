@@ -7,13 +7,13 @@ fn current_time_message() -> ResponseMessage {
 }
 
 #[test]
-fn test_fold_one_shot_processes_response() {
+fn fold_one_shot_processes_response() {
     let result = fold_one_shot(Some(Ok(current_time_message())), |message| Ok(message.message_type()));
     assert!(matches!(result, Ok(IncomingMessages::CurrentTime)));
 }
 
 #[test]
-fn test_fold_one_shot_propagates_error() {
+fn fold_one_shot_propagates_error() {
     // A routed error (e.g. request-less hard error fanned to one-shot shared
     // channels, #694) must surface to the caller, never be masked.
     let result: Result<IncomingMessages, Error> = fold_one_shot(Some(Err(Error::Cancelled)), |message| Ok(message.message_type()));
@@ -21,13 +21,13 @@ fn test_fold_one_shot_propagates_error() {
 }
 
 #[test]
-fn test_fold_one_shot_reads_a_closed_stream_as_an_error() {
+fn fold_one_shot_reads_a_closed_stream_as_an_error() {
     let result: Result<i32, Error> = fold_one_shot(None, |_| Ok(1));
     assert!(matches!(result, Err(Error::UnexpectedEndOfStream)));
 }
 
 #[test]
-fn test_empty_on_end_of_stream_converts_only_that_variant() {
+fn empty_on_end_of_stream_converts_only_that_variant() {
     // The ten collection sites read a closed stream as "nothing to report"...
     let recovered: Result<Vec<i32>, Error> = empty_on_end_of_stream(Error::UnexpectedEndOfStream);
     assert_eq!(recovered.expect("end of stream becomes the empty collection"), Vec::<i32>::new());
@@ -38,7 +38,7 @@ fn test_empty_on_end_of_stream_converts_only_that_variant() {
 }
 
 #[test]
-fn test_expect_proto_decodes_the_expected_type() {
+fn expect_proto_decodes_the_expected_type() {
     // The expected type is not passed: it is CurrentTime::MESSAGE_ID, reached
     // through the payload this decoder accepts.
     let processor = expect_proto(|payload: crate::proto::CurrentTime| Ok(payload.current_time));
@@ -46,7 +46,7 @@ fn test_expect_proto_decodes_the_expected_type() {
 }
 
 #[test]
-fn test_expect_proto_rejects_a_foreign_type() {
+fn expect_proto_rejects_a_foreign_type() {
     // The frame is well-formed proto — only the type is wrong. Without the
     // narrow, the payload decoder would run on another message's bytes.
     let processor = expect_proto(|payload: crate::proto::UserInfo| Ok(payload.white_branding_id));
@@ -55,7 +55,7 @@ fn test_expect_proto_rejects_a_foreign_type() {
 }
 
 #[test]
-fn test_expect_proto_narrows_to_the_payloads_own_message_id() {
+fn expect_proto_narrows_to_the_payloads_own_message_id() {
     // The pairing a hand-listed roster used to guard: every declared payload
     // narrows to its own MESSAGE_ID, and a frame of that type is what it
     // accepts. Checked here for one payload per collision-prone shape; the
@@ -98,7 +98,7 @@ mod retry_wiring {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_resends_after_a_connection_reset() {
+    fn sync_one_shot_resends_after_a_connection_reset() {
         use crate::client::blocking::Client;
 
         let message_bus = stub(2);
@@ -110,7 +110,7 @@ mod retry_wiring {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_gives_up_past_the_retry_limit() {
+    fn sync_one_shot_gives_up_past_the_retry_limit() {
         use crate::client::blocking::Client;
         use crate::common::retry::DEFAULT_MAX_RETRIES;
 
@@ -125,7 +125,7 @@ mod retry_wiring {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_resends_after_a_connection_reset() {
+    async fn async_one_shot_resends_after_a_connection_reset() {
         use crate::Client;
 
         let message_bus = stub(2);
@@ -137,7 +137,7 @@ mod retry_wiring {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_gives_up_past_the_retry_limit() {
+    async fn async_one_shot_gives_up_past_the_retry_limit() {
         use crate::common::retry::DEFAULT_MAX_RETRIES;
         use crate::Client;
 
@@ -179,7 +179,7 @@ mod bounded_wait {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_shared_times_out_without_a_frame() {
+    fn sync_one_shot_shared_times_out_without_a_frame() {
         use crate::client::blocking::Client;
         use crate::common::request_helpers::blocking::one_shot_shared_within;
 
@@ -190,7 +190,7 @@ mod bounded_wait {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_shared_matching_reads_past_a_foreign_frame() {
+    fn sync_one_shot_shared_matching_reads_past_a_foreign_frame() {
         use crate::client::blocking::Client;
         use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
         use std::cell::Cell;
@@ -207,7 +207,7 @@ mod bounded_wait {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_shared_matching_times_out_on_foreign_frames_only() {
+    fn sync_one_shot_shared_matching_times_out_on_foreign_frames_only() {
         use crate::client::blocking::Client;
         use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
 
@@ -218,7 +218,7 @@ mod bounded_wait {
 
     #[cfg(feature = "sync")]
     #[test]
-    fn test_sync_one_shot_shared_matching_stops_reading_at_the_deadline() {
+    fn sync_one_shot_shared_matching_stops_reading_at_the_deadline() {
         use crate::client::blocking::Client;
         use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
         use std::cell::Cell;
@@ -237,7 +237,7 @@ mod bounded_wait {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_shared_times_out_without_a_frame() {
+    async fn async_one_shot_shared_times_out_without_a_frame() {
         use crate::common::request_helpers::one_shot_shared_within;
         use crate::Client;
 
@@ -250,7 +250,7 @@ mod bounded_wait {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_shared_matching_reads_past_a_foreign_frame() {
+    async fn async_one_shot_shared_matching_reads_past_a_foreign_frame() {
         use crate::common::request_helpers::one_shot_shared_matching_within;
         use crate::Client;
         use std::cell::Cell;
@@ -269,7 +269,7 @@ mod bounded_wait {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_shared_matching_times_out_on_foreign_frames_only() {
+    async fn async_one_shot_shared_matching_times_out_on_foreign_frames_only() {
         use crate::common::request_helpers::one_shot_shared_matching_within;
         use crate::Client;
 
@@ -282,7 +282,7 @@ mod bounded_wait {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_async_one_shot_shared_matching_stops_reading_at_the_deadline() {
+    async fn async_one_shot_shared_matching_stops_reading_at_the_deadline() {
         use crate::common::request_helpers::one_shot_shared_matching_within;
         use crate::Client;
         use std::cell::Cell;
@@ -303,7 +303,7 @@ mod bounded_wait {
 }
 
 #[test]
-fn test_expect_proto_rejects_text_framing_of_the_expected_type() {
+fn expect_proto_rejects_text_framing_of_the_expected_type() {
     // Right type, unreadable framing: UnexpectedWireFormat, not UnexpectedResponse (#731).
     let message = ResponseMessage::from("49\01\01678890000\0");
     let processor = expect_proto(|payload: crate::proto::CurrentTime| Ok(payload.current_time));

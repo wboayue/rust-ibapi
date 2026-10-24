@@ -4,7 +4,7 @@ use crate::transport::raw_capture::test_support;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
-/// Async twin of `transport::sync::tests::test_read_message_taps_raw_bytes_including_rejected_prefixes`.
+/// Async twin of `transport::sync::tests::read_message_taps_raw_bytes_including_rejected_prefixes`.
 ///
 /// Two claims in one: the reader rejects a length prefix that cannot describe a
 /// frame, and the tap sees that prefix anyway. The second is the one worth a
@@ -12,7 +12,7 @@ use tokio::io::AsyncWriteExt;
 /// sequence in #891 that an operator
 /// opens the capture to find.
 #[tokio::test]
-async fn test_read_framed_message_taps_raw_bytes_including_rejected_prefixes() {
+async fn read_framed_message_taps_raw_bytes_including_rejected_prefixes() {
     let dir = tempfile::TempDir::new().unwrap();
     let tap = RawFrameTap::capturing_to(dir.path());
 
@@ -80,7 +80,7 @@ fn read_to_end(mut peer: TcpStream) -> tokio::task::JoinHandle<Vec<u8>> {
 /// the dispatcher reconnects, and later writes are refused rather than
 /// appended to the fragment.
 #[tokio::test]
-async fn test_write_cut_off_mid_frame_breaks_the_connection() {
+async fn write_cut_off_mid_frame_breaks_the_connection() {
     let (socket, peer, _listener) = socket_pair().await;
     let large = vec![0xAA; LARGE];
 
@@ -103,7 +103,7 @@ async fn test_write_cut_off_mid_frame_breaks_the_connection() {
 /// A write abandoned while it waits for the writer sends nothing and leaves
 /// the connection usable.
 #[tokio::test]
-async fn test_write_abandoned_before_it_starts_sends_nothing() {
+async fn write_abandoned_before_it_starts_sends_nothing() {
     let (socket, peer, _listener) = socket_pair().await;
     let large = vec![0xAA; LARGE];
 
@@ -126,7 +126,7 @@ async fn test_write_abandoned_before_it_starts_sends_nothing() {
 
 /// `reconnect` clears a break: the new connection reads and writes normally.
 #[tokio::test]
-async fn test_reconnect_clears_a_broken_connection() {
+async fn reconnect_clears_a_broken_connection() {
     let (socket, _peer, listener) = socket_pair().await;
     abandon_write(&socket, &vec![0xAA; LARGE]).await;
     assert!(matches!(socket.write_all(&[0xCC; 3]).await, Err(Error::ConnectionReset)));
@@ -146,7 +146,7 @@ async fn test_reconnect_clears_a_broken_connection() {
 
 /// Terminal close interrupts a blocked read, releases TCP, and cannot reconnect.
 #[tokio::test]
-async fn test_physical_close_wakes_read_and_is_terminal() {
+async fn physical_close_wakes_read_and_is_terminal() {
     let (socket, peer, _listener) = socket_pair().await;
     let reading = socket.clone();
     let read = tokio::spawn(async move { reading.read_message().await });
@@ -166,7 +166,7 @@ async fn test_physical_close_wakes_read_and_is_terminal() {
 /// Close overrides a break: I/O fails with `Shutdown`, not `ConnectionReset`,
 /// and reconnect refuses.
 #[tokio::test]
-async fn test_physical_close_overrides_a_broken_connection() {
+async fn physical_close_overrides_a_broken_connection() {
     let (socket, _peer, _listener) = socket_pair().await;
     abandon_write(&socket, &vec![0xAA; LARGE]).await;
     assert!(matches!(socket.write_all(&[0xCC; 3]).await, Err(Error::ConnectionReset)));
@@ -181,7 +181,7 @@ async fn test_physical_close_overrides_a_broken_connection() {
 
 /// A sender queued before close cannot write when its lock becomes available.
 #[tokio::test]
-async fn test_physical_close_prevents_a_queued_write() {
+async fn physical_close_prevents_a_queued_write() {
     let (socket, peer, _listener) = socket_pair().await;
     let writer = socket.writer.lock().await;
     let sending = socket.clone();
@@ -205,7 +205,7 @@ async fn test_physical_close_prevents_a_queued_write() {
 /// Close wakes a write stalled on a full send buffer, rather than waiting for
 /// the peer to drain it.
 #[tokio::test]
-async fn test_physical_close_wakes_a_backpressured_write() {
+async fn physical_close_wakes_a_backpressured_write() {
     let (socket, _peer, _listener) = socket_pair().await;
     let write = tokio::spawn({
         let socket = socket.clone();

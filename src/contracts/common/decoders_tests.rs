@@ -5,7 +5,7 @@ use crate::messages::IncomingMessages;
 use prost::Message;
 
 #[test]
-fn test_decode_contract_data_proto() {
+fn decode_contract_data_proto_works() {
     let proto_msg = crate::proto::ContractData {
         req_id: Some(1),
         contract: Some(crate::proto::Contract {
@@ -43,7 +43,7 @@ fn test_decode_contract_data_proto() {
 }
 
 #[test]
-fn test_decode_contract_data_proto_rejects_missing_submessages() {
+fn decode_contract_data_proto_rejects_missing_submessages() {
     // EDecoder.cs drops a ContractData frame when either submessage is null
     // rather than synthesizing a default; this crate has no skip channel, so
     // it errors, as #829's OpenOrder / CompletedOrder / ExecutionDetails do.
@@ -78,7 +78,7 @@ fn test_decode_contract_data_proto_rejects_missing_submessages() {
 }
 
 #[test]
-fn test_decode_symbol_samples_proto() {
+fn decode_symbol_samples_proto_works() {
     let proto_msg = crate::proto::SymbolSamples {
         req_id: Some(1),
         contract_descriptions: vec![
@@ -116,7 +116,7 @@ fn test_decode_symbol_samples_proto() {
 }
 
 #[test]
-fn test_decode_market_rule_proto() {
+fn decode_market_rule_proto_works() {
     let proto_msg = crate::proto::MarketRule {
         market_rule_id: Some(26),
         price_increments: vec![
@@ -140,7 +140,7 @@ fn test_decode_market_rule_proto() {
 }
 
 #[test]
-fn test_decode_option_chain_proto() {
+fn decode_option_chain_proto_works() {
     let proto_msg = crate::proto::SecDefOptParameter {
         req_id: Some(1),
         exchange: Some("SMART".into()),
@@ -166,7 +166,7 @@ fn test_decode_option_chain_proto() {
 // it is not skippable. See docs/rules/wire/proto-only-decoding.md.
 
 #[test]
-fn test_decode_contract_details_rejects_text_framing() {
+fn decode_contract_details_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::ContractData,
         "10\09001\0AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0",
@@ -175,7 +175,7 @@ fn test_decode_contract_details_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_option_chain_rejects_text_framing() {
+fn decode_option_chain_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::SecurityDefinitionOptionParameter,
         "75\09000\0SMART\0265598\0AAPL\0100\01\020260619\01\0150.0\0",
@@ -201,7 +201,7 @@ fn bond_frame(last_trade_date_or_contract_month: &str) -> ResponseMessage {
 }
 
 #[test]
-fn test_decode_bond_contract_details_splits_last_trade_date() {
+fn decode_bond_contract_details_splits_last_trade_date() {
     // Mirrors C# EDecoderUtils.SetLastTradeDate(.., isBond: true).
     let cases = [
         ("20430504 16:00 Europe/London", "20430504", "16:00", "Europe/London"),
@@ -220,7 +220,7 @@ fn test_decode_bond_contract_details_splits_last_trade_date() {
 }
 
 #[test]
-fn test_decode_contract_details_leaves_maturity_unset() {
+fn decode_contract_details_leaves_maturity_unset() {
     // The split is bond-only: a ContractData frame keeps maturity empty.
     use crate::common::test_utils::helpers::proto_response;
     use crate::testdata::builders::contracts::contract_data;
@@ -239,12 +239,12 @@ fn test_decode_contract_details_leaves_maturity_unset() {
 }
 
 #[test]
-fn test_decode_bond_contract_details_rejects_text_framing() {
+fn decode_bond_contract_details_rejects_text_framing() {
     assert_rejects_text_framing(IncomingMessages::BondContractData, "18\09001\0\0BOND\0", decode_bond_contract_details);
 }
 
 #[test]
-fn test_decode_bond_contract_details_live_shape() {
+fn decode_bond_contract_details_live_shape() {
     // Shape of a live `BondContractData` frame (US-T, 2026-10-01, server 225):
     // no symbol, no last trade date, no coupon; identity in local symbol and cusip.
     let proto_msg = crate::proto::ContractData {

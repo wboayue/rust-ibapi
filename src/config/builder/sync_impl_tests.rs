@@ -13,7 +13,7 @@ fn stub(responses: Vec<crate::messages::ResponseMessage>) -> Arc<MessageBusStub>
 }
 
 #[test]
-fn test_update_config_request_body() {
+fn update_config_request_body() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response().request_id(TEST_REQ_ID_FIRST).status("ok").encode_proto(),
@@ -66,7 +66,7 @@ fn test_update_config_request_body() {
 }
 
 #[test]
-fn test_update_config_bulk_setters() {
+fn update_config_bulk_setters() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response().request_id(TEST_REQ_ID_FIRST).status("ok").encode_proto(),
@@ -107,9 +107,9 @@ fn test_update_config_bulk_setters() {
 }
 
 #[test]
-fn test_update_config_response_decoded() {
+fn update_config_response_decoded() {
     // Proves the decoded response flows back through submit(); exhaustive
-    // field-mapping is owned by decoders_tests::test_decode_update_config_proto_populated.
+    // field-mapping is owned by decoders_tests::decode_update_config_proto_populated.
     let message_bus = stub(vec![proto_response(
         IncomingMessages::UpdateConfigResponse,
         update_config_response()
@@ -128,7 +128,7 @@ fn test_update_config_response_decoded() {
 }
 
 #[test]
-fn test_update_config_server_version_error() {
+fn update_config_server_version_error() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::UPDATE_CONFIG - 1);
@@ -139,7 +139,7 @@ fn test_update_config_server_version_error() {
 }
 
 #[test]
-fn test_update_config_unexpected_end_of_stream() {
+fn update_config_unexpected_end_of_stream() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::UPDATE_CONFIG);
