@@ -406,8 +406,11 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     /// The send gate: every bus-originated write checks here first, and is
-    /// refused with `Error::ConnectionReset` unless the session is live and
-    /// not shutting down.
+    /// refused unless the session is live and not shutting down - with
+    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::ConnectionFailed` once the reconnect gave up, and
+    /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
+    /// "stop".
     ///
     /// Without it, a request sent while the connection is down would be lost
     /// on the dead socket - or, worse, interleave with the handshake the
@@ -420,11 +423,11 @@ impl<S: Stream> TcpMessageBus<S> {
     /// principle race the socket swap inside `reconnect`. Closing that needs a
     /// session-level gate held across the handshake.
     fn ensure_connected(&self) -> Result<(), Error> {
-        if self.is_connected() {
-            Ok(())
-        } else {
-            Err(Error::ConnectionReset)
+        self.connection_state.check()?;
+        if self.is_shutting_down() {
+            return Err(Error::Shutdown);
         }
+        Ok(())
     }
 
     /// The one funnel for every bus-originated write, so no send can reach a
@@ -542,6 +545,9 @@ impl<S: Stream> TcpMessageBus<S> {
                     }
                     Err(reconnect_err) => {
                         error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
+                        // Latched before the shutdown, which keeps it: later
+                        // sends and waiters see `ConnectionFailed`, not `Shutdown`.
+                        self.connection_state.fail();
                         self.request_shutdown();
                         return Err(Error::ConnectionFailed);
                     }

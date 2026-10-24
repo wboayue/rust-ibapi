@@ -240,7 +240,8 @@ pub trait AsyncMessageBus: Send + Sync {
     fn request_shutdown_sync(&self);
 
     /// Resolve once the session is connected again, returning
-    /// [`Error::Shutdown`] if the session will never reconnect.
+    /// [`Error::ConnectionFailed`] if the reconnect gave up, or
+    /// [`Error::Shutdown`] after a shutdown.
     async fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
@@ -694,6 +695,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                     }
                                     Err(e) => {
                                         error!("Failed to reconnect to TWS/Gateway: {e:?}");
+                                        // Latched before `retire`'s shutdown, which
+                                        // keeps it: later sends and waiters see
+                                        // `ConnectionFailed`, not `Shutdown`.
+                                        message_bus.connection_state.fail();
                                         break;
                                     }
                                 }
@@ -751,8 +756,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// The send gate: every bus-originated write checks here first, and is
-    /// refused with `Error::ConnectionReset` unless the session is live and
-    /// not shutting down.
+    /// refused unless the session is live and not shutting down - with
+    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::ConnectionFailed` once the reconnect gave up, and
+    /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
+    /// "stop".
     ///
     /// Without it, a request sent while the connection is down would be lost
     /// on the dead socket - or, worse, interleave with the handshake the
@@ -765,11 +773,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// principle race the socket swap inside `reconnect`. Closing that needs a
     /// session-level gate held across the handshake.
     fn ensure_connected(&self) -> Result<(), Error> {
-        if self.is_connected() {
-            Ok(())
-        } else {
-            Err(Error::ConnectionReset)
+        self.connection_state.check()?;
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
         }
+        Ok(())
     }
 
     /// The one funnel for every bus-originated write, so no send can reach a

@@ -2879,3 +2879,38 @@ async fn notice_broadcaster_recovers_from_a_poisoned_lock() {
     assert_eq!(receiver.recv().await.unwrap().message, "after poison");
     assert!(matches!(receiver.recv().await, Err(broadcast::error::RecvError::Closed)));
 }
+
+/// A reconnect that gives up leaves the session `Failed`, not shut down: a
+/// later request and `wait_connected` both get `ConnectionFailed`, the
+/// documented terminal error, so a retry loop can tell "reconnecting"
+/// (`ConnectionReset`) from "gone" (#1052).
+#[tokio::test]
+async fn test_exhausted_reconnect_refuses_later_sends_with_connection_failed() {
+    let stream = MemoryStream::default();
+    let mut connection = AsyncConnection::stubbed(stream.clone(), 28);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    connection.max_reconnect_attempts = Some(1);
+    stream.set_reconnect_failures(1);
+    // Too short for a message id: InvalidFrame, which triggers the reconnect.
+    stream.push_inbound(b"xx".to_vec());
+
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let mut in_flight = bus.send_request(RequestId::nth(100), vec![]).await.unwrap();
+    bus.clone().process_messages().expect("process_messages");
+
+    // The reset arrives after the session is marked down, so the wait below
+    // cannot see the session as still connected.
+    let item = tokio::time::timeout(Duration::from_secs(5), in_flight.next_routed())
+        .await
+        .expect("in-flight request got no notification")
+        .expect("in-flight channel closed early");
+    assert!(matches!(item, RoutedItem::Error(Error::ConnectionReset)), "in-flight: {item:?}");
+
+    let waited = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+        .await
+        .expect("wait_connected did not return after the reconnect gave up");
+    assert!(matches!(waited, Err(Error::ConnectionFailed)), "wait_connected: {waited:?}");
+
+    let sent = bus.send_request(RequestId::nth(1), vec![]).await.err();
+    assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
+}

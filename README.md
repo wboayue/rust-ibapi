@@ -789,7 +789,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 ## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times (by default — see `ClientBuilder::max_reconnect_attempts` and `ClientBuilder::reconnect_forever`) using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. The market data type set with `switch_market_data_type` is re-sent after a reconnect, since TWS does not keep it across reconnects. When receiving responses via a `Subscription`, the application may need to handle retries manually. Since v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times (by default — see `ClientBuilder::max_reconnect_attempts` and `ClientBuilder::reconnect_forever`) using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. The market data type set with `switch_market_data_type` is re-sent after a reconnect, since TWS does not keep it across reconnects. When receiving responses via a `Subscription`, the application may need to handle retries manually. Since v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe. A stream open when the connection drops ends with `Error::ConnectionReset` right away, before the reconnect, so wait for it with `Client::wait_connected` before resubscribing; that returns `Error::ConnectionFailed` once the reconnect gives up:
 
 ```rust
 use ibapi::client::blocking::Client;
@@ -800,29 +800,38 @@ fn main() {
     let contract = Contract::stock("AAPL").build();
 
     'outer: loop {
-        let subscription = client
-            .realtime_bars(&contract)
-            .trading_hours(TradingHours::Extended)
-            .subscribe()
-            .expect("realtime bars request failed!");
+        // Waits out a reconnect in progress; fails only once the client gave
+        // up (ConnectionFailed) or was shut down (Shutdown).
+        if let Err(e) = client.wait_connected() {
+            eprintln!("connection gone: {e}");
+            return;
+        }
+
+        let subscription = match client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe() {
+            Ok(subscription) => subscription,
+            // Dropped again before the request went out: wait again.
+            Err(e) if e.is_connection_lost() => continue,
+            Err(e) => {
+                eprintln!("realtime bars request failed: {e}");
+                return;
+            }
+        };
 
         for item in &subscription {
             match item {
                 Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
                 Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
                 Err(e) if e.is_connection_lost() => {
-                    eprintln!("Connection lost. Retrying stream...");
+                    eprintln!("Connection lost. Resubscribing after the reconnect...");
                     continue 'outer;
                 }
-                // Everything else — including terminal ConnectionFailed (reconnect
-                // exhausted) — is not recoverable here, so stop.
                 Err(e) => {
                     eprintln!("error: {e}");
-                    break 'outer;
+                    return;
                 }
             }
         }
-        break;
+        return;
     }
 }
 ```

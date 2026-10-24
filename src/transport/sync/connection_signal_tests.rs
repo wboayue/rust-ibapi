@@ -58,3 +58,50 @@ fn shutdown_is_terminal() {
     assert!(!signal.is_connected(), "a late reconnect must not revive a shut-down session");
     assert!(matches!(signal.wait_connected(), Err(Error::Shutdown)));
 }
+
+#[test]
+fn check_tells_reconnecting_from_gone() {
+    let signal = ConnectionSignal::default();
+    assert!(signal.check().is_ok());
+
+    signal.set_disconnected();
+    assert!(matches!(signal.check(), Err(Error::ConnectionReset)));
+
+    signal.fail();
+    assert!(matches!(signal.check(), Err(Error::ConnectionFailed)));
+
+    let signal = ConnectionSignal::default();
+    signal.shutdown();
+    assert!(matches!(signal.check(), Err(Error::Shutdown)));
+}
+
+#[test]
+fn wait_connected_returns_connection_failed_when_the_reconnect_gives_up() {
+    let signal = Arc::new(ConnectionSignal::default());
+    signal.set_disconnected();
+
+    let waker = Arc::clone(&signal);
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        waker.fail();
+    });
+
+    let start = Instant::now();
+    assert!(matches!(signal.wait_connected(), Err(Error::ConnectionFailed)));
+    assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on failure");
+}
+
+/// The dispatcher latches `Failed` and then shuts the bus down; the shutdown
+/// must not replace why the session ended.
+#[test]
+fn failed_survives_the_following_shutdown_and_a_late_reconnect() {
+    let signal = ConnectionSignal::default();
+    signal.set_disconnected();
+    signal.fail();
+
+    signal.shutdown();
+    signal.set_connected();
+
+    assert!(!signal.is_connected());
+    assert!(matches!(signal.wait_connected(), Err(Error::ConnectionFailed)));
+}

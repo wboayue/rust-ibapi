@@ -951,7 +951,10 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 /// rather than hanging or silently dropping the error. In-flight subscriptions
 /// are notified of `Error::ConnectionReset` before the reconnect is attempted,
 /// and the `Error::Shutdown` the failed reconnect then requests finds the
-/// channel already cleared - so the reset is the only notification.
+/// channel already cleared - so the reset is the only notification. The
+/// session is left `Failed`: later sends and `wait_connected` get
+/// `ConnectionFailed`, not the `ConnectionReset` that means "reconnecting"
+/// (#1052).
 #[test]
 fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -964,6 +967,10 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
     assert!(matches!(resp, Err(Error::ConnectionReset)), "got: {resp:?}");
     assert!(sub.try_next().is_none(), "subscription received a second notification");
+
+    assert!(matches!(bus.wait_connected(), Err(Error::ConnectionFailed)));
+    let sent = bus.send_request(RequestId::nth(101), &[]).err();
+    assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
     Ok(())
 }
 

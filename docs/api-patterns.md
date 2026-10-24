@@ -491,16 +491,13 @@ See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/avail
 ```rust
 // The client reconnects on its own. A request sent while the connection is
 // down is refused with Error::ConnectionReset, which is_connection_lost()
-// matches. If reconnection is exhausted, is_connected() stays false and every
-// send keeps getting ConnectionReset, so bound the wait.
+// matches. wait_connected() blocks until the session is back, or fails with
+// Error::ConnectionFailed once the reconnect gives up (Error::Shutdown after
+// a shutdown); later requests then fail with that same error.
 match client.market_data(contract).subscribe() {
     Ok(subscription) => process_data(subscription),
     Err(e) if e.is_connection_lost() => {
-        let deadline = Instant::now() + Duration::from_secs(60);
-        while !client.is_connected() {
-            if Instant::now() >= deadline { return Err(e); }
-            thread::sleep(Duration::from_secs(1));
-        }
+        client.wait_connected()?;
         // Retry
     },
     Err(e) => return Err(e),
@@ -513,7 +510,7 @@ for result in subscription {
     match result {
         Ok(data) => process(data),
         Err(e) if e.is_connection_lost() => {
-            // Resubscribe after reconnection
+            // Ends before the reconnect starts: wait_connected(), then resubscribe
             break;
         },
         Err(e) => log::error!("Error: {}", e),

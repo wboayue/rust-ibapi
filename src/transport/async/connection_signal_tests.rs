@@ -63,3 +63,54 @@ async fn shutdown_is_terminal() {
         .expect("wait_connected blocked after shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
 }
+
+#[tokio::test]
+async fn check_tells_reconnecting_from_gone() {
+    let signal = ConnectionSignal::default();
+    assert!(signal.check().is_ok());
+
+    signal.set_disconnected();
+    assert!(matches!(signal.check(), Err(Error::ConnectionReset)));
+
+    signal.fail();
+    assert!(matches!(signal.check(), Err(Error::ConnectionFailed)));
+
+    let signal = ConnectionSignal::default();
+    signal.shutdown();
+    assert!(matches!(signal.check(), Err(Error::Shutdown)));
+}
+
+#[tokio::test]
+async fn wait_connected_returns_connection_failed_when_the_reconnect_gives_up() {
+    let signal = Arc::new(ConnectionSignal::default());
+    signal.set_disconnected();
+
+    let waker = Arc::clone(&signal);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        waker.fail();
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+        .await
+        .expect("wait_connected did not return on failure");
+    assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
+}
+
+/// The dispatcher latches `Failed` and then `retire` shuts the bus down; the
+/// shutdown must not replace why the session ended.
+#[tokio::test]
+async fn failed_survives_the_following_shutdown_and_a_late_reconnect() {
+    let signal = ConnectionSignal::default();
+    signal.set_disconnected();
+    signal.fail();
+
+    signal.shutdown();
+    signal.set_connected();
+
+    assert!(!signal.is_connected());
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+        .await
+        .expect("wait_connected blocked after failure");
+    assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
+}

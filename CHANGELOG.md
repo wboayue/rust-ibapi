@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Client::wait_connected` (blocking and async): waits until the client is connected again after a connection loss, failing with `Error::ConnectionFailed` once the reconnect gives up or `Error::Shutdown` after a shutdown. A stream loop calls it before resubscribing (#1052).
+
+### Changed
+
+- Once the automatic reconnect gives up, every later request fails with `Error::ConnectionFailed`, and after a shutdown with `Error::Shutdown`. Both used to fail with `Error::ConnectionReset`, the error for "still reconnecting", so a caller could not tell the states apart. One-shot requests that retry across a reconnect also end with `ConnectionFailed`, where they returned `Shutdown`. Streams open when the connection dropped still end with `ConnectionReset` (#1052).
+
+### Fixed
+
+- The stream-retry loop in README.md and `examples/sync/stream_retry.rs` no longer panics on a connection loss. It resubscribed while the client was still reconnecting, and `.expect` panicked on the `ConnectionReset` the request was refused with; it now calls `wait_connected` first (#1052).
+
 ## [5.2.0] - 2026-10-20
 
 ### Added
