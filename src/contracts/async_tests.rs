@@ -17,7 +17,7 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn test_contract_details() {
+async fn contract_details() {
     for test_case in contract_details_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -40,7 +40,7 @@ async fn test_contract_details() {
 }
 
 #[tokio::test]
-async fn test_matching_symbols() {
+async fn matching_symbols() {
     for test_case in matching_symbols_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -61,7 +61,7 @@ async fn test_matching_symbols() {
 }
 
 #[tokio::test]
-async fn test_market_rule() {
+async fn market_rule() {
     for test_case in market_rule_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -83,7 +83,7 @@ async fn test_market_rule() {
 }
 
 #[tokio::test]
-async fn test_smart_components() {
+async fn smart_components() {
     for test_case in smart_components_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -113,7 +113,7 @@ async fn test_smart_components() {
 }
 
 #[tokio::test]
-async fn test_option_calculations() {
+async fn option_calculations() {
     for test_case in option_calculation_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -171,7 +171,7 @@ async fn test_option_calculations() {
 }
 
 #[tokio::test]
-async fn test_option_chain() {
+async fn option_chain() {
     for test_case in option_chain_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -206,7 +206,7 @@ async fn test_option_chain() {
 }
 
 #[tokio::test]
-async fn test_stream_decoders() {
+async fn stream_decoders() {
     for test_case in stream_decoder_test_cases() {
         let message = test_case.message.clone();
 
@@ -253,7 +253,7 @@ async fn test_stream_decoders() {
 }
 
 #[tokio::test]
-async fn test_cancel_messages() {
+async fn cancel_messages() {
     for test_case in cancel_message_test_cases() {
         let context = test_case.request_type.map(|rt| DecoderContext::default().with_request_type(rt));
 
@@ -422,7 +422,7 @@ async fn request_future_contract_details() {
 }
 
 #[tokio::test]
-async fn test_cancel_contract_details() {
+async fn cancel_contract_details() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
 

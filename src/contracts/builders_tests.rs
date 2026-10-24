@@ -2,7 +2,7 @@ use super::*;
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 
 #[test]
-fn test_stock_builder_basic() {
+fn stock_builder_basic() {
     let stock = Contract::stock("AAPL").build();
     assert_eq!(stock.symbol, Symbol::from("AAPL"));
     assert_eq!(stock.security_type, SecurityType::Stock);
@@ -11,7 +11,7 @@ fn test_stock_builder_basic() {
 }
 
 #[test]
-fn test_stock_builder_customization() {
+fn stock_builder_customization() {
     let stock = Contract::stock("7203")
         .on_exchange("TSEJ")
         .in_currency("JPY")
@@ -27,7 +27,7 @@ fn test_stock_builder_customization() {
 }
 
 #[test]
-fn test_call_option_builder() {
+fn call_option_builder() {
     let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
 
     assert_eq!(call.symbol, Symbol::from("AAPL"));
@@ -39,7 +39,7 @@ fn test_call_option_builder() {
 }
 
 #[test]
-fn test_put_option_builder() {
+fn put_option_builder() {
     let put = Contract::put("SPY")
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
@@ -62,7 +62,7 @@ fn test_put_option_builder() {
 }
 
 #[test]
-fn test_invalid_strike_price() {
+fn invalid_strike_price() {
     let result = Strike::new(-10.0);
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "Strike price must be positive");
@@ -76,7 +76,7 @@ fn test_invalid_strike_price() {
 }
 
 #[test]
-fn test_futures_builder_with_manual_expiry() {
+fn futures_builder_with_manual_expiry() {
     let futures = Contract::futures("ES")
         .expires_in(ContractMonth::new(2024, 3))
         .on_exchange("CME")
@@ -93,7 +93,7 @@ fn test_futures_builder_with_manual_expiry() {
 }
 
 #[test]
-fn test_futures_builder_any_month() {
+fn futures_builder_any_month() {
     // Open query: month-less futures for an enumerate-all contract_details lookup.
     // Setters applied *before* .any_month() (on the Missing state).
     let query = Contract::futures("ES").on_exchange("NYMEX").in_currency("EUR").any_month().build();
@@ -118,7 +118,7 @@ fn test_futures_builder_any_month() {
 }
 
 #[test]
-fn test_futures_multiplier() {
+fn futures_multiplier() {
     // Default: no multiplier set (empty string)
     let es = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();
     assert_eq!(es.multiplier, "");
@@ -135,7 +135,7 @@ fn test_futures_multiplier() {
 }
 
 #[test]
-fn test_continuous_futures_builder() {
+fn continuous_futures_builder() {
     let es = Contract::continuous_futures("ES")
         .on_exchange("CME")
         .multiplier(50)
@@ -150,7 +150,7 @@ fn test_continuous_futures_builder() {
 }
 
 #[test]
-fn test_continuous_futures_multiplier() {
+fn continuous_futures_multiplier() {
     // Default: no multiplier set (empty string)
     let es = Contract::continuous_futures("ES").on_exchange("CME").build();
     assert_eq!(es.multiplier, "");
@@ -167,7 +167,7 @@ fn test_continuous_futures_multiplier() {
 }
 
 #[test]
-fn test_forex_builder() {
+fn forex_builder() {
     let forex = Contract::forex("EUR", "USD").on_exchange("IDEALPRO").build();
 
     assert_eq!(forex.symbol, Symbol::from("EUR"));
@@ -177,7 +177,7 @@ fn test_forex_builder() {
 }
 
 #[test]
-fn test_crypto_builder() {
+fn crypto_builder() {
     let btc = Contract::crypto("BTC").on_exchange("PAXOS").in_currency("USD").build();
 
     assert_eq!(btc.symbol, Symbol::from("BTC"));
@@ -187,7 +187,7 @@ fn test_crypto_builder() {
 }
 
 #[test]
-fn test_index_contract() {
+fn index_contract() {
     // SPX should get CBOE and USD
     let spx = Contract::index("SPX");
     assert_eq!(spx.symbol, Symbol::from("SPX"));
@@ -215,7 +215,7 @@ fn test_index_contract() {
 }
 
 #[test]
-fn test_spread_builder_long_calendar() {
+fn spread_builder_long_calendar() {
     let spread = Contract::spread()
         .long_calendar(12345, 67890)
         .in_currency("USD")
@@ -236,7 +236,7 @@ fn test_spread_builder_long_calendar() {
 }
 
 #[test]
-fn test_spread_builder_short_calendar() {
+fn spread_builder_short_calendar() {
     let spread = Contract::spread().short_calendar(12345, 67890).build().unwrap();
 
     assert_eq!(spread.combo_legs.len(), 2);
@@ -249,7 +249,7 @@ fn test_spread_builder_short_calendar() {
 }
 
 #[test]
-fn test_spread_builder_vertical() {
+fn spread_builder_vertical() {
     let spread = Contract::spread().vertical(11111, 22222).build().unwrap();
 
     assert_eq!(spread.security_type, SecurityType::Spread);
@@ -261,7 +261,7 @@ fn test_spread_builder_vertical() {
 }
 
 #[test]
-fn test_spread_builder_custom_legs() {
+fn spread_builder_custom_legs() {
     let spread = Contract::spread()
         .add_leg(10001, LegAction::Buy)
         .ratio(2)
@@ -294,7 +294,7 @@ fn test_spread_builder_custom_legs() {
 }
 
 #[test]
-fn test_spread_builder_empty_fails() {
+fn spread_builder_empty_fails() {
     let err = Contract::spread().build().unwrap_err();
     assert!(
         matches!(err, Error::InvalidArgument(ref msg) if msg == "Spread must have at least one leg"),
@@ -303,7 +303,7 @@ fn test_spread_builder_empty_fails() {
 }
 
 #[test]
-fn test_exchange_display() {
+fn exchange_display() {
     assert_eq!(Exchange("SMART".to_string()).to_string(), "SMART");
     assert_eq!(Exchange("NASDAQ".to_string()).to_string(), "NASDAQ");
     assert_eq!(Exchange("CBOE".to_string()).to_string(), "CBOE");
@@ -311,7 +311,7 @@ fn test_exchange_display() {
 }
 
 #[test]
-fn test_currency_display() {
+fn currency_display() {
     assert_eq!(Currency("USD".to_string()).to_string(), "USD");
     assert_eq!(Currency("EUR".to_string()).to_string(), "EUR");
     assert_eq!(Currency("JPY".to_string()).to_string(), "JPY");
@@ -319,13 +319,13 @@ fn test_currency_display() {
 }
 
 #[test]
-fn test_action_display() {
+fn action_display() {
     assert_eq!(LegAction::Buy.to_string(), "BUY");
     assert_eq!(LegAction::Sell.to_string(), "SELL");
 }
 
 #[test]
-fn test_symbol_conversion() {
+fn symbol_conversion() {
     let symbol = Symbol::new("AAPL");
     assert_eq!(symbol.as_str(), "AAPL");
     assert_eq!(symbol.to_string(), "AAPL");
@@ -338,7 +338,7 @@ fn test_symbol_conversion() {
 }
 
 #[test]
-fn test_expiration_date_formatting() {
+fn expiration_date_formatting() {
     let date = ExpirationDate::new(2024, 12, 20);
     assert_eq!(date.to_string(), "20241220");
 
@@ -347,7 +347,7 @@ fn test_expiration_date_formatting() {
 }
 
 #[test]
-fn test_contract_month_formatting() {
+fn contract_month_formatting() {
     let month = ContractMonth::new(2024, 3);
     assert_eq!(month.to_string(), "202403");
 
@@ -356,7 +356,7 @@ fn test_contract_month_formatting() {
 }
 
 #[test]
-fn test_default_implementations() {
+fn default_implementations() {
     assert_eq!(Exchange::default().as_str(), "SMART");
     assert_eq!(Currency::default().as_str(), "USD");
 
@@ -367,7 +367,7 @@ fn test_default_implementations() {
 }
 
 #[test]
-fn test_iron_condor_via_verticals() {
+fn iron_condor_via_verticals() {
     let (long_put, short_put, short_call, long_call) = (100, 105, 110, 115);
     let spread = Contract::spread()
         .vertical(long_put, short_put)
@@ -389,7 +389,7 @@ fn test_iron_condor_via_verticals() {
 }
 
 #[test]
-fn test_spread_builder_accepts_contract_id() {
+fn spread_builder_accepts_contract_id() {
     use crate::accounts::types::ContractId;
 
     let spread = Contract::spread()
@@ -405,7 +405,7 @@ fn test_spread_builder_accepts_contract_id() {
 }
 
 #[test]
-fn test_option_convenience_date_methods() {
+fn option_convenience_date_methods() {
     // Test expires_weekly - should set next Friday
     let weekly_option = Contract::call("SPY").strike(450.0).expires_weekly().build();
 

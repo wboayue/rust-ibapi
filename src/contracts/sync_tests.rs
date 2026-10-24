@@ -15,7 +15,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
 
 #[test]
-fn test_contract_details() {
+fn contract_details() {
     for test_case in contract_details_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -38,7 +38,7 @@ fn test_contract_details() {
 }
 
 #[test]
-fn test_matching_symbols() {
+fn matching_symbols() {
     for test_case in matching_symbols_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -59,7 +59,7 @@ fn test_matching_symbols() {
 }
 
 #[test]
-fn test_market_rule() {
+fn market_rule() {
     for test_case in market_rule_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -81,7 +81,7 @@ fn test_market_rule() {
 }
 
 #[test]
-fn test_smart_components() {
+fn smart_components() {
     for test_case in smart_components_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -111,7 +111,7 @@ fn test_smart_components() {
 }
 
 #[test]
-fn test_option_calculations() {
+fn option_calculations() {
     for test_case in option_calculation_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -165,7 +165,7 @@ fn test_option_calculations() {
 }
 
 #[test]
-fn test_option_chain() {
+fn option_chain() {
     for test_case in option_chain_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -197,7 +197,7 @@ fn test_option_chain() {
 }
 
 #[test]
-fn test_stream_decoders() {
+fn stream_decoders() {
     for test_case in stream_decoder_test_cases() {
         let message = test_case.message.clone();
 
@@ -244,7 +244,7 @@ fn test_stream_decoders() {
 }
 
 #[test]
-fn test_cancel_messages() {
+fn cancel_messages() {
     for test_case in cancel_message_test_cases() {
         let context = test_case.request_type.map(|rt| DecoderContext::default().with_request_type(rt));
 
@@ -280,7 +280,7 @@ fn test_cancel_messages() {
 }
 
 #[test]
-fn test_client_methods() {
+fn client_methods() {
     for test_case in client_method_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -351,7 +351,7 @@ fn test_client_methods() {
 }
 
 #[test]
-fn test_contract_details_errors() {
+fn contract_details_errors() {
     for test_case in contract_details_error_test_cases() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(test_case.ordered_responses.clone()));
 
@@ -386,7 +386,7 @@ fn test_contract_details_errors() {
 }
 
 #[test]
-fn test_cancel_contract_details() {
+fn cancel_contract_details() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
 
@@ -398,7 +398,7 @@ fn test_cancel_contract_details() {
 }
 
 #[test]
-fn test_matching_symbols_returns_server_error() {
+fn matching_symbols_returns_server_error() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         9000,
         321,
@@ -415,7 +415,7 @@ fn test_matching_symbols_returns_server_error() {
 }
 
 #[test]
-fn test_matching_symbols_rejects_unexpected_message() {
+fn matching_symbols_rejects_unexpected_message() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("10|9000|")]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
@@ -426,7 +426,7 @@ fn test_matching_symbols_rejects_unexpected_message() {
 }
 
 #[test]
-fn test_matching_symbols_returns_empty_on_closed_stream() {
+fn matching_symbols_returns_empty_on_closed_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
 
@@ -435,7 +435,7 @@ fn test_matching_symbols_returns_empty_on_closed_stream() {
 }
 
 #[test]
-fn test_market_rule_returns_eof_on_empty_stream() {
+fn market_rule_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
 
@@ -444,7 +444,7 @@ fn test_market_rule_returns_eof_on_empty_stream() {
 }
 
 #[test]
-fn test_market_rule_skips_another_rule_ids_frame() {
+fn market_rule_skips_another_rule_ids_frame() {
     use crate::testdata::builders::contracts::market_rule;
 
     // A concurrent market_rule(239) was answered first; every live
@@ -463,7 +463,7 @@ fn test_market_rule_skips_another_rule_ids_frame() {
 }
 
 #[test]
-fn test_calculate_option_price_returns_eof_on_empty_stream() {
+fn calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
@@ -473,7 +473,7 @@ fn test_calculate_option_price_returns_eof_on_empty_stream() {
 }
 
 #[test]
-fn test_calculate_implied_volatility_returns_eof_on_empty_stream() {
+fn calculate_implied_volatility_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
     let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);

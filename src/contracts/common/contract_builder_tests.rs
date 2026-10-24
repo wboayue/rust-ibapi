@@ -2,7 +2,7 @@ use super::*;
 use crate::contracts::LegAction;
 
 #[test]
-fn test_contract_builder_new() {
+fn contract_builder_new() {
     let builder = ContractBuilder::new();
 
     // All fields should be None initially
@@ -13,7 +13,7 @@ fn test_contract_builder_new() {
 }
 
 #[test]
-fn test_contract_builder_field_setters() {
+fn contract_builder_field_setters() {
     let builder = ContractBuilder::new()
         .contract_id(12345)
         .symbol("AAPL")
@@ -55,7 +55,7 @@ fn test_contract_builder_field_setters() {
 }
 
 #[test]
-fn test_contract_builder_stock() {
+fn contract_builder_stock() {
     let builder = ContractBuilder::stock("AAPL", "NASDAQ", "USD");
 
     assert_eq!(builder.symbol, Some("AAPL".to_string()));
@@ -65,7 +65,7 @@ fn test_contract_builder_stock() {
 }
 
 #[test]
-fn test_contract_builder_futures() {
+fn contract_builder_futures() {
     let builder = ContractBuilder::futures("ES", "CME", "USD");
 
     assert_eq!(builder.symbol, Some("ES".to_string()));
@@ -75,7 +75,7 @@ fn test_contract_builder_futures() {
 }
 
 #[test]
-fn test_contract_builder_crypto() {
+fn contract_builder_crypto() {
     let builder = ContractBuilder::crypto("BTC", "PAXOS", "USD");
 
     assert_eq!(builder.symbol, Some("BTC".to_string()));
@@ -85,7 +85,7 @@ fn test_contract_builder_crypto() {
 }
 
 #[test]
-fn test_contract_builder_option() {
+fn contract_builder_option() {
     let builder = ContractBuilder::option("AAPL", "SMART", "USD");
 
     assert_eq!(builder.symbol, Some("AAPL".to_string()));
@@ -95,7 +95,7 @@ fn test_contract_builder_option() {
 }
 
 #[test]
-fn test_contract_builder_build_stock_success() {
+fn contract_builder_build_stock_success() {
     let contract = ContractBuilder::stock("AAPL", "NASDAQ", "USD").contract_id(12345).build().unwrap();
 
     assert_eq!(contract.symbol, "AAPL");
@@ -110,7 +110,7 @@ fn test_contract_builder_build_stock_success() {
 }
 
 #[test]
-fn test_contract_builder_build_option_success() {
+fn contract_builder_build_option_success() {
     let contract = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
         .right(OptionRight::Call)
@@ -128,7 +128,7 @@ fn test_contract_builder_build_option_success() {
 }
 
 #[test]
-fn test_contract_builder_build_futures_success() {
+fn contract_builder_build_futures_success() {
     let contract = ContractBuilder::futures("ES", "CME", "USD")
         .last_trade_date_or_contract_month("202312")
         .build()
@@ -142,7 +142,7 @@ fn test_contract_builder_build_futures_success() {
 }
 
 #[test]
-fn test_contract_builder_build_missing_identifier() {
+fn contract_builder_build_missing_identifier() {
     let err = ContractBuilder::new().build().unwrap_err();
     assert!(
         matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, or contract_id is required"),
@@ -151,7 +151,7 @@ fn test_contract_builder_build_missing_identifier() {
 }
 
 #[test]
-fn test_contract_builder_build_with_local_symbol_only() {
+fn contract_builder_build_with_local_symbol_only() {
     let result = ContractBuilder::new()
         .local_symbol("FGBL MAR 23")
         .security_type(SecurityType::Future)
@@ -170,7 +170,7 @@ fn test_contract_builder_build_with_local_symbol_only() {
 }
 
 #[test]
-fn test_contract_builder_build_with_contract_id_only() {
+fn contract_builder_build_with_contract_id_only() {
     let result = ContractBuilder::new().contract_id(265598).exchange("SMART").build();
 
     assert!(result.is_ok());
@@ -182,7 +182,7 @@ fn test_contract_builder_build_with_contract_id_only() {
 }
 
 #[test]
-fn test_contract_builder_build_option_missing_strike() {
+fn contract_builder_build_option_missing_strike() {
     let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .right(OptionRight::Call)
         .last_trade_date_or_contract_month("20231215")
@@ -195,7 +195,7 @@ fn test_contract_builder_build_option_missing_strike() {
 }
 
 #[test]
-fn test_contract_builder_build_option_missing_right() {
+fn contract_builder_build_option_missing_right() {
     let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
         .last_trade_date_or_contract_month("20231215")
@@ -208,7 +208,7 @@ fn test_contract_builder_build_option_missing_right() {
 }
 
 #[test]
-fn test_contract_builder_build_option_missing_expiration() {
+fn contract_builder_build_option_missing_expiration() {
     let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(150.0)
         .right(OptionRight::Call)
@@ -221,7 +221,7 @@ fn test_contract_builder_build_option_missing_expiration() {
 }
 
 #[test]
-fn test_contract_builder_build_futures_missing_contract_month() {
+fn contract_builder_build_futures_missing_contract_month() {
     let err = ContractBuilder::futures("ES", "CME", "USD").build().unwrap_err();
     assert!(
         matches!(err, Error::InvalidArgument(ref msg) if msg == "Contract month is required for futures"),
@@ -230,7 +230,7 @@ fn test_contract_builder_build_futures_missing_contract_month() {
 }
 
 #[test]
-fn test_contract_builder_build_futures_option_missing_contract_month() {
+fn contract_builder_build_futures_option_missing_contract_month() {
     // FuturesOption is checked as an option first, so it fails on missing strike price
     let err = ContractBuilder::new()
         .symbol("ES")
@@ -246,7 +246,7 @@ fn test_contract_builder_build_futures_option_missing_contract_month() {
 }
 
 #[test]
-fn test_contract_builder_build_negative_strike() {
+fn contract_builder_build_negative_strike() {
     let err = ContractBuilder::option("AAPL", "SMART", "USD")
         .strike(-10.0)
         .right(OptionRight::Call)
@@ -260,7 +260,7 @@ fn test_contract_builder_build_negative_strike() {
 }
 
 #[test]
-fn test_contract_builder_combo_legs() {
+fn contract_builder_combo_legs() {
     let combo_legs = vec![
         ComboLeg {
             contract_id: 12345,
@@ -293,7 +293,7 @@ fn test_contract_builder_combo_legs() {
 }
 
 #[test]
-fn test_contract_builder_delta_neutral_contract() {
+fn contract_builder_delta_neutral_contract() {
     let delta_neutral = DeltaNeutralContract {
         contract_id: 12345,
         delta: 0.5,
@@ -313,7 +313,7 @@ fn test_contract_builder_delta_neutral_contract() {
 }
 
 #[test]
-fn test_contract_builder_chaining() {
+fn contract_builder_chaining() {
     // Test that builder methods can be chained fluently
     let contract = ContractBuilder::new()
         .symbol("TSLA")
@@ -340,7 +340,7 @@ fn test_contract_builder_chaining() {
 }
 
 #[test]
-fn test_contract_builder_defaults() {
+fn contract_builder_defaults() {
     // Test that unset fields get proper defaults
     let contract = ContractBuilder::new().symbol("TEST").build().unwrap();
 

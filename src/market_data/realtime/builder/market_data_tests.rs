@@ -13,7 +13,7 @@ mod sync_tests {
     use std::time::Duration;
 
     #[test]
-    fn test_market_data_builder_default() {
+    fn market_data_builder_default() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -24,7 +24,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_with_generic_ticks() {
+    fn market_data_builder_with_generic_ticks() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -39,7 +39,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_add_generic_tick_appends() {
+    fn market_data_builder_add_generic_tick_appends() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -61,7 +61,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_add_generic_tick_after_bulk() {
+    fn market_data_builder_add_generic_tick_after_bulk() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -83,7 +83,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_snapshot() {
+    fn market_data_builder_snapshot() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -98,7 +98,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_regulatory_snapshot() {
+    fn market_data_builder_regulatory_snapshot() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
@@ -113,7 +113,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_streaming_after_snapshot() {
+    fn market_data_builder_streaming_after_snapshot() {
         let (client, bus) = create_blocking_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -129,7 +129,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_market_data_builder_full_configuration() {
+    fn market_data_builder_full_configuration() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
@@ -146,7 +146,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_snapshot_once_collects_until_snapshot_end() {
+    fn snapshot_once_collects_until_snapshot_end() {
         let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
             proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
             proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
@@ -185,7 +185,7 @@ mod async_tests {
     use std::time::Duration;
 
     #[tokio::test]
-    async fn test_market_data_builder_async() {
+    async fn market_data_builder_async() {
         let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -202,7 +202,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_market_data_builder_add_generic_tick_async() {
+    async fn market_data_builder_add_generic_tick_async() {
         let (client, bus) = create_test_client();
         let contract = Contract::stock("AAPL").build();
 
@@ -225,7 +225,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_market_data_builder_regulatory_snapshot_async() {
+    async fn market_data_builder_regulatory_snapshot_async() {
         let (client, bus) = create_test_client_with_version(server_versions::REQ_SMART_COMPONENTS);
         let contract = Contract::stock("AAPL").build();
 
@@ -241,7 +241,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_snapshot_once_collects_until_snapshot_end() {
+    async fn snapshot_once_collects_until_snapshot_end() {
         let (client, bus) = create_test_client_with_ordered_proto_responses(vec![
             proto_response(IncomingMessages::TickPrice, tick_price().tick_type(4).price(185.50).encode_proto()),
             proto_response(IncomingMessages::TickSize, tick_size().tick_type(5).size(100.0).encode_proto()),
@@ -265,7 +265,7 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn test_snapshot_once_skips_cancel_after_completion() {
+    async fn snapshot_once_skips_cancel_after_completion() {
         // A completed snapshot must not emit a cancel on drop. The async drop
         // spawns the cancel send, so yield long enough for any spawned task to
         // run before asserting only the original request was sent.

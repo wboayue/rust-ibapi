@@ -2,7 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers;
 
 #[test]
-fn test_notice() {
+fn notice() {
     let message = helpers::proto_error_response(-1, 2107, "HMDS data farm connection is inactive.");
 
     let notice = Notice::from(&message);
@@ -13,7 +13,7 @@ fn test_notice() {
 }
 
 #[test]
-fn test_notice_edge_cases() {
+fn notice_edge_cases() {
     struct TestCase {
         name: &'static str,
         code: i32,
@@ -48,7 +48,7 @@ fn test_notice_edge_cases() {
 }
 
 #[test]
-fn test_notice_is_cancellation() {
+fn notice_is_cancellation() {
     // Code 202 = order cancelled
     let cancellation = Notice {
         request_id: None,
@@ -73,7 +73,7 @@ fn test_notice_is_cancellation() {
 }
 
 #[test]
-fn test_notice_is_warning() {
+fn notice_is_warning() {
     // Boundaries from the constant; 2176 and 2187 are the post-2169 codes IB
     // shipped that motivated widening the band (#805).
     let warning_codes = [*WARNING_CODE_RANGE.start(), 2107, 2119, 2150, 2176, 2187, *WARNING_CODE_RANGE.end()];
@@ -110,7 +110,7 @@ fn test_notice_is_warning() {
 }
 
 #[test]
-fn test_notice_classifies_order_message_warning_from_text() {
+fn notice_classifies_order_message_warning_from_text() {
     let warning = Notice {
         request_id: Some(402000003),
         code: 399,
@@ -133,7 +133,7 @@ fn test_notice_classifies_order_message_warning_from_text() {
 }
 
 #[test]
-fn test_notice_is_system_message() {
+fn notice_is_system_message() {
     // System message codes: 1100, 1101, 1102, 1300
     let system_codes = [
         (1100, "Connectivity between IB and TWS has been lost."),
@@ -169,7 +169,7 @@ fn test_notice_is_system_message() {
 }
 
 #[test]
-fn test_notice_is_informational() {
+fn notice_is_informational() {
     // Informational includes cancellations, warnings, and system messages
     let informational_codes = [202, 1100, 1101, 1102, 1300, *WARNING_CODE_RANGE.start(), 2107, *WARNING_CODE_RANGE.end()];
     for code in informational_codes {
@@ -188,7 +188,7 @@ fn test_notice_is_informational() {
 }
 
 #[test]
-fn test_notice_is_error() {
+fn notice_is_error() {
     // Code 200 = actual error
     let error = Notice {
         request_id: None,
@@ -235,7 +235,7 @@ fn test_notice_is_error() {
 }
 
 #[test]
-fn test_notice_is_order_rejection() {
+fn notice_is_order_rejection() {
     let start = *ORDER_REJECTION_CODE_RANGE.start();
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
@@ -247,7 +247,7 @@ fn test_notice_is_order_rejection() {
     }
 
     // Codes inside the band that an earlier category claims are covered by
-    // test_notice_category_predicates_are_disjoint.
+    // notice_category_predicates_are_disjoint.
     for code in [start - 1, end + 1, 100, *WARNING_CODE_RANGE.start(), SYSTEM_MESSAGE_CODES[0], 10000] {
         assert!(
             !helpers::test_notice(code, "").is_order_rejection(),
@@ -257,7 +257,7 @@ fn test_notice_is_order_rejection() {
 }
 
 #[test]
-fn test_notice_is_request_error() {
+fn notice_is_request_error() {
     for &code in REQUEST_ERROR_CODES {
         let notice = helpers::test_notice(code, "");
         assert!(notice.is_request_error(), "code {code} should be a request error");
@@ -278,7 +278,7 @@ fn test_notice_is_request_error() {
 /// Every category predicate is `category() == X`: at most one is true, and it
 /// names the category. `Error` has no predicate of its own.
 #[test]
-fn test_notice_category_predicates_are_disjoint() {
+fn notice_category_predicates_are_disjoint() {
     let messages = ["", "Order Message:\nWarning: outside RTH"];
     for code in -10..=11000 {
         for message in messages {
@@ -304,7 +304,7 @@ fn test_notice_category_predicates_are_disjoint() {
 }
 
 #[test]
-fn test_notice_category_partition() {
+fn notice_category_partition() {
     let cases: &[(i32, NoticeCategory)] = &[
         (ORDER_CANCELLED_CODE, NoticeCategory::Cancellation), // 202 — precedence over OrderRejection
         (0, NoticeCategory::Warning),                         // code-less frame: error_code absent on the wire
@@ -339,7 +339,7 @@ fn test_notice_category_partition() {
 }
 
 #[test]
-fn test_connectivity_status_from_code_table() {
+fn connectivity_status_from_code_table() {
     // Derive expectations from the code constants, per
     // docs/rules/testing/derive-from-constants.md: each farm-code set maps to its
     // status; everything else maps to None.
@@ -363,7 +363,7 @@ fn test_connectivity_status_from_code_table() {
 }
 
 #[test]
-fn test_connectivity_status_delegates() {
+fn connectivity_status_delegates() {
     // The accessor is a thin wrapper over from_code; assert delegation without
     // re-asserting the whole table.
     let code = FARM_BROKEN_CODES[0];
@@ -372,7 +372,7 @@ fn test_connectivity_status_delegates() {
 }
 
 #[test]
-fn test_connectivity_status_subset_of_warning() {
+fn connectivity_status_subset_of_warning() {
     // Additive contract: every farm code is still a Warning under the existing
     // partition — connectivity_status refines, it doesn't repartition.
     let all_farm = FARM_OK_CODES
@@ -393,7 +393,7 @@ fn test_connectivity_status_subset_of_warning() {
 }
 
 #[test]
-fn test_notice_data_advisory() {
+fn notice_data_advisory() {
     // Data advisories are informational: TWS proceeds with the request and
     // data follows, so they must not be classified as errors. Exact lists win
     // over ranges: every advisory categorises as DataAdvisory whatever band it
@@ -419,7 +419,7 @@ fn test_notice_data_advisory() {
 }
 
 #[test]
-fn test_handshake_synthetic_constants_pinned() {
+fn handshake_synthetic_constants_pinned() {
     // Hard pin the wire values — these are part of the public API and may not
     // shift silently. Negative codes never collide with TWS-emitted codes (TWS
     // uses 0+); -2 is taken by `ResponseMessage::is_shutdown`.
@@ -429,7 +429,7 @@ fn test_handshake_synthetic_constants_pinned() {
 }
 
 #[test]
-fn test_is_handshake_synthetic() {
+fn is_handshake_synthetic() {
     assert!(helpers::test_notice(HANDSHAKE_UNKNOWN_FRAME_CODE, "").is_handshake_synthetic());
     assert!(helpers::test_notice(HANDSHAKE_DECODE_FAILURE_CODE, "").is_handshake_synthetic());
 
@@ -455,7 +455,7 @@ fn test_is_handshake_synthetic() {
 }
 
 #[test]
-fn test_is_client_synthesized() {
+fn is_client_synthesized() {
     for code in [
         HANDSHAKE_UNKNOWN_FRAME_CODE,
         HANDSHAKE_DECODE_FAILURE_CODE,
@@ -486,7 +486,7 @@ fn test_is_client_synthesized() {
 }
 
 #[test]
-fn test_log_level_follows_category() {
+fn log_level_follows_category() {
     // Farm OK/inactive/connecting, 1102 (restored, data maintained) and the
     // cancellation confirmation: info.
     for code in FARM_OK_CODES
@@ -534,7 +534,7 @@ fn test_log_level_follows_category() {
 }
 
 #[test]
-fn test_unknown_message_type_notice_names_the_id_or_its_absence() {
+fn unknown_message_type_notice_names_the_id_or_its_absence() {
     let notice = unknown_message_type_notice(&ResponseMessage::from("9999\0"));
     assert_eq!(notice.code, UNKNOWN_MESSAGE_TYPE_CODE);
     assert!(notice.message.contains("message id 9999"), "{:?}", notice.message);

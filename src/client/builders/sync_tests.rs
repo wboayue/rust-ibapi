@@ -12,14 +12,14 @@ fn create_test_client() -> Client {
 }
 
 #[test]
-fn test_request_builder_new() {
+fn request_builder_new() {
     let client = create_test_client();
     let builder = RequestBuilder::new(&client);
     assert!(builder.request_id >= RequestId::nth(0));
 }
 
 #[test]
-fn test_request_builder_with_id() {
+fn request_builder_with_id() {
     let client = create_test_client();
     let request_id = RequestId::nth(42);
     let builder = RequestBuilder::with_id(&client, request_id);
@@ -27,14 +27,14 @@ fn test_request_builder_with_id() {
 }
 
 #[test]
-fn test_shared_request_builder_new() {
+fn shared_request_builder_new() {
     let client = create_test_client();
     let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
     assert_eq!(builder.message_type, OutgoingMessages::RequestMarketData);
 }
 
 #[test]
-fn test_subscription_builder_new() {
+fn subscription_builder_new() {
     let client = create_test_client();
     let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new(&client);
     // Builder created successfully
@@ -42,7 +42,7 @@ fn test_subscription_builder_new() {
 }
 
 #[test]
-fn test_client_request_builders_trait() {
+fn client_request_builders_trait() {
     let client = create_test_client();
 
     // Test request()
@@ -59,7 +59,7 @@ fn test_client_request_builders_trait() {
 }
 
 #[test]
-fn test_subscription_builder_ext_trait() {
+fn subscription_builder_ext_trait() {
     let client = create_test_client();
     let builder: SubscriptionBuilder<Bar> = client.subscription();
     // Builder created successfully through trait
@@ -67,7 +67,7 @@ fn test_subscription_builder_ext_trait() {
 }
 
 #[test]
-fn test_builder_patterns_table_driven() {
+fn builder_patterns_table_driven() {
     struct TestCase {
         name: &'static str,
         request_id: Option<i32>,

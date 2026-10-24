@@ -79,7 +79,7 @@ where
 }
 
 #[test]
-fn test_head_timestamp() {
+fn head_timestamp() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HeadTimestamp,
         head_timestamp_response().unix_timestamp(1678323335).encode_proto(),
@@ -110,7 +110,7 @@ fn test_head_timestamp() {
 }
 
 #[test]
-fn test_histogram_data_malformed_size_fails_the_request() {
+fn histogram_data_malformed_size_fails_the_request() {
     // End-to-end through the public API: a malformed size must fail the request
     // rather than silently decoding as 0 (issue #716).
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -127,7 +127,7 @@ fn test_histogram_data_malformed_size_fails_the_request() {
 }
 
 #[test]
-fn test_histogram_data() {
+fn histogram_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistogramData,
         histogram_data_response()
@@ -173,7 +173,7 @@ fn test_histogram_data() {
 }
 
 #[test]
-fn test_historical_data() {
+fn historical_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,
@@ -259,7 +259,7 @@ fn test_historical_data() {
 }
 
 #[test]
-fn test_historical_schedules() {
+fn historical_schedules() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalSchedule,
         historical_schedule_response().encode_proto(),
@@ -322,7 +322,7 @@ fn test_historical_schedules() {
 }
 
 #[test]
-fn test_historical_ticks_bid_ask() {
+fn historical_ticks_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -358,7 +358,7 @@ fn test_historical_ticks_bid_ask() {
 }
 
 #[test]
-fn test_historical_ticks_mid_point() {
+fn historical_ticks_mid_point() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -393,7 +393,7 @@ fn test_historical_ticks_mid_point() {
 }
 
 #[test]
-fn test_historical_ticks_trade() {
+fn historical_ticks_trade() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
@@ -429,7 +429,7 @@ fn test_historical_ticks_trade() {
 }
 
 #[test]
-fn test_historical_data_adjusted_last_validation() {
+fn historical_data_adjusted_last_validation() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -457,7 +457,7 @@ fn test_historical_data_adjusted_last_validation() {
 }
 
 #[test]
-fn test_historical_data_error_response() {
+fn historical_data_error_response() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
         9000,
         200,
@@ -486,7 +486,7 @@ fn test_historical_data_error_response() {
 /// served. Classified as an error it would end the request before
 /// `HistoricalData` arrived, and the caller would see no bars at all.
 #[test]
-fn test_historical_data_up_to_the_second_advisory_is_skipped() {
+fn historical_data_up_to_the_second_advisory_is_skipped() {
     let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
         proto_error_response(
             9000,
@@ -525,7 +525,7 @@ fn test_historical_data_up_to_the_second_advisory_is_skipped() {
 }
 
 #[test]
-fn test_historical_data_unexpected_response() {
+fn historical_data_unexpected_response() {
     // Respond with an unexpected message type (market data type).
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::MarketDataType,
@@ -557,7 +557,7 @@ fn test_historical_data_unexpected_response() {
 }
 
 #[test]
-fn test_tick_subscription_methods() {
+fn tick_subscription_methods() {
     // For now, we'll use a minimal test to ensure the methods exist and are called correctly
     // Testing the subscription iterators fully would require more complex setup with mocked messages
 
@@ -585,7 +585,7 @@ fn test_tick_subscription_methods() {
 }
 
 #[test]
-fn test_tick_subscription_buffer_and_iteration() {
+fn tick_subscription_buffer_and_iteration() {
     // First batch: 3 ticks, done = false. Second batch: 2 ticks, done = true.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
@@ -637,7 +637,7 @@ fn test_tick_subscription_buffer_and_iteration() {
 }
 
 #[test]
-fn test_tick_subscription_owned_iterator() {
+fn tick_subscription_owned_iterator() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
@@ -667,7 +667,7 @@ fn test_tick_subscription_owned_iterator() {
 }
 
 #[test]
-fn test_tick_subscription_bid_ask() {
+fn tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
@@ -703,7 +703,7 @@ fn test_tick_subscription_bid_ask() {
 }
 
 #[test]
-fn test_tick_subscription_midpoint() {
+fn tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
@@ -734,7 +734,7 @@ fn test_tick_subscription_midpoint() {
 }
 
 #[test]
-fn test_historical_data_time_zone_handling() {
+fn historical_data_time_zone_handling() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,
@@ -796,7 +796,7 @@ fn test_historical_data_time_zone_handling() {
 }
 
 #[test]
-fn test_historical_data_streaming_with_updates() {
+fn historical_data_streaming_with_updates() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,
@@ -878,7 +878,7 @@ fn test_historical_data_streaming_with_updates() {
 // it to the caller rather than swallowing it. The transport tests prove
 // delivery, not consumption — see blocking `matching_symbols` (#735).
 #[test]
-fn test_historical_data_streaming_error_response() {
+fn historical_data_streaming_error_response() {
     let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_error_response(
         9000,
         162,
@@ -899,7 +899,7 @@ fn test_historical_data_streaming_error_response() {
 }
 
 #[test]
-fn test_tick_subscription_sends_cancel_on_drop() {
+fn tick_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(100), &[]).unwrap();
@@ -915,7 +915,7 @@ fn test_tick_subscription_sends_cancel_on_drop() {
 }
 
 #[test]
-fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
+fn tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(101), &[]).unwrap();
@@ -934,7 +934,7 @@ fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
 }
 
 #[test]
-fn test_tick_subscription_drop_after_done_does_not_cancel() {
+fn tick_subscription_drop_after_done_does_not_cancel() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(102), &[]).unwrap();
@@ -954,7 +954,7 @@ fn test_tick_subscription_drop_after_done_does_not_cancel() {
 }
 
 #[test]
-fn test_tick_subscription_cancel_after_done_writes_nothing() {
+fn tick_subscription_cancel_after_done_writes_nothing() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let internal = message_bus.send_request(RequestId::nth(103), &[]).unwrap();
@@ -972,7 +972,7 @@ fn test_tick_subscription_cancel_after_done_writes_nothing() {
 }
 
 #[test]
-fn test_streaming_subscription_sends_cancel_on_drop() {
+fn streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -996,7 +996,7 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
 }
 
 #[test]
-fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
+fn streaming_subscription_cancel_prevents_duplicate_on_drop() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -1022,7 +1022,7 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
 }
 
 #[test]
-fn test_head_timestamp_unexpected_response() {
+fn head_timestamp_unexpected_response() {
     // 17 = HistoricalData — wrong type for head_timestamp (expects 88).
     assert_unexpected_response(
         server_versions::SIZE_RULES,
@@ -1032,7 +1032,7 @@ fn test_head_timestamp_unexpected_response() {
 }
 
 #[test]
-fn test_head_timestamp_end_of_stream() {
+fn head_timestamp_end_of_stream() {
     // Empty response set → channel closes → subscription.next() yields None.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -1044,7 +1044,7 @@ fn test_head_timestamp_end_of_stream() {
 }
 
 #[test]
-fn test_historical_data_with_end_message() {
+fn historical_data_with_end_message() {
     // start/end always come on the follow-on HistoricalDataEnd (108) frame at floor 210.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
@@ -1082,7 +1082,7 @@ fn test_historical_data_with_end_message() {
 }
 
 #[test]
-fn test_historical_data_end_of_stream_is_not_retried() {
+fn historical_data_end_of_stream_is_not_retried() {
     // Empty responses → channel closes immediately → subscription.next() yields
     // None. A closed stream is not a reset: it fails on the first attempt.
     let message_bus = Arc::new(MessageBusStub::default());
@@ -1101,7 +1101,7 @@ fn test_historical_data_end_of_stream_is_not_retried() {
 }
 
 #[test]
-fn test_historical_data_retries_a_connection_reset() {
+fn historical_data_retries_a_connection_reset() {
     let message_bus = Arc::new(
         MessageBusStub::with_ordered_responses(vec![
             proto_response(
@@ -1127,7 +1127,7 @@ fn test_historical_data_retries_a_connection_reset() {
 }
 
 #[test]
-fn test_historical_data_error_message_response() {
+fn historical_data_error_message_response() {
     // Type 4 = IncomingMessages::Error — exercises the explicit Error arm
     // (Err::from(message)), distinct from the UnexpectedResponse arm.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
@@ -1147,7 +1147,7 @@ fn test_historical_data_error_message_response() {
 }
 
 #[test]
-fn test_historical_schedules_ending_now() {
+fn historical_schedules_ending_now() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalSchedule,
         historical_schedule_response().encode_proto(),
@@ -1178,7 +1178,7 @@ fn test_historical_schedules_ending_now() {
 }
 
 #[test]
-fn test_historical_schedule_unexpected_response() {
+fn historical_schedule_unexpected_response() {
     assert_unexpected_response(
         server_versions::HISTORICAL_SCHEDULE,
         proto_response(IncomingMessages::HistoricalData, Vec::new()),
@@ -1187,7 +1187,7 @@ fn test_historical_schedule_unexpected_response() {
 }
 
 #[test]
-fn test_historical_schedule_end_of_stream() {
+fn historical_schedule_end_of_stream() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE);
     let result = client.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch();
@@ -1198,7 +1198,7 @@ fn test_historical_schedule_end_of_stream() {
 }
 
 #[test]
-fn test_cancel_historical_ticks() {
+fn cancel_historical_ticks() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
 
@@ -1209,12 +1209,12 @@ fn test_cancel_historical_ticks() {
 }
 
 #[test]
-fn test_cancel_historical_ticks_version_check() {
+fn cancel_historical_ticks_version_check() {
     assert_version_check_fails(Features::CANCEL_CONTRACT_DATA, |c| c.cancel_historical_ticks(9000));
 }
 
 #[test]
-fn test_histogram_data_empty_response_returns_empty_vec() {
+fn histogram_data_empty_response_returns_empty_vec() {
     // None on the first subscription.next() → returns an empty Vec.
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -1227,7 +1227,7 @@ fn test_histogram_data_empty_response_returns_empty_vec() {
 }
 
 #[test]
-fn test_tick_subscription_try_next_drains_buffer() {
+fn tick_subscription_try_next_drains_buffer() {
     // Pre-load a single batch with done=true so try_next() can drain without blocking.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
@@ -1255,7 +1255,7 @@ fn test_tick_subscription_try_next_drains_buffer() {
 }
 
 #[test]
-fn test_tick_subscription_next_timeout_drains_buffer() {
+fn tick_subscription_next_timeout_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
@@ -1286,7 +1286,7 @@ fn test_tick_subscription_next_timeout_drains_buffer() {
 }
 
 #[test]
-fn test_tick_subscription_error_surfaces_via_err_arm() {
+fn tick_subscription_error_surfaces_via_err_arm() {
     // #675 regression guard: a mid-stream RoutedItem::Error must surface through
     // the `Err` arm — NOT be swallowed as a silent `None` indistinguishable from
     // end-of-data. Subsequent calls return None (stream terminated).
@@ -1301,7 +1301,7 @@ fn test_tick_subscription_error_surfaces_via_err_arm() {
 }
 
 #[test]
-fn test_tick_subscription_notice_passes_through_then_data() {
+fn tick_subscription_notice_passes_through_then_data() {
     // A RoutedItem::Notice surfaces as SubscriptionItem::Notice (stream stays
     // open); a following tick batch is delivered after it.
     let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
@@ -1329,7 +1329,7 @@ fn test_tick_subscription_notice_passes_through_then_data() {
 }
 
 #[test]
-fn test_tick_subscription_iter_data_filters_notice_keeps_error() {
+fn tick_subscription_iter_data_filters_notice_keeps_error() {
     // iter_data() drops the Notice but still surfaces the terminal Error.
     let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
         RoutedItem::Notice(test_notice(2100, "warning")),
@@ -1346,7 +1346,7 @@ fn test_tick_subscription_iter_data_filters_notice_keeps_error() {
 }
 
 #[test]
-fn test_tick_subscription_none_when_channel_closes() {
+fn tick_subscription_none_when_channel_closes() {
     // Channel closes with no done=true → next_routed() yields None → next returns None.
     let (subscription, _signal_rx) = tick_sub_from_routed::<TickBidAsk>(vec![]); // empty + closed immediately
     assert!(subscription.next().is_none(), "closed channel → next_routed None → next returns None");
@@ -1354,7 +1354,7 @@ fn test_tick_subscription_none_when_channel_closes() {
 }
 
 #[test]
-fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
+fn tick_subscription_midpoint_try_iter_and_timeout_iter() {
     // Exercise try_next + next_timeout on the TickMidpoint monomorphization so
     // every (TickT × iterator) combination shows up in coverage data.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -1379,7 +1379,7 @@ fn test_tick_subscription_midpoint_try_iter_and_timeout_iter() {
 }
 
 #[test]
-fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
+fn tick_subscription_bid_ask_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
@@ -1400,7 +1400,7 @@ fn test_tick_subscription_bid_ask_try_iter_and_timeout_iter() {
 }
 
 #[test]
-fn test_tick_subscription_skips_unexpected_message_then_yields() {
+fn tick_subscription_skips_unexpected_message_then_yields() {
     // First response is HistoricalData — fill_buffer should silently skip it
     // (the `Some(Ok(message))` non-match arm) and loop to the next batch.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
@@ -1440,7 +1440,7 @@ fn fetch_daily(responses: Vec<crate::messages::ResponseMessage>) -> (Result<Hist
 
 /// A decoded batch alone cannot prove a finite request completed.
 #[test]
-fn test_historical_data_requires_end_after_a_batch() {
+fn historical_data_requires_end_after_a_batch() {
     for populated in [false, true] {
         let response = historical_data_response();
         let response = if populated {
@@ -1456,7 +1456,7 @@ fn test_historical_data_requires_end_after_a_batch() {
 
 /// A second data frame is not the completion marker.
 #[test]
-fn test_historical_data_requires_end_message_type() {
+fn historical_data_requires_end_message_type() {
     let response = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
     let (result, bus) = fetch_daily(vec![response.clone(), response]);
     assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
@@ -1465,7 +1465,7 @@ fn test_historical_data_requires_end_message_type() {
 
 /// An empty result is valid when the broker explicitly completes the request.
 #[test]
-fn test_historical_data_requires_end_accepts_completed_empty_batch() {
+fn historical_data_requires_end_accepts_completed_empty_batch() {
     let (result, bus) = fetch_daily(vec![
         proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
         proto_response(

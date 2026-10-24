@@ -18,7 +18,7 @@ mod account_summary_tests {
     use super::*;
 
     #[test]
-    fn test_decode_account_summary() {
+    fn decode_account_summary() {
         let message = proto_response(
             IncomingMessages::AccountSummary,
             account_summary().tag("NetLiquidation").value("123456.78").currency("USD").encode_proto(),
@@ -38,7 +38,7 @@ mod account_summary_tests {
     }
 
     #[test]
-    fn test_decode_account_summary_end() {
+    fn decode_account_summary_end() {
         let message = proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto());
 
         let result = AccountSummaryResult::decode(&test_context(), &message).unwrap();
@@ -47,13 +47,13 @@ mod account_summary_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
     }
 
     #[test]
-    fn test_cancel_message_no_request_id() {
+    fn cancel_message_no_request_id() {
         let result = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
@@ -61,7 +61,7 @@ mod account_summary_tests {
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(
             AccountSummaryResult::RESPONSE_MESSAGE_IDS,
             &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd]
@@ -74,7 +74,7 @@ mod pnl_tests {
     use crate::testdata::builders::accounts::pnl;
 
     #[test]
-    fn test_decode_pnl() {
+    fn decode_pnl() {
         let message = proto_response(
             IncomingMessages::PnL,
             pnl()
@@ -92,20 +92,20 @@ mod pnl_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = PnL::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnL);
     }
 
     #[test]
-    fn test_cancel_message_no_request_id() {
+    fn cancel_message_no_request_id() {
         let result = PnL::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(PnL::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnL]);
     }
 }
@@ -115,7 +115,7 @@ mod pnl_single_tests {
     use crate::testdata::builders::accounts::pnl_single;
 
     #[test]
-    fn test_decode_pnl_single() {
+    fn decode_pnl_single() {
         let message = proto_response(
             IncomingMessages::PnLSingle,
             pnl_single()
@@ -137,13 +137,13 @@ mod pnl_single_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = PnLSingle::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnLSingle);
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(PnLSingle::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnLSingle]);
     }
 }
@@ -154,7 +154,7 @@ mod position_update_tests {
     use crate::testdata::builders::ResponseProtoEncoder;
 
     #[test]
-    fn test_decode_position() {
+    fn decode_position() {
         let message = proto_response(
             IncomingMessages::Position,
             position()
@@ -181,7 +181,7 @@ mod position_update_tests {
     }
 
     #[test]
-    fn test_decode_position_end() {
+    fn decode_position_end() {
         let message = proto_response(IncomingMessages::PositionEnd, position_end().encode_proto());
 
         let result = PositionUpdate::decode(&test_context(), &message).unwrap();
@@ -190,13 +190,13 @@ mod position_update_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = PositionUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositions);
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(
             PositionUpdate::RESPONSE_MESSAGE_IDS,
             &[IncomingMessages::Position, IncomingMessages::PositionEnd]
@@ -209,7 +209,7 @@ mod position_update_multi_tests {
     use crate::testdata::builders::positions::{position_multi, position_multi_end};
 
     #[test]
-    fn test_decode_position_multi() {
+    fn decode_position_multi() {
         let message = proto_response(
             IncomingMessages::PositionMulti,
             position_multi()
@@ -237,7 +237,7 @@ mod position_update_multi_tests {
     }
 
     #[test]
-    fn test_decode_position_multi_end() {
+    fn decode_position_multi_end() {
         let message = proto_response(IncomingMessages::PositionMultiEnd, position_multi_end().encode_proto());
 
         let result = PositionUpdateMulti::decode(&test_context(), &message).unwrap();
@@ -246,20 +246,20 @@ mod position_update_multi_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositionsMulti);
     }
 
     #[test]
-    fn test_cancel_message_no_request_id() {
+    fn cancel_message_no_request_id() {
         let result = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(
             PositionUpdateMulti::RESPONSE_MESSAGE_IDS,
             &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd]
@@ -271,7 +271,7 @@ mod account_update_tests {
     use super::*;
 
     #[test]
-    fn test_decode_account_value() {
+    fn decode_account_value() {
         let message = proto_response(
             IncomingMessages::AccountValue,
             account_value()
@@ -296,7 +296,7 @@ mod account_update_tests {
     }
 
     #[test]
-    fn test_decode_portfolio_value() {
+    fn decode_portfolio_value() {
         let message = proto_response(IncomingMessages::PortfolioValue, portfolio_value().contract_id(12345).encode_proto());
 
         let result = AccountUpdate::decode(&test_context(), &message).unwrap();
@@ -314,7 +314,7 @@ mod account_update_tests {
     }
 
     #[test]
-    fn test_decode_update_time() {
+    fn decode_update_time() {
         let message = proto_response(
             IncomingMessages::AccountUpdateTime,
             account_update_time().timestamp("14:30:00").encode_proto(),
@@ -331,7 +331,7 @@ mod account_update_tests {
     }
 
     #[test]
-    fn test_decode_account_download_end() {
+    fn decode_account_download_end() {
         let message = proto_response(IncomingMessages::AccountDownloadEnd, account_download_end().encode_proto());
 
         let result = AccountUpdate::decode(&test_context(), &message).unwrap();
@@ -340,13 +340,13 @@ mod account_update_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = AccountUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(
             AccountUpdate::RESPONSE_MESSAGE_IDS,
             &[
@@ -363,7 +363,7 @@ mod account_update_multi_tests {
     use super::*;
 
     #[test]
-    fn test_decode_account_multi_value() {
+    fn decode_account_multi_value() {
         let message = proto_response(
             IncomingMessages::AccountUpdateMulti,
             account_update_multi()
@@ -389,7 +389,7 @@ mod account_update_multi_tests {
     }
 
     #[test]
-    fn test_decode_account_multi_end() {
+    fn decode_account_multi_end() {
         let message = proto_response(IncomingMessages::AccountUpdateMultiEnd, account_update_multi_end().encode_proto());
 
         let result = AccountUpdateMulti::decode(&test_context(), &message).unwrap();
@@ -398,13 +398,13 @@ mod account_update_multi_tests {
     }
 
     #[test]
-    fn test_cancel_message() {
+    fn cancel_message_works() {
         let bytes = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountUpdatesMulti);
     }
 
     #[test]
-    fn test_cancel_message_no_request_id() {
+    fn cancel_message_no_request_id() {
         let result = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, None, None);
 
         assert!(result.is_err());
@@ -412,7 +412,7 @@ mod account_update_multi_tests {
     }
 
     #[test]
-    fn test_response_message_ids() {
+    fn response_message_ids() {
         assert_eq!(
             AccountUpdateMulti::RESPONSE_MESSAGE_IDS,
             &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd]
@@ -425,7 +425,7 @@ mod edge_cases {
     use super::*;
 
     #[test]
-    fn test_empty_message_handling() {
+    fn empty_message_handling() {
         // Invalid message with missing fields
         let message = ResponseMessage::from("63\01\0123\0");
 
@@ -435,7 +435,7 @@ mod edge_cases {
     }
 
     #[test]
-    fn test_malformed_message() {
+    fn malformed_message() {
         // Create a message with missing fields (only has account, missing tag, value, currency)
         let message = ResponseMessage::from("63\01\0123\0DU1234567\0");
 
@@ -445,7 +445,7 @@ mod edge_cases {
     }
 
     #[test]
-    fn test_context_parameter_ignored() {
+    fn context_parameter_ignored() {
         // All cancel_message implementations should ignore the context parameter
         let context = DecoderContext::new(TEST_SERVER_VERSION).with_request_type(OutgoingMessages::RequestMarketData);
 
@@ -463,7 +463,7 @@ mod integration_tests {
     use super::*;
 
     #[test]
-    fn test_full_account_summary_flow() {
+    fn full_account_summary_flow() {
         let messages = vec![
             proto_response(
                 IncomingMessages::AccountSummary,
@@ -489,7 +489,7 @@ mod integration_tests {
     }
 
     #[test]
-    fn test_full_position_update_flow() {
+    fn full_position_update_flow() {
         use crate::testdata::builders::positions::{position, position_end};
         use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -519,7 +519,7 @@ mod integration_tests {
 }
 
 #[test]
-fn test_is_batch_end_marks_only_end_markers() {
+fn is_batch_end_marks_only_end_markers() {
     // (name, is_batch_end, expected)
     let cases = [
         ("summary End", AccountSummaryResult::End.is_batch_end(), true),

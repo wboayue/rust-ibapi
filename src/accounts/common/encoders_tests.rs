@@ -4,19 +4,19 @@ use crate::common::test_utils::helpers::assert_proto_msg_id;
 use crate::messages::OutgoingMessages;
 
 #[test]
-fn test_encode_request_positions() {
+fn encode_request_positions_works() {
     let bytes = super::encode_request_positions().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestPositions);
 }
 
 #[test]
-fn test_encode_cancel_positions() {
+fn encode_cancel_positions_works() {
     let bytes = super::encode_cancel_positions().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositions);
 }
 
 #[test]
-fn test_encode_request_account_summary() {
+fn encode_request_account_summary_works() {
     let group = AccountGroup("All".to_string());
     let bytes = super::encode_request_account_summary(3000, &group, &["AccountType", "NetLiquidation"]).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountSummary);
@@ -29,13 +29,13 @@ fn test_encode_request_account_summary() {
 }
 
 #[test]
-fn test_encode_cancel_account_summary() {
+fn encode_cancel_account_summary_works() {
     let bytes = super::encode_cancel_account_summary(3000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
 }
 
 #[test]
-fn test_encode_request_pnl() {
+fn encode_request_pnl_works() {
     use crate::accounts::types::ModelCode;
 
     let account = AccountId("DU123".to_string());
@@ -51,13 +51,13 @@ fn test_encode_request_pnl() {
 }
 
 #[test]
-fn test_encode_cancel_pnl() {
+fn encode_cancel_pnl_works() {
     let bytes = super::encode_cancel_pnl(123).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnL);
 }
 
 #[test]
-fn test_encode_request_pnl_single() {
+fn encode_request_pnl_single_works() {
     let account = AccountId("DU123".to_string());
     let cid = ContractId(1001);
     let bytes = super::encode_request_pnl_single(3000, &account, cid, None).unwrap();
@@ -72,13 +72,13 @@ fn test_encode_request_pnl_single() {
 }
 
 #[test]
-fn test_encode_cancel_pnl_single() {
+fn encode_cancel_pnl_single_works() {
     let bytes = super::encode_cancel_pnl_single(456).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnLSingle);
 }
 
 #[test]
-fn test_encode_request_positions_multi() {
+fn encode_request_positions_multi_works() {
     use crate::accounts::types::ModelCode;
 
     let account = AccountId("U1234567".to_string());
@@ -94,13 +94,13 @@ fn test_encode_request_positions_multi() {
 }
 
 #[test]
-fn test_encode_cancel_positions_multi() {
+fn encode_cancel_positions_multi_works() {
     let bytes = super::encode_cancel_positions_multi(9000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositionsMulti);
 }
 
 #[test]
-fn test_encode_request_account_updates() {
+fn encode_request_account_updates_works() {
     let account = AccountId("DU123".to_string());
     let bytes = super::encode_request_account_updates(true, &account).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
@@ -112,7 +112,7 @@ fn test_encode_request_account_updates() {
 }
 
 #[test]
-fn test_encode_cancel_account_updates() {
+fn encode_cancel_account_updates_works() {
     let bytes = super::encode_cancel_account_updates().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
 
@@ -123,7 +123,7 @@ fn test_encode_cancel_account_updates() {
 }
 
 #[test]
-fn test_encode_request_account_updates_multi() {
+fn encode_request_account_updates_multi_works() {
     use crate::accounts::types::ModelCode;
 
     let account = AccountId("DU1234567".to_string());
@@ -140,37 +140,37 @@ fn test_encode_request_account_updates_multi() {
 }
 
 #[test]
-fn test_encode_cancel_account_updates_multi() {
+fn encode_cancel_account_updates_multi_works() {
     let bytes = super::encode_cancel_account_updates_multi(9000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountUpdatesMulti);
 }
 
 #[test]
-fn test_encode_request_managed_accounts() {
+fn encode_request_managed_accounts_works() {
     let bytes = super::encode_request_managed_accounts().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestManagedAccounts);
 }
 
 #[test]
-fn test_encode_request_family_codes() {
+fn encode_request_family_codes_works() {
     let bytes = super::encode_request_family_codes().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestFamilyCodes);
 }
 
 #[test]
-fn test_encode_request_server_time() {
+fn encode_request_server_time_works() {
     let bytes = super::encode_request_server_time().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestCurrentTime);
 }
 
 #[test]
-fn test_encode_request_server_time_millis() {
+fn encode_request_server_time_millis_works() {
     let bytes = super::encode_request_server_time_millis().unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestCurrentTimeInMillis);
 }
 
 #[test]
-fn test_encode_request_soft_dollar_tiers() {
+fn encode_request_soft_dollar_tiers_works() {
     let bytes = super::encode_request_soft_dollar_tiers(3000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestSoftDollarTiers);
 
@@ -180,7 +180,7 @@ fn test_encode_request_soft_dollar_tiers() {
 }
 
 #[test]
-fn test_encode_request_user_info() {
+fn encode_request_user_info_works() {
     let bytes = super::encode_request_user_info(4000).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestUserInfo);
 
@@ -190,7 +190,7 @@ fn test_encode_request_user_info() {
 }
 
 #[test]
-fn test_encode_request_fa() {
+fn encode_request_fa_works() {
     let bytes = super::encode_request_fa(FaDataType::Groups).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::RequestFA);
 
@@ -200,7 +200,7 @@ fn test_encode_request_fa() {
 }
 
 #[test]
-fn test_encode_replace_fa() {
+fn encode_replace_fa_works() {
     let bytes = super::encode_replace_fa(5000, FaDataType::AccountAliases, "<xml/>").unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::ReplaceFA);
 
@@ -212,7 +212,7 @@ fn test_encode_replace_fa() {
 }
 
 #[test]
-fn test_encode_set_server_log_level() {
+fn encode_set_server_log_level_works() {
     let bytes = super::encode_set_server_log_level(ServerLogLevel::Info).unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::ChangeServerLog);
 
@@ -222,7 +222,7 @@ fn test_encode_set_server_log_level() {
 }
 
 #[test]
-fn test_encode_verify_request() {
+fn encode_verify_request_works() {
     let bytes = super::encode_verify_request("TestApi", "1.0").unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::VerifyRequest);
 
@@ -233,7 +233,7 @@ fn test_encode_verify_request() {
 }
 
 #[test]
-fn test_encode_verify_message() {
+fn encode_verify_message_works() {
     let bytes = super::encode_verify_message("challenge-data").unwrap();
     assert_proto_msg_id(&bytes, OutgoingMessages::VerifyMessage);
 

@@ -88,7 +88,7 @@ fn response_message_parse_test_cases() -> Vec<ResponseMessageParseTestCase> {
 }
 
 #[test]
-fn test_incoming_message_from_i32() {
+fn incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(1), IncomingMessages::TickPrice);
     assert_eq!(IncomingMessages::from(2), IncomingMessages::TickSize);
     assert_eq!(IncomingMessages::from(3), IncomingMessages::OrderStatus);
@@ -179,7 +179,7 @@ fn test_incoming_message_from_i32() {
 }
 
 #[test]
-fn test_routes_by_request_id() {
+fn routes_by_request_id_works() {
     // Sample of the allow-list — full registration check happens via
     // request_id() round-trips, not exhaustive enumeration here.
     assert!(routes_by_request_id(IncomingMessages::ContractData));
@@ -207,7 +207,7 @@ fn test_routes_by_request_id() {
 }
 
 #[test]
-fn test_text_request_id_field() {
+fn text_request_id_field_works() {
     // Field-1 messages (request_id immediately after message-type tag).
     assert_eq!(text_request_id_field(IncomingMessages::ContractData), Some(1));
     assert_eq!(text_request_id_field(IncomingMessages::BondContractData), Some(1));
@@ -229,7 +229,7 @@ fn test_text_request_id_field() {
 }
 
 #[test]
-fn test_encode_length() {
+fn encode_length_works() {
     for test_case in encode_length_test_cases() {
         let encoded = encode_length(test_case.message);
         assert_eq!(encoded.len(), test_case.expected_length, "Failed for message: {:?}", test_case.message);
@@ -247,7 +247,7 @@ fn test_encode_length() {
 }
 
 #[test]
-fn test_response_message_parsing() {
+fn response_message_parsing() {
     for test_case in response_message_parse_test_cases() {
         let mut message = ResponseMessage::from(test_case.input);
         message.i = test_case.field_index;
@@ -280,7 +280,7 @@ fn test_response_message_parsing() {
 }
 
 #[test]
-fn test_response_message_boundary_conditions() {
+fn response_message_boundary_conditions() {
     // Test reading past end of message
     let mut message = ResponseMessage::from("1\02\0");
     message.i = 3; // Beyond the last field
@@ -291,7 +291,7 @@ fn test_response_message_boundary_conditions() {
 }
 
 #[test]
-fn test_response_message_peek_operations() {
+fn response_message_peek_operations() {
     let message = ResponseMessage::from("1\0123\0abc\0456\0");
 
     // Test peek_int
@@ -335,7 +335,7 @@ fn proto_decodes_the_payload_as_the_requested_type() {
 }
 
 #[test]
-fn test_text_framed_message_has_no_order_id_or_execution_id() {
+fn text_framed_message_has_no_order_id_or_execution_id() {
     // order_id() and execution_id() require proto-framed payloads; a
     // text-framed message (raw_bytes = None) returns None regardless of the
     // historical text-layout field positions.
@@ -348,7 +348,7 @@ fn test_text_framed_message_has_no_order_id_or_execution_id() {
 }
 
 #[test]
-fn test_execution_id_protobuf_commissions_report() {
+fn execution_id_protobuf_commissions_report() {
     let bytes = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec-proto-1".into()),
         ..Default::default()
@@ -359,7 +359,7 @@ fn test_execution_id_protobuf_commissions_report() {
 }
 
 #[test]
-fn test_execution_id_protobuf_execution_data() {
+fn execution_id_protobuf_execution_data() {
     let bytes = crate::proto::ExecutionDetails {
         req_id: Some(7),
         contract: None,
@@ -374,13 +374,13 @@ fn test_execution_id_protobuf_execution_data() {
 }
 
 #[test]
-fn test_execution_id_protobuf_unknown_message_type_returns_none() {
+fn execution_id_protobuf_unknown_message_type_returns_none() {
     let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new());
     assert_eq!(message.execution_id(), None);
 }
 
 #[test]
-fn test_order_id_protobuf_open_order() {
+fn order_id_protobuf_open_order() {
     let bytes = crate::proto::OpenOrder {
         order_id: Some(42),
         ..Default::default()
@@ -391,7 +391,7 @@ fn test_order_id_protobuf_open_order() {
 }
 
 #[test]
-fn test_order_id_protobuf_order_status() {
+fn order_id_protobuf_order_status() {
     let bytes = crate::proto::OrderStatus {
         order_id: Some(99),
         status: Some("Filled".into()),
@@ -404,7 +404,7 @@ fn test_order_id_protobuf_order_status() {
 
 /// Each order frame's client id, read from where its proto carries it.
 #[test]
-fn test_client_id_of_each_order_frame() {
+fn client_id_of_each_order_frame() {
     use crate::proto;
     let full_order = proto::OpenOrder {
         order_id: Some(99),
@@ -490,7 +490,7 @@ fn test_client_id_of_each_order_frame() {
 }
 
 #[test]
-fn test_order_id_protobuf_execution_data_nested() {
+fn order_id_protobuf_execution_data_nested() {
     // ExecutionData carries order_id nested under `execution.order_id`,
     // not at proto tag 1 (which is req_id).
     let bytes = crate::proto::ExecutionDetails {
@@ -508,7 +508,7 @@ fn test_order_id_protobuf_execution_data_nested() {
 }
 
 #[test]
-fn test_order_id_protobuf_execution_data_end() {
+fn order_id_protobuf_execution_data_end() {
     // ExecutionDetailsEnd carries `req_id` at proto tag 1; order_id() returns
     // that value because routing keys this message family by order_id and the
     // proto schema overloads the field.
@@ -518,7 +518,7 @@ fn test_order_id_protobuf_execution_data_end() {
 }
 
 #[test]
-fn test_request_id_protobuf_tag1() {
+fn request_id_protobuf_tag1() {
     // HistoricalDataEnd-shaped envelope: just req_id at tag 1.
     let bytes = ProtoIdEnvelope { id: Some(314) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::HistoricalDataEnd as i32, bytes);
@@ -526,7 +526,7 @@ fn test_request_id_protobuf_tag1() {
 }
 
 #[test]
-fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
+fn request_id_protobuf_message_type_without_request_id_returns_none() {
     // ManagedAccounts is a shared message — not in routes_by_request_id, so
     // request_id() returns None even if the proto payload carried an int @ tag 1.
     let bytes = ProtoIdEnvelope { id: Some(42) }.encode_to_vec();
@@ -535,7 +535,7 @@ fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
 }
 
 #[test]
-fn test_request_message_index() {
+fn request_message_index() {
     let message = RequestMessage {
         fields: vec!["field0".to_string(), "field1".to_string(), "field2".to_string()],
     };
@@ -547,7 +547,7 @@ fn test_request_message_index() {
 
 #[test]
 #[should_panic]
-fn test_request_message_index_out_of_bounds() {
+fn request_message_index_out_of_bounds() {
     let message = RequestMessage {
         fields: vec!["field0".to_string()],
     };
@@ -556,7 +556,7 @@ fn test_request_message_index_out_of_bounds() {
 }
 
 #[test]
-fn test_response_message_is_shutdown() {
+fn response_message_is_shutdown() {
     let shutdown_message = ResponseMessage::from("-2\0");
     assert!(shutdown_message.is_shutdown());
 
@@ -565,7 +565,7 @@ fn test_response_message_is_shutdown() {
 }
 
 #[test]
-fn test_response_message_encode_decode_roundtrip() {
+fn response_message_encode_decode_roundtrip() {
     let original = ResponseMessage::from("1\0test\0123\03.456\0");
     let encoded = original.encode();
     let decoded = ResponseMessage::from(&encoded);
@@ -575,7 +575,7 @@ fn test_response_message_encode_decode_roundtrip() {
 
 // Tests for error conditions and edge cases
 #[test]
-fn test_response_message_next_methods_edge_cases() {
+fn response_message_next_methods_edge_cases() {
     struct TestCase {
         name: &'static str,
         input: &'static str,
@@ -639,7 +639,7 @@ fn test_response_message_next_methods_edge_cases() {
 }
 
 #[test]
-fn test_channel_mappings_completeness() {
+fn channel_mappings_completeness() {
     use super::shared_channel_configuration::CHANNEL_MAPPINGS;
 
     // Verify that each mapping has at least one response
@@ -678,7 +678,7 @@ fn test_channel_mappings_completeness() {
 }
 
 #[test]
-fn test_exclusive_one_shot_response_types() {
+fn exclusive_one_shot_response_types_works() {
     use super::shared_channel_configuration::exclusive_one_shot_response_types;
 
     let one_shot = exclusive_one_shot_response_types();
@@ -712,7 +712,7 @@ fn test_exclusive_one_shot_response_types() {
 }
 
 #[test]
-fn test_is_one_shot_request() {
+fn is_one_shot_request_works() {
     use super::shared_channel_configuration::{is_one_shot_request, CHANNEL_MAPPINGS};
 
     // Every mapping's flag round-trips through the request-side lookup.
@@ -730,7 +730,7 @@ fn test_is_one_shot_request() {
 }
 
 #[test]
-fn test_all_incoming_message_conversions() {
+fn all_incoming_message_conversions() {
     // Test boundary values and ensure all message types are covered
     let test_cases = vec![
         (0, IncomingMessages::NotValid),
@@ -751,7 +751,7 @@ fn test_all_incoming_message_conversions() {
 }
 
 #[test]
-fn test_outgoing_message_display() {
+fn outgoing_message_display() {
     // Test Display implementation for OutgoingMessages
     let test_cases = vec![
         (OutgoingMessages::RequestMarketData, "1"),
@@ -772,7 +772,7 @@ fn test_outgoing_message_display() {
 }
 
 #[test]
-fn test_encode_length_edge_cases() {
+fn encode_length_edge_cases() {
     // Test with various sizes
     let x255 = "x".repeat(255);
     let x256 = "x".repeat(256);
@@ -798,7 +798,7 @@ fn test_encode_length_edge_cases() {
 }
 
 #[test]
-fn test_response_message_access_patterns() {
+fn response_message_access_patterns() {
     let message = ResponseMessage::from("5\0123\0field2\0field3\0field4\0");
 
     // Test message_type
@@ -812,7 +812,7 @@ fn test_response_message_access_patterns() {
 }
 
 #[test]
-fn test_message_type_is_resolved_once_at_construction() {
+fn message_type_is_resolved_once_at_construction() {
     // Text framing keeps the discriminant in fields[0] — the handshake reader
     // walks the cursor from index 0 — and `kind` is derived from it.
     let text = ResponseMessage::from("5\0123\0");
@@ -837,7 +837,7 @@ fn test_message_type_is_resolved_once_at_construction() {
 }
 
 #[test]
-fn test_response_message_fields_modification() {
+fn response_message_fields_modification() {
     // Test that ResponseMessage handles field modification correctly
     let mut message = ResponseMessage::from("1\02\03\0");
     assert_eq!(message.fields.len(), 3);
@@ -853,7 +853,7 @@ fn test_response_message_fields_modification() {
 }
 
 #[test]
-fn test_incoming_messages_equality() {
+fn incoming_messages_equality() {
     // Test that IncomingMessages enum variants are properly comparable
     assert_eq!(IncomingMessages::TickPrice, IncomingMessages::TickPrice);
     assert_ne!(IncomingMessages::TickPrice, IncomingMessages::TickSize);
@@ -866,7 +866,7 @@ fn test_incoming_messages_equality() {
 
 // Additional tests for comprehensive FromStr coverage of OutgoingMessages
 #[test]
-fn test_outgoing_messages_from_str_comprehensive() {
+fn outgoing_messages_from_str_comprehensive() {
     use std::str::FromStr;
 
     // Table-driven test for all OutgoingMessages variants
@@ -972,7 +972,7 @@ fn test_outgoing_messages_from_str_comprehensive() {
 }
 
 #[test]
-fn test_outgoing_messages_try_from_round_trips() {
+fn outgoing_messages_try_from_round_trips() {
     for id in -1..=120 {
         if let Ok(message) = OutgoingMessages::try_from(id) {
             assert_eq!(message as i32, id);
@@ -981,7 +981,7 @@ fn test_outgoing_messages_try_from_round_trips() {
 }
 
 #[test]
-fn test_outgoing_messages_is_cancel() {
+fn outgoing_messages_is_cancel() {
     // Oracle independent of the match: the variant name.
     for message in (0..=120).filter_map(|id| OutgoingMessages::try_from(id).ok()) {
         let name = format!("{message:?}");
@@ -991,7 +991,7 @@ fn test_outgoing_messages_is_cancel() {
 }
 
 #[test]
-fn test_outgoing_message_type_of_frame() {
+fn outgoing_message_type_of_frame() {
     let proto = encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, b"payload");
     assert_eq!(outgoing_message_type(&proto), Some(OutgoingMessages::CancelMarketData));
 
@@ -1003,7 +1003,7 @@ fn test_outgoing_message_type_of_frame() {
 }
 
 #[test]
-fn test_routes_by_request_id_comprehensive() {
+fn routes_by_request_id_comprehensive() {
     // Confirm the allow-list covers a representative slice across domains.
     assert!(routes_by_request_id(IncomingMessages::MarketDepthL2));
     assert!(routes_by_request_id(IncomingMessages::TickReqParams));
@@ -1016,14 +1016,14 @@ fn test_routes_by_request_id_comprehensive() {
 }
 
 #[test]
-fn test_response_message_error_paths() {
+fn response_message_error_paths() {
     // Test empty message type detection
     let empty_msg = ResponseMessage::default();
     assert_eq!(empty_msg.message_type(), IncomingMessages::NotValid);
 }
 
 #[test]
-fn test_response_message_special_double_values() {
+fn response_message_special_double_values() {
     // Test parsing empty as 0.0
     let mut msg = ResponseMessage::from("test\0\0");
     msg.i = 1;
@@ -1049,7 +1049,7 @@ mod from_str_tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_outgoing_messages_from_str() {
+    fn outgoing_messages_from_str() {
         // Test some common message types
         assert_eq!(OutgoingMessages::from_str("1").unwrap(), OutgoingMessages::RequestMarketData);
         assert_eq!(OutgoingMessages::from_str("17").unwrap(), OutgoingMessages::RequestManagedAccounts);
@@ -1063,7 +1063,7 @@ mod from_str_tests {
     }
 
     #[test]
-    fn test_outgoing_messages_roundtrip() {
+    fn outgoing_messages_roundtrip() {
         // Test that we can convert to string and back
         let msg = OutgoingMessages::RequestCurrentTime;
         let as_string = msg.to_string();
@@ -1078,7 +1078,7 @@ mod from_str_tests {
     }
 
     #[test]
-    fn test_incoming_messages_from_str() {
+    fn incoming_messages_from_str() {
         // Test some common message types
         assert_eq!(IncomingMessages::from_str("4").unwrap(), IncomingMessages::Error);
         assert_eq!(IncomingMessages::from_str("15").unwrap(), IncomingMessages::ManagedAccounts);
@@ -1097,7 +1097,7 @@ mod from_str_tests {
     }
 
     #[test]
-    fn test_incoming_messages_roundtrip() {
+    fn incoming_messages_roundtrip() {
         // Test with CurrentTime message
         let n = 49;
         let msg = IncomingMessages::from(n);

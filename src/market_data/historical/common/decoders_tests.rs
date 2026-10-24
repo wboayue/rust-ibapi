@@ -18,7 +18,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_decode_historical_data_proto() {
+fn decode_historical_data_proto_works() {
     let proto_msg = crate::proto::HistoricalData {
         req_id: Some(1),
         historical_data_bars: vec![
@@ -63,7 +63,7 @@ fn test_decode_historical_data_proto() {
 }
 
 #[test]
-fn test_decode_historical_ticks_last_proto() {
+fn decode_historical_ticks_last_proto_works() {
     let proto_msg = crate::proto::HistoricalTicksLast {
         req_id: Some(1),
         historical_ticks_last: vec![
@@ -113,7 +113,7 @@ fn test_decode_historical_ticks_last_proto() {
 }
 
 #[test]
-fn test_decode_head_timestamp_proto() {
+fn decode_head_timestamp_proto_works() {
     let proto_msg = crate::proto::HeadTimestamp {
         req_id: Some(1),
         head_timestamp: Some("1609459200".into()),
@@ -124,7 +124,7 @@ fn test_decode_head_timestamp_proto() {
 }
 
 #[test]
-fn test_decode_historical_ticks_proto() {
+fn decode_historical_ticks_proto_works() {
     let proto_msg = crate::proto::HistoricalTicks {
         req_id: Some(1),
         historical_ticks: vec![
@@ -151,7 +151,7 @@ fn test_decode_historical_ticks_proto() {
 }
 
 #[test]
-fn test_decode_historical_ticks_bid_ask_proto() {
+fn decode_historical_ticks_bid_ask_proto_works() {
     let proto_msg = crate::proto::HistoricalTicksBidAsk {
         req_id: Some(1),
         historical_ticks_bid_ask: vec![crate::proto::HistoricalTickBidAsk {
@@ -181,7 +181,7 @@ fn test_decode_historical_ticks_bid_ask_proto() {
 }
 
 #[test]
-fn test_decode_histogram_data_proto() {
+fn decode_histogram_data_proto_works() {
     let proto_msg = crate::proto::HistogramData {
         req_id: Some(1),
         histogram_data_entries: vec![
@@ -205,7 +205,7 @@ fn test_decode_histogram_data_proto() {
 }
 
 #[test]
-fn test_decode_historical_data_end_proto() {
+fn decode_historical_data_end_proto_works() {
     // Instrument-timezone rendering, distinct start/end.
     let proto_msg = crate::proto::HistoricalDataEnd {
         req_id: Some(1),
@@ -220,7 +220,7 @@ fn test_decode_historical_data_end_proto() {
 }
 
 #[test]
-fn test_decode_historical_data_end_accepted_renderings() {
+fn decode_historical_data_end_accepted_renderings() {
     // The two wire-verified renderings, selected by the gateway's timezone setting:
     // instrument timezone (wall clock + zone, zone may contain spaces) and the UTC
     // format captured from a 10.50 gateway in #808.
@@ -246,7 +246,7 @@ fn test_decode_historical_data_end_accepted_renderings() {
 }
 
 #[test]
-fn test_decode_historical_data_end_rejected_renderings() {
+fn decode_historical_data_end_rejected_renderings() {
     // Unverified shapes fail loudly instead of being resolved in a guessed zone
     // (#904). A malformed clock is a parse error;
     // only a well-formed clock with an unknown zone is UnsupportedTimeZone, and the
@@ -277,7 +277,7 @@ fn test_decode_historical_data_end_rejected_renderings() {
 }
 
 #[test]
-fn test_decode_historical_schedule_proto() {
+fn decode_historical_schedule_proto_works() {
     let proto_msg = crate::proto::HistoricalSchedule {
         req_id: Some(1),
         start_date_time: Some("20260101-09:30:00".into()),
@@ -297,7 +297,7 @@ fn test_decode_historical_schedule_proto() {
 }
 
 #[test]
-fn test_decode_historical_schedule_unknown_timezone_errors() {
+fn decode_historical_schedule_unknown_timezone_errors() {
     // Gateway sends an unmappable timezone — must surface as Error::UnsupportedTimeZone.
     let proto_msg = crate::proto::HistoricalSchedule {
         req_id: Some(1),
@@ -319,7 +319,7 @@ fn test_decode_historical_schedule_unknown_timezone_errors() {
 }
 
 #[test]
-fn test_decode_historical_data_update_proto() {
+fn decode_historical_data_update_proto_works() {
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
@@ -346,7 +346,7 @@ fn test_decode_historical_data_update_proto() {
 }
 
 #[test]
-fn test_decode_historical_data_update_proto_missing_bar_is_parse_error() {
+fn decode_historical_data_update_proto_missing_bar_is_parse_error() {
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: None,
@@ -362,7 +362,7 @@ fn test_decode_historical_data_update_proto_missing_bar_is_parse_error() {
 /// A bar without a parsable `date` is a parse error on both decode paths.
 /// Previously it decoded as a bar dated `OffsetDateTime::UNIX_EPOCH`.
 #[test]
-fn test_decode_historical_data_bar_rejects_missing_or_malformed_date() {
+fn decode_historical_data_bar_rejects_missing_or_malformed_date() {
     let bar = |date: Option<&str>| crate::proto::HistoricalDataBar {
         date: date.map(Into::into),
         ..Default::default()
@@ -397,7 +397,7 @@ fn test_decode_historical_data_bar_rejects_missing_or_malformed_date() {
 }
 
 #[test]
-fn test_decode_historical_data_update_proto_missing_count_is_minus_one() {
+fn decode_historical_data_update_proto_missing_count_is_minus_one() {
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
@@ -416,7 +416,7 @@ fn test_decode_historical_data_update_proto_missing_count_is_minus_one() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_decode_historical_data_rejects_text_framing() {
+fn decode_historical_data_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalData,
         "17\09000\01\020230413\0182.94\0186.50\0180.94\0185.90\0948837.22\0184.869\0324891\0",
@@ -425,7 +425,7 @@ fn test_decode_historical_data_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_historical_data_end_rejects_text_framing() {
+fn decode_historical_data_end_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalDataEnd,
         "108\09000\020230315 09:30:00 UTC\020230315 10:30:00 UTC\0",
@@ -434,7 +434,7 @@ fn test_decode_historical_data_end_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_historical_data_update_rejects_text_framing() {
+fn decode_historical_data_update_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalDataUpdate,
         "90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0150\0",
@@ -443,7 +443,7 @@ fn test_decode_historical_data_update_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_historical_ticks_mid_point_rejects_text_framing() {
+fn decode_historical_ticks_mid_point_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalTick,
         "96\09000\01\01681133398\00\091.36\00\01\0",
@@ -452,7 +452,7 @@ fn test_decode_historical_ticks_mid_point_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_historical_ticks_bid_ask_rejects_text_framing() {
+fn decode_historical_ticks_bid_ask_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalTickBidAsk,
         "97\09000\01\01681133399\00\011.63\011.83\02800\0100\01\0",
@@ -461,7 +461,7 @@ fn test_decode_historical_ticks_bid_ask_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_historical_ticks_last_rejects_text_framing() {
+fn decode_historical_ticks_last_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::HistoricalTickLast,
         "98\09000\01\01681133400\00\011.63\024547\0ISLAND\0 O X\01\0",
@@ -492,12 +492,12 @@ fn historical_data_proto(volume: &str) -> crate::proto::HistoricalData {
 }
 
 #[test]
-fn test_decode_historical_data_proto_rejects_malformed_volume() {
+fn decode_historical_data_proto_rejects_malformed_volume() {
     assert_decimal_parse_error(super::decode_historical_data_proto(historical_data_proto("abc")), "abc");
 }
 
 #[test]
-fn test_decode_historical_data_proto_preserves_fractional_volume() {
+fn decode_historical_data_proto_preserves_fractional_volume() {
     let p = historical_data_response()
         .bar(
             historical_data_daily_bar("20230101")
@@ -513,7 +513,7 @@ fn test_decode_historical_data_proto_preserves_fractional_volume() {
 }
 
 #[test]
-fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
+fn decode_historical_data_update_proto_rejects_malformed_volume() {
     let p = crate::proto::HistoricalDataUpdate {
         req_id: Some(9000),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
@@ -532,7 +532,7 @@ fn test_decode_historical_data_update_proto_rejects_malformed_volume() {
 // value of "0.5" failed `parse::<i32>()` and silently decoded as 0.
 
 #[test]
-fn test_decode_historical_ticks_proto_preserves_fractional_size() {
+fn decode_historical_ticks_proto_preserves_fractional_size() {
     let p = historical_ticks_response()
         .tick(historical_tick_mid(1_681_133_400, 150.0, 0.5))
         .to_proto();
@@ -542,7 +542,7 @@ fn test_decode_historical_ticks_proto_preserves_fractional_size() {
 }
 
 #[test]
-fn test_decode_historical_ticks_last_proto_preserves_fractional_size() {
+fn decode_historical_ticks_last_proto_preserves_fractional_size() {
     let p = historical_ticks_last_response()
         .tick(historical_tick_last(1_681_133_400, 150.0, 0.25, "NYSE"))
         .to_proto();
@@ -552,7 +552,7 @@ fn test_decode_historical_ticks_last_proto_preserves_fractional_size() {
 }
 
 #[test]
-fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
+fn decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
     let p = historical_ticks_bid_ask_response()
         .tick(historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.5, 0.75))
         .to_proto();
@@ -563,7 +563,7 @@ fn test_decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
 }
 
 #[test]
-fn test_decode_histogram_data_proto_preserves_fractional_size() {
+fn decode_histogram_data_proto_preserves_fractional_size() {
     let p = histogram_data_response().entry(histogram_entry(125.5, 0.5)).to_proto();
 
     let entries = super::decode_histogram_data_proto(p).unwrap();
@@ -573,7 +573,7 @@ fn test_decode_histogram_data_proto_preserves_fractional_size() {
 // --- malformed sizes ---
 
 #[test]
-fn test_decode_histogram_data_proto_rejects_malformed_size() {
+fn decode_histogram_data_proto_rejects_malformed_size() {
     let p = histogram_data_response()
         .entry(histogram_entry(125.5, 0.0).size_wire(Some("abc")))
         .to_proto();
@@ -582,7 +582,7 @@ fn test_decode_histogram_data_proto_rejects_malformed_size() {
 }
 
 #[test]
-fn test_decode_historical_ticks_proto_rejects_malformed_size() {
+fn decode_historical_ticks_proto_rejects_malformed_size() {
     let p = historical_ticks_response()
         .tick(historical_tick_mid(1_681_133_400, 150.0, 0.0).size_wire(Some("abc")))
         .to_proto();
@@ -595,7 +595,7 @@ fn test_decode_historical_ticks_proto_rejects_malformed_size() {
 /// panic in `OffsetResult::unwrap`. The fold/gap policy itself is pinned in
 /// `common::timezone` tests; this checks both entry points reach it.
 #[test]
-fn test_window_edge_in_dst_fold_or_gap_decodes() {
+fn window_edge_in_dst_fold_or_gap_decodes() {
     // The live input from #790 (2026-08-29 04:40Z, NVDA daily bars, 300 days,
     // keepUpToDate): IB echoed the window start 300 days back, inside the
     // 2025-11-02 fold hour.

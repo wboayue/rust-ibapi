@@ -88,7 +88,7 @@ pub(crate) fn empty_on_end_of_stream<R: Default>(error: Error) -> Result<R, Erro
 /// but not because a narrow there is redundant. `decode` still owes its
 /// `_ => Err(unexpected_response(..))` backstop, and a single-type decoder has
 /// no match to hang one on, so `message.expect_type(..)?` *is* its backstop:
-/// drop it and `test_response_message_ids_match_decode_arms` reads the decoder
+/// drop it and `response_message_ids_match_decode_arms` reads the decoder
 /// as claiming an arm for every message type. What `expect_proto` would add
 /// there is the payload decode, which `decode` already owns.
 pub(crate) fn expect_proto<P, R>(decode: impl Fn(P) -> Result<R, Error>) -> impl Fn(&ResponseMessage) -> Result<R, Error>

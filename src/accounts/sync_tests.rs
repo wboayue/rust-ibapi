@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[test]
-fn test_pnl() {
+fn pnl() {
     let (client, message_bus) = create_blocking_test_client();
 
     let account = AccountId(TEST_ACCOUNT.to_string());
@@ -40,7 +40,7 @@ fn test_pnl() {
 }
 
 #[test]
-fn test_pnl_single() {
+fn pnl_single() {
     let (client, message_bus) = create_blocking_test_client();
 
     let account = AccountId(TEST_ACCOUNT.to_string());
@@ -57,7 +57,7 @@ fn test_pnl_single() {
 }
 
 #[test]
-fn test_positions() {
+fn positions() {
     use crate::accounts::PositionUpdate;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
@@ -90,7 +90,7 @@ fn test_positions() {
 }
 
 #[test]
-fn test_positions_multi() {
+fn positions_multi() {
     use crate::accounts::PositionUpdateMulti;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
@@ -134,7 +134,7 @@ fn test_positions_multi() {
 }
 
 #[test]
-fn test_account_summary() {
+fn account_summary_works() {
     use crate::accounts::AccountSummaryResult;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
@@ -180,7 +180,7 @@ fn test_account_summary() {
 }
 
 #[test]
-fn test_managed_accounts() {
+fn managed_accounts_works() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::ManagedAccounts,
         managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_proto(),
@@ -204,7 +204,7 @@ fn test_managed_accounts() {
 }
 
 #[test]
-fn test_managed_accounts_retry() {
+fn managed_accounts_retry() {
     // Test that managed_accounts retries on connection reset.
     // Since our stub doesn't simulate actual connection resets, we exercise the happy path.
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
@@ -220,7 +220,7 @@ fn test_managed_accounts_retry() {
 }
 
 #[test]
-fn test_server_time() {
+fn server_time() {
     use time::macros::datetime;
 
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
@@ -247,7 +247,7 @@ fn test_server_time() {
 }
 
 #[test]
-fn test_account_updates() {
+fn account_updates() {
     use crate::accounts::AccountUpdate;
 
     let account_name = AccountId(TEST_ACCOUNT.to_string());
@@ -285,7 +285,7 @@ fn test_account_updates() {
 }
 
 #[test]
-fn test_family_codes() {
+fn family_codes_works() {
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
@@ -338,7 +338,7 @@ fn test_family_codes() {
 }
 
 #[test]
-fn test_account_updates_multi() {
+fn account_updates_multi() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountUpdateMulti,
@@ -400,7 +400,7 @@ fn test_account_updates_multi() {
 // Additional comprehensive tests for sync module
 
 #[test]
-fn test_account_summary_comprehensive() {
+fn account_summary_comprehensive() {
     use super::common::test_tables::account_summary_tag_test_cases;
     use crate::accounts::AccountSummaryResult;
 
@@ -464,7 +464,7 @@ fn test_account_summary_comprehensive() {
 }
 
 #[test]
-fn test_pnl_comprehensive() {
+fn pnl_comprehensive() {
     use super::common::test_tables::pnl_parameter_test_cases;
 
     let test_cases = pnl_parameter_test_cases();
@@ -489,7 +489,7 @@ fn test_pnl_comprehensive() {
 }
 
 #[test]
-fn test_pnl_single_edge_cases() {
+fn pnl_single_edge_cases() {
     use super::common::test_tables::contract_id_test_cases;
 
     let test_cases = contract_id_test_cases();
@@ -513,7 +513,7 @@ fn test_pnl_single_edge_cases() {
 }
 
 #[test]
-fn test_positions_multi_parameter_combinations() {
+fn positions_multi_parameter_combinations() {
     use super::common::test_tables::positions_multi_parameter_test_cases;
 
     let test_cases = positions_multi_parameter_test_cases();
@@ -543,7 +543,7 @@ fn test_positions_multi_parameter_combinations() {
 }
 
 #[test]
-fn test_subscription_lifecycle() {
+fn subscription_lifecycle() {
     use super::common::test_tables::{subscription_lifecycle_test_cases, SubscriptionType};
 
     let test_cases = subscription_lifecycle_test_cases();
@@ -603,7 +603,7 @@ fn test_subscription_lifecycle() {
 }
 
 #[test]
-fn test_account_updates_stream_handling() {
+fn account_updates_stream_handling() {
     use crate::accounts::AccountUpdate;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
@@ -637,7 +637,7 @@ fn test_account_updates_stream_handling() {
 }
 
 #[test]
-fn test_server_time_millis() {
+fn server_time_millis() {
     use time::macros::datetime;
 
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -653,7 +653,7 @@ fn test_server_time_millis() {
 }
 
 #[test]
-fn test_server_time_millis_no_response() {
+fn server_time_millis_no_response() {
     let (client, message_bus) = create_blocking_test_client_with_version(server_versions::CURRENT_TIME_IN_MILLIS);
 
     let result = client.server_time_millis();
@@ -666,7 +666,7 @@ fn test_server_time_millis_no_response() {
 }
 
 #[test]
-fn test_soft_dollar_tiers() {
+fn soft_dollar_tiers_works() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::SoftDollarTier,
         soft_dollar_tiers()
@@ -686,7 +686,7 @@ fn test_soft_dollar_tiers() {
 }
 
 #[test]
-fn test_user_info() {
+fn user_info_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::UserInfo,
         user_info().request_id(TEST_REQ_ID_FIRST).white_branding_id("brand-xyz").encode_proto(),
@@ -700,7 +700,7 @@ fn test_user_info() {
 }
 
 #[test]
-fn test_request_fa() {
+fn request_fa() {
     use crate::accounts::FaDataType;
 
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
@@ -716,7 +716,7 @@ fn test_request_fa() {
 }
 
 #[test]
-fn test_request_fa_skips_another_datasets_frame() {
+fn request_fa_skips_another_datasets_frame() {
     use crate::accounts::FaDataType;
 
     // A concurrent request_fa(AccountAliases) was answered first; every
@@ -742,7 +742,7 @@ fn test_request_fa_skips_another_datasets_frame() {
 }
 
 #[test]
-fn test_replace_fa() {
+fn replace_fa() {
     use crate::accounts::FaDataType;
 
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
@@ -764,7 +764,7 @@ fn test_replace_fa() {
 }
 
 #[test]
-fn test_set_server_log_level() {
+fn set_server_log_level() {
     use crate::accounts::ServerLogLevel;
 
     let (client, message_bus) = create_blocking_test_client();
@@ -774,7 +774,7 @@ fn test_set_server_log_level() {
 }
 
 #[test]
-fn test_verify_request() {
+fn verify_request_works() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyMessageApi,
         verify_message_api().api_data("challenge-payload").encode_proto(),
@@ -787,7 +787,7 @@ fn test_verify_request() {
 }
 
 #[test]
-fn test_verify_message() {
+fn verify_message() {
     let (client, message_bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::VerifyCompleted,
         verify_completed().successful(true).error_text("").encode_proto(),
@@ -839,7 +839,7 @@ fn values(snapshot: &AccountSummarySnapshot) -> Vec<(&str, &str, &str)> {
 }
 
 #[test]
-fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
+fn account_summary_snapshots_emit_at_end_then_after_quiet_period() {
     let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -861,7 +861,7 @@ fn test_account_summary_snapshots_emit_at_end_then_after_quiet_period() {
 }
 
 #[test]
-fn test_account_summary_snapshots_end_when_subscription_closes() {
+fn account_summary_snapshots_end_when_subscription_closes() {
     let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -874,7 +874,7 @@ fn test_account_summary_snapshots_end_when_subscription_closes() {
 }
 
 #[test]
-fn test_account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_skip_end_without_changes() {
+fn account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_skip_end_without_changes() {
     let (mut snapshots, tx) = snapshots_over_channel(Duration::from_millis(50));
 
     tx.send(summary_frame("NetLiquidation", "100.0", "USD")).unwrap();
@@ -898,7 +898,7 @@ fn test_account_summary_snapshots_wait_for_end_on_slow_initial_rows_and_skip_end
 }
 
 #[test]
-fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
+fn client_account_summary_snapshots_sends_request_and_yields_snapshot_at_end() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountSummary,
@@ -930,7 +930,7 @@ fn test_client_account_summary_snapshots_sends_request_and_yields_snapshot_at_en
 }
 
 #[test]
-fn test_account_summary_snapshots_cancel_sends_cancel_and_ends() {
+fn account_summary_snapshots_cancel_sends_cancel_and_ends() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::AccountSummary,

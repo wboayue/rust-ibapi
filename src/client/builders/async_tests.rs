@@ -12,14 +12,14 @@ fn create_test_client() -> Client {
 }
 
 #[tokio::test]
-async fn test_request_builder_new() {
+async fn request_builder_new() {
     let client = create_test_client();
     let builder = RequestBuilder::new(&client);
     assert!(builder.request_id >= RequestId::nth(0));
 }
 
 #[tokio::test]
-async fn test_request_builder_with_id() {
+async fn request_builder_with_id() {
     let client = create_test_client();
     let request_id = RequestId::nth(42);
     let builder = RequestBuilder::with_id(&client, request_id);
@@ -27,14 +27,14 @@ async fn test_request_builder_with_id() {
 }
 
 #[tokio::test]
-async fn test_shared_request_builder_new() {
+async fn shared_request_builder_new() {
     let client = create_test_client();
     let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
     assert_eq!(builder.message_type, OutgoingMessages::RequestMarketData);
 }
 
 #[tokio::test]
-async fn test_subscription_builder_new() {
+async fn subscription_builder_new() {
     let client = create_test_client();
     let context = client.decoder_context();
     let message_bus = client.message_bus.clone();
@@ -44,7 +44,7 @@ async fn test_subscription_builder_new() {
 }
 
 #[tokio::test]
-async fn test_client_request_builders_trait() {
+async fn client_request_builders_trait() {
     let client = create_test_client();
 
     // Test request()
@@ -61,7 +61,7 @@ async fn test_client_request_builders_trait() {
 }
 
 #[tokio::test]
-async fn test_subscription_builder_ext_trait() {
+async fn subscription_builder_ext_trait() {
     let client = create_test_client();
     let builder: SubscriptionBuilder<Bar> = client.subscription();
     // Builder created successfully through trait
@@ -69,7 +69,7 @@ async fn test_subscription_builder_ext_trait() {
 }
 
 #[tokio::test]
-async fn test_builder_patterns_table_driven() {
+async fn builder_patterns_table_driven() {
     struct TestCase {
         name: &'static str,
         request_id: Option<i32>,
@@ -115,7 +115,7 @@ async fn test_builder_patterns_table_driven() {
 }
 
 #[tokio::test]
-async fn test_request_builder_send_raw() {
+async fn request_builder_send_raw() {
     let client = create_test_client();
 
     let builder = client.request_with_id(RequestId::nth(123));
@@ -126,7 +126,7 @@ async fn test_request_builder_send_raw() {
 }
 
 #[tokio::test]
-async fn test_shared_request_builder_send_raw() {
+async fn shared_request_builder_send_raw() {
     let client = create_test_client();
 
     let builder = client.shared_request(OutgoingMessages::RequestManagedAccounts);

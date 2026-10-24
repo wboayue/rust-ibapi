@@ -9,7 +9,7 @@ use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
 use crate::testdata::builders::ResponseProtoEncoder;
 
 #[test]
-fn test_decode_open_order_proto() {
+fn decode_open_order_proto_works() {
     let proto_msg = crate::proto::OpenOrder {
         order_id: Some(42),
         contract: Some(crate::proto::Contract {
@@ -47,7 +47,7 @@ fn test_decode_open_order_proto() {
 }
 
 #[test]
-fn test_decode_order_status_proto() {
+fn decode_order_status_proto_works() {
     let proto_msg = crate::proto::OrderStatus {
         order_id: Some(99),
         status: Some("Filled".into()),
@@ -77,7 +77,7 @@ fn test_decode_order_status_proto() {
 }
 
 #[test]
-fn test_decode_order_status_proto_missing_doubles() {
+fn decode_order_status_proto_missing_doubles() {
     // Regression: previously decoded to Some(0.0) via unwrap_or_default().
     let proto_msg = crate::proto::OrderStatus {
         order_id: Some(99),
@@ -100,7 +100,7 @@ fn test_decode_order_status_proto_missing_doubles() {
 }
 
 #[test]
-fn test_decode_order_status_proto_rejects_empty_status() {
+fn decode_order_status_proto_rejects_empty_status() {
     // Missing or empty status must error rather than silently defaulting to
     // Submitted; matches the text decoder which fails on empty status fields.
     for status in [None, Some(String::new())] {
@@ -123,7 +123,7 @@ fn test_decode_order_status_proto_rejects_empty_status() {
 }
 
 #[test]
-fn test_decode_commission_report_proto() {
+fn decode_commission_report_proto_works() {
     let proto_msg = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec123".into()),
         commission_and_fees: Some(1.25),
@@ -143,7 +143,7 @@ fn test_decode_commission_report_proto() {
 }
 
 #[test]
-fn test_decode_execution_data_proto() {
+fn decode_execution_data_proto_works() {
     let proto_msg = crate::proto::ExecutionDetails {
         req_id: Some(42),
         contract: Some(crate::proto::Contract {
@@ -176,7 +176,7 @@ fn test_decode_execution_data_proto() {
 }
 
 #[test]
-fn test_decode_completed_order_proto() {
+fn decode_completed_order_proto_works() {
     let proto_msg = crate::proto::CompletedOrder {
         contract: Some(crate::proto::Contract {
             con_id: Some(265598),
@@ -214,7 +214,7 @@ fn test_decode_completed_order_proto() {
 // =============================================================================
 
 #[test]
-fn test_decode_open_order_proto_via_builder() {
+fn decode_open_order_proto_via_builder() {
     use crate::testdata::builders::orders::open_order;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -239,7 +239,7 @@ fn test_decode_open_order_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_completed_order_proto_via_builder() {
+fn decode_completed_order_proto_via_builder() {
     use crate::testdata::builders::orders::completed_order;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -260,7 +260,7 @@ fn test_decode_completed_order_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_order_status_proto_via_builder() {
+fn decode_order_status_proto_via_builder() {
     use crate::testdata::builders::orders::order_status;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -289,7 +289,7 @@ fn test_decode_order_status_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_commission_report_proto_via_builder() {
+fn decode_commission_report_proto_via_builder() {
     use crate::testdata::builders::orders::commission_report;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -310,7 +310,7 @@ fn test_decode_commission_report_proto_via_builder() {
 }
 
 #[test]
-fn test_decode_execution_data_proto_via_builder() {
+fn decode_execution_data_proto_via_builder() {
     use crate::testdata::builders::orders::execution_data;
     use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -346,17 +346,17 @@ fn test_decode_execution_data_proto_via_builder() {
 // was addressed to this decoder, so it is not skippable.
 
 #[test]
-fn test_decode_open_order_rejects_text_framing() {
+fn decode_open_order_rejects_text_framing() {
     assert_rejects_text_framing(IncomingMessages::OpenOrder, "5\013\076792991\0AAPL\0STK\0", decode_open_order);
 }
 
 #[test]
-fn test_decode_completed_order_rejects_text_framing() {
+fn decode_completed_order_rejects_text_framing() {
     assert_rejects_text_framing(IncomingMessages::CompletedOrder, "101\0265598\0AAPL\0STK\0", decode_completed_order);
 }
 
 #[test]
-fn test_decode_execution_data_rejects_text_framing() {
+fn decode_execution_data_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::ExecutionData,
         "11\09000\042\0265598\0AAPL\0STK\0",
@@ -365,7 +365,7 @@ fn test_decode_execution_data_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_commission_report_rejects_text_framing() {
+fn decode_commission_report_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::CommissionsReport,
         "59\01\0exec001\02.5\0USD\0",
@@ -374,7 +374,7 @@ fn test_decode_commission_report_rejects_text_framing() {
 }
 
 #[test]
-fn test_decode_order_status_rejects_text_framing() {
+fn decode_order_status_rejects_text_framing() {
     assert_rejects_text_framing(
         IncomingMessages::OrderStatus,
         "3\013\0PreSubmitted\00\0100\00.0\01376327563\00\00.0\0100\0\00.0\0",
@@ -385,7 +385,7 @@ fn test_decode_order_status_rejects_text_framing() {
 // === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
 
 #[test]
-fn test_decode_order_status_proto_rejects_malformed_filled() {
+fn decode_order_status_proto_rejects_malformed_filled() {
     let p = crate::proto::OrderStatus {
         order_id: Some(1),
         status: Some("Submitted".into()),
@@ -398,7 +398,7 @@ fn test_decode_order_status_proto_rejects_malformed_filled() {
 }
 
 #[test]
-fn test_decode_order_status_proto_rejects_malformed_remaining() {
+fn decode_order_status_proto_rejects_malformed_remaining() {
     let p = crate::proto::OrderStatus {
         order_id: Some(1),
         status: Some("Submitted".into()),

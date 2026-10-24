@@ -50,7 +50,7 @@ unchanged. The `&mut *sub` reborrow is only needed for `filter_data` adapters re
 
 Two tests legitimately call `filter_data` because the notice-filter contract *is* what they
 assert — `filter_data_stream_drops_notices` and
-`test_routed_item_notice_skipped_then_response_delivered`. Both use consume form, not the cast.
+`routed_item_notice_skipped_then_response_delivered`. Both use consume form, not the cast.
 
 Related trap: the default `IntoIterator` on the sync side yields `SubscriptionItem`, not `T`,
 and `iter_data().flatten()` silently discards `Err` items because `Result` is itself

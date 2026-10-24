@@ -13,7 +13,7 @@ fn updated_proto_message(contract_info: &str) -> ResponseMessage {
 }
 
 #[test]
-fn test_decode_display_group_update() {
+fn decode_display_group_update() {
     let message = updated_proto_message("265598@SMART");
 
     let result = DisplayGroupUpdate::decode(&test_context(), &message).expect("decoding failed");
@@ -22,7 +22,7 @@ fn test_decode_display_group_update() {
 }
 
 #[test]
-fn test_decode_display_group_update_empty() {
+fn decode_display_group_update_empty() {
     let message = updated_proto_message("");
 
     let result = DisplayGroupUpdate::decode(&test_context(), &message).expect("decoding failed");
@@ -31,7 +31,7 @@ fn test_decode_display_group_update_empty() {
 }
 
 #[test]
-fn test_decode_wrong_message_type() {
+fn decode_wrong_message_type() {
     let bytes = display_group_updated().contract_info("data").encode_proto();
     let message = proto_response(IncomingMessages::DisplayGroupList, bytes);
 
@@ -41,7 +41,7 @@ fn test_decode_wrong_message_type() {
 }
 
 #[test]
-fn test_cancel_message() {
+fn cancel_message_works() {
     use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::messages::OutgoingMessages;
 
@@ -50,7 +50,7 @@ fn test_cancel_message() {
 }
 
 #[test]
-fn test_cancel_message_no_request_id() {
+fn cancel_message_no_request_id() {
     let result = DisplayGroupUpdate::cancel_message(176, None, None);
 
     assert!(result.is_err());

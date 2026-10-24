@@ -256,7 +256,7 @@ impl RequestEncoder for CalculateImpliedVolatilityRequestBuilder {
 
 // CancelOptionPrice / CancelImpliedVolatility builders intentionally omitted:
 // `OptionComputation::cancel_message` in `stream_decoders` dispatches to the
-// two encoders and `test_cancel_messages` exercises it; no production path
+// two encoders and `cancel_messages` exercises it; no production path
 // sends either cancel yet (the option one-shots never create a typed
 // subscription, so nothing calls `cancel_message` outside tests).
 single_req_id_request_builder!(CancelContractDataRequestBuilder, CancelContractData, OutgoingMessages::CancelContractData);
@@ -352,7 +352,7 @@ pub struct ContractDataResponse {
     pub time_zone_id: String,
     pub stock_type: String,
     pub settlement_method: String,
-    /// Default `"1"` is load-bearing — `test_contract_details` validators assert `min_size == 1.0`.
+    /// Default `"1"` is load-bearing — `contract_details` validators assert `min_size == 1.0`.
     pub min_size: String,
     /// Default `"1"` is load-bearing — see `min_size`.
     pub size_increment: String,

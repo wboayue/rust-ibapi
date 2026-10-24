@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_order_id() {
+fn order_id() {
     let id = OrderId::new(100);
     assert_eq!(id.value(), 100);
     assert_eq!(format!("{}", id), "100");
@@ -14,7 +14,7 @@ fn test_order_id() {
 }
 
 #[test]
-fn test_bracket_order_ids() {
+fn bracket_order_ids() {
     let ids = BracketOrderIds::new(100, 101, 102);
     assert_eq!(ids.parent.value(), 100);
     assert_eq!(ids.take_profit.value(), 101);
@@ -35,7 +35,7 @@ fn test_bracket_order_ids() {
 }
 
 #[test]
-fn test_quantity_validation() {
+fn quantity_validation() {
     assert!(Quantity::new(100.0).is_ok());
     assert!(Quantity::new(0.0).is_err());
     assert!(Quantity::new(-10.0).is_err());
@@ -44,7 +44,7 @@ fn test_quantity_validation() {
 }
 
 #[test]
-fn test_price_validation() {
+fn price_validation() {
     assert!(Price::new(50.0).is_ok());
     assert!(Price::new(0.0).is_ok());
     assert!(Price::new(-10.0).is_ok());
@@ -53,7 +53,7 @@ fn test_price_validation() {
 }
 
 #[test]
-fn test_order_type() {
+fn order_type() {
     assert_eq!(OrderType::Market.as_str(), "MKT");
     assert_eq!(OrderType::Limit.as_str(), "LMT");
     assert_eq!(OrderType::Stop.as_str(), "STP");
@@ -67,7 +67,7 @@ fn test_order_type() {
 }
 
 #[test]
-fn test_validation_error_display() {
+fn validation_error_display() {
     let err = ValidationError::InvalidQuantity(0.0);
     assert_eq!(err.to_string(), "Invalid quantity: 0");
 
@@ -91,7 +91,7 @@ fn test_validation_error_display() {
 }
 
 #[test]
-fn test_bracket_order_ids_wrong_length() {
+fn bracket_order_ids_wrong_length() {
     for ids in [vec![], vec![100, 101], vec![100, 101, 102, 103]] {
         let expected = Err(ValidationError::InvalidBracketOrder(format!("expected 3 order ids, got {}", ids.len())));
         assert_eq!(BracketOrderIds::try_from(ids), expected);

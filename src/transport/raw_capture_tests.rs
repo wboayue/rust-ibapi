@@ -26,7 +26,7 @@ fn record_frame(tap: &RawFrameTap, body: &[u8]) {
 }
 
 #[test]
-fn test_disabled_tap_is_inert() {
+fn disabled_tap_is_inert() {
     let tap = RawFrameTap::disabled();
     assert!(tap.sink.is_none(), "disabled() must hold no sink to write through");
 
@@ -37,7 +37,7 @@ fn test_disabled_tap_is_inert() {
 }
 
 #[test]
-fn test_unset_env_var_disables_the_tap() {
+fn unset_env_var_disables_the_tap() {
     temp_env::with_var_unset("IBAPI_RAW_CAPTURE_DIR", || {
         assert!(RawFrameTap::from_env().sink.is_none());
     });
@@ -49,7 +49,7 @@ fn test_unset_env_var_disables_the_tap() {
 }
 
 #[test]
-fn test_env_var_opens_a_capture_under_the_named_directory() {
+fn env_var_opens_a_capture_under_the_named_directory() {
     let dir = TempDir::new().unwrap();
     let nested = dir.path().join("does/not/exist/yet");
 
@@ -80,7 +80,7 @@ fn capture_replay_bodies(dir: &std::path::Path) -> Vec<u8> {
 /// frames — and would reproduce a desync just as faithfully.
 #[cfg(feature = "sync")]
 #[test]
-fn test_capture_replays_through_the_blocking_frame_reader() {
+fn capture_replays_through_the_blocking_frame_reader() {
     let dir = TempDir::new().unwrap();
     let capture = capture_replay_bodies(dir.path());
 
@@ -97,7 +97,7 @@ fn test_capture_replays_through_the_blocking_frame_reader() {
 /// the other.
 #[cfg(feature = "async")]
 #[tokio::test]
-async fn test_capture_replays_through_the_async_frame_reader() {
+async fn capture_replays_through_the_async_frame_reader() {
     use crate::transport::r#async::read_framed_message;
 
     let dir = TempDir::new().unwrap();
@@ -117,7 +117,7 @@ async fn test_capture_replays_through_the_async_frame_reader() {
 /// the capture and the index, or the artifact is missing the only frame anyone
 /// would open it to look at.
 #[test]
-fn test_prefix_without_a_body_is_still_captured() {
+fn prefix_without_a_body_is_still_captured() {
     let dir = TempDir::new().unwrap();
     let tap = RawFrameTap::capturing_to(dir.path());
 
@@ -134,7 +134,7 @@ fn test_prefix_without_a_body_is_still_captured() {
 }
 
 #[test]
-fn test_index_offsets_locate_each_prefix_in_the_capture() {
+fn index_offsets_locate_each_prefix_in_the_capture() {
     let dir = TempDir::new().unwrap();
     let capture = capture_replay_bodies(dir.path());
     for (seq, offset, declared) in index_without_timestamps(dir.path()) {
@@ -148,7 +148,7 @@ fn test_index_offsets_locate_each_prefix_in_the_capture() {
 }
 
 #[test]
-fn test_index_timestamps_are_utc_and_ordered() {
+fn index_timestamps_are_utc_and_ordered() {
     let dir = TempDir::new().unwrap();
     let tap = RawFrameTap::capturing_to(dir.path());
 
@@ -168,7 +168,7 @@ fn test_index_timestamps_are_utc_and_ordered() {
 /// would read back as a framing desync at the seam — the exact artifact these
 /// files exist to prove or disprove.
 #[test]
-fn test_reconnect_starts_a_new_segment() {
+fn reconnect_starts_a_new_segment() {
     let dir = TempDir::new().unwrap();
     let tap = RawFrameTap::capturing_to(dir.path());
 
@@ -195,7 +195,7 @@ fn test_reconnect_starts_a_new_segment() {
 }
 
 #[test]
-fn test_clones_share_one_capture() {
+fn clones_share_one_capture() {
     let dir = TempDir::new().unwrap();
     let tap = RawFrameTap::capturing_to(dir.path());
     let clone = tap.clone();
@@ -212,7 +212,7 @@ fn test_clones_share_one_capture() {
 /// A capture is a diagnostic aid. An unusable destination downgrades it to a
 /// no-op rather than failing the connection that was being diagnosed.
 #[test]
-fn test_unusable_directory_downgrades_to_disabled() {
+fn unusable_directory_downgrades_to_disabled() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("not-a-directory");
     fs::write(&file, b"occupied").unwrap();
@@ -230,7 +230,7 @@ fn test_unusable_directory_downgrades_to_disabled() {
 /// reconnecting client calls `start_new_segment` on every attempt, and a warning
 /// per attempt on a failing disk is its own problem.
 #[test]
-fn test_a_failed_segment_open_gives_up_permanently() {
+fn a_failed_segment_open_gives_up_permanently() {
     let dir = TempDir::new().unwrap();
     let capture_dir = dir.path().join("capture");
     let tap = RawFrameTap::capturing_to(&capture_dir);
@@ -251,6 +251,6 @@ fn test_a_failed_segment_open_gives_up_permanently() {
 }
 
 #[test]
-fn test_tap_is_send_and_sync() {
+fn tap_is_send_and_sync() {
     crate::tests::assert_send_and_sync::<RawFrameTap>();
 }

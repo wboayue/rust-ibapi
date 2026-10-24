@@ -17,7 +17,7 @@ use std::sync::Arc;
 use time::macros::datetime;
 
 #[test]
-fn test_news_providers() {
+fn news_providers_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsProviders,
         news_providers()
@@ -43,7 +43,7 @@ fn test_news_providers() {
 }
 
 #[test]
-fn test_news_bulletins() {
+fn news_bulletins() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsBulletins,
         news_bulletin()
@@ -68,7 +68,7 @@ fn test_news_bulletins() {
 }
 
 #[test]
-fn test_historical_news() {
+fn historical_news_works() {
     let headline = "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com";
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
@@ -116,7 +116,7 @@ fn test_historical_news() {
 }
 
 #[test]
-fn test_news_article() {
+fn news_article_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsArticle,
         news_article()
@@ -144,7 +144,7 @@ fn test_news_article() {
 }
 
 #[test]
-fn test_contract_news() {
+fn contract_news() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickNews,
         tick_news()
@@ -180,7 +180,7 @@ fn test_contract_news() {
 }
 
 #[test]
-fn test_broad_tape_news() {
+fn broad_tape_news() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickNews,
         tick_news()
@@ -216,7 +216,7 @@ fn test_broad_tape_news() {
 }
 
 #[test]
-fn test_contract_news_cancellation() {
+fn contract_news_cancellation() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -231,7 +231,7 @@ fn test_contract_news_cancellation() {
 }
 
 #[test]
-fn test_broad_tape_news_cancellation() {
+fn broad_tape_news_cancellation() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 

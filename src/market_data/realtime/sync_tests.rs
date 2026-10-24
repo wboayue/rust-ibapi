@@ -19,7 +19,7 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 
 #[test]
-fn test_switch_market_data_type() {
+fn switch_market_data_type() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -33,7 +33,7 @@ fn test_switch_market_data_type() {
 }
 
 #[test]
-fn test_realtime_bars() {
+fn realtime_bars() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::RealTimeBars,
@@ -113,7 +113,7 @@ fn test_realtime_bars() {
 }
 
 #[test]
-fn test_tick_by_tick_all_last() {
+fn tick_by_tick_all_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
@@ -186,7 +186,7 @@ fn test_tick_by_tick_all_last() {
 }
 
 #[test]
-fn test_market_depth() {
+fn market_depth() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::MarketDepth,
@@ -266,7 +266,7 @@ fn test_market_depth() {
 }
 
 #[test]
-fn test_market_depth_exchanges() {
+fn market_depth_exchanges() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::MktDepthExchanges,
         mkt_depth_exchanges_response()
@@ -314,7 +314,7 @@ fn test_market_depth_exchanges() {
 }
 
 #[test]
-fn test_tick_by_tick_bid_ask() {
+fn tick_by_tick_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
         bid_ask_tick()
@@ -364,7 +364,7 @@ fn test_tick_by_tick_bid_ask() {
 }
 
 #[test]
-fn test_tick_by_tick_midpoint() {
+fn tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
@@ -428,7 +428,7 @@ fn test_tick_by_tick_midpoint() {
 }
 
 #[test]
-fn test_basic_market_data() {
+fn basic_market_data() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         // tick_type 1 = Bid; size present + Bid → PriceSize variant.
         proto_response(
@@ -501,7 +501,7 @@ fn test_basic_market_data() {
 }
 
 #[test]
-fn test_market_data_with_combo_legs() {
+fn market_data_with_combo_legs() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -532,7 +532,7 @@ fn test_market_data_with_combo_legs() {
 }
 
 #[test]
-fn test_market_data_with_delta_neutral() {
+fn market_data_with_delta_neutral() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
@@ -560,7 +560,7 @@ fn test_market_data_with_delta_neutral() {
 }
 
 #[test]
-fn test_market_data_regulatory_snapshot() {
+fn market_data_regulatory_snapshot() {
     let message_bus = Arc::new(MessageBusStub::default());
 
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
@@ -597,7 +597,7 @@ fn test_market_data_regulatory_snapshot() {
 }
 
 #[test]
-fn test_tick_by_tick_last() {
+fn tick_by_tick_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
         trade_tick()
@@ -657,7 +657,7 @@ fn test_tick_by_tick_last() {
 ///
 /// See docs/rules/testing/fixture-builders.md.
 #[test]
-fn test_text_framed_fixture_fails_the_subscription() {
+fn text_framed_fixture_fails_the_subscription() {
     // Payload beyond the message id and request id is irrelevant — the decoder
     // rejects on framing before reading a field.
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![text_response("50\0\09000\0")]));

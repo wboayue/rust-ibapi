@@ -41,7 +41,7 @@ match to hang that on, so `message.expect_type(IncomingMessages::X)?` is its bac
 control-flow signal: it terminates the subscription, loudly. Never `Error::NotImplemented` or
 `Error::Simple(...)`.
 
-**Both drift directions are gated, for both traits**, by `test_response_message_ids_match_decode_arms`
+**Both drift directions are gated, for both traits**, by `response_message_ids_match_decode_arms`
 (`src/subscriptions/response_message_ids_tests.rs`). It probes every decoder with a minimal
 text-framed message of every `IncomingMessages` discriminant and requires the two lists to
 agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
@@ -61,7 +61,7 @@ declaration forms. And deriving the narrow from `Self::RESPONSE_MESSAGE_IDS` mak
 circular — `handled` would be computed from the same const as `declared`, so every declaration
 would agree with itself, including a wrong one. A cross-check needs two independent statements.
 
-Its companion `test_decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder`
+Its companion `decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder`
 blocks under `src/` against the hand-listed roster — per trait, so adding one while deleting the
 other cannot net out — and fails when a new decoder goes unregistered.
 
@@ -137,7 +137,7 @@ other two:
   moved one-shot narrowing to `request_helpers::expect_proto` at the call site (gated separately
   by `test_expect_proto_sites_match_the_roster`). **A counter-example too:** the same PR first
   deleted the `expect_type` from the two single-type `StreamDecoder::decode` impls as a "third
-  copy of the same fact", and `test_response_message_ids_match_decode_arms` caught it within the
+  copy of the same fact", and `response_message_ids_match_decode_arms` caught it within the
   hour. The narrow is the single-arm form of the backstop, not a duplicate of the const. It also
   showed the const's rename to `TickDecoder` bought the name without the gate.
 - #740 — narrowed `StreamDecoder::decode` from `&mut ResponseMessage` to `&ResponseMessage`. The

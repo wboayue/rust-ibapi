@@ -11,7 +11,7 @@ fn stub(responses: Vec<crate::messages::ResponseMessage>) -> Arc<MessageBusStub>
 }
 
 #[test]
-fn test_config_request_body() {
+fn config_request_body() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::ConfigResponse,
         config_response().request_id(TEST_REQ_ID_FIRST).encode_proto(),
@@ -24,7 +24,7 @@ fn test_config_request_body() {
 }
 
 #[test]
-fn test_config_round_trip() {
+fn config_round_trip() {
     let message_bus = stub(vec![proto_response(
         IncomingMessages::ConfigResponse,
         config_response()
@@ -43,7 +43,7 @@ fn test_config_round_trip() {
 }
 
 #[test]
-fn test_config_unexpected_end_of_stream() {
+fn config_unexpected_end_of_stream() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::CONFIG);
@@ -54,7 +54,7 @@ fn test_config_unexpected_end_of_stream() {
 }
 
 #[test]
-fn test_config_server_version_error() {
+fn config_server_version_error() {
     let message_bus = stub(vec![]);
 
     let client = Client::stubbed(message_bus, crate::server_versions::CONFIG - 1);

@@ -16,7 +16,7 @@ fn display_group_update_response(contract_info: &str) -> crate::messages::Respon
 }
 
 #[tokio::test]
-async fn test_display_groups() {
+async fn display_groups() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::DisplayGroupList,
         display_group_list().request_id(TEST_REQ_ID_FIRST).groups("3|1|2").encode_proto(),
@@ -30,7 +30,7 @@ async fn test_display_groups() {
 }
 
 #[tokio::test]
-async fn test_subscribe_to_group_events() {
+async fn subscribe_to_group_events() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![display_group_update_response(
         "265598@SMART",
     )]));
@@ -52,7 +52,7 @@ async fn test_subscribe_to_group_events() {
 }
 
 #[tokio::test]
-async fn test_subscribe_to_group_events_empty_group() {
+async fn subscribe_to_group_events_empty_group() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![display_group_update_response("")]));
 
     let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -66,7 +66,7 @@ async fn test_subscribe_to_group_events_empty_group() {
 }
 
 #[tokio::test]
-async fn test_update_display_group() {
+async fn update_display_group() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![display_group_update_response(
         "265598@SMART",
     )]));
@@ -83,7 +83,7 @@ async fn test_update_display_group() {
 }
 
 #[tokio::test]
-async fn test_subscribe_to_group_events_skips_wrong_message_type() {
+async fn subscribe_to_group_events_skips_wrong_message_type() {
     // Regression for docs/rules/wire/proto-only-decoding.md: wrong-type frames
     // must skip-classify, not terminate.
     let wrong = proto_response(

@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{error_envelope, proto_response};
 use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
 
 #[test]
-fn test_decoded_error_default() {
+fn decoded_error_default() {
     // Manual Default impl: request_id falls back to UNSPECIFIED_REQUEST_ID,
     // not i32::default (0). Guards the silent regression that swapped these.
     let d = DecodedError::default();
@@ -18,7 +18,7 @@ fn test_decoded_error_default() {
 }
 
 #[test]
-fn test_notice_from_decoded_preserves_rich_payload() {
+fn notice_from_decoded_preserves_rich_payload() {
     use crate::messages::Notice;
     use time::OffsetDateTime;
 
@@ -39,7 +39,7 @@ fn test_notice_from_decoded_preserves_rich_payload() {
 }
 
 #[test]
-fn test_notice_from_decoded_missing_optionals() {
+fn notice_from_decoded_missing_optionals() {
     use crate::messages::Notice;
 
     // Old format: error_time absent, JSON empty. Conversion preserves both.
@@ -58,7 +58,7 @@ fn test_notice_from_decoded_missing_optionals() {
 }
 
 #[test]
-fn test_error_from_decoded_projects_to_notice() {
+fn error_from_decoded_projects_to_notice() {
     // `From<DecodedError> for Error` projects to Error::Notice(Notice),
     // mirroring the existing `From<ResponseMessage>` projection.
     let payload = DecodedError {
@@ -80,7 +80,7 @@ fn test_error_from_decoded_projects_to_notice() {
 }
 
 #[test]
-fn test_determine_routing_error_protobuf_malformed() {
+fn determine_routing_error_protobuf_malformed() {
     // Garbage bytes that aren't a valid ErrorMessage proto fall back to Default,
     // which sets request_id = UNSPECIFIED_REQUEST_ID (not 0).
     let raw_bytes = vec![0xFFu8; 16];
@@ -97,7 +97,7 @@ fn test_determine_routing_error_protobuf_malformed() {
 }
 
 #[test]
-fn test_determine_routing_by_request_id() {
+fn determine_routing_by_request_id() {
     // Create a mock message with request ID (AccountSummary = 63)
     let message_str = "63\01\0123\0DU123456\0AccountType\0ADVISOR\0USD\0";
     let message = ResponseMessage::from(message_str);
@@ -109,7 +109,7 @@ fn test_determine_routing_by_request_id() {
 }
 
 #[test]
-fn test_determine_routing_error_protobuf() {
+fn determine_routing_error_protobuf() {
     // Protobuf Error with id=42 and error_code=2100 — full decode populates all five fields.
     let mut envelope = error_envelope(Some(42), Some(2100), "Market data farm connection is OK");
     envelope.error_time = Some(1700000000000);
@@ -130,7 +130,7 @@ fn test_determine_routing_error_protobuf() {
 }
 
 #[test]
-fn test_determine_routing_error_protobuf_unspecified_id() {
+fn determine_routing_error_protobuf_unspecified_id() {
     // Protobuf Error with no id (global notice) decodes to UNSPECIFIED_REQUEST_ID.
     let envelope = error_envelope(None, Some(2104), "Market data farm connection is OK");
     let message = proto_response(IncomingMessages::Error, envelope.encode_to_vec());
@@ -153,7 +153,7 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
 /// carries `orderId` at proto tag 1, where a request id would be read if it
 /// were ever added to the allow-list.
 #[test]
-fn test_determine_routing_shared_message() {
+fn determine_routing_shared_message() {
     let cases = [
         (
             IncomingMessages::ManagedAccounts,
@@ -183,7 +183,7 @@ fn test_determine_routing_shared_message() {
 }
 
 #[test]
-fn test_is_informational_code() {
+fn is_informational_code_works() {
     // Test range boundaries
     assert!(is_informational_code(*WARNING_CODE_RANGE.start(), ""));
     assert!(is_informational_code(*WARNING_CODE_RANGE.end(), ""));
@@ -205,9 +205,9 @@ fn test_is_informational_code() {
 }
 
 #[test]
-fn test_is_informational_code_data_advisory_codes() {
+fn is_informational_code_data_advisory_codes() {
     // Routing disposition only; the advisory list, its precedence, and the
-    // neighbour precision live in messages::tests::test_notice_data_advisory.
+    // neighbour precision live in messages::tests::notice_data_advisory.
     for &code in DATA_ADVISORY_CODES {
         assert!(is_informational_code(code, ""), "advisory code {code} should route as a notice");
     }
@@ -215,7 +215,7 @@ fn test_is_informational_code_data_advisory_codes() {
 }
 
 #[test]
-fn test_is_informational_code_classifies_order_message_from_text() {
+fn is_informational_code_classifies_order_message_from_text() {
     assert!(is_informational_code(
         399,
         "Order Message:\nSELL 1 ES DEC'26\nWarning: Your order will not be placed at the exchange until 2026-08-17 08:30:00 US/Central.",
@@ -224,7 +224,7 @@ fn test_is_informational_code_classifies_order_message_from_text() {
 }
 
 #[test]
-fn test_is_informational_code_order_cancelled_code() {
+fn is_informational_code_order_cancelled_code() {
     // 202 confirms a requested cancellation; it must route as a Notice, not
     // terminate the cancel_order / place_order subscription as an Error.
     assert!(is_informational_code(crate::messages::ORDER_CANCELLED_CODE, ""));
@@ -235,7 +235,7 @@ fn test_is_informational_code_order_cancelled_code() {
 }
 
 #[test]
-fn test_classify_error_order_cancelled_routed_is_notice() {
+fn classify_error_order_cancelled_routed_is_notice() {
     let payload = DecodedError {
         request_id: 42,
         error_code: crate::messages::ORDER_CANCELLED_CODE,
@@ -255,7 +255,7 @@ fn test_classify_error_order_cancelled_routed_is_notice() {
 }
 
 #[test]
-fn test_is_informational_code_system_message_codes() {
+fn is_informational_code_system_message_codes() {
     // System messages report a connection-wide state change, never a failed
     // request, so they route as notices.
     for code in crate::messages::SYSTEM_MESSAGE_CODES {
@@ -269,7 +269,7 @@ fn test_is_informational_code_system_message_codes() {
 }
 
 #[test]
-fn test_classify_error_unrouted_system_message_is_notice_only() {
+fn classify_error_unrouted_system_message_is_notice_only() {
     // 1102 arrives request-less. It must not fail in-flight one-shot shared
     // requests (`managed_accounts`, `server_time`, `next_valid_order_id`).
     let payload = DecodedError {
@@ -288,7 +288,7 @@ fn test_classify_error_unrouted_system_message_is_notice_only() {
 }
 
 #[test]
-fn test_classify_error_routed_system_message_is_notice() {
+fn classify_error_routed_system_message_is_notice() {
     // TWS binds a request id to a system message only rarely, but when it does
     // the frame must not terminate the subscription that owns the id.
     let payload = DecodedError {
@@ -311,7 +311,7 @@ fn test_classify_error_routed_system_message_is_notice() {
 /// order-range id is order-bound, a request-range or unspecified id is not,
 /// whatever happens to be registered under the number.
 #[test]
-fn test_order_update_notice_gating() {
+fn order_update_notice_gating() {
     let payload = DecodedError {
         request_id: 42,
         error_code: 201,
@@ -339,7 +339,7 @@ fn test_order_update_notice_gating() {
 
 /// An error frame's id picks the request or order side by range.
 #[test]
-fn test_classify_error_routes_by_id_range() {
+fn classify_error_routes_by_id_range() {
     let error = |request_id| DecodedError {
         request_id,
         error_code: 200,
@@ -359,7 +359,7 @@ fn test_classify_error_routes_by_id_range() {
 }
 
 #[test]
-fn test_classify_error_unrouted_warning_is_notice_only() {
+fn classify_error_unrouted_warning_is_notice_only() {
     let payload = DecodedError {
         error_code: 2104,
         error_message: "Market data farm OK".into(),
@@ -376,7 +376,7 @@ fn test_classify_error_unrouted_warning_is_notice_only() {
 }
 
 #[test]
-fn test_classify_error_unrouted_hard_error_fails_one_shots() {
+fn classify_error_unrouted_hard_error_fails_one_shots() {
     let payload = DecodedError {
         error_code: 321,
         error_message: "Server error".into(),
@@ -397,7 +397,7 @@ fn test_classify_error_unrouted_hard_error_fails_one_shots() {
 }
 
 #[test]
-fn test_classify_error_codeless_notice_is_notice_only() {
+fn classify_error_codeless_notice_is_notice_only() {
     // A pacing notice whose protobuf error_code field is absent. It decodes to
     // code 0, which is outside WARNING_CODE_RANGE. It must still classify as a
     // warning, not fail every in-flight one-shot.
@@ -424,7 +424,7 @@ fn test_classify_error_codeless_notice_is_notice_only() {
 }
 
 #[test]
-fn test_classify_error_codeless_routed_is_notice() {
+fn classify_error_codeless_routed_is_notice() {
     // A code-less frame carrying a request id is delivered to that
     // subscription as a Notice, not an Error that would terminate it.
     let payload = DecodedError {
@@ -443,7 +443,7 @@ fn test_classify_error_codeless_routed_is_notice() {
 }
 
 #[test]
-fn test_classify_error_routed_warning_is_notice() {
+fn classify_error_routed_warning_is_notice() {
     let payload = DecodedError {
         request_id: 42,
         error_code: 2104,
@@ -461,7 +461,7 @@ fn test_classify_error_routed_warning_is_notice() {
 }
 
 #[test]
-fn test_classify_error_routed_hard_error_is_error() {
+fn classify_error_routed_hard_error_is_error() {
     let payload = DecodedError {
         request_id: 7,
         error_code: 200,
@@ -483,7 +483,7 @@ fn test_classify_error_routed_hard_error_is_error() {
 /// have no `order_id` field, so the dispatcher falls back to the sentinel `-1`.
 /// (Cases with a real `order_id` are covered by the per-type proto tests below.)
 #[test]
-fn test_order_message_routing_without_order_id_returns_sentinel() {
+fn order_message_routing_without_order_id_returns_sentinel() {
     let completed_orders_end = proto_response(IncomingMessages::CompletedOrdersEnd, Vec::new());
     match determine_routing(&completed_orders_end) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
@@ -508,7 +508,7 @@ fn test_order_message_routing_without_order_id_returns_sentinel() {
 // path through `determine_routing`.
 
 #[test]
-fn test_determine_routing_protobuf_open_order() {
+fn determine_routing_protobuf_open_order() {
     let bytes = crate::proto::OpenOrder {
         order_id: Some(58),
         ..Default::default()
@@ -522,7 +522,7 @@ fn test_determine_routing_protobuf_open_order() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_order_status() {
+fn determine_routing_protobuf_order_status() {
     let bytes = crate::proto::OrderStatus {
         order_id: Some(58),
         status: Some("Filled".into()),
@@ -537,7 +537,7 @@ fn test_determine_routing_protobuf_order_status() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
+fn determine_routing_protobuf_execution_data_uses_nested_order_id() {
     // ExecutionData's tag 1 is req_id (-1 for unsolicited). The order_id is
     // nested under `execution.order_id`. Routing must pick the nested value.
     let bytes = crate::proto::ExecutionDetails {
@@ -557,7 +557,7 @@ fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_execution_data_end() {
+fn determine_routing_protobuf_execution_data_end() {
     let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(7) }.encode_to_vec();
     let message = proto_response(IncomingMessages::ExecutionDataEnd, bytes);
     match determine_routing(&message) {
@@ -567,7 +567,7 @@ fn test_determine_routing_protobuf_execution_data_end() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_commissions_report_no_order_id() {
+fn determine_routing_protobuf_commissions_report_no_order_id() {
     // CommissionsReport has no order_id (in either proto or text); routing
     // falls back to ByOrderId(-1) and the dispatcher then reroutes via
     // execution_id.
@@ -584,7 +584,7 @@ fn test_determine_routing_protobuf_commissions_report_no_order_id() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_request_id_message() {
+fn determine_routing_protobuf_request_id_message() {
     // AccountSummary uses ByRequestId and proto `req_id` lives at tag 1.
     let bytes = crate::proto::AccountSummary {
         req_id: Some(314),
@@ -599,7 +599,7 @@ fn test_determine_routing_protobuf_request_id_message() {
 }
 
 #[test]
-fn test_determine_routing_protobuf_market_data_type() {
+fn determine_routing_protobuf_market_data_type() {
     // Regression for the silent drop: MarketDataType is declared by the
     // `TickTypes` decoder, so it has to reach a request_id-keyed subscription.
     // Before it was added to `text_request_id_field` it fell through to
@@ -617,7 +617,7 @@ fn test_determine_routing_protobuf_market_data_type() {
 }
 
 #[test]
-fn test_first_unroutable_by_request_id_accepts_registered_types() {
+fn first_unroutable_by_request_id_accepts_registered_types() {
     // The two ways in, one per arm of `routable_to_request_id_subscription`.
     let declared = &[
         IncomingMessages::TickPrice,         // text_request_id_field entry
@@ -628,7 +628,7 @@ fn test_first_unroutable_by_request_id_accepts_registered_types() {
 }
 
 #[test]
-fn test_first_unroutable_by_request_id_rejects_error() {
+fn first_unroutable_by_request_id_rejects_error() {
     // `Error` used to be exempted here so that decoders declaring it would not
     // trip the guard — const declares, guard exempts, circular. It is
     // classified by `determine_routing` before the allow-list and reaches a
@@ -641,7 +641,7 @@ fn test_first_unroutable_by_request_id_rejects_error() {
 }
 
 #[test]
-fn test_first_unroutable_by_request_id_reports_first_offender() {
+fn first_unroutable_by_request_id_reports_first_offender() {
     // FamilyCodes and MarketRule are shared-channel types with no request id.
     let declared = &[IncomingMessages::TickPrice, IncomingMessages::FamilyCodes, IncomingMessages::MarketRule];
     assert_eq!(first_unroutable_by_request_id(declared), Some(IncomingMessages::FamilyCodes));
@@ -654,7 +654,7 @@ fn test_first_unroutable_by_request_id_reports_first_offender() {
 /// `routes_by_request_id(NotValid)` is false, but if either of those shifted
 /// the alarm would go quiet with no test failing.
 #[test]
-fn test_unknown_message_type_routes_by_message_type() {
+fn unknown_message_type_routes_by_message_type() {
     let message = ResponseMessage::from("9999\01\0");
     assert_eq!(message.message_type(), IncomingMessages::NotValid);
     assert_eq!(determine_routing(&message), RoutingDecision::ByMessageType(IncomingMessages::NotValid));
@@ -667,7 +667,7 @@ fn test_unknown_message_type_routes_by_message_type() {
 /// and `ExecutionDataEnd`, so the request-id arm would claim them if it ran
 /// first.
 #[test]
-fn test_order_message_types_route_by_order_id() {
+fn order_message_types_route_by_order_id() {
     let id_at_tag_1 = crate::proto::ExecutionDetailsEnd { req_id: Some(7) }.encode_to_vec();
     let order_types = [
         IncomingMessages::OrderStatus,
@@ -691,7 +691,7 @@ fn test_order_message_types_route_by_order_id() {
 }
 
 #[test]
-fn test_order_routing_strategy_for_own_and_foreign_frames() {
+fn order_routing_strategy_for_own_and_foreign_frames() {
     use IncomingMessages as M;
     use OrderRoutingStrategy as S;
     let cases = [
@@ -712,7 +712,7 @@ fn test_order_routing_strategy_for_own_and_foreign_frames() {
 }
 
 #[test]
-fn test_is_foreign_compares_client_ids() {
+fn is_foreign_compares_client_ids() {
     let status = |client_id: Option<i32>| {
         let body = crate::proto::OrderStatus {
             order_id: Some(7),

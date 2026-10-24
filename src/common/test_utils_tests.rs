@@ -3,7 +3,7 @@ use crate::messages::{encode_protobuf_message, OutgoingMessages};
 use crate::server_versions;
 
 #[test]
-fn test_create_test_client() {
+fn create_test_client_works() {
     let (client, message_bus) = create_test_client();
     assert_eq!(client.server_version(), server_versions::SIZE_RULES);
     assert!(message_bus.request_messages.read().unwrap().is_empty());
@@ -11,7 +11,7 @@ fn test_create_test_client() {
 }
 
 #[test]
-fn test_create_test_client_with_version() {
+fn create_test_client_with_version_works() {
     let custom_version = 150;
     let (client, message_bus) = create_test_client_with_version(custom_version);
     assert_eq!(client.server_version(), custom_version);
@@ -20,7 +20,7 @@ fn test_create_test_client_with_version() {
 }
 
 #[test]
-fn test_assert_request_msg_id() {
+fn assert_request_msg_id_works() {
     let (_client, message_bus) = create_test_client();
 
     {
@@ -32,7 +32,7 @@ fn test_assert_request_msg_id() {
 }
 
 #[test]
-fn test_request_message_count() {
+fn request_message_count_works() {
     let (_client, message_bus) = create_test_client();
 
     assert_eq!(request_message_count(&message_bus), 0);
@@ -47,7 +47,7 @@ fn test_request_message_count() {
 }
 
 #[test]
-fn test_constants() {
+fn constants() {
     assert_eq!(TEST_ACCOUNT, "DU1234567");
     assert_eq!(TEST_CONTRACT_ID, 1001);
     assert_eq!(TEST_ORDER_ID, 5001);
@@ -168,7 +168,7 @@ fn assert_request_proto_panics_on_body_mismatch() {
 }
 
 #[test]
-fn test_text_response_translates_pipes_to_nul() {
+fn text_response_translates_pipes_to_nul() {
     let mut message = text_response("1|9001|payload");
     assert_eq!(message.next_string().unwrap(), "1");
     assert_eq!(message.next_string().unwrap(), "9001");

@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::CapturingSink;
 use crate::messages::UNKNOWN_MESSAGE_TYPE_CODE;
 
 #[test]
-fn test_validate_frame_length_accepts_the_legal_range() {
+fn validate_frame_length_accepts_the_legal_range() {
     // Boundaries derived from the constants, not restated: a body holding only
     // the message id is the smallest legal frame, and the C#-matching cap is
     // inclusive (`EReader` rejects on `>` MaxMsgSize).
@@ -13,7 +13,7 @@ fn test_validate_frame_length_accepts_the_legal_range() {
 }
 
 #[test]
-fn test_validate_frame_length_rejects_out_of_range_lengths() {
+fn validate_frame_length_rejects_out_of_range_lengths() {
     // Below: a body that cannot hold the message id. Above: the desync
     // signature — four garbage bytes read as a length, which unbounded sizes an
     // allocation of up to 4 GiB and then consumes every real message until it
@@ -29,7 +29,7 @@ fn test_validate_frame_length_rejects_out_of_range_lengths() {
 }
 
 #[test]
-fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
+fn report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
     // Message id 9999 maps to no IncomingMessages variant, which is what a
     // desynchronized read produces: garbage where the id should be.
     let message = ResponseMessage::from("9999\01\0");
@@ -52,7 +52,7 @@ fn test_report_unroutable_frame_raises_a_notice_for_an_unknown_kind() {
 }
 
 #[test]
-fn test_report_unroutable_frame_stays_quiet_for_a_known_kind() {
+fn report_unroutable_frame_stays_quiet_for_a_known_kind() {
     // A known type with no current subscriber is ordinary steady state — it
     // must not raise a desync notice, or the signal is worthless.
     let message = ResponseMessage::from("15\01\0DU1234567\0");
@@ -68,7 +68,7 @@ fn test_report_unroutable_frame_stays_quiet_for_a_known_kind() {
 }
 
 #[test]
-fn test_fibonacci_backoff() {
+fn fibonacci_backoff() {
     let mut backoff = FibonacciBackoff::new(10);
 
     assert_eq!(backoff.next_delay(), Duration::from_secs(1));
@@ -86,7 +86,7 @@ fn test_fibonacci_backoff() {
 /// the number of calls. Without that, this test will fail in debug builds with
 /// `attempt to add with overflow` at call 93.
 #[test]
-fn test_fibonacci_backoff_never_overflows() {
+fn fibonacci_backoff_never_overflows() {
     let mut backoff = FibonacciBackoff::new(30);
     for _ in 0..100 {
         assert!(backoff.next_delay() <= Duration::from_secs(30));
@@ -98,7 +98,7 @@ fn test_fibonacci_backoff_never_overflows() {
 /// engage; `saturating_add` must cover that. Without it, call ~93 panics with
 /// `attempt to add with overflow` in debug builds.
 #[test]
-fn test_fibonacci_backoff_never_overflows_with_huge_max() {
+fn fibonacci_backoff_never_overflows_with_huge_max() {
     let mut backoff = FibonacciBackoff::new(u64::MAX);
     for _ in 0..100 {
         backoff.next_delay();
@@ -109,7 +109,7 @@ fn test_fibonacci_backoff_never_overflows_with_huge_max() {
 /// `max: 0` means no delay, not a fixed 1s: `current` starts clamped at
 /// `max`, so the delay must respect `max` from the first call.
 #[test]
-fn test_fibonacci_backoff_zero_max() {
+fn fibonacci_backoff_zero_max() {
     let mut backoff = FibonacciBackoff::new(0);
     assert_eq!(backoff.next_delay(), Duration::ZERO);
     assert_eq!(backoff.next_delay(), Duration::ZERO);
@@ -169,7 +169,7 @@ fn read_and_write_lock_recover_from_a_poisoned_rwlock() {
 /// open mid-reconnect (`check_ended`): only terminal states refuse the latter,
 /// and each terminal state names why the session ended (#1052).
 #[test]
-fn test_session_state_verdicts() {
+fn session_state_verdicts() {
     let cases = [
         (SessionState::Connected, None, None),
         (SessionState::Disconnected, Some("ConnectionReset"), None),

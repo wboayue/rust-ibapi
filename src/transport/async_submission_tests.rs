@@ -106,7 +106,7 @@ fn make_bus(mode: WriteMode) -> (SubmissionStream, Arc<AsyncTcpMessageBus<Submis
 /// A caller that drops the submission while its write is pending (a timeout,
 /// a losing `select!` branch) leaves no registration behind.
 #[tokio::test]
-async fn test_dropping_a_pending_write_releases_its_registration() {
+async fn dropping_a_pending_write_releases_its_registration() {
     for kind in KINDS {
         let (stream, bus) = make_bus(WriteMode::Pending);
         let mut submitting = Box::pin(kind.submit(&bus));
@@ -132,7 +132,7 @@ async fn test_dropping_a_pending_write_releases_its_registration() {
 /// The abandoned submission's cleanup signal can run after a new submission
 /// has registered under the same id; it must leave that registration alone.
 #[tokio::test]
-async fn test_abandoned_write_cleanup_preserves_a_newer_registration() {
+async fn abandoned_write_cleanup_preserves_a_newer_registration() {
     for kind in KINDS {
         let (stream, bus) = make_bus(WriteMode::Pending);
         // Stall the cleanup task, so the abandoned submission's signal cannot
@@ -159,7 +159,7 @@ async fn test_abandoned_write_cleanup_preserves_a_newer_registration() {
 /// A completed write hands the registration to the returned subscription: it
 /// stays while the subscription lives and goes when it is dropped.
 #[tokio::test]
-async fn test_a_completed_write_hands_cleanup_to_the_subscription() {
+async fn a_completed_write_hands_cleanup_to_the_subscription() {
     for kind in KINDS {
         let (stream, bus) = make_bus(WriteMode::Succeed);
         let subscription = kind.submit(&bus).await.unwrap();

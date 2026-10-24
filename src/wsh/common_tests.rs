@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_autofill_is_specified() {
+fn autofill_is_specified() {
     assert!(!AutoFill::default().is_specified());
 
     assert!(AutoFill {
@@ -27,7 +27,7 @@ fn test_autofill_is_specified() {
 }
 
 #[test]
-fn test_autofill_combinations() {
+fn autofill_combinations() {
     let combinations = vec![
         (false, false, false, false),
         (true, false, false, true),

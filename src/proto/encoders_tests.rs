@@ -3,7 +3,7 @@ use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::orders::{Action, Order, TimeInForce};
 
 #[test]
-fn test_encode_contract_basic() {
+fn encode_contract_basic() {
     let contract = Contract {
         contract_id: 265598,
         symbol: Symbol::from("AAPL"),
@@ -28,7 +28,7 @@ fn test_encode_contract_basic() {
 }
 
 #[test]
-fn test_encode_contract_with_multiplier() {
+fn encode_contract_with_multiplier() {
     let contract = Contract {
         multiplier: "100".to_string(),
         ..Default::default()
@@ -39,14 +39,14 @@ fn test_encode_contract_with_multiplier() {
 }
 
 #[test]
-fn test_encode_contract_empty_multiplier() {
+fn encode_contract_empty_multiplier() {
     let contract = Contract::default();
     let proto = encode_contract(&contract);
     assert!(proto.multiplier.is_none());
 }
 
 #[test]
-fn test_encode_delta_neutral() {
+fn encode_delta_neutral() {
     let dnc = contracts::DeltaNeutralContract {
         contract_id: 123,
         delta: 0.5,
@@ -65,7 +65,7 @@ fn test_encode_delta_neutral() {
 }
 
 #[test]
-fn test_encode_order_basic() {
+fn encode_order_basic() {
     let order = Order {
         action: Action::Buy,
         total_quantity: 100.0,
@@ -87,7 +87,7 @@ fn test_encode_order_basic() {
 }
 
 #[test]
-fn test_encode_order_hedge_max_size() {
+fn encode_order_hedge_max_size() {
     let order = Order {
         hedge_max_size: Some(500),
         ..Default::default()
@@ -99,7 +99,7 @@ fn test_encode_order_hedge_max_size() {
 }
 
 #[test]
-fn test_encode_order_deactivate() {
+fn encode_order_deactivate() {
     let order = Order {
         deactivate: true,
         ..Default::default()
@@ -111,7 +111,7 @@ fn test_encode_order_deactivate() {
 }
 
 #[test]
-fn test_encode_order_route_marketable_to_bbo() {
+fn encode_order_route_marketable_to_bbo() {
     let order = Order {
         route_marketable_to_bbo: true,
         ..Default::default()
@@ -123,7 +123,7 @@ fn test_encode_order_route_marketable_to_bbo() {
 }
 
 #[test]
-fn test_encode_order_conditions_include_overnight() {
+fn encode_order_conditions_include_overnight() {
     let order = Order {
         conditions_include_overnight: true,
         ..Default::default()
@@ -135,7 +135,7 @@ fn test_encode_order_conditions_include_overnight() {
 }
 
 #[test]
-fn test_encode_order_default_fields_omitted() {
+fn encode_order_default_fields_omitted() {
     let order = Order::default();
     let proto = encode_order(&order);
 
@@ -152,13 +152,13 @@ fn test_encode_order_default_fields_omitted() {
 }
 
 #[test]
-fn test_encode_soft_dollar_tier_empty() {
+fn encode_soft_dollar_tier_empty() {
     let tier = SoftDollarTier::default();
     assert!(encode_soft_dollar_tier(&tier).is_none());
 }
 
 #[test]
-fn test_encode_soft_dollar_tier_filled() {
+fn encode_soft_dollar_tier_filled() {
     let tier = SoftDollarTier {
         name: "Tier1".to_string(),
         value: "Val1".to_string(),
@@ -171,7 +171,7 @@ fn test_encode_soft_dollar_tier_filled() {
 }
 
 #[test]
-fn test_encode_condition_price() {
+fn encode_condition_price() {
     use crate::orders::conditions::{PriceCondition, TriggerMethod};
     let cond = OrderCondition::Price(PriceCondition {
         contract_id: 265598,
@@ -193,7 +193,7 @@ fn test_encode_condition_price() {
 }
 
 #[test]
-fn test_encode_condition_price_default_trigger_method_is_emitted() {
+fn encode_condition_price_default_trigger_method_is_emitted() {
     // TWS rejects ("Invalid value in field # 6127") if trigger_method is omitted.
     use crate::orders::conditions::{PriceCondition, TriggerMethod};
     let cond = OrderCondition::Price(PriceCondition {
@@ -210,7 +210,7 @@ fn test_encode_condition_price_default_trigger_method_is_emitted() {
 }
 
 #[test]
-fn test_encode_unknown_condition_round_trips() {
+fn encode_unknown_condition_round_trips() {
     // #827: a condition decoded as Unknown goes back out as it arrived (conjunction flag set;
     // an absent one returns as explicit AND, see the test below).
     use crate::orders::conditions::UnknownCondition;
@@ -249,7 +249,7 @@ fn test_encode_unknown_condition_round_trips() {
 }
 
 #[test]
-fn test_encode_unknown_condition_absent_conjunction_returns_as_and() {
+fn encode_unknown_condition_absent_conjunction_returns_as_and() {
     // The one field that does not round-trip verbatim: absent reads as AND and is sent explicitly.
     let wire = proto::OrderCondition {
         r#type: Some(2),
@@ -273,7 +273,7 @@ fn test_encode_unknown_condition_absent_conjunction_returns_as_and() {
 }
 
 #[test]
-fn test_encode_condition_time() {
+fn encode_condition_time() {
     use crate::orders::conditions::TimeCondition;
     let cond = OrderCondition::Time(TimeCondition {
         time: "20251230 14:30:00 US/Eastern".to_string(),
@@ -289,7 +289,7 @@ fn test_encode_condition_time() {
 }
 
 #[test]
-fn test_encode_execution_filter() {
+fn encode_execution_filter_works() {
     let filter = orders::ExecutionFilter {
         client_id: Some(1),
         account_code: "DU123".to_string(),
@@ -312,20 +312,20 @@ fn test_encode_execution_filter() {
 }
 
 #[test]
-fn test_some_str_empty() {
+fn some_str_empty() {
     assert!(some_str("").is_none());
     assert_eq!(some_str("hello"), Some("hello".to_string()));
 }
 
 #[test]
-fn test_some_display() {
+fn some_display_works() {
     assert!(some_display::<i32>(None).is_none());
     assert_eq!(some_display(Some(&42_i32)), Some("42".to_string()));
     assert_eq!(some_display(Some(&"text".to_string())), Some("text".to_string()));
 }
 
 #[test]
-fn test_tag_values_to_map() {
+fn tag_values_to_map_works() {
     let tags = vec![
         crate::contracts::TagValue {
             tag: "k1".to_string(),

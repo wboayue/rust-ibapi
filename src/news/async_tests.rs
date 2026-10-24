@@ -18,7 +18,7 @@ use std::sync::Arc;
 use time::macros::datetime;
 
 #[tokio::test]
-async fn test_news_providers() {
+async fn news_providers_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsProviders,
         news_providers()
@@ -44,7 +44,7 @@ async fn test_news_providers() {
 }
 
 #[tokio::test]
-async fn test_news_bulletins() {
+async fn news_bulletins() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsBulletins,
         news_bulletin()
@@ -71,7 +71,7 @@ async fn test_news_bulletins() {
 }
 
 #[tokio::test]
-async fn test_historical_news() {
+async fn historical_news_works() {
     let headline = "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com";
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
@@ -122,7 +122,7 @@ async fn test_historical_news() {
 }
 
 #[tokio::test]
-async fn test_news_article() {
+async fn news_article_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsArticle,
         news_article()
@@ -150,7 +150,7 @@ async fn test_news_article() {
 }
 
 #[tokio::test]
-async fn test_contract_news() {
+async fn contract_news() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickNews,
         tick_news()
@@ -191,7 +191,7 @@ async fn test_contract_news() {
 }
 
 #[tokio::test]
-async fn test_broad_tape_news() {
+async fn broad_tape_news() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickNews,
         tick_news()
@@ -229,7 +229,7 @@ async fn test_broad_tape_news() {
 }
 
 #[tokio::test]
-async fn test_news_bulletin_cancellation() {
+async fn news_bulletin_cancellation() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NewsBulletins,
         news_bulletin()
@@ -254,7 +254,7 @@ async fn test_news_bulletin_cancellation() {
 }
 
 #[tokio::test]
-async fn test_contract_news_cancellation() {
+async fn contract_news_cancellation() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickNews,
         tick_news()
@@ -282,7 +282,7 @@ async fn test_contract_news_cancellation() {
 }
 
 #[tokio::test]
-async fn test_broad_tape_news_cancellation() {
+async fn broad_tape_news_cancellation() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
