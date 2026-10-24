@@ -4,10 +4,12 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::client::ClientRequestBuilders;
+use crate::common::request_helpers::{self, expect_proto};
 use crate::subscriptions::Subscription;
 use crate::transport::AsyncMessageBus;
 use crate::{Client, Error};
 
+use super::common::decoders;
 use super::common::stream_decoders::DisplayGroupUpdate;
 use super::encoders;
 
@@ -87,6 +89,34 @@ impl DerefMut for DisplayGroupSubscription {
 }
 
 impl Client {
+    /// Returns the ids of the display groups visible in TWS, most used first.
+    ///
+    /// Display Groups are a TWS-only feature (not available in IB Gateway).
+    /// Pass an id to [`subscribe_to_group_events`](Self::subscribe_to_group_events).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:7497", 100).await?;
+    ///
+    ///     let groups = client.display_groups().await?;
+    ///     println!("visible display groups: {groups:?}");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn display_groups(&self) -> Result<Vec<i32>, Error> {
+        request_helpers::one_shot_by_request_id(
+            self,
+            encoders::encode_query_display_groups,
+            expect_proto(decoders::decode_display_group_list_proto),
+        )
+        .await
+    }
+
     /// Subscribes to display group events for the specified group.
     ///
     /// Display Groups are a TWS-only feature (not available in IB Gateway).

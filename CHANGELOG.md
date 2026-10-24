@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Client::wait_connected` (blocking and async): waits until the client is connected again after a connection loss, failing with `Error::ConnectionFailed` once the reconnect gives up or `Error::Shutdown` after a shutdown. A stream loop calls it before resubscribing (#1052).
+- `Client::display_groups()` (async and blocking) returns the ids of the display groups visible in TWS, most used first; pass one to `subscribe_to_group_events` (#1058).
 
 ### Changed
 

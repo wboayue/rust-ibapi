@@ -156,8 +156,11 @@ pub(crate) fn encode_cancel_head_timestamp(request_id: i32) -> Result<Vec<u8>, E
 }
 
 // Per-encoder body assertions live in the migrated sync/async tests via
-// `assert_request<B>(builder)`; cancel encoders are exercised through their
-// production paths (e.g. subscription drop handlers).
+// `assert_request<B>(builder)`; the historical-data and historical-ticks
+// cancel encoders are exercised through their production paths (subscription
+// drop handlers). `encode_cancel_histogram_data` and
+// `encode_cancel_head_timestamp` have no production path yet (no `Client`
+// method sends them) and are covered by the unit tests below.
 #[cfg(test)]
 #[path = "encoders_tests.rs"]
 mod tests;

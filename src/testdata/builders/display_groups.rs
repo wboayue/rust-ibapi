@@ -1,8 +1,15 @@
-//! Builders for display-groups response messages.
+//! Builders for display-groups response and request messages.
 
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::testdata::builders::ResponseProtoEncoder;
+
+single_req_id_request_builder!(
+    QueryDisplayGroupsRequestBuilder,
+    QueryDisplayGroupsRequest,
+    OutgoingMessages::QueryDisplayGroups
+);
 
 #[derive(Clone, Debug)]
 pub struct DisplayGroupUpdatedResponse {
@@ -37,6 +44,51 @@ impl ResponseProtoEncoder for DisplayGroupUpdatedResponse {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DisplayGroupListResponse {
+    pub request_id: i32,
+    pub groups: String,
+}
+
+impl Default for DisplayGroupListResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            groups: String::new(),
+        }
+    }
+}
+
+impl DisplayGroupListResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+    pub fn groups(mut self, v: impl Into<String>) -> Self {
+        self.groups = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for DisplayGroupListResponse {
+    type Proto = proto::DisplayGroupList;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::DisplayGroupList {
+            req_id: Some(self.request_id),
+            groups: Some(self.groups.clone()),
+        }
+    }
+}
+
 pub fn display_group_updated() -> DisplayGroupUpdatedResponse {
     DisplayGroupUpdatedResponse::default()
+}
+
+pub fn display_group_list() -> DisplayGroupListResponse {
+    DisplayGroupListResponse::default()
+}
+
+pub fn query_display_groups_request() -> QueryDisplayGroupsRequestBuilder {
+    QueryDisplayGroupsRequestBuilder::default()
 }
