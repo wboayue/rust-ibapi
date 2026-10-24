@@ -1,6 +1,6 @@
 use super::*;
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
-use crate::orders::{Action, Order, TimeInForce};
+use crate::orders::{Action, Order, TimeInForce, WhatIfType};
 
 #[test]
 fn encode_contract_basic() {
@@ -123,6 +123,38 @@ fn encode_order_route_marketable_to_bbo() {
 }
 
 #[test]
+fn encode_order_additional_params() {
+    let order = Order {
+        post_only: true,
+        allow_pre_open: true,
+        ignore_open_auction: true,
+        seek_price_improvement: Some(true),
+        what_if_type: Some(WhatIfType::MarginRequirements),
+        ..Default::default()
+    };
+
+    let proto = encode_order(&order);
+
+    assert_eq!(proto.post_only, Some(true));
+    assert_eq!(proto.allow_pre_open, Some(true));
+    assert_eq!(proto.ignore_open_auction, Some(true));
+    assert_eq!(proto.seek_price_improvement, Some(1));
+    assert_eq!(proto.what_if_type, Some(1));
+}
+
+#[test]
+fn encode_order_seek_price_improvement_false_is_sent() {
+    let order = Order {
+        seek_price_improvement: Some(false),
+        ..Default::default()
+    };
+
+    let proto = encode_order(&order);
+
+    assert_eq!(proto.seek_price_improvement, Some(0));
+}
+
+#[test]
 fn encode_order_conditions_include_overnight() {
     let order = Order {
         conditions_include_overnight: true,
@@ -146,9 +178,14 @@ fn encode_order_default_fields_omitted() {
     assert!(proto.all_or_none.is_none());
     assert!(proto.hedge_max_size.is_none());
     assert!(proto.deactivate.is_none());
-    // `verify_order` gates these on the bool: absent when false, as C# checks presence.
+    // `verify_order` gates these on the field: absent when unset, as C# checks presence.
     assert!(proto.route_marketable_to_bbo.is_none());
     assert!(proto.conditions_include_overnight.is_none());
+    assert!(proto.post_only.is_none());
+    assert!(proto.allow_pre_open.is_none());
+    assert!(proto.ignore_open_auction.is_none());
+    assert!(proto.seek_price_improvement.is_none());
+    assert!(proto.what_if_type.is_none());
 }
 
 #[test]

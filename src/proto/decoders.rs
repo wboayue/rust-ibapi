@@ -5,7 +5,7 @@ use crate::contracts::{
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
     Action, Execution, ExecutionSide, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState,
-    ReferencePriceType, Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
+    ReferencePriceType, Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType, WhatIfType,
 };
 use crate::proto;
 use crate::Error;
@@ -326,8 +326,12 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
 
     // processing control
     order.what_if = proto.what_if.unwrap_or_default();
+    order.what_if_type = proto.what_if_type.map(WhatIfType::from);
     order.transmit = proto.transmit.unwrap_or(true);
     order.deactivate = proto.deactivate.unwrap_or_default();
+    order.post_only = proto.post_only.unwrap_or_default();
+    order.allow_pre_open = proto.allow_pre_open.unwrap_or_default();
+    order.ignore_open_auction = proto.ignore_open_auction.unwrap_or_default();
     order.override_percentage_constraints = proto.override_percentage_constraints.unwrap_or_default();
 
     // institutional orders
@@ -410,6 +414,7 @@ pub fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.shareholder = s(&proto.shareholder);
     order.imbalance_only = proto.imbalance_only.unwrap_or_default();
     order.route_marketable_to_bbo = proto.route_marketable_to_bbo.unwrap_or_default() != 0;
+    order.seek_price_improvement = proto.seek_price_improvement.map(|v| v != 0);
     order.parent_perm_id = proto.parent_perm_id;
     order.use_price_mgmt_algo = proto.use_price_mgmt_algo.unwrap_or_default() != 0;
     order.duration = proto.duration;

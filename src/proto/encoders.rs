@@ -288,11 +288,11 @@ pub fn encode_order(order: &Order) -> proto::Order {
         route_marketable_to_bbo: if order.route_marketable_to_bbo { Some(1) } else { None },
         parent_perm_id: order.parent_perm_id,
         deactivate: some_bool(order.deactivate),
-        post_only: None,
-        allow_pre_open: None,
-        ignore_open_auction: None,
-        seek_price_improvement: None,
-        what_if_type: None,
+        post_only: some_bool(order.post_only),
+        allow_pre_open: some_bool(order.allow_pre_open),
+        ignore_open_auction: some_bool(order.ignore_open_auction),
+        seek_price_improvement: order.seek_price_improvement.map(i32::from),
+        what_if_type: order.what_if_type.map(i32::from),
     };
 
     proto_order

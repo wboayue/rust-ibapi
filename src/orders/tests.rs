@@ -279,6 +279,19 @@ fn reference_price_type_round_trips_every_wire_code() {
     );
 }
 
+#[test]
+fn what_if_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (WhatIfType::FullOrderCheck, 0),
+            (WhatIfType::MarginRequirements, 1),
+            (WhatIfType::Unknown(2), 2),
+            (WhatIfType::Unknown(-1), -1),
+        ],
+        WhatIfType::Unknown,
+    );
+}
+
 /// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new
 /// variant has no arm in `modeled_index` and fails to compile; the arm it
 /// forces then indexes past `seen`, so the table has to grow before the

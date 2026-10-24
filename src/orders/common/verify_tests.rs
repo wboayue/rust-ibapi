@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::ids::REQUEST_ID_FLOOR;
+use crate::orders::WhatIfType;
 
 fn assert_rejected(result: Result<OrderId, Error>, what: &str) {
     assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "{what}: {result:?}");
@@ -70,12 +71,52 @@ fn verify_order_gates_fields_above_the_floor() {
             DEACTIVATE,
         ),
         (
+            "post_only",
+            Order {
+                post_only: true,
+                ..Order::default()
+            },
+            POST_ONLY,
+        ),
+        (
+            "allow_pre_open",
+            Order {
+                allow_pre_open: true,
+                ..Order::default()
+            },
+            ALLOW_PRE_OPEN,
+        ),
+        (
+            "ignore_open_auction",
+            Order {
+                ignore_open_auction: true,
+                ..Order::default()
+            },
+            IGNORE_OPEN_AUCTION,
+        ),
+        (
             "route_marketable_to_bbo",
             Order {
                 route_marketable_to_bbo: true,
                 ..Order::default()
             },
             ROUTE_MARKETABLE_TO_BBO,
+        ),
+        (
+            "seek_price_improvement",
+            Order {
+                seek_price_improvement: Some(false),
+                ..Order::default()
+            },
+            SEEK_PRICE_IMPROVEMENT,
+        ),
+        (
+            "what_if_type",
+            Order {
+                what_if_type: Some(WhatIfType::FullOrderCheck),
+                ..Order::default()
+            },
+            WHAT_IF_TYPE,
         ),
         (
             "preset_stop_loss_order_id",
