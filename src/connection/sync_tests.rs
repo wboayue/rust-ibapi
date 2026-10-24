@@ -177,7 +177,7 @@ fn make_client() -> (Client, MemoryStream) {
     connection.establish_connection().expect("establish_connection failed");
     let server_version = connection.server_version();
 
-    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().expect("process_messages");
 
     let client = Client::stubbed(bus, server_version);
@@ -538,7 +538,7 @@ fn dispatcher_exits_when_shutdown_requested_during_reconnect() {
     push_handshake(&stream);
     connection.establish_connection().expect("establish_connection failed");
 
-    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().expect("process_messages");
 
     // Break the read: the dispatcher enters reconnect and waits out its
@@ -583,7 +583,7 @@ fn dispatcher_exits_when_shutdown_requested_during_a_successful_reconnect() {
     connection.establish_connection().expect("establish_connection failed");
     let shutdown = connection.shutdown_signal();
 
-    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().expect("process_messages");
 
     // Break the read: the dispatcher enters reconnect, waits out its backoff
@@ -627,7 +627,7 @@ fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
     push_handshake(&stream);
     connection.establish_connection().expect("establish_connection failed");
 
-    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().expect("process_messages");
     let message_bus: &dyn MessageBus = bus.as_ref();
 
@@ -676,7 +676,7 @@ fn one_shot_request_is_retried_after_the_reconnect() {
     connection.establish_connection().expect("establish_connection failed");
     let server_version = connection.server_version();
 
-    let bus = Arc::new(TcpMessageBus::new(connection).expect("TcpMessageBus::new"));
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().expect("process_messages");
     let client = Arc::new(Client::stubbed(bus.clone(), server_version));
 

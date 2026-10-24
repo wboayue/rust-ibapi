@@ -106,7 +106,7 @@ impl Client {
         let connection = AsyncConnection::connect(config.connection, notice_sender).await?;
         let connection_metadata = connection.connection_metadata().await;
 
-        let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity)?);
+        let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity));
 
         let client = Client::new(connection_metadata, message_bus.clone())?;
 

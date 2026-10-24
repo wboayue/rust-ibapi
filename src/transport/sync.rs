@@ -335,13 +335,13 @@ pub struct TcpMessageBus<S: Stream> {
 }
 
 impl<S: Stream> TcpMessageBus<S> {
-    pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
+    pub fn new(connection: Connection<S>) -> TcpMessageBus<S> {
         let order_taps = OrderTaps::new();
         let (signals_send, signals_recv) = channel::unbounded();
         let (shutdown_send, shutdown_recv) = channel::bounded(1);
         let shutdown = connection.shutdown_signal();
 
-        Ok(TcpMessageBus {
+        TcpMessageBus {
             connection,
             handles: Mutex::new(Vec::default()),
             requests: SenderHash::new(),
@@ -357,7 +357,7 @@ impl<S: Stream> TcpMessageBus<S> {
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
-        })
+        }
     }
 
     /// Installs the client's order-ID generator so a successful reconnect

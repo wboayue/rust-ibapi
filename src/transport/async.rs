@@ -517,14 +517,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// through `with_channel_capacity` (the builder owns the default), so
     /// this exists for test fixtures that don't care about capacity.
     #[cfg(test)]
-    pub fn new(connection: AsyncConnection<S>) -> Result<Self, Error> {
+    pub fn new(connection: AsyncConnection<S>) -> Self {
         Self::with_channel_capacity(connection, BROADCAST_CHANNEL_CAPACITY)
     }
 
     /// Create a new async TCP message bus whose market-data channels hold up
     /// to `channel_capacity` frames per subscription before evicting the
     /// oldest. Order-class channels hold at least their [`ChannelClass`] floor.
-    pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Result<Self, Error> {
+    pub fn with_channel_capacity(connection: AsyncConnection<S>, channel_capacity: usize) -> Self {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
         let shutdown = connection.shutdown_signal();
@@ -590,7 +590,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         });
 
-        Ok(message_bus)
+        message_bus
     }
 
     /// Installs the client's order-ID generator so a successful reconnect
