@@ -350,11 +350,24 @@ pub enum AccountUpdate {
     End,
 }
 
+/// Prefix on the key of a per-currency [`AccountValue`] or [`AccountMultiValue`] when the TWS
+/// API setting "Prepend '$LEDGER-' prefix to per-currency account values" is enabled.
+/// Unrelated to the `$LEDGER` account summary group of [`AccountSummaryTags`].
+pub const LEDGER_PREFIX: &str = "$LEDGER-";
+
 /// Single account value update emitted by the API.
+///
+/// A key such as `AccruedCash` arrives once for the whole account and once per currency.
+/// With the TWS API setting "Prepend '$LEDGER-' prefix to per-currency account values"
+/// (TWS 10.47 and later, File - Global Configuration - API - Settings; on by default for
+/// new users, off for upgrading users) the per-currency rows arrive as `$LEDGER-AccruedCash`
+/// and the account-level row keeps its key. [`is_per_currency`](Self::is_per_currency) and
+/// [`base_key`](Self::base_key) split the prefix off. With the setting off, both rows carry
+/// the bare key and the key does not distinguish between them.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountValue {
-    /// Key describing the value
+    /// Key describing the value, with the [`LEDGER_PREFIX`] when TWS marks it per-currency
     pub key: String,
     /// Value corresponding to the key
     pub value: String,
@@ -362,6 +375,34 @@ pub struct AccountValue {
     pub currency: String,
     /// Account ID (optional)
     pub account: Option<String>,
+}
+
+impl AccountValue {
+    /// `true` when `key` carries the [`LEDGER_PREFIX`], which marks a per-currency value
+    /// when the TWS setting is enabled. Always `false` with the setting off.
+    pub fn is_per_currency(&self) -> bool {
+        self.key.starts_with(LEDGER_PREFIX)
+    }
+
+    /// `key` without the [`LEDGER_PREFIX`]; `key` itself when it has none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountValue;
+    ///
+    /// let value = AccountValue {
+    ///     key: "$LEDGER-AccruedCash".to_string(),
+    ///     value: "1000".to_string(),
+    ///     currency: "USD".to_string(),
+    ///     account: None,
+    /// };
+    /// assert!(value.is_per_currency());
+    /// assert_eq!(value.base_key(), "AccruedCash");
+    /// ```
+    pub fn base_key(&self) -> &str {
+        self.key.strip_prefix(LEDGER_PREFIX).unwrap_or(&self.key)
+    }
 }
 
 /// Aggregated valuation details for a single contract within the account.
@@ -405,6 +446,9 @@ pub enum AccountUpdateMulti {
 }
 
 /// Key/value pair returned for a specific account/model code pair.
+///
+/// Per-currency keys carry the [`LEDGER_PREFIX`] under the same TWS setting as
+/// [`AccountValue`].
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
@@ -412,12 +456,40 @@ pub struct AccountMultiValue {
     pub account: String,
     /// Model code
     pub model_code: String,
-    /// Key describing the value
+    /// Key describing the value, with the [`LEDGER_PREFIX`] when TWS marks it per-currency
     pub key: String,
     /// Value corresponding to the key
     pub value: String,
     /// Currency of the value
     pub currency: String,
+}
+
+impl AccountMultiValue {
+    /// `true` when `key` carries the [`LEDGER_PREFIX`], which marks a per-currency value
+    /// when the TWS setting is enabled. Always `false` with the setting off.
+    pub fn is_per_currency(&self) -> bool {
+        self.key.starts_with(LEDGER_PREFIX)
+    }
+
+    /// `key` without the [`LEDGER_PREFIX`]; `key` itself when it has none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::accounts::AccountMultiValue;
+    ///
+    /// let value = AccountMultiValue {
+    ///     key: "$LEDGER-AccruedCash".to_string(),
+    ///     value: "1000".to_string(),
+    ///     currency: "USD".to_string(),
+    ///     ..Default::default()
+    /// };
+    /// assert!(value.is_per_currency());
+    /// assert_eq!(value.base_key(), "AccruedCash");
+    /// ```
+    pub fn base_key(&self) -> &str {
+        self.key.strip_prefix(LEDGER_PREFIX).unwrap_or(&self.key)
+    }
 }
 
 /// User identity information returned by `Client::user_info`.
@@ -571,3 +643,7 @@ pub use r#async::AccountSummarySnapshots;
 
 #[cfg(feature = "async")]
 mod r#async;
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).
 - `news::HistoricalNewsPage`, from `historical_news(..).page()` (async and blocking): the headlines as `articles`, and `has_more`, TWS's flag that more headlines are available than it returned (#1211).
 - `AccountId` converts from `&String` and `&AccountId`, so a borrowed account id passes to any `impl Into<AccountId>` parameter (#1204).
+- `AccountValue::is_per_currency` and `base_key` (also on `AccountMultiValue`) and `accounts::LEDGER_PREFIX`: distinguish between per-currency account values and account-level ones. With the TWS 10.47 API setting "Prepend '$LEDGER-' prefix to per-currency account values" on, per-currency keys from `account_updates` and `account_updates_multi` arrive prefixed, e.g. `$LEDGER-AccruedCash`; with it off, keys are unchanged and `is_per_currency` is `false` (#1223).
 
 ### Changed
 

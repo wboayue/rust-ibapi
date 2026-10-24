@@ -274,6 +274,8 @@ impl Client {
     /// Subscribes to a specific account's information and portfolio.
     ///
     /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed.
+    /// Per-currency values may arrive with a `$LEDGER-` key prefix; see
+    /// [`AccountValue`].
     ///
     /// TWS streams one account at a time per connection. Subscribing to the same
     /// account again shares the stream; another account is refused until every
@@ -316,6 +318,8 @@ impl Client {
     /// Requests account updates for account and/or model.
     ///
     /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
+    /// Per-currency values may arrive with a `$LEDGER-` key prefix; see
+    /// [`AccountMultiValue`].
     ///
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
