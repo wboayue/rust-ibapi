@@ -19,7 +19,7 @@ The transport is protobuf-only, so responses are proto-framed with `proto_respon
 ```rust
 // src/orders/async_tests.rs
 #[tokio::test]
-async fn test_place_order() {
+async fn place_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::OpenOrder,
