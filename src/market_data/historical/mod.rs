@@ -178,7 +178,8 @@ pub struct Bar {
     pub volume: f64,
     /// The bar's Weighted Average Price (only available for TRADES)
     pub wap: f64,
-    /// The number of trades during the bar's timespan (only available for TRADES)
+    /// The number of trades during the bar's timespan (only available for TRADES);
+    /// `-1` when TWS sends none
     pub count: i32,
 }
 

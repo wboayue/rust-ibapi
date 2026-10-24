@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The stream-retry loop in README.md and `examples/sync/stream_retry.rs` no longer panics on a connection loss. It resubscribed while the client was still reconnecting, and `.expect` panicked on the `ConnectionReset` the request was refused with; it now calls `wait_connected` first (#1052).
+- A `HistoricalDataUpdate` frame with no bar fails to decode with `Error::Parse`. Previously it reached the subscriber as `HistoricalBarUpdate::Update` holding a bar dated 1970-01-01 with zero prices and volume. The `historical_data(..).stream()` subscription yields the error and ends (#1057).
+- An update bar from `historical_data(..).stream()` (`HistoricalBarUpdate::Update`) that carries no trade count has `count` `-1`, as bars in the initial batch already did, instead of `0` (#1057).
+- A historical bar whose `date` is missing or does not parse fails to decode with `Error::Parse`, which carries the value when it is malformed. Previously it decoded as a bar dated 1970-01-01. `historical_data(..).fetch()` returns the error; the `historical_data(..).stream()` subscription yields it and ends (#1057).
 
 ## [5.2.0] - 2026-10-20
 
