@@ -58,7 +58,8 @@ pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Err
         check_version(server_version, IGNORE_OPEN_AUCTION)?;
     }
 
-    if order.route_marketable_to_bbo {
+    // Tri-state: `Some(false)` is sent too, so it is gated.
+    if order.route_marketable_to_bbo.is_some() {
         check_version(server_version, ROUTE_MARKETABLE_TO_BBO)?;
     }
 

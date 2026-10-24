@@ -35,7 +35,7 @@ pub(crate) const ADDITIONAL_PARAM_GATES: &[ParamGate] = &[
     ParamGate {
         name: "route_marketable_to_bbo",
         version: server_versions::ADDITIONAL_ORDER_PARAMS_2,
-        set: |order| order.route_marketable_to_bbo = true,
+        set: |order| order.route_marketable_to_bbo = Some(true),
     },
     ParamGate {
         name: "seek_price_improvement",

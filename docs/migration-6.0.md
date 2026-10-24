@@ -393,3 +393,22 @@ The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so ever
 `Subscription::cancel_and_drain` (sync and async) logged a failed cancel write and went on draining, so the failure showed up later, if at all, as `Drained::Unconfirmed` or a connection reset. It now returns the write's error. The cancel is also written when the stream had already ended with an error on our side (a decode error, `Error::BufferLimitExceeded`), where 5.x left it to the drop and its log. A `Drained::Unconfirmed` arm that stood for "the write may have failed" now gets those cases as `Err`; treat the request id as possibly live there too.
 
 In async, the deadline now bounds the write as well. A write still pending when it passes gives `Drained::Unconfirmed` and finishes in its own task, where a failure is only logged. `cancel()` still returns `()`.
+
+### 20. `Order::use_price_mgmt_algo` and `route_marketable_to_bbo` are `Option<bool>`
+
+Both fields were `bool`. The order sent `true` as `1` and `false` as nothing, which leaves the TWS default in place, so a caller could not turn either feature off; an open order TWS reported with `0` (explicitly off) read as `false`, the same as unset. They are now `Option<bool>`: `None` sends nothing, `Some(false)` sends `0`, `Some(true)` sends `1`. An open order reads back `None`, `Some(false)` or `Some(true)` the same way.
+
+```rust,ignore
+// 5.x
+order.use_price_mgmt_algo = true;
+order.route_marketable_to_bbo = false; // could only mean "leave the TWS default"
+
+// 6.0
+order.use_price_mgmt_algo = Some(true);
+order.route_marketable_to_bbo = None; // leave the TWS default
+order.route_marketable_to_bbo = Some(false); // turn it off
+```
+
+Replace `true` with `Some(true)` and `false` with `None`, and use `Some(false)` where the feature must be off. The compiler finds every use of the two fields as `bool`.
+
+The compiler does not catch two things. `route_marketable_to_bbo: Some(false)` is sent, so it needs server version 217 (`ADDITIONAL_ORDER_PARAMS_2`), as `Some(true)` always did; against an older server the order now fails with `Error::ServerVersion` where `false` used to pass. `Order` derives `Serialize` / `Deserialize`, and an unset field now serializes as `null`; JSON written by 5.x, which has `true` or `false`, still deserializes, as `Some(true)` or `Some(false)`, so a stored `false` that meant "leave the default" now sends `0`.

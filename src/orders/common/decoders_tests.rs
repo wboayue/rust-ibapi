@@ -744,6 +744,24 @@ fn decode_order_seek_price_improvement_zero_is_false() {
     assert_eq!(order.seek_price_improvement, Some(false));
 }
 
+// === decode_order tri-state flags ===
+
+/// `route_marketable_to_bbo` and `use_price_mgmt_algo` are int32 on the wire:
+/// absent is `None`, 0 is `Some(false)`, anything else `Some(true)`.
+#[test]
+fn decode_order_tri_state_flags() {
+    for (wire, expected) in [(None, None), (Some(0), Some(false)), (Some(1), Some(true)), (Some(2), Some(true))] {
+        let proto_order = proto::Order {
+            route_marketable_to_bbo: wire,
+            use_price_mgmt_algo: wire,
+            ..proto_order()
+        };
+        let order = decode_order(&proto_order).unwrap();
+        assert_eq!(order.route_marketable_to_bbo, expected, "route_marketable_to_bbo {wire:?}");
+        assert_eq!(order.use_price_mgmt_algo, expected, "use_price_mgmt_algo {wire:?}");
+    }
+}
+
 // === decode_order conditions_include_overnight ===
 
 #[test]

@@ -461,10 +461,11 @@ pub struct Order {
     pub shareholder: String,
     /// Used to specify "imbalance only open orders" or "imbalance only closing orders".
     pub imbalance_only: bool,
-    /// Routes market order to Best Bid Offer.
+    /// Routes market order to Best Bid Offer. `None` leaves the TWS default in place;
+    /// `Some(false)` turns it off explicitly.
     ///
-    /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
-    pub route_marketable_to_bbo: bool,
+    /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later when `Some`.
+    pub route_marketable_to_bbo: Option<bool>,
     /// Whether to seek a better price than the one submitted with the order. `None` sends
     /// nothing, leaving TWS's default. Open-order reports carry TWS's value, so an order
     /// placed with `None` reads back as `Some(false)`.
@@ -531,8 +532,9 @@ pub struct Order {
     pub is_oms_container: bool,
     /// Set to true to convert order of type 'Primary Peg' to 'D-Peg'.
     pub discretionary_up_to_limit_price: bool,
-    /// Specifies wether to use Price Management Algo. CTCI users only.
-    pub use_price_mgmt_algo: bool,
+    /// Specifies whether to use Price Management Algo. CTCI users only. `None` leaves the TWS
+    /// default in place; `Some(false)` turns it off explicitly.
+    pub use_price_mgmt_algo: Option<bool>,
     /// Indicates the duration of the order in seconds.
     pub duration: Option<i32>,
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
@@ -662,7 +664,7 @@ impl Default for Order {
             auto_cancel_parent: false,
             shareholder: "".to_owned(),
             imbalance_only: false,
-            route_marketable_to_bbo: false,
+            route_marketable_to_bbo: None,
             seek_price_improvement: None,
             parent_perm_id: None,
             advanced_error_override: "".to_owned(),
@@ -693,7 +695,7 @@ impl Default for Order {
             soft_dollar_tier: SoftDollarTier::default(),
             is_oms_container: false,
             discretionary_up_to_limit_price: false,
-            use_price_mgmt_algo: false,
+            use_price_mgmt_algo: None,
             duration: None,
             post_to_ats: None,
             customer_account: String::new(),
