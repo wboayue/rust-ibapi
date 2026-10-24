@@ -363,7 +363,7 @@ fn account_updates_multi() {
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let subscription = client
-        .account_updates_multi(account.as_ref(), None)
+        .account_updates_multi(account.as_ref(), None, false)
         .expect("request account updates multi failed");
 
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
@@ -392,7 +392,7 @@ fn account_updates_multi() {
         &request_account_updates_multi()
             .request_id(TEST_REQ_ID_FIRST)
             .account(TEST_ACCOUNT)
-            .ledger_and_nlv(true),
+            .ledger_and_nlv(false),
     );
     assert_request(&message_bus, 1, &cancel_account_updates_multi().request_id(TEST_REQ_ID_FIRST));
 }

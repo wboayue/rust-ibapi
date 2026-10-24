@@ -123,7 +123,9 @@ fn account_updates_receives_data() {
 fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account();
 
-    let subscription = client.account_updates_multi(Some(&account), None).expect("account_updates_multi failed");
+    let subscription = client
+        .account_updates_multi(Some(&account), None, true)
+        .expect("account_updates_multi failed");
 
     let _item = subscription.next_timeout(Duration::from_secs(10));
 }

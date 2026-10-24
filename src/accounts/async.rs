@@ -355,6 +355,10 @@ impl Client {
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
+    /// * `ledger_and_nlv` - which keys arrive. `true`: only the per-currency `$LEDGER-*` keys
+    ///   (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ..., one set per currency and
+    ///   for `BASE`), TWS's light-weight request. `false`: those same keys plus the account-level
+    ///   keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
     ///
     /// # Examples
     ///
@@ -371,7 +375,7 @@ impl Client {
     ///
     ///     let account = AccountId("U1234567".to_string());
     ///
-    ///     let mut subscription = client.account_updates_multi(Some(&account), None).await.expect("error requesting account updates multi");
+    ///     let mut subscription = client.account_updates_multi(Some(&account), None, false).await.expect("error requesting account updates multi");
     ///
     ///     while let Some(item) = subscription.next().await {
     ///         match item {
@@ -391,9 +395,10 @@ impl Client {
         &self,
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
+        ledger_and_nlv: bool,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_and_nlv)?;
 
         builder.send::<AccountUpdateMulti>(request).await
     }

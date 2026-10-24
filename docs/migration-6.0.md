@@ -323,6 +323,22 @@ if row.is_smart_depth { /* ... */ }
 
 The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.
 
+### 16. `account_updates_multi` takes `ledger_and_nlv`
+
+`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_and_nlv: bool`, the flag of TWS's account-updates-by-model request. `true` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `false` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `true`, so the account-level keys could not be requested.
+
+```rust,ignore
+// 5.x
+let updates = client.account_updates_multi(Some(&account), None)?;
+
+// 6.0: `true` keeps the 5.x request
+let updates = client.account_updates_multi(Some(&account), None, true)?;
+// or ask for the account-level keys as well
+let updates = client.account_updates_multi(Some(&account), None, false)?;
+```
+
+Add the argument. The compiler finds every call that lacks it. It does not choose the value for you: pass `true` to receive what 5.x received, or `false` to receive the account-level keys as well, as verified against a live gateway (`docs/wire-facts/accounts.md`).
+
 ### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
 
 All three are text-protocol fields: `faProfile` went out in the text `placeOrder` until IB desupported FA profiles at server 177, and `basisPoints` / `basisPointsType` came back in the text `openOrder` for EFP orders ("download only" in IB's client). IB's protobuf `Order` message, the only shape the crate has spoken since 3.0, has no field for any of them, so nothing has sent or read them since. They are removed. Deleting an assignment changes nothing TWS sees. For a Financial Advisor allocation, use `fa_group` and `fa_method`, which are transmitted.

@@ -320,12 +320,15 @@ impl Client {
 
     /// Requests account updates for account and/or model.
     ///
-    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed.
     /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
     ///
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
+    /// * `ledger_and_nlv` - which keys arrive. `true`: only the per-currency `$LEDGER-*` keys
+    ///   (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ..., one set per currency and
+    ///   for `BASE`), TWS's light-weight request. `false`: those same keys plus the account-level
+    ///   keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
     ///
     /// # Examples
     ///
@@ -339,7 +342,7 @@ impl Client {
     ///
     /// let account = AccountId("U1234567".to_string());
     ///
-    /// let subscription = client.account_updates_multi(Some(&account), None).expect("error requesting account updates multi");
+    /// let subscription = client.account_updates_multi(Some(&account), None, false).expect("error requesting account updates multi");
     /// for update in subscription.iter_data() {
     ///     let update = update?;
     ///     println!("{update:?}");
@@ -355,9 +358,10 @@ impl Client {
         &self,
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
+        ledger_and_nlv: bool,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_and_nlv)?;
 
         builder.send(request)
     }

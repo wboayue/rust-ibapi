@@ -17,7 +17,7 @@ fn main() {
     let account = Some(AccountId("DU1234567".to_string()));
 
     let subscription = client
-        .account_updates_multi(account.as_ref(), None)
+        .account_updates_multi(account.as_ref(), None, false)
         .expect("error requesting account updates multi");
     for update in subscription.iter_data() {
         let update = match update {
