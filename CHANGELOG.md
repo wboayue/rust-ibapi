@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Once the automatic reconnect gives up, every later request fails with `Error::ConnectionFailed`, and after a shutdown with `Error::Shutdown`. Both used to fail with `Error::ConnectionReset`, the error for "still reconnecting", so a caller could not tell the states apart. One-shot requests that retry across a reconnect also end with `ConnectionFailed`, where they returned `Shutdown`. Streams open when the connection dropped still end with `ConnectionReset` (#1052).
+- Once the automatic reconnect gives up, every later request fails with `Error::ConnectionFailed`, and after a shutdown with `Error::Shutdown`. Both used to fail with `Error::ConnectionReset`, the error for "still reconnecting", so a caller could not tell the states apart. `order_update_stream`, `order_status_stream` and `wait_for_fill` also fail with `ConnectionFailed` after the reconnect gives up, where they returned `Shutdown`. A dispatcher that stops on a read error reconnecting cannot fix now reports `ConnectionFailed` too, instead of `Shutdown`. One-shot requests that retry across a reconnect also end with `ConnectionFailed`, where they returned `Shutdown`. Streams open when the connection dropped still end with `ConnectionReset` (#1052).
 
 ### Fixed
 

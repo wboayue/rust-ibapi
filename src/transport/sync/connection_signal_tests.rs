@@ -59,20 +59,21 @@ fn shutdown_is_terminal() {
     assert!(matches!(signal.wait_connected(), Err(Error::Shutdown)));
 }
 
+/// The signal tracks the session through a failed reconnect; which error
+/// each state maps to is `SessionState`'s, tested in `common_tests`.
 #[test]
-fn check_tells_reconnecting_from_gone() {
+fn check_follows_the_session_through_a_failed_reconnect() {
     let signal = ConnectionSignal::default();
     assert!(signal.check().is_ok());
+    assert!(signal.check_ended().is_ok());
 
     signal.set_disconnected();
     assert!(matches!(signal.check(), Err(Error::ConnectionReset)));
+    assert!(signal.check_ended().is_ok(), "reconnecting is not ended");
 
     signal.fail();
     assert!(matches!(signal.check(), Err(Error::ConnectionFailed)));
-
-    let signal = ConnectionSignal::default();
-    signal.shutdown();
-    assert!(matches!(signal.check(), Err(Error::Shutdown)));
+    assert!(matches!(signal.check_ended(), Err(Error::ConnectionFailed)));
 }
 
 #[test]

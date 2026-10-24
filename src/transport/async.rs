@@ -711,6 +711,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                             }
                             Err(err) => {
                                 error!("Error processing message (shutting down): {err:?}");
+                                // Nobody asked for this shutdown: report the
+                                // session as failed.
+                                message_bus.connection_state.fail();
                                 break;
                             }
                         }
@@ -778,6 +781,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             return Err(Error::Shutdown);
         }
         Ok(())
+    }
+
+    /// A refusal from the order taps, which close on shutdown, reported as
+    /// why the session ended - `ConnectionFailed` when the client gave up on
+    /// it, as the send gate does. Asked after the refusal: `fail` latches
+    /// before the taps close, so the reason is always already set.
+    fn ended_reason(&self, refusal: Error) -> Error {
+        self.connection_state.check_ended().err().unwrap_or(refusal)
     }
 
     /// The one funnel for every bus-originated write, so no send can reach a
@@ -1147,8 +1158,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn create_order_status_subscription(&self, order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
+        // Not the send gate: nothing is written, and the stream may be
+        // opened mid-reconnect.
         let capacity = ChannelClass::Order.capacity(self.channel_capacity);
-        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderStatus(order_id))
             .class(ChannelClass::Order))
@@ -1156,7 +1169,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let capacity = ChannelClass::OrderStream.capacity(self.channel_capacity);
-        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
             .class(ChannelClass::OrderStream))

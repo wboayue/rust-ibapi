@@ -430,6 +430,14 @@ impl<S: Stream> TcpMessageBus<S> {
         Ok(())
     }
 
+    /// A refusal from the order taps, which close on shutdown, reported as
+    /// why the session ended - `ConnectionFailed` when the client gave up on
+    /// it, as the send gate does. Asked after the refusal: `fail` latches
+    /// before the taps close, so the reason is always already set.
+    fn ended_reason(&self, refusal: Error) -> Error {
+        self.connection_state.check_ended().err().unwrap_or(refusal)
+    }
+
     /// The one funnel for every bus-originated write, so no send can reach a
     /// socket the session no longer owns. The dispatcher's own reconnect
     /// handshake writes through `Connection`, not here.
@@ -591,6 +599,8 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             Err(err) => {
                 error!("error reading next message (shutting down): {err:?}");
+                // Nobody asked for this shutdown: report the session as failed.
+                self.connection_state.fail();
                 self.request_shutdown();
                 Err(err)
             }
@@ -966,7 +976,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
-        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0)?;
+        // Allowed mid-reconnect, like the order-update stream below.
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0).map_err(|e| self.ended_reason(e))?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
@@ -981,7 +992,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         // created while a reconnect is in progress. The lease gives the
         // subscription's drop signal its identity — see
         // `clear_order_update_stream`.
-        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_updates(0)?;
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_updates(0).map_err(|e| self.ended_reason(e))?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)

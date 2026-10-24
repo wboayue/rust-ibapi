@@ -2913,4 +2913,24 @@ async fn test_exhausted_reconnect_refuses_later_sends_with_connection_failed() {
 
     let sent = bus.send_request(RequestId::nth(1), vec![]).await.err();
     assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
+    // Streams that skip the send gate report the same reason.
+    let updates = bus.create_order_update_subscription().await.err();
+    assert!(matches!(updates, Some(Error::ConnectionFailed)), "order updates: {updates:?}");
+    let status = bus.create_order_status_subscription(OrderId::from(7)).await.err();
+    assert!(matches!(status, Some(Error::ConnectionFailed)), "order status: {status:?}");
+}
+
+/// After shutdown, the send gate refuses with `Shutdown` - not the
+/// `ConnectionReset` that means "reconnecting", which would invite a retry
+/// against a client that is gone (#1052).
+#[tokio::test]
+async fn test_send_after_shutdown_fails_with_shutdown() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+    mb.ensure_shutdown().await;
+
+    let sent = bus.send_request(RequestId::nth(1), vec![]).await.err();
+    assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
+    let waited = bus.wait_connected().await;
+    assert!(matches!(waited, Err(Error::Shutdown)), "wait_connected: {waited:?}");
 }

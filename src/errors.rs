@@ -63,7 +63,8 @@ pub enum Error {
     InvalidArgument(String),
 
     /// The connection to TWS/Gateway is gone for good: the automatic
-    /// reconnect used up its attempts. Terminal - every later request, and
+    /// reconnect used up its attempts, or reading from the socket failed in a
+    /// way reconnecting cannot fix. Terminal - every later request, and
     /// `Client::wait_connected`, fails with it. Streams open when the
     /// connection dropped already ended with [`Error::ConnectionReset`].
     #[error("ConnectionFailed")]
@@ -296,7 +297,8 @@ impl Error {
     /// Returns `false` for failures reconnecting cannot recover, so a read loop can
     /// branch on them separately to stop retrying: intentional teardown
     /// ([`Error::Shutdown`]), handshake refusal ([`Error::ConnectionRejected`]), and
-    /// exhausted reconnection ([`Error::ConnectionFailed`]).
+    /// a session the client gave up on ([`Error::ConnectionFailed`]: reconnection
+    /// exhausted, or a read error reconnecting cannot fix).
     ///
     /// The client reconnects on its own, and streams open when the connection
     /// dropped end with [`Error::ConnectionReset`] as soon as it does, before the
