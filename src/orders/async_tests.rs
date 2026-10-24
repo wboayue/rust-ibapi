@@ -7,7 +7,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::builder::{BracketPrices, TrailBy};
+use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
@@ -910,7 +910,10 @@ async fn submit_rejects_an_invalid_order_before_sending() {
         .submit()
         .await
         .expect_err("a negative quantity is invalid");
-    assert!(err.to_string().contains("Invalid quantity"), "got {err}");
+    assert!(
+        matches!(err, crate::Error::Validation(ValidationError::InvalidQuantity(q)) if q == -100.0),
+        "got {err:?}"
+    );
     assert_eq!(request_message_count(&bus), 0, "an invalid order must not reach the wire");
 }
 

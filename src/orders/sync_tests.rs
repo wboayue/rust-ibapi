@@ -19,7 +19,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 
 use super::*;
 use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
-use crate::orders::builder::{BracketPrices, TrailBy};
+use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::common::order_builder;
 
 #[test]
@@ -981,7 +981,10 @@ fn submit_rejects_an_invalid_order_before_sending() {
         .market()
         .submit()
         .expect_err("a negative quantity is invalid");
-    assert!(err.to_string().contains("Invalid quantity"), "got {err}");
+    assert!(
+        matches!(err, Error::Validation(ValidationError::InvalidQuantity(q)) if q == -100.0),
+        "got {err:?}"
+    );
     assert_eq!(request_message_count(&bus), 0, "an invalid order must not reach the wire");
 }
 

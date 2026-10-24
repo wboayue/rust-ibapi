@@ -62,6 +62,14 @@ pub enum Error {
     #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
 
+    /// An order builder rejected its inputs before anything was sent:
+    /// `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and
+    /// attached-order submits, `ExerciseOptionsBuilder::submit`, and `?` on
+    /// any [`ValidationError`]. Carries the `ValidationError`, so callers
+    /// match on its variants instead of parsing a message.
+    #[error("validation error: {0}")]
+    Validation(#[from] ValidationError),
+
     /// The connection to TWS/Gateway is gone for good: the automatic
     /// reconnect used up its attempts, or reading from the socket failed in a
     /// way reconnecting cannot fix. Terminal - every later request, and
@@ -383,6 +391,7 @@ impl Clone for Error {
             Error::ServerVersion(a, b, s) => Error::ServerVersion(*a, *b, s.clone()),
             Error::Simple(s) => Error::Simple(s.clone()),
             Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
+            Error::Validation(e) => Error::Validation(e.clone()),
             Error::ConnectionFailed => Error::ConnectionFailed,
             Error::ConnectionRejected(s) => Error::ConnectionRejected(s.clone()),
             Error::ClientIdInUse { client_id } => Error::ClientIdInUse { client_id: *client_id },
@@ -413,27 +422,6 @@ impl Clone for Error {
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Error {
         Error::Poison(format!("Mutex poison error: {err}"))
-    }
-}
-
-impl From<ValidationError> for Error {
-    fn from(err: ValidationError) -> Self {
-        match err {
-            ValidationError::InvalidQuantity(q) => Error::InvalidArgument(format!("Invalid quantity: {}", q)),
-            ValidationError::InvalidPrice(p) => Error::InvalidArgument(format!("Invalid price: {}", p)),
-            ValidationError::MissingRequiredField(field) => Error::InvalidArgument(format!("Missing required field: {}", field)),
-            ValidationError::InvalidCombination(msg) => Error::InvalidArgument(format!("Invalid combination: {}", msg)),
-            ValidationError::InvalidStopPrice { stop, current } => {
-                Error::InvalidArgument(format!("Invalid stop price {} for current price {}", stop, current))
-            }
-            ValidationError::InvalidLimitPrice { limit, current } => {
-                Error::InvalidArgument(format!("Invalid limit price {} for current price {}", limit, current))
-            }
-            ValidationError::InvalidBracketOrder(msg) => Error::InvalidArgument(format!("Invalid bracket order: {}", msg)),
-            ValidationError::InvalidPercentage { field, value, min, max } => {
-                Error::InvalidArgument(format!("Invalid {}: {} (must be between {} and {})", field, value, min, max))
-            }
-        }
     }
 }
 
