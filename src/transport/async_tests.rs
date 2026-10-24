@@ -2890,7 +2890,7 @@ async fn test_exhausted_reconnect_refuses_later_sends_with_connection_failed() {
     // Too short for a message id: InvalidFrame, which triggers the reconnect.
     stream.push_inbound(b"xx".to_vec());
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let mut in_flight = bus.send_request(RequestId::nth(100), vec![]).await.unwrap();
     bus.clone().process_messages().expect("process_messages");
 
