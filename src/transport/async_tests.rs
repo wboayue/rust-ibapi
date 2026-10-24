@@ -1229,7 +1229,7 @@ async fn subscription_10091_preserves_later_option_computation() {
 /// `MarketDepths::Reset` so `filter_data()` keeps it (#899).
 #[tokio::test]
 async fn subscription_317_yields_reset_then_rows() {
-    use crate::market_data::realtime::MarketDepths;
+    use crate::market_data::realtime::{DepthOperation, DepthSide, MarketDepths};
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
@@ -1265,8 +1265,8 @@ async fn subscription_317_yields_reset_then_rows() {
     match depths.next().await {
         Some(Ok(MarketDepths::MarketDepth(depth))) => {
             assert_eq!(depth.position, 0);
-            assert_eq!(depth.operation, 0);
-            assert_eq!(depth.side, 1);
+            assert_eq!(depth.operation, DepthOperation::Insert);
+            assert_eq!(depth.side, DepthSide::Bid);
             assert_eq!(depth.price, 101.5);
             assert_eq!(depth.size, 3.0);
         }

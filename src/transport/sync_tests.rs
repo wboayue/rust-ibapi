@@ -2054,7 +2054,7 @@ fn subscription_10091_preserves_later_option_computation() -> Result<(), Error> 
 /// `MarketDepths::Reset` so `iter_data()` keeps it (#899).
 #[test]
 fn subscription_317_yields_reset_then_rows() -> Result<(), Error> {
-    use crate::market_data::realtime::MarketDepths;
+    use crate::market_data::realtime::{DepthOperation, DepthSide, MarketDepths};
     use crate::messages::IncomingMessages;
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
@@ -2090,8 +2090,8 @@ fn subscription_317_yields_reset_then_rows() -> Result<(), Error> {
     match depths.next() {
         Some(Ok(MarketDepths::MarketDepth(depth))) => {
             assert_eq!(depth.position, 0);
-            assert_eq!(depth.operation, 0);
-            assert_eq!(depth.side, 1);
+            assert_eq!(depth.operation, DepthOperation::Insert);
+            assert_eq!(depth.side, DepthSide::Bid);
             assert_eq!(depth.price, 101.5);
             assert_eq!(depth.size, 3.0);
         }

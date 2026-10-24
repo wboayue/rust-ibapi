@@ -170,3 +170,34 @@ if details.fund_asset_type == FundAssetType::None { /* no value */ }
 if details.fund_asset_type == Some(FundAssetType::Equity) { /* ... */ }
 if details.fund_asset_type.is_none() { /* no value */ }
 ```
+
+### 8. `MarketDepth` and `MarketDepthL2` `operation` and `side` are enums
+
+`MarketDepth::operation`, `MarketDepth::side`, `MarketDepthL2::operation` and `MarketDepthL2::side` held the wire codes as `i32`: operation `0` insert, `1` update, `2` delete; side `0` ask, `1` bid. They are now `market_data::realtime::DepthOperation` (`Insert`, `Update`, `Delete`) and `market_data::realtime::DepthSide` (`Ask`, `Bid`), each with `Unknown(i32)` for a code this version does not model, which keeps the code as received. `DepthOperation::from(i32)`, `DepthSide::from(i32)` and `i32::from(..)` convert between the two.
+
+```rust,ignore
+// 5.x
+if row.side == 1 {
+    match row.operation {
+        0 | 1 => bids[row.position as usize] = Some((row.price, row.size)),
+        2 => bids[row.position as usize] = None,
+        _ => {}
+    }
+}
+
+// 6.0
+use ibapi::market_data::realtime::{DepthOperation, DepthSide};
+
+if row.side == DepthSide::Bid {
+    match row.operation {
+        DepthOperation::Insert | DepthOperation::Update => bids[row.position as usize] = Some((row.price, row.size)),
+        DepthOperation::Delete => bids[row.position as usize] = None,
+        DepthOperation::Unknown(_) => {}
+    }
+}
+let code = i32::from(row.operation); // where the wire code is needed
+```
+
+Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
+
+The compiler does not catch the serialized form. `MarketDepth` and `MarketDepthL2` derive `Serialize` / `Deserialize`, and `operation` and `side` now serialize in the enums' derived externally tagged form: `"Insert"`, `"Update"`, `"Delete"`, `"Ask"`, `"Bid"`, or `{"Unknown":9}`, where they were numbers. Stored or transmitted rows written by 5.x carry the numbers and no longer deserialize; the `utoipa` schemas change the same way.
