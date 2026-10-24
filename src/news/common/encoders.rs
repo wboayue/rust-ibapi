@@ -62,23 +62,16 @@ pub(in crate::news) fn encode_request_news_article(request_id: i32, provider_cod
     ))
 }
 
-/// Build the generic tick list for contract-specific news subscriptions.
-fn contract_news_generic_ticks(provider_codes: &[&str]) -> Vec<String> {
-    let mut ticks = vec!["mdoff".to_string()];
-    for provider in provider_codes {
-        ticks.push(format!("292:{provider}"));
-    }
-    ticks
-}
-
 /// Encode a contract news market data request.
 pub(in crate::news) fn encode_contract_news_request(
     request_id: i32,
     contract: &crate::contracts::Contract,
     provider_codes: &[&str],
 ) -> Result<Vec<u8>, crate::Error> {
-    let generic_ticks = contract_news_generic_ticks(provider_codes);
-    let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
+    // `mdoff` plus a `292:<provider>` tick per provider. The encoder borrows
+    // `&str`s, so the formatted ticks need an owner.
+    let provider_ticks: Vec<String> = provider_codes.iter().map(|provider| format!("292:{provider}")).collect();
+    let generic_ticks: Vec<&str> = std::iter::once("mdoff").chain(provider_ticks.iter().map(String::as_str)).collect();
     crate::market_data::realtime::common::encoders::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)
 }
 
