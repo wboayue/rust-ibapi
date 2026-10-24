@@ -22,8 +22,9 @@ mod sync_impl {
     /// What a retry waits on between attempts.
     pub trait ReconnectWaiter {
         /// Block until the session is connected again. Returns
-        /// `Error::Shutdown` if it never will be (a reconnect that gave up, or
-        /// during shutdown); the retry passes that on as-is, since a
+        /// `Error::ConnectionFailed` (a reconnect that gave up) or
+        /// `Error::Shutdown` (during shutdown) if it never will be; the retry
+        /// passes that on as-is, since a
         /// `ConnectionReset` would invite the caller to retry a client that is gone.
         fn wait_connected(&self) -> Result<(), Error>;
     }
@@ -74,8 +75,9 @@ mod async_impl {
     #[async_trait]
     pub trait ReconnectWaiter: Sync {
         /// Resolve once the session is connected again. Returns
-        /// `Error::Shutdown` if it never will be (a reconnect that gave up, or
-        /// during shutdown); the retry passes that on as-is, since a
+        /// `Error::ConnectionFailed` (a reconnect that gave up) or
+        /// `Error::Shutdown` (during shutdown) if it never will be; the retry
+        /// passes that on as-is, since a
         /// `ConnectionReset` would invite the caller to retry a client that is gone.
         async fn wait_connected(&self) -> Result<(), Error>;
     }

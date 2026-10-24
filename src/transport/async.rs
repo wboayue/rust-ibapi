@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use log::{debug, error, info, warn};
 use tokio::runtime::Handle;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -240,7 +240,8 @@ pub trait AsyncMessageBus: Send + Sync {
     fn request_shutdown_sync(&self);
 
     /// Resolve once the session is connected again, returning
-    /// [`Error::Shutdown`] if the session will never reconnect.
+    /// [`Error::ConnectionFailed`] if the reconnect gave up, or
+    /// [`Error::Shutdown`] after a shutdown.
     async fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
@@ -483,8 +484,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     cleanup_gate: Arc<tokio::sync::Mutex<()>>,
     /// Runtime the bus was built on; see [`AsyncMessageBus::runtime_handle`].
     runtime: Handle,
-    /// Handle to the message processing task
-    process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
+    /// Handle to the message processing task, set before `process_messages` returns.
+    process_task: std::sync::Mutex<Option<task::JoinHandle<()>>>,
     /// Latching shutdown flag, shared with the connection so a reconnect in
     /// progress sees the request.
     shutdown: Arc<ShutdownSignal>,
@@ -541,7 +542,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             #[cfg(test)]
             cleanup_gate: Arc::default(),
             runtime: Handle::current(),
-            process_task: Arc::new(RwLock::new(None)),
+            process_task: std::sync::Mutex::new(None),
             shutdown,
             order_ids: OnceLock::new(),
             rate_limiter: OnceLock::new(),
@@ -694,6 +695,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                     }
                                     Err(e) => {
                                         error!("Failed to reconnect to TWS/Gateway: {e:?}");
+                                        // Latched before `retire`'s shutdown, which
+                                        // keeps it: later sends and waiters see
+                                        // `ConnectionFailed`, not `Shutdown`.
+                                        message_bus.connection_state.fail();
                                         break;
                                     }
                                 }
@@ -706,6 +711,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                             }
                             Err(err) => {
                                 error!("Error processing message (shutting down): {err:?}");
+                                // Nobody asked for this shutdown: report the
+                                // session as failed.
+                                message_bus.connection_state.fail();
                                 break;
                             }
                         }
@@ -721,12 +729,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             message_bus.retire().await;
         });
 
-        // Store the task handle
-        let process_task = self.process_task.clone();
-        tokio::spawn(async move {
-            let mut task_guard = process_task.write().await;
-            *task_guard = Some(handle);
-        });
+        *lock(&self.process_task) = Some(handle);
 
         Ok(())
     }
@@ -740,7 +743,6 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             RoutingDecision::ByRequestId(id) => self.route_to_request_channel(id, message).await,
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::Error(payload) => self.route_error_message(payload).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
@@ -751,8 +753,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// The send gate: every bus-originated write checks here first, and is
-    /// refused with `Error::ConnectionReset` unless the session is live and
-    /// not shutting down.
+    /// refused unless the session is live and not shutting down - with
+    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::ConnectionFailed` once the reconnect gave up, and
+    /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
+    /// "stop".
     ///
     /// Without it, a request sent while the connection is down would be lost
     /// on the dead socket - or, worse, interleave with the handshake the
@@ -765,11 +770,19 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// principle race the socket swap inside `reconnect`. Closing that needs a
     /// session-level gate held across the handshake.
     fn ensure_connected(&self) -> Result<(), Error> {
-        if self.is_connected() {
-            Ok(())
-        } else {
-            Err(Error::ConnectionReset)
+        self.connection_state.check()?;
+        if self.shutdown.is_requested() {
+            return Err(Error::Shutdown);
         }
+        Ok(())
+    }
+
+    /// A refusal from the order taps, which close on shutdown, reported as
+    /// why the session ended - `ConnectionFailed` when the client gave up on
+    /// it, as the send gate does. Asked after the refusal: `fail` latches
+    /// before the taps close, so the reason is always already set.
+    fn ended_reason(&self, refusal: Error) -> Error {
+        self.connection_state.check_ended().err().unwrap_or(refusal)
     }
 
     /// The one funnel for every bus-originated write, so no send can reach a
@@ -1139,8 +1152,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn create_order_status_subscription(&self, order_id: OrderId) -> Result<AsyncInternalSubscription, Error> {
+        // Not the send gate: nothing is written, and the stream may be
+        // opened mid-reconnect.
         let capacity = ChannelClass::Order.capacity(self.channel_capacity);
-        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderStatus(order_id))
             .class(ChannelClass::Order))
@@ -1148,7 +1163,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let capacity = ChannelClass::OrderStream.capacity(self.channel_capacity);
-        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity)?;
+        let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
             .class(ChannelClass::OrderStream))
@@ -1164,12 +1179,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         // Wakes the dispatcher's pending read, so the join below can't hang on it.
         self.retire().await;
 
-        // Wait for the processing task to finish
-        let task_handle = {
-            let mut task_guard = self.process_task.write().await;
-            task_guard.take()
-        };
-
+        // Wait for the processing task to finish; the guard is dropped before the await.
+        let task_handle = lock(&self.process_task).take();
         if let Some(handle) = task_handle {
             debug!("Waiting for processing task to finish");
             if let Err(e) = handle.await {

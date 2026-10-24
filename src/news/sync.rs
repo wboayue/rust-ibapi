@@ -172,7 +172,7 @@ impl Client {
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
         let builder = self.request();
-        let request = common::encode_contract_news_request(builder.request_id(), contract, provider_codes)?;
+        let request = encoders::encode_contract_news_request(builder.request_id(), contract, provider_codes)?;
         builder.send_with_context(request, common::tick_news_context(self.decoder_context()))
     }
 
@@ -198,7 +198,7 @@ impl Client {
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
         let builder = self.request();
-        let request = common::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
+        let request = encoders::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
         builder.send_with_context(request, common::tick_news_context(self.decoder_context()))
     }
 }

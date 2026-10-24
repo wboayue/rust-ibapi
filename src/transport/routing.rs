@@ -17,8 +17,6 @@ pub(crate) enum RoutingDecision {
     ByOrderId(i32),
     /// Route by message type to shared channel
     ByMessageType(IncomingMessages),
-    /// Route to shared message channel
-    SharedMessage(IncomingMessages),
     /// Special handling for error messages
     Error(DecodedError),
     /// Shutdown signal
@@ -79,13 +77,6 @@ fn is_order_message(message_type: IncomingMessages) -> bool {
     )
 }
 
-fn is_shared_message(message_type: IncomingMessages) -> bool {
-    matches!(
-        message_type,
-        IncomingMessages::ManagedAccounts | IncomingMessages::NextValidId | IncomingMessages::CurrentTime
-    )
-}
-
 /// Determine how to route an incoming message
 pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     let message_type = message.message_type();
@@ -112,9 +103,6 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     // dispatch handles text and protobuf wire formats.
     if is_order_message(message_type) {
         return RoutingDecision::ByOrderId(message.order_id().unwrap_or(-1));
-    }
-    if is_shared_message(message_type) {
-        return RoutingDecision::SharedMessage(message_type);
     }
     if let Some(request_id) = message.request_id() {
         return RoutingDecision::ByRequestId(request_id);
