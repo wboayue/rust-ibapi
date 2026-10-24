@@ -393,3 +393,19 @@ The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so ever
 `Subscription::cancel_and_drain` (sync and async) logged a failed cancel write and went on draining, so the failure showed up later, if at all, as `Drained::Unconfirmed` or a connection reset. It now returns the write's error. The cancel is also written when the stream had already ended with an error on our side (a decode error, `Error::BufferLimitExceeded`), where 5.x left it to the drop and its log. A `Drained::Unconfirmed` arm that stood for "the write may have failed" now gets those cases as `Err`; treat the request id as possibly live there too.
 
 In async, the deadline now bounds the write as well. A write still pending when it passes gives `Drained::Unconfirmed` and finishes in its own task, where a failure is only logged. `cancel()` still returns `()`.
+
+### 21. `historical_news` takes `total_results: u16`
+
+`Client::historical_news` (async and blocking) took `total_results: u8`, which capped a request at 255 headlines. IB documents the maximum as 300. The parameter is now `u16`.
+
+```rust,ignore
+// 5.x
+let total_results: u8 = 255;
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+
+// 6.0
+let total_results: u16 = 300;
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+```
+
+Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given and does not enforce IB's limit of 300.

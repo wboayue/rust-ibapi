@@ -98,7 +98,7 @@ impl Client {
         provider_codes: &[&str],
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
-        total_results: u8,
+        total_results: u16,
     ) -> Result<Subscription<NewsArticle>, Error> {
         let builder = self.request();
         let request =
