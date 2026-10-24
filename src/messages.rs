@@ -81,7 +81,8 @@ pub enum IncomingMessages {
     TickGeneric = 45,
     /// String-valued tick (exchange names, etc.).
     TickString = 46,
-    /// Exchange for Physical tick update.
+    /// Exchange for Physical tick update. TWS has no protobuf schema for it,
+    /// so no decoder claims this id; a frame is dropped with an info-level log.
     TickEFP = 47, //TICK EFP 47
     /// Current world clock time.
     CurrentTime = 49,
@@ -99,7 +100,8 @@ pub enum IncomingMessages {
     AccountDownloadEnd = 54,
     /// End marker for execution data.
     ExecutionDataEnd = 55,
-    /// Delta-neutral validation response.
+    /// Delta-neutral validation response. TWS has no protobuf schema for it,
+    /// so no decoder claims this id; a frame is dropped with an info-level log.
     DeltaNeutralValidation = 56,
     /// End of tick snapshot.
     TickSnapshotEnd = 57,
@@ -385,6 +387,8 @@ pub(crate) fn text_request_id_field(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
         | IncomingMessages::ReplaceFAEnd
+        | IncomingMessages::RerouteMktDataReq
+        | IncomingMessages::RerouteMktDepthReq
         | IncomingMessages::SecurityDefinitionOptionParameter
         | IncomingMessages::SecurityDefinitionOptionParameterEnd
         | IncomingMessages::SmartComponents
