@@ -190,6 +190,49 @@ impl Client {
         self.message_bus.is_connected()
     }
 
+    /// Resolves once the client is connected to TWS/IB Gateway again, so a
+    /// stream loop can resubscribe after [`Error::is_connection_lost`].
+    ///
+    /// Resolves at once while connected. While the client is reconnecting it
+    /// waits for the reconnect to finish, which with
+    /// `ClientBuilder::reconnect_forever` may be never; wrap it in `tokio::time::timeout` to bound the wait.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::ConnectionFailed`] if the reconnect gave up after its last attempt.
+    /// - [`Error::Shutdown`] if the client was shut down.
+    ///
+    /// Both are terminal: every later request fails with the same error.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     loop {
+    ///         let subscription = match client.realtime_bars(&contract).subscribe().await {
+    ///             Ok(subscription) => subscription,
+    ///             Err(e) if e.is_connection_lost() => {
+    ///                 client.wait_connected().await.expect("reconnect gave up");
+    ///                 continue;
+    ///             }
+    ///             Err(e) => panic!("request failed: {e}"),
+    ///         };
+    ///         // ... read until a connection-lost error, wait_connected, loop
+    /// #       drop(subscription);
+    /// #       break;
+    ///     }
+    /// }
+    /// ```
+    pub async fn wait_connected(&self) -> Result<(), Error> {
+        self.message_bus.wait_connected().await
+    }
+
     /// Cleanly shuts down the message bus.
     ///
     /// All outstanding [`Subscription`](crate::subscriptions::Subscription)s see their channels

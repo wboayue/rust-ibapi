@@ -62,7 +62,11 @@ pub enum Error {
     #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
 
-    /// Failed to establish connection to TWS/Gateway.
+    /// The connection to TWS/Gateway is gone for good: the automatic
+    /// reconnect used up its attempts, or reading from the socket failed in a
+    /// way reconnecting cannot fix. Terminal - every later request, and
+    /// `Client::wait_connected`, fails with it. Streams open when the
+    /// connection dropped already ended with [`Error::ConnectionReset`].
     #[error("ConnectionFailed")]
     ConnectionFailed,
 
@@ -293,20 +297,28 @@ impl Error {
     /// Returns `false` for failures reconnecting cannot recover, so a read loop can
     /// branch on them separately to stop retrying: intentional teardown
     /// ([`Error::Shutdown`]), handshake refusal ([`Error::ConnectionRejected`]), and
-    /// exhausted reconnection ([`Error::ConnectionFailed`], returned only after the
-    /// transport already gave up).
+    /// a session the client gave up on ([`Error::ConnectionFailed`]: reconnection
+    /// exhausted, or a read error reconnecting cannot fix).
+    ///
+    /// The client reconnects on its own, and streams open when the connection
+    /// dropped end with [`Error::ConnectionReset`] as soon as it does, before the
+    /// reconnect starts. A request sent while it is still reconnecting is refused
+    /// with `ConnectionReset` too; once it gives up, requests fail with
+    /// `ConnectionFailed` instead. So on `true`, call `Client::wait_connected`
+    /// before resubscribing: it returns once the session is back, or with
+    /// `ConnectionFailed` / `Shutdown` if it never will be.
     ///
     /// # Examples
     ///
     /// In a subscription read loop, branch on this predicate to decide whether to
-    /// re-establish the connection or surface a request-level failure:
+    /// wait for the reconnect and resubscribe or surface a request-level failure:
     ///
     /// ```
     /// use ibapi::Error;
     ///
     /// fn on_stream_error(err: Error) -> Result<(), Error> {
     ///     if err.is_connection_lost() {
-    ///         // tear down and resubscribe, then keep going
+    ///         // wait_connected, resubscribe, then keep going
     ///         Ok(())
     ///     } else {
     ///         // a request-level failure (or terminal disconnect) — surface it
@@ -315,7 +327,7 @@ impl Error {
     /// }
     ///
     /// assert!(on_stream_error(Error::ConnectionReset).is_ok());
-    /// assert!(on_stream_error(Error::ConnectionFailed).is_err()); // reconnect exhausted
+    /// assert!(on_stream_error(Error::ConnectionFailed).is_err()); // reconnect gave up
     /// assert!(on_stream_error(Error::Shutdown).is_err());
     /// ```
     pub fn is_connection_lost(&self) -> bool {

@@ -164,3 +164,25 @@ fn read_and_write_lock_recover_from_a_poisoned_rwlock() {
     *write_lock(&rwlock) += 1;
     assert_eq!(*read_lock(&rwlock), 2);
 }
+
+/// Each state's verdict for the send gate (`check`) and for streams that may
+/// open mid-reconnect (`check_ended`): only terminal states refuse the latter,
+/// and each terminal state names why the session ended (#1052).
+#[test]
+fn test_session_state_verdicts() {
+    let cases = [
+        (SessionState::Connected, None, None),
+        (SessionState::Disconnected, Some("ConnectionReset"), None),
+        (SessionState::ShutDown, Some("Shutdown"), Some("Shutdown")),
+        (SessionState::Failed, Some("ConnectionFailed"), Some("ConnectionFailed")),
+    ];
+    for (state, check, check_ended) in cases {
+        assert_eq!(state.check().err().map(|e| e.to_string()).as_deref(), check, "{state:?} check");
+        assert_eq!(
+            state.check_ended().err().map(|e| e.to_string()).as_deref(),
+            check_ended,
+            "{state:?} check_ended"
+        );
+        assert_eq!(state.is_terminal(), check_ended.is_some(), "{state:?} is_terminal");
+    }
+}

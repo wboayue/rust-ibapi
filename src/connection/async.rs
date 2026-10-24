@@ -38,7 +38,7 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) notice_broadcaster: NoticeBroadcaster,
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
-    max_reconnect_attempts: Option<u32>,
+    pub(crate) max_reconnect_attempts: Option<u32>,
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,

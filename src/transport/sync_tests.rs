@@ -951,7 +951,10 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 /// rather than hanging or silently dropping the error. In-flight subscriptions
 /// are notified of `Error::ConnectionReset` before the reconnect is attempted,
 /// and the `Error::Shutdown` the failed reconnect then requests finds the
-/// channel already cleared - so the reset is the only notification.
+/// channel already cleared - so the reset is the only notification. The
+/// session is left `Failed`: later sends and `wait_connected` get
+/// `ConnectionFailed`, not the `ConnectionReset` that means "reconnecting"
+/// (#1052).
 #[test]
 fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -964,6 +967,15 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
     assert!(matches!(resp, Err(Error::ConnectionReset)), "got: {resp:?}");
     assert!(sub.try_next().is_none(), "subscription received a second notification");
+
+    assert!(matches!(bus.wait_connected(), Err(Error::ConnectionFailed)));
+    let sent = bus.send_request(RequestId::nth(101), &[]).err();
+    assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
+    // Streams that skip the send gate report the same reason.
+    let updates = bus.create_order_update_subscription().err();
+    assert!(matches!(updates, Some(Error::ConnectionFailed)), "order updates: {updates:?}");
+    let status = bus.create_order_status_subscription(OrderId::from(7)).err();
+    assert!(matches!(status, Some(Error::ConnectionFailed)), "order status: {status:?}");
     Ok(())
 }
 
@@ -1390,6 +1402,19 @@ fn test_create_order_update_subscription_after_shutdown_fails() {
 
     let err = bus.create_order_update_subscription().expect_err("subscribe after shutdown");
     assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+}
+
+/// After shutdown, the send gate refuses with `Shutdown` - not the
+/// `ConnectionReset` that means "reconnecting", which would invite a retry
+/// against a client that is gone (#1052).
+#[test]
+fn test_send_after_shutdown_fails_with_shutdown() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let sent = bus.send_request(RequestId::nth(1), &[]).err();
+    assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
+    assert!(matches!(bus.wait_connected(), Err(Error::Shutdown)));
 }
 
 /// A notice stream opened after shutdown is already at end-of-stream, like
