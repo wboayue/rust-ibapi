@@ -22,11 +22,18 @@ fn main() {
     let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
     println!("Connected successfully!");
 
-    println!("\nSubscribing to group events for group 1...");
-    // 1 corresponds to "Group 1" in TWS (Red)
-    let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    // Visible groups, most used first; 1 is "Group 1" in TWS (Red).
+    let groups = client.display_groups().expect("display groups request failed");
+    println!("Visible display groups: {groups:?}");
+    let Some(&group_id) = groups.first() else {
+        eprintln!("No display groups visible in TWS");
+        return;
+    };
 
-    println!("Listening for events. Change the contract in TWS Group 1 (Red) to see updates.");
+    println!("\nSubscribing to group events for group {group_id}...");
+    let subscription = client.subscribe_to_group_events(group_id).expect("subscription failed");
+
+    println!("Listening for events. Change the contract in TWS group {group_id} to see updates.");
 
     for event in subscription.iter_data() {
         match event {
