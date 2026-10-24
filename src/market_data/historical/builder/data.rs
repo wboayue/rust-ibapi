@@ -340,7 +340,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// reset, build a new request), and only the caller bounds the wait.
     /// [`ending`](Self::ending), [`between`](Self::between) and
     /// [`buffer_limit`](Self::buffer_limit) all apply. The bars come as TWS sent
-    /// them: after `between`, trim them with [`HistoricalData::trim_to`].
+    /// them: after `between`, build a [`HistoricalData`] from them and the `End`
+    /// window and call [`trim_to`](HistoricalData::trim_to).
     ///
     /// Dropping the subscription before `End` sends `cancelHistoricalData`. To
     /// know when TWS is done with the request, use `cancel_and_drain`. Any TWS
@@ -360,7 +361,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::{BarSize, HistoricalDataFrame};
+    /// use ibapi::market_data::historical::{BarSize, HistoricalData, HistoricalDataFrame};
     /// use ibapi::subscriptions::SubscriptionItem;
     /// use std::time::{Duration, Instant};
     /// use time::macros::datetime;
@@ -379,9 +380,10 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// loop {
     ///     let remaining = deadline.saturating_duration_since(Instant::now());
     ///     match subscription.next_timeout(remaining) {
-    ///         Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data)))) => bars = Some(data),
-    ///         Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. }))) => {
-    ///             if let Some(data) = bars.take() {
+    ///         Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(received)))) => bars = Some(received),
+    ///         Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start: served_start, end: served_end }))) => {
+    ///             if let Some(bars) = bars.take() {
+    ///                 let data = HistoricalData { start: served_start, end: served_end, bars };
     ///                 println!("{} bars", data.trim_to(start, end).bars.len());
     ///             }
     ///             break;
@@ -511,7 +513,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// reset, build a new request), and only the caller bounds the wait.
     /// [`ending`](Self::ending), [`between`](Self::between) and
     /// [`buffer_limit`](Self::buffer_limit) all apply. The bars come as TWS sent
-    /// them: after `between`, trim them with [`HistoricalData::trim_to`].
+    /// them: after `between`, build a [`HistoricalData`] from them and the `End`
+    /// window and call [`trim_to`](HistoricalData::trim_to).
     ///
     /// Dropping the subscription before `End` sends `cancelHistoricalData`. To
     /// know when TWS is done with the request, use `cancel_and_drain`. Any TWS
@@ -530,7 +533,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
-    /// use ibapi::market_data::historical::HistoricalDataFrame;
+    /// use ibapi::market_data::historical::{HistoricalData, HistoricalDataFrame};
     /// use time::macros::datetime;
     /// use tokio::time::{timeout_at, Duration, Instant};
     ///
@@ -549,9 +552,10 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     ///     let mut bars = None;
     ///     loop {
     ///         match timeout_at(deadline, subscription.next()).await {
-    ///             Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data))))) => bars = Some(data),
-    ///             Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))) => {
-    ///                 if let Some(data) = bars.take() {
+    ///             Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(received))))) => bars = Some(received),
+    ///             Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start: served_start, end: served_end })))) => {
+    ///                 if let Some(bars) = bars.take() {
+    ///                     let data = HistoricalData { start: served_start, end: served_end, bars };
     ///                     println!("{} bars", data.trim_to(start, end).bars.len());
     ///                 }
     ///                 break;

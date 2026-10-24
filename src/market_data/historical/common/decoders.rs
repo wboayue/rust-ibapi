@@ -8,7 +8,7 @@ use crate::messages::ResponseMessage;
 use crate::Error;
 
 use crate::market_data::historical::{
-    Bar, BarTimestamp, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
+    Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
 };
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
@@ -17,14 +17,11 @@ fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
     OffsetDateTime::from_unix_timestamp(secs).map_err(|e| mk_err(&e))
 }
 
-pub(crate) fn decode_historical_data(message: &ResponseMessage) -> Result<HistoricalData, Error> {
-    let bars = decode_historical_data_proto(message.proto()?)?;
-    // start/end always come on the separate HistoricalDataEnd message at floor 210.
-    Ok(HistoricalData {
-        start: OffsetDateTime::UNIX_EPOCH,
-        end: OffsetDateTime::UNIX_EPOCH,
-        bars,
-    })
+/// The bars of a `HistoricalData` wire message. The window's start and end
+/// come on the separate `HistoricalDataEnd` wire message
+/// ([`decode_historical_data_end`]).
+pub(crate) fn decode_historical_data(message: &ResponseMessage) -> Result<Vec<Bar>, Error> {
+    decode_historical_data_proto(message.proto()?)
 }
 
 pub(crate) fn decode_historical_data_end(message: &ResponseMessage) -> Result<(OffsetDateTime, OffsetDateTime), Error> {

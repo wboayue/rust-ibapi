@@ -228,9 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut subscription = subscription.filter_data();
     while let Some(update) = subscription.next().await {
         match update {
-            Ok(HistoricalBarUpdate::Historical(data)) => {
-                println!("Received {} initial historical bars", data.bars.len());
-                if let Some(bar) = data.bars.last() {
+            Ok(HistoricalBarUpdate::Historical(bars)) => {
+                println!("Received {} initial historical bars", bars.len());
+                if let Some(bar) = bars.last() {
                     println!(
                         "  Latest: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}",
                         format_time(&bar.date),

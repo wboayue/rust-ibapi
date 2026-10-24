@@ -500,11 +500,9 @@ impl HistoricalData {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HistoricalBarUpdate {
-    /// Initial batch of historical bars. Always received first.
-    ///
-    /// Its `start` and `end` are `OffsetDateTime::UNIX_EPOCH`: TWS sends the
-    /// window in a separate message, delivered as [`End`](Self::End).
-    Historical(HistoricalData),
+    /// Initial batch of historical bars. Always received first. The
+    /// requested window follows as [`End`](Self::End).
+    Historical(Vec<Bar>),
     /// Real-time update of the current (incomplete) bar.
     /// Multiple updates with the same timestamp will be sent as the bar builds.
     Update(Bar),
@@ -562,9 +560,8 @@ fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
 /// nothing follows `End`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HistoricalDataFrame {
-    /// Every bar of the request, in one frame. Its `start` and `end` are the
-    /// Unix epoch: the window comes in `End`.
-    Bars(HistoricalData),
+    /// Every bar of the request, in one frame. The window comes in `End`.
+    Bars(Vec<Bar>),
     /// The window TWS served. The request is complete.
     End {
         /// Start of the window.
@@ -604,9 +601,9 @@ impl BarRequest<'_> {
 
 impl HistoricalDataFrame {
     /// The bars, which TWS sends first.
-    pub(crate) fn into_bars(self) -> Result<HistoricalData, Error> {
+    pub(crate) fn into_bars(self) -> Result<Vec<Bar>, Error> {
         match self {
-            Self::Bars(data) => Ok(data),
+            Self::Bars(bars) => Ok(bars),
             Self::End { .. } => Err(Error::UnexpectedResponse("historical data: window before bars".into())),
         }
     }

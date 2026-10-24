@@ -302,12 +302,12 @@ pub(crate) async fn historical_data(client: &Client, request: BarRequest<'_>, re
             // the future, sends TWS's cancel; after it, nothing is sent.
             let mut subscription = builder.send::<HistoricalDataFrame>(message).await?;
 
-            let mut data = request_helpers::next_frame(&mut subscription, deadline).await?.into_bars()?;
+            let bars = request_helpers::next_frame(&mut subscription, deadline).await?.into_bars()?;
             // Only the window frame proves the download is complete, so a close
             // before it is an error.
-            (data.start, data.end) = request_helpers::next_frame(&mut subscription, deadline).await?.into_window()?;
+            let (start, end) = request_helpers::next_frame(&mut subscription, deadline).await?.into_window()?;
 
-            Ok(data)
+            Ok(HistoricalData { start, end, bars })
         }
     })
     .await

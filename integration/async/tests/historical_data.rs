@@ -345,7 +345,7 @@ async fn historical_data_stream_buffer_limit_reader_keeps_up() {
             .await
             .expect("timed out")
         {
-            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) => saw_bars = !data.bars.is_empty(),
+            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) => saw_bars = !bars.is_empty(),
             Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { .. }))) => break,
             Some(Ok(item)) => eprintln!("item: {item:?}"),
             other => panic!("expected the initial bars then End, got {other:?}"),
