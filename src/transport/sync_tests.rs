@@ -347,7 +347,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::with_socket(stream, 28, None, std::sync::Arc::new(crate::transport::sync::NoticeBroadcaster::new()));
     connection.establish_connection()?;
-    let bus = Arc::new(TcpMessageBus::new(connection)?);
+    let bus = Arc::new(TcpMessageBus::new(connection));
 
     let subscription = bus.send_order_request(OrderId::from(5), &request)?;
 
@@ -469,7 +469,7 @@ fn test_client_reconnect() -> Result<(), Error> {
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
     let server_version = connection.server_version();
-    let bus = Arc::new(TcpMessageBus::new(connection)?);
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages()?;
     let client = Client::stubbed(bus.clone(), server_version);
 
@@ -503,7 +503,7 @@ fn test_is_connected_stays_true_after_reconnect() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
-    let bus = TcpMessageBus::new(connection)?;
+    let bus = TcpMessageBus::new(connection);
 
     assert!(bus.is_connected(), "bus should be connected after initial handshake");
 
@@ -544,7 +544,7 @@ fn test_reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
-    let bus = TcpMessageBus::new(connection)?;
+    let bus = TcpMessageBus::new(connection);
 
     let order_ids = Arc::new(ClientIdManager::new(100)?);
     bus.set_order_ids(order_ids.clone());
@@ -591,7 +591,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
-    let bus = TcpMessageBus::new(connection)?;
+    let bus = TcpMessageBus::new(connection);
 
     bus.dispatch()?;
 
@@ -632,7 +632,7 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
-    let bus = TcpMessageBus::new(connection)?;
+    let bus = TcpMessageBus::new(connection);
 
     let notices = bus.connection.notice_broadcaster.subscribe();
 
@@ -731,7 +731,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection()?;
     let server_version = connection.server_version();
-    let bus = Arc::new(TcpMessageBus::new(connection)?);
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages()?;
     let client = Client::stubbed(bus.clone(), server_version);
 
@@ -779,7 +779,7 @@ fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(TcpMessageBus::new(connection));
     (stream, bus)
 }
 
@@ -951,7 +951,10 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 /// rather than hanging or silently dropping the error. In-flight subscriptions
 /// are notified of `Error::ConnectionReset` before the reconnect is attempted,
 /// and the `Error::Shutdown` the failed reconnect then requests finds the
-/// channel already cleared - so the reset is the only notification.
+/// channel already cleared - so the reset is the only notification. The
+/// session is left `Failed`: later sends and `wait_connected` get
+/// `ConnectionFailed`, not the `ConnectionReset` that means "reconnecting"
+/// (#1052).
 #[test]
 fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let (stream, bus) = make_bus();
@@ -964,6 +967,15 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");
     assert!(matches!(resp, Err(Error::ConnectionReset)), "got: {resp:?}");
     assert!(sub.try_next().is_none(), "subscription received a second notification");
+
+    assert!(matches!(bus.wait_connected(), Err(Error::ConnectionFailed)));
+    let sent = bus.send_request(RequestId::nth(101), &[]).err();
+    assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
+    // Streams that skip the send gate report the same reason.
+    let updates = bus.create_order_update_subscription().err();
+    assert!(matches!(updates, Some(Error::ConnectionFailed)), "order updates: {updates:?}");
+    let status = bus.create_order_status_subscription(OrderId::from(7)).err();
+    assert!(matches!(status, Some(Error::ConnectionFailed)), "order status: {status:?}");
     Ok(())
 }
 
@@ -1390,6 +1402,19 @@ fn test_create_order_update_subscription_after_shutdown_fails() {
 
     let err = bus.create_order_update_subscription().expect_err("subscribe after shutdown");
     assert!(matches!(err, Error::Shutdown), "got: {err:?}");
+}
+
+/// After shutdown, the send gate refuses with `Shutdown` - not the
+/// `ConnectionReset` that means "reconnecting", which would invite a retry
+/// against a client that is gone (#1052).
+#[test]
+fn test_send_after_shutdown_fails_with_shutdown() {
+    let (_, bus) = make_bus();
+    bus.ensure_shutdown();
+
+    let sent = bus.send_request(RequestId::nth(1), &[]).err();
+    assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
+    assert!(matches!(bus.wait_connected(), Err(Error::Shutdown)));
 }
 
 /// A notice stream opened after shutdown is already at end-of-stream, like
@@ -3356,7 +3381,7 @@ impl Stream for FailingWriteStream {}
 fn test_failed_write_leaves_no_registration() {
     let connection = Connection::stubbed(FailingWriteStream(MemoryStream::default()), 28);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(TcpMessageBus::new(connection));
     let mb: &dyn MessageBus = bus.as_ref();
 
     assert!(mb.send_request(RequestId::nth(100), b"req-bytes").is_err());
@@ -4065,7 +4090,7 @@ fn tcp_client_with_peer() -> (Client, Arc<TcpMessageBus<TcpSocket>>, std::net::T
     let (socket, peer, _listener) = tcp_socket_pair();
     let connection = Connection::stubbed(socket, CLIENT_ID);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
-    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    let bus = Arc::new(TcpMessageBus::new(connection));
     bus.process_messages().unwrap();
     let client = Client::stubbed(bus.clone(), crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     (client, bus, peer)

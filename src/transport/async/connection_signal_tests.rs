@@ -63,3 +63,55 @@ async fn shutdown_is_terminal() {
         .expect("wait_connected blocked after shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
 }
+
+/// The signal tracks the session through a failed reconnect; which error
+/// each state maps to is `SessionState`'s, tested in `common_tests`.
+#[tokio::test]
+async fn check_follows_the_session_through_a_failed_reconnect() {
+    let signal = ConnectionSignal::default();
+    assert!(signal.check().is_ok());
+    assert!(signal.check_ended().is_ok());
+
+    signal.set_disconnected();
+    assert!(matches!(signal.check(), Err(Error::ConnectionReset)));
+    assert!(signal.check_ended().is_ok(), "reconnecting is not ended");
+
+    signal.fail();
+    assert!(matches!(signal.check(), Err(Error::ConnectionFailed)));
+    assert!(matches!(signal.check_ended(), Err(Error::ConnectionFailed)));
+}
+
+#[tokio::test]
+async fn wait_connected_returns_connection_failed_when_the_reconnect_gives_up() {
+    let signal = Arc::new(ConnectionSignal::default());
+    signal.set_disconnected();
+
+    let waker = Arc::clone(&signal);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        waker.fail();
+    });
+
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+        .await
+        .expect("wait_connected did not return on failure");
+    assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
+}
+
+/// The dispatcher latches `Failed` and then `retire` shuts the bus down; the
+/// shutdown must not replace why the session ended.
+#[tokio::test]
+async fn failed_survives_the_following_shutdown_and_a_late_reconnect() {
+    let signal = ConnectionSignal::default();
+    signal.set_disconnected();
+    signal.fail();
+
+    signal.shutdown();
+    signal.set_connected();
+
+    assert!(!signal.is_connected());
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+        .await
+        .expect("wait_connected blocked after failure");
+    assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
+}

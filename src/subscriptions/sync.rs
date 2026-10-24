@@ -44,6 +44,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     context: DecoderContext,
     message_bus: Arc<dyn MessageBus>,
     request_id: Option<i32>,
+    order_id: Option<i32>,
     shared: Option<SharedTicket>,
     phantom: PhantomData<T>,
     cancelled: AtomicBool,
@@ -66,6 +67,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         // Raw from here on: the public accessor and the decoders' cancel
         // messages speak `i32`.
         let request_id = subscription.request_id.map(RequestId::raw);
+        let order_id = subscription.order_id.map(|id| id.value());
         let shared = subscription.shared;
 
         debug_assert_request_id_routable::<T, T>(request_id);
@@ -74,6 +76,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             context,
             message_bus,
             request_id,
+            order_id,
             shared,
             subscription,
             phantom: PhantomData,
@@ -127,6 +130,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.ended_natively.load(Ordering::Relaxed)
     }
 
+    /// The id a cancel names: the request id, else the order id.
+    fn id(&self) -> Option<i32> {
+        self.request_id.or(self.order_id)
+    }
+
     /// The cancel a subscription that isn't shared writes, if any. `None` when the
     /// type has none, or once the stream has seen its end marker or snapshot
     /// end: the cancel would name a request TWS already finished.
@@ -134,7 +142,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
             return None;
         }
-        T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)).ok()
+        T::cancel_message(self.context.server_version, self.id(), Some(&self.context)).ok()
     }
 
     /// Cancel the request and wait, up to `deadline`, for TWS to confirm it

@@ -335,13 +335,13 @@ pub struct TcpMessageBus<S: Stream> {
 }
 
 impl<S: Stream> TcpMessageBus<S> {
-    pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
+    pub fn new(connection: Connection<S>) -> TcpMessageBus<S> {
         let order_taps = OrderTaps::new();
         let (signals_send, signals_recv) = channel::unbounded();
         let (shutdown_send, shutdown_recv) = channel::bounded(1);
         let shutdown = connection.shutdown_signal();
 
-        Ok(TcpMessageBus {
+        TcpMessageBus {
             connection,
             handles: Mutex::new(Vec::default()),
             requests: SenderHash::new(),
@@ -357,7 +357,7 @@ impl<S: Stream> TcpMessageBus<S> {
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
-        })
+        }
     }
 
     /// Installs the client's order-ID generator so a successful reconnect
@@ -406,8 +406,11 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     /// The send gate: every bus-originated write checks here first, and is
-    /// refused with `Error::ConnectionReset` unless the session is live and
-    /// not shutting down.
+    /// refused unless the session is live and not shutting down - with
+    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::ConnectionFailed` once the reconnect gave up, and
+    /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
+    /// "stop".
     ///
     /// Without it, a request sent while the connection is down would be lost
     /// on the dead socket - or, worse, interleave with the handshake the
@@ -420,11 +423,19 @@ impl<S: Stream> TcpMessageBus<S> {
     /// principle race the socket swap inside `reconnect`. Closing that needs a
     /// session-level gate held across the handshake.
     fn ensure_connected(&self) -> Result<(), Error> {
-        if self.is_connected() {
-            Ok(())
-        } else {
-            Err(Error::ConnectionReset)
+        self.connection_state.check()?;
+        if self.is_shutting_down() {
+            return Err(Error::Shutdown);
         }
+        Ok(())
+    }
+
+    /// A refusal from the order taps, which close on shutdown, reported as
+    /// why the session ended - `ConnectionFailed` when the client gave up on
+    /// it, as the send gate does. Asked after the refusal: `fail` latches
+    /// before the taps close, so the reason is always already set.
+    fn ended_reason(&self, refusal: Error) -> Error {
+        self.connection_state.check_ended().err().unwrap_or(refusal)
     }
 
     /// The one funnel for every bus-originated write, so no send can reach a
@@ -542,6 +553,9 @@ impl<S: Stream> TcpMessageBus<S> {
                     }
                     Err(reconnect_err) => {
                         error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
+                        // Latched before the shutdown, which keeps it: later
+                        // sends and waiters see `ConnectionFailed`, not `Shutdown`.
+                        self.connection_state.fail();
                         self.request_shutdown();
                         return Err(Error::ConnectionFailed);
                     }
@@ -585,6 +599,8 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             Err(err) => {
                 error!("error reading next message (shutting down): {err:?}");
+                // Nobody asked for this shutdown: report the session as failed.
+                self.connection_state.fail();
                 self.request_shutdown();
                 Err(err)
             }
@@ -960,7 +976,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn create_order_status_subscription(&self, order_id: OrderId) -> Result<InternalSubscription, Error> {
-        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0)?;
+        // Allowed mid-reconnect, like the order-update stream below.
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_status(order_id, 0).map_err(|e| self.ended_reason(e))?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)
@@ -975,7 +992,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         // created while a reconnect is in progress. The lease gives the
         // subscription's drop signal its identity — see
         // `clear_order_update_stream`.
-        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_updates(0)?;
+        let NewTap { sender, receiver, lease } = self.order_taps.subscribe_updates(0).map_err(|e| self.ended_reason(e))?;
         Ok(SubscriptionBuilder::new()
             .receiver(receiver)
             .sender(sender)

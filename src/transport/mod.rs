@@ -286,7 +286,8 @@ pub(crate) trait MessageBus: Send + Sync {
     fn ensure_shutdown(&self);
 
     /// Block until the session is connected again, returning
-    /// [`Error::Shutdown`] if the session will never reconnect.
+    /// [`Error::ConnectionFailed`] if the reconnect gave up, or
+    /// [`Error::Shutdown`] after a shutdown.
     fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;

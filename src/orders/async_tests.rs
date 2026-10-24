@@ -24,7 +24,7 @@ use std::sync::Arc;
 use tokio::time::Duration;
 
 #[tokio::test]
-async fn test_place_order() {
+async fn place_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::OpenOrder,
@@ -194,7 +194,7 @@ async fn place_order_gates_additional_order_params() {
 }
 
 #[tokio::test]
-async fn test_cancel_order() {
+async fn cancel_order() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::OrderStatus,
         order_status()
@@ -222,7 +222,7 @@ async fn test_cancel_order() {
 }
 
 #[tokio::test]
-async fn test_cancel_order_delivers_202_as_non_terminal_notice() {
+async fn cancel_order_delivers_202_as_non_terminal_notice() {
     // The cancellation confirmation (202) must arrive as a Notice and leave
     // the stream open: the OrderStatus frame queued behind it still arrives.
     let order_id = 1;
@@ -253,7 +253,7 @@ async fn test_cancel_order_delivers_202_as_non_terminal_notice() {
 }
 
 #[tokio::test]
-async fn test_open_orders() {
+async fn open_orders() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::OpenOrder,
@@ -312,7 +312,7 @@ async fn test_open_orders() {
 }
 
 #[tokio::test]
-async fn test_completed_orders() {
+async fn completed_orders() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::CompletedOrder,
@@ -356,7 +356,7 @@ async fn test_completed_orders() {
 }
 
 #[tokio::test]
-async fn test_executions() {
+async fn executions() {
     // All three responses are emitted only in response to RequestExecutions (gate 201)
     // or PlaceOrder (gate 203) — both ≤ floor 203, so the server always emits them as
     // proto and the text branch in the decoders is gone.
@@ -423,7 +423,7 @@ async fn test_executions() {
 }
 
 #[tokio::test]
-async fn test_submit_order() {
+async fn submit_order() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -445,7 +445,7 @@ async fn test_submit_order() {
 }
 
 #[tokio::test]
-async fn test_exercise_options() {
+async fn exercise_options() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::OpenOrder,
         open_order()
@@ -493,7 +493,7 @@ async fn test_exercise_options() {
 }
 
 #[tokio::test]
-async fn test_next_valid_order_id() {
+async fn next_valid_order_id() {
     let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(9123) };
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NextValidId,
@@ -531,7 +531,7 @@ async fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream() {
+async fn order_update_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::OrderStatus,
@@ -589,7 +589,7 @@ async fn test_order_update_stream() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_survives_unknown_status() {
+async fn order_update_stream_survives_unknown_status() {
     // Regression test for #774: a status string this crate does not model
     // must arrive as OrderStatusKind::Unknown, not terminate the stream —
     // the frame queued behind it still arrives.
@@ -624,7 +624,7 @@ async fn test_order_update_stream_survives_unknown_status() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_survives_unknown_condition() {
+async fn order_update_stream_survives_unknown_condition() {
     // #827: an OpenOrder carrying a condition type this crate does not model
     // arrives as OrderCondition::Unknown and the frame queued behind it still arrives.
     let unknown = proto::OrderCondition {
@@ -656,7 +656,7 @@ async fn test_order_update_stream_survives_unknown_condition() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_survives_unknown_sec_type() {
+async fn order_update_stream_survives_unknown_sec_type() {
     // SecurityType is open: an OpenOrder frame whose contract carries a
     // sec_type this crate does not model arrives as SecurityType::Other and
     // the frame queued behind it still arrives.
@@ -685,7 +685,7 @@ async fn test_order_update_stream_survives_unknown_sec_type() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_survives_unknown_tif() {
+async fn order_update_stream_survives_unknown_tif() {
     // TimeInForce is open: an OpenOrder frame carrying a tif this crate
     // does not model arrives as TimeInForce::Unknown and the frame queued
     // behind it still arrives.
@@ -711,7 +711,7 @@ async fn test_order_update_stream_survives_unknown_tif() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_survives_unknown_security_id_type() {
+async fn order_update_stream_survives_unknown_security_id_type() {
     // SecurityIdType is open: a contract carrying an identifier scheme this
     // crate does not model arrives as SecurityIdType::Unknown and the frame
     // queued behind it still arrives (#840).
@@ -738,7 +738,7 @@ async fn test_order_update_stream_survives_unknown_security_id_type() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_ends_on_empty_action() {
+async fn order_update_stream_ends_on_empty_action() {
     // action is required: an OpenOrder frame with an empty action fails
     // decode with Error::Parse, which terminates the subscription — the
     // frame queued behind it is never delivered. The survives_unknown_tif
@@ -759,7 +759,7 @@ async fn test_order_update_stream_ends_on_empty_action() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_already_subscribed() {
+async fn order_update_stream_already_subscribed() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -775,7 +775,7 @@ async fn test_order_update_stream_already_subscribed() {
 }
 
 #[tokio::test]
-async fn test_order_update_stream_drop_releases_subscription() {
+async fn order_update_stream_drop_releases_subscription() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -789,7 +789,7 @@ async fn test_order_update_stream_drop_releases_subscription() {
 }
 
 #[tokio::test]
-async fn test_global_cancel() {
+async fn global_cancel() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_GLOBAL_CANCEL);
 

@@ -1,4 +1,4 @@
 //! Common functionality for the configuration module.
 
-pub mod decoders;
-pub mod encoders;
+pub(crate) mod decoders;
+pub(crate) mod encoders;

@@ -95,7 +95,7 @@ impl Client {
         let connection = Connection::connect(config.connection, notice_broadcaster)?;
         let connection_metadata = connection.connection_metadata();
 
-        let message_bus = Arc::new(TcpMessageBus::new(connection)?);
+        let message_bus = Arc::new(TcpMessageBus::new(connection));
 
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
@@ -208,6 +208,46 @@ impl Client {
     /// ```
     pub fn is_connected(&self) -> bool {
         self.message_bus.is_connected()
+    }
+
+    /// Blocks until the client is connected to TWS/IB Gateway again, so a
+    /// stream loop can resubscribe after [`Error::is_connection_lost`].
+    ///
+    /// Returns `Ok(())` at once while connected. While the client is
+    /// reconnecting it blocks until the reconnect finishes, which with
+    /// `ClientBuilder::reconnect_forever` may be never.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::ConnectionFailed`] if the reconnect gave up after its last attempt.
+    /// - [`Error::Shutdown`] if the client was shut down.
+    ///
+    /// Both are terminal: every later request fails with the same error.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::prelude::*;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// loop {
+    ///     let subscription = match client.realtime_bars(&contract).subscribe() {
+    ///         Ok(subscription) => subscription,
+    ///         Err(e) if e.is_connection_lost() => {
+    ///             client.wait_connected().expect("reconnect gave up");
+    ///             continue;
+    ///         }
+    ///         Err(e) => panic!("request failed: {e}"),
+    ///     };
+    ///     // ... read until a connection-lost error, wait_connected, loop
+    /// #   break;
+    /// }
+    /// ```
+    pub fn wait_connected(&self) -> Result<(), Error> {
+        self.message_bus.wait_connected()
     }
 
     /// Cleanly shuts down the message bus.

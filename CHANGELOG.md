@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Client::wait_connected` (blocking and async): waits until the client is connected again after a connection loss, failing with `Error::ConnectionFailed` once the reconnect gives up or `Error::Shutdown` after a shutdown. A stream loop calls it before resubscribing (#1052).
 - `Client::display_groups()` (async and blocking) returns the ids of the display groups visible in TWS, most used first; pass one to `subscribe_to_group_events` (#1058).
+
+### Changed
+
+- Once the automatic reconnect gives up, every later request fails with `Error::ConnectionFailed`, and after a shutdown with `Error::Shutdown`. Both used to fail with `Error::ConnectionReset`, the error for "still reconnecting", so a caller could not tell the states apart. `order_update_stream`, `order_status_stream` and `wait_for_fill` also fail with `ConnectionFailed` after the reconnect gives up, where they returned `Shutdown`. A dispatcher that stops on a read error reconnecting cannot fix now reports `ConnectionFailed` too, instead of `Shutdown`. One-shot requests that retry across a reconnect also end with `ConnectionFailed`, where they returned `Shutdown`. Streams open when the connection dropped still end with `ConnectionReset` (#1052).
+
+### Fixed
+
+- The stream-retry loop in README.md and `examples/sync/stream_retry.rs` no longer panics on a connection loss. It resubscribed while the client was still reconnecting, and `.expect` panicked on the `ConnectionReset` the request was refused with; it now calls `wait_connected` first (#1052).
 
 ## [5.2.0] - 2026-10-20
 
