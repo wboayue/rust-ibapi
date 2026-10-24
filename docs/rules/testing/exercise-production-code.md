@@ -68,8 +68,9 @@ ids up front. Same output while ids increment by one, which is why four tests na
 submission never noticed. Drive `Client::stubbed` and assert on the captured request proto.
 
 Deleting the shadows left the mock with no callers at all: `src/orders/builder/tests.rs` went
-from 292 lines to 123 (`wc -l`). **A mock that exists to host a copy of the code under test
-takes the rest of its file with it when the copy dies.**
+from 292 lines to 123 (`wc -l`); #1054 deleted the rest, two `build()`-only tests, once
+`order_builder_tests.rs` made every assertion they did. **A mock that exists to host a copy
+of the code under test takes the rest of its file with it when the copy dies.**
 
 ## Precedents
 

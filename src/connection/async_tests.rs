@@ -119,7 +119,7 @@ async fn make_client() -> Client {
     connection.establish_connection().await.expect("establish_connection failed");
     let server_version = connection.server_version();
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     bus.clone().process_messages().expect("process_messages");
 
     Client::stubbed(bus, server_version)
@@ -512,7 +512,7 @@ async fn dispatcher_task_finishes_when_shutdown_requested_during_reconnect() {
     push_handshake(&stream);
     connection.establish_connection().await.expect("establish_connection failed");
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     bus.clone().process_messages().expect("process_messages");
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -552,7 +552,7 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
     push_handshake(&stream);
     connection.establish_connection().await.expect("establish_connection failed");
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     bus.clone().process_messages().expect("process_messages");
     let message_bus: &dyn AsyncMessageBus = bus.as_ref();
 
@@ -606,7 +606,7 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     connection.establish_connection().await.expect("establish_connection failed");
     let server_version = connection.server_version();
 
-    let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     bus.clone().process_messages().expect("process_messages");
     let client = Arc::new(Client::stubbed(bus.clone(), server_version));
 

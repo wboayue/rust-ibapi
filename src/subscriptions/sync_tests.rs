@@ -456,6 +456,40 @@ fn test_order_subscription_cancel_unregisters() {
     assert!(matches!(sub.next(), Some(Err(Error::Cancelled))));
 }
 
+/// Has a cancel message that carries the id it was given, so a test can see
+/// which id the subscription named.
+#[derive(Debug)]
+struct IdCancelItem;
+
+impl StreamDecoder<IdCancelItem> for IdCancelItem {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+
+    fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<IdCancelItem, Error> {
+        Ok(IdCancelItem)
+    }
+
+    fn cancel_message(_server_version: i32, id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        Ok(id.expect("cancel needs an id").to_string().into_bytes())
+    }
+}
+
+/// The cancel names the request id, else the order id, as the async side does.
+#[test]
+fn test_cancel_names_request_id_else_order_id() {
+    for (builder, expected) in [
+        (SubscriptionBuilder::new().request_id(RequestId::nth(1)), RequestId::nth(1).raw()),
+        (SubscriptionBuilder::new().order_id(OrderId::from(7)), 7),
+    ] {
+        let (sub, bus, _signals) = routed_subscription::<IdCancelItem>(builder, vec![]);
+        sub.cancel();
+        assert_eq!(
+            bus.request_messages(),
+            vec![expected.to_string().into_bytes()],
+            "cancel for id {expected}"
+        );
+    }
+}
+
 #[test]
 fn test_order_update_stream_cancel_unregisters() {
     // No request id, order id or shared ticket: the order update stream.

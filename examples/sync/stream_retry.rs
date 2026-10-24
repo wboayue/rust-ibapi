@@ -19,29 +19,37 @@ fn main() {
     let contract = Contract::stock("AAPL").build();
 
     'retry: loop {
-        // Request real-time bars data with 5-second intervals
-        let subscription = client
-            .realtime_bars(&contract)
-            .trading_hours(TradingHours::Extended)
-            .subscribe()
-            .expect("realtime bars request failed!");
+        // Waits out a reconnect in progress; fails only once the client gave
+        // up (ConnectionFailed) or was shut down (Shutdown).
+        if let Err(e) = client.wait_connected() {
+            eprintln!("connection gone: {e}");
+            return;
+        }
+
+        let subscription = match client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe() {
+            Ok(subscription) => subscription,
+            // Dropped again before the request went out: wait again.
+            Err(e) if e.is_connection_lost() => continue,
+            Err(e) => {
+                eprintln!("realtime bars request failed: {e}");
+                return;
+            }
+        };
 
         for bar in subscription.iter_data() {
             match bar {
                 Ok(bar) => println!("bar: {bar:?}"),
                 Err(e) if e.is_connection_lost() => {
-                    eprintln!("Connection lost. Retrying stream...");
+                    eprintln!("Connection lost. Resubscribing after the reconnect...");
                     continue 'retry;
                 }
-                // Everything else — including terminal ConnectionFailed (reconnect
-                // exhausted, client shut down) — is not recoverable here, so give up.
                 Err(e) => {
                     eprintln!("error: {e}");
-                    break 'retry;
+                    return;
                 }
             }
         }
 
-        break;
+        return;
     }
 }

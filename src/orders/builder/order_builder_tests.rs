@@ -32,6 +32,19 @@ fn test_stop_order() {
 }
 
 #[test]
+fn test_stop_limit_order() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(200).stop_limit(145.00, 148.00);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "STP LMT");
+    assert_eq!(order.aux_price, Some(145.00));
+    assert_eq!(order.limit_price, Some(148.00));
+}
+
+#[test]
 fn test_trailing_stop_limit() {
     let client = MockClient;
     let contract = create_test_contract();

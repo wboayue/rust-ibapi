@@ -87,6 +87,47 @@ pub(crate) fn report_unroutable_frame(message: &ResponseMessage, notice_sink: &d
     }
 }
 
+/// Session state behind both buses' connection signals.
+///
+/// `Disconnected` while a reconnect may still bring the session back;
+/// `ShutDown` and `Failed` (the reconnect gave up, or the dispatcher died)
+/// are terminal and latch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionState {
+    Connected,
+    Disconnected,
+    ShutDown,
+    Failed,
+}
+
+impl SessionState {
+    /// Neither a reconnect nor a later shutdown moves the session out of a
+    /// terminal state.
+    pub(crate) fn is_terminal(self) -> bool {
+        matches!(self, SessionState::ShutDown | SessionState::Failed)
+    }
+
+    /// The send gate's verdict: live, reconnecting, or gone for good.
+    pub(crate) fn check(self) -> Result<(), Error> {
+        match self {
+            SessionState::Connected => Ok(()),
+            SessionState::Disconnected => Err(Error::ConnectionReset),
+            SessionState::ShutDown => Err(Error::Shutdown),
+            SessionState::Failed => Err(Error::ConnectionFailed),
+        }
+    }
+
+    /// Like [`check`](Self::check), but `Ok` while reconnecting: for streams
+    /// that write nothing and may be opened mid-reconnect.
+    pub(crate) fn check_ended(self) -> Result<(), Error> {
+        if self.is_terminal() {
+            self.check()
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// Default maximum number of reconnection attempts.
 ///
 /// Overridable per client via `ClientBuilder::max_reconnect_attempts` /
