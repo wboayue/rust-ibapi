@@ -23,11 +23,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:7497", 100).await?;
     println!("Connected successfully!");
 
-    println!("\nSubscribing to group events for group 1...");
-    // 1 corresponds to "Group 1" in TWS (Red)
-    let mut subscription = client.subscribe_to_group_events(1).await?;
+    // Visible groups, most used first; 1 is "Group 1" in TWS (Red).
+    let groups = client.display_groups().await?;
+    println!("Visible display groups: {:?}", groups);
+    let Some(&group_id) = groups.first() else {
+        eprintln!("No display groups visible in TWS");
+        return Ok(());
+    };
 
-    println!("Listening for events. Change the contract in TWS Group 1 (Red) to see updates.");
+    println!("\nSubscribing to group events for group {}...", group_id);
+    let mut subscription = client.subscribe_to_group_events(group_id).await?;
+
+    println!("Listening for events. Change the contract in TWS group {} to see updates.", group_id);
 
     // DisplayGroupSubscription derefs to Subscription; deref-then-borrow before filter_data.
     let inner = &mut *subscription;

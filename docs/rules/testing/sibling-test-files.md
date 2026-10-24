@@ -34,7 +34,8 @@ file longer than the code it holds. No inline `#[cfg(test)] mod ... { }` block r
 The *placement* half is nearly finished: alongside the 115 flat `*_tests.rs` files, 4
 `mod tests;` declarations still resolve to a `<dir>/tests.rs`, all in directories that also hold
 real modules (`find src -name "*_tests.rs" | wc -l` and `find src -name tests.rs | wc -l`,
-2026-10-21, after #1042 flattened the test-only directories).
+2026-10-24, after #1042 flattened the test-only directories and #1054 deleted
+`src/orders/builder/tests.rs`).
 Convert one when you are already editing that module — see
 [modernize touched modules](../workflow/modernize-touched-modules.md) — and do not read the
 surviving `<dir>/tests.rs` files as precedent.

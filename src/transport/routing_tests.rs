@@ -147,17 +147,38 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
     }
 }
 
+/// The request-id-less one-shot replies reach their shared channel by falling
+/// through `determine_routing`: none is in the request-id allow-list. Nothing
+/// else pins that since #1055 dropped their early return, and `NextValidId`
+/// carries `orderId` at proto tag 1, where a request id would be read if it
+/// were ever added to the allow-list.
 #[test]
 fn test_determine_routing_shared_message() {
-    // ManagedAccounts message (type 15)
-    let message_str = "15\01\0DU123456,DU234567\0";
-    let message = ResponseMessage::from(message_str);
-
-    match determine_routing(&message) {
-        RoutingDecision::ByMessageType(msg_type) => {
-            assert_eq!(msg_type, IncomingMessages::ManagedAccounts);
+    let cases = [
+        (
+            IncomingMessages::ManagedAccounts,
+            crate::proto::ManagedAccounts {
+                accounts_list: Some("DU123456,DU234567".into()),
+            }
+            .encode_to_vec(),
+        ),
+        (
+            IncomingMessages::NextValidId,
+            crate::proto::NextValidId { order_id: Some(90) }.encode_to_vec(),
+        ),
+        (
+            IncomingMessages::CurrentTime,
+            crate::proto::CurrentTime {
+                current_time: Some(1_700_000_000),
+            }
+            .encode_to_vec(),
+        ),
+    ];
+    for (kind, body) in cases {
+        match determine_routing(&proto_response(kind, body)) {
+            RoutingDecision::ByMessageType(routed) => assert_eq!(routed, kind),
+            routing => panic!("{kind:?}: expected ByMessageType routing, got {routing:?}"),
         }
-        routing => panic!("Expected ByMessageType routing, got {routing:?}"),
     }
 }
 
