@@ -10,7 +10,7 @@ triggers:
   - adding an Order field that carries another order's id
 symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors]
-precedents: ["#789"]
+precedents: ["#789", "#1069"]
 memory: [project_issue_audit_788_790, reference_tws_request_id_range]
 ---
 
