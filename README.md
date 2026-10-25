@@ -27,13 +27,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 # Async only (default features)
-ibapi = "5.2"
+ibapi = "5.3"
 
 # Blocking only
-ibapi = { version = "5.2", default-features = false, features = ["sync"] }
+ibapi = { version = "5.3", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "5.2", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "5.3", default-features = false, features = ["sync", "async"] }
 ```
 
 When both features are enabled, `ibapi::Client` is the async client; alias the blocking one to use both in the same module:

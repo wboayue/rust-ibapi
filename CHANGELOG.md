@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-10-25
+
 ### Added
 
 - `Client::wait_connected` (blocking and async): waits until the client is connected again after a connection loss, failing with `Error::ConnectionFailed` once the reconnect gives up or `Error::Shutdown` after a shutdown. A stream loop calls it before resubscribing (#1052).
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `HistoricalDataUpdate` frame with no bar fails to decode with `Error::Parse`. Previously it reached the subscriber as `HistoricalBarUpdate::Update` holding a bar dated 1970-01-01 with zero prices and volume. The `historical_data(..).stream()` subscription yields the error and ends (#1057).
 - An update bar from `historical_data(..).stream()` (`HistoricalBarUpdate::Update`) that carries no trade count has `count` `-1`, as bars in the initial batch already did, instead of `0` (#1057).
 - A historical bar whose `date` is missing or does not parse fails to decode with `Error::Parse`, which carries the value when it is malformed. Previously it decoded as a bar dated 1970-01-01. `historical_data(..).fetch()` returns the error; the `historical_data(..).stream()` subscription yields it and ends (#1057).
+- Async `Client::disconnect` called right after `connect` waits for the message-processing task to finish, as its docs promise. Previously it could return before the task had recorded its handle, leaving the task to be dropped later and a panic in it unlogged (#1059).
 
 ## [5.2.0] - 2026-10-20
 
@@ -428,7 +431,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...HEAD
+[5.3.0]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...v5.3.0
 [5.2.0]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...v5.2.0
 [5.1.0]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/wboayue/rust-ibapi/compare/v4.2.0...v5.0.0
