@@ -6,11 +6,15 @@
 
 ## Introduction
 
-This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
+An unofficial Rust client for the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), with async (Tokio) and blocking clients for TWS and IB Gateway.
 
-With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data.
+Use it to retrieve account information, request real-time and historical market data, place and monitor orders, run market scans, and read news and Wall Street Horizon (WSH) event data. Contract builders check required fields at compile time, subscriptions cancel themselves when dropped, and the client reconnects automatically after a dropped connection.
 
-> **📚 Migrating?** See the [v4.x → v5.0](docs/migration-5.0.md) and [v3.x → v4.x](docs/migration-4.0.md) guides for the latest breaking changes, the [v2.x → v3.0 guide](docs/migration-3.0.md) for the `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
+> **📚 Migrating?**
+> - [v4.x → v5.0](docs/migration-5.0.md)
+> - [v3.x → v4.x](docs/migration-4.0.md)
+> - [v2.x → v3.0](docs/migration-3.0.md): `Subscription` shape and notification handling
+> - [v1.x → v2.0](MIGRATION.md)
 
 ## Sync/Async Architecture
 
@@ -32,32 +36,18 @@ ibapi = { version = "5.2", default-features = false, features = ["sync"] }
 ibapi = { version = "5.2", default-features = false, features = ["sync", "async"] }
 ```
 
-```bash
-# Async client (default configuration)
-cargo test
-cargo run --example async_connect
-
-# Blocking client only
-cargo test --no-default-features --features sync
-
-# Validate both clients together
-cargo test --all-features
-```
-
-When both features are enabled, import the blocking types explicitly:
+When both features are enabled, `ibapi::Client` is the async client; alias the blocking one to use both in the same module:
 
 ```rust
-use ibapi::Client;                    // async client
-use ibapi::client::blocking::Client;  // blocking client
+use ibapi::Client;                                     // async client
+use ibapi::client::blocking::Client as BlockingClient; // blocking client
 ```
 
 ## Available APIs
 
-The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
+The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) lists every available API, covering trading, account management, and market data, with examples.
 
 ## Examples
-
-These examples demonstrate key features of the `ibapi` API.
 
 ### Connecting to TWS
 
@@ -92,7 +82,7 @@ async fn main() {
 
 ### Creating Contracts
 
-The library provides a powerful type-safe contract builder API. Here's how to create a stock contract for TSLA:
+Contracts are built with a type-safe builder. Here's how to create a stock contract for TSLA:
 
 ```rust
 use ibapi::prelude::*;
@@ -279,31 +269,7 @@ loop {
 }
 ```
 
-Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) for more details.
-
-#### One-Shot Snapshot
-
-For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. The same `collect_for` / `collect_until` terminals are available on any `Subscription<T>`. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`; `collect_for` returns whatever arrived in time instead.
-
-```rust
-use ibapi::client::blocking::Client;
-use ibapi::prelude::*;
-use std::time::Duration;
-
-fn main() {
-    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
-    let contract = Contract::stock("AAPL").build();
-
-    let ticks = client
-        .market_data(&contract)
-        .snapshot_once(Duration::from_secs(5))
-        .expect("snapshot request failed!");
-
-    for tick in ticks {
-        println!("tick: {tick:?}");
-    }
-}
-```
+#### Multiple Subscriptions
 
 Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
@@ -341,6 +307,36 @@ fn main() {
 }
 ```
 > **Note:** When using `zip`, the iteration will stop if either subscription ends. For independent processing, consider handling each subscription separately.
+
+#### One-Shot Snapshot
+
+For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop.
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
+use std::time::Duration;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
+    let contract = Contract::stock("AAPL").build();
+
+    let ticks = client
+        .market_data(&contract)
+        .snapshot_once(Duration::from_secs(5))
+        .expect("snapshot request failed!");
+
+    for tick in ticks {
+        println!("tick: {tick:?}");
+    }
+}
+```
+
+#### Collecting Results
+
+Any `Subscription<T>` can also be collected with `collect_for` or `collect_until`, which return whatever arrived in time. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`.
+
+Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) for more details.
 
 ### Placing Orders
 
@@ -563,17 +559,20 @@ The order update stream provides real-time notifications for:
 - **OrderStatus**: Status changes typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (`Submitted`, `Filled`, `Cancelled`, …) with `is_active()` / `is_terminal()` helpers
 - **OpenOrder**: Order details when opened or modified
 - **ExecutionData**: Fill notifications with price and quantity
+- **OrderBound**: Binding of an API order ID to a TWS permanent ID
 - **CommissionReport**: Commission charges for executions
 
 Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flow through `SubscriptionItem::Notice` on the per-order subscription returned by `place_order`, not through `OrderUpdate`. See [Handling notifications](#handling-notifications).
 
 ## Handling notifications
 
-TWS emits two flavors of notification alongside subscription data:
+TWS emits two flavors of notification alongside subscription data. Routing
+depends on whether a notice carries a `request_id`, not on its code alone:
 
-- **Per-subscription notices** — warning codes 2100..=2199 and order-cancel code
-  202 carry a `request_id` that maps back to a specific subscription. They arrive
-  on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
+- **Per-subscription notices** — warnings in the 2100..=2199 band and order-cancel
+  code 202 that carry a `request_id` mapping back to a specific subscription.
+  They arrive on that subscription as `SubscriptionItem::Notice(_)`; the stream
+  stays open.
   - **Scanner "no items retrieved"** — an empty scan (common before regular
     hours) reports error code 165 with that text. A scanner subscription
     delivers it as `SubscriptionItem::Notice(_)` and stays open; later batches,
@@ -581,7 +580,8 @@ TWS emits two flavors of notification alongside subscription data:
     `Error`, so don't end a scanner loop on `!notice.is_informational()` alone.
     On other requests, and with any other text, 165 still ends the stream.
 - **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status
-  codes (2104/2105/2106/2107/2108) have no `request_id`. They are not delivered
+  codes (2103–2108, 2119, 2157, 2158) have no `request_id`, even though the
+  farm-status codes fall inside the 2100 band. They are not delivered
   to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.
 
 ### Per-subscription notices
@@ -661,7 +661,7 @@ For a complete data-only example, see the sync example under
 
 ### Handshake-time notices
 
-Farm-status codes (2104/2106/2158, etc.) typically arrive *before*
+Farm-status codes typically arrive *before*
 `Client::connect` returns, so a `notice_stream` registered afterwards will not
 see that initial burst. To capture handshake-time notices — useful for
 connection-state UIs and startup telemetry — use the builder's
@@ -701,7 +701,7 @@ post-connect — both subscribe to the same broadcaster.
 
 ## Multi-Threading
 
-The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be shared between threads to support concurrent operations. The following example demonstrates valid multi-threaded usage of [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html).
+The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be shared between threads with `Arc`:
 
 ```rust
 use std::sync::Arc;
@@ -743,9 +743,9 @@ fn main() {
 }
 ```
 
-Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, every live subscription mapped to a response type receives every response of that type: concurrent requests of the same message type (if not synchronized by the application) also receive the responses to each other, and so do requests that share response types, such as `open_orders` and `all_open_orders`. Responses cannot be attributed to the request that caused them, so an application that issues such requests concurrently — with different arguments, or of kinds whose response types overlap — has to serialize them itself.
+Some TWS API calls have no request ID, so their responses are routed by message type. Every live subscription for a message type receives every response of that type: concurrent requests of the same kind, or of kinds that share response types such as `open_orders` and `all_open_orders`, see each other's responses, and nothing identifies which request caused which response.
 
-To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
+Either serialize those requests yourself, or give each thread its own client. Each client needs a distinct client ID and receives only the responses to its own requests:
 
 ```rust
 use std::thread;
@@ -785,11 +785,15 @@ fn main() {
 }
 ```
 
-In this model, each client instance handles only the requests it initiates, improving the reliability of concurrent operations.
-
 ## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 20 times (by default — see `ClientBuilder::max_reconnect_attempts` and `ClientBuilder::reconnect_forever`) using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. The market data type set with `switch_market_data_type` is re-sent after a reconnect, since TWS does not keep it across reconnects. When receiving responses via a `Subscription`, the application may need to handle retries manually. Since v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe. A stream open when the connection drops ends with `Error::ConnectionReset` right away, before the reconnect, so wait for it with `Client::wait_connected` before resubscribing; that returns `Error::ConnectionFailed` once the reconnect gives up:
+When the connection drops, the client:
+
+- reconnects up to 20 times with Fibonacci backoff (configurable with `ClientBuilder::max_reconnect_attempts` and `ClientBuilder::reconnect_forever`);
+- retries one-shot requests that are safe to repeat, such as `server_time` and `managed_accounts`;
+- re-sends the market data type set with `switch_market_data_type`, since TWS does not keep it across reconnects.
+
+Subscriptions are not resumed. A stream open when the connection drops ends right away, before the reconnect, with `Some(Err(Error::ConnectionReset))` from `Subscription::next()`. Wait for the reconnect with `Client::wait_connected`, then resubscribe; `wait_connected` returns `Error::ConnectionFailed` once the reconnect gives up:
 
 ```rust
 use ibapi::client::blocking::Client;
