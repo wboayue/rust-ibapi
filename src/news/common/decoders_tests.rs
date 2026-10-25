@@ -32,6 +32,25 @@ fn decode_news_article_proto_works() {
 }
 
 #[test]
+fn decode_news_article_proto_article_types() {
+    let decode = |article_type| {
+        decode_news_article_proto(crate::proto::NewsArticle {
+            req_id: Some(1),
+            article_type,
+            article_text: None,
+        })
+    };
+
+    assert_eq!(decode(Some(1)).unwrap().article_type, ArticleType::Binary);
+    assert_eq!(decode(None).unwrap().article_type, ArticleType::Text, "absent is code 0");
+    let err = decode(Some(2)).unwrap_err();
+    assert!(
+        matches!(&err, Error::Parse(_, field, reason) if field == "article_type" && reason.contains('2')),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn decode_historical_news_proto_works() {
     let proto_msg = crate::proto::HistoricalNews {
         req_id: Some(1),

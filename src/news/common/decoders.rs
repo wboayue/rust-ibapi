@@ -69,9 +69,19 @@ pub(crate) fn decode_news_bulletin_proto(p: crate::proto::NewsBulletin) -> Resul
 
 pub(crate) fn decode_news_article_proto(p: crate::proto::NewsArticle) -> Result<NewsArticleBody, Error> {
     Ok(NewsArticleBody {
-        article_type: ArticleType::from(p.article_type.unwrap_or_default()),
+        article_type: decode_article_type(p.article_type.unwrap_or_default())?,
         article_text: p.article_text.unwrap_or_default(),
     })
+}
+
+// One-shot path, so closed: an unknown code fails the call rather than reading as `Text`.
+// Absent is `Text` (code 0), as in the reference client.
+fn decode_article_type(code: i32) -> Result<ArticleType, Error> {
+    match code {
+        0 => Ok(ArticleType::Text),
+        1 => Ok(ArticleType::Binary),
+        _ => Err(Error::parse_proto("article_type", format!("unknown article type code {code}"))),
+    }
 }
 
 pub(crate) fn decode_historical_news_proto(p: crate::proto::HistoricalNews) -> Result<NewsArticle, Error> {
