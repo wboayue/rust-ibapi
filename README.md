@@ -18,7 +18,7 @@ Use it to retrieve account information, request real-time and historical market 
 
 ## Sync/Async Architecture
 
-rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The async client is enabled by default; opt into the blocking client with the `sync` feature and use both together when you need to mix execution models.
+The async client is enabled by default; opt into the blocking client with the `sync` feature and use both together when you need to mix execution models.
 
 - **async** *(default)*: Non-blocking client using Tokio tasks and broadcast channels. Available as `ibapi::Client`.
 - **sync**: Blocking client using crossbeam channels. Available as `ibapi::client::blocking::Client` (or `ibapi::Client` when `async` is disabled).
@@ -97,7 +97,7 @@ let contract = Contract::stock("7203")
     .build();
 ```
 
-The builder API provides type-safe construction for all contract types with compile-time validation:
+Required fields are checked at compile time for all contract types:
 
 ```rust
 // Options - required fields enforced at compile time
@@ -119,7 +119,7 @@ let treasury = Contract::bond_cusip("912810RN0");
 let euro_bond = Contract::bond_isin("DE0001102309");
 ```
 
-See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.
+See the [Contract Builder Guide](docs/contract-builder.md) for documentation on all contract types.
 
 For a complete list of contract attributes, explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html).
 
@@ -334,13 +334,13 @@ fn main() {
 
 #### Collecting Results
 
-Any `Subscription<T>` can also be collected with `collect_for` or `collect_until`, which return whatever arrived in time. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`.
+Any `Subscription<T>` can also be collected without a loop: `collect_for(timeout)` returns whatever arrived in time, and `collect_until(timeout, stop)` returns early once the `stop` predicate accepts the items collected so far. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`.
 
 Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) for more details.
 
 ### Placing Orders
 
-For a comprehensive guide on all supported order types and their usage, see the [Order Types Guide](docs/order-types.md).
+For all supported order types and their usage, see the [Order Types Guide](docs/order-types.md).
 
 #### Sync Example
 
@@ -416,7 +416,7 @@ async fn main() {
 
 #### Monitoring Order Updates
 
-For real-time monitoring of order status, executions, and commissions, set up an order update stream before submitting orders:
+For real-time monitoring of order status, executions, and commissions, set up an order update stream before submitting orders. TWS does not replay order events, so updates sent before the stream exists are lost:
 
 ##### Sync Example
 
@@ -562,7 +562,7 @@ The order update stream provides real-time notifications for:
 - **OrderBound**: Binding of an API order ID to a TWS permanent ID
 - **CommissionReport**: Commission charges for executions
 
-Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flow through `SubscriptionItem::Notice` on the per-order subscription returned by `place_order`, not through `OrderUpdate`. See [Handling notifications](#handling-notifications).
+Per-order TWS warnings (e.g. quote-throttling codes in the 2100 band scoped to an order) are not delivered through `OrderUpdate`. They arrive as `SubscriptionItem::Notice` only on the subscription returned by the lower-level `client.place_order(order_id, &contract, &order)`; `submit()` returns just the order ID and does not expose them. See [Handling notifications](#handling-notifications).
 
 ## Handling notifications
 
@@ -655,17 +655,13 @@ want `iter_data()` / `filter_data()` — notices are observability concerns and
 already log at `warn!`. UI status indicators, custom logging, and audit pipelines
 match on `SubscriptionItem::Data` vs `SubscriptionItem::Notice` directly.
 
-For a complete data-only example, see the sync example under
-[Requesting Realtime Market Data](#requesting-realtime-market-data) above — its
-`iter_data()` loop is exactly this shape.
-
 ### Handshake-time notices
 
-Farm-status codes typically arrive *before*
-`Client::connect` returns, so a `notice_stream` registered afterwards will not
-see that initial burst. To capture handshake-time notices — useful for
-connection-state UIs and startup telemetry — use the builder's
-`connect_with_notice_stream` terminal instead of `connect`:
+Farm-status codes typically arrive *before* `Client::connect` returns, so a
+`notice_stream` registered afterwards will not see that initial burst. To
+capture handshake-time notices — useful for connection-state UIs and startup
+telemetry — use the builder's `connect_with_notice_stream` terminal instead of
+`connect`:
 
 ```rust
 use ibapi::client::blocking::Client;
@@ -693,11 +689,10 @@ fn main() {
 }
 ```
 
-The pre-bound stream survives auto-reconnects (the broadcaster lives on
-`Connection`, not on the bus), so a single subscription covers both paths.
-For runtime-only unrouted notices once the client is up, you can also call
-[`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream)
-post-connect — both subscribe to the same broadcaster.
+The stream survives auto-reconnects and receives the same notices as
+[`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream),
+which you can call after connecting instead if you don't need the handshake
+burst.
 
 ## Multi-Threading
 
@@ -842,7 +837,7 @@ fn main() {
 
 ## Contributions
 
-We welcome contributions of all kinds. Feel free to propose new ideas, share bug fixes, or enhance the documentation. If you'd like to contribute, please start by reviewing our [contributor documentation](https://github.com/wboayue/rust-ibapi/blob/main/CONTRIBUTING.md).
+We welcome contributions of all kinds: new ideas, bug fixes, or documentation improvements. If you'd like to contribute, please start by reviewing our [contributor documentation](https://github.com/wboayue/rust-ibapi/blob/main/CONTRIBUTING.md).
 
 If you encounter a bug or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
