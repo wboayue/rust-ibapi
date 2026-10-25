@@ -186,7 +186,7 @@ async fn main() {
 }
 ```
 
-### Requesting Realtime Market Data
+### Requesting Real-Time Market Data
 
 These examples use `iter_data()` (sync) / `filter_data()` (async) to focus on bars; per-subscription notices are filtered (and logged at `warn!`). See [Handling notifications](#handling-notifications) for the pattern when you also want to observe `Notice` items.
 
@@ -562,34 +562,23 @@ The order update stream provides real-time notifications for:
 - **OrderBound**: Binding of an API order ID to a TWS permanent ID
 - **CommissionReport**: Commission charges for executions
 
-Per-order TWS warnings (e.g. quote-throttling codes in the 2100 band scoped to an order) are not delivered through `OrderUpdate`. They arrive as `SubscriptionItem::Notice` only on the subscription returned by the lower-level `client.place_order(order_id, &contract, &order)`; `submit()` returns just the order ID and does not expose them. See [Handling notifications](#handling-notifications).
+Per-order TWS warnings (e.g. quote-throttling codes in the 2100 band scoped to an order) are not delivered through `OrderUpdate`.
+
+They arrive as `SubscriptionItem::Notice` only on the subscription returned by the lower-level `client.place_order(order_id, &contract, &order)`; `submit()` returns just the order ID and does not expose them. See [Handling notifications](#handling-notifications).
 
 ## Handling notifications
 
-TWS emits two flavors of notification alongside subscription data. Routing
-depends on whether a notice carries a `request_id`, not on its code alone:
+TWS emits two flavors of notification alongside subscription data. Routing depends on whether a notice carries a `request_id`, not on its code alone:
 
-- **Per-subscription notices** — warnings in the 2100..=2199 band and order-cancel
-  code 202 that carry a `request_id` mapping back to a specific subscription.
-  They arrive on that subscription as `SubscriptionItem::Notice(_)`; the stream
-  stays open.
-  - **Scanner "no items retrieved"** — an empty scan (common before regular
-    hours) reports error code 165 with that text. A scanner subscription
-    delivers it as `SubscriptionItem::Notice(_)` and stays open; later batches,
-    including empty ones, still arrive. The notice's `category()` is still
-    `Error`, so don't end a scanner loop on `!notice.is_informational()` alone.
-    On other requests, and with any other text, 165 still ends the stream.
-- **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status
-  codes (2103–2108, 2119, 2157, 2158) have no `request_id`, even though the
-  farm-status codes fall inside the 2100 band. They are not delivered
-  to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.
+- **Per-subscription notices** — warnings in the 2100..=2199 band and order-cancel code 202 that carry a `request_id` mapping back to a specific subscription. They arrive on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
+  - **Scanner "no items retrieved"** — an empty scan (common before regular hours) reports error code 165 with that text. A scanner subscription delivers it as `SubscriptionItem::Notice(_)` and stays open; later batches, including empty ones, still arrive. The notice's `category()` is still `Error`, so don't end a scanner loop on `!notice.is_informational()` alone. On other requests, and with any other text, 165 still ends the stream.
+- **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status codes (2103–2108, 2119, 2157, 2158 — inside the 2100 band, but sent without a `request_id`) are not delivered to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.
 
 ### Per-subscription notices
 
-`Subscription<T>::next()` returns `Option<Result<SubscriptionItem<T>, Error>>`,
-so a single match handles data, notices, and terminal errors:
+`Subscription<T>::next()` returns `Option<Result<SubscriptionItem<T>, Error>>`, so a single match handles data, notices, and terminal errors:
 
-#### Sync example
+#### Sync Example
 
 ```rust
 use ibapi::client::blocking::Client;
@@ -614,7 +603,7 @@ fn main() {
 }
 ```
 
-#### Async example
+#### Async Example
 
 ```rust
 use ibapi::prelude::*;
@@ -642,26 +631,18 @@ async fn main() {
 
 ### Filtering vs. observing
 
-Pick the iterator/stream shape based on whether the call site cares about
-notices:
+Pick the iterator/stream shape based on whether the call site cares about notices:
 
 | Want                                  | Sync                            | Async                          |
 |---------------------------------------|---------------------------------|--------------------------------|
 | **Data only** (notices logged at warn) | `subscription.iter_data()` / `next_data()` | `subscription.filter_data()` (then `.next().await`) |
 | **Data + notices** (full visibility)   | `subscription.iter()` / `next()` | `subscription.next().await` (matches on `SubscriptionItem`) |
 
-Most call sites (downstream business logic, indicators, paper-trading loops)
-want `iter_data()` / `filter_data()` — notices are observability concerns and
-already log at `warn!`. UI status indicators, custom logging, and audit pipelines
-match on `SubscriptionItem::Data` vs `SubscriptionItem::Notice` directly.
+Most call sites (downstream business logic, indicators, paper-trading loops) want `iter_data()` / `filter_data()` — notices are observability concerns and already log at `warn!`. UI status indicators, custom logging, and audit pipelines match on `SubscriptionItem::Data` vs `SubscriptionItem::Notice` directly.
 
 ### Handshake-time notices
 
-Farm-status codes typically arrive *before* `Client::connect` returns, so a
-`notice_stream` registered afterwards will not see that initial burst. To
-capture handshake-time notices — useful for connection-state UIs and startup
-telemetry — use the builder's `connect_with_notice_stream` terminal instead of
-`connect`:
+Farm-status codes typically arrive *before* `Client::connect` returns, so a `notice_stream` registered afterwards will not see that initial burst. To capture handshake-time notices — useful for connection-state UIs and startup telemetry — use the builder's `connect_with_notice_stream` terminal instead of `connect`:
 
 ```rust
 use ibapi::client::blocking::Client;
@@ -689,10 +670,7 @@ fn main() {
 }
 ```
 
-The stream survives auto-reconnects and receives the same notices as
-[`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream),
-which you can call after connecting instead if you don't need the handshake
-burst.
+The stream survives auto-reconnects and receives the same notices as [`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream), which you can call after connecting instead if you don't need the handshake burst.
 
 ## Multi-Threading
 
