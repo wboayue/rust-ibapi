@@ -271,10 +271,10 @@ impl_wire_enum!(SecurityIdType, fallback Unknown);
 pub struct Strike(f64);
 
 impl Strike {
-    /// Construct a validated strike price ensuring it is positive.
+    /// Construct a validated strike price ensuring it is positive and finite.
     pub fn new(price: f64) -> Result<Self, String> {
-        if price <= 0.0 {
-            Err("Strike price must be positive".to_string())
+        if !(price.is_finite() && price > 0.0) {
+            Err("Strike price must be positive and finite".to_string())
         } else {
             Ok(Strike(price))
         }
@@ -282,7 +282,7 @@ impl Strike {
 
     /// Create a strike price, panicking if invalid (for internal use in builders)
     pub(crate) fn new_unchecked(price: f64) -> Self {
-        Strike::new(price).expect("Strike price must be positive")
+        Strike::new(price).expect("Strike price must be positive and finite")
     }
 
     /// Access the numeric strike value.

@@ -65,7 +65,7 @@ fn put_option_builder() {
 fn invalid_strike_price() {
     let result = Strike::new(-10.0);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "Strike price must be positive");
+    assert_eq!(result.unwrap_err(), "Strike price must be positive and finite");
 
     let result = Strike::new(0.0);
     assert!(result.is_err());
