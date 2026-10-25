@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::{ExecutionSide, OrderStatusKind, TimeInForce, UnknownCondition};
+use crate::orders::{ExecutionSide, OrderStatusKind, TimeInForce, UnknownCondition, WhatIfType};
 
 // === parse_required ===
 
@@ -316,6 +316,46 @@ fn decode_order_deactivate_absent_is_false() {
     assert!(!order.deactivate);
 }
 
+// === decode_order additional order params ===
+
+#[test]
+fn decode_order_maps_additional_params() {
+    let proto_order = proto::Order {
+        post_only: Some(true),
+        allow_pre_open: Some(true),
+        ignore_open_auction: Some(true),
+        seek_price_improvement: Some(1),
+        what_if_type: Some(1),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert!(order.post_only);
+    assert!(order.allow_pre_open);
+    assert!(order.ignore_open_auction);
+    assert_eq!(order.seek_price_improvement, Some(true));
+    assert_eq!(order.what_if_type, Some(WhatIfType::MarginRequirements));
+}
+
+#[test]
+fn decode_order_additional_params_absent_are_unset() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(!order.post_only);
+    assert!(!order.allow_pre_open);
+    assert!(!order.ignore_open_auction);
+    assert_eq!(order.seek_price_improvement, None);
+    assert_eq!(order.what_if_type, None);
+}
+
+#[test]
+fn decode_order_seek_price_improvement_zero_is_false() {
+    let proto_order = proto::Order {
+        seek_price_improvement: Some(0),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.seek_price_improvement, Some(false));
+}
+
 // === decode_order conditions_include_overnight ===
 
 #[test]
@@ -459,6 +499,7 @@ fn decode_order_preserves_unknown_integer_codes() {
         reference_price_type: Some(9),
         origin: Some(9),
         short_sale_slot: Some(9),
+        what_if_type: Some(9),
         ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
@@ -468,6 +509,7 @@ fn decode_order_preserves_unknown_integer_codes() {
     assert_eq!(order.reference_price_type, Some(ReferencePriceType::Unknown(9)));
     assert_eq!(order.origin, OrderOrigin::Unknown(9));
     assert_eq!(order.short_sale_slot, ShortSaleSlot::Unknown(9));
+    assert_eq!(order.what_if_type, Some(WhatIfType::Unknown(9)));
 }
 
 #[test]

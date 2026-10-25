@@ -85,12 +85,12 @@ as for strings: **`From<i32>` never coerces an unrecognized code to a known vari
 shape `Liquidity` established is an enum with an `Unknown(i32)` payload variant and a total
 `From<i32>` returning `Unknown(code)` for anything outside the table, so the value is
 observable rather than silently read as `None`, `Default`, or the first listed variant. The
-seven order enums also implement `From<T> for i32`, handing the code back, written by hand
-because `value as i32` no longer compiles once a payload variant exists. `Unknown(i32)` is
-`Copy`, so an enum that was `Copy` stays so, and derived serde stays. There is no closed
-(`TryFrom<i32>`) form of this shape: these fields are decoded on a streaming path where an
-error kills the subscription, so a payload variant is the only way to keep the conversion
-total without coercing.
+order enums of this shape also implement `From<T> for i32`, handing the code back, written
+by hand because `value as i32` no longer compiles once a payload variant exists.
+`Unknown(i32)` is `Copy`, so an enum that was `Copy` stays so, and derived serde stays. There
+is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded on a streaming
+path where an error kills the subscription, so a payload variant is the only way to keep the
+conversion total without coercing.
 
 **The wire code lives in the `From` impls, not in a discriminant.** #825 first wrote these
 with `#[repr(i32)]` and `Customer = 0` alongside the hand-written `From<T> for i32`, copying

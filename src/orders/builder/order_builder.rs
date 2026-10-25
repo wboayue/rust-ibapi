@@ -10,7 +10,7 @@ use crate::orders::conditions::TriggerMethod;
 use crate::orders::OrderId;
 use crate::orders::{
     Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce,
-    VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
+    VolatilityType, WhatIfType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
 };
 
 #[cfg(test)]
@@ -46,6 +46,7 @@ pub struct OrderBuilder<T> {
     algo_strategy: Option<String>,
     algo_params: Vec<TagValue>,
     pub(crate) what_if: bool,
+    what_if_type: Option<WhatIfType>,
 
     // Advanced fields
     discretionary_amt: Option<f64>,
@@ -244,6 +245,7 @@ impl<T> OrderBuilder<T> {
             algo_strategy: None,
             algo_params: Vec::new(),
             what_if: false,
+            what_if_type: None,
             discretionary_amt: None,
             trailing_percent: None,
             trail_stop_price: None,
@@ -1066,6 +1068,38 @@ impl<T> OrderBuilder<T> {
         self
     }
 
+    /// Set what a what-if order checks; see [`WhatIfType`].
+    ///
+    /// Takes effect only on a what-if order, i.e. with `.analyze()`. It does not make
+    /// the order what-if: `.submit()` still places a live order.
+    ///
+    /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::WhatIfType;
+    ///
+    /// let _ = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(50.0)
+    ///     .what_if_type(WhatIfType::MarginRequirements)
+    ///     .analyze()
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn what_if_type(mut self, what_if_type: WhatIfType) -> Self {
+        self.what_if_type = Some(what_if_type);
+        self
+    }
+
     // Additional order attributes
 
     /// Set volatility for volatility orders
@@ -1617,6 +1651,7 @@ impl<T> OrderBuilder<T> {
         }
 
         order.what_if = self.what_if;
+        order.what_if_type = self.what_if_type;
 
         // Set advanced fields
         if let Some(amt) = self.discretionary_amt {

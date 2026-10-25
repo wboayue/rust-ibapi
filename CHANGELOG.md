@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Client::wait_connected` (blocking and async): waits until the client is connected again after a connection loss, failing with `Error::ConnectionFailed` once the reconnect gives up or `Error::Shutdown` after a shutdown. A stream loop calls it before resubscribing (#1052).
 - `Client::display_groups()` (async and blocking) returns the ids of the display groups visible in TWS, most used first; pass one to `subscribe_to_group_events` (#1058).
+- `Order::post_only`, `Order::allow_pre_open`, `Order::ignore_open_auction`, `Order::seek_price_improvement` and `Order::what_if_type` (new `orders::WhatIfType`, set with `OrderBuilder::what_if_type`) are sent with the order and read back from open-order reports. Previously they were dropped on send and left unset on decode. The first three need server version 216 and the last two 217; below that `place_order` / `submit_order` (sync and async) return `Error::ServerVersion` (#1065).
 
 ### Changed
 

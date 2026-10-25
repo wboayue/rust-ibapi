@@ -2,7 +2,9 @@ use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 use crate::orders::conditions::TriggerMethod;
-use crate::orders::{Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType};
+use crate::orders::{
+    Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
+};
 use crate::proto::encoders::encode_order;
 
 fn create_test_contract() -> Contract {
@@ -693,6 +695,24 @@ fn reference_price_type_reaches_the_wire() {
 
     assert_eq!(order.reference_price_type, Some(ReferencePriceType::NBBO));
     assert_eq!(encode_order(&order).reference_price_type, Some(2));
+}
+
+#[test]
+fn what_if_type_reaches_the_wire() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .limit(50.0)
+        .what_if()
+        .what_if_type(WhatIfType::MarginRequirements)
+        .build()
+        .unwrap();
+
+    assert!(order.what_if);
+    assert_eq!(order.what_if_type, Some(WhatIfType::MarginRequirements));
+    assert_eq!(encode_order(&order).what_if_type, Some(1));
 }
 
 #[test]
