@@ -1070,6 +1070,9 @@ impl<T> OrderBuilder<T> {
 
     /// Set what a what-if order checks; see [`WhatIfType`].
     ///
+    /// Takes effect only on a what-if order, i.e. with `.analyze()`. It does not make
+    /// the order what-if: `.submit()` still places a live order.
+    ///
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     ///
     /// # Examples
