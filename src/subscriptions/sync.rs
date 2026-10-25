@@ -136,6 +136,43 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.request_id
     }
 
+    /// Whether the stream has terminated. Set once a `next`, `try_next` or
+    /// `next_timeout` call has returned TWS's end marker (as `None`), a
+    /// terminal error, or `Err(Error::Cancelled)` after [`cancel`](Self::cancel);
+    /// from then on those calls return `None` without reading. Also set once a
+    /// snapshot's end tick has been returned: the reads do not stop there, but
+    /// TWS sends nothing more for the request. Distinguishes between the
+    /// `None` that [`try_next`](Self::try_next) and
+    /// [`next_timeout`](Self::next_timeout) return at the end and the one they
+    /// return while nothing has arrived yet.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use std::time::Duration;
+    ///
+    /// # fn main() -> Result<(), ibapi::Error> {
+    /// let client = Client::connect("127.0.0.1:4002", 100)?;
+    /// let contract = Contract::stock("AAPL").build();
+    /// let subscription = client.contract_details_stream(&contract).subscribe()?;
+    ///
+    /// loop {
+    ///     match subscription.try_next() {
+    ///         Some(Ok(item)) => println!("{item:?}"),
+    ///         Some(Err(e)) => { eprintln!("error: {e}"); break; }
+    ///         None if subscription.is_terminated() => break,
+    ///         None => std::thread::sleep(Duration::from_millis(100)), // nothing yet
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn is_terminated(&self) -> bool {
+        self.stream_ended.load(Ordering::Relaxed) || self.snapshot_ended.load(Ordering::Relaxed)
+    }
+
     /// Whether the stream ended with TWS's end marker, as opposed to an
     /// error or a closed channel (both of which also end iteration).
     pub(crate) fn ended_natively(&self) -> bool {
@@ -357,8 +394,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// or terminal error. Use [`try_iter_data`](Self::try_iter_data) when notices
     /// should be filtered.
     ///
-    /// Returns `None` if no item is available *right now*; check the surrounding
-    /// loop or stream state to distinguish from end-of-stream.
+    /// `None` means either that no item is queued *right now* or that the
+    /// stream ended; [`is_terminated`](Self::is_terminated) distinguishes
+    /// between the two.
     pub fn try_next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
@@ -377,11 +415,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// or terminal error. Use [`timeout_iter_data`](Self::timeout_iter_data) when
     /// you want notices filtered.
     ///
-    /// `None` means either that `timeout` passed or that the stream ended with
-    /// TWS's end marker; terminal errors, a TWS rejection included, come as
-    /// `Some(Err(_))`. To collect a whole result within a time bound, use
-    /// [`collect_to_end_within`](Self::collect_to_end_within), which tells the
-    /// two apart.
+    /// `None` means either that `timeout` passed or that the stream ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
+    /// Terminal errors, a TWS rejection included, come as `Some(Err(_))`. To
+    /// collect a whole result within a time bound, use
+    /// [`collect_to_end_within`](Self::collect_to_end_within).
     pub fn next_timeout(&self, timeout: Duration) -> Option<Result<SubscriptionItem<T>, Error>> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
@@ -415,7 +453,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
     /// Non-blocking iterator. Same `SubscriptionItem<T>` shape as [`iter`](Self::iter)
     /// (see [`try_iter_data`](Self::try_iter_data) for the data-only variant).
-    /// Returns `None` immediately when nothing is queued.
+    /// Returns `None` immediately when nothing is queued, and once the stream
+    /// has ended; [`is_terminated`](Self::is_terminated) distinguishes between
+    /// the two.
     pub fn try_iter(&self) -> SubscriptionTryIter<'_, T> {
         SubscriptionTryIter { subscription: self }
     }
@@ -423,6 +463,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Iterator that waits up to `timeout` for each item. Same
     /// `SubscriptionItem<T>` shape as [`iter`](Self::iter); see
     /// [`timeout_iter_data`](Self::timeout_iter_data) for the data-only variant.
+    /// Returns `None` when `timeout` passes, and once the stream has ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
     pub fn timeout_iter(&self, timeout: Duration) -> SubscriptionTimeoutIter<'_, T> {
         SubscriptionTimeoutIter { subscription: self, timeout }
     }
@@ -433,12 +475,16 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.iter().filter_data()
     }
 
-    /// Non-blocking data iterator (notices filtered).
+    /// Non-blocking data iterator (notices filtered). Returns `None` immediately
+    /// when nothing is queued, and once the stream has ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
     pub fn try_iter_data(&self) -> FilterData<SubscriptionTryIter<'_, T>> {
         self.try_iter().filter_data()
     }
 
-    /// Timeout-bounded data iterator (notices filtered).
+    /// Timeout-bounded data iterator (notices filtered). Returns `None` when
+    /// `timeout` passes, and once the stream has ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
     pub fn timeout_iter_data(&self, timeout: Duration) -> FilterData<SubscriptionTimeoutIter<'_, T>> {
         self.timeout_iter(timeout).filter_data()
     }

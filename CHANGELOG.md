@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Blocking `Subscription::is_terminated()`, `TickSubscription::is_terminated()` and `NoticeStream::is_terminated()`: whether the stream has terminated, so a caller polling with `try_next` or `next_timeout` can distinguish between their `None` at the end of the stream and the `None` they return while nothing has arrived yet (#1141).
+
 ## [5.5.0] - 2026-10-30
 
 ### Added

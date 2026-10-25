@@ -34,12 +34,18 @@ use time_tz::{self, PrimitiveDateTimeExt, Tz};
 // after the last item. Returns the signal-channel receiver too; keep it bound
 // for the test's lifetime to silence the drop-time signal warning.
 fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubscription<T>, channel::Receiver<Signal>) {
+    let (subscription, signal_rx, _sender) = tick_sub_with_sender(items);
+    (subscription, signal_rx)
+}
+
+// `tick_sub_from_routed` with the inbound channel kept open: the returned
+// sender feeds it.
+fn tick_sub_with_sender<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubscription<T>, channel::Receiver<Signal>, channel::Sender<RoutedItem>) {
     let (sender, receiver) = channel::unbounded();
     let (signaler, signal_rx) = channel::unbounded();
     for item in items {
         sender.send(item).unwrap();
     }
-    drop(sender);
     let internal = SubscriptionBuilder::new()
         .receiver(receiver)
         .signaler(signaler)
@@ -47,7 +53,7 @@ fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubsc
         .request_id(RequestId::nth(300))
         .build();
     let subscription = TickSubscription::new(internal, RequestId::nth(300).raw(), Arc::new(MessageBusStub::default()));
-    (subscription, signal_rx)
+    (subscription, signal_rx, sender)
 }
 
 // Pins server_version one below `feature.min_version` and asserts the call fails
@@ -1278,10 +1284,13 @@ fn tick_subscription_try_next_drains_buffer() {
         .expect("subscription should be created");
 
     // Drain via try_iter_data — each .next() goes through try_next() → next_helper(try_next_routed).
-    let ticks: Vec<TickLast> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
-    assert_eq!(ticks.len(), 2, "should drain both ticks via try_next");
-    assert_eq!(ticks[0].price, 12.00);
-    assert_eq!(ticks[1].price, 12.01);
+    assert!(!subscription.is_terminated(), "nothing read yet");
+    let mut ticks = subscription.try_iter_data();
+    assert_eq!(ticks.next().expect("first tick").expect("decode error").price, 12.00);
+    assert!(!subscription.is_terminated(), "one tick still buffered");
+    assert_eq!(ticks.next().expect("second tick").expect("decode error").price, 12.01);
+    assert!(subscription.is_terminated(), "last batch read and drained");
+    assert!(ticks.next().is_none(), "nothing after the two ticks");
 
     // After done, try_next returns None immediately.
     assert!(subscription.try_next().is_none(), "no more ticks expected after done");
@@ -1325,10 +1334,12 @@ fn tick_subscription_error_surfaces_via_err_arm() {
     // end-of-data. Subsequent calls return None (stream terminated).
     let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![RoutedItem::Error(Error::Simple("injected".into()))]);
 
+    assert!(!subscription.is_terminated());
     match subscription.next() {
         Some(Err(Error::Simple(msg))) => assert_eq!(msg, "injected", "error payload preserved"),
         other => panic!("expected Some(Err(Simple)), got {other:?}"),
     }
+    assert!(subscription.is_terminated());
     assert!(subscription.next().is_none(), "stream terminates after a terminal error");
     subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
 }
@@ -1376,6 +1387,14 @@ fn tick_subscription_iter_data_filters_notice_keeps_error() {
     }
     assert!(data.next().is_none(), "stream ended after the error");
     subscription.done.store(true, Ordering::Relaxed);
+}
+
+#[test]
+fn tick_subscription_is_terminated_false_while_nothing_has_arrived() {
+    let (subscription, _signal_rx, _sender) = tick_sub_with_sender::<TickLast>(vec![]);
+    assert!(subscription.try_next().is_none(), "open, empty channel: nothing queued");
+    assert!(!subscription.is_terminated());
+    subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
 }
 
 #[test]
