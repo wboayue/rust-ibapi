@@ -481,6 +481,10 @@ impl Client {
     /// a [`place_order`](Self::place_order) subscription: all may be open at
     /// once, as may several streams on one order. Nothing is sent to TWS.
     ///
+    /// # Errors
+    ///
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -506,7 +510,7 @@ impl Client {
     /// }
     /// ```
     pub async fn order_status_stream(&self, order_id: impl Into<OrderId>) -> Result<Subscription<OrderStatus>, Error> {
-        let internal_subscription = self.message_bus.create_order_status_subscription(order_id.into()).await?;
+        let internal_subscription = self.message_bus.create_order_status_subscription(order_id.into().checked()?).await?;
         Ok(Subscription::new_from_internal_simple(
             internal_subscription,
             self.message_bus.clone(),
@@ -539,8 +543,9 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// [`Error::ConnectionReset`] if the connection is down or drops during
-    /// the wait, [`Error::Shutdown`] if the client shuts down.
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000
+    /// (reserved for request ids), [`Error::ConnectionReset`] if the connection is
+    /// down or drops during the wait, [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
     ///
