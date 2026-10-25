@@ -387,7 +387,10 @@ impl Client {
         ))
     }
 
-    /// Requests status updates about future orders placed from TWS.
+    /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+    ///
+    /// # Arguments
+    /// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
     ///
     /// # Examples
     ///
@@ -396,7 +399,7 @@ impl Client {
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let client = Client::connect("127.0.0.1:4002", 0).await.expect("connection failed");
     ///     let subscription = client.auto_open_orders(true).await.expect("auto_open_orders failed");
     ///     let mut orders = subscription.filter_data();
     ///     while let Some(order) = orders.next().await {
