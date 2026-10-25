@@ -1202,6 +1202,8 @@ fn order_entry_points_reject_request_range_ids() {
     rejected(client.place_order(1, &contract, &with_parent).map(|_| ()), "place_order parent_id");
     rejected(client.submit_order(floor, &contract, &order), "submit_order");
     rejected(client.cancel_order(floor, "").map(|_| ()), "cancel_order");
+    rejected(client.order_status_stream(floor).map(|_| ()), "order_status_stream");
+    rejected(client.wait_for_fill(floor, std::time::Duration::ZERO).map(|_| ()), "wait_for_fill");
 
     client.raise_next_order_id(OrderId::from(floor));
     rejected(client.exercise_options(&contract).exercise(1).submit().map(|_| ()), "exercise_options");

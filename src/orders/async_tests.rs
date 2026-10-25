@@ -1149,6 +1149,8 @@ async fn order_entry_points_reject_request_range_ids() {
     rejected(client.place_order(1, &contract, &with_parent).await.map(|_| ()), "place_order parent_id");
     rejected(client.submit_order(floor, &contract, &order).await, "submit_order");
     rejected(client.cancel_order(floor, "").await.map(|_| ()), "cancel_order");
+    rejected(client.order_status_stream(floor).await.map(|_| ()), "order_status_stream");
+    rejected(client.wait_for_fill(floor, std::time::Duration::ZERO).await.map(|_| ()), "wait_for_fill");
 
     client.raise_next_order_id(OrderId::from(floor));
     rejected(
