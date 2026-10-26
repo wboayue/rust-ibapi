@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Contract::last_trade_date` is now populated from decoded contracts (contract details, open orders, positions, executions, ...) for options and futures. It was always `None` (#1087).
 - `order_status_stream` and `wait_for_fill` (sync and async) return `Error::OrderIdInRequestRange` for an order id at or above 1,500,000,000, as the other order methods do. Previously the stream never matched a status, so `wait_for_fill` waited out its timeout and returned `TimedOut` (#1069).
 - `OrderBuilder::order_type(OrderType::MarketOnOpen)`, `LimitOnOpen` and `AtAuction` set the time in force those types imply (`OnOpen`, `OnOpen`, `Auction`), as `market_on_open()`, `limit_on_open()` and `at_auction()` do. This replaces a time in force set earlier in the chain; a time-in-force setter called later still wins. Previously they sent a plain `MKT`, `LMT` or `MTL` day order (#1073).
 - `Strike::new` rejects NaN and infinite prices, and so `OptionBuilder::strike` panics on them as it does on zero or negative ones. Previously a NaN or infinite strike went into the contract unchecked. `OptionBuilder::strike` and the price, time, margin, volume and percent-change condition builders' `build()` now document their panics (#1072).

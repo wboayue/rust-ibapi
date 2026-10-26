@@ -258,3 +258,27 @@ fn stk_contract() -> proto::Contract {
         ..Default::default()
     }
 }
+
+// === decode_contract last_trade_date (#1087) ===
+
+#[test]
+fn decode_contract_parses_last_trade_date() {
+    use time::macros::date;
+    // Live: OPT/FUT/FOP carry plain YYYYMMDD; STK/BOND omit the tag.
+    let cases = [
+        (None, None),
+        (Some(""), None),
+        (Some("20261218"), Some(date!(2026 - 12 - 18))),
+        (Some("20261218 08:30:00 US/Central"), Some(date!(2026 - 12 - 18))),
+        (Some("202612"), None),
+        (Some("garbage!"), None),
+    ];
+    for (raw, expected) in cases {
+        let proto_contract = proto::Contract {
+            last_trade_date: raw.map(String::from),
+            ..stk_contract()
+        };
+        let contract = decode_contract(&proto_contract).unwrap();
+        assert_eq!(contract.last_trade_date, expected, "last_trade_date for {raw:?}");
+    }
+}

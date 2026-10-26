@@ -220,6 +220,25 @@ fn decode_bond_contract_details_splits_last_trade_date() {
 }
 
 #[test]
+fn decode_contract_details_reads_last_trade_date() {
+    use crate::common::test_utils::helpers::proto_response;
+    use crate::testdata::builders::contracts::contract_data;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let frame = proto_response(
+        IncomingMessages::ContractData,
+        contract_data()
+            .request_id(9000)
+            .security_type("FUT")
+            .last_trade_date_or_contract_month("20261218 08:30:00 US/Central")
+            .last_trade_date("20261218")
+            .encode_proto(),
+    );
+    let details = decode_contract_details(&frame).unwrap();
+    assert_eq!(details.contract.last_trade_date, Some(time::macros::date!(2026 - 12 - 18)));
+}
+
+#[test]
 fn decode_contract_details_leaves_maturity_unset() {
     // The split is bond-only: a ContractData frame keeps maturity empty.
     use crate::common::test_utils::helpers::proto_response;
