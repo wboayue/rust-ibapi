@@ -192,8 +192,22 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
         combo_legs_description: s(&proto.combo_legs_descrip),
         combo_legs: proto.combo_legs.iter().map(decode_combo_leg).collect::<Result<Vec<_>, _>>()?,
         delta_neutral_contract: proto.delta_neutral_contract.as_ref().map(decode_delta_neutral_contract),
-        last_trade_date: None,
+        last_trade_date: proto.last_trade_date.as_deref().and_then(parse_last_trade_date),
     })
+}
+
+/// Tag 21 `lastTradeDate`: plain `YYYYMMDD` on the wire (live: OPT/FUT/FOP; absent
+/// for STK/BOND). C# keeps the raw string, so a value that fails to parse logs and
+/// reads as `None` rather than failing the whole frame over an auxiliary field.
+fn parse_last_trade_date(raw: &str) -> Option<time::Date> {
+    if raw.is_empty() {
+        return None;
+    }
+    let date = time::Date::parse(raw, time::macros::format_description!("[year][month][day]")).ok();
+    if date.is_none() {
+        log::warn!("unparseable contract lastTradeDate {raw:?}; expected YYYYMMDD");
+    }
+    date
 }
 
 pub fn decode_combo_leg(proto: &proto::ComboLeg) -> Result<ComboLeg, Error> {

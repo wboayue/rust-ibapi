@@ -346,6 +346,7 @@ pub struct ContractDataResponse {
     pub symbol: String,
     pub security_type: String,
     pub last_trade_date_or_contract_month: String,
+    pub last_trade_date: String,
     pub multiplier: String,
     pub exchange: String,
     pub primary_exchange: String,
@@ -379,6 +380,7 @@ impl Default for ContractDataResponse {
             symbol: String::new(),
             security_type: "STK".to_string(),
             last_trade_date_or_contract_month: String::new(),
+            last_trade_date: String::new(),
             multiplier: String::new(),
             exchange: String::new(),
             primary_exchange: String::new(),
@@ -424,6 +426,11 @@ impl ContractDataResponse {
         self.last_trade_date_or_contract_month = v.into();
         self
     }
+    pub fn last_trade_date(mut self, v: impl Into<String>) -> Self {
+        self.last_trade_date = v.into();
+        self
+    }
+
     pub fn multiplier(mut self, v: impl Into<String>) -> Self {
         self.multiplier = v.into();
         self
@@ -505,6 +512,7 @@ impl ResponseProtoEncoder for ContractDataResponse {
                 symbol: some_str(&self.symbol),
                 sec_type: some_str(&self.security_type),
                 last_trade_date_or_contract_month: some_str(&self.last_trade_date_or_contract_month),
+                last_trade_date: some_str(&self.last_trade_date),
                 multiplier: if self.multiplier.is_empty() {
                     None
                 } else {
