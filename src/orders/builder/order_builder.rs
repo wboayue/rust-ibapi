@@ -434,7 +434,8 @@ impl<T> OrderBuilder<T> {
     ///
     /// `MarketOnOpen`, `LimitOnOpen` and `AtAuction` go out as `MKT`, `LMT` and `MTL`; the time in
     /// force is what makes them, so these also set it (`OnOpen`, `OnOpen`, `Auction`), as their
-    /// named setters do. A later time-in-force setter overrides it.
+    /// named setters do. It replaces an earlier time in force; a later time-in-force setter
+    /// overrides it.
     ///
     /// # Examples
     ///
@@ -448,10 +449,8 @@ impl<T> OrderBuilder<T> {
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
-        match order_type {
-            OrderType::MarketOnOpen | OrderType::LimitOnOpen => self.time_in_force = TimeInForce::OnOpen,
-            OrderType::AtAuction => self.time_in_force = TimeInForce::Auction,
-            _ => {}
+        if let Some(tif) = order_type.implied_time_in_force() {
+            self.time_in_force = tif;
         }
         self.order_type = Some(order_type);
         self

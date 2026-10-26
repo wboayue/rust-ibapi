@@ -2292,6 +2292,14 @@ fn order_type_sets_the_time_in_force_its_type_implies() {
         .build()
         .unwrap();
     assert_eq!(order.tif, TimeInForce::GoodTillCanceled, "a later time-in-force setter wins");
+
+    let order = Order::builder()
+        .buy(100)
+        .good_till_canceled()
+        .order_type(OrderType::MarketOnOpen)
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::OnOpen, "replaces an earlier time in force");
 }
 
 // === Pegged orders ===

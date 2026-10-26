@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::orders::OrderId;
+use crate::orders::{OrderId, TimeInForce};
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
 ///
@@ -310,6 +310,16 @@ impl OrderType {
             Self::ComboMarket => "MKT",
             Self::RelativeLimitCombo => "REL + LMT",
             Self::RelativeMarketCombo => "REL + MKT",
+        }
+    }
+
+    /// The time in force this type is made of, for the types `as_str` sends as a plain
+    /// `MKT` / `LMT` / `MTL`.
+    pub(crate) fn implied_time_in_force(&self) -> Option<TimeInForce> {
+        match self {
+            Self::MarketOnOpen | Self::LimitOnOpen => Some(TimeInForce::OnOpen),
+            Self::AtAuction => Some(TimeInForce::Auction),
+            _ => None,
         }
     }
 
