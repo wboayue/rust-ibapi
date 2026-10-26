@@ -104,8 +104,11 @@ impl Client {
     ///
     /// let account = AccountId("U1234567".to_string());
     /// let subscription = client.positions_multi(Some(&account), None).expect("error requesting positions by model");
-    /// for position in subscription.iter() {
-    ///     println!("{position:?}")
+    /// for position in subscription.iter_data() {
+    ///     match position {
+    ///         Ok(position) => println!("{position:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PositionUpdateMulti>, Error> {
@@ -131,8 +134,11 @@ impl Client {
     ///
     /// let account = AccountId("account id".to_string());
     /// let subscription = client.pnl(&account, None).expect("error requesting pnl");
-    /// for pnl in subscription.iter() {
-    ///     println!("{pnl:?}")
+    /// for pnl in subscription.iter_data() {
+    ///     match pnl {
+    ///         Ok(pnl) => println!("{pnl:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
@@ -161,8 +167,11 @@ impl Client {
     /// let contract_id = ContractId(1001);
     ///
     /// let subscription = client.pnl_single(&account, contract_id, None).expect("error requesting pnl");
-    /// for pnl in &subscription {
-    ///     println!("{pnl:?}")
+    /// for pnl in subscription.iter_data() {
+    ///     match pnl {
+    ///         Ok(pnl) => println!("{pnl:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
@@ -197,8 +206,11 @@ impl Client {
     /// let group = AccountGroup("All".to_string());
     ///
     /// let subscription = client.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]).expect("error requesting account summary");
-    /// for summary in &subscription {
-    ///     println!("{summary:?}")
+    /// for summary in subscription.iter_data() {
+    ///     match summary {
+    ///         Ok(summary) => println!("{summary:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {

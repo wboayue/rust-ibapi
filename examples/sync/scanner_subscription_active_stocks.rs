@@ -23,13 +23,17 @@ fn main() {
         .scanner_subscription(&scanner_subscription, &filter)
         .expect("request scanner parameters failed");
 
-    if let Some(Ok(scan_results)) = subscription.next_data() {
-        for scan_data in scan_results.iter() {
-            println!(
-                "rank: {}, contract_id: {}, symbol: {}",
-                scan_data.rank, scan_data.contract_details.contract.contract_id, scan_data.contract_details.contract.symbol
-            );
+    match subscription.next_data() {
+        Some(Ok(scan_results)) => {
+            for scan_data in scan_results.iter() {
+                println!(
+                    "rank: {}, contract_id: {}, symbol: {}",
+                    scan_data.rank, scan_data.contract_details.contract.contract_id, scan_data.contract_details.contract.symbol
+                );
+            }
         }
+        Some(Err(e)) => eprintln!("scanner error: {e}"),
+        None => eprintln!("scanner subscription ended without results"),
     }
 }
 

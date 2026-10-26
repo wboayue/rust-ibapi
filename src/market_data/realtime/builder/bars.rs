@@ -116,7 +116,7 @@ impl<'a> RealtimeBarsBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn subscribe(self) -> Result<crate::subscriptions::Subscription<Bar>, Error> {
+    pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<Bar>, Error> {
         crate::market_data::realtime::r#async::realtime_bars(self.client, self.contract, &self.what_to_show, self.trading_hours, &self.options).await
     }
 }

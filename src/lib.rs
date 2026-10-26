@@ -17,7 +17,7 @@
 //! market scanning, and access to news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes,
 //! maintaining parity with the official API, and enhancing usability.
 //!
-//! # Example
+//! # Examples
 //!
 //! Connect to TWS / IB Gateway and place a market order:
 //!
@@ -121,7 +121,7 @@ pub(crate) mod connection;
 /// other frames during the handshake, the startup callback receives them as
 /// typed [`StartupMessage`] values instead of having them discarded.
 ///
-/// # Example
+/// # Examples
 ///
 #[cfg_attr(
     feature = "async",

@@ -26,8 +26,8 @@ fn main() -> anyhow::Result<()> {
     let client = Client::connect("127.0.0.1:4002", 100)?;
 
     let subscription = client.executions(filter)?;
-    for execution in &subscription {
-        println!("{execution:?}")
+    for execution in subscription.iter_data() {
+        println!("{:?}", execution?);
     }
 
     Ok(())

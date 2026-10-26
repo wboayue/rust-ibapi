@@ -168,6 +168,7 @@ impl ContractBuilder {
     /// Required for option contracts. Must be a positive value.
     ///
     /// # Examples
+    ///
     /// ```no_run
     /// use ibapi::contracts::{ContractBuilder, OptionRight};
     ///

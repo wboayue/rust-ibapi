@@ -44,9 +44,9 @@ than the other examples in the same file. See [doc parity audit](doc-parity-audi
 
 #751 closed the backfill: re-counted then as 143 of 154 `impl Client` methods with
 `# Examples`, the other eleven being trivial client accessors that are exempt. A new method
-ships with its example. Since then a singular `# Example` has crept in, including on both
-`submit_oca_orders` (`grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs`). That is
-drift to fix, not an accepted variant: rename to `# Examples` when you touch the method.
+ships with its example. The singular `# Example` heading that crept in afterward was renamed
+throughout; `grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs` should print
+nothing. The `orders::order_builder` free functions each carry a runnable example too.
 
 ## Precedents
 

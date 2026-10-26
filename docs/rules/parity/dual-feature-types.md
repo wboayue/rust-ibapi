@@ -10,7 +10,7 @@ triggers:
   - a path containing the async keyword fails to parse
 symbols: [NoticeStream, sync_impl, async_impl, Subscription, r#async]
 related: [feature-matrix, no-parity-wrappers, subscription-consumer-idiom]
-precedents: ["#512", "#526", "#823", "#957", "#958"]
+precedents: ["#512", "#526", "#823", "#916", "#957", "#958"]
 memory: [feedback_raw_identifier_async_path, feedback_plan_cfg_receiver_types]
 ---
 
@@ -54,6 +54,11 @@ shape — both are `Subscription<T: StreamDecoder<T>>`
 dispatching statically on `T`, both carry `#[allow(private_bounds)]` because `StreamDecoder` is
 `pub(crate)`. A divergence in the *impl* of a dual-feature type reads as deliberate long after
 it stopped being so, so bring the halves together rather than documenting the gap.
+
+One divergence is deliberate: after `cancel()`, both halves yield `Err(Error::Cancelled)` and
+end, but the blocking side first yields what was already queued, while every async clone stops
+at its next poll through a shared flag, following the async `TickSubscription` precedent (#894,
+#916). Don't "fix" either side to match the other.
 
 ## Precedents
 

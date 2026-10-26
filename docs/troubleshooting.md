@@ -308,7 +308,7 @@ let client = Client::connect("127.0.0.1:4002", 100)
 // Handle specific errors
 match client.place_order(order_id, &contract, &order) {
     Ok(_) => println!("Order placed successfully"),
-    Err(Error::InvalidOrderId) => println!("Invalid order ID"),
+    Err(Error::OrderIdInRequestRange { order_id }) => println!("order id {order_id} is in the request-id range"),
     Err(e) => println!("Order failed: {}", e),
 }
 ```

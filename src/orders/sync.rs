@@ -22,6 +22,7 @@ impl Client {
     /// that guides you through the order creation process.
     ///
     /// # Examples
+    ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
@@ -49,8 +50,11 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let subscription = client.all_open_orders().expect("request failed");
-    /// for order_data in &subscription {
-    ///    println!("{order_data:?}")
+    /// for order_data in subscription.iter_data() {
+    ///     match order_data {
+    ///         Ok(order_data) => println!("{order_data:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn all_open_orders(&self) -> Result<Subscription<Orders>, Error> {
@@ -73,8 +77,11 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 0).expect("connection failed");
     ///
     /// let subscription = client.auto_open_orders(false).expect("request failed");
-    /// for order_data in &subscription {
-    ///    println!("{order_data:?}")
+    /// for order_data in subscription.iter_data() {
+    ///     match order_data {
+    ///         Ok(order_data) => println!("{order_data:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
@@ -141,8 +148,11 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let subscription = client.completed_orders(false).expect("request failed");
-    /// for order_data in &subscription {
-    ///    println!("{order_data:?}")
+    /// for order_data in subscription.iter_data() {
+    ///     match order_data {
+    ///         Ok(order_data) => println!("{order_data:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
@@ -179,8 +189,11 @@ impl Client {
     /// };
     ///
     /// let subscription = client.executions(filter).expect("request failed");
-    /// for execution_data in &subscription {
-    ///    println!("{execution_data:?}")
+    /// for execution_data in subscription.iter_data() {
+    ///     match execution_data {
+    ///         Ok(execution_data) => println!("{execution_data:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
@@ -262,8 +275,11 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let subscription = client.open_orders().expect("request failed");
-    /// for order_data in &subscription {
-    ///    println!("{order_data:?}")
+    /// for order_data in subscription.iter_data() {
+    ///     match order_data {
+    ///         Ok(order_data) => println!("{order_data:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn open_orders(&self) -> Result<Subscription<Orders>, Error> {

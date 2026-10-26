@@ -105,7 +105,7 @@ precedents. Every rule now lives in a node; nothing is inline.
 ### Workflow
 
 - **About to commit or open a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
-  the rustdoc trio is a local-only gate; CI does not fail on broken intra-doc links
+  the integration crate builds are the one local-only gate; CI covers the rest
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them
@@ -185,8 +185,7 @@ cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --no-default-features --features sync -- -D warnings
 cargo clippy --all-targets --all-features -- -D warnings
 
-# Rustdoc intra-doc links — local-only gate; `cargo test --doc` misses these
-# and CI's `cargo doc` runs without RUSTDOCFLAGS.
+# Rustdoc intra-doc links — `cargo test --doc` misses these (CI also runs them).
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --no-default-features --features sync
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features

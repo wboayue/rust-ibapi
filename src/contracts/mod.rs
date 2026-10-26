@@ -154,7 +154,7 @@ impl_wire_enum!(SecurityType, fallback Other);
 /// sensible defaults for you. A bare struct literal with `..Default::default()` also
 /// works when you need full control over individual fields.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// use ibapi::contracts::Contract;
@@ -387,7 +387,8 @@ impl Contract {
 
     /// Create a bond contract with CUSIP identifier
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
@@ -400,7 +401,8 @@ impl Contract {
 
     /// Create a bond contract with ISIN identifier
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
@@ -413,7 +415,8 @@ impl Contract {
 
     /// Create a bond contract with CUSIP or ISIN identifier
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::{Contract, BondIdentifier, Cusip, Isin};
     ///

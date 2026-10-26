@@ -81,6 +81,8 @@ jobs:
 
       # Build documentation
       - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps ${{ matrix.flags }}
 
       # Check that benches compile (if any exist)

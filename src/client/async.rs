@@ -137,7 +137,21 @@ impl Client {
         Ok(client)
     }
 
-    /// Returns the server version
+    /// Returns the version of the TWS API server to which the client is connected.
+    /// This version is determined during the initial connection handshake.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let server_version = client.server_version();
+    ///     println!("Connected to TWS server version: {server_version:?}");
+    /// }
+    /// ```
     pub fn server_version(&self) -> i32 {
         self.server_version
     }

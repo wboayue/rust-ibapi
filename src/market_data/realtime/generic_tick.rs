@@ -16,7 +16,7 @@
 //! Many tick types are delivered by default and require no entry in
 //! `genericTickList`. Only the IDs below opt in to additional data.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```no_run
 //! use ibapi::market_data::realtime::generic_tick;

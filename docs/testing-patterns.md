@@ -56,8 +56,8 @@ fn establish_connection_populates_metadata() {
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
     push_handshake(&stream);  // pre-pushes 3 frames
 
-    connection.establish_connection(None).expect("...");
-    assert_eq!(connection.server_version(), server_versions::PROTOBUF);
+    connection.establish_connection().expect("establish_connection failed");
+    assert_eq!(connection.server_version(), SERVER_VERSION);
 }
 ```
 
@@ -74,7 +74,7 @@ Real TCP listener that binds `127.0.0.1:0`, accepts once, replays scripted hands
 // src/client/sync_tests.rs
 #[test]
 fn connect_handshakes_against_real_socket() {
-    let (addr, _h) = spawn_handshake_listener(handshake_frames());
+    let (addr, _h) = spawn_handshake_listener(default_handshake_frames());
     let client = Client::connect(&addr.to_string(), 100).expect("Client::connect");
     assert_eq!(client.client_id(), 100);
 }
@@ -109,12 +109,14 @@ Shared test tables in `<domain>/common/test_tables.rs` are exercised from both `
 
 ```rust
 // common/test_tables.rs
-pub const TEST_CASES: &[TestCase] = &[
-    TestCase { name: "...", input: ..., expected: ... },
-    // ...
-];
+pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
+    vec![
+        ContractDetailsTestCase { name: "...", contract: /* … */, ordered_responses: vec![/* … */], /* … */ },
+        // ...
+    ]
+}
 
-// sync_tests.rs and async_tests.rs both iterate TEST_CASES with the same assertions.
+// sync_tests.rs and async_tests.rs both iterate contract_details_test_cases() with the same assertions.
 ```
 
 ## Running tests

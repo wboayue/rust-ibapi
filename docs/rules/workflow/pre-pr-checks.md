@@ -41,11 +41,11 @@ Add `just rules-check` when the change touches `AGENTS.md` or `docs/rules/`, and
 
 ## Why
 
-**The rustdoc trio is a local-only gate.** `ci.yml` runs `cargo doc --no-deps` per leg with no
-`RUSTDOCFLAGS`, so a broken intra-doc link warns and passes. `cargo test --doc` does not cover
-it either — that compiles the `# Examples` bodies, and says nothing about whether a
-`[Client::stubbed]`-style intra-doc reference resolves. The first place a broken link becomes
-visible is docs.rs.
+**The rustdoc trio is the only check for intra-doc links.** `cargo test --doc` does not cover
+it — that compiles the `# Examples` bodies, and says nothing about whether a
+`[Client::stubbed]`-style intra-doc reference resolves. `ci.yml` runs `cargo doc --no-deps`
+per leg with `RUSTDOCFLAGS=-D warnings`, so CI catches a broken link too; run it locally to
+avoid the round trip.
 
 The three feature configurations are not interchangeable and `--features sync` is not the
 sync-only build; see [feature matrix](../parity/feature-matrix.md) for why, and for the
@@ -53,9 +53,10 @@ incident where a sync-only break survived 11 merges.
 
 **Know which half of the list has no safety net.** `ci.yml` re-runs `cargo fmt -- --check`,
 `cargo clippy --all-targets <flags> -- -D warnings`, `cargo test <flags>`, and
-`cargo build --examples` on each of the three legs, and `basic-checks` runs the rules-graph
-script — skip those locally and CI catches you. Nothing re-runs the rustdoc trio or the
-[integration crate builds](integration-crate-builds.md); skip those and the breakage ships.
+`cargo build --examples` and `cargo doc --no-deps` (with `-D warnings`) on each of the three
+legs, and `basic-checks` runs the rules-graph script — skip those locally and CI catches you.
+Nothing re-runs the [integration crate builds](integration-crate-builds.md); skip those and the
+breakage ships.
 
 Run the CI-covered half locally anyway, on the same toolchain CI uses — see
 [pinned toolchain](pinned-toolchain.md) — because one local loop beats a push-wait-red-fix

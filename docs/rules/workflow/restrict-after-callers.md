@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665"]
+precedents: ["#547", "#548", "#581", "#665", "#1081"]
 memory: [feedback_narrowing_transparency_audit, feedback_non_exhaustive_caseby_case]
 ---
 
@@ -70,3 +70,6 @@ attribute added "for headroom" is the one most likely to be reverted.
 - #581 — narrowing `ResponseMessage` to `pub(crate)` was planned as transparent; it surfaced
   five `private_interfaces` warnings (`TickDecoder::decode`, three impls, and
   `Error::UnexpectedResponse`) plus five `dead_code` warnings, expanding scope mid-flight.
+- #1081 — removed `#[non_exhaustive]` from `ExecutionFilterSide`, `OptionRight` and
+  `LegAction`: closed TWS vocabularies. The one stated reason, on `ExecutionFilterSide`, was
+  headroom.

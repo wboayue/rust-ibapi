@@ -47,7 +47,7 @@ fn expect_data<T: std::fmt::Debug>(item: Option<Result<SubscriptionItem<T>, Erro
 
 /// Build a `TickSubscription<T>` fed by `items`, with the broadcast channel
 /// closed after the last item.
-fn tick_sub_from_routed<T: TickDecoder<T> + Send>(items: Vec<RoutedItem>) -> TickSubscription<T> {
+fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> TickSubscription<T> {
     let (tx, rx) = tokio::sync::broadcast::channel(16);
     for item in items {
         tx.send(item).unwrap();

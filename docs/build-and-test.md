@@ -93,37 +93,36 @@ Use shared test tables for comprehensive coverage:
 
 ```rust
 // common/test_tables.rs
-pub const TEST_CASES: &[TestCase] = &[
-    TestCase {
-        name: "valid_request",
-        input: Input { ... },
-        expected: Expected { ... },
-    },
-    // more cases...
-];
+pub fn market_rule_test_cases() -> Vec<MarketRuleTestCase> {
+    vec![
+        MarketRuleTestCase { name: "valid_request", market_rule_id: 26, ordered_responses: vec![/* … */], /* … */ },
+        // more cases...
+    ]
+}
 
-// In sync.rs and async.rs
+// In sync_tests.rs and async_tests.rs
 #[test]
-fn test_api() {
-    for case in TEST_CASES {
-        let result = run_test(case);
-        assert_eq!(result, case.expected);
+fn market_rule() {
+    for case in market_rule_test_cases() {
+        // run the request, assert on the result
     }
 }
 ```
 
-### Testing RequestMessage Fields
+### Testing Outgoing Requests
 
-Use direct indexing for precise field testing:
+Compare the whole encoded request against a request builder from `src/testdata/builders/`:
 
 ```rust
 #[test]
-fn test_message_format() {
-    let request = create_request();
-    
-    assert_eq!(request[0], "MessageType");
-    assert_eq!(request[1], "123");  // request_id
-    assert_eq!(request[2], "value");
+fn market_rule_request() {
+    let (client, message_bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::MarketRule,
+        market_rule(26).encode_proto(),
+    )]);
+    client.market_rule(26).expect("market_rule failed");
+
+    assert_request(&message_bus, 0, &market_rule_request().market_rule_id(26));
 }
 ```
 
@@ -162,9 +161,8 @@ leg runs the full sequence:
 1. **Formatting**: `cargo fmt --check`
 2. **Linting**: `cargo clippy --all-targets … -- -D warnings`
 3. **Tests**: `cargo test`
-4. **Documentation**: `cargo doc --no-deps` — note this leg runs **without** `RUSTDOCFLAGS`, so
-   a broken intra-doc link warns and still passes. Catching those is local-only; see
-   [pre-PR checks](rules/workflow/pre-pr-checks.md)
+4. **Documentation**: `cargo doc --no-deps` with `RUSTDOCFLAGS=-D warnings`, so a broken
+   intra-doc link fails the leg; see [pre-PR checks](rules/workflow/pre-pr-checks.md)
 5. **Examples**: `cargo build --examples`
 6. **Benches**: `cargo check --benches` (non-blocking)
 

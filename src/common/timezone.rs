@@ -77,7 +77,8 @@ static TIMEZONE_REGISTRY: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::n
 /// A mapping applies wherever the crate resolves a gateway zone name; see
 /// [Gateway Time Zone](https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone).
 ///
-/// # Example
+/// # Examples
+///
 /// ```no_run
 /// ibapi::register_timezone_alias("Foo Standard Time", "Asia/Tokyo");
 /// ```

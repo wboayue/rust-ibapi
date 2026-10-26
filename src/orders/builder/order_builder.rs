@@ -914,7 +914,7 @@ impl<T> OrderBuilder<T> {
     /// The first condition is always treated as AND. Use `and_condition()` or `or_condition()`
     /// for subsequent conditions to specify the logical relationship.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -941,7 +941,7 @@ impl<T> OrderBuilder<T> {
 
     /// Add a condition that must be met along with previous conditions (AND logic).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -970,7 +970,7 @@ impl<T> OrderBuilder<T> {
 
     /// Add a condition where either this OR previous conditions trigger the order (OR logic).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {

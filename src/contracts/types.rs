@@ -184,7 +184,6 @@ impl_str_partial_eq!(Currency);
 /// state via `None`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[non_exhaustive]
 pub enum OptionRight {
     /// Call option right.
     Call,
@@ -573,7 +572,6 @@ pub enum BondIdentifier {
 /// floor of 210), so all three variants are unconditionally valid.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[non_exhaustive]
 pub enum LegAction {
     /// Buy the leg.
     #[default]

@@ -344,7 +344,7 @@ pub(crate) async fn historical_data_stream(
 // seam between the typed builder and the wire encoder (the builder-fed exception in
 // docs/rules/style/param-budget.md).
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn historical_ticks<T: TickDecoder<T> + Send>(
+pub(crate) async fn historical_ticks<T: TickDecoder<T>>(
     client: &Client,
     contract: &Contract,
     start: Option<OffsetDateTime>,
@@ -405,7 +405,7 @@ pub(crate) async fn historical_schedule(
 /// for `.filter_data()` when you only want ticks. Both are in
 /// [`ibapi::prelude`](crate::prelude).
 #[must_use = "TickSubscription must be polled (.next().await or .filter_data()) to receive ticks; dropping it cancels the request"]
-pub struct TickSubscription<T: TickDecoder<T> + Send> {
+pub struct TickSubscription<T: TickDecoder<T>> {
     done: bool,
     stream_ended: bool,
     messages: AsyncInternalSubscription,
@@ -415,7 +415,7 @@ pub struct TickSubscription<T: TickDecoder<T> + Send> {
     cancelled: AtomicBool,
 }
 
-impl<T: TickDecoder<T> + Send> TickSubscription<T> {
+impl<T: TickDecoder<T>> TickSubscription<T> {
     fn new(messages: AsyncInternalSubscription, request_id: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
         Self {
             done: false,
@@ -469,7 +469,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
     }
 }
 
-impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
+impl<T: TickDecoder<T> + Unpin> Stream for TickSubscription<T> {
     type Item = Result<SubscriptionItem<T>, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -524,7 +524,7 @@ impl<T: TickDecoder<T> + Send + Unpin> Stream for TickSubscription<T> {
     }
 }
 
-impl<T: TickDecoder<T> + Send> Drop for TickSubscription<T> {
+impl<T: TickDecoder<T>> Drop for TickSubscription<T> {
     fn drop(&mut self) {
         if self.done || self.cancelled.swap(true, Ordering::Relaxed) {
             return;

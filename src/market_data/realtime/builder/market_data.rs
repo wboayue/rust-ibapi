@@ -141,8 +141,11 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
-    /// for tick in &subscription {
-    ///     println!("{tick:?}");
+    /// for tick in subscription.iter_data() {
+    ///     match tick {
+    ///         Ok(tick) => println!("{tick:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<TickTypes>, Error> {
@@ -209,7 +212,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn subscribe(self) -> Result<crate::subscriptions::Subscription<TickTypes>, Error> {
+    pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<TickTypes>, Error> {
         let generic_ticks = self.generic_tick_refs();
 
         crate::market_data::realtime::r#async::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot).await
