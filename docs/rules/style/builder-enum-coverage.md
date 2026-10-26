@@ -7,9 +7,9 @@ triggers:
   - adding a named method to a builder that sets an enum field
   - adding a variant to an enum a builder exposes
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
-symbols: [OrderBuilder, Action, unreachable]
+symbols: [OrderBuilder, Action, OrderType, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822", "#832", "#833", "#1073"]
+precedents: ["#549", "#822", "#832", "#833", "#1073", "#1076"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -50,9 +50,22 @@ three by hand. The recipe is also blind to an enum inside a collection — the `
 drops `conditions: Vec<OrderCondition>`, reachable through `.condition()`.
 
 The recipe is blind to the builder's own `OrderType` too, since it is not an `Order` field.
-`MarketOnOpen` / `LimitOnOpen` had no named setter until #1073 — reachable only through
-`.order_type(..)`, which sent them as plain day orders. `RelativeLimitCombo` and
-`RelativeMarketCombo` still have none (#1076).
+Cross-check its variants against the setters that write them:
+
+```bash
+sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
+  | grep -oE '^    [A-Z][A-Za-z]*,' | tr -d ' ,' \
+  | while read v; do grep -v '^ *//' src/orders/builder/order_builder.rs \
+      | grep -qE "(Some\(|order_type\()OrderType::$v\)" || echo "$v"; done
+```
+
+The pattern matches a setter's write (`Some(OrderType::X)` or `self.order_type(OrderType::X)`),
+so doc examples and `build()`'s comparisons don't count. It prints three rows today. `ComboLimit`
+and `ComboMarket` are not gaps: they send `LMT` and `MKT`, the same wire as `.limit()` and
+`.market()`. `Volatility` is a real gap — reachable only as `.order_type(OrderType::Volatility)`, since
+`.volatility(..)` sets the figure, not the type (#1082). `MarketOnOpen` / `LimitOnOpen` had no
+named setter until #1073, which sent them as plain day orders through `.order_type(..)`;
+`RelativeLimitCombo` / `RelativeMarketCombo` got theirs in #1076.
 
 ## Why
 
@@ -86,3 +99,5 @@ touch either side.
   method, deliberately: the raw value comes from a decode, so the general
   `.time_in_force(..)` setter is the only sensible way in and a `.unknown("GTZ")` method
   would read as an invitation to invent wire strings.
+- #1076 — `.relative_limit_combo()` / `.relative_market_combo()`, the two `OrderType` gaps the
+  recipe above was added to surface. Neither takes an offset, matching C# `OrderSamples`.

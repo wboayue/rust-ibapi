@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `OrderBuilder::relative_limit_combo` and `relative_market_combo` set the `REL + LMT` and `REL + MKT` combo order types, previously reachable only through `.order_type(..)` (#1076).
+
 ### Changed
 
 - `ExecutionFilterSide`, `OptionRight` and `LegAction` are no longer `#[non_exhaustive]`, so a `match` on them can be exhaustive without a wildcard arm; an existing `_ =>` arm now warns as unreachable and can be removed. Each covers a closed set of TWS values. The async `TickSubscription` no longer requires `T: Send` (#1081).

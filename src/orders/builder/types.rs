@@ -354,7 +354,7 @@ impl OrderType {
 
     // `build()` sends a price field only for the types below, so one left by an earlier
     // order-type setter is dropped. Sets follow C# `OrderSamples.cs`, plus `limit_price` for
-    // PEG BEST and the fields the REL combos (reachable only through `.order_type(..)`) may carry.
+    // PEG BEST and an `aux_price` offset on the REL combos, which only `.order_type(..)` can carry.
 
     /// Types whose stop price the builder sends as `aux_price`.
     pub(crate) fn uses_stop_price(&self) -> bool {

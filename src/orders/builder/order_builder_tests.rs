@@ -2452,6 +2452,29 @@ fn non_guaranteed_matches_free_fn() {
 }
 
 #[test]
+fn relative_limit_combo_matches_free_fn() {
+    let order = Order::builder().buy(100).relative_limit_combo(50.0).build().unwrap();
+    let free = crate::orders::order_builder::relative_limit_combo(Action::Buy, 100.0, 50.0);
+    assert_eq!(order, free);
+}
+
+#[test]
+fn relative_market_combo_matches_free_fn() {
+    let order = Order::builder().buy(100).relative_market_combo().build().unwrap();
+    let free = crate::orders::order_builder::relative_market_combo(Action::Buy, 100.0);
+    assert_eq!(order, free);
+}
+
+#[test]
+fn relative_combos_drop_an_earlier_aux_price() {
+    let order = Order::builder().buy(1).relative(0.5, None).relative_limit_combo(2.0).build().unwrap();
+    assert_eq!(order.aux_price, None, "REL + LMT");
+
+    let order = Order::builder().buy(1).market_if_touched(10.0).relative_market_combo().build().unwrap();
+    assert_eq!(order.aux_price, None, "REL + MKT");
+}
+
+#[test]
 fn combo_leg_prices_set_one_leg_per_price() {
     let order = Order::builder().buy(1).limit(2.5).combo_leg_prices([1.1, 2.2]).build().unwrap();
     let free = crate::orders::order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 1.0, vec![1.1, 2.2]);

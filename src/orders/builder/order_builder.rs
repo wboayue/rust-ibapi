@@ -560,6 +560,42 @@ impl<T> OrderBuilder<T> {
         self
     }
 
+    /// Relative + Limit combo (`REL + LMT`); `limit_price` caps the combo
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::Order;
+    ///
+    /// let order = Order::builder().buy(1).relative_limit_combo(2.5).non_guaranteed().build()?;
+    /// assert_eq!(order.order_type, "REL + LMT");
+    /// assert_eq!(order.limit_price, Some(2.5));
+    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// ```
+    pub fn relative_limit_combo(mut self, limit_price: impl Into<f64>) -> Self {
+        self.limit_price = Some(limit_price.into());
+        // `build()` sends `aux_price` for the REL combos, so clear any an earlier setter wrote;
+        // C# `OrderSamples` sets none.
+        self.aux_price = None;
+        self.order_type(OrderType::RelativeLimitCombo)
+    }
+
+    /// Relative + Market combo (`REL + MKT`), with no limit price
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::Order;
+    ///
+    /// let order = Order::builder().buy(1).relative_market_combo().build()?;
+    /// assert_eq!(order.order_type, "REL + MKT");
+    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// ```
+    pub fn relative_market_combo(mut self) -> Self {
+        self.aux_price = None;
+        self.order_type(OrderType::RelativeMarketCombo)
+    }
+
     /// At Auction - for pre-market opening period execution
     pub fn at_auction(mut self, price: impl Into<f64>) -> Self {
         self.limit_price = Some(price.into());
