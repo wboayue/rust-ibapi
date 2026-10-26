@@ -26,8 +26,8 @@ To upgrade: bump `rust-toolchain.toml` and the `dtolnay/rust-toolchain@` pins of
 `ci.yml` pins the toolchain version in **two** jobs — the feature matrix (`ci`) and
 `basic-checks`. Bumping only the first leaves the second on the old compiler, which is exactly
 the split the pin exists to prevent. A third job, `msrv`, pins `@1.88` and runs
-`cargo +1.88 check` against `rust-version = "1.88"`; bumping it with the toolchain silently
-raises the MSRV.
+`cargo +1.88 check` against `rust-version = "1.88"`; bumping it with the toolchain means
+nothing checks the declared `rust-version` any more.
 
 Not every workflow is pinned, deliberately:
 

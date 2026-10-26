@@ -34,13 +34,13 @@ The failure mode is a test that no longer tests anything while still reporting g
 `compile_fail` block whose `use` line goes stale fails to compile for that reason alone and
 keeps passing — the actual invariant is unguarded from then on, invisibly.
 
-The repo has two (`grep -rn compile_fail --include=*.rs src`). The typestate guard in
+The repo has two (`grep -rn compile_fail --include=*.rs src`). One is the typestate guard in
 `src/contracts/mod.rs`: `Contract::futures` returns `FuturesBuilder<Symbol, Missing>`, and
 `build()` exists only once a month terminal has been applied. `E0599` is "no method named
 `build` found" — that specific code is the whole assertion. Without it the test would also
-pass if `Contract` were renamed. And the id-type guard in `src/orders/builder/condition_helpers.rs`
-(#845): `price(OrderId::new(1), ..)` must fail with `E0277`, "the trait bound
-`ContractId: From<OrderId>` is not satisfied", not with a missing-import error.
+pass if `Contract` were renamed. The other is the id-type guard in
+`src/orders/builder/condition_helpers.rs` (#845): `price(OrderId::new(1), ..)` must fail with
+`E0277` (unsatisfied trait bound), not with a missing-import error.
 
 ## Precedents
 

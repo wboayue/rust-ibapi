@@ -88,9 +88,9 @@ being routed. Two consequences pull in opposite directions:
 **It can drop the connection.** `with_connection_resets(n)` answers the first `n` requests with
 a bare `RoutedItem::Error(Error::ConnectionReset)` and no responses — what a dropped socket
 looks like — so a retrying request path can be asserted on by resend count. `server_time` (in
-`request_helpers_tests.rs`) and `historical_data` assert their retry with it, and `wait_for_fill`
-asserts it fails on a reset; nothing checks that the other one-shot sites retry, so an API whose retry wiring
-matters needs its own test rather than an assumption.
+`request_helpers_tests.rs`) and `historical_data` assert their retry with it, and
+`wait_for_fill` asserts it fails on a reset. Nothing checks that the other one-shot sites retry,
+so an API whose retry wiring matters needs its own test rather than an assumption.
 
 ## Note on `server_version`
 
