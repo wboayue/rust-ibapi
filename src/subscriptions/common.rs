@@ -44,7 +44,9 @@ impl<T> SubscriptionItem<T> {
 pub enum Drained {
     /// TWS sent the end marker: the request is over at TWS.
     Ended,
-    /// TWS sent an error for the request: the request is over at TWS.
+    /// TWS answered with an error for the request. For request types whose
+    /// errors aren't known to end the request at TWS, the drop still writes
+    /// the cancel.
     Rejected(Notice),
     /// No terminal evidence: the deadline passed, or the stream had already
     /// ended with an error on our side (such as a buffer overflow), after

@@ -97,9 +97,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// Writes TWS's cancel unless the request has already finished (end
     /// marker, snapshot end, or a TWS error its type knows ends the request)
-    /// or its type has none. Either way the
-    /// subscription stops receiving: it yields what was already queued, then
-    /// `Err(Error::Cancelled)`, then ends. Idempotent; also called on drop.
+    /// or its type has none. Either way the subscription stops receiving: it
+    /// yields what was already queued, then `Err(Error::Cancelled)`, then
+    /// ends. Idempotent; also called on drop.
     pub fn cancel(&self) {
         // One atomic swap, not a load then a store: two threads cancelling the
         // same handle would otherwise both reach the bus, and on a shared

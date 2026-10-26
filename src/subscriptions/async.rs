@@ -624,10 +624,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// Writes TWS's cancel unless the request has already finished (end
     /// marker, snapshot end, or a TWS error its type knows ends the request)
-    /// or its type has none. Either way the stream
-    /// stops, for every clone: the next poll yields `Err(Error::Cancelled)`,
-    /// frames not yet read are skipped, and the stream ends. A clone already
-    /// waiting in `next()` is woken to yield it. Idempotent.
+    /// or its type has none. Either way the stream stops, for every clone: the
+    /// next poll yields `Err(Error::Cancelled)`, frames not yet read are
+    /// skipped, and the stream ends. A clone already waiting in `next()` is
+    /// woken to yield it. Idempotent.
     pub async fn cancel(&self) {
         // The route itself is released at drop, by liveness.
         let request = &self.request;

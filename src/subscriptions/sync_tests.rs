@@ -784,6 +784,17 @@ fn drain_after_read_rejection_is_rejected() {
     assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "the drop writes the cancel");
 }
 
+/// Without a request id the error may be a request-less one fanned out to
+/// every shared stream, so it isn't recorded as this request's rejection.
+#[test]
+fn drain_after_error_without_request_id_is_unconfirmed() {
+    let notice = crate::messages::Notice::synthesized(200, "No security definition".to_string());
+    let (sub, _bus, _signals) = routed_subscription::<DrainItem>(SubscriptionBuilder::new(), vec![RoutedItem::Error(Error::Notice(notice))]);
+    assert!(matches!(sub.next(), Some(Err(Error::Notice(_)))));
+
+    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Unconfirmed);
+}
+
 #[test]
 fn drain_session_error_is_err() {
     let (sub, _bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);

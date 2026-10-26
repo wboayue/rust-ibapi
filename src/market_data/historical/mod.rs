@@ -554,8 +554,9 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
         matches!(self, Self::End { .. })
     }
 
-    /// A one-shot query has nothing to continue after an error: live, TWS
-    /// answers a cancel after 162, 200 or 10314 with 366 (no query found).
+    /// Any error, not a code list: a one-shot query has nothing to continue
+    /// after one. Verified live for 162, 200 and 10314, where TWS answers a
+    /// cancel with 366 (no query found).
     fn rejection_ends_request(_notice: &Notice) -> bool {
         true
     }
