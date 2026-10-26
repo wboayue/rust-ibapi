@@ -133,7 +133,7 @@ pub(crate) fn decode_smart_components_proto(p: crate::proto::SmartComponents) ->
         .collect())
 }
 
-// === Sub-message decoders (shared by the frame decoders above) ===
+// === Sub-message decoders (used by the frame decoders above) ===
 
 pub(crate) fn decode_contract_and_details(
     proto_contract: &proto::Contract,

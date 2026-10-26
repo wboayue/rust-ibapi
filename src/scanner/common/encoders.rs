@@ -31,7 +31,7 @@ pub(in crate::scanner) fn encode_cancel_scanner_subscription(request_id: i32) ->
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelScannerSubscription, OutgoingMessages::CancelScannerSubscription)
 }
 
-// === Sub-message encoders (shared by the frame encoders above) ===
+// === Sub-message encoders (used by the frame encoders above) ===
 
 pub(crate) fn encode_subscription_params(subscription: &ScannerSubscription, filter: &[TagValue]) -> proto::ScannerSubscription {
     proto::ScannerSubscription {
@@ -61,5 +61,10 @@ pub(crate) fn encode_subscription_params(subscription: &ScannerSubscription, fil
     }
 }
 
-// Encoder body assertions live in the migrated sync/async tests via
-// `assert_request<B>(builder)`.
+// The sync/async tests check the request envelope via `assert_request<B>(builder)`; their
+// expected body comes from `encode_subscription_params` itself, so its field mapping is
+// pinned in `encoders_tests.rs`.
+
+#[cfg(test)]
+#[path = "encoders_tests.rs"]
+mod tests;
