@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::messages::ResponseMessage;
-use crate::proto::decoders::{parse_decimal_or_zero, required};
+use crate::proto::decoders::{parse_optional_decimal, required};
 use crate::{proto, Error};
 
 use super::super::{
@@ -69,12 +69,21 @@ pub(crate) fn decode_account_multi_value(message: &ResponseMessage) -> Result<Ac
 
 // === Protobuf decoders ===
 
+/// A position quantity is required: C# leaves it unset (`decimal.MaxValue`) when
+/// absent, and defaulting to `0` would report a flat position that may not be.
+/// An "unset" sentinel errors the same way, as C# maps both to `MaxValue`.
+/// Safe to require: live, a flat position still sends `"0"` on Position,
+/// PositionMulti and PnLSingle (#1088).
+fn required_position(text: Option<&str>, message: &str) -> Result<f64, Error> {
+    required(parse_optional_decimal(text)?, "position", message)
+}
+
 pub(crate) fn decode_position_proto(p: crate::proto::Position) -> Result<Position, Error> {
     let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "Position")?)?;
     Ok(Position {
         account: p.account.unwrap_or_default(),
         contract,
-        position: parse_decimal_or_zero(p.position.as_deref())?,
+        position: required_position(p.position.as_deref(), "Position")?,
         average_cost: p.avg_cost.unwrap_or_default(),
     })
 }
@@ -92,7 +101,7 @@ pub(crate) fn decode_account_portfolio_value_proto(p: crate::proto::PortfolioVal
     let contract = proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "PortfolioValue")?)?;
     Ok(AccountPortfolioValue {
         contract,
-        position: parse_decimal_or_zero(p.position.as_deref())?,
+        position: required_position(p.position.as_deref(), "PortfolioValue")?,
         market_price: p.market_price.unwrap_or_default(),
         market_value: p.market_value.unwrap_or_default(),
         average_cost: p.average_cost.unwrap_or_default(),
@@ -112,7 +121,7 @@ pub(crate) fn decode_pnl_proto(p: crate::proto::PnL) -> Result<PnL, Error> {
 
 pub(crate) fn decode_pnl_single_proto(p: crate::proto::PnLSingle) -> Result<PnLSingle, Error> {
     Ok(PnLSingle {
-        position: parse_decimal_or_zero(p.position.as_deref())?,
+        position: required_position(p.position.as_deref(), "PnLSingle")?,
         daily_pnl: p.daily_pn_l.unwrap_or_default(),
         unrealized_pnl: p.unrealized_pn_l.unwrap_or_default(),
         realized_pnl: p.realized_pn_l.unwrap_or_default(),
@@ -140,7 +149,7 @@ pub(crate) fn decode_position_multi_proto(p: crate::proto::PositionMulti) -> Res
     Ok(PositionMulti {
         account: p.account.unwrap_or_default(),
         contract,
-        position: parse_decimal_or_zero(p.position.as_deref())?,
+        position: required_position(p.position.as_deref(), "PositionMulti")?,
         average_cost: p.avg_cost.unwrap_or_default(),
         model_code: p.model_code.unwrap_or_default(),
     })

@@ -629,3 +629,86 @@ fn decode_position_frames_require_contract() {
         assert_missing_field(missing, "contract", message);
     }
 }
+
+// Absent position quantity: Error::Parse, not a fabricated flat 0 (#1088).
+// An explicit "0" is how TWS reports a closed position (live) and still decodes.
+#[test]
+fn decode_position_frames_require_position() {
+    use crate::testdata::builders::accounts::{pnl_single, portfolio_value};
+    use crate::testdata::builders::positions::{position, position_multi};
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let position = position().to_proto();
+    let position_multi = position_multi().to_proto();
+    let portfolio = portfolio_value().to_proto();
+    let pnl_single = pnl_single().to_proto();
+    let zero = || Some("0".to_string());
+    let cases = [
+        (
+            "Position",
+            super::decode_position_proto(crate::proto::Position {
+                position: zero(),
+                ..position.clone()
+            })
+            .map(|p| p.position),
+            super::decode_position_proto(crate::proto::Position { position: None, ..position }).map(|p| p.position),
+        ),
+        (
+            "PositionMulti",
+            super::decode_position_multi_proto(crate::proto::PositionMulti {
+                position: zero(),
+                ..position_multi.clone()
+            })
+            .map(|p| p.position),
+            super::decode_position_multi_proto(crate::proto::PositionMulti {
+                position: None,
+                ..position_multi
+            })
+            .map(|p| p.position),
+        ),
+        (
+            "PortfolioValue",
+            super::decode_account_portfolio_value_proto(crate::proto::PortfolioValue {
+                position: zero(),
+                ..portfolio.clone()
+            })
+            .map(|p| p.position),
+            super::decode_account_portfolio_value_proto(crate::proto::PortfolioValue { position: None, ..portfolio }).map(|p| p.position),
+        ),
+        (
+            "PnLSingle",
+            super::decode_pnl_single_proto(crate::proto::PnLSingle {
+                position: zero(),
+                ..pnl_single.clone()
+            })
+            .map(|p| p.position),
+            super::decode_pnl_single_proto(crate::proto::PnLSingle {
+                position: None,
+                ..pnl_single
+            })
+            .map(|p| p.position),
+        ),
+    ];
+
+    for (message, flat_result, missing) in cases {
+        assert_eq!(
+            flat_result.unwrap_or_else(|e| panic!("{message} flat frame must decode: {e}")),
+            0.0,
+            "{message}"
+        );
+        assert_missing_field(missing, "position", message);
+    }
+}
+
+// An "unset" sentinel on position is treated as absent (C# maps both to MaxValue).
+#[test]
+fn decode_position_proto_rejects_unset_sentinel_position() {
+    use crate::testdata::builders::positions::position;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let p = crate::proto::Position {
+        position: Some("9223372036854775807".into()),
+        ..position().to_proto()
+    };
+    assert_missing_field(super::decode_position_proto(p), "position", "Position");
+}
