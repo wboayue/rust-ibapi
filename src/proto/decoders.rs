@@ -203,9 +203,7 @@ fn parse_last_trade_date(raw: &str) -> Option<time::Date> {
     if raw.is_empty() {
         return None;
     }
-    let date = raw
-        .get(..8)
-        .and_then(|ymd| time::Date::parse(ymd, time::macros::format_description!("[year][month][day]")).ok());
+    let date = time::Date::parse(raw, time::macros::format_description!("[year][month][day]")).ok();
     if date.is_none() {
         log::warn!("unparseable contract lastTradeDate {raw:?}; expected YYYYMMDD");
     }
