@@ -527,6 +527,13 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     rate_limiter: OnceLock<RateLimiter>,
     /// Session state, and what `wait_connected` awaits.
     connection_state: Arc<ConnectionSignal>,
+    /// The session gate. The dispatcher holds it for write from failing the
+    /// channels of a lost connection until the replayed handshake has the
+    /// session live again; `write_now` holds it for read across its state
+    /// check and its write. So a write either finishes before the reconnect
+    /// starts, or is refused: none reaches the socket the reconnect installs
+    /// until the handshake on it is done.
+    session: tokio::sync::RwLock<()>,
 }
 
 impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
@@ -576,6 +583,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             session_generation: AtomicU64::new(0),
             rate_limiter: OnceLock::new(),
             connection_state: Arc::new(ConnectionSignal::default()),
+            session: tokio::sync::RwLock::new(()),
         };
 
         // Start cleanup task
@@ -677,6 +685,13 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                 // reconnect can run for minutes.
                                 message_bus.reset_channels().await;
 
+                                // Waits out writes whose state check passed
+                                // before the flip (a write stuck on the dead
+                                // socket must not delay the failures above);
+                                // every later one is refused until the session
+                                // is live again.
+                                let session = message_bus.session.write().await;
+
                                 match message_bus.connection.reconnect().await {
                                     Ok(_) => {
                                         // Shutdown may have been requested while the
@@ -695,6 +710,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");
+                                        // Released before the state flips: `set_connected`
+                                        // wakes `wait_connected`, and a woken caller's send
+                                        // must not be refused. Until the flip,
+                                        // `ensure_connected` still refuses.
+                                        drop(session);
                                         message_bus.connection_state.set_connected();
 
                                         // The notice stream is the central carrier of
@@ -788,10 +808,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// would never be reset again, so its caller would await forever. Callers
     /// wait the reconnect out through `wait_connected` instead.
     ///
-    /// The check-then-write window is not closed: a caller that passes here
-    /// just before the dispatcher flips the state can still write, and in
-    /// principle race the socket swap inside `reconnect`. Closing that needs a
-    /// session-level gate held across the handshake.
+    /// On its own this check is a snapshot that races the dispatcher: a caller
+    /// that passes here just before the state flips could still write, and that
+    /// write could land in the handshake the reconnect is running on the new
+    /// socket (#1171). `write_now` runs it under the `session` gate, which the
+    /// dispatcher holds across the reconnect, so there the check and the write
+    /// are one step and the race is closed.
     fn ensure_connected(&self) -> Result<(), Error> {
         self.connection_state.check()?;
         if self.shutdown.is_requested() {
@@ -825,8 +847,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         }
     }
 
-    /// Writes without throttling; the connected check runs after any wait.
+    /// Writes without throttling; the connected check runs after any wait,
+    /// under the `session` gate. The gate held for write is a reconnect in
+    /// progress, whatever the state signal says yet, so the write is refused
+    /// as `ensure_connected` would refuse it once the signal catches up.
     async fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+        let Ok(_session) = self.session.try_read() else {
+            return Err(self.ended_reason(Error::ConnectionReset));
+        };
         self.ensure_connected()?;
         self.connection.write_message(message).await
     }

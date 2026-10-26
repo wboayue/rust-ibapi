@@ -3313,6 +3313,47 @@ fn sends_are_refused_while_disconnected() {
     assert!(!stream.captured().is_empty());
 }
 
+/// A send is refused for as long as the reconnect handshake is in flight,
+/// even when its state check passed: the dispatcher holds the session gate
+/// across the reconnect. Without the gate the request would land on the new
+/// socket between the handshake and its acknowledgement.
+#[test]
+fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notices = bus.connection.notice_broadcaster.subscribe();
+    let handler = &bus.connection.connection_handler;
+
+    // Connection lost, then nothing: the reconnect blocks on the handshake ack.
+    stream.push_inbound(b"xx".to_vec());
+    let dispatcher = thread::spawn({
+        let bus = bus.clone();
+        move || bus.dispatch()
+    });
+    helpers::wait_for("the handshake to be written", || stream.captured() == handler.format_handshake());
+
+    // Stands in for a sender whose check passed before the dispatcher flipped
+    // the state: with the signal saying live, only the gate refuses the write.
+    bus.connection_state.set_connected();
+    assert!(matches!(bus.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::ConnectionReset)));
+    assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
+    assert_eq!(
+        stream.captured(),
+        handler.format_handshake(),
+        "the request must not reach the socket mid-handshake"
+    );
+
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    dispatcher.join().expect("dispatcher thread panicked")?;
+    let notice = notices.recv_timeout(TICK).expect("no reconnect notice on the notice fan-out");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    // The gate is open again once the session is live.
+    assert!(bus.send_request(RequestId::nth(100), b"req-bytes").is_ok());
+    Ok(())
+}
+
 /// A cancel that cannot be sent is not an error the caller has to handle:
 /// the session that held the subscription is gone. The local registration goes
 /// either way, so nothing is left behind.
@@ -3361,9 +3402,9 @@ fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on shutdown");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
-/// the send gate cannot close: the write is refused after the registration
-/// went in.
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
+/// refused after the registration went in: the session went down between the
+/// registering call's first state check and its write.
 #[derive(Clone, Debug)]
 struct FailingWriteStream(MemoryStream);
 
@@ -3394,9 +3435,9 @@ impl Reconnect for FailingWriteStream {
 impl Stream for FailingWriteStream {}
 
 /// A send whose write fails takes its registration with it, so no channel is
-/// left waiting on a response that was never requested. Covers the window the
-/// `ensure_connected` check cannot close, where the session goes down between
-/// the check and the write.
+/// left waiting on a response that was never requested. Covers the session
+/// going down between the registering call's first `ensure_connected` check
+/// and its write.
 #[test]
 fn failed_write_leaves_no_registration() {
     let connection = Connection::stubbed(FailingWriteStream(MemoryStream::default()), 28);

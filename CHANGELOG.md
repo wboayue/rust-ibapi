@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).
 - `From<i32> for ArticleType` is removed: it read any unknown code as `Text`. See `docs/migration-6.0.md` §3 (#1071).
 
+### Fixed
+
+- A request made while the client is reconnecting is refused with `Error::ConnectionReset` for the whole reconnect, the handshake on the new connection included (sync and async). Previously a request made just as the connection dropped could be written to the new connection before its handshake had finished (#1171).
+
 ## [5.6.0] - 2026-11-03
 
 ### Added

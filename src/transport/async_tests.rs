@@ -16,7 +16,8 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{
-    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, NoticeTestData, FARM_OK_MSG,
+    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, wait_for_async,
+    NoticeTestData, FARM_OK_MSG,
 };
 use crate::connection::common::ConnectionProtocol;
 use crate::connection::r#async::AsyncConnection;
@@ -2146,6 +2147,48 @@ async fn sends_are_refused_while_disconnected() {
     assert!(!stream.captured().is_empty());
 }
 
+/// A send is refused for as long as the reconnect handshake is in flight,
+/// even when its state check passed: the dispatcher holds the session gate
+/// across the reconnect. Without the gate the request would land on the new
+/// socket between the handshake and its acknowledgement.
+#[tokio::test]
+async fn sends_are_refused_during_the_reconnect_handshake() {
+    let (stream, bus) = make_bus();
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
+    let handler = &bus.connection.connection_handler;
+
+    // Connection lost, then nothing: the reconnect blocks on the handshake ack.
+    stream.push_inbound(b"xx".to_vec());
+    bus.clone().process_messages().expect("process_messages");
+    wait_for_async("the handshake to be written", || stream.captured() == handler.format_handshake()).await;
+
+    // Stands in for a sender whose check passed before the dispatcher flipped
+    // the state: with the signal saying live, only the gate refuses the write.
+    bus.connection_state.set_connected();
+    assert!(matches!(
+        bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await,
+        Err(Error::ConnectionReset)
+    ));
+    assert!(bus.requests.is_empty(), "a refused request must register nothing");
+    assert_eq!(
+        stream.captured(),
+        handler.format_handshake(),
+        "the request must not reach the socket mid-handshake"
+    );
+
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    let notice = tokio::time::timeout(Duration::from_secs(2), notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    // The gate is open again once the session is live.
+    assert!(bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await.is_ok());
+}
+
 /// `wait_connected` holds the one-shot retry until the session is back, and a
 /// shutdown releases it rather than leaving the caller there for good.
 #[tokio::test]
@@ -2165,9 +2208,9 @@ async fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
-/// the send gate cannot close: the write is refused after the registration
-/// went in.
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
+/// refused after the registration went in: the session went down between the
+/// registering call's first state check and its write.
 #[derive(Clone, Debug, Default)]
 struct FailingWriteStream(MemoryStream);
 
@@ -2200,9 +2243,9 @@ impl AsyncReconnect for FailingWriteStream {
 impl AsyncStream for FailingWriteStream {}
 
 /// A send whose write fails takes its registration with it, so no channel is
-/// left waiting on a response that was never requested. Covers the window the
-/// `ensure_connected` check cannot close, where the session goes down between
-/// the check and the write.
+/// left waiting on a response that was never requested. Covers the session
+/// going down between the registering call's first `ensure_connected` check
+/// and its write.
 #[tokio::test]
 async fn failed_write_leaves_no_registration() {
     let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
