@@ -11,7 +11,7 @@ triggers:
   - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
-precedents: ["#657"]
+precedents: ["#657", "#1080"]
 memory: [project_domain_module_pattern, project_main_flat_helpers_nested_pattern]
 ---
 
@@ -59,6 +59,9 @@ example of adding a module.
   `market_data/realtime/{sync,async}.rs`, next to the sibling entry points (`realtime_bars`,
   `tick_by_tick`, `market_depth`) they had diverged from. `client/` now holds only
   cross-cutting mechanics.
+- #1080 — moved `Client::submit_oca_orders` out of `orders/builder/{sync,async}_impl.rs` into
+  `orders/{sync,async}.rs` beside `submit_order`: a client method in a helper file is drift even
+  inside the right domain.
 
 ## Known drift
 
