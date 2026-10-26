@@ -196,8 +196,7 @@ impl<'a> WshEventFilterBuilder<'a, crate::client::r#async::Client> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
-    /// use ibapi::subscriptions::r#async::SubscriptionItemStreamExt;
+    /// use ibapi::prelude::*;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
@@ -205,7 +204,7 @@ impl<'a> WshEventFilterBuilder<'a, crate::client::r#async::Client> {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
     ///     // See https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
-    ///     let mut subscription = client.wsh_event_data_by_filter("{}").limit(10).subscribe().await.expect("request failed");
+    ///     let subscription = client.wsh_event_data_by_filter("{}").limit(10).subscribe().await.expect("request failed");
     ///
     ///     let mut events = subscription.filter_data();
     ///     while let Some(event) = events.next().await {

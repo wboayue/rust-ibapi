@@ -23,7 +23,10 @@ fn main() {
         .subscribe()
         .expect("request option chain failed!");
 
-    for option_chain in &subscription {
-        println!("{option_chain:?}")
+    for option_chain in subscription.iter_data() {
+        match option_chain {
+            Ok(option_chain) => println!("{option_chain:?}"),
+            Err(e) => eprintln!("error: {e}"),
+        }
     }
 }

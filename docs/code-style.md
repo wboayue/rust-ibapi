@@ -75,7 +75,7 @@ Run clippy once per feature configuration before committing — three legs, all 
 - **Types**: PascalCase (e.g., `MessageBus`, `AccountSummary`)
 - **Functions/Methods**: snake_case (e.g., `connect`, `server_time`)
 - **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_RECONNECT_ATTEMPTS`)
-- **Module names**: snake_case (e.g., `market_data`, `order_management`)
+- **Module names**: snake_case (e.g., `market_data`, `display_groups`)
 
 ## Import Organization
 

@@ -3,7 +3,7 @@
 //! This module provides ergonomic helper functions that return partially-built
 //! condition builders, enabling a fluent API for adding conditions to orders.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```no_run
 //! use ibapi::orders::builder::{price, time, margin};
@@ -25,7 +25,7 @@ use crate::orders::OrderCondition;
 /// - `contract_id`: Contract identifier for the instrument to monitor
 /// - `exchange`: Exchange where the price is monitored
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::price;
@@ -50,7 +50,7 @@ pub fn price(contract_id: impl Into<ContractId>, exchange: impl Into<String>) ->
 
 /// Create a time condition builder.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::time;
@@ -65,7 +65,7 @@ pub fn time() -> TimeConditionBuilder {
 
 /// Create a margin condition builder.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::margin;
@@ -85,7 +85,7 @@ pub fn margin() -> MarginConditionBuilder {
 /// - `contract_id`: Contract identifier for the instrument to monitor
 /// - `exchange`: Exchange where volume is monitored
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::volume;
@@ -109,7 +109,7 @@ pub fn volume(contract_id: impl Into<ContractId>, exchange: impl Into<String>) -
 /// - `security_type`: Security type (e.g., "STK", "OPT")
 /// - `exchange`: Exchange where execution is monitored
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::execution;
@@ -132,7 +132,7 @@ pub fn execution(symbol: impl Into<String>, security_type: impl Into<String>, ex
 /// - `contract_id`: Contract identifier for the instrument to monitor
 /// - `exchange`: Exchange where price change is monitored
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::percent_change;

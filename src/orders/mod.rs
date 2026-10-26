@@ -1836,10 +1836,9 @@ pub enum Orders {
 /// makes invalid filter values unrepresentable.
 ///
 /// No `Default` — [`ExecutionFilter::side`] carries the no-filter state via
-/// `None`. `#[non_exhaustive]` leaves headroom for IBKR vocabulary additions.
+/// `None`. Exhaustive: TWS filters executions by `BUY` or `SELL` only.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[non_exhaustive]
 pub enum ExecutionFilterSide {
     /// Filter to buy fills only.
     Buy,

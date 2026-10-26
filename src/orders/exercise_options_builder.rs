@@ -181,7 +181,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn submit(self) -> Result<crate::subscriptions::Subscription<super::ExerciseOptions>, Error> {
+    pub async fn submit(self) -> Result<crate::subscriptions::r#async::Subscription<super::ExerciseOptions>, Error> {
         let (order_id, request) = self.encode(|| self.client.next_order_id())?;
         let internal_subscription = self.client.send_order(order_id, request).await?;
 

@@ -124,8 +124,11 @@ impl Client {
     /// // Update the displayed contract
     /// subscription.update("265598@SMART").expect("update failed");
     ///
-    /// for event in &subscription {
-    ///     println!("group event: {:?}", event);
+    /// for event in subscription.iter_data() {
+    ///     match event {
+    ///         Ok(event) => println!("group event: {:?}", event),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<DisplayGroupSubscription, Error> {

@@ -244,7 +244,7 @@ impl Client {
 
 No module re-exports needed — the `impl Client` methods are automatically available on the Client type.
 
-### Step 8: Add Comprehensive Tests
+### Step 7: Add Comprehensive Tests
 
 Create table-driven tests that work for both sync and async:
 
@@ -266,7 +266,7 @@ pub const MY_API_TESTS: &[MyApiTestCase] = &[
 ];
 ```
 
-### Step 9: Verify Both Modes
+### Step 8: Verify Both Modes
 
 Test your implementation in both sync and async modes:
 
@@ -280,7 +280,7 @@ cargo test <module>::sync --no-default-features --features sync
 cargo clippy --no-default-features --features sync
 ```
 
-### Step 10: Add Examples
+### Step 9: Add Examples
 
 Add examples showing the API usage to the examples folder:
 - Sync examples: `examples/sync/my_feature.rs`
@@ -303,8 +303,8 @@ use crate::common::error_helpers;
 let value = error_helpers::require(some_option, "parameter is required")?;
 let request_id = error_helpers::require_request_id_for(request_id, "my operation")?;
 
-// Validate ranges
-let port = error_helpers::require_range(port, 1, 65535, "port")?;
+// Validate non-empty inputs
+let symbol = error_helpers::require_not_empty(symbol, "symbol")?;
 
 // Validate with custom logic
 let valid_value = error_helpers::require_with(some_option, || {
@@ -353,12 +353,14 @@ pub fn my_subscription(&self) -> Result<Subscription<MyData>, Error> {
 
 Handles connection reset scenarios:
 
-```rust
-use crate::common::retry;
+Every one-shot helper above already retries; reach for these only in a hand-written request
+path (e.g. `historical_data`). The first argument is the client, which waits for the reconnect
+before the next attempt:
 
-// Automatically retry on connection reset
-let result = retry::retry_on_connection_reset(|| {
-    // Your operation that might fail due to connection reset
-    my_operation()
-})?;
+```rust
+// sync
+let result = crate::common::retry::blocking::retry_on_connection_reset(client, || my_operation())?;
+
+// async
+let result = crate::common::retry::retry_on_connection_reset(client, || async { my_operation().await }).await?;
 ```

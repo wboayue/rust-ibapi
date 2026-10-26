@@ -105,7 +105,7 @@ impl From<&str> for AlgoParams {
 /// VWAP seeks to achieve the volume-weighted average price from order
 /// submission to market close.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::vwap;
@@ -220,7 +220,7 @@ impl TwapStrategyType {
 ///
 /// TWAP seeks to achieve the time-weighted average price.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::twap;
@@ -291,7 +291,7 @@ impl TwapBuilder {
 ///
 /// Controls participation rate to minimize market impact.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol;
@@ -390,7 +390,7 @@ impl RiskAversion {
 ///
 /// Achieves the bid/ask midpoint at order arrival time.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{arrival_price, RiskAversion};
@@ -504,7 +504,7 @@ impl AdaptivePriority {
 /// Combines IB's Smart Routing with user-defined urgency to balance
 /// execution speed against price improvement.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{adaptive, AdaptivePriority};
@@ -550,7 +550,7 @@ impl AdaptiveBuilder {
 ///
 /// Minimizes slippage relative to the closing auction price.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{close_price, RiskAversion};
@@ -626,7 +626,7 @@ impl ClosePriceBuilder {
 /// Hidden order with randomized display sizes - the user-supplied display
 /// size is randomized in increments to camouflage the actual order size.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::dark_ice;
@@ -699,7 +699,7 @@ impl DarkIceBuilder {
 /// Slices an order into random increments at random intervals to disguise
 /// trading intent.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accumulate_distribute;
@@ -812,7 +812,7 @@ impl AccumulateDistributeBuilder {
 ///
 /// Balances market impact against the risk of adverse price movement.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{balance_impact_risk, RiskAversion};
@@ -878,7 +878,7 @@ impl BalanceImpactRiskBuilder {
 ///
 /// Slices the order to achieve the market average with minimal impact.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::minimise_impact;
@@ -929,7 +929,7 @@ impl MinimiseImpactBuilder {
 /// `min_pct_vol_4_px` / `max_pct_vol_4_px`. All four percentage fields are
 /// validated to IB's 10-50% range.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_price;
@@ -1033,7 +1033,7 @@ impl PctVolPriceBuilder {
 /// Participation rate varies linearly from `start_pct_vol` to `end_pct_vol`
 /// as the order is filled.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_size;
@@ -1115,7 +1115,7 @@ impl PctVolSizeBuilder {
 /// Participation rate varies linearly from `start_pct_vol` to `end_pct_vol`
 /// over the active time window.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_time;
@@ -1204,7 +1204,7 @@ impl PctVolTimeBuilder {
 /// enumerate the parameters of this algo; the parameter shape is taken from
 /// the canonical Testbed sample (`samples/CSharp/Testbed/AvailableAlgoParams.cs`).
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accu_distr;

@@ -125,7 +125,21 @@ impl Client {
         ))
     }
 
-    /// Submits an Order (fire-and-forget).
+    /// Submits or modifies an [`crate::orders::Order`] without returning a subscription.
+    ///
+    /// This is a fire-and-forget method that submits an [`crate::orders::Order`] for the given [Contract]
+    /// but does not return a subscription for order updates. To receive order status updates,
+    /// fills, and commission reports, use the [`order_update_stream`](Client::order_update_stream) method
+    /// or use [`place_order`](Client::place_order) instead which returns a subscription.
+    ///
+    /// # Arguments
+    /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    /// * `contract` - [Contract] to submit order for.
+    /// * `order` - [`crate::orders::Order`] to submit.
+    ///
+    /// # Returns
+    /// * `Ok(())` if the order was successfully sent
+    /// * `Err(Error)` if validation failed or sending failed
     ///
     /// # Errors
     /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
@@ -133,20 +147,35 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::orders::OrderUpdate;
     /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::stock("AAPL").build();
-    ///     let order = client
-    ///         .order(&contract)
-    ///         .buy(100)
-    ///         .market()
-    ///         .build()
-    ///         .expect("order build");
-    ///     let order_id = client.next_valid_order_id().await.expect("next id");
-    ///     client.submit_order(order_id, &contract, &order).await.expect("submit failed");
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///
+    ///     let contract = Contract::stock("MSFT").build();
+    ///     let order = client.order(&contract).buy(100).market().build_order()?;
+    ///     let order_id = client.next_order_id();
+    ///
+    ///     // Submit order without waiting for confirmation
+    ///     client.submit_order(order_id, &contract, &order).await?;
+    ///
+    ///     // Monitor all order updates via the order update stream
+    ///     // This will receive updates for ALL orders, not just this one
+    ///     let mut events = client.order_update_stream().await?.filter_data();
+    ///     while let Some(event) = events.next().await {
+    ///         match event? {
+    ///             OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
+    ///             OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
+    ///             OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///             OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
+    ///             _ => {}
+    ///         }
+    ///     }
+    ///
+    ///     Ok(())
     /// }
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
@@ -207,7 +236,15 @@ impl Client {
         Ok(order_ids)
     }
 
-    /// Submits an Order with a subscription for updates.
+    /// Places or modifies an [`crate::orders::Order`].
+    ///
+    /// Submits an [`crate::orders::Order`] using [Client] for the given [Contract].
+    /// Upon successful submission, the client will start receiving events related to the order's activity via the subscription, including order status updates and execution reports.
+    ///
+    /// # Arguments
+    /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    /// * `contract` - [Contract] to submit order for.
+    /// * `order` - [`crate::orders::Order`] to submit.
     ///
     /// # Errors
     /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
@@ -215,24 +252,29 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::orders::PlaceOrder;
     /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::stock("AAPL").build();
-    ///     let order = client
-    ///         .order(&contract)
-    ///         .buy(100)
-    ///         .market()
-    ///         .build()
-    ///         .expect("order build");
-    ///     let order_id = client.next_valid_order_id().await.expect("next id");
-    ///     let subscription = client.place_order(order_id, &contract, &order).await.expect("place");
-    ///     let mut updates = subscription.filter_data();
-    ///     while let Some(update) = updates.next().await {
-    ///         println!("{update:?}");
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///
+    ///     let contract = Contract::stock("MSFT").build();
+    ///     let order = client.order(&contract).buy(100).market().build_order()?;
+    ///     let order_id = client.next_order_id();
+    ///
+    ///     let mut events = client.place_order(order_id, &contract, &order).await?.filter_data();
+    ///     while let Some(event) = events.next().await {
+    ///         match event? {
+    ///             PlaceOrder::OrderStatus(order_status) => println!("order status: {order_status:?}"),
+    ///             PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+    ///             PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
+    ///             PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///         }
     ///     }
+    ///
+    ///     Ok(())
     /// }
     /// ```
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {

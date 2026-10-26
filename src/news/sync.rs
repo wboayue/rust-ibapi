@@ -170,8 +170,11 @@ impl Client {
     /// let provider_codes = ["DJ-N"];
     ///
     /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
-    /// for article in &subscription {
-    ///     println!("{article:?}");
+    /// for article in subscription.iter_data() {
+    ///     match article {
+    ///         Ok(article) => println!("{article:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
@@ -196,8 +199,11 @@ impl Client {
     /// let provider_code = "BRFG";
     ///
     /// let subscription = client.broad_tape_news(provider_code).expect("request broad tape news failed");
-    /// for article in &subscription {
-    ///     println!("{article:?}");
+    /// for article in subscription.iter_data() {
+    ///     match article {
+    ///         Ok(article) => println!("{article:?}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {

@@ -230,7 +230,7 @@ async fn main() {
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
-    let mut subscription = client
+    let subscription = client
         .realtime_bars(&contract)
         .trading_hours(TradingHours::Extended)
         .subscribe()

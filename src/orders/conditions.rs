@@ -78,7 +78,7 @@ impl From<i32> for TriggerMethod {
 /// - When `conditions_ignore_rth` is true on the order, monitoring extends to
 ///   after-hours trading
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
@@ -160,7 +160,7 @@ where
 /// - HH:MM:SS: Hour, minute, second in 24-hour format
 /// - TZ: Timezone (e.g., "UTC", "US/Eastern", "America/New_York")
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::TimeCondition;
@@ -201,7 +201,7 @@ pub struct TimeCondition {
 /// - Only applies to margin accounts; cash accounts will not trigger this condition
 /// - Common use: Submit protective orders when margin cushion falls below safe levels
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::MarginCondition;
@@ -240,7 +240,7 @@ pub struct MarginCondition {
 /// - Common use case: Place a hedge order immediately after an initial position is filled
 /// - The symbol must match exactly (case-sensitive in most cases)
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::ExecutionCondition;
@@ -278,7 +278,7 @@ pub struct ExecutionCondition {
 /// - When `conditions_ignore_rth` is true on the order, includes after-hours volume
 /// - Common use case: Enter positions after sufficient liquidity is established
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::VolumeCondition;
@@ -322,7 +322,7 @@ pub struct VolumeCondition {
 /// - Resets at the start of each trading session
 /// - Common use case: Momentum trading or volatility-based order activation
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::PercentChangeCondition;
@@ -397,7 +397,7 @@ pub struct UnknownCondition {
 
 /// Builder for [`PriceCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
@@ -465,7 +465,7 @@ impl PriceConditionBuilder {
 
     /// Set the trigger method for price evaluation.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```no_run
     /// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
@@ -509,7 +509,7 @@ impl PriceConditionBuilder {
 
 /// Builder for [`TimeCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::TimeCondition;
@@ -597,7 +597,7 @@ impl Default for TimeConditionBuilder {
 
 /// Builder for [`MarginCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::MarginCondition;
@@ -677,7 +677,7 @@ impl Default for MarginConditionBuilder {
 
 /// Builder for [`ExecutionCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::ExecutionCondition;
@@ -746,7 +746,7 @@ impl ExecutionConditionBuilder {
 
 /// Builder for [`VolumeCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::VolumeCondition;
@@ -836,7 +836,7 @@ impl VolumeConditionBuilder {
 
 /// Builder for [`PercentChangeCondition`].
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::conditions::PercentChangeCondition;

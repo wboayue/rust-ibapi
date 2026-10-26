@@ -3,7 +3,7 @@
 //! This module provides ergonomic helper functions that return algo builders,
 //! enabling a fluent API for configuring algo orders.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```no_run
 //! use ibapi::orders::builder::{vwap, twap, pct_vol, arrival_price};
@@ -29,7 +29,7 @@ use crate::orders::builder::algo_builders::{
 /// VWAP seeks to achieve the volume-weighted average price from order
 /// submission to market close.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::vwap;
@@ -49,7 +49,7 @@ pub fn vwap() -> VwapBuilder {
 ///
 /// TWAP seeks to achieve the time-weighted average price.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::twap;
@@ -68,7 +68,7 @@ pub fn twap() -> TwapBuilder {
 ///
 /// Controls participation rate to minimize market impact.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol;
@@ -88,7 +88,7 @@ pub fn pct_vol() -> PctVolBuilder {
 ///
 /// Achieves the bid/ask midpoint at order arrival time.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{arrival_price, RiskAversion};
@@ -109,7 +109,7 @@ pub fn arrival_price() -> ArrivalPriceBuilder {
 ///
 /// Combines IB's Smart Routing with user-defined urgency.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{adaptive, AdaptivePriority};
@@ -127,7 +127,7 @@ pub fn adaptive() -> AdaptiveBuilder {
 ///
 /// Minimizes slippage relative to the closing auction price.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{close_price, RiskAversion};
@@ -147,7 +147,7 @@ pub fn close_price() -> ClosePriceBuilder {
 ///
 /// Hidden order with randomized display sizes.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::dark_ice;
@@ -167,7 +167,7 @@ pub fn dark_ice() -> DarkIceBuilder {
 ///
 /// Slices an order into random increments at random intervals.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accumulate_distribute;
@@ -186,7 +186,7 @@ pub fn accumulate_distribute() -> AccumulateDistributeBuilder {
 ///
 /// Balances market impact against adverse-price-movement risk.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::{balance_impact_risk, RiskAversion};
@@ -205,7 +205,7 @@ pub fn balance_impact_risk() -> BalanceImpactRiskBuilder {
 ///
 /// Slices the order to match market average while minimizing impact.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::minimise_impact;
@@ -223,7 +223,7 @@ pub fn minimise_impact() -> MinimiseImpactBuilder {
 ///
 /// Participation rate varies with the market price.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_price;
@@ -242,7 +242,7 @@ pub fn pct_vol_price() -> PctVolPriceBuilder {
 ///
 /// Participation rate varies based on remaining order size.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_size;
@@ -261,7 +261,7 @@ pub fn pct_vol_size() -> PctVolSizeBuilder {
 ///
 /// Participation rate varies linearly over the active time window.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::pct_vol_time;
@@ -282,7 +282,7 @@ pub fn pct_vol_time() -> PctVolTimeBuilder {
 /// smaller set of parameters with explicit `route_order_type` and
 /// `active_time_tz`. See [`AccuDistrBuilder`] for the parameter shape.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accu_distr;

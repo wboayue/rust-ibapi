@@ -55,6 +55,14 @@ use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, Ti
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
 /// the limit price set to the COP or the best bid/ask after the market opens.
 /// Products: FUT, STK
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::at_auction(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
@@ -69,6 +77,14 @@ pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
 /// A Discretionary order is a limit order submitted with a hidden, specified 'discretionary' amount off the limit price which
 /// may be used to increase the price range over which the limit order is eligible to execute. The market sees only the limit price.
 /// Products: STK
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::discretionary(Action::Buy, 100.0, 50.0, 0.10);
+/// ```
 pub fn discretionary(action: Action, quantity: f64, price: f64, discretionary_amount: f64) -> Order {
     Order {
         action,
@@ -84,6 +100,14 @@ pub fn discretionary(action: Action, quantity: f64, price: f64, discretionary_am
 /// and the speed of execution, but unlike the Limit order a Market order provides no price protection and may fill at a price far
 /// lower/higher than the current displayed bid/ask.
 /// Products: BOND, CFD, EFP, CASH, FUND, FUT, FOP, OPT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_order(Action::Buy, 100.0);
+/// ```
 pub fn market_order(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -100,6 +124,14 @@ pub fn market_order(action: Action, quantity: f64) -> Order {
 /// is held in the system until the trigger price is touched, and is then submitted as a market order. An MIT order is similar to a
 /// stop order, except that an MIT sell order is placed above the current market price, and a stop sell order is placed below
 /// Products: BOND, CFD, CASH, FUT, FOP, OPT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_if_touched(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn market_if_touched(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
@@ -112,6 +144,14 @@ pub fn market_if_touched(action: Action, quantity: f64, price: f64) -> Order {
 
 /// A Market-on-Close (MOC) order is a market order that is submitted to execute as close to the closing price as possible.
 /// Products: CFD, FUT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_on_close(Action::Buy, 100.0);
+/// ```
 pub fn market_on_close(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -124,6 +164,14 @@ pub fn market_on_close(action: Action, quantity: f64) -> Order {
 /// A Market-on-Open (MOO) order combines a market order with the OPG time in force to create an order that is automatically
 /// submitted at the market's open and fills at the market price.
 /// Products: CFD, STK, OPT, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_on_open(Action::Buy, 100.0);
+/// ```
 pub fn market_on_open(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -138,6 +186,14 @@ pub fn market_on_open(action: Action, quantity: f64) -> Order {
 /// to ISE for MPM execution. Market orders execute at the midpoint whenever an eligible contra-order is available. Limit orders
 /// execute only when the midpoint price is better than the limit price. Standard MPM orders are completely anonymous.
 /// Products: STK
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::midpoint_match(Action::Buy, 100.0);
+/// ```
 pub fn midpoint_match(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -151,6 +207,14 @@ pub fn midpoint_match(action: Action, quantity: f64) -> Order {
 // the NBBO or better. Set an optional price cap to define the highest price (for a buy order) or the lowest price (for a sell
 // order) you are willing to accept. Requires TWS 975+. Smart-routing to US stocks only.
 /// Construct a midprice order with an optional price cap.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::midprice(Action::Buy, 100.0, Some(50.0));
+/// ```
 pub fn midprice(action: Action, quantity: f64, price_cap: Option<f64>) -> Order {
     Order {
         action,
@@ -168,6 +232,14 @@ pub fn midprice(action: Action, quantity: f64, price_cap: Option<f64>) -> Order 
 ///     Sell order price = Bid price + offset amount
 ///     Buy order price = Ask price - offset amount
 /// Products: STK
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::pegged_to_market(Action::Buy, 100.0, 0.05);
+/// ```
 pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Order {
     Order {
         action,
@@ -183,6 +255,14 @@ pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Or
 /// Simultaneously it identifies the next best price and quantity offered/available, and submits the matching quantity of your order for
 /// immediate execution.
 /// Products: CFD, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::sweep_to_fill(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
@@ -206,6 +286,14 @@ pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
 /// will be rounded to the nearest penny in favor of the order and will be used as your auction improvement amount.
 /// Products: OPT
 /// Supported Exchanges: BOX
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::auction_relative(Action::Buy, 100.0, 0.05);
+/// ```
 pub fn auction_relative(action: Action, quantity: f64, offset: f64) -> Order {
     Order {
         action,
@@ -219,6 +307,14 @@ pub fn auction_relative(action: Action, quantity: f64, offset: f64) -> Order {
 /// The Block attribute is used for large volume option orders on ISE that consist of at least 50 contracts. To execute large-volume
 /// orders over time without moving the market, use the Accumulate/Distribute algorithm.
 /// Products: OPT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::block(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn block(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
@@ -234,6 +330,14 @@ pub fn block(action: Action, quantity: f64, price: f64) -> Order {
 /// a limit order with the limit price equal to the price at which the filled portion of the order executed.
 /// Products: OPT
 /// Supported Exchanges: BOX
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::box_top(Action::Buy, 100.0);
+/// ```
 pub fn box_top(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -250,6 +354,14 @@ pub fn box_top(action: Action, quantity: f64) -> Order {
 /// An option order routed to BOX with this limit price is an Auction Limit order: IB may enter it in
 /// BOX's price improvement auction, with your improvement amount the difference between the limit price
 /// and the nearest listed increment. TWS applies the account's configured auction strategy.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_order(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -263,6 +375,14 @@ pub fn limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
 /// Forex orders can be placed in denomination of second currency in pair using cash_qty field
 /// Requires TWS or IBG 963+
 /// <https://www.interactivebrokers.com/en/index.php?f=23876#963-02>
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_order_with_cash_qty(Action::Buy, 50.0, 5000.0);
+/// ```
 pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64) -> Order {
     Order {
         action,
@@ -276,6 +396,14 @@ pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64
 /// A Limit-on-close (LOC) order will be submitted at the close and will execute if the closing price is at or better than the submitted
 /// limit price.
 /// Products: CFD, FUT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_on_close(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn limit_on_close(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -289,6 +417,14 @@ pub fn limit_on_close(action: Action, quantity: f64, limit_price: f64) -> Order 
 /// A Limit-on-Open (LOO) order combines a limit order with the OPG time in force to create an order that is submitted at the market's open,
 /// and that will only execute at the specified limit price or better. Orders are filled in accordance with specific exchange rules.
 /// Products: CFD, STK, OPT, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_on_open(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn limit_on_open(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -310,6 +446,14 @@ pub fn limit_on_open(action: Action, quantity: f64, limit_price: f64) -> Order {
 /// The Passive Relative order is similar to the Relative/Pegged-to-Primary order, except that the Passive relative subtracts the offset from
 /// the bid and the Relative adds the offset to the bid.
 /// Products: STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::passive_relative(Action::Buy, 100.0, 0.05);
+/// ```
 pub fn passive_relative(action: Action, quantity: f64, offset: f64) -> Order {
     Order {
         action,
@@ -325,6 +469,14 @@ pub fn passive_relative(action: Action, quantity: f64, offset: f64) -> Order {
 /// the NBBO midpoint and the order price adjusts automatically to continue to peg the midpoint if the market moves. The price only adjusts
 /// to be more aggressive. If the market moves in the opposite direction, the order will execute.
 /// Products: STK
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::pegged_to_midpoint(Action::Buy, 100.0, 0.05, 50.0);
+/// ```
 pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -413,6 +565,14 @@ pub fn bracket_order(
 /// A Market-to-Limit (MTL) order is submitted as a market order to execute at the current best market price. If the order is only
 /// partially filled, the remainder of the order is canceled and re-submitted as a limit order with the limit price equal to the price
 /// at which the filled portion of the order executed.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_to_limit(Action::Buy, 100.0);
+/// ```
 pub fn market_to_limit(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -426,6 +586,14 @@ pub fn market_to_limit(action: Action, quantity: f64) -> Order {
 /// resubmitted as a limit order if the entire order does not immediately execute at the market price. The limit price is set by Globex to be
 /// close to the current market price, slightly higher for a sell order and lower for a buy order.
 /// Products: FUT, FOP
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_with_protection(Action::Buy, 100.0);
+/// ```
 pub fn market_with_protection(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -441,6 +609,14 @@ pub fn market_with_protection(action: Action, quantity: f64) -> Order {
 /// position. A Buy Stop order is always placed above the current market price. It is typically used to limit a loss or help protect a
 /// profit on a short sale.
 /// Products: CFD, BAG, CASH, FUT, FOP, OPT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::stop(Action::Buy, 100.0, 45.0);
+/// ```
 pub fn stop(action: Action, quantity: f64, stop_price: f64) -> Order {
     Order {
         action,
@@ -457,6 +633,14 @@ pub fn stop(action: Action, quantity: f64, stop_price: f64) -> Order {
 /// point range. Any portion of the order that does not fill within this protected range is submitted as a limit order at the exchange-defined
 /// trigger price +/- the protection points.
 /// Products: FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::stop_with_protection(Action::Buy, 100.0, 45.0);
+/// ```
 pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> Order {
     Order {
         action,
@@ -473,6 +657,14 @@ pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> O
 /// maximum possible loss, without setting a limit on the maximum possible gain. "Buy" trailing stop orders are the mirror image of sell
 /// trailing stop orders, and are most appropriate for use in falling markets.
 /// Products: CFD, CASH, FOP, FUT, OPT, STK, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::trailing_stop(Action::Buy, 100.0, 2.0, 45.0);
+/// ```
 pub fn trailing_stop(action: Action, quantity: f64, trailing_percent: f64, trail_stop_price: f64) -> Order {
     Order {
         action,
@@ -489,6 +681,14 @@ pub fn trailing_stop(action: Action, quantity: f64, trailing_percent: f64, trail
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::combo_limit_order(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn combo_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -529,6 +729,14 @@ pub(crate) fn non_guaranteed_params() -> Vec<TagValue> {
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::combo_market_order(Action::Buy, 100.0);
+/// ```
 pub fn combo_market_order(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -543,6 +751,14 @@ pub fn combo_market_order(action: Action, quantity: f64) -> Order {
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, vec![10.0, 11.0]);
+/// ```
 pub fn limit_order_for_combo_with_leg_prices(action: Action, quantity: f64, leg_prices: Vec<f64>) -> Order {
     let mut order = Order {
         action,
@@ -564,6 +780,14 @@ pub fn limit_order_for_combo_with_leg_prices(action: Action, quantity: f64, leg_
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::relative_limit_combo(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn relative_limit_combo(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -579,6 +803,14 @@ pub fn relative_limit_combo(action: Action, quantity: f64, limit_price: f64) -> 
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::relative_market_combo(Action::Buy, 100.0);
+/// ```
 pub fn relative_market_combo(action: Action, quantity: f64) -> Order {
     Order {
         action,
@@ -598,6 +830,21 @@ pub fn relative_market_combo(action: Action, quantity: f64) -> Order {
 /// Grouping the two orders using an OCA order type offers the investor two chance to enter a similar position, while only running the risk
 /// of taking on a single position.
 /// Products: BOND, CASH, FUT, FOP, STK, OPT, WAR
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action, OcaType};
+///
+/// let orders = order_builder::one_cancels_all(
+///     "MyOCA",
+///     vec![
+///         order_builder::limit_order(Action::Buy, 100.0, 50.0),
+///         order_builder::limit_order(Action::Buy, 100.0, 49.0),
+///     ],
+///     OcaType::CancelWithBlock,
+/// );
+/// ```
 pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: OcaType) -> Vec<Order> {
     for order in &mut oca_orders {
         order.oca_group = oca_group.to_owned();
@@ -616,6 +863,14 @@ pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: Oc
 /// is the same as for regular orders priced in premium terms except that the client can limit the volatility level they are willing to pay or
 /// receive.
 /// Products: FOP, OPT
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action, VolatilityType};
+///
+/// let order = order_builder::volatility(Action::Buy, 100.0, 0.2, VolatilityType::Daily);
+/// ```
 pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volatility_type: VolatilityType) -> Order {
     Order {
         action,
@@ -628,6 +883,14 @@ pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volati
 }
 
 /// Create an FX hedge order tied to the specified parent order id.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::market_f_hedge(1001, Action::Buy);
+/// ```
 pub fn market_f_hedge(parent_order_id: impl Into<OrderId>, action: Action) -> Order {
     //FX Hedge orders can only have a quantity of 0
     let mut order = market_order(action, 0.0);
@@ -726,6 +989,14 @@ pub fn attach_adjustable_stop(parent: &Order, stop_price: f64, adjustment: Adjus
     order
 }
 /// Build a limit order flagged for "what if" margin calculation.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::what_if_limit_order(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
     order.what_if = true;
@@ -835,6 +1106,14 @@ pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> O
 //     }
 
 /// Build an IBKRATS limit order (not-held with auto-routing).
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_ibkrats(Action::Buy, 100.0, 50.0);
+/// ```
 pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -847,6 +1126,14 @@ pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
 }
 
 /// Build a limit order while overriding the manual order time field.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{order_builder, Action};
+///
+/// let order = order_builder::limit_order_with_manual_order_time(Action::Buy, 100.0, 50.0, "20240102 09:30:00 US/Eastern");
+/// ```
 pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_price: f64, manual_order_time: &str) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
     manual_order_time.clone_into(&mut order.manual_order_time);

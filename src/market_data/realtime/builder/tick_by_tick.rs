@@ -187,7 +187,7 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn last(self) -> Result<crate::subscriptions::Subscription<Trade>, Error> {
+    pub async fn last(self) -> Result<crate::subscriptions::r#async::Subscription<Trade>, Error> {
         crate::market_data::realtime::r#async::tick_by_tick::<Trade>(self.client, self.contract, "Last", self.number_of_ticks, false).await
     }
 
@@ -218,7 +218,7 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn all_last(self) -> Result<crate::subscriptions::Subscription<Trade>, Error> {
+    pub async fn all_last(self) -> Result<crate::subscriptions::r#async::Subscription<Trade>, Error> {
         crate::market_data::realtime::r#async::tick_by_tick::<Trade>(self.client, self.contract, "AllLast", self.number_of_ticks, false).await
     }
 
@@ -250,7 +250,7 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::Subscription<BidAsk>, Error> {
+    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::r#async::Subscription<BidAsk>, Error> {
         crate::market_data::realtime::r#async::tick_by_tick::<BidAsk>(
             self.client,
             self.contract,
@@ -288,7 +288,7 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn mid_point(self) -> Result<crate::subscriptions::Subscription<MidPoint>, Error> {
+    pub async fn mid_point(self) -> Result<crate::subscriptions::r#async::Subscription<MidPoint>, Error> {
         crate::market_data::realtime::r#async::tick_by_tick::<MidPoint>(self.client, self.contract, "MidPoint", self.number_of_ticks, false).await
     }
 }

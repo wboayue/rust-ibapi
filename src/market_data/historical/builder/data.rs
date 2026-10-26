@@ -430,7 +430,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     ///     drop(subscription);
     /// }
     /// ```
-    pub async fn stream(self) -> Result<crate::subscriptions::Subscription<HistoricalBarUpdate>, Error> {
+    pub async fn stream(self) -> Result<crate::subscriptions::r#async::Subscription<HistoricalBarUpdate>, Error> {
         let duration = self.resolve_for_stream()?;
         crate::market_data::historical::r#async::historical_data_stream(
             self.client,
