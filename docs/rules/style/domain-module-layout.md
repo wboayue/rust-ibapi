@@ -65,7 +65,7 @@ example of adding a module.
 
 ## Known drift
 
-Single-domain encoders and decoders still sit in the shared `src/proto/` modules —
-`decode_order`, `encode_order` and their siblings for orders, `decode_contract_details`,
-`encode_scanner_subscription` — tracked in #1078. Don't add to them there; a new
-single-domain function goes in `<domain>/common/`.
+Two single-domain converters still sit in the shared `src/proto/` modules —
+`decode_contract_details` and `encode_scanner_subscription` — tracked in #1078 (the orders
+converters moved in its first PR). Don't add to them there; a new single-domain function goes
+in `<domain>/common/`.

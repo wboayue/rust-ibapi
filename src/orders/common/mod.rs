@@ -14,3 +14,5 @@ pub(super) mod test_tables;
 pub(crate) use decoders::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 #[cfg(all(test, feature = "sync"))]
 pub(crate) use encoders::encode_place_order;
+#[cfg(test)]
+pub(crate) use encoders::{encode_execution_filter, encode_order, encode_order_cancel};
