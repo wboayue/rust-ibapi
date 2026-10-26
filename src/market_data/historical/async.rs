@@ -274,11 +274,6 @@ impl Client {
     }
 }
 
-// pub(crate) internal plumbing called from `HistoricalDataBuilder`; the
-// public API is already a builder, so flat args here are the deliberate
-// seam between the typed builder and the wire encoder (the builder-fed exception in
-// docs/rules/style/param-budget.md).
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -287,11 +282,10 @@ pub(crate) async fn historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
-    deadline: Option<tokio::time::Instant>,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
 
-    let fetch = retry_on_connection_reset(client, || async {
+    retry_on_connection_reset(client, || async {
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -304,8 +298,10 @@ pub(crate) async fn historical_data(
             false,
         )?;
 
-        // Dropping the subscription before the window frame, on any error
-        // below or with the future, sends TWS's cancel; after it, nothing is sent.
+        // The window frame is a second read, which is why this is not a
+        // one-shot and cannot use the helpers in `common::request_helpers`.
+        // Dropping the subscription before it, on any error below or with
+        // the future, sends TWS's cancel; after it, nothing is sent.
         let mut subscription = builder.send::<HistoricalDataFrame>(request).await?;
 
         let mut data = next_frame(&mut subscription).await?.into_bars()?;
@@ -314,13 +310,8 @@ pub(crate) async fn historical_data(
         (data.start, data.end) = next_frame(&mut subscription).await?.into_window()?;
 
         Ok(data)
-    });
-
-    match deadline {
-        // The deadline covers retries and the waits for reconnection between them.
-        Some(deadline) => tokio::time::timeout_at(deadline, fetch).await.map_err(|_elapsed| Error::Timeout)?,
-        None => fetch.await,
-    }
+    })
+    .await
 }
 
 /// The next frame of a one-shot request, skipping notices.

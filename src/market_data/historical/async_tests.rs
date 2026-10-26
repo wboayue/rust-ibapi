@@ -964,25 +964,9 @@ async fn historical_data_dropped_fetch_cancels() {
     assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
 }
 
-/// No answer within the bound: `Error::Timeout`, and the request is cancelled at TWS.
+/// The window frame ends the request at TWS: nothing to cancel.
 #[tokio::test]
-async fn historical_data_fetch_within_times_out_and_cancels() {
-    let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
-    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let result = client
-        .historical_data(&test_contract(), BarSize::Hour)
-        .duration(Duration::days(1))
-        .fetch_within(std::time::Duration::from_millis(20))
-        .await;
-
-    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
-    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
-}
-
-/// An answer within the bound completes as `fetch` does, with nothing to cancel.
-#[tokio::test]
-async fn historical_data_fetch_within_completes() {
+async fn historical_data_completed_fetch_sends_no_cancel() {
     let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalData,
@@ -997,12 +981,29 @@ async fn historical_data_fetch_within_completes() {
     let data = client
         .historical_data(&test_contract(), BarSize::Hour)
         .duration(Duration::days(1))
-        .fetch_within(std::time::Duration::from_secs(5))
+        .fetch()
         .await
-        .expect("answered within the bound");
+        .expect("completed request");
 
     assert_eq!(data.bars.len(), 1);
     assert_eq!(historical_requests_and_cancels(&bus).await, (1, 0));
+}
+
+/// A second batch of bars in place of the window frame cancels the request at TWS.
+#[tokio::test]
+async fn historical_data_out_of_order_frames_cancel() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![bars.clone(), bars]));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let result = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
+        .await;
+
+    assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
 }
 
 /// A decode failure before the window frame cancels the request at TWS.

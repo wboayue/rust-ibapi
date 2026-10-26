@@ -493,9 +493,14 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel historical data")?;
-        common::encoders::encode_cancel_historical_data(request_id)
+        cancel_historical_data(request_id)
     }
+}
+
+/// The cancel for a historical bar request, one-shot or streaming.
+fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
+    let request_id = error_helpers::require_request_id_for(request_id, "encode cancel historical data")?;
+    common::encoders::encode_cancel_historical_data(request_id)
 }
 
 /// The frames of a one-shot historical data request: the bars, then the window.
@@ -542,8 +547,7 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel historical data")?;
-        common::encoders::encode_cancel_historical_data(request_id)
+        cancel_historical_data(request_id)
     }
 
     fn is_snapshot_end(&self) -> bool {

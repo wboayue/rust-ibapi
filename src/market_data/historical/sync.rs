@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 use log::error;
 use time::OffsetDateTime;
@@ -249,11 +248,6 @@ impl Client {
     }
 }
 
-// pub(crate) internal plumbing called from `HistoricalDataBuilder`; the
-// public API is already a builder, so flat args here are the deliberate
-// seam between the typed builder and the wire encoder (the builder-fed exception in
-// docs/rules/style/param-budget.md).
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -262,16 +256,10 @@ pub(crate) fn historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
-    deadline: Option<Instant>,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
 
     retry_on_connection_reset(client, || {
-        // A retry follows a wait for reconnection, which the deadline doesn't bound.
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            return Err(Error::Timeout);
-        }
-
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -284,43 +272,27 @@ pub(crate) fn historical_data(
             false,
         )?;
 
-        // Dropping the subscription before the window frame, on any error
-        // below, sends TWS's cancel; after it, nothing is sent.
+        // The window frame is a second read, which is why this is not a
+        // one-shot and cannot use the helpers in `common::request_helpers`.
+        // Dropping the subscription before it, on any error below, sends
+        // TWS's cancel; after it, nothing is sent.
         let subscription = builder.send::<HistoricalDataFrame>(request)?;
 
-        let mut data = next_frame(&subscription, deadline)?.into_bars()?;
+        let mut data = next_frame(&subscription)?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
         // before it is an error.
-        (data.start, data.end) = next_frame(&subscription, deadline)?.into_window()?;
+        (data.start, data.end) = next_frame(&subscription)?.into_window()?;
 
         Ok(data)
     })
 }
 
-/// The next frame of a one-shot request, skipping notices; `Error::Timeout`
-/// once `deadline` passes.
-fn next_frame(subscription: &Subscription<HistoricalDataFrame>, deadline: Option<Instant>) -> Result<HistoricalDataFrame, Error> {
+/// The next frame of a one-shot request, skipping notices.
+fn next_frame(subscription: &Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
     loop {
-        let item = match deadline {
-            None => subscription.next(),
-            Some(deadline) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return Err(Error::Timeout);
-                }
-                subscription.next_timeout(remaining)
-            }
-        };
-        match item {
-            Some(item) => {
-                if let Some(frame) = filter_notice(item) {
-                    return frame;
-                }
-            }
-            // `next_timeout` returns `None` for a timeout and for a closed
-            // channel; only a timeout waits until the deadline.
-            None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Err(Error::Timeout),
-            None => return Err(Error::UnexpectedEndOfStream),
+        let item = subscription.next().ok_or(Error::UnexpectedEndOfStream)?;
+        if let Some(frame) = filter_notice(item) {
+            return frame;
         }
     }
 }

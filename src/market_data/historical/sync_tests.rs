@@ -1465,42 +1465,12 @@ fn historical_data_requires_end_message_type() {
     assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
 }
 
-/// No answer within the bound: `Error::Timeout`, and the request is cancelled at TWS.
+/// A decode failure before the window frame cancels the request at TWS.
 #[test]
-fn historical_data_fetch_within_times_out_and_cancels() {
-    let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
-    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let result = client
-        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
-        .duration(Duration::seconds(86_400))
-        .fetch_within(std::time::Duration::from_millis(20));
-
-    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+fn historical_data_local_error_cancels() {
+    let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::HistoricalData, vec![0xff])]);
+    assert!(result.is_err(), "malformed bars must fail");
     assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
-}
-
-/// An answer within the bound completes as `fetch` does, with nothing to cancel.
-#[test]
-fn historical_data_fetch_within_completes() {
-    let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
-        proto_response(
-            IncomingMessages::HistoricalData,
-            historical_data_response()
-                .bar(historical_data_daily_bar("20230315").ohlc(1.0, 2.0, 0.5, 1.5))
-                .encode_proto(),
-        ),
-        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
-    ]);
-
-    let data = client
-        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
-        .duration(Duration::seconds(86_400))
-        .fetch_within(std::time::Duration::from_secs(5))
-        .expect("answered within the bound");
-
-    assert_eq!(data.bars.len(), 1);
-    assert_eq!(historical_requests_and_cancels(&bus), (1, 0));
 }
 
 /// An empty result is valid when the broker explicitly completes the request.
