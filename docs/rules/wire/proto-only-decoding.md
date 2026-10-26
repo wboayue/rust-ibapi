@@ -8,7 +8,7 @@ triggers:
   - adding a StreamDecoder or TickDecoder impl
   - a subscription terminates on an unexpected message
   - adding a decode arm for a new message type
-symbols: [require_proto, ResponseMessage::proto, process_decode_result, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
+symbols: [require_proto, ResponseMessage::proto, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
 precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740"]
 memory: [project_protobuf_only, feedback_unreachable_regression_guards]
@@ -20,8 +20,8 @@ Every domain decoder reads its payload with `message.proto()`, which takes the b
 was retired with the floor ratchet.
 
 **Decoding takes `&ResponseMessage`, never `&mut`.** Reading `raw_bytes` and handing it to `prost`
-consumes nothing. `next_int` / `next_string` / `next_double` still exist and still need `&mut`, but
-the handshake (`connection/common.rs`) is their only caller — it reads the server version and time
+consumes nothing. `next_int` / `next_string` still exist and still need `&mut` (`next_double` is
+`#[cfg(test)]`), but the handshake (`connection/common.rs`) is their only production caller — it reads the server version and time
 off a frame that predates any decoder. A new `&mut ResponseMessage` in a decode path means either a
 text decoder, which the floor ratchet retired, or a signature copied from one.
 
@@ -53,7 +53,7 @@ That reading is exactly why a missing backstop is not a style question. A `decod
 straight into `proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
 reads it as claiming an arm for every discriminant it scans and can say nothing about it.
 
-**The const stays a slice even for the six single-type decoders, and the narrow stays a
+**The const stays a slice even for single-type decoders, and the narrow stays a
 hardcoded literal.** Both look like duplication and neither is. Collapsing to
 `const MESSAGE_TYPE` with a derived `RESPONSE_MESSAGE_IDS = &[Self::MESSAGE_TYPE]` compiles, but
 `StreamDecoder`'s multi-type impls cannot use it, so one filter (`is_undeclared`) would read two

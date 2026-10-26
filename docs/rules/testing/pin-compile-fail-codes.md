@@ -9,7 +9,7 @@ triggers:
   - reviewing a bare compile_fail annotation
 symbols: [compile_fail, FuturesBuilder, Missing]
 related: [exercise-production-code]
-precedents: ["#548"]
+precedents: ["#548", "#845"]
 memory: []
 ---
 
@@ -34,10 +34,13 @@ The failure mode is a test that no longer tests anything while still reporting g
 `compile_fail` block whose `use` line goes stale fails to compile for that reason alone and
 keeps passing — the actual invariant is unguarded from then on, invisibly.
 
-The repo's one instance is the typestate guard in `src/contracts/mod.rs`: `Contract::futures`
-returns `FuturesBuilder<Symbol, Missing>`, and `build()` exists only once a month terminal has
-been applied. `E0599` is "no method named `build` found" — that specific code is the whole
-assertion. Without it the test would also pass if `Contract` were renamed.
+The repo has two (`grep -rn compile_fail --include=*.rs src`). The typestate guard in
+`src/contracts/mod.rs`: `Contract::futures` returns `FuturesBuilder<Symbol, Missing>`, and
+`build()` exists only once a month terminal has been applied. `E0599` is "no method named
+`build` found" — that specific code is the whole assertion. Without it the test would also
+pass if `Contract` were renamed. And the id-type guard in `src/orders/builder/condition_helpers.rs`
+(#845): `price(OrderId::new(1), ..)` must fail with `E0277`, "the trait bound
+`ContractId: From<OrderId>` is not satisfied", not with a missing-import error.
 
 ## Precedents
 
@@ -45,5 +48,5 @@ assertion. Without it the test would also pass if `Contract` were renamed.
 
 > **Correction.** The pre-migration `CLAUDE.md` rule cited this precedent as pinning
 > `compile_fail,E0639` for "cannot construct a `#[non_exhaustive]` struct externally". No such
-> doc-test exists; the only `compile_fail` in the repo is the `E0599` typestate guard above.
+> doc-test exists; at the time the only `compile_fail` in the repo was the `E0599` typestate guard above.
 > The directive was right, the evidence was not.

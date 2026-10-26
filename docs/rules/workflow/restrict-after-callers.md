@@ -63,8 +63,8 @@ attribute added "for headroom" is the one most likely to be reverted.
 - #665 — **removed that `#[non_exhaustive]` again.** Once the fields were strongly typed
   (`Symbol`, `Exchange`, `Currency`, `Option<OptionRight>`), the 2.x mistakes it guarded already
   failed to compile, so it was pure construction friction. The split was still right; the
-  restriction was not. The `compile_fail` guard from #548 went with it — the repo's remaining
-  one guards a typestate builder, per
+  restriction was not. The `compile_fail` guard from #548 went with it — the two that remain
+  guard a typestate builder and an id type (#845), per
   [pin compile_fail codes](../testing/pin-compile-fail-codes.md).
   `setter_parity_with_contract_fields` survives and is the part still earning its keep.
 - #581 — narrowing `ResponseMessage` to `pub(crate)` was planned as transparent; it surfaced

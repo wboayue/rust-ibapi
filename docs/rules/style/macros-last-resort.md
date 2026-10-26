@@ -45,14 +45,14 @@ All nine macros in `src/`, and what each one buys (`grep -rn 'macro_rules!' src 
 | Macro | Home | Why not a function |
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Orphan rule: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions = 12 impls |
-| `impl_wire_enum!` | `macros.rs` | Same — `Display` / `FromStr` / `ToField` are foreign traits. 12 enums × 3 impls = 36 (`grep -rn 'impl_wire_enum!(' src --include=*.rs \| grep -v '^src/macros.rs' \| wc -l`). The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
+| `impl_wire_enum!` | `macros.rs` | Same — `Display` / `FromStr` / `ToField` are foreign traits. 13 enums × 3 impls = 39 (`grep -rn 'impl_wire_enum!(' src --include=*.rs \| grep -v '^src/macros.rs' \| wc -l`). The `as_str` / `from_wire` data tables stay in normal Rust, visible to goto-def; only the plumbing expands |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Calls inherent `<$t>::new` and `.as_str()`; 5 test fns |
 | `single_req_id_request_builder!` | `testdata/builders/mod.rs` | Generates a new named struct per proto type |
 | `request_id_response_builder!` | `testdata/builders/mod.rs` | Same — a distinct nominal type per fixture |
 | `empty_request_builder!` | `testdata/builders/mod.rs` | Same |
 | `encode_cancel_by_id!` | `proto/encoders.rs` | Names a distinct `proto::` struct literal per call; there is no trait over "prost message with a `req_id` field" |
 | `encode_empty_proto!` | `proto/encoders.rs` | Same, for the no-field request bodies |
-| `impl_proto_payload!` | `proto/payload.rs` | Same — a `const MESSAGE_ID` per generated `prost` type, 25 of them (`awk '/^impl_proto_payload! \{/,/^\}/' src/proto/payload.rs \| grep -c '=>'`). Load-bearing, not cosmetic: `expect_proto` will not compile for a payload lacking a line |
+| `impl_proto_payload!` | `proto/payload.rs` | Same — a `const MESSAGE_ID` per generated `prost` type, 26 of them (`awk '/^impl_proto_payload! \{/,/^\}/' src/proto/payload.rs \| grep -c '=>'`). Load-bearing, not cosmetic: `expect_proto` will not compile for a payload lacking a line |
 
 The last six are all case 3 — a type name is the argument, and generics cannot construct a
 type they were handed as an identifier.

@@ -27,8 +27,12 @@ standing in for the enum (`oca_group(group, 1)`) and a private field nothing wri
 symptoms, and the second can mean the wire has no such field — see
 [wire enum typing](../wire/enum-typing.md) on `AuctionStrategy`.
 
-`OrderBuilder` is clear of this as of #833: #832 closed the integer-coded enums and #833 the
-two string-typed ones, and `what_if_type` arrived with its setter. Eleven `Order` fields are
+`OrderBuilder`'s `Order` fields are clear of this as of #833: #832 closed the integer-coded
+enums and #833 the two string-typed ones, and `what_if_type` arrived with its setter. The
+builder's own `OrderType` is not an `Order` field, so the recipe below does not see it:
+`RelativeLimitCombo` and `RelativeMarketCombo` have no named setter (only the free functions in
+`orders::order_builder`), and `MarketOnOpen` / `LimitOnOpen` had none until #1073 — reachable
+only through `.order_type(..)`, which sent them as plain day orders. Eleven `Order` fields are
 enum-typed; **eight** have a same-named setter. The other three do not, and are the ones a
 name-match reports as gaps when they are not: `oca_type` is set by
 `.oca_group(group, OcaType)`, `action` by `.buy()` / `.sell()` / `.sell_short()` /

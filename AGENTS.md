@@ -92,7 +92,7 @@ precedents. Every rule now lives in a node; nothing is inline.
 
 - **Touching feature-gated code, or adding a `lib.rs` doctest** →
   [feature matrix](docs/rules/parity/feature-matrix.md) — note `--features sync` is *not* the
-  sync-only build, and no PR gate covers sync-only
+  sync-only build; CI's `sync` leg passes `--no-default-features`
 - **Reaching for `block_on`, or needing a lock inside an `async fn`** →
   [no block_on](docs/rules/parity/no-block-on.md)
 - **Adding a public type with distinct sync/async impls** →
