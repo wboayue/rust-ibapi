@@ -291,8 +291,8 @@ impl<S: Stream> Connection<S> {
         let mut attempts = 0;
         let ctx = self.handshake_context();
         loop {
-            let mut message = self.decode_frame(&self.read_startup_frame()?)?;
-            let info = self.connection_handler.parse_account_info(&mut message, &ctx)?;
+            let message = self.decode_frame(&self.read_startup_frame()?)?;
+            let info = self.connection_handler.parse_account_info(&message, &ctx)?;
 
             attempts += 1;
             if account_info.merge(info) || attempts > MAX_ACCOUNT_INFO_ATTEMPTS {
@@ -315,7 +315,7 @@ impl<S: Stream> Connection<S> {
                 ..Default::default()
             }),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
-            recorder: MessageRecorder::new(false, String::from("")),
+            recorder: MessageRecorder::disabled(),
             connection_handler: ConnectionHandler::default(),
             startup_callback: None,
             notice_broadcaster: Arc::new(NoticeBroadcaster::new()),

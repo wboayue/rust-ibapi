@@ -117,8 +117,8 @@ pub fn event_data_by_contract_test_cases() -> Vec<EventDataByContractTestCase> {
     ]
 }
 
-#[allow(dead_code)]
 /// Test case for subscription-based tests
+#[cfg_attr(not(feature = "async"), allow(dead_code))]
 pub struct SubscriptionTestCase {
     pub name: &'static str,
     pub filter: &'static str,
@@ -128,7 +128,7 @@ pub struct SubscriptionTestCase {
     pub expected_events: Vec<String>,
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(feature = "async"), allow(dead_code))]
 pub fn subscription_test_cases() -> Vec<SubscriptionTestCase> {
     vec![SubscriptionTestCase {
         name: "multiple events",

@@ -14,8 +14,8 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_order, completed_orders_end, completed_orders_request, execution_data, execution_data_end,
-    executions_request, global_cancel_request, next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_bound,
-    order_status, place_order_request,
+    executions_request, global_cancel_request, next_valid_id, next_valid_order_id_request, open_order, open_order_end, open_orders_request,
+    order_bound, order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
@@ -494,10 +494,9 @@ async fn exercise_options() {
 
 #[tokio::test]
 async fn next_valid_order_id() {
-    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(9123) };
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&next_valid_id_proto),
+        next_valid_id().order_id(9123).encode_proto(),
     )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -520,7 +519,7 @@ async fn next_valid_order_id() {
 async fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
     let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&crate::proto::NextValidId { order_id: Some(5) }),
+        next_valid_id().order_id(5).encode_proto(),
     )]);
 
     let allocated = client.next_order_id();
@@ -1167,9 +1166,7 @@ async fn order_entry_points_reject_request_range_ids() {
 async fn next_valid_order_id_rejects_request_range() {
     let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&crate::proto::NextValidId {
-            order_id: Some(REQUEST_ID_FLOOR),
-        }),
+        next_valid_id().order_id(REQUEST_ID_FLOOR).encode_proto(),
     )]);
 
     let result = client.next_valid_order_id().await;

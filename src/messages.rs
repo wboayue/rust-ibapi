@@ -961,9 +961,8 @@ struct ExecutionMinimal {
 /// Crate-internal wire envelope; not part of the public API. All fields,
 /// constructors, and methods are crate-visible only. Framing is discriminated
 /// by `raw_bytes`: `Some(_)` = protobuf payload, `None` = NUL-delimited text
-/// payload pre-parsed into `fields` (carries WSH metadata/event-data, plus
-/// unhandled text-framed message types that fall through to the dispatcher
-/// catch-all).
+/// payload pre-parsed into `fields` (the handshake, plus unhandled
+/// text-framed message types that fall through to the dispatcher catch-all).
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ResponseMessage {
     /// Cursor index for incremental decoding.
@@ -1166,8 +1165,7 @@ impl ResponseMessage {
     }
 
     /// Peek an integer field without advancing the cursor. Called from
-    /// [`Self::request_id`]'s text-fallback path (tests only at floor 213)
-    /// and the handshake parser (pre-proto framing).
+    /// [`Self::request_id`]'s text-fallback path (tests only at floor 213).
     ///
     /// Refuses proto-framed messages defensively (per docs/rules/wire/proto-aware-accessors.md):
     /// if `raw_bytes()` is `Some`, the caller picked the wrong accessor —

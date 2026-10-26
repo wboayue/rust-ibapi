@@ -7,7 +7,7 @@ use crate::contracts::{ContractDescription, ContractDetails, MarketRule, OptionC
 // in `market_data/realtime/common/decoders` and routed here via the narrow
 // re-export below — same proto, same `OptionComputation` struct, no point
 // duplicating the decoder.
-pub(crate) use crate::market_data::realtime::common::decoders::decode_tick_option_computation;
+pub(crate) use crate::market_data::realtime::common::decode_tick_option_computation;
 
 // All originating outgoing-request gates for ContractData / SymbolSamples /
 // MarketRule / SecurityDefinitionOptionParameter are <= the connection floor,

@@ -25,7 +25,7 @@ pub(in crate::wsh) fn encode_request_wsh_event_data(
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
-    let format = time::format_description::parse_borrowed::<2>("[year][month][day]").unwrap();
+    let format = time::macros::format_description!("[year][month][day]");
     let request = crate::proto::WshEventDataRequest {
         req_id: Some(request_id),
         con_id: contract_id,
@@ -33,8 +33,8 @@ pub(in crate::wsh) fn encode_request_wsh_event_data(
         fill_watchlist: auto_fill.as_ref().map(|af| af.watchlist),
         fill_portfolio: auto_fill.as_ref().map(|af| af.portfolio),
         fill_competitors: auto_fill.as_ref().map(|af| af.competitors),
-        start_date: start_date.and_then(|d| d.format(&format).ok()),
-        end_date: end_date.and_then(|d| d.format(&format).ok()),
+        start_date: start_date.and_then(|d| d.format(format).ok()),
+        end_date: end_date.and_then(|d| d.format(format).ok()),
         total_limit: limit,
     };
     Ok(encode_protobuf_message(

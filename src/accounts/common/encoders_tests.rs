@@ -2,17 +2,23 @@ use crate::accounts::types::{AccountGroup, AccountId, ContractId};
 use crate::accounts::{FaDataType, ServerLogLevel};
 use crate::common::test_utils::helpers::assert_proto_msg_id;
 use crate::messages::OutgoingMessages;
+use crate::testdata::builders::accounts::{
+    cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, request_current_time, request_current_time_in_millis,
+    request_family_codes, request_managed_accounts,
+};
+use crate::testdata::builders::positions::{cancel_positions, cancel_positions_multi, request_positions};
+use crate::testdata::builders::RequestEncoder;
 
 #[test]
 fn encode_request_positions_works() {
     let bytes = super::encode_request_positions().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::RequestPositions);
+    assert_eq!(bytes, request_positions().encode_request());
 }
 
 #[test]
 fn encode_cancel_positions_works() {
     let bytes = super::encode_cancel_positions().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositions);
+    assert_eq!(bytes, cancel_positions().encode_request());
 }
 
 #[test]
@@ -31,7 +37,7 @@ fn encode_request_account_summary_works() {
 #[test]
 fn encode_cancel_account_summary_works() {
     let bytes = super::encode_cancel_account_summary(3000).unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
+    assert_eq!(bytes, cancel_account_summary().request_id(3000).encode_request());
 }
 
 #[test]
@@ -53,7 +59,7 @@ fn encode_request_pnl_works() {
 #[test]
 fn encode_cancel_pnl_works() {
     let bytes = super::encode_cancel_pnl(123).unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnL);
+    assert_eq!(bytes, cancel_pnl().request_id(123).encode_request());
 }
 
 #[test]
@@ -74,7 +80,7 @@ fn encode_request_pnl_single_works() {
 #[test]
 fn encode_cancel_pnl_single_works() {
     let bytes = super::encode_cancel_pnl_single(456).unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnLSingle);
+    assert_eq!(bytes, cancel_pnl_single().request_id(456).encode_request());
 }
 
 #[test]
@@ -96,7 +102,7 @@ fn encode_request_positions_multi_works() {
 #[test]
 fn encode_cancel_positions_multi_works() {
     let bytes = super::encode_cancel_positions_multi(9000).unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositionsMulti);
+    assert_eq!(bytes, cancel_positions_multi().request_id(9000).encode_request());
 }
 
 #[test]
@@ -142,31 +148,31 @@ fn encode_request_account_updates_multi_works() {
 #[test]
 fn encode_cancel_account_updates_multi_works() {
     let bytes = super::encode_cancel_account_updates_multi(9000).unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountUpdatesMulti);
+    assert_eq!(bytes, cancel_account_updates_multi().request_id(9000).encode_request());
 }
 
 #[test]
 fn encode_request_managed_accounts_works() {
     let bytes = super::encode_request_managed_accounts().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::RequestManagedAccounts);
+    assert_eq!(bytes, request_managed_accounts().encode_request());
 }
 
 #[test]
 fn encode_request_family_codes_works() {
     let bytes = super::encode_request_family_codes().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::RequestFamilyCodes);
+    assert_eq!(bytes, request_family_codes().encode_request());
 }
 
 #[test]
 fn encode_request_server_time_works() {
     let bytes = super::encode_request_server_time().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::RequestCurrentTime);
+    assert_eq!(bytes, request_current_time().encode_request());
 }
 
 #[test]
 fn encode_request_server_time_millis_works() {
     let bytes = super::encode_request_server_time_millis().unwrap();
-    assert_proto_msg_id(&bytes, OutgoingMessages::RequestCurrentTimeInMillis);
+    assert_eq!(bytes, request_current_time_in_millis().encode_request());
 }
 
 #[test]

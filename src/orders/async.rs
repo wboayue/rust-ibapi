@@ -159,6 +159,54 @@ impl Client {
         Ok(())
     }
 
+    /// Submit multiple OCA (One-Cancels-All) orders
+    ///
+    /// When one order in the group is filled, all others are automatically cancelled.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OcaType;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let contract1 = Contract::stock("AAPL").build();
+    ///     let contract2 = Contract::stock("MSFT").build();
+    ///
+    ///     let order1 = client.order(&contract1)
+    ///         .buy(100)
+    ///         .limit(50.0)
+    ///         .oca_group("MyOCA", OcaType::CancelWithBlock)
+    ///         .build_order().expect("order build failed");
+    ///         
+    ///     let order2 = client.order(&contract2)
+    ///         .buy(100)
+    ///         .limit(45.0)
+    ///         .oca_group("MyOCA", OcaType::CancelWithBlock)
+    ///         .build_order().expect("order build failed");
+    ///
+    ///     let order_ids = client.submit_oca_orders(
+    ///         vec![(contract1, order1), (contract2, order2)]
+    ///     ).await.expect("OCA submission failed");
+    /// }
+    /// ```
+    pub async fn submit_oca_orders(&self, orders: Vec<(crate::contracts::Contract, crate::orders::Order)>) -> Result<Vec<OrderId>, Error> {
+        let mut order_ids = Vec::new();
+
+        for (contract, mut order) in orders.into_iter() {
+            let order_id = self.next_order_id();
+            order.order_id = order_id;
+            order_ids.push(OrderId::new(order_id));
+            self.submit_order(order_id, &contract, &order).await?;
+        }
+
+        Ok(order_ids)
+    }
+
     /// Submits an Order with a subscription for updates.
     ///
     /// # Errors

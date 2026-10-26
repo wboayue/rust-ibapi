@@ -259,6 +259,17 @@ impl RequestEncoder for CalculateImpliedVolatilityRequestBuilder {
 // two encoders and `cancel_messages` exercises it; no production path
 // sends either cancel yet (the option one-shots never create a typed
 // subscription, so nothing calls `cancel_message` outside tests).
+// --- ContractDataEnd (msg 52) ---
+
+request_id_response_builder!(ContractDataEndResponse, ContractDataEnd);
+
+impl ContractDataEndResponse {
+    pub fn request_id(mut self, v: i32) -> Self {
+        self.request_id = v;
+        self
+    }
+}
+
 single_req_id_request_builder!(CancelContractDataRequestBuilder, CancelContractData, OutgoingMessages::CancelContractData);
 
 #[derive(Clone, Debug)]
@@ -768,6 +779,10 @@ pub fn cancel_contract_data_request() -> CancelContractDataRequestBuilder {
 
 pub fn option_chain_request() -> OptionChainRequestBuilder {
     OptionChainRequestBuilder::default()
+}
+
+pub fn contract_data_end() -> ContractDataEndResponse {
+    ContractDataEndResponse::default()
 }
 
 pub fn contract_data() -> ContractDataResponse {

@@ -16,7 +16,7 @@ pub(crate) mod r#async;
 #[cfg(feature = "sync")]
 pub(crate) mod sync;
 
-pub(crate) use common::encoders;
+use common::encoders;
 
 pub use common::DisplayGroupUpdate;
 

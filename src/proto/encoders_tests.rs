@@ -425,3 +425,74 @@ fn encode_attached_orders_sends_preset_type_for_each_leg() {
         assert_eq!(encode_attached_orders(&order), Some(expected));
     }
 }
+
+#[test]
+fn encode_combo_legs_pairs_each_leg_with_its_order_price() {
+    use crate::contracts::{ComboLeg, ComboLegOpenClose, LegAction};
+    use crate::orders::OrderComboLeg;
+
+    let contract = Contract {
+        combo_legs: vec![
+            ComboLeg {
+                contract_id: 1001,
+                ratio: 1,
+                action: LegAction::Buy,
+                exchange: "SMART".into(),
+                open_close: ComboLegOpenClose::Open,
+                short_sale_slot: 2,
+                designated_location: "LOC".into(),
+                exempt_code: 7,
+            },
+            ComboLeg {
+                contract_id: 1002,
+                ratio: 2,
+                action: LegAction::SellShort,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    // Prices cover only the first leg: the second must go out without one.
+    let order = Order {
+        order_combo_legs: vec![OrderComboLeg { price: Some(1.25) }],
+        ..Default::default()
+    };
+
+    let legs = encode_combo_legs(&contract, Some(&order));
+
+    assert_eq!(
+        legs,
+        vec![
+            proto::ComboLeg {
+                con_id: Some(1001),
+                ratio: Some(1),
+                action: Some("BUY".into()),
+                exchange: Some("SMART".into()),
+                open_close: Some(1),
+                short_sales_slot: Some(2),
+                designated_location: Some("LOC".into()),
+                exempt_code: Some(7),
+                per_leg_price: Some(1.25),
+            },
+            proto::ComboLeg {
+                con_id: Some(1002),
+                ratio: Some(2),
+                action: Some("SSHORT".into()),
+                exchange: None,
+                open_close: None,
+                short_sales_slot: None,
+                designated_location: None,
+                exempt_code: None,
+                per_leg_price: None,
+            },
+        ]
+    );
+
+    let without_order = encode_combo_legs(&contract, None);
+    assert!(without_order.iter().all(|leg| leg.per_leg_price.is_none()), "no order, no per-leg price");
+}
+
+#[test]
+fn encode_combo_legs_is_empty_for_a_plain_contract() {
+    assert!(encode_combo_legs(&Contract::default(), Some(&Order::default())).is_empty());
+}

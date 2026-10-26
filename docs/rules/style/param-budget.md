@@ -51,8 +51,10 @@ split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planne
 the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
-No violations are open; #901 tracked the last ones. `historical_news` (five required
-arguments) was reviewed and kept flat.
+About 60 non-test functions take four to seven parameters, most of them builder-fed
+`pub(crate)` seams without the exception comment; #1079 holds the inventory and the open
+decision on whether `pub(crate)` seams stay in scope. `historical_news` (five required
+arguments) was reviewed and kept flat (#901).
 
 ## Precedents
 

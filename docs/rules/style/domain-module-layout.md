@@ -62,9 +62,7 @@ example of adding a module.
 
 ## Known drift
 
-`Client::submit_oca_orders` is a public client method in an `impl Client` block at
-`orders/builder/sync_impl.rs` and `orders/builder/async_impl.rs` — the right domain, the wrong
-file. The helper carve-out above does not cover it: that blesses `<domain>/<side>/foo.rs`
-*under* the side file, and these are siblings of it. Its body is a loop over `next_order_id()`
-+ `submit_order()` with no builder coupling, so it belongs in `orders/{sync,async}.rs`. Two
-sites; move them when you are next in that file, and do not read them as precedent.
+Single-domain encoders and decoders still sit in the shared `src/proto/` modules —
+`decode_order`, `encode_order` and their siblings for orders, `decode_contract_details`,
+`encode_scanner_subscription` — tracked in #1078. Don't add to them there; a new
+single-domain function goes in `<domain>/common/`.

@@ -72,14 +72,14 @@ pub(in crate::news) fn encode_contract_news_request(
     // `&str`s, so the formatted ticks need an owner.
     let provider_ticks: Vec<String> = provider_codes.iter().map(|provider| format!("292:{provider}")).collect();
     let generic_ticks: Vec<&str> = std::iter::once("mdoff").chain(provider_ticks.iter().map(String::as_str)).collect();
-    crate::market_data::realtime::common::encoders::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)
+    crate::market_data::realtime::common::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)
 }
 
 /// Encode a broad tape news market data request.
 pub(in crate::news) fn encode_broad_tape_news_request(request_id: i32, provider_code: &str) -> Result<Vec<u8>, crate::Error> {
     let contract = crate::contracts::Contract::news(provider_code);
     let generic_ticks = &["mdoff", "292"];
-    crate::market_data::realtime::common::encoders::encode_request_market_data(request_id, &contract, generic_ticks, false, false)
+    crate::market_data::realtime::common::encode_request_market_data(request_id, &contract, generic_ticks, false, false)
 }
 
 // Encoder body assertions live in the migrated sync/async tests via

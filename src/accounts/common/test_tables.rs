@@ -8,8 +8,6 @@ use crate::accounts::types::*;
 pub struct ContractIdTestCase {
     pub description: &'static str,
     pub contract_id: ContractId,
-    #[allow(dead_code)]
-    pub expected_pattern: String,
 }
 
 /// Test case for PnL parameter combinations
@@ -17,8 +15,6 @@ pub struct ContractIdTestCase {
 pub struct PnLTestCase {
     pub description: &'static str,
     pub model_code: Option<String>,
-    #[allow(dead_code)]
-    pub expected_pattern: &'static str,
 }
 
 /// Test case for positions multi parameter combinations
@@ -37,7 +33,7 @@ pub struct AccountSummaryTagTestCase {
     pub tags: Vec<&'static str>,
     #[cfg_attr(not(feature = "async"), allow(dead_code))]
     pub expected_tag_encoding: Option<&'static str>,
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "sync"), allow(dead_code))]
     pub should_succeed: bool,
     pub expect_responses: bool,
 }
@@ -47,10 +43,6 @@ pub struct AccountSummaryTagTestCase {
 pub struct SubscriptionLifecycleTestCase {
     pub description: &'static str,
     pub subscription_type: SubscriptionType,
-    #[allow(dead_code)]
-    pub expected_subscribe_pattern: &'static str,
-    #[allow(dead_code)]
-    pub expected_cancel_pattern: &'static str,
 }
 
 /// Types of subscriptions for lifecycle testing
@@ -86,27 +78,22 @@ pub fn contract_id_test_cases() -> Vec<ContractIdTestCase> {
         ContractIdTestCase {
             description: "standard contract ID",
             contract_id: ContractId(1001),
-            expected_pattern: "|1001|".to_string(),
         },
         ContractIdTestCase {
             description: "zero contract ID",
             contract_id: ContractId(0),
-            expected_pattern: "|0|".to_string(),
         },
         ContractIdTestCase {
             description: "max contract ID",
             contract_id: ContractId(i32::MAX),
-            expected_pattern: format!("|{}|", i32::MAX),
         },
         ContractIdTestCase {
             description: "negative contract ID",
             contract_id: ContractId(-1),
-            expected_pattern: "|-1|".to_string(),
         },
         ContractIdTestCase {
             description: "large positive ID",
             contract_id: ContractId(999999999),
-            expected_pattern: "|999999999|".to_string(),
         },
     ]
 }
@@ -117,27 +104,22 @@ pub fn pnl_parameter_test_cases() -> Vec<PnLTestCase> {
         PnLTestCase {
             description: "PnL with TARGET2024 model",
             model_code: Some("TARGET2024".to_string()),
-            expected_pattern: "TARGET2024",
         },
         PnLTestCase {
             description: "PnL with MODEL1",
             model_code: Some("MODEL1".to_string()),
-            expected_pattern: "MODEL1",
         },
         PnLTestCase {
             description: "PnL with MODEL2",
             model_code: Some("MODEL2".to_string()),
-            expected_pattern: "MODEL2",
         },
         PnLTestCase {
             description: "PnL with no model code",
             model_code: None,
-            expected_pattern: "||",
         },
         PnLTestCase {
             description: "PnL with empty model code",
             model_code: Some("".to_string()),
-            expected_pattern: "||",
         },
     ]
 }
@@ -240,8 +222,6 @@ pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase>
                 account: "DU1234567".to_string(),
                 model_code: Some("TARGET2024".to_string()),
             },
-            expected_subscribe_pattern: "92|",
-            expected_cancel_pattern: "93|",
         },
         SubscriptionLifecycleTestCase {
             description: "PnL subscription without model code",
@@ -249,14 +229,10 @@ pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase>
                 account: "DU1234567".to_string(),
                 model_code: None,
             },
-            expected_subscribe_pattern: "92|",
-            expected_cancel_pattern: "93|",
         },
         SubscriptionLifecycleTestCase {
             description: "Positions subscription",
             subscription_type: SubscriptionType::Positions,
-            expected_subscribe_pattern: "61|",
-            expected_cancel_pattern: "64|",
         },
         SubscriptionLifecycleTestCase {
             description: "Account Summary subscription",
@@ -264,8 +240,6 @@ pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase>
                 group: "All".to_string(),
                 tags: vec!["AccountType".to_string()],
             },
-            expected_subscribe_pattern: "62|",
-            expected_cancel_pattern: "63|",
         },
         SubscriptionLifecycleTestCase {
             description: "Positions Multi subscription",
@@ -273,8 +247,6 @@ pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase>
                 account: Some("DU1234567".to_string()),
                 model_code: Some("TARGET2024".to_string()),
             },
-            expected_subscribe_pattern: "74|",
-            expected_cancel_pattern: "75|",
         },
         SubscriptionLifecycleTestCase {
             description: "PnL Single subscription",
@@ -283,8 +255,6 @@ pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase>
                 contract_id: 1001,
                 model_code: Some("TARGET2024".to_string()),
             },
-            expected_subscribe_pattern: "94|",
-            expected_cancel_pattern: "95|",
         },
     ]
 }
