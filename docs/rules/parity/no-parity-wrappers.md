@@ -14,11 +14,14 @@ memory: []
 ---
 
 Don't wrap a `tokio::sync::broadcast::Sender` / `mpsc` / similar in a struct just so the async
-side mirrors the sync side. Store the runtime type directly on the bus.
+side mirrors the sync side. Wrap a channel only when the wrapper adds behavior the bare type
+lacks (`close`, end-on-arrival); a struct that only forwards is the anti-pattern.
 
-The sync side often needs a real wrapper — `Mutex<Option<Vec<crossbeam Sender<Notice>>>>` plus manual
-pruning of dropped receivers. The async side gets `subscribe()` and auto-prune from tokio, so
-the equivalent wrapper would be a no-op delegate. Asymmetry here is correct.
+`NoticeBroadcaster` is the worked example. The sync half needs a wrapper anyway —
+`Mutex<Option<Vec<crossbeam Sender<Notice>>>>` plus manual pruning of dropped receivers. tokio's
+`broadcast` gives the async half `subscribe()` and auto-prune for free, so a wrapper that only
+delegated those would be a no-op. It earns its place through `close`, which neither bare sender
+can do (#872).
 
 ## Why
 
@@ -30,10 +33,10 @@ The test is whether **both** sides have real behavior:
 
 - `deliver_to_order_or_request` — genuine mirror. Both `transport/sync.rs` and
   `transport/async.rs` implement the routing logic. Acceptable duplication.
-- `NoticeBroadcaster` — genuine mirror, though the async half wraps a `broadcast::Sender`. Both
-  hold their sender(s) in a `Mutex<Option<..>>` so `close` can end every `NoticeStream`,
-  including one subscribed after the close (#872). That is behavior a bare sender lacks, which
-  is what separates it from the forwarding struct below.
+- `NoticeBroadcaster` — genuine mirror, though the async half wraps a `broadcast::Sender`.
+  Both hold their sender(s) in a `Mutex<Option<..>>` so `close` can end every `NoticeStream`,
+  including one subscribed after the close (#872). That behavior is what separates it from
+  the forwarding struct below.
 - `filter_data` — genuine mirror. Both sides define the method, and the return types differ
   because the abstractions differ: sync yields `FilterData<I>` (an `Iterator` adapter), async
   yields `FilterDataStream<S>` (a `Stream` adapter).

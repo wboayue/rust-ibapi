@@ -21,8 +21,8 @@ was retired with the floor ratchet.
 
 **Decoding takes `&ResponseMessage`, never `&mut`.** Reading `raw_bytes` and handing it to `prost`
 consumes nothing. `next_int` / `next_string` still exist and still need `&mut` (`next_double` is
-`#[cfg(test)]`), but the handshake (`connection/common.rs`) is their only production caller — it reads the server version and time
-off a frame that predates any decoder. A new `&mut ResponseMessage` in a decode path means either a
+`#[cfg(test)]`), but the handshake (`connection/common.rs`) is their only production caller —
+it reads the server version and time off a frame that predates any decoder. A new `&mut ResponseMessage` in a decode path means either a
 text decoder, which the floor ratchet retired, or a signature copied from one.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip

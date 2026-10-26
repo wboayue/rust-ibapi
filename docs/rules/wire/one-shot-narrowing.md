@@ -78,7 +78,7 @@ structural â€” a site could not name a payload decoder without naming a frame â€
 arguments unrelated to the compiler, so a mispairing built and ran. Catching that took a
 hand-listed roster and a source-scraping test, and the pair was spelled twice per API since sync
 and async each carry a call site. #749 moved it onto the payload type, where it is a property
-rather than an argument: 25 `impl ProtoPayload` declarations (26 today) replaced 50 call-site
+rather than an argument: 25 `impl ProtoPayload` declarations replaced 50 call-site
 literals plus the roster.
 
 That is not the same as "the type system enforces it". A wrong `MESSAGE_ID` in an impl is still

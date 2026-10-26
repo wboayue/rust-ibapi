@@ -1,6 +1,6 @@
 ---
 id: feature-matrix
-title: Three feature configurations must build and test, and --features sync is not one of them
+title: Three feature configurations must build and test, and `--features sync` is not one of them
 cluster: parity
 status: active
 triggers:
