@@ -947,7 +947,7 @@ fn account_summary_snapshots_cancel_sends_cancel_and_ends() {
     snapshots.next().unwrap().unwrap();
     snapshots.cancel();
 
-    assert!(snapshots.all(|item| item.is_err()), "no snapshot after cancel");
+    assert!(snapshots.next().is_none(), "iteration ends after cancel");
     assert_eq!(request_message_count(&message_bus), 2);
     assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }
