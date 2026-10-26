@@ -1,6 +1,5 @@
 use crate::contracts::{
-    ComboLeg, ComboLegOpenClose, Contract, ContractDetails, Currency, DeltaNeutralContract, Exchange, FundAssetType, FundDistributionPolicyIndicator,
-    IneligibilityReason, LegAction, SecurityIdType, SecurityType, Symbol, TagValue,
+    ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityIdType, SecurityType, Symbol, TagValue,
 };
 use crate::orders::SoftDollarTier;
 use crate::proto;
@@ -224,112 +223,6 @@ pub fn decode_soft_dollar_tier(proto: &proto::SoftDollarTier) -> SoftDollarTier 
         value: s(&proto.value),
         display_name: s(&proto.display_name),
     }
-}
-
-pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: &proto::ContractDetails) -> Result<ContractDetails, Error> {
-    let contract = decode_contract(proto_contract)?;
-
-    Ok(ContractDetails {
-        contract,
-        market_name: s(&proto_details.market_name),
-        // min_tick is StringToDoubleMax upstream, not StringToDecimal; the extra
-        // integer sentinels are unreachable here (no price tick is 2147483647).
-        min_tick: parse_decimal_or_zero(proto_details.min_tick.as_deref())?,
-        order_types: proto_details
-            .order_types
-            .as_deref()
-            .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
-            .unwrap_or_default(),
-        valid_exchanges: proto_details
-            .valid_exchanges
-            .as_deref()
-            .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
-            .unwrap_or_default(),
-        price_magnifier: proto_details.price_magnifier.unwrap_or_default(),
-        under_contract_id: proto_details.under_con_id.unwrap_or_default(),
-        long_name: s(&proto_details.long_name),
-        contract_month: s(&proto_details.contract_month),
-        industry: s(&proto_details.industry),
-        category: s(&proto_details.category),
-        subcategory: s(&proto_details.subcategory),
-        time_zone_id: s(&proto_details.time_zone_id),
-        trading_hours: proto_details
-            .trading_hours
-            .as_deref()
-            .map(|s| s.split(';').map(|t| t.to_string()).collect())
-            .unwrap_or_default(),
-        liquid_hours: proto_details
-            .liquid_hours
-            .as_deref()
-            .map(|s| s.split(';').map(|t| t.to_string()).collect())
-            .unwrap_or_default(),
-        ev_rule: s(&proto_details.ev_rule),
-        ev_multiplier: proto_details.ev_multiplier.unwrap_or_default(),
-        agg_group: proto_details.agg_group.unwrap_or_default(),
-        sec_id_list: tag_values(&proto_details.sec_id_list),
-        under_symbol: s(&proto_details.under_symbol),
-        under_security_type: s(&proto_details.under_sec_type),
-        market_rule_ids: proto_details
-            .market_rule_ids
-            .as_deref()
-            .map(|s| s.split(',').map(|t| t.to_string()).collect())
-            .unwrap_or_default(),
-        real_expiration_date: s(&proto_details.real_expiration_date),
-        stock_type: s(&proto_details.stock_type),
-        settlement_method: s(&proto_details.settlement_method),
-        // Absent means unset upstream (ContractDetails.cs ctor sets decimal.MaxValue),
-        // and contracts without size rules really do omit these.
-        min_size: parse_optional_decimal(proto_details.min_size.as_deref())?,
-        size_increment: parse_optional_decimal(proto_details.size_increment.as_deref())?,
-        suggested_size_increment: parse_optional_decimal(proto_details.suggested_size_increment.as_deref())?,
-        // fund fields
-        fund_name: s(&proto_details.fund_name),
-        fund_family: s(&proto_details.fund_family),
-        fund_type: s(&proto_details.fund_type),
-        fund_front_load: s(&proto_details.fund_front_load),
-        fund_back_load: s(&proto_details.fund_back_load),
-        fund_back_load_time_interval: s(&proto_details.fund_back_load_time_interval),
-        fund_management_fee: s(&proto_details.fund_management_fee),
-        fund_closed: proto_details.fund_closed.unwrap_or_default(),
-        fund_closed_for_new_investors: proto_details.fund_closed_for_new_investors.unwrap_or_default(),
-        fund_closed_for_new_money: proto_details.fund_closed_for_new_money.unwrap_or_default(),
-        fund_notify_amount: s(&proto_details.fund_notify_amount),
-        fund_minimum_initial_purchase: s(&proto_details.fund_minimum_initial_purchase),
-        fund_subsequent_minimum_purchase: s(&proto_details.fund_minimum_subsequent_purchase),
-        fund_blue_sky_states: s(&proto_details.fund_blue_sky_states),
-        fund_blue_sky_territories: s(&proto_details.fund_blue_sky_territories),
-        fund_distribution_policy_indicator: FundDistributionPolicyIndicator::from(
-            proto_details.fund_distribution_policy_indicator.as_deref().unwrap_or(""),
-        ),
-        fund_asset_type: FundAssetType::from(proto_details.fund_asset_type.as_deref().unwrap_or("")),
-        // bond fields
-        cusip: s(&proto_details.cusip),
-        ratings: s(&proto_details.ratings),
-        desc_append: s(&proto_details.desc_append),
-        bond_type: s(&proto_details.bond_type),
-        coupon_type: s(&proto_details.coupon_type),
-        callable: proto_details.callable.unwrap_or_default(),
-        putable: proto_details.puttable.unwrap_or_default(),
-        coupon: proto_details.coupon.unwrap_or_default(),
-        convertible: proto_details.convertible.unwrap_or_default(),
-        maturity: String::new(),
-        issue_date: s(&proto_details.issue_date),
-        next_option_date: s(&proto_details.next_option_date),
-        next_option_type: s(&proto_details.next_option_type),
-        next_option_partial: proto_details.next_option_partial.unwrap_or_default(),
-        notes: s(&proto_details.bond_notes),
-        // ineligibility reasons
-        ineligibility_reasons: proto_details
-            .ineligibility_reason_list
-            .iter()
-            .map(|r| IneligibilityReason {
-                id: s(&r.id),
-                description: s(&r.description),
-            })
-            .collect(),
-        // defaults for fields not in protobuf
-        last_trade_time: String::new(),
-    })
 }
 
 #[cfg(test)]
