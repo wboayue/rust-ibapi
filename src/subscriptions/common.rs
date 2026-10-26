@@ -286,6 +286,11 @@ pub(crate) trait StreamDecoder<T> {
     /// that is wire-verified: ending the stream on our side doesn't prove TWS
     /// ended the request, and a skipped cancel then leaks it at TWS (a market
     /// data line, a scanner slot). Default: `false`, the cancel is written.
+    ///
+    /// Match the codes verified live, not every error: an unverified terminal
+    /// code (10197 on market data, 165 on scanners) must keep its cancel. A
+    /// one-shot query with nothing to continue (`HistoricalDataFrame`) may
+    /// accept any error.
     fn rejection_ends_request(_notice: &Notice) -> bool {
         false
     }

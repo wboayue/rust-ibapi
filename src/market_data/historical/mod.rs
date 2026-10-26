@@ -25,7 +25,7 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use crate::common::error_helpers;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
 
@@ -494,6 +494,11 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         cancel_historical_data(request_id)
+    }
+
+    /// Live: after 200 TWS answers the cancel with 366 (no query found).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
 

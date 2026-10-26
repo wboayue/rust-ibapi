@@ -18,7 +18,7 @@ use time::OffsetDateTime;
 
 use crate::common::error_helpers;
 use crate::contracts::OptionComputation;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, MARKET_DEPTH_RESET_CODE};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, MARKET_DEPTH_RESET_CODE, NO_SECURITY_DEFINITION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -75,6 +75,11 @@ impl StreamDecoder<BidAsk> for BidAsk {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel bid/ask ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
+
+    /// Live: after 200 TWS answers the cancel with 300 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
+    }
 }
 
 /// Attributes for bid/ask tick data.
@@ -110,6 +115,11 @@ impl StreamDecoder<MidPoint> for MidPoint {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel mid point ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
+    }
+
+    /// Live: after 200 TWS answers the cancel with 300 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
 
@@ -149,6 +159,11 @@ impl StreamDecoder<Bar> for Bar {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel realtime bars")?;
         common::encoders::encode_cancel_realtime_bars(request_id)
     }
+
+    /// Live: after 200 TWS answers the cancel with 300 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
+    }
 }
 
 /// Represents `Last` or `AllLast` tick-by-tick real-time tick.
@@ -182,6 +197,11 @@ impl StreamDecoder<Trade> for Trade {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel trade ticks")?;
         common::encoders::encode_cancel_tick_by_tick(request_id)
+    }
+
+    /// Live: after 200 TWS answers the cancel with 300 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
 
@@ -301,6 +321,11 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market depth")?;
         common::encoders::encode_cancel_market_depth(request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
     }
+
+    /// Live: after 200 TWS answers the cancel with 310 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
+    }
 }
 
 /// Stores depth market data description.
@@ -372,6 +397,11 @@ impl StreamDecoder<TickTypes> for TickTypes {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market data")?;
         common::encoders::encode_cancel_market_data(request_id)
+    }
+
+    /// Live: after 200 TWS answers the cancel with 300 (no such request).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == NO_SECURITY_DEFINITION_CODE
     }
 
     fn is_snapshot_end(&self) -> bool {
