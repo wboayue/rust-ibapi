@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `positions`, `positions_multi`, `account_updates` and `pnl_single` return `Error::Parse` for a frame with no position quantity, instead of reporting a flat `0`. TWS sends an explicit `"0"` for a closed position, so normal closes are unaffected (#1088).
+- `positions`, `positions_multi`, `account_updates` and `pnl_single` return `Error::Parse` for a frame with no position quantity, or an "unset" sentinel in it, instead of reporting a flat `0`. TWS sends an explicit `"0"` for a closed position, so normal closes are unaffected (#1088).
 - `Contract::last_trade_date` is now populated from decoded contracts (contract details, open orders, positions, executions, ...) for options and futures. It was always `None` (#1087).
 - `order_status_stream` and `wait_for_fill` (sync and async) return `Error::OrderIdInRequestRange` for an order id at or above 1,500,000,000, as the other order methods do. Previously the stream never matched a status, so `wait_for_fill` waited out its timeout and returned `TimedOut` (#1069).
 - `OrderBuilder::order_type(OrderType::MarketOnOpen)`, `LimitOnOpen` and `AtAuction` set the time in force those types imply (`OnOpen`, `OnOpen`, `Auction`), as `market_on_open()`, `limit_on_open()` and `at_auction()` do. This replaces a time in force set earlier in the chain; a time-in-force setter called later still wins. Previously they sent a plain `MKT`, `LMT` or `MTL` day order (#1073).

@@ -71,7 +71,9 @@ pub(crate) fn decode_account_multi_value(message: &ResponseMessage) -> Result<Ac
 
 /// A position quantity is required: C# leaves it unset (`decimal.MaxValue`) when
 /// absent, and defaulting to `0` would report a flat position that may not be.
-/// Safe to require: live, a closed position still sends `"0"` (#1088).
+/// An "unset" sentinel errors the same way, as C# maps both to `MaxValue`.
+/// Safe to require: live, a flat position still sends `"0"` on Position,
+/// PositionMulti and PnLSingle (#1088).
 fn required_position(text: Option<&str>, message: &str) -> Result<f64, Error> {
     required(parse_optional_decimal(text)?, "position", message)
 }
